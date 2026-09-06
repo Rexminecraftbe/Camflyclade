@@ -1,10 +1,12 @@
-# Text that the plugin outputs in game
+# Texte, die das Plugin im Spiel ausgibt
 messages:
   actionbar-off: "&cCam mode ended"
   actionbar-on: "&aCam mode activated"
   armorstand.name-format: "&e{player}'s Body"
   body-attacked: "&cYour body was attacked by {damager}! Camera mode ended."
+  body-drowning: "&cYour body is drowning! Camera mode ended."
   body-env-damage: "&cYour body was damaged by {cause}! Camera mode ended."
+  body-got-effect: "&cYour body was hit by an effect and camera mode was ended!"
   body-missing: "&cYour body no longer exists! Camera mode ended."
   body-moved: "&cYour body was moved! Camera mode ended."
   body-suffocating: "&cYour body is stuck and suffocating! Camera mode ended."
@@ -21,16 +23,19 @@ messages:
   hitbox.name-format: "&c[HITBOX] {player}"
   no-permission: "&cYou don't have permission to use this command."
   no-player: "&cThis command can only be used by players."
+  no-projectiles: "&cYou cannot shoot projectiles in camera mode."
+  protocol-found: "ProtocolLib found! Sound suppression is enabled."
   reload-exit: "&cCamera mode ended due to plugin restart."
   reload-start: "&ePlugin is restarting..."
   reload-success: "&aPlugin reload successful."
   time-limit-expired: "&cCam mode ended: Time limit expired."
 
-# Enable or disable individual messages
+# Aktiviert oder deaktiviert einzelne Nachrichten
 message-settings:
-  enabled: true
   body-attacked: true
+  body-drowning: true
   body-env-damage: true
+  body-got-effect: true
   body-missing: true
   body-moved: true
   body-suffocating: true
@@ -44,94 +49,121 @@ message-settings:
   cooldown-available: true
   cooldown-text: true
   distance-limit: true
+  enabled: true
   no-permission: true
   no-player: true
+  no-projectiles: true
+  protocol-found: true
   reload-exit: true
   reload-start: true
   reload-success: true
   time-limit-expired: true
 
-# Settings for the action bar display
+# Einstellungen für die Action-Bar Anzeige
 action-bar:
-  # Determines if the action bar is used
+  # Legt fest, ob die Action-Bar verwendet wird
   enabled: true
-  # Duration of the fade-out after disabling
+  # Dauer der Ausblendung nach dem Beenden
   off-duration: 1
 
 
-# Basic settings of camera mode
+# Grundeinstellungen des Kamera-Modus
 camera-mode:
-  # Enable the distance limit to the body
+  # Aktiviert die Begrenzung der Entfernung zum Körper
   max-distance-enabled: true
-  # Maximum distance in blocks
+  # Maximale Entfernung in Blöcken
   max-distance: 100.0
-  # Cooldown between distance warnings
+  # Abklingzeit zwischen Distanzwarnungen
   distance-warning-cooldown: 3
-  # Damage per tick when the body is drowning
+  # Schaden pro Tick beim Ertrinken des Körpers
   drowning-damage: 2.0
-  # Visibility of other players in mode (cam/true/false)
+  # Sichtbarkeit anderer Spieler im Modus (cam/true/false)
   player_visibility_mode: "true"
-  # Allow invisibility potions
+  # Erlaubt Unsichtbarkeitstränke
   allow_invisibility_potion: true
-  # Allow flight through lava
+  # Erlaubt Flug durch Lava
   allow_lava_flight: true
 
-# Armor stand settings
+# Einstellungen des Rüstungsständers
 armorstand:
-  # Show the name above the armor stand
+  # Zeigt den Namen über dem Rüstungsständer an
   name-visible: true
-  # Whether the armor stand is visible
+  # Ob der Rüstungsständer sichtbar ist
   visible: true
-  # Gravity for the armor stand
+  # Schwerkraft für den Rüstungsständer
   gravity: true
+  # Schaden, den der Rüstungsständer bei Treffern erhält
+  damage-amount: 1.0
+  # Verringert Haltbarkeit der ausgerüsteten Rüstung
+  durability-loss: true
+  # Ignoriert Rüstung beim Berechnen des Schadens
+  damage-ignore-armor: true
 
-# Limit the duration of camera mode
+# Geräuschunterdrückung
+mute:
+  # Unterdrückt Angriffssounds
+  attack: true
+  # Unterdrückt Schrittgeräusche
+  footsteps: true
+  # Versteckt Sprintpartikel
+  hide-sprint-particles: true
+
+# Begrenzung der Dauer des Kamera-Modus
 time-limit:
-  # Enable the time limit
+  # Aktiviert das Zeitlimit
   enabled: false
-  # Enable a cooldown after expiry
+  # Aktiviert eine Abklingzeit nach Ablauf
   cooldowns-enabled: false
-  # Maximum duration of the mode in seconds
+  # Maximale Dauer des Modus in Sekunden
   duration-seconds: 300
-  # Wait time until the next start in seconds
+  # Wartezeit bis zum nächsten Start in Sekunden
   cooldown-seconds: 120
-  # Show a boss bar to display the remaining time
+  # Zeigt eine Bossbar zur Anzeige der verbleibenden Zeit
   show-bossbar: true
-  # Color of the boss bar
+  # Farbe der Bossbar
   bossbar-color: BLUE
 
-# Particles around the player in camera mode
+# Partikel um den Spieler im Kamera-Modus
 camera-particles:
-  # Vertical position of the particles
+  # Vertikale Position der Partikel
   height: 0.2
-  # Number of particles per tick
+  # Anzahl der Partikel pro Tick
   particles-per-tick: 0.1
-  # Show particles to the player themselves
+  # Zeigt Partikel auch dem Spieler selbst an
   show-own-particles: false
 
-# Fire protection during camera mode
+# Schutz vor Feuer während des Kamera-Modus
 fireguard:
-  # Enable fire protection
+  # Aktiviert den Feuerschutz
   enabled: true
-  # Visually hide nearby fire
+  # Blendete nahe Feuer optisch aus
   hide-fire: true
-  # Update interval in ticks (The lower, the more frequently)
+  # Abstand der Aktualisierung in Ticks
   tick-interval: 10
-  # Horizontal search radius
+  # Horizontaler Suchradius
   radius-horizontal: 1.5
-  # Vertical radius upward
+  # Vertikaler Radius nach oben
   radius-up: 2
-  # Vertical radius downward
+  # Vertikaler Radius nach unten
   radius-down: 1
 
-# Put a camera head on the player
+# Setzt dem Spieler einen Kamera-Kopf auf
 camera-head:
-  # Enable the camera head
+  # Aktiviert den Kamerakopf
   enabled: false
 
-# Protection against immediate start after taking damage
+# Schutz vor sofortigem Start nach Schaden
 cam-safety:
-  # Enable the safety check
+  # Aktiviert die Sicherheitsprüfung
   enabled: true
-  # Wait time after last damage in seconds
+  # Wartezeit nach letztem Schaden in Sekunden
   delay: 5
+
+# Einstellungen zur Übertragung von Schaden
+mirror-damage:
+  # Verwendet die echte Rüstung des Spielers
+  damage-armor: true
+  # Art der Schadensübertragung: mirror | custom | off
+  damage-mode: mirror  # mirror | custom | off
+  # Fester Schaden in Herzen für den Modus "custom"
+  custom-damage-hearts: 0.5
