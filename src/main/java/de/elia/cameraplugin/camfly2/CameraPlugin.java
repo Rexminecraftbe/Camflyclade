@@ -165,13 +165,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 getLogger().info(ChatColor.stripColor(pfMessage));
             }
         }
-        setupNoCollisionTeam();
+        refreshNoCollisionTeam();
         this.getCommand("cam").setExecutor(new CamCommand(this));
         this.getCommand("cam").setTabCompleter(new CamTabCompleter());
         this.getServer().getPluginManager().registerEvents(this, this);
-        for (Player online : Bukkit.getOnlinePlayers()) {
-            updateViewerTeam(online);
-        }
         getLogger().info("CameraPlugin wurde aktiviert!");
     }
 
@@ -212,6 +209,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             bar.removeAll();
         }
         mutedPlayers.clear();
+        removeNoCollisionTeamIfUnused();
         removeLeftoverEntities();
         getLogger().info("CameraPlugin wurde deaktiviert!");
     }
@@ -623,6 +621,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 hitboxEntities.remove(damagedEntity.getUniqueId());
             }
             cameraPlayers.remove(ownerUUID);
+            removeNoCollisionTeamIfUnused();
             damagedEntity.remove();
             return;
         }
@@ -1300,38 +1299,81 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
     }
 
-    private void setupNoCollisionTeam() {
+    /**
+     * Liefert das No-Collision-Team oder {@code null}, wenn es aktuell nicht existiert.
+     * Das Team existiert nur, solange mindestens ein Spieler im Cam-Modus ist.
+     */
+    private Team getNoCollisionTeam() {
+        return Bukkit.getScoreboardManager().getMainScoreboard().getTeam(NO_COLLISION_TEAM);
+    }
+
+    /**
+     * Legt das Team an, sobald wieder mindestens ein Spieler im Cam-Modus ist,
+     * und traegt beim Neuanlegen alle Online-Spieler erneut ein.
+     */
+    private Team createNoCollisionTeam() {
         Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
         Team team = scoreboard.getTeam(NO_COLLISION_TEAM);
+        boolean created = false;
         if (team == null) {
             team = scoreboard.registerNewTeam(NO_COLLISION_TEAM);
+            created = true;
         }
         team.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
         team.setCanSeeFriendlyInvisibles(true);
+        if (created) {
+            // Beim Loeschen sind auch die Zuschauer-Eintraege verloren gegangen
+            for (Player online : Bukkit.getOnlinePlayers()) {
+                updateViewerTeam(online);
+            }
+        }
+        return team;
+    }
+
+    /**
+     * Loescht das Team wieder, sobald sich kein Spieler mehr im Cam-Modus befindet.
+     */
+    private void removeNoCollisionTeamIfUnused() {
+        if (!cameraPlayers.isEmpty()) return;
+        Team team = getNoCollisionTeam();
+        if (team != null) {
+            team.unregister();
+        }
+    }
+
+    /**
+     * Bringt das Team mit dem aktuellen Zustand in Einklang: vorhanden und
+     * befuellt, solange jemand im Cam-Modus ist, sonst geloescht.
+     */
+    private void refreshNoCollisionTeam() {
+        if (cameraPlayers.isEmpty()) {
+            removeNoCollisionTeamIfUnused();
+            return;
+        }
+        createNoCollisionTeam();
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            updateViewerTeam(online);
+        }
     }
 
     private void addPlayerToNoCollisionTeam(Player player) {
-        Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
-        Team team = scoreboard.getTeam(NO_COLLISION_TEAM);
-        if (team != null) {
-            team.addEntry(player.getName());
-        }
+        createNoCollisionTeam().addEntry(player.getName());
     }
 
     private void removePlayerFromNoCollisionTeam(Player player) {
-        Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
-        Team team = scoreboard.getTeam(NO_COLLISION_TEAM);
+        Team team = getNoCollisionTeam();
         if (team != null) {
             team.removeEntry(player.getName());
         }
+        removeNoCollisionTeamIfUnused();
     }
 
     private void updateViewerTeam(Player player) {
-        Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
-        Team team = scoreboard.getTeam(NO_COLLISION_TEAM);
+        boolean inCam = cameraPlayers.containsKey(player.getUniqueId());
+        // Nur ein Spieler im Cam-Modus darf das Team (neu) entstehen lassen
+        Team team = inCam ? createNoCollisionTeam() : getNoCollisionTeam();
         if (team == null) return;
 
-        boolean inCam = cameraPlayers.containsKey(player.getUniqueId());
         boolean shouldBeMember;
 
         if (inCam) {
@@ -1532,10 +1574,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 getLogger().info(ChatColor.stripColor(pfMessage));
             }
         }
-        setupNoCollisionTeam();
-        for (Player online : Bukkit.getOnlinePlayers()) {
-            updateViewerTeam(online);
-        }
+        refreshNoCollisionTeam();
         for (BukkitRunnable task : cooldownTasks.values()) {
             task.cancel();
         }
