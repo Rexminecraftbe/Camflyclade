@@ -1570,6 +1570,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
 
+
     // *** CameraData Klasse erweitert ***
     private static class CameraData {
         private final ArmorStand armorStand;
