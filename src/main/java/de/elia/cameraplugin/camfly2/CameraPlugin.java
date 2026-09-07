@@ -16,6 +16,7 @@ import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
+import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -25,6 +26,9 @@ import org.bukkit.profile.PlayerProfile;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.scoreboard.Criteria;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.boss.BossBar;
@@ -52,6 +56,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.Collection;
 import java.util.ArrayList;
 import de.elia.cameraplugin.feuer.CamFireGuard;
+import de.elia.cameraplugin.body.BodyType;
+import de.elia.cameraplugin.body.MannequinSkin;
 
 import static org.bukkit.Sound.ENTITY_ITEM_BREAK;
 
@@ -61,7 +67,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private final Map<UUID, CameraData> cameraPlayers = new HashMap<>();
     private final Map<UUID, Long> distanceMessageCooldown = new HashMap<>();
     private final Set<UUID> damageImmunityBypass = new HashSet<>();
-    private final Map<UUID, UUID> armorStandOwners = new HashMap<>();
+    private final Map<UUID, UUID> bodyOwners = new HashMap<>();
     private final Map<UUID, UUID> hitboxEntities = new HashMap<>();
     private final Set<UUID> pendingDamage = new HashSet<>();
     private final Set<UUID> mutedPlayers = new HashSet<>();
@@ -104,6 +110,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private boolean armorStandNameVisible;
     private boolean armorStandVisible;
     private boolean armorStandGravity;
+    private BodyType bodyType;
+    private boolean mannequinImmovable;
     private VisibilityMode playerVisibilityMode;
     private boolean allowInvisibilityPotion;
     private boolean allowLavaFlight;
@@ -143,7 +151,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
         camModeObjective = scoreboard.getObjective(CAM_OBJECTIVE);
         if (camModeObjective == null) {
-            camModeObjective = scoreboard.registerNewObjective(CAM_OBJECTIVE, "dummy", "Cam Mode");
+            camModeObjective = scoreboard.registerNewObjective(CAM_OBJECTIVE, Criteria.DUMMY, "Cam Mode");
         }
         for (String entry : scoreboard.getEntries()) {
             camModeObjective.getScore(entry).setScore(0);
@@ -238,61 +246,24 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
         Location playerLocation = player.getLocation();
 
-        ArmorStand armorStand = (ArmorStand) player.getWorld().spawnEntity(playerLocation, EntityType.ARMOR_STAND);
-        armorStand.setRemainingAir(originalRemainingAir);
-        armorStand.getPersistentDataContainer().set(bodyKey, PersistentDataType.INTEGER, 1);
-        armorStand.setVisible(armorStandVisible);
-        armorStand.setGravity(armorStandGravity);
-        armorStand.setCanPickupItems(false);
-        armorStand.setCustomName(getMessage("armorstand.name-format").replace("{player}", player.getName()));
-        armorStand.setCustomNameVisible(armorStandNameVisible);
-        armorStand.setInvulnerable(false);
-        armorStand.setMarker(false);
-        armorStand.setMaxHealth(20.0);
-        armorStand.setHealth(20.0);
-        armorStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
-        armorStand.addEquipmentLock(EquipmentSlot.CHEST, ArmorStand.LockType.REMOVING_OR_CHANGING);
-        armorStand.addEquipmentLock(EquipmentSlot.LEGS, ArmorStand.LockType.REMOVING_OR_CHANGING);
-        armorStand.addEquipmentLock(EquipmentSlot.FEET, ArmorStand.LockType.REMOVING_OR_CHANGING);
-        armorStand.addEquipmentLock(EquipmentSlot.HAND, ArmorStand.LockType.REMOVING_OR_CHANGING);
-        armorStand.addEquipmentLock(EquipmentSlot.OFF_HAND, ArmorStand.LockType.REMOVING_OR_CHANGING);
+        LivingEntity body = spawnCameraBody(player, playerLocation, originalRemainingAir);
 
-        ItemStack playerHead = new ItemStack(Material.PLAYER_HEAD);
-        SkullMeta skullMeta = (SkullMeta) playerHead.getItemMeta();
-        if (skullMeta != null) {
-            skullMeta.setOwningPlayer(player);
-            playerHead.setItemMeta(skullMeta);
-        }
-        armorStand.getEquipment().setHelmet(playerHead);
+        // The server calculates the damage from the armour worn by the entity that
+        // is hit, so the player's armour goes onto whichever entity that is.
+        ItemStack[] mirrorArmor = createMirrorArmor(originalArmor);
 
-        Villager hitbox = (Villager) player.getWorld().spawnEntity(playerLocation, EntityType.VILLAGER);
-        // Equip the hitbox with armour to ensure damage is calculated just like
-        // for the player. Use clones when armour durability shouldn't change.
-        ItemStack[] mirrorArmor;
-        if (damageArmor) {
-            mirrorArmor = originalArmor;
+        Villager hitbox = null;
+        if (bodyType.usesSeparateHitbox()) {
+            hitbox = spawnHitbox(player, playerLocation, mirrorArmor);
+            hitbox.teleport(body.getLocation().add(0, 0.1, 0));
         } else {
-            mirrorArmor = new ItemStack[originalArmor.length];
-            for (int i = 0; i < originalArmor.length; i++) {
-                if (originalArmor[i] != null) {
-                    mirrorArmor[i] = originalArmor[i].clone();
-                }
+            EntityEquipment bodyEquipment = body.getEquipment();
+            if (bodyEquipment != null) {
+                bodyEquipment.setArmorContents(mirrorArmor);
             }
         }
-        hitbox.getEquipment().setArmorContents(mirrorArmor);
-        hitbox.getPersistentDataContainer().set(hitboxKey, PersistentDataType.INTEGER, 1);
-        hitbox.setInvisible(true);
-        hitbox.setSilent(true);
-        hitbox.setAI(false);
-        hitbox.setInvulnerable(false);
-        hitbox.setCustomName(getMessage("hitbox.name-format").replace("{player}", player.getName()));
-        hitbox.setCustomNameVisible(false);
-        hitbox.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
-        hitbox.setProfession(Villager.Profession.NONE);
-        hitbox.setVillagerType(Villager.Type.PLAINS);
-        hitbox.setVillagerLevel(1);
-        hitbox.setCanPickupItems(false);
-        hitbox.teleport(armorStand.getLocation().add(0, 0.1, 0));
+        // Whoever wears the armour is the entity that takes the hits.
+        LivingEntity damageTarget = hitbox != null ? hitbox : body;
 
         GameMode originalGameMode = player.getGameMode();
         boolean originalAllowFlight = player.getAllowFlight();
@@ -326,24 +297,28 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             if (entity instanceof Mob) {
                 Mob mob = (Mob) entity;
                 if (player.equals(mob.getTarget())) {
-                    mob.setTarget(hitbox); // redirect aggro to hitbox
+                    mob.setTarget(damageTarget); // redirect aggro away from the player
                 }
             }
         }
 
         // *** Gespeichertes Inventar an CameraData übergeben ***
-        cameraPlayers.put(player.getUniqueId(), new CameraData(armorStand, hitbox, originalGameMode, originalAllowFlight, originalFlying, originalSilent, originalInventory, originalArmor, pausedEffects, originalRemainingAir));
-        armorStandOwners.put(armorStand.getUniqueId(), player.getUniqueId());
-        hitboxEntities.put(hitbox.getUniqueId(), player.getUniqueId());
+        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, originalGameMode, originalAllowFlight, originalFlying, originalSilent, originalInventory, originalArmor, pausedEffects, originalRemainingAir));
+        bodyOwners.put(body.getUniqueId(), player.getUniqueId());
+        if (hitbox != null) {
+            hitboxEntities.put(hitbox.getUniqueId(), player.getUniqueId());
+        }
         if (protocolLibAvailable) {
             mutedPlayers.add(player.getUniqueId());
         }
 
-        startHitboxSync(armorStand, hitbox);
+        if (hitbox != null) {
+            startHitboxSync(body, hitbox);
+        }
         startCameraParticles(player);
         startActionBar(player);
         camFireGuard.startFor(player);
-        startArmorStandHealthCheck(player, armorStand);
+        startBodyHealthCheck(player, body);
         addPlayerToNoCollisionTeam(player);
         // Team wurde evtl. gerade neu erstellt -> alle Mitglieder neu setzen.
         refreshNoCollisionTeam();
@@ -364,6 +339,104 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Copies the player's armour for the entity that mirrors the damage. The real
+     * items are used when they are supposed to lose durability, clones otherwise.
+     */
+    private ItemStack[] createMirrorArmor(ItemStack[] originalArmor) {
+        if (damageArmor) {
+            return originalArmor;
+        }
+        ItemStack[] mirrorArmor = new ItemStack[originalArmor.length];
+        for (int i = 0; i < originalArmor.length; i++) {
+            if (originalArmor[i] != null) {
+                mirrorArmor[i] = originalArmor[i].clone();
+            }
+        }
+        return mirrorArmor;
+    }
+
+    /**
+     * Creates the invisible villager that takes the hits for an armour stand body,
+     * so that damage is calculated just like it would be for the player.
+     */
+    private Villager spawnHitbox(Player player, Location location, ItemStack[] mirrorArmor) {
+        Villager hitbox = (Villager) location.getWorld().spawnEntity(location, EntityType.VILLAGER);
+        hitbox.getEquipment().setArmorContents(mirrorArmor);
+        hitbox.getPersistentDataContainer().set(hitboxKey, PersistentDataType.INTEGER, 1);
+        hitbox.setInvisible(true);
+        hitbox.setSilent(true);
+        hitbox.setAI(false);
+        hitbox.setInvulnerable(false);
+        hitbox.setCustomName(getMessage("hitbox.name-format").replace("{player}", player.getName()));
+        hitbox.setCustomNameVisible(false);
+        hitbox.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
+        hitbox.setProfession(Villager.Profession.NONE);
+        hitbox.setVillagerType(Villager.Type.PLAINS);
+        hitbox.setVillagerLevel(1);
+        hitbox.setCanPickupItems(false);
+        return hitbox;
+    }
+
+    /**
+     * Spawns the body that stays behind while the player is in camera mode.
+     * Depending on {@code body.type} this is either an armour stand wearing the
+     * player's head or, on Minecraft 1.21.9 and newer, a mannequin that uses the
+     * player's own skin.
+     */
+    private LivingEntity spawnCameraBody(Player player, Location location, int remainingAir) {
+        LivingEntity body = bodyType == BodyType.MANNEQUIN
+                ? spawnMannequinBody(player, location)
+                : spawnArmorStandBody(player, location);
+
+        body.setRemainingAir(remainingAir);
+        body.getPersistentDataContainer().set(bodyKey, PersistentDataType.INTEGER, 1);
+        body.setGravity(armorStandGravity);
+        body.setCanPickupItems(false);
+        body.setCustomName(getMessage("armorstand.name-format").replace("{player}", player.getName()));
+        body.setCustomNameVisible(armorStandNameVisible);
+        body.setInvulnerable(false);
+        AttributeInstance maxHealth = body.getAttribute(Attribute.MAX_HEALTH);
+        if (maxHealth != null) {
+            maxHealth.setBaseValue(20.0);
+            body.setHealth(20.0);
+        }
+        return body;
+    }
+
+    /** Creates a mannequin that shows the player's own skin. */
+    private Mannequin spawnMannequinBody(Player player, Location location) {
+        Mannequin mannequin = (Mannequin) location.getWorld().spawnEntity(location, EntityType.MANNEQUIN);
+        if (!MannequinSkin.apply(mannequin, player)) {
+            getLogger().warning("Der Skin von " + player.getName()
+                    + " konnte nicht auf das Mannequin übertragen werden, es benutzt den Standard-Skin.");
+        }
+        mannequin.setImmovable(mannequinImmovable);
+        return mannequin;
+    }
+
+    /** Creates the classic body: an armour stand wearing the player's head. */
+    private ArmorStand spawnArmorStandBody(Player player, Location location) {
+        ArmorStand armorStand = (ArmorStand) location.getWorld().spawnEntity(location, EntityType.ARMOR_STAND);
+        armorStand.setVisible(armorStandVisible);
+        armorStand.setMarker(false);
+        armorStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
+        armorStand.addEquipmentLock(EquipmentSlot.CHEST, ArmorStand.LockType.REMOVING_OR_CHANGING);
+        armorStand.addEquipmentLock(EquipmentSlot.LEGS, ArmorStand.LockType.REMOVING_OR_CHANGING);
+        armorStand.addEquipmentLock(EquipmentSlot.FEET, ArmorStand.LockType.REMOVING_OR_CHANGING);
+        armorStand.addEquipmentLock(EquipmentSlot.HAND, ArmorStand.LockType.REMOVING_OR_CHANGING);
+        armorStand.addEquipmentLock(EquipmentSlot.OFF_HAND, ArmorStand.LockType.REMOVING_OR_CHANGING);
+
+        ItemStack playerHead = new ItemStack(Material.PLAYER_HEAD);
+        SkullMeta skullMeta = (SkullMeta) playerHead.getItemMeta();
+        if (skullMeta != null) {
+            skullMeta.setOwningPlayer(player);
+            playerHead.setItemMeta(skullMeta);
+        }
+        armorStand.getEquipment().setHelmet(playerHead);
+        return armorStand;
+    }
+
     public void exitCameraMode(Player player) {
         CameraData cameraData = cameraPlayers.get(player.getUniqueId());
         if (cameraData == null) {
@@ -378,21 +451,21 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             return;
         }
         cancelTimeLimit(player);
-        ArmorStand armorStand = cameraData.getArmorStand();
+        LivingEntity body = cameraData.getBody();
         Villager hitbox = cameraData.getHitbox();
 
         double reaggroRadius = 64.0;
-        for (Entity entity : armorStand.getNearbyEntities(reaggroRadius, reaggroRadius, reaggroRadius)) {
+        for (Entity entity : body.getNearbyEntities(reaggroRadius, reaggroRadius, reaggroRadius)) {
             if (entity instanceof Mob) {
                 Mob mob = (Mob) entity;
-                if (armorStand.equals(mob.getTarget()) || hitbox.equals(mob.getTarget())) {
+                if (body.equals(mob.getTarget()) || (hitbox != null && hitbox.equals(mob.getTarget()))) {
                     mob.setTarget(player);
                 }
             }
         }
 
         // Zuerst zum Körper teleportieren
-        player.teleport(armorStand.getLocation());
+        player.teleport(body.getLocation());
         stopCameraParticles(player);
         stopActionBar(player);
         if (!shuttingDown) {
@@ -436,16 +509,23 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         removePlayerFromNoCollisionTeam(player);
 
         // Aufräumen
-        armorStandOwners.remove(armorStand.getUniqueId());
-        hitboxEntities.remove(hitbox.getUniqueId());
+        bodyOwners.remove(body.getUniqueId());
+        if (hitbox != null) {
+            hitboxEntities.remove(hitbox.getUniqueId());
+        }
 
         // Clear equipment before removing to avoid item drops or duplication
-        armorStand.getEquipment().setArmorContents(new ItemStack[4]);
-        armorStand.getEquipment().setHelmet(new ItemStack(Material.AIR));
-        armorStand.remove();
+        EntityEquipment bodyEquipment = body.getEquipment();
+        if (bodyEquipment != null) {
+            bodyEquipment.setArmorContents(new ItemStack[4]);
+            bodyEquipment.setHelmet(new ItemStack(Material.AIR));
+        }
+        body.remove();
         // Remove armour from the hitbox before deleting it to avoid item drops
-        hitbox.getEquipment().setArmorContents(new ItemStack[4]);
-        hitbox.remove();
+        if (hitbox != null) {
+            hitbox.getEquipment().setArmorContents(new ItemStack[4]);
+            hitbox.remove();
+        }
 
         for (Player other : Bukkit.getOnlinePlayers()) {
             other.showPlayer(this, player);
@@ -460,29 +540,29 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         return cameraPlayers.containsKey(player.getUniqueId());
     }
 
-    private void startArmorStandHealthCheck(Player player, ArmorStand armorStand) {
-        final Location initialLocation = armorStand.getLocation().clone();
+    private void startBodyHealthCheck(Player player, LivingEntity body) {
+        final Location initialLocation = body.getLocation().clone();
         new BukkitRunnable() {
             @Override
             public void run() {
-                if (!cameraPlayers.containsKey(player.getUniqueId()) || !player.isOnline() || armorStand.isDead()) {
+                if (!cameraPlayers.containsKey(player.getUniqueId()) || !player.isOnline() || body.isDead()) {
                     this.cancel();
                     return;
                 }
-                if (!armorStand.getLocation().getWorld().equals(initialLocation.getWorld()) ||
-                        armorStand.getLocation().distanceSquared(initialLocation) > 0.01) {
+                if (!body.getLocation().getWorld().equals(initialLocation.getWorld()) ||
+                        body.getLocation().distanceSquared(initialLocation) > 0.01) {
                     sendConfiguredMessage(player, "body-moved");
                     exitCameraMode(player);
                     this.cancel();
                     return;
                 }
-                if (armorStand.getEyeLocation().getBlock().getType().isSolid()) {
+                if (body.getEyeLocation().getBlock().getType().isSolid()) {
                     sendConfiguredMessage(player, "body-suffocating");
                     exitCameraMode(player);
                     this.cancel();
                 }
-                if (armorStand.getRemainingAir() < armorStand.getMaximumAir() && armorStand.getRemainingAir() <= 0) {
-                    if (armorStand.getTicksLived() % 20 == 0) {
+                if (body.getRemainingAir() < body.getMaximumAir() && body.getRemainingAir() <= 0) {
+                    if (body.getTicksLived() % 20 == 0) {
                         sendConfiguredMessage(player, "body-drowning");
                         exitCameraMode(player);
                     }
@@ -491,15 +571,15 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }.runTaskTimer(this, 20L, 1L);
     }
 
-    private void startHitboxSync(ArmorStand armorStand, Villager hitbox) {
+    private void startHitboxSync(LivingEntity body, Villager hitbox) {
         new BukkitRunnable() {
             @Override
             public void run() {
-                if (armorStand.isDead() || hitbox.isDead()) {
+                if (body.isDead() || hitbox.isDead()) {
                     this.cancel();
                     return;
                 }
-                hitbox.teleport(armorStand.getLocation().add(0, 0.1, 0));
+                hitbox.teleport(body.getLocation().add(0, 0.1, 0));
             }
         }.runTaskTimer(this, 1L, 1L);
     }
@@ -605,22 +685,18 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onArmorStandDamage(EntityDamageEvent event) {
         Entity damagedEntity = event.getEntity();
-        UUID ownerUUID = null;
 
-        // Prüfe, ob es sich um unseren ArmorStand oder die zugehörige Hitbox handelt
-        if (damagedEntity instanceof ArmorStand) {
-            ownerUUID = armorStandOwners.get(damagedEntity.getUniqueId());
-        } else if (damagedEntity instanceof Villager) {
-            ownerUUID = hitboxEntities.get(damagedEntity.getUniqueId());
-        }
+        // Prüfe, ob es sich um unseren Körper oder die zugehörige Hitbox handelt
+        boolean damagedBody = isCameraBody(damagedEntity);
+        UUID ownerUUID = getBodyOrHitboxOwner(damagedEntity);
 
         if (ownerUUID == null) return; // Nicht von uns verwaltet
 
         Player owner = Bukkit.getPlayer(ownerUUID);
         if (owner == null || !owner.isOnline()) {
             // Spieler offline -> Aufräumen
-            if (damagedEntity instanceof ArmorStand) {
-                armorStandOwners.remove(damagedEntity.getUniqueId());
+            if (damagedBody) {
+                bodyOwners.remove(damagedEntity.getUniqueId());
             } else {
                 hitboxEntities.remove(damagedEntity.getUniqueId());
             }
@@ -825,23 +901,40 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
 
     @EventHandler(priority = EventPriority.HIGH)
-    public void onVillagerInteract(PlayerInteractEntityEvent event) {
+    public void onBodyInteract(PlayerInteractEntityEvent event) {
+        handleBodyInteract(event);
+    }
+
+    /**
+     * Armour stands and mannequins are clicked with the "interact at" variant of
+     * the event, which has its own handler list. Without this the body could be
+     * equipped by right clicking it.
+     */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onBodyInteractAt(PlayerInteractAtEntityEvent event) {
+        handleBodyInteract(event);
+    }
+
+    private void handleBodyInteract(PlayerInteractEntityEvent event) {
         Entity entity = event.getRightClicked();
         Player player = event.getPlayer();
-        if (entity instanceof Villager) {
-            UUID ownerUUID = hitboxEntities.get(entity.getUniqueId());
-            if (ownerUUID != null) {
-                event.setCancelled(true);
-                if (player.getUniqueId().equals(ownerUUID)) {
-                    sendConfiguredMessage(player, "camera-off");
-                    Player owner = Bukkit.getPlayer(ownerUUID);
-                    if (owner != null) {
-                        exitCameraMode(owner);
-                    }
-                } else {
-                    sendConfiguredMessage(player, "cant-interact-other");
-                }
+        UUID ownerUUID = getBodyOrHitboxOwner(entity);
+        if (ownerUUID == null) {
+            return;
+        }
+        event.setCancelled(true);
+        if (!cameraPlayers.containsKey(ownerUUID)) {
+            // Beide Event-Varianten können für denselben Klick ausgelöst werden.
+            return;
+        }
+        if (player.getUniqueId().equals(ownerUUID)) {
+            sendConfiguredMessage(player, "camera-off");
+            Player owner = Bukkit.getPlayer(ownerUUID);
+            if (owner != null) {
+                exitCameraMode(owner);
             }
+        } else {
+            sendConfiguredMessage(player, "cant-interact-other");
         }
     }
 
@@ -860,8 +953,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         Player player = (Player) event.getTarget();
         if (cameraPlayers.containsKey(player.getUniqueId())) {
             CameraData data = cameraPlayers.get(player.getUniqueId());
-            if (data != null && data.getHitbox() != null && !data.getHitbox().isDead()) {
-                event.setTarget(data.getHitbox());
+            if (data != null && !data.getDamageTarget().isDead()) {
+                event.setTarget(data.getDamageTarget());
             }
         }
     }
@@ -875,14 +968,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 event.setCancelled(true);
                 event.setTarget(null);
             }
-        } else if (target instanceof ArmorStand stand) {
-            UUID owner = armorStandOwners.get(stand.getUniqueId());
-            if (owner != null && cameraPlayers.containsKey(owner)) {
-                event.setCancelled(true);
-                event.setTarget(null);
-            }
-        } else if (target instanceof Villager villager) {
-            UUID owner = hitboxEntities.get(villager.getUniqueId());
+        } else {
+            UUID owner = getBodyOrHitboxOwner(target);
             if (owner != null && cameraPlayers.containsKey(owner)) {
                 event.setCancelled(true);
                 event.setTarget(null);
@@ -988,7 +1075,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             return;
         }
 
-        Location standLoc = cameraPlayers.get(player.getUniqueId()).getArmorStand().getLocation();
+        Location standLoc = cameraPlayers.get(player.getUniqueId()).getBody().getLocation();
         // Always prevent players from switching worlds, optionally limit distance
         if (!to.getWorld().equals(standLoc.getWorld()) ||
                 (maxDistanceEnabled && to.distanceSquared(standLoc) > maxDistance * maxDistance)) {
@@ -1066,13 +1153,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBodyPotionEffect(EntityPotionEffectEvent event) {
         Entity entity = event.getEntity();
-        UUID ownerUUID = null;
-
-        if (entity instanceof ArmorStand) {
-            ownerUUID = armorStandOwners.get(entity.getUniqueId());
-        } else if (entity instanceof Villager) {
-            ownerUUID = hitboxEntities.get(entity.getUniqueId());
-        }
+        UUID ownerUUID = getBodyOrHitboxOwner(entity);
 
         if (ownerUUID == null) return;
 
@@ -1106,12 +1187,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onPotionSplash(PotionSplashEvent event) {
         for (LivingEntity entity : event.getAffectedEntities()) {
-            UUID owner = null;
-            if (entity instanceof ArmorStand stand) {
-                owner = armorStandOwners.get(stand.getUniqueId());
-            } else if (entity instanceof Villager villager) {
-                owner = hitboxEntities.get(villager.getUniqueId());
-            }
+            UUID owner = getBodyOrHitboxOwner(entity);
             if (owner == null) continue;
             Player player = Bukkit.getPlayer(owner);
             if (player == null) continue;
@@ -1131,12 +1207,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     public void onProjectileHit(ProjectileHitEvent event) {
         Entity hit = event.getHitEntity();
         if (hit == null) return;
-        UUID owner = null;
-        if (hit instanceof ArmorStand stand) {
-            owner = armorStandOwners.get(stand.getUniqueId());
-        } else if (hit instanceof Villager villager) {
-            owner = hitboxEntities.get(villager.getUniqueId());
-        }
+        UUID owner = getBodyOrHitboxOwner(hit);
         if (owner == null) return;
         Player player = Bukkit.getPlayer(owner);
         if (player == null) return;
@@ -1178,15 +1249,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
 
         Entity target = event.getEntity();
-        UUID ownerUUID = null;
+        UUID ownerUUID = getBodyOrHitboxOwner(target);
 
-        if (target instanceof ArmorStand) {
-            ownerUUID = armorStandOwners.get(target.getUniqueId());
-        } else if (target instanceof Villager) {
-            ownerUUID = hitboxEntities.get(target.getUniqueId());
-        }
-
-        // Cancel attacks on anything except the player's own armor stand or hitbox
+        // Cancel attacks on anything except the player's own body or hitbox
         if (ownerUUID == null || !ownerUUID.equals(attacker.getUniqueId())) {
             event.setCancelled(true);
             if (ownerUUID != null && !ownerUUID.equals(attacker.getUniqueId())) {
@@ -1212,6 +1277,23 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
 
+
+    /** {@code true} when the entity is the camera body of a player. */
+    private boolean isCameraBody(Entity entity) {
+        return entity != null && bodyOwners.containsKey(entity.getUniqueId());
+    }
+
+    /**
+     * Returns the camera player that owns the given body or hitbox entity,
+     * or {@code null} when the entity is not managed by us.
+     */
+    private UUID getBodyOrHitboxOwner(Entity entity) {
+        if (entity == null) {
+            return null;
+        }
+        UUID owner = bodyOwners.get(entity.getUniqueId());
+        return owner != null ? owner : hitboxEntities.get(entity.getUniqueId());
+    }
 
     public String getMessage(String path) {
         return ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages." + path, ""));
@@ -1247,6 +1329,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         armorStandNameVisible = getConfig().getBoolean("armorstand.name-visible", true);
         armorStandVisible = getConfig().getBoolean("armorstand.visible", true);
         armorStandGravity = getConfig().getBoolean("armorstand.gravity", true);
+        bodyType = resolveBodyType(getConfig().getInt("body.type", BodyType.ARMOR_STAND.getId()));
+        mannequinImmovable = getConfig().getBoolean("body.mannequin-immovable", true);
         muteAttack = getConfig().getBoolean("mute.attack", false);
         muteFootsteps = getConfig().getBoolean("mute.footsteps", false);
         hideSprintParticles = getConfig().getBoolean("mute.hide-sprint-particles", true);
@@ -1290,6 +1374,20 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (camFireGuard != null) {
             camFireGuard.loadConfig(getConfig());
         }
+    }
+
+    /**
+     * Turns the number configured in {@code body.type} into a body type and
+     * falls back to the armour stand when the value is unknown.
+     */
+    private BodyType resolveBodyType(int configuredId) {
+        BodyType requested = BodyType.fromId(configuredId);
+        if (requested == null) {
+            getLogger().warning("Unbekannter Wert für body.type: " + configuredId
+                    + ". Es wird 1 (Rüstungsständer) verwendet.");
+            return BodyType.ARMOR_STAND;
+        }
+        return requested;
     }
 
     private ChatColor parseColor(String colorName) {
@@ -1600,7 +1698,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     // *** CameraData Klasse erweitert ***
     private static class CameraData {
-        private final ArmorStand armorStand;
+        private final LivingEntity body;
         private final Villager hitbox;
         private final GameMode originalGameMode;
         private final boolean originalAllowFlight;
@@ -1611,8 +1709,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         private final ItemStack[] originalArmorContents;     // Für Rüstung
         private final Collection<PotionEffect> pausedEffects;
 
-        public CameraData(ArmorStand armorStand, Villager hitbox, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalSilent, ItemStack[] originalInventoryContents, ItemStack[] originalArmorContents, Collection<PotionEffect> pausedEffects, int originalRemainingAir) {
-            this.armorStand = armorStand;
+        public CameraData(LivingEntity body, Villager hitbox, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalSilent, ItemStack[] originalInventoryContents, ItemStack[] originalArmorContents, Collection<PotionEffect> pausedEffects, int originalRemainingAir) {
+            this.body = body;
             this.hitbox = hitbox;
             this.originalGameMode = originalGameMode;
             this.originalAllowFlight = originalAllowFlight;
@@ -1624,8 +1722,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             this.originalRemainingAir = originalRemainingAir;
         }
 
-        public ArmorStand getArmorStand() { return armorStand; }
+        public LivingEntity getBody() { return body; }
+        /** The separate hitbox, or {@code null} when the body is hit directly. */
         public Villager getHitbox() { return hitbox; }
+        /** The entity that takes the hits: the separate hitbox, or the body itself. */
+        public LivingEntity getDamageTarget() { return hitbox != null ? hitbox : body; }
         public GameMode getOriginalGameMode() { return originalGameMode; }
         public boolean getOriginalAllowFlight() { return originalAllowFlight; }
         public boolean getOriginalFlying() { return originalFlying; }
