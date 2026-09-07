@@ -23,6 +23,17 @@ public enum BodyType {
     }
 
     /**
+     * Whether this body needs a separate entity to take the hits for the player.
+     *
+     * <p>An armour stand does not calculate armour the way a player does, so the
+     * damage is taken by an invisible villager wearing the player's armour. A
+     * mannequin is hit directly and wears that armour itself.</p>
+     */
+    public boolean usesSeparateHitbox() {
+        return this == ARMOR_STAND;
+    }
+
+    /**
      * Resolves the number configured in {@code body.type}.
      *
      * @return the matching type, or {@code null} if the number is unknown

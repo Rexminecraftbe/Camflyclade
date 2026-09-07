@@ -248,34 +248,22 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
         LivingEntity body = spawnCameraBody(player, playerLocation, originalRemainingAir);
 
-        Villager hitbox = (Villager) player.getWorld().spawnEntity(playerLocation, EntityType.VILLAGER);
-        // Equip the hitbox with armour to ensure damage is calculated just like
-        // for the player. Use clones when armour durability shouldn't change.
-        ItemStack[] mirrorArmor;
-        if (damageArmor) {
-            mirrorArmor = originalArmor;
+        // The server calculates the damage from the armour worn by the entity that
+        // is hit, so the player's armour goes onto whichever entity that is.
+        ItemStack[] mirrorArmor = createMirrorArmor(originalArmor);
+
+        Villager hitbox = null;
+        if (bodyType.usesSeparateHitbox()) {
+            hitbox = spawnHitbox(player, playerLocation, mirrorArmor);
+            hitbox.teleport(body.getLocation().add(0, 0.1, 0));
         } else {
-            mirrorArmor = new ItemStack[originalArmor.length];
-            for (int i = 0; i < originalArmor.length; i++) {
-                if (originalArmor[i] != null) {
-                    mirrorArmor[i] = originalArmor[i].clone();
-                }
+            EntityEquipment bodyEquipment = body.getEquipment();
+            if (bodyEquipment != null) {
+                bodyEquipment.setArmorContents(mirrorArmor);
             }
         }
-        hitbox.getEquipment().setArmorContents(mirrorArmor);
-        hitbox.getPersistentDataContainer().set(hitboxKey, PersistentDataType.INTEGER, 1);
-        hitbox.setInvisible(true);
-        hitbox.setSilent(true);
-        hitbox.setAI(false);
-        hitbox.setInvulnerable(false);
-        hitbox.setCustomName(getMessage("hitbox.name-format").replace("{player}", player.getName()));
-        hitbox.setCustomNameVisible(false);
-        hitbox.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
-        hitbox.setProfession(Villager.Profession.NONE);
-        hitbox.setVillagerType(Villager.Type.PLAINS);
-        hitbox.setVillagerLevel(1);
-        hitbox.setCanPickupItems(false);
-        hitbox.teleport(body.getLocation().add(0, 0.1, 0));
+        // Whoever wears the armour is the entity that takes the hits.
+        LivingEntity damageTarget = hitbox != null ? hitbox : body;
 
         GameMode originalGameMode = player.getGameMode();
         boolean originalAllowFlight = player.getAllowFlight();
@@ -309,7 +297,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             if (entity instanceof Mob) {
                 Mob mob = (Mob) entity;
                 if (player.equals(mob.getTarget())) {
-                    mob.setTarget(hitbox); // redirect aggro to hitbox
+                    mob.setTarget(damageTarget); // redirect aggro away from the player
                 }
             }
         }
@@ -317,12 +305,16 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         // *** Gespeichertes Inventar an CameraData übergeben ***
         cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, originalGameMode, originalAllowFlight, originalFlying, originalSilent, originalInventory, originalArmor, pausedEffects, originalRemainingAir));
         bodyOwners.put(body.getUniqueId(), player.getUniqueId());
-        hitboxEntities.put(hitbox.getUniqueId(), player.getUniqueId());
+        if (hitbox != null) {
+            hitboxEntities.put(hitbox.getUniqueId(), player.getUniqueId());
+        }
         if (protocolLibAvailable) {
             mutedPlayers.add(player.getUniqueId());
         }
 
-        startHitboxSync(body, hitbox);
+        if (hitbox != null) {
+            startHitboxSync(body, hitbox);
+        }
         startCameraParticles(player);
         startActionBar(player);
         camFireGuard.startFor(player);
@@ -345,6 +337,45 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 }
             }.runTaskLater(this, 2L); // delay to ensure armour is restored
         }
+    }
+
+    /**
+     * Copies the player's armour for the entity that mirrors the damage. The real
+     * items are used when they are supposed to lose durability, clones otherwise.
+     */
+    private ItemStack[] createMirrorArmor(ItemStack[] originalArmor) {
+        if (damageArmor) {
+            return originalArmor;
+        }
+        ItemStack[] mirrorArmor = new ItemStack[originalArmor.length];
+        for (int i = 0; i < originalArmor.length; i++) {
+            if (originalArmor[i] != null) {
+                mirrorArmor[i] = originalArmor[i].clone();
+            }
+        }
+        return mirrorArmor;
+    }
+
+    /**
+     * Creates the invisible villager that takes the hits for an armour stand body,
+     * so that damage is calculated just like it would be for the player.
+     */
+    private Villager spawnHitbox(Player player, Location location, ItemStack[] mirrorArmor) {
+        Villager hitbox = (Villager) location.getWorld().spawnEntity(location, EntityType.VILLAGER);
+        hitbox.getEquipment().setArmorContents(mirrorArmor);
+        hitbox.getPersistentDataContainer().set(hitboxKey, PersistentDataType.INTEGER, 1);
+        hitbox.setInvisible(true);
+        hitbox.setSilent(true);
+        hitbox.setAI(false);
+        hitbox.setInvulnerable(false);
+        hitbox.setCustomName(getMessage("hitbox.name-format").replace("{player}", player.getName()));
+        hitbox.setCustomNameVisible(false);
+        hitbox.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
+        hitbox.setProfession(Villager.Profession.NONE);
+        hitbox.setVillagerType(Villager.Type.PLAINS);
+        hitbox.setVillagerLevel(1);
+        hitbox.setCanPickupItems(false);
+        return hitbox;
     }
 
     /**
@@ -427,7 +458,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         for (Entity entity : body.getNearbyEntities(reaggroRadius, reaggroRadius, reaggroRadius)) {
             if (entity instanceof Mob) {
                 Mob mob = (Mob) entity;
-                if (body.equals(mob.getTarget()) || hitbox.equals(mob.getTarget())) {
+                if (body.equals(mob.getTarget()) || (hitbox != null && hitbox.equals(mob.getTarget()))) {
                     mob.setTarget(player);
                 }
             }
@@ -479,7 +510,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
         // Aufräumen
         bodyOwners.remove(body.getUniqueId());
-        hitboxEntities.remove(hitbox.getUniqueId());
+        if (hitbox != null) {
+            hitboxEntities.remove(hitbox.getUniqueId());
+        }
 
         // Clear equipment before removing to avoid item drops or duplication
         EntityEquipment bodyEquipment = body.getEquipment();
@@ -489,8 +522,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         body.remove();
         // Remove armour from the hitbox before deleting it to avoid item drops
-        hitbox.getEquipment().setArmorContents(new ItemStack[4]);
-        hitbox.remove();
+        if (hitbox != null) {
+            hitbox.getEquipment().setArmorContents(new ItemStack[4]);
+            hitbox.remove();
+        }
 
         for (Player other : Bukkit.getOnlinePlayers()) {
             other.showPlayer(this, player);
@@ -918,8 +953,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         Player player = (Player) event.getTarget();
         if (cameraPlayers.containsKey(player.getUniqueId())) {
             CameraData data = cameraPlayers.get(player.getUniqueId());
-            if (data != null && data.getHitbox() != null && !data.getHitbox().isDead()) {
-                event.setTarget(data.getHitbox());
+            if (data != null && !data.getDamageTarget().isDead()) {
+                event.setTarget(data.getDamageTarget());
             }
         }
     }
@@ -1688,7 +1723,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
 
         public LivingEntity getBody() { return body; }
+        /** The separate hitbox, or {@code null} when the body is hit directly. */
         public Villager getHitbox() { return hitbox; }
+        /** The entity that takes the hits: the separate hitbox, or the body itself. */
+        public LivingEntity getDamageTarget() { return hitbox != null ? hitbox : body; }
         public GameMode getOriginalGameMode() { return originalGameMode; }
         public boolean getOriginalAllowFlight() { return originalAllowFlight; }
         public boolean getOriginalFlying() { return originalFlying; }
