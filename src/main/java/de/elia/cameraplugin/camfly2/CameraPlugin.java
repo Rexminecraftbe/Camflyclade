@@ -57,6 +57,7 @@ import java.util.Collection;
 import java.util.ArrayList;
 import de.elia.cameraplugin.feuer.CamFireGuard;
 import de.elia.cameraplugin.body.BodyType;
+import de.elia.cameraplugin.body.MannequinSkin;
 
 import static org.bukkit.Sound.ENTITY_ITEM_BREAK;
 
@@ -375,7 +376,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     /** Creates a mannequin that shows the player's own skin. */
     private Mannequin spawnMannequinBody(Player player, Location location) {
         Mannequin mannequin = (Mannequin) location.getWorld().spawnEntity(location, EntityType.MANNEQUIN);
-        mannequin.setProfile(player.getPlayerProfile());
+        if (!MannequinSkin.apply(mannequin, player)) {
+            getLogger().warning("Der Skin von " + player.getName()
+                    + " konnte nicht auf das Mannequin übertragen werden, es benutzt den Standard-Skin.");
+        }
         mannequin.setImmovable(mannequinImmovable);
         return mannequin;
     }
