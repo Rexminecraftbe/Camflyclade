@@ -84,7 +84,20 @@ camera-mode:
   # Erlaubt Flug durch Lava
   allow_lava_flight: true
 
-# Einstellungen des Rüstungsständers
+# Körper, der im Kamera-Modus an der Stelle des Spielers zurückbleibt
+body:
+  # Welche Entität als Körper benutzt wird
+  # 1 = Rüstungsständer mit dem Kopf des Spielers (wie bisher)
+  # 2 = Mannequin mit dem Skin des Spielers (benötigt Minecraft 1.21.9 oder neuer)
+  # Kennt der Server kein Mannequin, wird automatisch 1 verwendet.
+  type: 1
+  # Nur für Typ 2: das Mannequin bleibt fest an seiner Stelle stehen,
+  # es fällt nicht und kann nicht weggeschoben werden
+  mannequin-immovable: true
+
+# Einstellungen des Körpers
+# name-visible, gravity und damage-* gelten für beide Typen,
+# visible nur für den Rüstungsständer (Typ 1)
 armorstand:
   # Zeigt den Namen über dem Rüstungsständer an
   name-visible: true
