@@ -26,6 +26,9 @@ import org.bukkit.profile.PlayerProfile;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.scoreboard.Criteria;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.boss.BossBar;
@@ -54,7 +57,6 @@ import java.util.Collection;
 import java.util.ArrayList;
 import de.elia.cameraplugin.feuer.CamFireGuard;
 import de.elia.cameraplugin.body.BodyType;
-import de.elia.cameraplugin.body.MannequinSupport;
 
 import static org.bukkit.Sound.ENTITY_ITEM_BREAK;
 
@@ -148,7 +150,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
         camModeObjective = scoreboard.getObjective(CAM_OBJECTIVE);
         if (camModeObjective == null) {
-            camModeObjective = scoreboard.registerNewObjective(CAM_OBJECTIVE, "dummy", "Cam Mode");
+            camModeObjective = scoreboard.registerNewObjective(CAM_OBJECTIVE, Criteria.DUMMY, "Cam Mode");
         }
         for (String entry : scoreboard.getEntries()) {
             camModeObjective.getScore(entry).setScore(0);
@@ -351,21 +353,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * player's own skin.
      */
     private LivingEntity spawnCameraBody(Player player, Location location, int remainingAir) {
-        LivingEntity body = null;
-        if (bodyType == BodyType.MANNEQUIN) {
-            body = MannequinSupport.spawn(location);
-            if (body == null) {
-                getLogger().warning("Das Mannequin konnte nicht erstellt werden, es wird ein Rüstungsständer verwendet.");
-            } else {
-                if (!MannequinSupport.applyPlayerSkin(body, player)) {
-                    getLogger().warning("Der Skin von " + player.getName() + " konnte nicht auf das Mannequin übertragen werden.");
-                }
-                MannequinSupport.setImmovable(body, mannequinImmovable);
-            }
-        }
-        if (body == null) {
-            body = spawnArmorStandBody(player, location);
-        }
+        LivingEntity body = bodyType == BodyType.MANNEQUIN
+                ? spawnMannequinBody(player, location)
+                : spawnArmorStandBody(player, location);
 
         body.setRemainingAir(remainingAir);
         body.getPersistentDataContainer().set(bodyKey, PersistentDataType.INTEGER, 1);
@@ -374,13 +364,20 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         body.setCustomName(getMessage("armorstand.name-format").replace("{player}", player.getName()));
         body.setCustomNameVisible(armorStandNameVisible);
         body.setInvulnerable(false);
-        try {
-            body.setMaxHealth(20.0);
+        AttributeInstance maxHealth = body.getAttribute(Attribute.MAX_HEALTH);
+        if (maxHealth != null) {
+            maxHealth.setBaseValue(20.0);
             body.setHealth(20.0);
-        } catch (RuntimeException ex) {
-            getLogger().warning("Die Leben des Kamera-Körpers konnten nicht gesetzt werden: " + ex.getMessage());
         }
         return body;
+    }
+
+    /** Creates a mannequin that shows the player's own skin. */
+    private Mannequin spawnMannequinBody(Player player, Location location) {
+        Mannequin mannequin = (Mannequin) location.getWorld().spawnEntity(location, EntityType.MANNEQUIN);
+        mannequin.setProfile(player.getPlayerProfile());
+        mannequin.setImmovable(mannequinImmovable);
+        return mannequin;
     }
 
     /** Creates the classic body: an armour stand wearing the player's head. */
@@ -1342,19 +1339,13 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     /**
      * Turns the number configured in {@code body.type} into a body type and
-     * falls back to the armour stand whenever the value is unknown or the
-     * server is too old for the requested entity.
+     * falls back to the armour stand when the value is unknown.
      */
     private BodyType resolveBodyType(int configuredId) {
         BodyType requested = BodyType.fromId(configuredId);
         if (requested == null) {
             getLogger().warning("Unbekannter Wert für body.type: " + configuredId
                     + ". Es wird 1 (Rüstungsständer) verwendet.");
-            return BodyType.ARMOR_STAND;
-        }
-        if (requested == BodyType.MANNEQUIN && !MannequinSupport.isSupported()) {
-            getLogger().warning("body.type ist auf 2 (Mannequin) gesetzt, dieser Server kennt die Mannequin-Entität aber nicht"
-                    + " (Minecraft 1.21.9 oder neuer wird benötigt). Es wird 1 (Rüstungsständer) verwendet.");
             return BodyType.ARMOR_STAND;
         }
         return requested;
