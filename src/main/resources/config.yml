@@ -75,8 +75,6 @@ camera-mode:
   max-distance: 100.0
   # Abklingzeit zwischen Distanzwarnungen
   distance-warning-cooldown: 3
-  # Schaden pro Tick beim Ertrinken des Körpers
-  drowning-damage: 2.0
   # Sichtbarkeit anderer Spieler im Modus (cam/true/false)
   player_visibility_mode: "true"
   # Erlaubt Unsichtbarkeitstränke
@@ -85,18 +83,24 @@ camera-mode:
   allow_lava_flight: true
 
 # Körper, der im Kamera-Modus an der Stelle des Spielers zurückbleibt
+# In beiden Fällen nimmt ein Mannequin den Schaden: Es hat die Hitbox eines
+# Spielers und trägt die Rüstung, deshalb rechnet der Server den Schaden bei
+# beiden Typen gleich aus. Jeder Treffer beendet den Kamera-Modus.
 body:
   # Welche Entität als Körper benutzt wird
-  # 1 = Rüstungsständer mit dem Kopf des Spielers (wie bisher)
-  # 2 = Mannequin mit dem Skin des Spielers
+  # 1 = Rüstungsständer mit dem Kopf des Spielers, dazu ein unsichtbares
+  #     Mannequin an derselben Stelle, das die Treffer abbekommt.
+  #     Auch seine Rüstung wird nicht angezeigt (kein Resourcepack nötig).
+  # 2 = sichtbares Mannequin mit dem Skin des Spielers, das die Rüstung
+  #     des Spielers auch sichtbar trägt
   # Bei einem unbekannten Wert wird 1 verwendet.
   type: 1
-  # Nur für Typ 2: das Mannequin bleibt fest an seiner Stelle stehen,
-  # es fällt nicht und kann nicht weggeschoben werden
+  # Das Mannequin bleibt fest an seiner Stelle stehen, es fällt nicht
+  # und kann nicht weggeschoben werden (gilt für beide Typen)
   mannequin-immovable: true
 
 # Einstellungen des Körpers
-# name-visible, gravity und damage-* gelten für beide Typen,
+# name-visible und gravity gelten für den Körper beider Typen,
 # visible nur für den Rüstungsständer (Typ 1)
 armorstand:
   # Zeigt den Namen über dem Rüstungsständer an

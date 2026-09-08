@@ -7,9 +7,12 @@ package de.elia.cameraplugin.body;
  * config file.</p>
  */
 public enum BodyType {
-    /** Armour stand wearing the player's head. Works on every supported version. */
+    /**
+     * Armour stand wearing the player's head, with an invisible mannequin
+     * standing in the same spot that takes the hits.
+     */
     ARMOR_STAND(1),
-    /** Mannequin using the player's own skin. Requires Minecraft 1.21.9 or newer. */
+    /** Visible mannequin using the player's own skin, which is hit directly. */
     MANNEQUIN(2);
 
     private final int id;
@@ -26,8 +29,8 @@ public enum BodyType {
      * Whether this body needs a separate entity to take the hits for the player.
      *
      * <p>An armour stand does not calculate armour the way a player does, so the
-     * damage is taken by an invisible villager wearing the player's armour. A
-     * mannequin is hit directly and wears that armour itself.</p>
+     * damage is taken by an invisible mannequin wearing the player's armour. A
+     * visible mannequin is hit directly and wears that armour itself.</p>
      */
     public boolean usesSeparateHitbox() {
         return this == ARMOR_STAND;
