@@ -57,6 +57,7 @@ import java.util.Collection;
 import java.util.ArrayList;
 import de.elia.cameraplugin.feuer.CamFireGuard;
 import de.elia.cameraplugin.body.BodyType;
+import de.elia.cameraplugin.body.EquipmentVisibility;
 import de.elia.cameraplugin.body.MannequinSkin;
 
 import static org.bukkit.Sound.ENTITY_ITEM_BREAK;
@@ -92,6 +93,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private boolean shuttingDown = false;
     private NamespacedKey bodyKey;
     private NamespacedKey hitboxKey;
+    private NamespacedKey hiddenArmorAsset;
+    /** Armour slots in the order of {@link org.bukkit.inventory.PlayerInventory#getArmorContents()}. */
+    private static final EquipmentSlot[] ARMOR_SLOTS = {
+            EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD
+    };
     private static final String CAM_OBJECTIVE = "cam_mode";
     private org.bukkit.scoreboard.Objective camModeObjective;
 
@@ -147,6 +153,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         loadConfigValues();
         bodyKey = new NamespacedKey(this, "cam_body");
         hitboxKey = new NamespacedKey(this, "cam_hitbox");
+        // Deliberately not a real equipment asset: the client finds nothing for
+        // it and therefore draws nothing.
+        hiddenArmorAsset = new NamespacedKey(this, "hidden_armor");
         Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
         camModeObjective = scoreboard.getObjective(CAM_OBJECTIVE);
         if (camModeObjective == null) {
@@ -247,18 +256,18 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
         LivingEntity body = spawnCameraBody(player, playerLocation, originalRemainingAir);
 
-        // The server calculates the damage from the armour worn by the entity that
-        // is hit, so the player's armour goes onto whichever entity that is.
-        ItemStack[] mirrorArmor = createMirrorArmor(originalArmor);
-
+        // A mannequin always wears the player's armour and always takes the hits,
+        // so the server calculates the damage the same way for both body types.
         Mannequin hitbox = null;
         if (bodyType.usesSeparateHitbox()) {
-            hitbox = spawnHitbox(player, playerLocation, mirrorArmor);
+            // The mannequin next to the armour stand is invisible, so it wears
+            // copies whose armour is not rendered either.
+            hitbox = spawnHitbox(player, playerLocation, createHiddenArmor(originalArmor));
             hitbox.teleport(body.getLocation());
         } else {
             EntityEquipment bodyEquipment = body.getEquipment();
             if (bodyEquipment != null) {
-                bodyEquipment.setArmorContents(mirrorArmor);
+                bodyEquipment.setArmorContents(createMirrorArmor(originalArmor));
             }
         }
         // Whoever wears the armour is the entity that takes the hits.
@@ -356,18 +365,44 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
+     * Copies the player's armour for the invisible mannequin and takes away its
+     * rendering, so that it protects the body without the pieces floating in
+     * front of the armour stand.
+     *
+     * <p>Copies are enough here: the body never really takes the damage, its
+     * damage event is cancelled. The durability is taken from the player's own
+     * armour when the damage is mirrored onto him, and his items are therefore
+     * left untouched.</p>
+     */
+    private ItemStack[] createHiddenArmor(ItemStack[] originalArmor) {
+        ItemStack[] hiddenArmor = new ItemStack[originalArmor.length];
+        boolean stillVisible = false;
+        for (int i = 0; i < originalArmor.length && i < ARMOR_SLOTS.length; i++) {
+            if (originalArmor[i] == null) {
+                continue;
+            }
+            ItemStack copy = originalArmor[i].clone();
+            if (!EquipmentVisibility.hide(copy, ARMOR_SLOTS[i], hiddenArmorAsset)) {
+                stillVisible = true;
+            }
+            hiddenArmor[i] = copy;
+        }
+        if (stillVisible) {
+            getLogger().warning("Die Rüstung des unsichtbaren Mannequins konnte nicht ausgeblendet werden, "
+                    + "sie bleibt am Körper sichtbar.");
+        }
+        return hiddenArmor;
+    }
+
+    /**
      * Creates the invisible mannequin that takes the hits for an armour stand
      * body. A mannequin has the same hitbox as a player and wears the player's
      * armour, so the server calculates the damage just like it would for the
      * player himself.
      *
-     * <p>The mannequin is not sent to the clients at all. That keeps the armour
-     * it wears from being rendered next to the armour stand and leaves the
-     * armour stand as the only body players can see and click. Hits on the
-     * armour stand are passed on to the mannequin in
-     * {@link #onBodyDamage(EntityDamageEvent)}, everything the world does to the
-     * body (lava, water, blocks, explosions) reaches the mannequin directly
-     * because it is only hidden for the clients, not for the server.</p>
+     * <p>It is invisible and its armour is not rendered either, but it is a
+     * normal entity otherwise: players, mobs and the world hit it directly, just
+     * like the visible mannequin of body type 2.</p>
      */
     private Mannequin spawnHitbox(Player player, Location location, ItemStack[] mirrorArmor) {
         Mannequin hitbox = (Mannequin) location.getWorld().spawnEntity(location, EntityType.MANNEQUIN);
@@ -376,7 +411,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             equipment.setArmorContents(mirrorArmor);
         }
         hitbox.getPersistentDataContainer().set(hitboxKey, PersistentDataType.INTEGER, 1);
-        hitbox.setVisibleByDefault(false);
         hitbox.setInvisible(true);
         hitbox.setSilent(true);
         hitbox.setGravity(false);
@@ -692,9 +726,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
 
     /**
-     * Every hit on the body ends camera mode. There is no separate check for
-     * lava, water or blocks any more: the mannequin takes that damage itself,
-     * so the damage event is all that is needed to notice it.
+     * Every hit on the body ends camera mode. The mannequin takes the hit for
+     * both body types, so the damage is always calculated the same way, and
+     * there is no separate check for lava, water or blocks any more: the
+     * mannequin takes that damage itself and the damage event is all that is
+     * needed to notice it.
      */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBodyDamage(EntityDamageEvent event) {
@@ -722,9 +758,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
         CameraData data = cameraPlayers.get(ownerUUID);
 
-        // Hits on the armour stand are passed on to the mannequin so that the
-        // damage is always calculated on the entity wearing the player's armour.
-        // The player's own hit ends camera mode below and is not passed on.
+        // The armour stand is a little taller than the mannequin, so a hit can
+        // land on it instead. Such a hit is passed on to the mannequin, so that
+        // the damage is calculated on the entity wearing the player's armour in
+        // every case. The player's own hit just ends camera mode below.
         if (damagedBody && data != null && data.getHitbox() != null && !data.getHitbox().isDead()
                 && event instanceof EntityDamageByEntityEvent byEntity
                 && !byEntity.getDamager().getUniqueId().equals(owner.getUniqueId())

@@ -84,13 +84,15 @@ camera-mode:
 
 # Körper, der im Kamera-Modus an der Stelle des Spielers zurückbleibt
 # In beiden Fällen nimmt ein Mannequin den Schaden: Es hat die Hitbox eines
-# Spielers und trägt die Rüstung, deshalb rechnet der Server den Schaden genau
-# so aus wie beim Spieler selbst. Jeder Treffer beendet den Kamera-Modus.
+# Spielers und trägt die Rüstung, deshalb rechnet der Server den Schaden bei
+# beiden Typen gleich aus. Jeder Treffer beendet den Kamera-Modus.
 body:
   # Welche Entität als Körper benutzt wird
   # 1 = Rüstungsständer mit dem Kopf des Spielers, dazu ein unsichtbares
-  #     Mannequin an derselben Stelle, das die Treffer abbekommt
-  # 2 = sichtbares Mannequin mit dem Skin des Spielers
+  #     Mannequin an derselben Stelle, das die Treffer abbekommt.
+  #     Auch seine Rüstung wird nicht angezeigt (kein Resourcepack nötig).
+  # 2 = sichtbares Mannequin mit dem Skin des Spielers, das die Rüstung
+  #     des Spielers auch sichtbar trägt
   # Bei einem unbekannten Wert wird 1 verwendet.
   type: 1
   # Das Mannequin bleibt fest an seiner Stelle stehen, es fällt nicht
