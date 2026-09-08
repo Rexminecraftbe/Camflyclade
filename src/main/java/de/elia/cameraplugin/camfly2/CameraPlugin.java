@@ -94,6 +94,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private NamespacedKey bodyKey;
     private NamespacedKey hitboxKey;
     private NamespacedKey hiddenArmorAsset;
+    private boolean hiddenArmorLogged;
     /** Armour slots in the order of {@link org.bukkit.inventory.PlayerInventory#getArmorContents()}. */
     private static final EquipmentSlot[] ARMOR_SLOTS = {
             EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD
@@ -377,6 +378,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private ItemStack[] createHiddenArmor(ItemStack[] originalArmor) {
         ItemStack[] hiddenArmor = new ItemStack[originalArmor.length];
         boolean stillVisible = false;
+        ItemStack sample = null;
         for (int i = 0; i < originalArmor.length && i < ARMOR_SLOTS.length; i++) {
             if (originalArmor[i] == null) {
                 continue;
@@ -386,10 +388,20 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 stillVisible = true;
             }
             hiddenArmor[i] = copy;
+            if (sample == null) {
+                sample = copy;
+            }
         }
         if (stillVisible) {
             getLogger().warning("Die Rüstung des unsichtbaren Mannequins konnte nicht ausgeblendet werden, "
-                    + "sie bleibt am Körper sichtbar.");
+                    + "sie bleibt am Körper sichtbar. Setter: " + EquipmentVisibility.describeAssetSetter());
+        } else if (sample != null && !hiddenArmorLogged) {
+            // Once per start, so it can be checked whether the component really
+            // reaches the item when the armour is still visible on the client.
+            hiddenArmorLogged = true;
+            getLogger().info("Rüstung des unsichtbaren Mannequins ausgeblendet über "
+                    + EquipmentVisibility.describeAssetSetter()
+                    + ", Komponente am Item: " + EquipmentVisibility.describe(sample));
         }
         return hiddenArmor;
     }
