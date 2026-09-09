@@ -17,6 +17,22 @@ messages:
   cant-attack-other-body: "&cYou cannot attack other bodies in camera mode."
   cant-fly-in-lava: "&cYou cannot fly through lava! Camera mode will be ended."
   cant-interact-other: "&cYou cannot interact with another player's body!"
+  # Meldungen über fehlerhafte Werte in dieser Datei. Sie gehen immer ins
+  # Server-Log und bei /cam reload zusätzlich an den Spieler, der ihn
+  # ausgelöst hat. Platzhalter: {path} der Schlüssel, {value} der eingetragene
+  # Wert, {used} der stattdessen benutzte Wert, {allowed} die erlaubten Werte,
+  # {min} der Mindestwert, {count} die Anzahl der Meldungen.
+  # Leer lassen bringt nichts, dann greift der eingebaute Text - zum
+  # Abschalten message-settings.config-errors auf false setzen.
+  config-error-header: "&cDie Konfiguration hat {count} ungültige Stellen:"
+  config-error-header-single: "&cDie Konfiguration hat eine ungültige Stelle:"
+  config-error-more: "&c... und {count} weitere. Alle stehen in der Server-Konsole."
+  config-expected-boolean: "&cFalscher Wert für {path}: '{value}'. Erwartet wird true oder false. Es wird {used} verwendet."
+  config-expected-number: "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Zahl. Es wird {used} verwendet."
+  config-expected-text: "&cFalscher Wert für {path}: '{value}'. Erwartet wird Text. Es wird {used} verwendet."
+  config-too-small: "&cWert für {path} ist zu klein: {value}. Es wird {min} verwendet."
+  config-unknown-color: "&cUnbekannte Farbe für {path}: '{value}'. Es wird keine Farbe verwendet."
+  config-unknown-value: "&cUnbekannter Wert für {path}: '{value}'. Erlaubt sind: {allowed}. Es wird {used} verwendet."
   cooldown-available: "&aCam mode available again"
   cooldown-text: "You can start cam mode again in %time%."
   distance-limit: "&cYou cannot move further than {distance} blocks from your body!"
@@ -46,6 +62,9 @@ message-settings:
   cant-attack-other-body: true
   cant-fly-in-lava: true
   cant-interact-other: true
+  # Gilt für den ganzen config-*-Block und nur für den Chat beim Reload,
+  # ins Server-Log gehen die Meldungen immer
+  config-errors: true
   cooldown-available: true
   cooldown-text: true
   distance-limit: true
@@ -131,12 +150,6 @@ armorstand:
   # Mannequin, damit beide gemeinsam fallen.
   # Wird ignoriert, wenn body.movement-sensitivity auf 0 steht
   gravity: true
-  # Schaden, den der Rüstungsständer bei Treffern erhält
-  damage-amount: 1.0
-  # Verringert Haltbarkeit der ausgerüsteten Rüstung
-  durability-loss: true
-  # Ignoriert Rüstung beim Berechnen des Schadens
-  damage-ignore-armor: true
 
 # Geräuschunterdrückung
 mute:

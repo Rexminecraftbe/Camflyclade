@@ -61,6 +61,7 @@ import de.elia.cameraplugin.body.BodyType;
 import de.elia.cameraplugin.body.EquipmentVisibility;
 import de.elia.cameraplugin.body.MannequinSkin;
 import de.elia.cameraplugin.body.MovementSensitivity;
+import de.elia.cameraplugin.config.ConfigIssue;
 import de.elia.cameraplugin.config.ConfigReader;
 
 import static org.bukkit.Sound.ENTITY_ITEM_BREAK;
@@ -124,6 +125,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * bury the chat.
      */
     private static final int MAX_CHAT_WARNINGS = 8;
+
+    /** Message for a colour name that does not exist, plus its built-in wording. */
+    private static final String UNKNOWN_COLOR_MESSAGE = "config-unknown-color";
+    private static final String UNKNOWN_COLOR_FALLBACK =
+            "&cUnbekannte Farbe für {path}: '{value}'. Es wird keine Farbe verwendet.";
 
     // Configurable values
     private boolean maxDistanceEnabled;
@@ -1441,7 +1447,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      *
      * @return a note for each value that did not fit and was replaced
      */
-    private List<String> loadConfigValues() {
+    private List<ConfigIssue> loadConfigValues() {
         ConfigReader config = new ConfigReader(getConfig());
         maxDistanceEnabled = config.getBoolean("camera-mode.max-distance-enabled", true);
         maxDistance = config.getDouble("camera-mode.max-distance", 100.0, 0.0);
@@ -1515,8 +1521,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private BodyType resolveBodyType(ConfigReader config, int configuredId) {
         BodyType requested = BodyType.fromId(configuredId);
         if (requested == null) {
-            config.warn("Unbekannter Wert für body.type: " + configuredId
-                    + ". Es wird 1 (Rüstungsständer) verwendet.");
+            config.warnUnknownValue("body.type", configuredId, "1, 2",
+                    String.valueOf(BodyType.ARMOR_STAND.getId()));
             return BodyType.ARMOR_STAND;
         }
         return requested;
@@ -1533,8 +1539,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private MovementSensitivity resolveMovementSensitivity(ConfigReader config, int configuredId) {
         MovementSensitivity requested = MovementSensitivity.fromId(configuredId);
         if (requested == null) {
-            config.warn("Unbekannter Wert für body.movement-sensitivity: " + configuredId
-                    + ". Es wird 1 (normal) verwendet.");
+            config.warnUnknownValue("body.movement-sensitivity", configuredId, "0, 1, 2",
+                    String.valueOf(MovementSensitivity.NORMAL.getId()));
             requested = MovementSensitivity.NORMAL;
         }
         return requested.forBodyType(bodyType);
@@ -1548,8 +1554,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         String name = config.getString(path, "");
         ChatColor color = parseColor(name);
         if (color == null && !name.isEmpty()) {
-            config.warn("Unbekannte Farbe für " + path + ": '" + name
-                    + "'. Es wird keine Farbe verwendet.");
+            config.warn(ConfigIssue.of(UNKNOWN_COLOR_MESSAGE, UNKNOWN_COLOR_FALLBACK)
+                    .with("path", path)
+                    .with("value", name));
         }
         return color;
     }
@@ -1560,27 +1567,48 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * second part a broken config file stays invisible in game: the reload
      * reports success while the server quietly runs on default values.
      */
-    private void reportConfigWarnings(List<String> warnings, Player initiator) {
-        for (String warning : warnings) {
-            getLogger().warning(warning);
+    private void reportConfigWarnings(List<ConfigIssue> warnings, Player initiator) {
+        List<String> texts = new ArrayList<>(warnings.size());
+        for (ConfigIssue warning : warnings) {
+            texts.add(warning.format(configMessage(warning.getMessageKey(), warning.getFallback())));
         }
-        if (initiator == null || warnings.isEmpty()) {
+        for (String text : texts) {
+            // The console has no use for colour codes, only for the sentence.
+            getLogger().warning(ChatColor.stripColor(text));
+        }
+        if (initiator == null || texts.isEmpty() || !isMessageEnabled("config-errors")) {
             return;
         }
-        String prefix = ChatColor.RED + "[" + getName() + "] ";
         // The command reports success right after this, so the block needs a
         // headline of its own to not be mistaken for a clean reload.
-        initiator.sendMessage(prefix + "Die Konfiguration hat "
-                + (warnings.size() == 1 ? "eine ungültige Stelle" : warnings.size() + " ungültige Stellen")
-                + ":");
-        int shown = Math.min(warnings.size(), MAX_CHAT_WARNINGS);
+        String header = texts.size() == 1
+                ? configMessage("config-error-header-single", "&cDie Konfiguration hat eine ungültige Stelle:")
+                : configMessage("config-error-header", "&cDie Konfiguration hat {count} ungültige Stellen:");
+        initiator.sendMessage(header.replace("{count}", String.valueOf(texts.size())));
+        int shown = Math.min(texts.size(), MAX_CHAT_WARNINGS);
         for (int i = 0; i < shown; i++) {
-            initiator.sendMessage(prefix + warnings.get(i));
+            initiator.sendMessage(texts.get(i));
         }
-        if (warnings.size() > shown) {
-            initiator.sendMessage(prefix + "... und " + (warnings.size() - shown)
-                    + " weitere. Alle stehen in der Server-Konsole.");
+        if (texts.size() > shown) {
+            initiator.sendMessage(configMessage("config-error-more",
+                    "&c... und {count} weitere. Alle stehen in der Server-Konsole.")
+                    .replace("{count}", String.valueOf(texts.size() - shown)));
         }
+    }
+
+    /**
+     * Looks up the wording of a config note. Unlike {@link #getMessage(String)}
+     * an empty entry falls back to the built-in text: a note that lost its
+     * wording would be an empty line in the log and would hide the very problem
+     * it is about. Use {@code message-settings.config-errors} to switch the
+     * notes in the chat off instead.
+     */
+    private String configMessage(String key, String fallback) {
+        String raw = getConfig().getString("messages." + key, fallback);
+        if (raw == null || raw.isEmpty()) {
+            raw = fallback;
+        }
+        return ChatColor.translateAlternateColorCodes('&', raw);
     }
 
     private ChatColor parseColor(String colorName) {

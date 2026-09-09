@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Reads the config file and writes down every value that does not fit.
@@ -21,27 +22,46 @@ import java.util.Locale;
  * <p>A value that is not in the file at all is not a mistake: it keeps its
  * default silently, so that a config file from an older version does not
  * produce a wall of notes.</p>
+ *
+ * <p>The notes carry no wording of their own, only the message key and the
+ * pieces that belong into it; see {@link ConfigIssue}.</p>
  */
 public final class ConfigReader {
 
-    /** Above this many constants an enum is not listed in the note any more. */
-    private static final int MAX_LISTED_CONSTANTS = 10;
+    /** Message keys of the notes, matching the {@code messages} block. */
+    public static final String EXPECTED_BOOLEAN = "config-expected-boolean";
+    public static final String EXPECTED_NUMBER = "config-expected-number";
+    public static final String EXPECTED_TEXT = "config-expected-text";
+    public static final String UNKNOWN_VALUE = "config-unknown-value";
+    public static final String TOO_SMALL = "config-too-small";
+
+    /** Wording used when a key is missing from the config file. */
+    private static final Map<String, String> FALLBACKS = Map.of(
+            EXPECTED_BOOLEAN, "&cFalscher Wert für {path}: '{value}'. Erwartet wird true oder false."
+                    + " Es wird {used} verwendet.",
+            EXPECTED_NUMBER, "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Zahl."
+                    + " Es wird {used} verwendet.",
+            EXPECTED_TEXT, "&cFalscher Wert für {path}: '{value}'. Erwartet wird Text."
+                    + " Es wird {used} verwendet.",
+            UNKNOWN_VALUE, "&cUnbekannter Wert für {path}: '{value}'. Erlaubt sind: {allowed}."
+                    + " Es wird {used} verwendet.",
+            TOO_SMALL, "&cWert für {path} ist zu klein: {value}. Es wird {min} verwendet.");
 
     private final FileConfiguration config;
-    private final List<String> warnings = new ArrayList<>();
+    private final List<ConfigIssue> warnings = new ArrayList<>();
 
     public ConfigReader(FileConfiguration config) {
         this.config = config;
     }
 
     /** The collected notes, in the order in which the values were read. */
-    public List<String> getWarnings() {
+    public List<ConfigIssue> getWarnings() {
         return warnings;
     }
 
     /** Adds a note from a check the caller does on its own. */
-    public void warn(String message) {
-        warnings.add(message);
+    public void warn(ConfigIssue issue) {
+        warnings.add(issue);
     }
 
     // ------------------------------------------------------------- Wahrheitswerte
@@ -54,7 +74,7 @@ public final class ConfigReader {
         if (raw instanceof Boolean value) {
             return value;
         }
-        warnWrongType(path, raw, "true oder false", String.valueOf(def));
+        warnWrongType(path, raw, EXPECTED_BOOLEAN, String.valueOf(def));
         return def;
     }
 
@@ -73,7 +93,7 @@ public final class ConfigReader {
             if (raw == null || raw instanceof Boolean || section.isConfigurationSection(key)) {
                 continue;
             }
-            warnWrongType(path + "." + key, raw, "true oder false", "true");
+            warnWrongType(path + "." + key, raw, EXPECTED_BOOLEAN, "true");
         }
     }
 
@@ -128,7 +148,7 @@ public final class ConfigReader {
         if (raw instanceof Number value) {
             return value;
         }
-        warnWrongType(path, raw, "eine Zahl", String.valueOf(def));
+        warnWrongType(path, raw, EXPECTED_NUMBER, String.valueOf(def));
         return null;
     }
 
@@ -147,7 +167,7 @@ public final class ConfigReader {
         if (raw instanceof Boolean || raw instanceof Number || raw instanceof String) {
             return raw.toString();
         }
-        warnWrongType(path, raw, "Text", def);
+        warnWrongType(path, raw, EXPECTED_TEXT, def);
         return def;
     }
 
@@ -159,8 +179,7 @@ public final class ConfigReader {
                 return value;
             }
         }
-        warnings.add("Unbekannter Wert für " + path + ": '" + value + "'. Erlaubt sind: "
-                + String.join(", ", allowed) + ". Es wird " + def + " verwendet.");
+        warnUnknownValue(path, value, String.join(", ", allowed), def);
         return def;
     }
 
@@ -170,25 +189,41 @@ public final class ConfigReader {
         try {
             return Enum.valueOf(type, value.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
-            T[] constants = type.getEnumConstants();
-            String allowed = constants.length <= MAX_LISTED_CONSTANTS
-                    ? " Erlaubt sind: " + String.join(", ", Arrays.stream(constants).map(Enum::name).toList()) + "."
-                    : "";
-            warnings.add("Unbekannter Wert für " + path + ": '" + value + "'." + allowed
-                    + " Es wird " + def.name() + " verwendet.");
+            String allowed = String.join(", ",
+                    Arrays.stream(type.getEnumConstants()).map(Enum::name).toList());
+            warnUnknownValue(path, value, allowed, def.name());
             return def;
         }
     }
 
     // ------------------------------------------------------------------ Notizen
 
-    private void warnWrongType(String path, Object raw, String expected, String used) {
-        warnings.add("Falscher Wert für " + path + ": '" + raw + "'. Erwartet wird "
-                + expected + ". Es wird " + used + " verwendet.");
+    private void warnWrongType(String path, Object raw, String messageKey, String used) {
+        warnings.add(ConfigIssue.of(messageKey, FALLBACKS.get(messageKey))
+                .with("path", path)
+                .with("value", raw)
+                .with("used", used));
+    }
+
+    /**
+     * Adds a note that a value is none of the ones the plugin knows. Public so
+     * that checks the plugin does on its own read the same as these here.
+     *
+     * @param allowed the permitted values, already joined for the message
+     * @param used    what is used instead
+     */
+    public void warnUnknownValue(String path, Object value, String allowed, String used) {
+        warnings.add(ConfigIssue.of(UNKNOWN_VALUE, FALLBACKS.get(UNKNOWN_VALUE))
+                .with("path", path)
+                .with("value", value)
+                .with("allowed", allowed)
+                .with("used", used));
     }
 
     private void warnTooSmall(String path, String value, String min) {
-        warnings.add("Wert für " + path + " ist zu klein: " + value
-                + ". Es wird " + min + " verwendet.");
+        warnings.add(ConfigIssue.of(TOO_SMALL, FALLBACKS.get(TOO_SMALL))
+                .with("path", path)
+                .with("value", value)
+                .with("min", min));
     }
 }
