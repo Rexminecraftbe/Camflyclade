@@ -86,6 +86,10 @@ camera-mode:
 # In beiden Fällen nimmt ein Mannequin den Schaden: Es hat die Hitbox eines
 # Spielers und trägt die Rüstung, deshalb rechnet der Server den Schaden bei
 # beiden Typen gleich aus. Jeder Treffer beendet den Kamera-Modus.
+# Am Mannequin wird bei beiden Typen auch die Bewegung gemessen: Verlässt es
+# seinen Platz (Schwerkraft, Wasser, Kolben), endet der Kamera-Modus mit der
+# Nachricht "body-moved". Von Spielern und Mobs kann es dabei nicht
+# weggeschoben werden, dafür ist keine Einstellung nötig.
 body:
   # Welche Entität als Körper benutzt wird
   # 1 = Rüstungsständer mit dem Kopf des Spielers, dazu ein unsichtbares
@@ -95,9 +99,6 @@ body:
   #     des Spielers auch sichtbar trägt
   # Bei einem unbekannten Wert wird 1 verwendet.
   type: 1
-  # Das Mannequin bleibt fest an seiner Stelle stehen, es fällt nicht
-  # und kann nicht weggeschoben werden (gilt für beide Typen)
-  mannequin-immovable: true
 
 # Einstellungen des Körpers
 # name-visible und gravity gelten für den Körper beider Typen,
@@ -107,7 +108,8 @@ armorstand:
   name-visible: true
   # Ob der Rüstungsständer sichtbar ist
   visible: true
-  # Schwerkraft für den Rüstungsständer
+  # Schwerkraft für den Körper; bei Typ 1 gilt sie auch für das unsichtbare
+  # Mannequin, damit beide gemeinsam fallen
   gravity: true
   # Schaden, den der Rüstungsständer bei Treffern erhält
   damage-amount: 1.0

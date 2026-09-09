@@ -109,6 +109,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     private static final String NO_COLLISION_TEAM = "cam_no_push";
 
+    /** From this difference on the body counts as moved: 0.05 blocks, squared. */
+    private static final double BODY_MOVE_THRESHOLD_SQUARED = 0.0025;
+
     // Configurable values
     private boolean maxDistanceEnabled;
     private double maxDistance;
@@ -117,7 +120,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private boolean armorStandVisible;
     private boolean armorStandGravity;
     private BodyType bodyType;
-    private boolean mannequinImmovable;
     private VisibilityMode playerVisibilityMode;
     private boolean allowInvisibilityPotion;
     private boolean allowLavaFlight;
@@ -259,6 +261,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
         // A mannequin always wears the player's armour and always takes the hits,
         // so the server calculates the damage the same way for both body types.
+        // It is also the entity the movement check watches for both types.
         Mannequin hitbox = null;
         if (bodyType.usesSeparateHitbox()) {
             // The mannequin next to the armour stand is invisible, so it wears
@@ -321,13 +324,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             mutedPlayers.add(player.getUniqueId());
         }
 
-        if (hitbox != null) {
-            startHitboxSync(body, hitbox);
-        }
         startCameraParticles(player);
         startActionBar(player);
         camFireGuard.startFor(player);
-        startBodyHealthCheck(player, body);
+        // The entity taking the hits is the mannequin for both body types, so the
+        // movement check always runs on it.
+        startBodyMovementCheck(player, damageTarget);
         addPlayerToNoCollisionTeam(player);
         // Team wurde evtl. gerade neu erstellt -> alle Mitglieder neu setzen.
         refreshNoCollisionTeam();
@@ -425,8 +427,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         hitbox.getPersistentDataContainer().set(hitboxKey, PersistentDataType.INTEGER, 1);
         hitbox.setInvisible(true);
         hitbox.setSilent(true);
-        hitbox.setGravity(false);
-        hitbox.setImmovable(mannequinImmovable);
+        // It stands inside the armour stand and therefore has to behave the same
+        // way: whatever moves the one moves the other. Only then does the
+        // movement check on the mannequin notice that the body has fallen.
+        hitbox.setGravity(armorStandGravity);
+        makeMannequinPushProof(hitbox);
         hitbox.setInvulnerable(false);
         hitbox.setCustomName(getMessage("hitbox.name-format").replace("{player}", player.getName()));
         hitbox.setCustomNameVisible(false);
@@ -468,8 +473,22 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             getLogger().warning("Der Skin von " + player.getName()
                     + " konnte nicht auf das Mannequin übertragen werden, es benutzt den Standard-Skin.");
         }
-        mannequin.setImmovable(mannequinImmovable);
+        makeMannequinPushProof(mannequin);
         return mannequin;
+    }
+
+    /**
+     * Lets the mannequin be moved by the world but not by anyone standing next
+     * to it.
+     *
+     * <p>It is deliberately not immovable any more: gravity, flowing water and
+     * pistons are supposed to move it, because that movement is what ends camera
+     * mode. Only the push of players and mobs is taken away, so that the body is
+     * not shoved out of its spot by someone walking into it.</p>
+     */
+    private void makeMannequinPushProof(Mannequin mannequin) {
+        mannequin.setImmovable(false);
+        mannequin.setCollidable(false);
     }
 
     /** Creates the classic body: an armour stand wearing the player's head. */
@@ -601,22 +620,42 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Watches the body while camera mode is running. Drowning, suffocation, fire
-     * and lava are not checked here any more: the mannequin takes that damage
-     * itself and {@link #onBodyDamage(EntityDamageEvent)} ends camera mode. All
-     * that is left is noticing when the body is moved away from its spot.
+     * Watches the mannequin while camera mode is running and ends the mode as
+     * soon as it leaves its spot. Both body types run through this one check,
+     * because both have a mannequin: with body type 1 it is the invisible one
+     * standing in the armour stand, with type 2 the visible body itself. It is
+     * the entity that takes the hits in either case, so gravity, water and
+     * pistons are noticed on the same entity for both types.
+     *
+     * <p>Deliberately checked by the scheduler and not through an event: the
+     * mannequin has no AI, so {@code EntityMoveEvent} does not fire for it, and
+     * falling or drifting away would go unnoticed.</p>
+     *
+     * <p>Drowning, suffocation, fire and lava are not checked here: the
+     * mannequin takes that damage itself and
+     * {@link #onBodyDamage(EntityDamageEvent)} ends camera mode.</p>
      */
-    private void startBodyHealthCheck(Player player, LivingEntity body) {
-        final Location initialLocation = body.getLocation().clone();
+    private void startBodyMovementCheck(Player player, LivingEntity mannequin) {
         new BukkitRunnable() {
+            /**
+             * The spot the body is compared against. Taken at the first run and
+             * not when it is spawned, so that settling onto the ground right
+             * after the spawn does not already count as movement.
+             */
+            private Location reference;
+
             @Override
             public void run() {
-                if (!cameraPlayers.containsKey(player.getUniqueId()) || !player.isOnline() || body.isDead()) {
+                if (!cameraPlayers.containsKey(player.getUniqueId()) || !player.isOnline() || mannequin.isDead()) {
                     this.cancel();
                     return;
                 }
-                if (!body.getLocation().getWorld().equals(initialLocation.getWorld()) ||
-                        body.getLocation().distanceSquared(initialLocation) > 0.01) {
+                Location current = mannequin.getLocation();
+                if (reference == null) {
+                    reference = current.clone();
+                    return;
+                }
+                if (hasMoved(reference, current)) {
                     sendConfiguredMessage(player, "body-moved");
                     exitCameraMode(player);
                     this.cancel();
@@ -625,18 +664,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }.runTaskTimer(this, 20L, 1L);
     }
 
-    /** Keeps the invisible mannequin exactly where the armour stand body is. */
-    private void startHitboxSync(LivingEntity body, Mannequin hitbox) {
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (body.isDead() || hitbox.isDead()) {
-                    this.cancel();
-                    return;
-                }
-                hitbox.teleport(body.getLocation());
-            }
-        }.runTaskTimer(this, 1L, 1L);
+    /** {@code true} when the body left its spot or its world. */
+    private boolean hasMoved(Location reference, Location current) {
+        if (!current.getWorld().equals(reference.getWorld())) {
+            return true;
+        }
+        return current.distanceSquared(reference) > BODY_MOVE_THRESHOLD_SQUARED;
     }
 
     private void startCameraParticles(Player player) {
@@ -1384,7 +1417,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         armorStandVisible = getConfig().getBoolean("armorstand.visible", true);
         armorStandGravity = getConfig().getBoolean("armorstand.gravity", true);
         bodyType = resolveBodyType(getConfig().getInt("body.type", BodyType.ARMOR_STAND.getId()));
-        mannequinImmovable = getConfig().getBoolean("body.mannequin-immovable", true);
         muteAttack = getConfig().getBoolean("mute.attack", false);
         muteFootsteps = getConfig().getBoolean("mute.footsteps", false);
         hideSprintParticles = getConfig().getBoolean("mute.hide-sprint-particles", true);
