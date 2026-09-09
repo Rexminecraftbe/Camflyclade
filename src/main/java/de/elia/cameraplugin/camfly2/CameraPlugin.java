@@ -59,6 +59,7 @@ import de.elia.cameraplugin.feuer.CamFireGuard;
 import de.elia.cameraplugin.body.BodyType;
 import de.elia.cameraplugin.body.EquipmentVisibility;
 import de.elia.cameraplugin.body.MannequinSkin;
+import de.elia.cameraplugin.body.MovementSensitivity;
 
 import static org.bukkit.Sound.ENTITY_ITEM_BREAK;
 
@@ -109,8 +110,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     private static final String NO_COLLISION_TEAM = "cam_no_push";
 
-    /** From this difference on the body counts as moved: 0.05 blocks, squared. */
-    private static final double BODY_MOVE_THRESHOLD_SQUARED = 0.0025;
+    /**
+     * Smallest threshold that is accepted for {@code body.move-threshold}, in
+     * blocks. Anything below is raised to this value.
+     */
+    private static final double MIN_MOVE_THRESHOLD = 0.01;
 
     // Configurable values
     private boolean maxDistanceEnabled;
@@ -120,6 +124,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private boolean armorStandVisible;
     private boolean armorStandGravity;
     private BodyType bodyType;
+    private MovementSensitivity movementSensitivity;
+    /** {@code body.move-threshold} squared, so the square root can be skipped. */
+    private double moveThresholdSquared;
     private VisibilityMode playerVisibilityMode;
     private boolean allowInvisibilityPotion;
     private boolean allowLavaFlight;
@@ -430,8 +437,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         // It stands inside the armour stand and therefore has to behave the same
         // way: whatever moves the one moves the other. Only then does the
         // movement check on the mannequin notice that the body has fallen.
-        hitbox.setGravity(armorStandGravity);
-        makeMannequinPushProof(hitbox);
+        hitbox.setGravity(useBodyGravity());
+        applyMovementSensitivity(hitbox);
         hitbox.setInvulnerable(false);
         hitbox.setCustomName(getMessage("hitbox.name-format").replace("{player}", player.getName()));
         hitbox.setCustomNameVisible(false);
@@ -453,7 +460,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
         body.setRemainingAir(remainingAir);
         body.getPersistentDataContainer().set(bodyKey, PersistentDataType.INTEGER, 1);
-        body.setGravity(armorStandGravity);
+        body.setGravity(useBodyGravity());
         body.setCanPickupItems(false);
         body.setCustomName(getMessage("armorstand.name-format").replace("{player}", player.getName()));
         body.setCustomNameVisible(armorStandNameVisible);
@@ -473,29 +480,43 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             getLogger().warning("Der Skin von " + player.getName()
                     + " konnte nicht auf das Mannequin übertragen werden, es benutzt den Standard-Skin.");
         }
-        makeMannequinPushProof(mannequin);
+        applyMovementSensitivity(mannequin);
         return mannequin;
     }
 
     /**
-     * Lets the mannequin be moved by the world but not by anyone standing next
-     * to it.
+     * Puts the configured {@code body.movement-sensitivity} onto a mannequin.
      *
-     * <p>It is deliberately not immovable any more: gravity, flowing water and
-     * pistons are supposed to move it, because that movement is what ends camera
-     * mode. Only the push of players and mobs is taken away, so that the body is
-     * not shoved out of its spot by someone walking into it.</p>
+     * <p>On level 0 it is nailed to its spot, on the levels above it is moved by
+     * gravity, water and pistons, because that movement is what ends camera
+     * mode. Only level 2 also lets players and mobs push it.</p>
+     *
+     * <p>The same call fits the invisible hitbox and the visible body: level 2
+     * has already fallen back to level 1 for an armour stand body, so the
+     * hitbox, which only exists for that body type, never becomes collidable.</p>
      */
-    private void makeMannequinPushProof(Mannequin mannequin) {
-        mannequin.setImmovable(false);
-        mannequin.setCollidable(false);
+    private void applyMovementSensitivity(Mannequin mannequin) {
+        mannequin.setImmovable(movementSensitivity.isFixed());
+        mannequin.setCollidable(movementSensitivity.allowsEntityPush());
+    }
+
+    /**
+     * Gravity for the body entities. Level 0 nails the body down, so the
+     * configured {@code armorstand.gravity} is ignored there.
+     */
+    private boolean useBodyGravity() {
+        return !movementSensitivity.isFixed() && armorStandGravity;
     }
 
     /** Creates the classic body: an armour stand wearing the player's head. */
     private ArmorStand spawnArmorStandBody(Player player, Location location) {
         ArmorStand armorStand = (ArmorStand) location.getWorld().spawnEntity(location, EntityType.ARMOR_STAND);
         armorStand.setVisible(armorStandVisible);
-        armorStand.setMarker(false);
+        // A marker has no hitbox at all and is the only armour stand a piston
+        // leaves alone, which is what makes level 0 really hold still. Nothing
+        // is lost by it: hits and right clicks land on the mannequin standing in
+        // the same spot either way.
+        armorStand.setMarker(movementSensitivity.isFixed());
         armorStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
         armorStand.addEquipmentLock(EquipmentSlot.CHEST, ArmorStand.LockType.REMOVING_OR_CHANGING);
         armorStand.addEquipmentLock(EquipmentSlot.LEGS, ArmorStand.LockType.REMOVING_OR_CHANGING);
@@ -636,6 +657,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * {@link #onBodyDamage(EntityDamageEvent)} ends camera mode.</p>
      */
     private void startBodyMovementCheck(Player player, LivingEntity mannequin) {
+        if (movementSensitivity.isFixed()) {
+            // Nothing can move the body on this level, so the check would only
+            // compare a location with itself every tick.
+            return;
+        }
         new BukkitRunnable() {
             /**
              * The spot the body is compared against. Taken at the first run and
@@ -669,7 +695,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (!current.getWorld().equals(reference.getWorld())) {
             return true;
         }
-        return current.distanceSquared(reference) > BODY_MOVE_THRESHOLD_SQUARED;
+        return current.distanceSquared(reference) > moveThresholdSquared;
     }
 
     private void startCameraParticles(Player player) {
@@ -1417,6 +1443,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         armorStandVisible = getConfig().getBoolean("armorstand.visible", true);
         armorStandGravity = getConfig().getBoolean("armorstand.gravity", true);
         bodyType = resolveBodyType(getConfig().getInt("body.type", BodyType.ARMOR_STAND.getId()));
+        movementSensitivity = resolveMovementSensitivity(
+                getConfig().getInt("body.movement-sensitivity", MovementSensitivity.NORMAL.getId()));
+        double moveThreshold = Math.max(MIN_MOVE_THRESHOLD, getConfig().getDouble("body.move-threshold", 0.05));
+        moveThresholdSquared = moveThreshold * moveThreshold;
         muteAttack = getConfig().getBoolean("mute.attack", false);
         muteFootsteps = getConfig().getBoolean("mute.footsteps", false);
         hideSprintParticles = getConfig().getBoolean("mute.hide-sprint-particles", true);
@@ -1474,6 +1504,24 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             return BodyType.ARMOR_STAND;
         }
         return requested;
+    }
+
+    /**
+     * Turns the number configured in {@code body.movement-sensitivity} into a
+     * level and falls back to 1 when the value is unknown.
+     *
+     * <p>Level 2 is cut back to level 1 for an armour stand body. That is a
+     * valid setting in the wrong combination and not a mistake, so it is
+     * described in the config file instead of being logged.</p>
+     */
+    private MovementSensitivity resolveMovementSensitivity(int configuredId) {
+        MovementSensitivity requested = MovementSensitivity.fromId(configuredId);
+        if (requested == null) {
+            getLogger().warning("Unbekannter Wert für body.movement-sensitivity: " + configuredId
+                    + ". Es wird 1 (normal) verwendet.");
+            requested = MovementSensitivity.NORMAL;
+        }
+        return requested.forBodyType(bodyType);
     }
 
     private ChatColor parseColor(String colorName) {

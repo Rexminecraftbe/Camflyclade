@@ -87,9 +87,9 @@ camera-mode:
 # Spielers und trägt die Rüstung, deshalb rechnet der Server den Schaden bei
 # beiden Typen gleich aus. Jeder Treffer beendet den Kamera-Modus.
 # Am Mannequin wird bei beiden Typen auch die Bewegung gemessen: Verlässt es
-# seinen Platz (Schwerkraft, Wasser, Kolben), endet der Kamera-Modus mit der
-# Nachricht "body-moved". Von Spielern und Mobs kann es dabei nicht
-# weggeschoben werden, dafür ist keine Einstellung nötig.
+# seinen Platz, endet der Kamera-Modus mit der Nachricht "body-moved".
+# Was den Körper überhaupt bewegen darf und wie weit er dabei kommt, legen
+# movement-sensitivity und move-threshold fest.
 body:
   # Welche Entität als Körper benutzt wird
   # 1 = Rüstungsständer mit dem Kopf des Spielers, dazu ein unsichtbares
@@ -99,6 +99,25 @@ body:
   #     des Spielers auch sichtbar trägt
   # Bei einem unbekannten Wert wird 1 verwendet.
   type: 1
+  # Wie empfindlich der Körper auf Verschiebung reagiert
+  # 0 = reagiert auf gar nichts. Körper und Mannequin stehen fest, weder
+  #     Schwerkraft noch Wasser noch Kolben bewegen sie. Damit ist die
+  #     Bewegungserkennung aus, "body-moved" kommt nie. Die Einstellung
+  #     armorstand.gravity wird auf dieser Stufe ignoriert.
+  # 1 = normal. Schwerkraft, Wasser und Kolben bewegen den Körper und jede
+  #     Bewegung beendet den Kamera-Modus. Spieler und Mobs können ihn
+  #     nicht anrempeln.
+  # 2 = sehr empfindlich. Zusätzlich schieben Spieler und Mobs den Körper
+  #     weg, was den Kamera-Modus ebenfalls beendet.
+  #     Nur für type: 2 verfügbar! Bei type: 1 würde nur das unsichtbare
+  #     Mannequin geschoben, während der sichtbare Rüstungsständer stehen
+  #     bleibt - dort wird deshalb automatisch Stufe 1 benutzt.
+  # Bei einem unbekannten Wert wird 1 verwendet.
+  movement-sensitivity: 1
+  # Wie weit sich das Mannequin bewegen darf, bevor der Kamera-Modus endet,
+  # in Blöcken. Gilt bei beiden Körpertypen und ist auf Stufe 0 wirkungslos.
+  # Werte unter 0.01 werden automatisch auf 0.01 angehoben.
+  move-threshold: 0.05
 
 # Einstellungen des Körpers
 # name-visible und gravity gelten für den Körper beider Typen,
@@ -109,7 +128,8 @@ armorstand:
   # Ob der Rüstungsständer sichtbar ist
   visible: true
   # Schwerkraft für den Körper; bei Typ 1 gilt sie auch für das unsichtbare
-  # Mannequin, damit beide gemeinsam fallen
+  # Mannequin, damit beide gemeinsam fallen.
+  # Wird ignoriert, wenn body.movement-sensitivity auf 0 steht
   gravity: true
   # Schaden, den der Rüstungsständer bei Treffern erhält
   damage-amount: 1.0
