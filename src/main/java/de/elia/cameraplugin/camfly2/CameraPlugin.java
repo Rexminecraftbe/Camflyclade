@@ -55,11 +55,13 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.Collection;
 import java.util.ArrayList;
+import java.util.List;
 import de.elia.cameraplugin.feuer.CamFireGuard;
 import de.elia.cameraplugin.body.BodyType;
 import de.elia.cameraplugin.body.EquipmentVisibility;
 import de.elia.cameraplugin.body.MannequinSkin;
 import de.elia.cameraplugin.body.MovementSensitivity;
+import de.elia.cameraplugin.config.ConfigReader;
 
 import static org.bukkit.Sound.ENTITY_ITEM_BREAK;
 
@@ -116,6 +118,13 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      */
     private static final double MIN_MOVE_THRESHOLD = 0.01;
 
+    /**
+     * How many config notes are sent into the chat of the player who reloaded.
+     * The rest is only in the console, so that a thoroughly broken file does not
+     * bury the chat.
+     */
+    private static final int MAX_CHAT_WARNINGS = 8;
+
     // Configurable values
     private boolean maxDistanceEnabled;
     private double maxDistance;
@@ -160,7 +169,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     public void onEnable() {
         shuttingDown = false;
         saveDefaultConfig();
-        loadConfigValues();
+        // Created before the config is read, so its values go through the same
+        // load and its notes end up in the same report.
+        camFireGuard = new CamFireGuard(this);
+        reportConfigWarnings(loadConfigValues(), null);
         bodyKey = new NamespacedKey(this, "cam_body");
         hitboxKey = new NamespacedKey(this, "cam_hitbox");
         // Deliberately not a real equipment asset: the client finds nothing for
@@ -178,8 +190,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             camModeObjective.getScore(p.getName()).setScore(0);
         }
         removeLeftoverEntities();
-        camFireGuard = new CamFireGuard(this);
-        camFireGuard.loadConfig(getConfig());
         if (muteAttack || muteFootsteps || hideSprintParticles) {
             if (getServer().getPluginManager().getPlugin("ProtocolLib") != null) {
                 protocolLibAvailable = true;
@@ -1426,59 +1436,61 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
     }
 
-    private void loadConfigValues() {
-        maxDistanceEnabled = getConfig().getBoolean("camera-mode.max-distance-enabled", true);
-        maxDistance = getConfig().getDouble("camera-mode.max-distance", 100.0);
-        distanceWarningCooldown = getConfig().getInt("camera-mode.distance-warning-cooldown", 3);
-        String visibility = getConfig().getString("camera-mode.player_visibility_mode", "cam").toLowerCase();
+    /**
+     * Reads every value out of the config file.
+     *
+     * @return a note for each value that did not fit and was replaced
+     */
+    private List<String> loadConfigValues() {
+        ConfigReader config = new ConfigReader(getConfig());
+        maxDistanceEnabled = config.getBoolean("camera-mode.max-distance-enabled", true);
+        maxDistance = config.getDouble("camera-mode.max-distance", 100.0, 0.0);
+        distanceWarningCooldown = config.getInt("camera-mode.distance-warning-cooldown", 3, 0);
+        String visibility = config.getChoice("camera-mode.player_visibility_mode", "cam", "cam", "true", "false")
+                .toLowerCase();
         playerVisibilityMode = switch (visibility) {
             case "true" -> VisibilityMode.ALL;
             case "false" -> VisibilityMode.NONE;
             default -> VisibilityMode.CAM;
         };
-        allowInvisibilityPotion = getConfig().getBoolean("camera-mode.allow_invisibility_potion", true);
-        allowLavaFlight = getConfig().getBoolean("camera-mode.allow_lava_flight", false);
-        cameraHeadEnabled = getConfig().getBoolean("camera-head.enabled", false);
-        armorStandNameVisible = getConfig().getBoolean("armorstand.name-visible", true);
-        armorStandVisible = getConfig().getBoolean("armorstand.visible", true);
-        armorStandGravity = getConfig().getBoolean("armorstand.gravity", true);
-        bodyType = resolveBodyType(getConfig().getInt("body.type", BodyType.ARMOR_STAND.getId()));
-        movementSensitivity = resolveMovementSensitivity(
-                getConfig().getInt("body.movement-sensitivity", MovementSensitivity.NORMAL.getId()));
-        double moveThreshold = Math.max(MIN_MOVE_THRESHOLD, getConfig().getDouble("body.move-threshold", 0.05));
+        allowInvisibilityPotion = config.getBoolean("camera-mode.allow_invisibility_potion", true);
+        allowLavaFlight = config.getBoolean("camera-mode.allow_lava_flight", false);
+        cameraHeadEnabled = config.getBoolean("camera-head.enabled", false);
+        armorStandNameVisible = config.getBoolean("armorstand.name-visible", true);
+        armorStandVisible = config.getBoolean("armorstand.visible", true);
+        armorStandGravity = config.getBoolean("armorstand.gravity", true);
+        bodyType = resolveBodyType(config, config.getInt("body.type", BodyType.ARMOR_STAND.getId()));
+        movementSensitivity = resolveMovementSensitivity(config,
+                config.getInt("body.movement-sensitivity", MovementSensitivity.NORMAL.getId()));
+        double moveThreshold = config.getDouble("body.move-threshold", 0.05, MIN_MOVE_THRESHOLD);
         moveThresholdSquared = moveThreshold * moveThreshold;
-        muteAttack = getConfig().getBoolean("mute.attack", false);
-        muteFootsteps = getConfig().getBoolean("mute.footsteps", false);
-        hideSprintParticles = getConfig().getBoolean("mute.hide-sprint-particles", true);
-        particleHeight = getConfig().getDouble("camera-particles.height", 1.0);
-        particlesPerTick = getConfig().getInt("camera-particles.particles-per-tick", 5);
-        showOwnParticles = getConfig().getBoolean("camera-particles.show-own-particles", false);
-        protocolFoundLogColor = parseColor(getConfig().getString("log-colors.protocol-found", ""));
-        actionBarEnabled = getConfig().getBoolean("action-bar.enabled", true);
-        actionBarOffDuration = getConfig().getInt("action-bar.off-duration", 10);
-        actionBarOnMessage = ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.actionbar-on", "&aCam-Modus aktiviert"));
-        actionBarOffMessage = ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.actionbar-off", "&cCam-Modus beendet"));
-        timeLimitEnabled = getConfig().getBoolean("time-limit.enabled", false);
-        cooldownsEnabled = getConfig().getBoolean("time-limit.cooldowns-enabled", false);
-        durationSeconds = getConfig().getInt("time-limit.duration-seconds", 300);
-        cooldownSeconds = getConfig().getInt("time-limit.cooldown-seconds", 120);
-        showBossbar = getConfig().getBoolean("time-limit.show-bossbar", true);
-        String colorName = getConfig().getString("time-limit.bossbar-color", "BLUE");
-        try {
-            bossbarColor = BarColor.valueOf(colorName.toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            bossbarColor = BarColor.BLUE;
-        }
-        bossbarText = ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.bossbar-text", "Cam-Modus endet in: %time%"));
-        cooldownText = ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.cooldown-text", "Du kannst den Cam-Modus erst in %time% erneut starten."));
-        cooldownAvailableText = ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.cooldown-available", "&aCam-Modus wieder verf\u00fcgbar"));
-        camSafetyEnabled = getConfig().getBoolean("cam-safety.enabled", true);
-        camSafetyDelay = getConfig().getInt("cam-safety.delay", 5);
-        camSafetyMessage = getConfig().getString("messages.cam-safety",
+        muteAttack = config.getBoolean("mute.attack", false);
+        muteFootsteps = config.getBoolean("mute.footsteps", false);
+        hideSprintParticles = config.getBoolean("mute.hide-sprint-particles", true);
+        particleHeight = config.getDouble("camera-particles.height", 1.0);
+        particlesPerTick = config.getInt("camera-particles.particles-per-tick", 5, 0);
+        showOwnParticles = config.getBoolean("camera-particles.show-own-particles", false);
+        protocolFoundLogColor = resolveLogColor(config, "log-colors.protocol-found");
+        actionBarEnabled = config.getBoolean("action-bar.enabled", true);
+        actionBarOffDuration = config.getInt("action-bar.off-duration", 10, 0);
+        actionBarOnMessage = ChatColor.translateAlternateColorCodes('&', config.getString("messages.actionbar-on", "&aCam-Modus aktiviert"));
+        actionBarOffMessage = ChatColor.translateAlternateColorCodes('&', config.getString("messages.actionbar-off", "&cCam-Modus beendet"));
+        timeLimitEnabled = config.getBoolean("time-limit.enabled", false);
+        cooldownsEnabled = config.getBoolean("time-limit.cooldowns-enabled", false);
+        durationSeconds = config.getInt("time-limit.duration-seconds", 300, 1);
+        cooldownSeconds = config.getInt("time-limit.cooldown-seconds", 120, 0);
+        showBossbar = config.getBoolean("time-limit.show-bossbar", true);
+        bossbarColor = config.getEnum("time-limit.bossbar-color", BarColor.class, BarColor.BLUE);
+        bossbarText = ChatColor.translateAlternateColorCodes('&', config.getString("messages.bossbar-text", "Cam-Modus endet in: %time%"));
+        cooldownText = ChatColor.translateAlternateColorCodes('&', config.getString("messages.cooldown-text", "Du kannst den Cam-Modus erst in %time% erneut starten."));
+        cooldownAvailableText = ChatColor.translateAlternateColorCodes('&', config.getString("messages.cooldown-available", "&aCam-Modus wieder verf\u00fcgbar"));
+        camSafetyEnabled = config.getBoolean("cam-safety.enabled", true);
+        camSafetyDelay = config.getInt("cam-safety.delay", 5, 0);
+        camSafetyMessage = config.getString("messages.cam-safety",
                 "§cDu kannst den Cam-Modus nicht starten! Du musst noch %seconds% Sekunden in Sicherheit bleiben.");
 
-        damageArmor = getConfig().getBoolean("mirror-damage.damage-armor", true);
-        String modeRaw = getConfig().getString("mirror-damage.damage-mode", "mirror");
+        damageArmor = config.getBoolean("mirror-damage.damage-armor", true);
+        String modeRaw = config.getChoice("mirror-damage.damage-mode", "mirror", "mirror", "custom", "off", "false");
         if ("custom".equalsIgnoreCase(modeRaw)) {
             damageMode = DamageMode.CUSTOM;
         } else if ("false".equalsIgnoreCase(modeRaw) || "off".equalsIgnoreCase(modeRaw)) {
@@ -1486,20 +1498,24 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         } else {
             damageMode = DamageMode.MIRROR;
         }
-        customDamageHearts = getConfig().getDouble("mirror-damage.custom-damage-hearts", 0.5);
+        customDamageHearts = config.getDouble("mirror-damage.custom-damage-hearts", 0.5, 0.0);
+        // Read one by one while the server runs, so a wrong value would show up
+        // again and again instead of once. Checked here in one go instead.
+        config.checkBooleanSection("message-settings");
         if (camFireGuard != null) {
-            camFireGuard.loadConfig(getConfig());
+            camFireGuard.loadConfig(config);
         }
+        return config.getWarnings();
     }
 
     /**
      * Turns the number configured in {@code body.type} into a body type and
      * falls back to the armour stand when the value is unknown.
      */
-    private BodyType resolveBodyType(int configuredId) {
+    private BodyType resolveBodyType(ConfigReader config, int configuredId) {
         BodyType requested = BodyType.fromId(configuredId);
         if (requested == null) {
-            getLogger().warning("Unbekannter Wert für body.type: " + configuredId
+            config.warn("Unbekannter Wert für body.type: " + configuredId
                     + ". Es wird 1 (Rüstungsständer) verwendet.");
             return BodyType.ARMOR_STAND;
         }
@@ -1514,14 +1530,57 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * valid setting in the wrong combination and not a mistake, so it is
      * described in the config file instead of being logged.</p>
      */
-    private MovementSensitivity resolveMovementSensitivity(int configuredId) {
+    private MovementSensitivity resolveMovementSensitivity(ConfigReader config, int configuredId) {
         MovementSensitivity requested = MovementSensitivity.fromId(configuredId);
         if (requested == null) {
-            getLogger().warning("Unbekannter Wert für body.movement-sensitivity: " + configuredId
+            config.warn("Unbekannter Wert für body.movement-sensitivity: " + configuredId
                     + ". Es wird 1 (normal) verwendet.");
             requested = MovementSensitivity.NORMAL;
         }
         return requested.forBodyType(bodyType);
+    }
+
+    /**
+     * Reads a colour for a log message. Empty means no colour at all and is the
+     * default, so only a name that cannot be resolved is worth a note.
+     */
+    private ChatColor resolveLogColor(ConfigReader config, String path) {
+        String name = config.getString(path, "");
+        ChatColor color = parseColor(name);
+        if (color == null && !name.isEmpty()) {
+            config.warn("Unbekannte Farbe für " + path + ": '" + name
+                    + "'. Es wird keine Farbe verwendet.");
+        }
+        return color;
+    }
+
+    /**
+     * Writes the notes from {@link #loadConfigValues()} into the console and,
+     * after a reload, into the chat of the player who started it. Without the
+     * second part a broken config file stays invisible in game: the reload
+     * reports success while the server quietly runs on default values.
+     */
+    private void reportConfigWarnings(List<String> warnings, Player initiator) {
+        for (String warning : warnings) {
+            getLogger().warning(warning);
+        }
+        if (initiator == null || warnings.isEmpty()) {
+            return;
+        }
+        String prefix = ChatColor.RED + "[" + getName() + "] ";
+        // The command reports success right after this, so the block needs a
+        // headline of its own to not be mistaken for a clean reload.
+        initiator.sendMessage(prefix + "Die Konfiguration hat "
+                + (warnings.size() == 1 ? "eine ungültige Stelle" : warnings.size() + " ungültige Stellen")
+                + ":");
+        int shown = Math.min(warnings.size(), MAX_CHAT_WARNINGS);
+        for (int i = 0; i < shown; i++) {
+            initiator.sendMessage(prefix + warnings.get(i));
+        }
+        if (warnings.size() > shown) {
+            initiator.sendMessage(prefix + "... und " + (warnings.size() - shown)
+                    + " weitere. Alle stehen in der Server-Konsole.");
+        }
     }
 
     private ChatColor parseColor(String colorName) {
@@ -1790,7 +1849,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             }
         }
         reloadConfig();
-        loadConfigValues();
+        reportConfigWarnings(loadConfigValues(), initiator);
         protocolLibAvailable = false;
         mutedPlayers.clear();
         if (muteAttack || muteFootsteps || hideSprintParticles) {
