@@ -42,6 +42,13 @@ messages:
   reload-exit: "&cCamera mode ended due to plugin restart."
   reload-start: "&ePlugin is restarting..."
   reload-success: "&aPlugin reload successful."
+  # Zeilen in der Server-Konsole beim Start. Das Plugin lädt dabei einmal die
+  # Skins vor, dazwischen schreibt der Server selbst seine Zeile
+  # "Environment: ...". Leer lassen ("") schaltet die jeweilige Zeile ab.
+  # Platzhalter bei startup-skins-failed: {error} der Grund des Fehlers.
+  startup-skins-failed: "Skins konnten beim Start nicht vorgeladen werden: {error}"
+  startup-skins-loaded: "Skins wurden erfolgreich geladen."
+  startup-skins-loading: "Skins werden geladen..."
   time-limit-expired: "&cCam mode ended: Time limit expired."
 
 # Aktiviert oder deaktiviert einzelne Nachrichten
