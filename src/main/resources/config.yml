@@ -31,7 +31,6 @@ messages:
   config-expected-number: "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Zahl. Es wird {used} verwendet."
   config-expected-text: "&cFalscher Wert für {path}: '{value}'. Erwartet wird Text. Es wird {used} verwendet."
   config-too-small: "&cWert für {path} ist zu klein: {value}. Es wird {min} verwendet."
-  config-unknown-color: "&cUnbekannte Farbe für {path}: '{value}'. Es wird keine Farbe verwendet."
   config-unknown-value: "&cUnbekannter Wert für {path}: '{value}'. Erlaubt sind: {allowed}. Es wird {used} verwendet."
   cooldown-available: "&aCam mode available again"
   cooldown-text: "You can start cam mode again in %time%."
@@ -40,7 +39,6 @@ messages:
   no-permission: "&cYou don't have permission to use this command."
   no-player: "&cThis command can only be used by players."
   no-projectiles: "&cYou cannot shoot projectiles in camera mode."
-  protocol-found: "ProtocolLib found! Sound suppression is enabled."
   reload-exit: "&cCamera mode ended due to plugin restart."
   reload-start: "&ePlugin is restarting..."
   reload-success: "&aPlugin reload successful."
@@ -72,7 +70,6 @@ message-settings:
   no-permission: true
   no-player: true
   no-projectiles: true
-  protocol-found: true
   reload-exit: true
   reload-start: true
   reload-success: true
@@ -94,7 +91,14 @@ camera-mode:
   max-distance: 100.0
   # Abklingzeit zwischen Distanzwarnungen
   distance-warning-cooldown: 3
-  # Sichtbarkeit anderer Spieler im Modus (cam/true/false)
+  # Wer den Spieler im Cam-Modus sehen darf
+  # cam   = nur Spieler, die selbst im Cam-Modus sind
+  # true  = alle
+  # false = niemand. Das läuft allein über den Unsichtbarkeitseffekt, damit
+  #         der Spieler in der Tab-Liste stehen bleibt. Der Effekt wird in
+  #         diesem Modus immer gesetzt, auch wenn allow_invisibility_potion
+  #         auf false steht, und der leuchtende Umriss bleibt aus.
+  #         Getragene Ausrüstung, etwa der Kamera-Kopf, bleibt sichtbar.
   player_visibility_mode: "true"
   # Macht den Spieler im Cam-Modus unsichtbar
   allow_invisibility_potion: true
@@ -105,6 +109,7 @@ camera-mode:
   # PvP-Server verrät es die Position des Spielers.
   # Getragene Ausrüstung, etwa der Kamera-Kopf, bleibt davon unberührt
   # sichtbar.
+  # Bei player_visibility_mode "false" wird der Umriss nicht gesetzt.
   glowing-outline: true
   # Erlaubt Flug durch Lava
   allow_lava_flight: true
@@ -158,15 +163,6 @@ armorstand:
   # Mannequin, damit beide gemeinsam fallen.
   # Wird ignoriert, wenn body.movement-sensitivity auf 0 steht
   gravity: true
-
-# Geräuschunterdrückung
-mute:
-  # Unterdrückt Angriffssounds
-  attack: true
-  # Unterdrückt Schrittgeräusche
-  footsteps: true
-  # Versteckt Sprintpartikel
-  hide-sprint-particles: true
 
 # Begrenzung der Dauer des Kamera-Modus
 time-limit:

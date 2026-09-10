@@ -4,7 +4,6 @@ main: de.elia.cameraplugin.camfly2.CameraPlugin
 api-version: 26.2
 author: Rexminecraft343
 description: A plugin for a camera mode with an armour stand or mannequin body
-softdepend: [ProtocolLib]
 
 commands:
   cam:
