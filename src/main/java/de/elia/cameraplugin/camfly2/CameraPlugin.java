@@ -21,7 +21,6 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.SkullMeta;
-import de.elia.cameraplugin.mutplayer.ProtocolLibHook;
 import org.bukkit.profile.PlayerProfile;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
@@ -77,17 +76,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private final Map<UUID, UUID> bodyOwners = new HashMap<>();
     private final Map<UUID, UUID> hitboxEntities = new HashMap<>();
     private final Set<UUID> pendingDamage = new HashSet<>();
-    private final Set<UUID> mutedPlayers = new HashSet<>();
-    private boolean protocolLibAvailable = false;
     private boolean muteAttack;
     private boolean muteFootsteps;
-    private boolean hideSprintParticles;
     private CamFireGuard camFireGuard;
     private double particleHeight;
     private int particlesPerTick;
     private boolean showOwnParticles;
-    private ChatColor protocolFoundLogColor;
-    private ChatColor protocolNotFoundLogColor;
     private final Map<UUID, BukkitRunnable> particleTasks = new HashMap<>();
     private final Map<UUID, BukkitRunnable> actionBarTasks = new HashMap<>();
     private final Map<UUID, BukkitRunnable> offMessageTasks = new HashMap<>();
@@ -126,11 +120,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * bury the chat.
      */
     private static final int MAX_CHAT_WARNINGS = 8;
-
-    /** Message for a colour name that does not exist, plus its built-in wording. */
-    private static final String UNKNOWN_COLOR_MESSAGE = "config-unknown-color";
-    private static final String UNKNOWN_COLOR_FALLBACK =
-            "&cUnbekannte Farbe für {path}: '{value}'. Es wird keine Farbe verwendet.";
 
     // Configurable values
     private boolean maxDistanceEnabled;
@@ -199,17 +188,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         removeLeftoverEntities();
         warmUpProfileService();
-        if (muteAttack || muteFootsteps || hideSprintParticles) {
-            if (getServer().getPluginManager().getPlugin("ProtocolLib") != null) {
-                protocolLibAvailable = true;
-                new ProtocolLibHook(this, mutedPlayers, muteAttack, muteFootsteps, hideSprintParticles);
-                String pfMessage = getMessage("protocol-found");
-                if (protocolFoundLogColor != null) {
-                    pfMessage = protocolFoundLogColor + pfMessage + ChatColor.RESET;
-                }
-                getLogger().info(ChatColor.stripColor(pfMessage));
-            }
-        }
         // Beim Start ist niemand im Cam-Modus -> ein uebrig gebliebenes Team entfernen.
         deleteNoCollisionTeam();
         this.getCommand("cam").setExecutor(new CamCommand(this));
@@ -278,7 +256,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         for (BossBar bar : bossBars.values()) {
             bar.removeAll();
         }
-        mutedPlayers.clear();
         // Kein Spieler mehr im Cam-Modus -> Team entfernen.
         deleteNoCollisionTeam();
         removeLeftoverEntities();
@@ -339,10 +316,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             // shape back - that is what everyone else sees of the camera player.
             player.setGlowing(true);
         }
-        if (!protocolLibAvailable && (muteAttack || muteFootsteps)) {
+        if (muteAttack || muteFootsteps) {
+            // Without packet access the only lever left is the entity silence
+            // flag: it takes away every sound the player makes at once, attack
+            // and footsteps among them. The invisibility belongs to it, so that
+            // a silent player is not seen either.
             player.setSilent(true);
-        }
-        if (!protocolLibAvailable && (muteAttack || muteFootsteps)) {
             player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
         }
 
@@ -374,9 +353,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         bodyOwners.put(body.getUniqueId(), player.getUniqueId());
         if (hitbox != null) {
             hitboxEntities.put(hitbox.getUniqueId(), player.getUniqueId());
-        }
-        if (protocolLibAvailable) {
-            mutedPlayers.add(player.getUniqueId());
         }
 
         startCameraParticles(player);
@@ -581,7 +557,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             // Ensure players are removed from the no-collision team even if the
             // CameraData has already been cleaned up by another call.
             removePlayerFromNoCollisionTeam(player);
-            mutedPlayers.remove(player.getUniqueId());
             updateViewerTeam(player);
             if (camModeObjective != null) {
                 camModeObjective.getScore(player.getName()).setScore(0);
@@ -638,7 +613,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         removePlayerFromNoCollisionTeam(player);
 
         cameraPlayers.remove(player.getUniqueId());
-        mutedPlayers.remove(player.getUniqueId());
         updateViewerTeam(player);
         if (camModeObjective != null) {
             camModeObjective.getScore(player.getName()).setScore(0);
@@ -1238,7 +1212,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         distanceMessageCooldown.remove(event.getPlayer().getUniqueId());
         removePlayerFromNoCollisionTeam(event.getPlayer());
-        mutedPlayers.remove(event.getPlayer().getUniqueId());
         lastDamageTimes.remove(event.getPlayer().getUniqueId());
     }
 
@@ -1527,11 +1500,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         moveThresholdSquared = moveThreshold * moveThreshold;
         muteAttack = config.getBoolean("mute.attack", false);
         muteFootsteps = config.getBoolean("mute.footsteps", false);
-        hideSprintParticles = config.getBoolean("mute.hide-sprint-particles", true);
         particleHeight = config.getDouble("camera-particles.height", 1.0);
         particlesPerTick = config.getInt("camera-particles.particles-per-tick", 5, 0);
         showOwnParticles = config.getBoolean("camera-particles.show-own-particles", false);
-        protocolFoundLogColor = resolveLogColor(config, "log-colors.protocol-found");
         actionBarEnabled = config.getBoolean("action-bar.enabled", true);
         actionBarOffDuration = config.getInt("action-bar.off-duration", 10, 0);
         actionBarOnMessage = ChatColor.translateAlternateColorCodes('&', config.getString("messages.actionbar-on", "&aCam-Modus aktiviert"));
@@ -1602,21 +1573,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Reads a colour for a log message. Empty means no colour at all and is the
-     * default, so only a name that cannot be resolved is worth a note.
-     */
-    private ChatColor resolveLogColor(ConfigReader config, String path) {
-        String name = config.getString(path, "");
-        ChatColor color = parseColor(name);
-        if (color == null && !name.isEmpty()) {
-            config.warn(ConfigIssue.of(UNKNOWN_COLOR_MESSAGE, UNKNOWN_COLOR_FALLBACK)
-                    .with("path", path)
-                    .with("value", name));
-        }
-        return color;
-    }
-
-    /**
      * Writes the notes from {@link #loadConfigValues()} into the console and,
      * after a reload, into the chat of the player who started it. Without the
      * second part a broken config file stays invisible in game: the reload
@@ -1664,17 +1620,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             raw = fallback;
         }
         return ChatColor.translateAlternateColorCodes('&', raw);
-    }
-
-    private ChatColor parseColor(String colorName) {
-        if (colorName == null || colorName.isEmpty()) {
-            return null;
-        }
-        try {
-            return ChatColor.valueOf(colorName.toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            return null;
-        }
     }
 
     /**
@@ -1932,19 +1877,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         reloadConfig();
         reportConfigWarnings(loadConfigValues(), initiator);
-        protocolLibAvailable = false;
-        mutedPlayers.clear();
-        if (muteAttack || muteFootsteps || hideSprintParticles) {
-            if (getServer().getPluginManager().getPlugin("ProtocolLib") != null) {
-                protocolLibAvailable = true;
-                new ProtocolLibHook(this, mutedPlayers, muteAttack, muteFootsteps, hideSprintParticles);
-                String pfMessage = getMessage("protocol-found");
-                if (protocolFoundLogColor != null) {
-                    pfMessage = protocolFoundLogColor + pfMessage + ChatColor.RESET;
-                }
-                getLogger().info(ChatColor.stripColor(pfMessage));
-            }
-        }
         refreshNoCollisionTeam();
         for (BukkitRunnable task : cooldownTasks.values()) {
             task.cancel();

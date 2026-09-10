@@ -31,7 +31,6 @@ messages:
   config-expected-number: "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Zahl. Es wird {used} verwendet."
   config-expected-text: "&cFalscher Wert für {path}: '{value}'. Erwartet wird Text. Es wird {used} verwendet."
   config-too-small: "&cWert für {path} ist zu klein: {value}. Es wird {min} verwendet."
-  config-unknown-color: "&cUnbekannte Farbe für {path}: '{value}'. Es wird keine Farbe verwendet."
   config-unknown-value: "&cUnbekannter Wert für {path}: '{value}'. Erlaubt sind: {allowed}. Es wird {used} verwendet."
   cooldown-available: "&aCam mode available again"
   cooldown-text: "You can start cam mode again in %time%."
@@ -40,7 +39,6 @@ messages:
   no-permission: "&cYou don't have permission to use this command."
   no-player: "&cThis command can only be used by players."
   no-projectiles: "&cYou cannot shoot projectiles in camera mode."
-  protocol-found: "ProtocolLib found! Sound suppression is enabled."
   reload-exit: "&cCamera mode ended due to plugin restart."
   reload-start: "&ePlugin is restarting..."
   reload-success: "&aPlugin reload successful."
@@ -72,7 +70,6 @@ message-settings:
   no-permission: true
   no-player: true
   no-projectiles: true
-  protocol-found: true
   reload-exit: true
   reload-start: true
   reload-success: true
@@ -160,13 +157,16 @@ armorstand:
   gravity: true
 
 # Geräuschunterdrückung
+# Sie läuft über die Stummschaltung der Entität: Steht eine der beiden
+# Optionen auf true, verstummen alle eigenen Geräusche des Spielers auf
+# einmal - Angriff und Schritte lassen sich also nicht getrennt schalten.
+# Der Spieler wird dabei auch unsichtbar, damit er im Cam-Modus nicht doch
+# auffällt. Sprintpartikel bleiben sichtbar.
 mute:
   # Unterdrückt Angriffssounds
   attack: true
   # Unterdrückt Schrittgeräusche
   footsteps: true
-  # Versteckt Sprintpartikel
-  hide-sprint-particles: true
 
 # Begrenzung der Dauer des Kamera-Modus
 time-limit:
