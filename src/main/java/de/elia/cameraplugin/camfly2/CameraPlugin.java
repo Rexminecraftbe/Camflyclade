@@ -60,6 +60,7 @@ import java.util.List;
 import de.elia.cameraplugin.feuer.CamFireGuard;
 import de.elia.cameraplugin.body.BodyType;
 import de.elia.cameraplugin.body.EquipmentVisibility;
+import de.elia.cameraplugin.body.MannequinLabel;
 import de.elia.cameraplugin.body.MannequinSkin;
 import de.elia.cameraplugin.body.MovementSensitivity;
 import de.elia.cameraplugin.config.ConfigIssue;
@@ -144,6 +145,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private double moveThresholdSquared;
     private VisibilityMode playerVisibilityMode;
     private boolean allowInvisibilityPotion;
+    private boolean glowingOutline;
     private boolean allowLavaFlight;
     private Object Sound;
 
@@ -271,6 +273,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             player.removePotionEffect(effect.getType());
         }
         boolean originalSilent = player.isSilent();
+        boolean originalGlowing = player.isGlowing();
         int originalRemainingAir = player.getRemainingAir();
 
         // *** Inventar und Rüstung leeren ***
@@ -307,10 +310,15 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         player.setGameMode(GameMode.CREATIVE);
         player.setAllowFlight(true);
         player.setFlying(true);
+        if (glowingOutline) {
+            // The invisibility takes the body away, the outline puts a visible
+            // shape back - that is what everyone else sees of the camera player.
+            player.setGlowing(true);
+        }
         if (!protocolLibAvailable && (muteAttack || muteFootsteps)) {
             player.setSilent(true);
         }
-        if (!protocolLibAvailable && (muteAttack || muteFootsteps) && mayHideCamPlayer()) {
+        if (!protocolLibAvailable && (muteAttack || muteFootsteps)) {
             player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
         }
 
@@ -321,8 +329,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 player.setGameMode(GameMode.ADVENTURE);
                 player.setAllowFlight(true); // ensure flight remains enabled
                 player.setFlying(true);       // keep player flying
-                if (allowInvisibilityPotion && mayHideCamPlayer()
-                        && !player.hasPotionEffect(PotionEffectType.INVISIBILITY)) {
+                if (allowInvisibilityPotion && !player.hasPotionEffect(PotionEffectType.INVISIBILITY)) {
                     player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
                 }
             }
@@ -339,7 +346,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
 
         // *** Gespeichertes Inventar an CameraData übergeben ***
-        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, originalGameMode, originalAllowFlight, originalFlying, originalSilent, originalInventory, originalArmor, pausedEffects, originalRemainingAir));
+        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, originalGameMode, originalAllowFlight, originalFlying, originalSilent, originalGlowing, originalInventory, originalArmor, pausedEffects, originalRemainingAir));
         bodyOwners.put(body.getUniqueId(), player.getUniqueId());
         if (hitbox != null) {
             hitboxEntities.put(hitbox.getUniqueId(), player.getUniqueId());
@@ -450,6 +457,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         hitbox.setInvulnerable(false);
         hitbox.setCustomName(getMessage("hitbox.name-format").replace("{player}", player.getName()));
         hitbox.setCustomNameVisible(false);
+        MannequinLabel.hideDescription(hitbox);
         hitbox.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
         hitbox.setCanPickupItems(false);
         return hitbox;
@@ -489,6 +497,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                     + " konnte nicht auf das Mannequin übertragen werden, es benutzt den Standard-Skin.");
         }
         applyMovementSensitivity(mannequin);
+        // Without this the grey "NPC" line sits under the body's name.
+        MannequinLabel.hideDescription(mannequin);
         return mannequin;
     }
 
@@ -598,6 +608,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         player.setAllowFlight(cameraData.getOriginalAllowFlight());
         player.setFlying(cameraData.getOriginalFlying());
         player.setSilent(cameraData.getOriginalSilent());
+        player.setGlowing(cameraData.getOriginalGlowing());
         player.setRemainingAir(cameraData.getOriginalRemainingAir());
 
         removePlayerFromNoCollisionTeam(player);
@@ -641,17 +652,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (!shuttingDown) {
             startCooldown(player);
         }
-    }
-
-    /**
-     * Whether the camera player may be made invisible while the mode runs.
-     *
-     * <p>Not in visibility mode "true": everybody is supposed to see him there,
-     * and since only camera players are in the team, nobody outside it would see
-     * through the effect - he would simply be gone for the others.</p>
-     */
-    private boolean mayHideCamPlayer() {
-        return playerVisibilityMode != VisibilityMode.ALL;
     }
 
     public boolean isInCameraMode(Player player) {
@@ -1490,6 +1490,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             default -> VisibilityMode.CAM;
         };
         allowInvisibilityPotion = config.getBoolean("camera-mode.allow_invisibility_potion", true);
+        glowingOutline = config.getBoolean("camera-mode.glowing-outline", true);
         allowLavaFlight = config.getBoolean("camera-mode.allow_lava_flight", false);
         cameraHeadEnabled = config.getBoolean("camera-head.enabled", false);
         armorStandNameVisible = config.getBoolean("armorstand.name-visible", true);
@@ -1955,18 +1956,20 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         private final boolean originalAllowFlight;
         private final boolean originalFlying;
         private final boolean originalSilent;
+        private final boolean originalGlowing;
         private final int originalRemainingAir;
         private final ItemStack[] originalInventoryContents; // Für Inventar
         private final ItemStack[] originalArmorContents;     // Für Rüstung
         private final Collection<PotionEffect> pausedEffects;
 
-        public CameraData(LivingEntity body, Mannequin hitbox, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalSilent, ItemStack[] originalInventoryContents, ItemStack[] originalArmorContents, Collection<PotionEffect> pausedEffects, int originalRemainingAir) {
+        public CameraData(LivingEntity body, Mannequin hitbox, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalSilent, boolean originalGlowing, ItemStack[] originalInventoryContents, ItemStack[] originalArmorContents, Collection<PotionEffect> pausedEffects, int originalRemainingAir) {
             this.body = body;
             this.hitbox = hitbox;
             this.originalGameMode = originalGameMode;
             this.originalAllowFlight = originalAllowFlight;
             this.originalFlying = originalFlying;
             this.originalSilent = originalSilent;
+            this.originalGlowing = originalGlowing;
             this.originalInventoryContents = originalInventoryContents;
             this.originalArmorContents = originalArmorContents;
             this.pausedEffects = pausedEffects;
@@ -1982,6 +1985,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         public boolean getOriginalAllowFlight() { return originalAllowFlight; }
         public boolean getOriginalFlying() { return originalFlying; }
         public boolean getOriginalSilent() { return originalSilent; }
+        /** Whether the player was already glowing before camera mode. */
+        public boolean getOriginalGlowing() { return originalGlowing; }
         public ItemStack[] getOriginalInventoryContents() { return originalInventoryContents; }
         public ItemStack[] getOriginalArmorContents() { return originalArmorContents; }
         public Collection<PotionEffect> getPausedEffects() { return pausedEffects; }

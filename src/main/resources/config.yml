@@ -97,10 +97,15 @@ camera-mode:
   # Sichtbarkeit anderer Spieler im Modus (cam/true/false)
   player_visibility_mode: "true"
   # Macht den Spieler im Cam-Modus unsichtbar
-  # Ohne Wirkung bei player_visibility_mode: "true" - dort sollen ihn alle
-  # sehen, und nur Spieler im Cam-Modus sind im Team, das durch die
-  # Unsichtbarkeit hindurchsieht
   allow_invisibility_potion: true
+  # Umrandet den unsichtbaren Spieler mit einem leuchtenden Umriss, damit
+  # andere ihn als Geist sehen statt gar nicht. Ohne ihn ist er für alle
+  # unsichtbar, die ihn laut player_visibility_mode sehen dürften.
+  # Achtung: Ein Leuchten ist auch durch Wände sichtbar - auf einem
+  # PvP-Server verrät es die Position des Spielers.
+  # Getragene Ausrüstung, etwa der Kamera-Kopf, bleibt davon unberührt
+  # sichtbar.
+  glowing-outline: true
   # Erlaubt Flug durch Lava
   allow_lava_flight: true
 
@@ -203,6 +208,9 @@ fireguard:
   radius-down: 1
 
 # Setzt dem Spieler einen Kamera-Kopf auf
+# Funktioniert weiterhin: Der Kopf ist getragene Ausrüstung und bleibt auch
+# an einem unsichtbaren Spieler sichtbar - er schwebt dann dort, wo der
+# Spieler ist
 camera-head:
   # Aktiviert den Kamerakopf
   enabled: false
