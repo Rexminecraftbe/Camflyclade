@@ -76,8 +76,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private final Map<UUID, UUID> bodyOwners = new HashMap<>();
     private final Map<UUID, UUID> hitboxEntities = new HashMap<>();
     private final Set<UUID> pendingDamage = new HashSet<>();
-    private boolean muteAttack;
-    private boolean muteFootsteps;
     private CamFireGuard camFireGuard;
     private double particleHeight;
     private int particlesPerTick;
@@ -273,7 +271,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             pausedEffects.add(effect);
             player.removePotionEffect(effect.getType());
         }
-        boolean originalSilent = player.isSilent();
         boolean originalGlowing = player.isGlowing();
         int originalRemainingAir = player.getRemainingAir();
 
@@ -311,20 +308,13 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         player.setGameMode(GameMode.CREATIVE);
         player.setAllowFlight(true);
         player.setFlying(true);
-        if (glowingOutline) {
+        if (glowingOutline && playerVisibilityMode != VisibilityMode.NONE) {
             // The invisibility takes the body away, the outline puts a visible
             // shape back - that is what everyone else sees of the camera player.
+            // In mode NONE nobody is meant to see him, so an outline would give
+            // away exactly what that mode hides.
             player.setGlowing(true);
         }
-        if (muteAttack || muteFootsteps) {
-            // Without packet access the only lever left is the entity silence
-            // flag: it takes away every sound the player makes at once, attack
-            // and footsteps among them. The invisibility belongs to it, so that
-            // a silent player is not seen either.
-            player.setSilent(true);
-            player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
-        }
-
 
         new BukkitRunnable() {
             @Override
@@ -332,7 +322,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 player.setGameMode(GameMode.ADVENTURE);
                 player.setAllowFlight(true); // ensure flight remains enabled
                 player.setFlying(true);       // keep player flying
-                if (allowInvisibilityPotion && !player.hasPotionEffect(PotionEffectType.INVISIBILITY)) {
+                if (needsInvisibility() && !player.hasPotionEffect(PotionEffectType.INVISIBILITY)) {
                     player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
                 }
             }
@@ -349,7 +339,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
 
         // *** Gespeichertes Inventar an CameraData übergeben ***
-        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, originalGameMode, originalAllowFlight, originalFlying, originalSilent, originalGlowing, originalInventory, originalArmor, pausedEffects, originalRemainingAir));
+        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, originalArmor, pausedEffects, originalRemainingAir));
         bodyOwners.put(body.getUniqueId(), player.getUniqueId());
         if (hitbox != null) {
             hitboxEntities.put(hitbox.getUniqueId(), player.getUniqueId());
@@ -606,7 +596,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         player.setGameMode(cameraData.getOriginalGameMode());
         player.setAllowFlight(cameraData.getOriginalAllowFlight());
         player.setFlying(cameraData.getOriginalFlying());
-        player.setSilent(cameraData.getOriginalSilent());
         player.setGlowing(cameraData.getOriginalGlowing());
         player.setRemainingAir(cameraData.getOriginalRemainingAir());
 
@@ -1498,8 +1487,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 config.getInt("body.movement-sensitivity", MovementSensitivity.NORMAL.getId()));
         double moveThreshold = config.getDouble("body.move-threshold", 0.05, MIN_MOVE_THRESHOLD);
         moveThresholdSquared = moveThreshold * moveThreshold;
-        muteAttack = config.getBoolean("mute.attack", false);
-        muteFootsteps = config.getBoolean("mute.footsteps", false);
         particleHeight = config.getDouble("camera-particles.height", 1.0);
         particlesPerTick = config.getInt("camera-particles.particles-per-tick", 5, 0);
         showOwnParticles = config.getBoolean("camera-particles.show-own-particles", false);
@@ -1632,7 +1619,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             team = scoreboard.registerNewTeam(NO_COLLISION_TEAM);
         }
         team.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
-        team.setCanSeeFriendlyInvisibles(true);
+        // Members see each other through the invisibility, which is what mode
+        // CAM lives on. Mode NONE hides the player from everybody, so there it
+        // would be a hole.
+        team.setCanSeeFriendlyInvisibles(playerVisibilityMode != VisibilityMode.NONE);
         return team;
     }
 
@@ -1711,6 +1701,23 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Whether the camera player is turned invisible. Mode NONE takes him away
+     * from everybody and the effect is the only thing left that still does so,
+     * so there it is applied even when the option is switched off.
+     */
+    private boolean needsInvisibility() {
+        return allowInvisibilityPotion || playerVisibilityMode == VisibilityMode.NONE;
+    }
+
+    /**
+     * Puts one viewer on the right side of the camera player.
+     *
+     * <p>Mode NONE leans on the invisibility instead of hiding the player from
+     * the client: {@code hidePlayer} would take him out of the tab list as well,
+     * and he is supposed to stay in there. What that costs is worn equipment -
+     * the camera head keeps being drawn on an invisible player.</p>
+     */
     private void applyVisibility(Player camPlayer, Player viewer) {
         if (camPlayer.equals(viewer)) return;
         switch (playerVisibilityMode) {
@@ -1721,8 +1728,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                     viewer.hidePlayer(this, camPlayer);
                 }
             }
-            case ALL -> viewer.showPlayer(this, camPlayer);
-            case NONE -> viewer.hidePlayer(this, camPlayer);
+            // ALL shows him with the outline, NONE leans on the invisibility -
+            // either way the entity stays where it is.
+            case ALL, NONE -> viewer.showPlayer(this, camPlayer);
         }
     }
 
@@ -1910,20 +1918,18 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         private final GameMode originalGameMode;
         private final boolean originalAllowFlight;
         private final boolean originalFlying;
-        private final boolean originalSilent;
         private final boolean originalGlowing;
         private final int originalRemainingAir;
         private final ItemStack[] originalInventoryContents; // Für Inventar
         private final ItemStack[] originalArmorContents;     // Für Rüstung
         private final Collection<PotionEffect> pausedEffects;
 
-        public CameraData(LivingEntity body, Mannequin hitbox, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalSilent, boolean originalGlowing, ItemStack[] originalInventoryContents, ItemStack[] originalArmorContents, Collection<PotionEffect> pausedEffects, int originalRemainingAir) {
+        public CameraData(LivingEntity body, Mannequin hitbox, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, ItemStack[] originalArmorContents, Collection<PotionEffect> pausedEffects, int originalRemainingAir) {
             this.body = body;
             this.hitbox = hitbox;
             this.originalGameMode = originalGameMode;
             this.originalAllowFlight = originalAllowFlight;
             this.originalFlying = originalFlying;
-            this.originalSilent = originalSilent;
             this.originalGlowing = originalGlowing;
             this.originalInventoryContents = originalInventoryContents;
             this.originalArmorContents = originalArmorContents;
@@ -1939,7 +1945,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         public GameMode getOriginalGameMode() { return originalGameMode; }
         public boolean getOriginalAllowFlight() { return originalAllowFlight; }
         public boolean getOriginalFlying() { return originalFlying; }
-        public boolean getOriginalSilent() { return originalSilent; }
         /** Whether the player was already glowing before camera mode. */
         public boolean getOriginalGlowing() { return originalGlowing; }
         public ItemStack[] getOriginalInventoryContents() { return originalInventoryContents; }
