@@ -53,6 +53,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import java.util.Collection;
 import java.util.ArrayList;
 import java.util.List;
@@ -207,15 +208,38 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * is, and building the camera head does exactly that. It is therefore built
      * once here and thrown away.</p>
      *
-     * <p>Nothing depends on this, so anything that goes wrong is passed over: at
-     * worst the line appears later, as it did before.</p>
+     * <p>The work is framed by two lines of its own, so the authlib line in
+     * between reads as part of loading the skins instead of standing there
+     * without context.</p>
+     *
+     * <p>Nothing depends on this, so anything that goes wrong is only reported:
+     * at worst the line appears later, as it did before.</p>
      */
     private void warmUpProfileService() {
+        logStartupMessage(Level.INFO, "startup-skins-loading", "Skins werden geladen...", null);
         try {
             createCameraHead();
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException ex) {
             // Purely cosmetic, the log line is not worth a failed start.
+            logStartupMessage(Level.WARNING, "startup-skins-failed",
+                    "Skins konnten beim Start nicht vorgeladen werden: {error}", ex.toString());
+            return;
         }
+        logStartupMessage(Level.INFO, "startup-skins-loaded", "Skins wurden erfolgreich geladen.", null);
+    }
+
+    /**
+     * Writes a startup line from the config file into the console. An empty
+     * entry switches the line off; {@code {error}} is replaced when a reason is
+     * given.
+     */
+    private void logStartupMessage(Level level, String key, String fallback, String error) {
+        String text = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&',
+                getConfig().getString("messages." + key, fallback)));
+        if (text.isEmpty()) {
+            return;
+        }
+        getLogger().log(level, error == null ? text : text.replace("{error}", error));
     }
 
     @Override
