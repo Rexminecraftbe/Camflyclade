@@ -17,6 +17,22 @@ messages:
   cant-attack-other-body: "&cYou cannot attack other bodies in camera mode."
   cant-fly-in-lava: "&cYou cannot fly through lava! Camera mode will be ended."
   cant-interact-other: "&cYou cannot interact with another player's body!"
+  # Meldungen über fehlerhafte Werte in dieser Datei. Sie gehen immer ins
+  # Server-Log und bei /cam reload zusätzlich an den Spieler, der ihn
+  # ausgelöst hat. Platzhalter: {path} der Schlüssel, {value} der eingetragene
+  # Wert, {used} der stattdessen benutzte Wert, {allowed} die erlaubten Werte,
+  # {min} der Mindestwert, {count} die Anzahl der Meldungen.
+  # Leer lassen bringt nichts, dann greift der eingebaute Text - zum
+  # Abschalten message-settings.config-errors auf false setzen.
+  config-error-header: "&cDie Konfiguration hat {count} ungültige Stellen:"
+  config-error-header-single: "&cDie Konfiguration hat eine ungültige Stelle:"
+  config-error-more: "&c... und {count} weitere. Alle stehen in der Server-Konsole."
+  config-expected-boolean: "&cFalscher Wert für {path}: '{value}'. Erwartet wird true oder false. Es wird {used} verwendet."
+  config-expected-number: "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Zahl. Es wird {used} verwendet."
+  config-expected-text: "&cFalscher Wert für {path}: '{value}'. Erwartet wird Text. Es wird {used} verwendet."
+  config-too-small: "&cWert für {path} ist zu klein: {value}. Es wird {min} verwendet."
+  config-unknown-color: "&cUnbekannte Farbe für {path}: '{value}'. Es wird keine Farbe verwendet."
+  config-unknown-value: "&cUnbekannter Wert für {path}: '{value}'. Erlaubt sind: {allowed}. Es wird {used} verwendet."
   cooldown-available: "&aCam mode available again"
   cooldown-text: "You can start cam mode again in %time%."
   distance-limit: "&cYou cannot move further than {distance} blocks from your body!"
@@ -46,6 +62,9 @@ message-settings:
   cant-attack-other-body: true
   cant-fly-in-lava: true
   cant-interact-other: true
+  # Gilt für den ganzen config-*-Block und nur für den Chat beim Reload,
+  # ins Server-Log gehen die Meldungen immer
+  config-errors: true
   cooldown-available: true
   cooldown-text: true
   distance-limit: true
@@ -77,8 +96,16 @@ camera-mode:
   distance-warning-cooldown: 3
   # Sichtbarkeit anderer Spieler im Modus (cam/true/false)
   player_visibility_mode: "true"
-  # Erlaubt Unsichtbarkeitstränke
+  # Macht den Spieler im Cam-Modus unsichtbar
   allow_invisibility_potion: true
+  # Umrandet den unsichtbaren Spieler mit einem leuchtenden Umriss, damit
+  # andere ihn als Geist sehen statt gar nicht. Ohne ihn ist er für alle
+  # unsichtbar, die ihn laut player_visibility_mode sehen dürften.
+  # Achtung: Ein Leuchten ist auch durch Wände sichtbar - auf einem
+  # PvP-Server verrät es die Position des Spielers.
+  # Getragene Ausrüstung, etwa der Kamera-Kopf, bleibt davon unberührt
+  # sichtbar.
+  glowing-outline: true
   # Erlaubt Flug durch Lava
   allow_lava_flight: true
 
@@ -86,6 +113,10 @@ camera-mode:
 # In beiden Fällen nimmt ein Mannequin den Schaden: Es hat die Hitbox eines
 # Spielers und trägt die Rüstung, deshalb rechnet der Server den Schaden bei
 # beiden Typen gleich aus. Jeder Treffer beendet den Kamera-Modus.
+# Am Mannequin wird bei beiden Typen auch die Bewegung gemessen: Verlässt es
+# seinen Platz, endet der Kamera-Modus mit der Nachricht "body-moved".
+# Was den Körper überhaupt bewegen darf und wie weit er dabei kommt, legen
+# movement-sensitivity und move-threshold fest.
 body:
   # Welche Entität als Körper benutzt wird
   # 1 = Rüstungsständer mit dem Kopf des Spielers, dazu ein unsichtbares
@@ -95,9 +126,25 @@ body:
   #     des Spielers auch sichtbar trägt
   # Bei einem unbekannten Wert wird 1 verwendet.
   type: 1
-  # Das Mannequin bleibt fest an seiner Stelle stehen, es fällt nicht
-  # und kann nicht weggeschoben werden (gilt für beide Typen)
-  mannequin-immovable: true
+  # Wie empfindlich der Körper auf Verschiebung reagiert
+  # 0 = reagiert auf gar nichts. Körper und Mannequin stehen fest, weder
+  #     Schwerkraft noch Wasser noch Kolben bewegen sie. Damit ist die
+  #     Bewegungserkennung aus, "body-moved" kommt nie. Die Einstellung
+  #     armorstand.gravity wird auf dieser Stufe ignoriert.
+  # 1 = normal. Schwerkraft, Wasser und Kolben bewegen den Körper und jede
+  #     Bewegung beendet den Kamera-Modus. Spieler und Mobs können ihn
+  #     nicht anrempeln.
+  # 2 = sehr empfindlich. Zusätzlich schieben Spieler und Mobs den Körper
+  #     weg, was den Kamera-Modus ebenfalls beendet.
+  #     Nur für type: 2 verfügbar! Bei type: 1 würde nur das unsichtbare
+  #     Mannequin geschoben, während der sichtbare Rüstungsständer stehen
+  #     bleibt - dort wird deshalb automatisch Stufe 1 benutzt.
+  # Bei einem unbekannten Wert wird 1 verwendet.
+  movement-sensitivity: 1
+  # Wie weit sich das Mannequin bewegen darf, bevor der Kamera-Modus endet,
+  # in Blöcken. Gilt bei beiden Körpertypen und ist auf Stufe 0 wirkungslos.
+  # Werte unter 0.01 werden automatisch auf 0.01 angehoben.
+  move-threshold: 0.05
 
 # Einstellungen des Körpers
 # name-visible und gravity gelten für den Körper beider Typen,
@@ -107,14 +154,10 @@ armorstand:
   name-visible: true
   # Ob der Rüstungsständer sichtbar ist
   visible: true
-  # Schwerkraft für den Rüstungsständer
+  # Schwerkraft für den Körper; bei Typ 1 gilt sie auch für das unsichtbare
+  # Mannequin, damit beide gemeinsam fallen.
+  # Wird ignoriert, wenn body.movement-sensitivity auf 0 steht
   gravity: true
-  # Schaden, den der Rüstungsständer bei Treffern erhält
-  damage-amount: 1.0
-  # Verringert Haltbarkeit der ausgerüsteten Rüstung
-  durability-loss: true
-  # Ignoriert Rüstung beim Berechnen des Schadens
-  damage-ignore-armor: true
 
 # Geräuschunterdrückung
 mute:
@@ -165,6 +208,9 @@ fireguard:
   radius-down: 1
 
 # Setzt dem Spieler einen Kamera-Kopf auf
+# Funktioniert weiterhin: Der Kopf ist getragene Ausrüstung und bleibt auch
+# an einem unsichtbaren Spieler sichtbar - er schwebt dann dort, wo der
+# Spieler ist
 camera-head:
   # Aktiviert den Kamerakopf
   enabled: false

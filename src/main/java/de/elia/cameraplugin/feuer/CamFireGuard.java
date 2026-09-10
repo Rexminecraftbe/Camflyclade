@@ -2,7 +2,7 @@ package de.elia.cameraplugin.feuer;
 
 import org.bukkit.*;
 import org.bukkit.block.Block;
-import org.bukkit.configuration.file.FileConfiguration;
+import de.elia.cameraplugin.config.ConfigReader;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -39,13 +39,15 @@ public class CamFireGuard implements Listener {
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
     }
 
-    public void loadConfig(FileConfiguration config) {
+    public void loadConfig(ConfigReader config) {
         enabled = config.getBoolean("fireguard.enabled", true);
         hideFire = config.getBoolean("fireguard.hide-fire", true);
-        tickInterval = config.getLong("fireguard.tick-interval", 0L);
-        radiusH = config.getDouble("fireguard.radius-horizontal", 1.5);
-        radiusUp = config.getInt("fireguard.radius-up", 2);
-        radiusDown = config.getInt("fireguard.radius-down", 1);
+        // A period of zero would make the task run every single tick, so one
+        // tick is the smallest interval that is accepted here.
+        tickInterval = config.getLong("fireguard.tick-interval", 10L, 1L);
+        radiusH = config.getDouble("fireguard.radius-horizontal", 1.5, 0.0);
+        radiusUp = config.getInt("fireguard.radius-up", 2, 0);
+        radiusDown = config.getInt("fireguard.radius-down", 1, 0);
         radiusH2 = radiusH * radiusH;
         rangeXZ = (int) Math.ceil(radiusH);
     }

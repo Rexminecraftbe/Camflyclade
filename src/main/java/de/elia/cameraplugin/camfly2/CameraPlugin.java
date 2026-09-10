@@ -42,6 +42,7 @@ import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.entity.Arrow;
 import org.bukkit.entity.AbstractArrow;
 import org.bukkit.scoreboard.Team;
+import org.bukkit.util.Vector;
 import org.bukkit.NamespacedKey;
 import org.bukkit.persistence.PersistentDataType;
 import de.elia.cameraplugin.mirrordamage.DamageMode;
@@ -55,10 +56,15 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.Collection;
 import java.util.ArrayList;
+import java.util.List;
 import de.elia.cameraplugin.feuer.CamFireGuard;
 import de.elia.cameraplugin.body.BodyType;
 import de.elia.cameraplugin.body.EquipmentVisibility;
+import de.elia.cameraplugin.body.MannequinLabel;
 import de.elia.cameraplugin.body.MannequinSkin;
+import de.elia.cameraplugin.body.MovementSensitivity;
+import de.elia.cameraplugin.config.ConfigIssue;
+import de.elia.cameraplugin.config.ConfigReader;
 
 import static org.bukkit.Sound.ENTITY_ITEM_BREAK;
 
@@ -94,7 +100,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private NamespacedKey bodyKey;
     private NamespacedKey hitboxKey;
     private NamespacedKey hiddenArmorAsset;
-    private boolean hiddenArmorLogged;
     /** Armour slots in the order of {@link org.bukkit.inventory.PlayerInventory#getArmorContents()}. */
     private static final EquipmentSlot[] ARMOR_SLOTS = {
             EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD
@@ -109,6 +114,24 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     private static final String NO_COLLISION_TEAM = "cam_no_push";
 
+    /**
+     * Smallest threshold that is accepted for {@code body.move-threshold}, in
+     * blocks. Anything below is raised to this value.
+     */
+    private static final double MIN_MOVE_THRESHOLD = 0.01;
+
+    /**
+     * How many config notes are sent into the chat of the player who reloaded.
+     * The rest is only in the console, so that a thoroughly broken file does not
+     * bury the chat.
+     */
+    private static final int MAX_CHAT_WARNINGS = 8;
+
+    /** Message for a colour name that does not exist, plus its built-in wording. */
+    private static final String UNKNOWN_COLOR_MESSAGE = "config-unknown-color";
+    private static final String UNKNOWN_COLOR_FALLBACK =
+            "&cUnbekannte Farbe für {path}: '{value}'. Es wird keine Farbe verwendet.";
+
     // Configurable values
     private boolean maxDistanceEnabled;
     private double maxDistance;
@@ -117,9 +140,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private boolean armorStandVisible;
     private boolean armorStandGravity;
     private BodyType bodyType;
-    private boolean mannequinImmovable;
+    private MovementSensitivity movementSensitivity;
+    /** {@code body.move-threshold} squared, so the square root can be skipped. */
+    private double moveThresholdSquared;
     private VisibilityMode playerVisibilityMode;
     private boolean allowInvisibilityPotion;
+    private boolean glowingOutline;
     private boolean allowLavaFlight;
     private Object Sound;
 
@@ -151,7 +177,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     public void onEnable() {
         shuttingDown = false;
         saveDefaultConfig();
-        loadConfigValues();
+        // Created before the config is read, so its values go through the same
+        // load and its notes end up in the same report.
+        camFireGuard = new CamFireGuard(this);
+        reportConfigWarnings(loadConfigValues(), null);
         bodyKey = new NamespacedKey(this, "cam_body");
         hitboxKey = new NamespacedKey(this, "cam_hitbox");
         // Deliberately not a real equipment asset: the client finds nothing for
@@ -169,8 +198,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             camModeObjective.getScore(p.getName()).setScore(0);
         }
         removeLeftoverEntities();
-        camFireGuard = new CamFireGuard(this);
-        camFireGuard.loadConfig(getConfig());
+        warmUpProfileService();
         if (muteAttack || muteFootsteps || hideSprintParticles) {
             if (getServer().getPluginManager().getPlugin("ProtocolLib") != null) {
                 protocolLibAvailable = true;
@@ -189,6 +217,29 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         this.getServer().getPluginManager().registerEvents(this, this);
         refreshNoCollisionTeam();
         getLogger().info("CameraPlugin wurde aktiviert!");
+    }
+
+    /**
+     * Touches the profile handling once while the server is still starting.
+     *
+     * <p>The first time the server works with a skin, Mojang's authlib logs its
+     * environment ("Environment[sessionHost=...]"). Without this that line lands
+     * in the middle of the game, right after the first /cam, because that is
+     * when the body gets the player's head and skin.</p>
+     *
+     * <p>A bare profile is not enough to set that off - one carrying a texture
+     * is, and building the camera head does exactly that. It is therefore built
+     * once here and thrown away.</p>
+     *
+     * <p>Nothing depends on this, so anything that goes wrong is passed over: at
+     * worst the line appears later, as it did before.</p>
+     */
+    private void warmUpProfileService() {
+        try {
+            createCameraHead();
+        } catch (RuntimeException ignored) {
+            // Purely cosmetic, the log line is not worth a failed start.
+        }
     }
 
     @Override
@@ -246,6 +297,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             player.removePotionEffect(effect.getType());
         }
         boolean originalSilent = player.isSilent();
+        boolean originalGlowing = player.isGlowing();
         int originalRemainingAir = player.getRemainingAir();
 
         // *** Inventar und Rüstung leeren ***
@@ -259,6 +311,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
         // A mannequin always wears the player's armour and always takes the hits,
         // so the server calculates the damage the same way for both body types.
+        // It is also the entity the movement check watches for both types.
         Mannequin hitbox = null;
         if (bodyType.usesSeparateHitbox()) {
             // The mannequin next to the armour stand is invisible, so it wears
@@ -281,6 +334,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         player.setGameMode(GameMode.CREATIVE);
         player.setAllowFlight(true);
         player.setFlying(true);
+        if (glowingOutline) {
+            // The invisibility takes the body away, the outline puts a visible
+            // shape back - that is what everyone else sees of the camera player.
+            player.setGlowing(true);
+        }
         if (!protocolLibAvailable && (muteAttack || muteFootsteps)) {
             player.setSilent(true);
         }
@@ -312,7 +370,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
 
         // *** Gespeichertes Inventar an CameraData übergeben ***
-        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, originalGameMode, originalAllowFlight, originalFlying, originalSilent, originalInventory, originalArmor, pausedEffects, originalRemainingAir));
+        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, originalGameMode, originalAllowFlight, originalFlying, originalSilent, originalGlowing, originalInventory, originalArmor, pausedEffects, originalRemainingAir));
         bodyOwners.put(body.getUniqueId(), player.getUniqueId());
         if (hitbox != null) {
             hitboxEntities.put(hitbox.getUniqueId(), player.getUniqueId());
@@ -321,13 +379,14 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             mutedPlayers.add(player.getUniqueId());
         }
 
-        if (hitbox != null) {
-            startHitboxSync(body, hitbox);
-        }
         startCameraParticles(player);
         startActionBar(player);
         camFireGuard.startFor(player);
-        startBodyHealthCheck(player, body);
+        // The entity taking the hits is the mannequin for both body types, so the
+        // movement check always runs on it. Both calls look at the sensitivity
+        // level and only one of them does anything.
+        startBodyMovementCheck(player, damageTarget);
+        startBodyPin(player, body, hitbox);
         addPlayerToNoCollisionTeam(player);
         // Team wurde evtl. gerade neu erstellt -> alle Mitglieder neu setzen.
         refreshNoCollisionTeam();
@@ -378,7 +437,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private ItemStack[] createHiddenArmor(ItemStack[] originalArmor) {
         ItemStack[] hiddenArmor = new ItemStack[originalArmor.length];
         boolean stillVisible = false;
-        ItemStack sample = null;
         for (int i = 0; i < originalArmor.length && i < ARMOR_SLOTS.length; i++) {
             if (originalArmor[i] == null) {
                 continue;
@@ -388,20 +446,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 stillVisible = true;
             }
             hiddenArmor[i] = copy;
-            if (sample == null) {
-                sample = copy;
-            }
         }
         if (stillVisible) {
             getLogger().warning("Die Rüstung des unsichtbaren Mannequins konnte nicht ausgeblendet werden, "
                     + "sie bleibt am Körper sichtbar. Setter: " + EquipmentVisibility.describeAssetSetter());
-        } else if (sample != null && !hiddenArmorLogged) {
-            // Once per start, so it can be checked whether the component really
-            // reaches the item when the armour is still visible on the client.
-            hiddenArmorLogged = true;
-            getLogger().info("Rüstung des unsichtbaren Mannequins ausgeblendet über "
-                    + EquipmentVisibility.describeAssetSetter()
-                    + ", Komponente am Item: " + EquipmentVisibility.describe(sample));
         }
         return hiddenArmor;
     }
@@ -425,11 +473,15 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         hitbox.getPersistentDataContainer().set(hitboxKey, PersistentDataType.INTEGER, 1);
         hitbox.setInvisible(true);
         hitbox.setSilent(true);
-        hitbox.setGravity(false);
-        hitbox.setImmovable(mannequinImmovable);
+        // It stands inside the armour stand and therefore has to behave the same
+        // way: whatever moves the one moves the other. Only then does the
+        // movement check on the mannequin notice that the body has fallen.
+        hitbox.setGravity(useBodyGravity());
+        applyMovementSensitivity(hitbox);
         hitbox.setInvulnerable(false);
         hitbox.setCustomName(getMessage("hitbox.name-format").replace("{player}", player.getName()));
         hitbox.setCustomNameVisible(false);
+        MannequinLabel.hideDescription(hitbox);
         hitbox.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
         hitbox.setCanPickupItems(false);
         return hitbox;
@@ -448,7 +500,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
         body.setRemainingAir(remainingAir);
         body.getPersistentDataContainer().set(bodyKey, PersistentDataType.INTEGER, 1);
-        body.setGravity(armorStandGravity);
+        body.setGravity(useBodyGravity());
         body.setCanPickupItems(false);
         body.setCustomName(getMessage("armorstand.name-format").replace("{player}", player.getName()));
         body.setCustomNameVisible(armorStandNameVisible);
@@ -468,14 +520,43 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             getLogger().warning("Der Skin von " + player.getName()
                     + " konnte nicht auf das Mannequin übertragen werden, es benutzt den Standard-Skin.");
         }
-        mannequin.setImmovable(mannequinImmovable);
+        applyMovementSensitivity(mannequin);
+        // Without this the grey "NPC" line sits under the body's name.
+        MannequinLabel.hideDescription(mannequin);
         return mannequin;
+    }
+
+    /**
+     * Puts the configured {@code body.movement-sensitivity} onto a mannequin.
+     *
+     * <p>On level 0 it is nailed to its spot, on the levels above it is moved by
+     * gravity, water and pistons, because that movement is what ends camera
+     * mode. Only level 2 also lets players and mobs push it.</p>
+     *
+     * <p>The same call fits the invisible hitbox and the visible body: level 2
+     * has already fallen back to level 1 for an armour stand body, so the
+     * hitbox, which only exists for that body type, never becomes collidable.</p>
+     */
+    private void applyMovementSensitivity(Mannequin mannequin) {
+        mannequin.setImmovable(movementSensitivity.isFixed());
+        mannequin.setCollidable(movementSensitivity.allowsEntityPush());
+    }
+
+    /**
+     * Gravity for the body entities. Level 0 nails the body down, so the
+     * configured {@code armorstand.gravity} is ignored there.
+     */
+    private boolean useBodyGravity() {
+        return !movementSensitivity.isFixed() && armorStandGravity;
     }
 
     /** Creates the classic body: an armour stand wearing the player's head. */
     private ArmorStand spawnArmorStandBody(Player player, Location location) {
         ArmorStand armorStand = (ArmorStand) location.getWorld().spawnEntity(location, EntityType.ARMOR_STAND);
         armorStand.setVisible(armorStandVisible);
+        // Never a marker: that would take away its hitbox and drop the name tag
+        // from above the head down to its feet. Level 0 is held in place by
+        // startBodyPin instead.
         armorStand.setMarker(false);
         armorStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
         armorStand.addEquipmentLock(EquipmentSlot.CHEST, ArmorStand.LockType.REMOVING_OR_CHANGING);
@@ -551,6 +632,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         player.setAllowFlight(cameraData.getOriginalAllowFlight());
         player.setFlying(cameraData.getOriginalFlying());
         player.setSilent(cameraData.getOriginalSilent());
+        player.setGlowing(cameraData.getOriginalGlowing());
         player.setRemainingAir(cameraData.getOriginalRemainingAir());
 
         removePlayerFromNoCollisionTeam(player);
@@ -601,22 +683,47 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Watches the body while camera mode is running. Drowning, suffocation, fire
-     * and lava are not checked here any more: the mannequin takes that damage
-     * itself and {@link #onBodyDamage(EntityDamageEvent)} ends camera mode. All
-     * that is left is noticing when the body is moved away from its spot.
+     * Watches the mannequin while camera mode is running and ends the mode as
+     * soon as it leaves its spot. Both body types run through this one check,
+     * because both have a mannequin: with body type 1 it is the invisible one
+     * standing in the armour stand, with type 2 the visible body itself. It is
+     * the entity that takes the hits in either case, so gravity, water and
+     * pistons are noticed on the same entity for both types.
+     *
+     * <p>Deliberately checked by the scheduler and not through an event: the
+     * mannequin has no AI, so {@code EntityMoveEvent} does not fire for it, and
+     * falling or drifting away would go unnoticed.</p>
+     *
+     * <p>Drowning, suffocation, fire and lava are not checked here: the
+     * mannequin takes that damage itself and
+     * {@link #onBodyDamage(EntityDamageEvent)} ends camera mode.</p>
      */
-    private void startBodyHealthCheck(Player player, LivingEntity body) {
-        final Location initialLocation = body.getLocation().clone();
+    private void startBodyMovementCheck(Player player, LivingEntity mannequin) {
+        if (movementSensitivity.isFixed()) {
+            // Nothing can move the body on this level, so the check would only
+            // compare a location with itself every tick.
+            return;
+        }
         new BukkitRunnable() {
+            /**
+             * The spot the body is compared against. Taken at the first run and
+             * not when it is spawned, so that settling onto the ground right
+             * after the spawn does not already count as movement.
+             */
+            private Location reference;
+
             @Override
             public void run() {
-                if (!cameraPlayers.containsKey(player.getUniqueId()) || !player.isOnline() || body.isDead()) {
+                if (!cameraPlayers.containsKey(player.getUniqueId()) || !player.isOnline() || mannequin.isDead()) {
                     this.cancel();
                     return;
                 }
-                if (!body.getLocation().getWorld().equals(initialLocation.getWorld()) ||
-                        body.getLocation().distanceSquared(initialLocation) > 0.01) {
+                Location current = mannequin.getLocation();
+                if (reference == null) {
+                    reference = current.clone();
+                    return;
+                }
+                if (hasMoved(reference, current)) {
                     sendConfiguredMessage(player, "body-moved");
                     exitCameraMode(player);
                     this.cancel();
@@ -625,18 +732,51 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }.runTaskTimer(this, 20L, 1L);
     }
 
-    /** Keeps the invisible mannequin exactly where the armour stand body is. */
-    private void startHitboxSync(LivingEntity body, Mannequin hitbox) {
+    /**
+     * Puts the body back whenever something moved it, as long as sensitivity
+     * level 0 is set.
+     *
+     * <p>{@code setImmovable} keeps gravity and knockback off the mannequin but
+     * does not stop a piston, and an armour stand is pushed by one as well. The
+     * level promises that nothing moves the body, so what a piston does is
+     * undone here.</p>
+     */
+    private void startBodyPin(Player player, LivingEntity body, Mannequin hitbox) {
+        if (!movementSensitivity.isFixed()) {
+            return;
+        }
+        final Location anchor = body.getLocation().clone();
         new BukkitRunnable() {
             @Override
             public void run() {
-                if (body.isDead() || hitbox.isDead()) {
+                if (!cameraPlayers.containsKey(player.getUniqueId()) || !player.isOnline() || body.isDead()) {
                     this.cancel();
                     return;
                 }
-                hitbox.teleport(body.getLocation());
+                pinToSpot(body, anchor);
+                if (hitbox != null && !hitbox.isDead()) {
+                    pinToSpot(hitbox, anchor);
+                }
             }
         }.runTaskTimer(this, 1L, 1L);
+    }
+
+    /** Teleports the entity back to its spot when something pushed it away. */
+    private void pinToSpot(Entity entity, Location anchor) {
+        Location current = entity.getLocation();
+        if (!current.getWorld().equals(anchor.getWorld())
+                || current.distanceSquared(anchor) > MIN_MOVE_THRESHOLD * MIN_MOVE_THRESHOLD) {
+            entity.teleport(anchor);
+            entity.setVelocity(new Vector());
+        }
+    }
+
+    /** {@code true} when the body left its spot or its world. */
+    private boolean hasMoved(Location reference, Location current) {
+        if (!current.getWorld().equals(reference.getWorld())) {
+            return true;
+        }
+        return current.distanceSquared(reference) > moveThresholdSquared;
     }
 
     private void startCameraParticles(Player player) {
@@ -1272,17 +1412,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
     }
 
-    @EventHandler
-    public void onPotionEffectChange(EntityPotionEffectEvent event) {
-        if (!(event.getEntity() instanceof Player player)) return;
-        if (!allowInvisibilityPotion) return;
-        if (playerVisibilityMode == VisibilityMode.NONE) return;
-        if (cameraPlayers.containsKey(player.getUniqueId())) return;
-        if (!PotionEffectType.INVISIBILITY.equals(event.getModifiedType())) return;
-
-        Bukkit.getScheduler().runTask(this, () -> updateViewerTeam(player));
-    }
-
     @EventHandler(priority = EventPriority.HIGHEST)
     public void filterCommandSuggestions(PlayerCommandSendEvent event) {
         event.getCommands().removeIf(cmd -> cmd.equalsIgnoreCase("camplugin:cam"));
@@ -1367,56 +1496,62 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
     }
 
-    private void loadConfigValues() {
-        maxDistanceEnabled = getConfig().getBoolean("camera-mode.max-distance-enabled", true);
-        maxDistance = getConfig().getDouble("camera-mode.max-distance", 100.0);
-        distanceWarningCooldown = getConfig().getInt("camera-mode.distance-warning-cooldown", 3);
-        String visibility = getConfig().getString("camera-mode.player_visibility_mode", "cam").toLowerCase();
+    /**
+     * Reads every value out of the config file.
+     *
+     * @return a note for each value that did not fit and was replaced
+     */
+    private List<ConfigIssue> loadConfigValues() {
+        ConfigReader config = new ConfigReader(getConfig());
+        maxDistanceEnabled = config.getBoolean("camera-mode.max-distance-enabled", true);
+        maxDistance = config.getDouble("camera-mode.max-distance", 100.0, 0.0);
+        distanceWarningCooldown = config.getInt("camera-mode.distance-warning-cooldown", 3, 0);
+        String visibility = config.getChoice("camera-mode.player_visibility_mode", "cam", "cam", "true", "false")
+                .toLowerCase();
         playerVisibilityMode = switch (visibility) {
             case "true" -> VisibilityMode.ALL;
             case "false" -> VisibilityMode.NONE;
             default -> VisibilityMode.CAM;
         };
-        allowInvisibilityPotion = getConfig().getBoolean("camera-mode.allow_invisibility_potion", true);
-        allowLavaFlight = getConfig().getBoolean("camera-mode.allow_lava_flight", false);
-        cameraHeadEnabled = getConfig().getBoolean("camera-head.enabled", false);
-        armorStandNameVisible = getConfig().getBoolean("armorstand.name-visible", true);
-        armorStandVisible = getConfig().getBoolean("armorstand.visible", true);
-        armorStandGravity = getConfig().getBoolean("armorstand.gravity", true);
-        bodyType = resolveBodyType(getConfig().getInt("body.type", BodyType.ARMOR_STAND.getId()));
-        mannequinImmovable = getConfig().getBoolean("body.mannequin-immovable", true);
-        muteAttack = getConfig().getBoolean("mute.attack", false);
-        muteFootsteps = getConfig().getBoolean("mute.footsteps", false);
-        hideSprintParticles = getConfig().getBoolean("mute.hide-sprint-particles", true);
-        particleHeight = getConfig().getDouble("camera-particles.height", 1.0);
-        particlesPerTick = getConfig().getInt("camera-particles.particles-per-tick", 5);
-        showOwnParticles = getConfig().getBoolean("camera-particles.show-own-particles", false);
-        protocolFoundLogColor = parseColor(getConfig().getString("log-colors.protocol-found", ""));
-        actionBarEnabled = getConfig().getBoolean("action-bar.enabled", true);
-        actionBarOffDuration = getConfig().getInt("action-bar.off-duration", 10);
-        actionBarOnMessage = ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.actionbar-on", "&aCam-Modus aktiviert"));
-        actionBarOffMessage = ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.actionbar-off", "&cCam-Modus beendet"));
-        timeLimitEnabled = getConfig().getBoolean("time-limit.enabled", false);
-        cooldownsEnabled = getConfig().getBoolean("time-limit.cooldowns-enabled", false);
-        durationSeconds = getConfig().getInt("time-limit.duration-seconds", 300);
-        cooldownSeconds = getConfig().getInt("time-limit.cooldown-seconds", 120);
-        showBossbar = getConfig().getBoolean("time-limit.show-bossbar", true);
-        String colorName = getConfig().getString("time-limit.bossbar-color", "BLUE");
-        try {
-            bossbarColor = BarColor.valueOf(colorName.toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            bossbarColor = BarColor.BLUE;
-        }
-        bossbarText = ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.bossbar-text", "Cam-Modus endet in: %time%"));
-        cooldownText = ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.cooldown-text", "Du kannst den Cam-Modus erst in %time% erneut starten."));
-        cooldownAvailableText = ChatColor.translateAlternateColorCodes('&', getConfig().getString("messages.cooldown-available", "&aCam-Modus wieder verf\u00fcgbar"));
-        camSafetyEnabled = getConfig().getBoolean("cam-safety.enabled", true);
-        camSafetyDelay = getConfig().getInt("cam-safety.delay", 5);
-        camSafetyMessage = getConfig().getString("messages.cam-safety",
+        allowInvisibilityPotion = config.getBoolean("camera-mode.allow_invisibility_potion", true);
+        glowingOutline = config.getBoolean("camera-mode.glowing-outline", true);
+        allowLavaFlight = config.getBoolean("camera-mode.allow_lava_flight", false);
+        cameraHeadEnabled = config.getBoolean("camera-head.enabled", false);
+        armorStandNameVisible = config.getBoolean("armorstand.name-visible", true);
+        armorStandVisible = config.getBoolean("armorstand.visible", true);
+        armorStandGravity = config.getBoolean("armorstand.gravity", true);
+        bodyType = resolveBodyType(config, config.getInt("body.type", BodyType.ARMOR_STAND.getId()));
+        movementSensitivity = resolveMovementSensitivity(config,
+                config.getInt("body.movement-sensitivity", MovementSensitivity.NORMAL.getId()));
+        double moveThreshold = config.getDouble("body.move-threshold", 0.05, MIN_MOVE_THRESHOLD);
+        moveThresholdSquared = moveThreshold * moveThreshold;
+        muteAttack = config.getBoolean("mute.attack", false);
+        muteFootsteps = config.getBoolean("mute.footsteps", false);
+        hideSprintParticles = config.getBoolean("mute.hide-sprint-particles", true);
+        particleHeight = config.getDouble("camera-particles.height", 1.0);
+        particlesPerTick = config.getInt("camera-particles.particles-per-tick", 5, 0);
+        showOwnParticles = config.getBoolean("camera-particles.show-own-particles", false);
+        protocolFoundLogColor = resolveLogColor(config, "log-colors.protocol-found");
+        actionBarEnabled = config.getBoolean("action-bar.enabled", true);
+        actionBarOffDuration = config.getInt("action-bar.off-duration", 10, 0);
+        actionBarOnMessage = ChatColor.translateAlternateColorCodes('&', config.getString("messages.actionbar-on", "&aCam-Modus aktiviert"));
+        actionBarOffMessage = ChatColor.translateAlternateColorCodes('&', config.getString("messages.actionbar-off", "&cCam-Modus beendet"));
+        timeLimitEnabled = config.getBoolean("time-limit.enabled", false);
+        cooldownsEnabled = config.getBoolean("time-limit.cooldowns-enabled", false);
+        durationSeconds = config.getInt("time-limit.duration-seconds", 300, 1);
+        cooldownSeconds = config.getInt("time-limit.cooldown-seconds", 120, 0);
+        showBossbar = config.getBoolean("time-limit.show-bossbar", true);
+        bossbarColor = config.getEnum("time-limit.bossbar-color", BarColor.class, BarColor.BLUE);
+        bossbarText = ChatColor.translateAlternateColorCodes('&', config.getString("messages.bossbar-text", "Cam-Modus endet in: %time%"));
+        cooldownText = ChatColor.translateAlternateColorCodes('&', config.getString("messages.cooldown-text", "Du kannst den Cam-Modus erst in %time% erneut starten."));
+        cooldownAvailableText = ChatColor.translateAlternateColorCodes('&', config.getString("messages.cooldown-available", "&aCam-Modus wieder verf\u00fcgbar"));
+        camSafetyEnabled = config.getBoolean("cam-safety.enabled", true);
+        camSafetyDelay = config.getInt("cam-safety.delay", 5, 0);
+        camSafetyMessage = config.getString("messages.cam-safety",
                 "§cDu kannst den Cam-Modus nicht starten! Du musst noch %seconds% Sekunden in Sicherheit bleiben.");
 
-        damageArmor = getConfig().getBoolean("mirror-damage.damage-armor", true);
-        String modeRaw = getConfig().getString("mirror-damage.damage-mode", "mirror");
+        damageArmor = config.getBoolean("mirror-damage.damage-armor", true);
+        String modeRaw = config.getChoice("mirror-damage.damage-mode", "mirror", "mirror", "custom", "off", "false");
         if ("custom".equalsIgnoreCase(modeRaw)) {
             damageMode = DamageMode.CUSTOM;
         } else if ("false".equalsIgnoreCase(modeRaw) || "off".equalsIgnoreCase(modeRaw)) {
@@ -1424,24 +1559,111 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         } else {
             damageMode = DamageMode.MIRROR;
         }
-        customDamageHearts = getConfig().getDouble("mirror-damage.custom-damage-hearts", 0.5);
+        customDamageHearts = config.getDouble("mirror-damage.custom-damage-hearts", 0.5, 0.0);
+        // Read one by one while the server runs, so a wrong value would show up
+        // again and again instead of once. Checked here in one go instead.
+        config.checkBooleanSection("message-settings");
         if (camFireGuard != null) {
-            camFireGuard.loadConfig(getConfig());
+            camFireGuard.loadConfig(config);
         }
+        return config.getWarnings();
     }
 
     /**
      * Turns the number configured in {@code body.type} into a body type and
      * falls back to the armour stand when the value is unknown.
      */
-    private BodyType resolveBodyType(int configuredId) {
+    private BodyType resolveBodyType(ConfigReader config, int configuredId) {
         BodyType requested = BodyType.fromId(configuredId);
         if (requested == null) {
-            getLogger().warning("Unbekannter Wert für body.type: " + configuredId
-                    + ". Es wird 1 (Rüstungsständer) verwendet.");
+            config.warnUnknownValue("body.type", configuredId, "1, 2",
+                    String.valueOf(BodyType.ARMOR_STAND.getId()));
             return BodyType.ARMOR_STAND;
         }
         return requested;
+    }
+
+    /**
+     * Turns the number configured in {@code body.movement-sensitivity} into a
+     * level and falls back to 1 when the value is unknown.
+     *
+     * <p>Level 2 is cut back to level 1 for an armour stand body. That is a
+     * valid setting in the wrong combination and not a mistake, so it is
+     * described in the config file instead of being logged.</p>
+     */
+    private MovementSensitivity resolveMovementSensitivity(ConfigReader config, int configuredId) {
+        MovementSensitivity requested = MovementSensitivity.fromId(configuredId);
+        if (requested == null) {
+            config.warnUnknownValue("body.movement-sensitivity", configuredId, "0, 1, 2",
+                    String.valueOf(MovementSensitivity.NORMAL.getId()));
+            requested = MovementSensitivity.NORMAL;
+        }
+        return requested.forBodyType(bodyType);
+    }
+
+    /**
+     * Reads a colour for a log message. Empty means no colour at all and is the
+     * default, so only a name that cannot be resolved is worth a note.
+     */
+    private ChatColor resolveLogColor(ConfigReader config, String path) {
+        String name = config.getString(path, "");
+        ChatColor color = parseColor(name);
+        if (color == null && !name.isEmpty()) {
+            config.warn(ConfigIssue.of(UNKNOWN_COLOR_MESSAGE, UNKNOWN_COLOR_FALLBACK)
+                    .with("path", path)
+                    .with("value", name));
+        }
+        return color;
+    }
+
+    /**
+     * Writes the notes from {@link #loadConfigValues()} into the console and,
+     * after a reload, into the chat of the player who started it. Without the
+     * second part a broken config file stays invisible in game: the reload
+     * reports success while the server quietly runs on default values.
+     */
+    private void reportConfigWarnings(List<ConfigIssue> warnings, Player initiator) {
+        List<String> texts = new ArrayList<>(warnings.size());
+        for (ConfigIssue warning : warnings) {
+            texts.add(warning.format(configMessage(warning.getMessageKey(), warning.getFallback())));
+        }
+        for (String text : texts) {
+            // The console has no use for colour codes, only for the sentence.
+            getLogger().warning(ChatColor.stripColor(text));
+        }
+        if (initiator == null || texts.isEmpty() || !isMessageEnabled("config-errors")) {
+            return;
+        }
+        // The command reports success right after this, so the block needs a
+        // headline of its own to not be mistaken for a clean reload.
+        String header = texts.size() == 1
+                ? configMessage("config-error-header-single", "&cDie Konfiguration hat eine ungültige Stelle:")
+                : configMessage("config-error-header", "&cDie Konfiguration hat {count} ungültige Stellen:");
+        initiator.sendMessage(header.replace("{count}", String.valueOf(texts.size())));
+        int shown = Math.min(texts.size(), MAX_CHAT_WARNINGS);
+        for (int i = 0; i < shown; i++) {
+            initiator.sendMessage(texts.get(i));
+        }
+        if (texts.size() > shown) {
+            initiator.sendMessage(configMessage("config-error-more",
+                    "&c... und {count} weitere. Alle stehen in der Server-Konsole.")
+                    .replace("{count}", String.valueOf(texts.size() - shown)));
+        }
+    }
+
+    /**
+     * Looks up the wording of a config note. Unlike {@link #getMessage(String)}
+     * an empty entry falls back to the built-in text: a note that lost its
+     * wording would be an empty line in the log and would hide the very problem
+     * it is about. Use {@code message-settings.config-errors} to switch the
+     * notes in the chat off instead.
+     */
+    private String configMessage(String key, String fallback) {
+        String raw = getConfig().getString("messages." + key, fallback);
+        if (raw == null || raw.isEmpty()) {
+            raw = fallback;
+        }
+        return ChatColor.translateAlternateColorCodes('&', raw);
     }
 
     private ChatColor parseColor(String colorName) {
@@ -1515,6 +1737,16 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         deleteNoCollisionTeamIfUnused();
     }
 
+    /**
+     * Keeps the team down to the players who are in camera mode right now.
+     *
+     * <p>The team switches collisions off for its members, so everybody in it
+     * walks through everybody else. Players who were only watching used to be
+     * added as well - that let them see through the camera player's invisibility,
+     * but it also took collisions away from the whole server as soon as a single
+     * player started camera mode. The glowing outline shows the camera player to
+     * everybody instead, so nobody else has to join the team.</p>
+     */
     private void updateViewerTeam(Player player) {
         if (cameraPlayers.isEmpty()) {
             // Niemand im Cam-Modus -> das Team wird nicht gebraucht.
@@ -1523,18 +1755,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         Team team = ensureNoCollisionTeam();
 
-        boolean inCam = cameraPlayers.containsKey(player.getUniqueId());
-        boolean shouldBeMember;
-
-        if (inCam) {
-            shouldBeMember = true;
-        } else if (allowInvisibilityPotion && playerVisibilityMode == VisibilityMode.ALL) {
-            shouldBeMember = !player.hasPotionEffect(PotionEffectType.INVISIBILITY);
-        } else {
-            shouldBeMember = false;
-        }
-
-        if (shouldBeMember) {
+        if (cameraPlayers.containsKey(player.getUniqueId())) {
             if (!team.hasEntry(player.getName())) {
                 team.addEntry(player.getName());
             }
@@ -1710,7 +1931,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             }
         }
         reloadConfig();
-        loadConfigValues();
+        reportConfigWarnings(loadConfigValues(), initiator);
         protocolLibAvailable = false;
         mutedPlayers.clear();
         if (muteAttack || muteFootsteps || hideSprintParticles) {
@@ -1758,18 +1979,20 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         private final boolean originalAllowFlight;
         private final boolean originalFlying;
         private final boolean originalSilent;
+        private final boolean originalGlowing;
         private final int originalRemainingAir;
         private final ItemStack[] originalInventoryContents; // Für Inventar
         private final ItemStack[] originalArmorContents;     // Für Rüstung
         private final Collection<PotionEffect> pausedEffects;
 
-        public CameraData(LivingEntity body, Mannequin hitbox, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalSilent, ItemStack[] originalInventoryContents, ItemStack[] originalArmorContents, Collection<PotionEffect> pausedEffects, int originalRemainingAir) {
+        public CameraData(LivingEntity body, Mannequin hitbox, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalSilent, boolean originalGlowing, ItemStack[] originalInventoryContents, ItemStack[] originalArmorContents, Collection<PotionEffect> pausedEffects, int originalRemainingAir) {
             this.body = body;
             this.hitbox = hitbox;
             this.originalGameMode = originalGameMode;
             this.originalAllowFlight = originalAllowFlight;
             this.originalFlying = originalFlying;
             this.originalSilent = originalSilent;
+            this.originalGlowing = originalGlowing;
             this.originalInventoryContents = originalInventoryContents;
             this.originalArmorContents = originalArmorContents;
             this.pausedEffects = pausedEffects;
@@ -1785,6 +2008,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         public boolean getOriginalAllowFlight() { return originalAllowFlight; }
         public boolean getOriginalFlying() { return originalFlying; }
         public boolean getOriginalSilent() { return originalSilent; }
+        /** Whether the player was already glowing before camera mode. */
+        public boolean getOriginalGlowing() { return originalGlowing; }
         public ItemStack[] getOriginalInventoryContents() { return originalInventoryContents; }
         public ItemStack[] getOriginalArmorContents() { return originalArmorContents; }
         public Collection<PotionEffect> getPausedEffects() { return pausedEffects; }
