@@ -42,6 +42,7 @@ import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.entity.Arrow;
 import org.bukkit.entity.AbstractArrow;
 import org.bukkit.scoreboard.Team;
+import org.bukkit.util.Vector;
 import org.bukkit.NamespacedKey;
 import org.bukkit.persistence.PersistentDataType;
 import de.elia.cameraplugin.mirrordamage.DamageMode;
@@ -98,7 +99,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private NamespacedKey bodyKey;
     private NamespacedKey hitboxKey;
     private NamespacedKey hiddenArmorAsset;
-    private boolean hiddenArmorLogged;
     /** Armour slots in the order of {@link org.bukkit.inventory.PlayerInventory#getArmorContents()}. */
     private static final EquipmentSlot[] ARMOR_SLOTS = {
             EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD
@@ -310,7 +310,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (!protocolLibAvailable && (muteAttack || muteFootsteps)) {
             player.setSilent(true);
         }
-        if (!protocolLibAvailable && (muteAttack || muteFootsteps)) {
+        if (!protocolLibAvailable && (muteAttack || muteFootsteps) && mayHideCamPlayer()) {
             player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
         }
 
@@ -321,7 +321,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 player.setGameMode(GameMode.ADVENTURE);
                 player.setAllowFlight(true); // ensure flight remains enabled
                 player.setFlying(true);       // keep player flying
-                if (allowInvisibilityPotion && !player.hasPotionEffect(PotionEffectType.INVISIBILITY)) {
+                if (allowInvisibilityPotion && mayHideCamPlayer()
+                        && !player.hasPotionEffect(PotionEffectType.INVISIBILITY)) {
                     player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
                 }
             }
@@ -351,8 +352,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         startActionBar(player);
         camFireGuard.startFor(player);
         // The entity taking the hits is the mannequin for both body types, so the
-        // movement check always runs on it.
+        // movement check always runs on it. Both calls look at the sensitivity
+        // level and only one of them does anything.
         startBodyMovementCheck(player, damageTarget);
+        startBodyPin(player, body, hitbox);
         addPlayerToNoCollisionTeam(player);
         // Team wurde evtl. gerade neu erstellt -> alle Mitglieder neu setzen.
         refreshNoCollisionTeam();
@@ -403,7 +406,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private ItemStack[] createHiddenArmor(ItemStack[] originalArmor) {
         ItemStack[] hiddenArmor = new ItemStack[originalArmor.length];
         boolean stillVisible = false;
-        ItemStack sample = null;
         for (int i = 0; i < originalArmor.length && i < ARMOR_SLOTS.length; i++) {
             if (originalArmor[i] == null) {
                 continue;
@@ -413,20 +415,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 stillVisible = true;
             }
             hiddenArmor[i] = copy;
-            if (sample == null) {
-                sample = copy;
-            }
         }
         if (stillVisible) {
             getLogger().warning("Die Rüstung des unsichtbaren Mannequins konnte nicht ausgeblendet werden, "
                     + "sie bleibt am Körper sichtbar. Setter: " + EquipmentVisibility.describeAssetSetter());
-        } else if (sample != null && !hiddenArmorLogged) {
-            // Once per start, so it can be checked whether the component really
-            // reaches the item when the armour is still visible on the client.
-            hiddenArmorLogged = true;
-            getLogger().info("Rüstung des unsichtbaren Mannequins ausgeblendet über "
-                    + EquipmentVisibility.describeAssetSetter()
-                    + ", Komponente am Item: " + EquipmentVisibility.describe(sample));
         }
         return hiddenArmor;
     }
@@ -528,11 +520,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private ArmorStand spawnArmorStandBody(Player player, Location location) {
         ArmorStand armorStand = (ArmorStand) location.getWorld().spawnEntity(location, EntityType.ARMOR_STAND);
         armorStand.setVisible(armorStandVisible);
-        // A marker has no hitbox at all and is the only armour stand a piston
-        // leaves alone, which is what makes level 0 really hold still. Nothing
-        // is lost by it: hits and right clicks land on the mannequin standing in
-        // the same spot either way.
-        armorStand.setMarker(movementSensitivity.isFixed());
+        // Never a marker: that would take away its hitbox and drop the name tag
+        // from above the head down to its feet. Level 0 is held in place by
+        // startBodyPin instead.
+        armorStand.setMarker(false);
         armorStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
         armorStand.addEquipmentLock(EquipmentSlot.CHEST, ArmorStand.LockType.REMOVING_OR_CHANGING);
         armorStand.addEquipmentLock(EquipmentSlot.LEGS, ArmorStand.LockType.REMOVING_OR_CHANGING);
@@ -652,6 +643,17 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Whether the camera player may be made invisible while the mode runs.
+     *
+     * <p>Not in visibility mode "true": everybody is supposed to see him there,
+     * and since only camera players are in the team, nobody outside it would see
+     * through the effect - he would simply be gone for the others.</p>
+     */
+    private boolean mayHideCamPlayer() {
+        return playerVisibilityMode != VisibilityMode.ALL;
+    }
+
     public boolean isInCameraMode(Player player) {
         return cameraPlayers.containsKey(player.getUniqueId());
     }
@@ -704,6 +706,45 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 }
             }
         }.runTaskTimer(this, 20L, 1L);
+    }
+
+    /**
+     * Puts the body back whenever something moved it, as long as sensitivity
+     * level 0 is set.
+     *
+     * <p>{@code setImmovable} keeps gravity and knockback off the mannequin but
+     * does not stop a piston, and an armour stand is pushed by one as well. The
+     * level promises that nothing moves the body, so what a piston does is
+     * undone here.</p>
+     */
+    private void startBodyPin(Player player, LivingEntity body, Mannequin hitbox) {
+        if (!movementSensitivity.isFixed()) {
+            return;
+        }
+        final Location anchor = body.getLocation().clone();
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (!cameraPlayers.containsKey(player.getUniqueId()) || !player.isOnline() || body.isDead()) {
+                    this.cancel();
+                    return;
+                }
+                pinToSpot(body, anchor);
+                if (hitbox != null && !hitbox.isDead()) {
+                    pinToSpot(hitbox, anchor);
+                }
+            }
+        }.runTaskTimer(this, 1L, 1L);
+    }
+
+    /** Teleports the entity back to its spot when something pushed it away. */
+    private void pinToSpot(Entity entity, Location anchor) {
+        Location current = entity.getLocation();
+        if (!current.getWorld().equals(anchor.getWorld())
+                || current.distanceSquared(anchor) > MIN_MOVE_THRESHOLD * MIN_MOVE_THRESHOLD) {
+            entity.teleport(anchor);
+            entity.setVelocity(new Vector());
+        }
     }
 
     /** {@code true} when the body left its spot or its world. */
@@ -1347,17 +1388,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
     }
 
-    @EventHandler
-    public void onPotionEffectChange(EntityPotionEffectEvent event) {
-        if (!(event.getEntity() instanceof Player player)) return;
-        if (!allowInvisibilityPotion) return;
-        if (playerVisibilityMode == VisibilityMode.NONE) return;
-        if (cameraPlayers.containsKey(player.getUniqueId())) return;
-        if (!PotionEffectType.INVISIBILITY.equals(event.getModifiedType())) return;
-
-        Bukkit.getScheduler().runTask(this, () -> updateViewerTeam(player));
-    }
-
     @EventHandler(priority = EventPriority.HIGHEST)
     public void filterCommandSuggestions(PlayerCommandSendEvent event) {
         event.getCommands().removeIf(cmd -> cmd.equalsIgnoreCase("camplugin:cam"));
@@ -1682,6 +1712,17 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         deleteNoCollisionTeamIfUnused();
     }
 
+    /**
+     * Keeps the team down to the players who are in camera mode right now.
+     *
+     * <p>The team switches collisions off for its members, so everybody in it
+     * walks through everybody else. Players who are only watching used to be
+     * added as well - that let them see through the camera player's invisibility
+     * in visibility mode "true", but it also took collisions away from the whole
+     * server as soon as a single player started camera mode. The camera player
+     * keeps his invisibility off in that mode instead, see
+     * {@link #mayHideCamPlayer()}.</p>
+     */
     private void updateViewerTeam(Player player) {
         if (cameraPlayers.isEmpty()) {
             // Niemand im Cam-Modus -> das Team wird nicht gebraucht.
@@ -1690,18 +1731,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         Team team = ensureNoCollisionTeam();
 
-        boolean inCam = cameraPlayers.containsKey(player.getUniqueId());
-        boolean shouldBeMember;
-
-        if (inCam) {
-            shouldBeMember = true;
-        } else if (allowInvisibilityPotion && playerVisibilityMode == VisibilityMode.ALL) {
-            shouldBeMember = !player.hasPotionEffect(PotionEffectType.INVISIBILITY);
-        } else {
-            shouldBeMember = false;
-        }
-
-        if (shouldBeMember) {
+        if (cameraPlayers.containsKey(player.getUniqueId())) {
             if (!team.hasEntry(player.getName())) {
                 team.addEntry(player.getName());
             }

@@ -62,19 +62,6 @@ public final class EquipmentVisibility {
         return true;
     }
 
-    /** The equippable component an item carries, for the log. */
-    public static String describe(ItemStack item) {
-        ItemMeta meta = item == null ? null : item.getItemMeta();
-        if (meta == null) {
-            return "keine";
-        }
-        try {
-            return String.valueOf(meta.getEquippable());
-        } catch (RuntimeException ex) {
-            return "nicht lesbar (" + ex + ")";
-        }
-    }
-
     /**
      * The setter that was used for the equipment asset, or - when none of them
      * fitted - the single argument setters this server's API offers.

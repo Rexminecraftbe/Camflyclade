@@ -96,7 +96,10 @@ camera-mode:
   distance-warning-cooldown: 3
   # Sichtbarkeit anderer Spieler im Modus (cam/true/false)
   player_visibility_mode: "true"
-  # Erlaubt Unsichtbarkeitstränke
+  # Macht den Spieler im Cam-Modus unsichtbar
+  # Ohne Wirkung bei player_visibility_mode: "true" - dort sollen ihn alle
+  # sehen, und nur Spieler im Cam-Modus sind im Team, das durch die
+  # Unsichtbarkeit hindurchsieht
   allow_invisibility_potion: true
   # Erlaubt Flug durch Lava
   allow_lava_flight: true
