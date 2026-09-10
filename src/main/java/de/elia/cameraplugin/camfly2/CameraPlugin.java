@@ -222,23 +222,21 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     /**
      * Touches the profile handling once while the server is still starting.
      *
-     * <p>The first time a player profile is resolved, Mojang's authlib logs its
+     * <p>The first time the server works with a skin, Mojang's authlib logs its
      * environment ("Environment[sessionHost=...]"). Without this that line lands
      * in the middle of the game, right after the first /cam, because that is
-     * when the body gets the player's head and skin. Doing the same kind of work
-     * here moves it into the start-up output where it belongs.</p>
+     * when the body gets the player's head and skin.</p>
+     *
+     * <p>A bare profile is not enough to set that off - one carrying a texture
+     * is, and building the camera head does exactly that. It is therefore built
+     * once here and thrown away.</p>
      *
      * <p>Nothing depends on this, so anything that goes wrong is passed over: at
      * worst the line appears later, as it did before.</p>
      */
     private void warmUpProfileService() {
         try {
-            ItemStack head = new ItemStack(Material.PLAYER_HEAD);
-            SkullMeta meta = (SkullMeta) head.getItemMeta();
-            if (meta != null) {
-                meta.setOwnerProfile(Bukkit.createPlayerProfile(UUID.randomUUID(), getName()));
-                head.setItemMeta(meta);
-            }
+            createCameraHead();
         } catch (RuntimeException ignored) {
             // Purely cosmetic, the log line is not worth a failed start.
         }
