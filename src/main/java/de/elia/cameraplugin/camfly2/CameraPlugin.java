@@ -198,6 +198,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             camModeObjective.getScore(p.getName()).setScore(0);
         }
         removeLeftoverEntities();
+        warmUpProfileService();
         if (muteAttack || muteFootsteps || hideSprintParticles) {
             if (getServer().getPluginManager().getPlugin("ProtocolLib") != null) {
                 protocolLibAvailable = true;
@@ -216,6 +217,31 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         this.getServer().getPluginManager().registerEvents(this, this);
         refreshNoCollisionTeam();
         getLogger().info("CameraPlugin wurde aktiviert!");
+    }
+
+    /**
+     * Touches the profile handling once while the server is still starting.
+     *
+     * <p>The first time a player profile is resolved, Mojang's authlib logs its
+     * environment ("Environment[sessionHost=...]"). Without this that line lands
+     * in the middle of the game, right after the first /cam, because that is
+     * when the body gets the player's head and skin. Doing the same kind of work
+     * here moves it into the start-up output where it belongs.</p>
+     *
+     * <p>Nothing depends on this, so anything that goes wrong is passed over: at
+     * worst the line appears later, as it did before.</p>
+     */
+    private void warmUpProfileService() {
+        try {
+            ItemStack head = new ItemStack(Material.PLAYER_HEAD);
+            SkullMeta meta = (SkullMeta) head.getItemMeta();
+            if (meta != null) {
+                meta.setOwnerProfile(Bukkit.createPlayerProfile(UUID.randomUUID(), getName()));
+                head.setItemMeta(meta);
+            }
+        } catch (RuntimeException ignored) {
+            // Purely cosmetic, the log line is not worth a failed start.
+        }
     }
 
     @Override
@@ -1717,12 +1743,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * Keeps the team down to the players who are in camera mode right now.
      *
      * <p>The team switches collisions off for its members, so everybody in it
-     * walks through everybody else. Players who are only watching used to be
-     * added as well - that let them see through the camera player's invisibility
-     * in visibility mode "true", but it also took collisions away from the whole
-     * server as soon as a single player started camera mode. The camera player
-     * keeps his invisibility off in that mode instead, see
-     * {@link #mayHideCamPlayer()}.</p>
+     * walks through everybody else. Players who were only watching used to be
+     * added as well - that let them see through the camera player's invisibility,
+     * but it also took collisions away from the whole server as soon as a single
+     * player started camera mode. The glowing outline shows the camera player to
+     * everybody instead, so nobody else has to join the team.</p>
      */
     private void updateViewerTeam(Player player) {
         if (cameraPlayers.isEmpty()) {
