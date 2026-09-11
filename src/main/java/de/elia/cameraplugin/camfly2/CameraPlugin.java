@@ -124,9 +124,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private boolean maxDistanceEnabled;
     private double maxDistance;
     private int distanceWarningCooldown;
-    private boolean armorStandNameVisible;
-    private boolean armorStandVisible;
-    private boolean armorStandGravity;
+    private boolean bodyNameVisible;
+    private boolean bodyVisible;
     private BodyType bodyType;
     private MovementSensitivity movementSensitivity;
     /** {@code body.move-threshold} squared, so the square root can be skipped. */
@@ -319,7 +318,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         } else {
             EntityEquipment bodyEquipment = body.getEquipment();
             if (bodyEquipment != null) {
-                bodyEquipment.setArmorContents(createMirrorArmor(originalArmor));
+                // A body that is not meant to be seen must not have its armour
+                // floating where it stands, so an invisible mannequin wears the
+                // same unrendered copies as the hitbox of body type 1.
+                bodyEquipment.setArmorContents(bodyVisible
+                        ? createMirrorArmor(originalArmor)
+                        : createHiddenArmor(originalArmor));
             }
         }
         // Whoever wears the armour is the entity that takes the hits.
@@ -461,7 +465,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             equipment.setArmorContents(mirrorArmor);
         }
         hitbox.getPersistentDataContainer().set(hitboxKey, PersistentDataType.INTEGER, 1);
-        hitbox.setInvisible(true);
+        hideMannequin(hitbox);
         hitbox.setSilent(true);
         // It stands inside the armour stand and therefore has to behave the same
         // way: whatever moves the one moves the other. Only then does the
@@ -472,7 +476,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         hitbox.setCustomName(getMessage("hitbox.name-format").replace("{player}", player.getName()));
         hitbox.setCustomNameVisible(false);
         MannequinLabel.hideDescription(hitbox);
-        hitbox.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
         hitbox.setCanPickupItems(false);
         return hitbox;
     }
@@ -492,8 +495,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         body.getPersistentDataContainer().set(bodyKey, PersistentDataType.INTEGER, 1);
         body.setGravity(useBodyGravity());
         body.setCanPickupItems(false);
-        body.setCustomName(getMessage("armorstand.name-format").replace("{player}", player.getName()));
-        body.setCustomNameVisible(armorStandNameVisible);
+        applyBodyName(body, player);
         body.setInvulnerable(false);
         AttributeInstance maxHealth = body.getAttribute(Attribute.MAX_HEALTH);
         if (maxHealth != null) {
@@ -506,14 +508,46 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     /** Creates a mannequin that shows the player's own skin. */
     private Mannequin spawnMannequinBody(Player player, Location location) {
         Mannequin mannequin = (Mannequin) location.getWorld().spawnEntity(location, EntityType.MANNEQUIN);
-        if (!MannequinSkin.apply(mannequin, player)) {
+        if (!MannequinSkin.apply(mannequin, player, bodyNameVisible)) {
             getLogger().warning("Der Skin von " + player.getName()
                     + " konnte nicht auf das Mannequin übertragen werden, es benutzt den Standard-Skin.");
         }
         applyMovementSensitivity(mannequin);
         // Without this the grey "NPC" line sits under the body's name.
         MannequinLabel.hideDescription(mannequin);
+        if (!bodyVisible) {
+            // Out of sight in exactly the way body type 1 keeps its
+            // mannequin next to the armour stand.
+            hideMannequin(mannequin);
+        }
         return mannequin;
+    }
+
+    /**
+     * Puts the configured name above the body or takes it away for good.
+     *
+     * <p>An armour stand only ever shows the name it was given, so the flag
+     * alone does the job there. A mannequin is drawn like a player and carries
+     * a second name: the one of the profile its skin comes from, which is shown
+     * whatever the flag says. A body without a name therefore gets no name to
+     * begin with, and {@link MannequinSkin} keeps the profile name away from
+     * the mannequin on top of that.</p>
+     */
+    private void applyBodyName(LivingEntity body, Player player) {
+        body.setCustomName(bodyNameVisible
+                ? getMessage("armorstand.name-format").replace("{player}", player.getName())
+                : null);
+        body.setCustomNameVisible(bodyNameVisible);
+    }
+
+    /**
+     * Takes a mannequin out of sight. The armour it wears is hidden separately
+     * through {@link #createHiddenArmor(ItemStack[])}, otherwise the pieces
+     * would stay where the body is.
+     */
+    private void hideMannequin(Mannequin mannequin) {
+        mannequin.setInvisible(true);
+        mannequin.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
     }
 
     /**
@@ -533,17 +567,18 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Gravity for the body entities. Level 0 nails the body down, so the
-     * configured {@code armorstand.gravity} is ignored there.
+     * Gravity for the body entities, decided by
+     * {@code body.movement-sensitivity} alone: level 0 nails the body to its
+     * spot, every level above it lets the body fall.
      */
     private boolean useBodyGravity() {
-        return !movementSensitivity.isFixed() && armorStandGravity;
+        return !movementSensitivity.isFixed();
     }
 
     /** Creates the classic body: an armour stand wearing the player's head. */
     private ArmorStand spawnArmorStandBody(Player player, Location location) {
         ArmorStand armorStand = (ArmorStand) location.getWorld().spawnEntity(location, EntityType.ARMOR_STAND);
-        armorStand.setVisible(armorStandVisible);
+        armorStand.setVisible(bodyVisible);
         // Never a marker: that would take away its hitbox and drop the name tag
         // from above the head down to its feet. Level 0 is held in place by
         // startBodyPin instead.
@@ -555,13 +590,17 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         armorStand.addEquipmentLock(EquipmentSlot.HAND, ArmorStand.LockType.REMOVING_OR_CHANGING);
         armorStand.addEquipmentLock(EquipmentSlot.OFF_HAND, ArmorStand.LockType.REMOVING_OR_CHANGING);
 
-        ItemStack playerHead = new ItemStack(Material.PLAYER_HEAD);
-        SkullMeta skullMeta = (SkullMeta) playerHead.getItemMeta();
-        if (skullMeta != null) {
-            skullMeta.setOwningPlayer(player);
-            playerHead.setItemMeta(skullMeta);
+        if (bodyVisible) {
+            // Only a body that is meant to be seen gets the head: on an
+            // invisible armour stand it would go on floating by itself.
+            ItemStack playerHead = new ItemStack(Material.PLAYER_HEAD);
+            SkullMeta skullMeta = (SkullMeta) playerHead.getItemMeta();
+            if (skullMeta != null) {
+                skullMeta.setOwningPlayer(player);
+                playerHead.setItemMeta(skullMeta);
+            }
+            armorStand.getEquipment().setHelmet(playerHead);
         }
-        armorStand.getEquipment().setHelmet(playerHead);
         return armorStand;
     }
 
@@ -1503,10 +1542,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         glowingOutline = config.getBoolean("camera-mode.glowing-outline", true);
         allowLavaFlight = config.getBoolean("camera-mode.allow_lava_flight", false);
         cameraHeadEnabled = config.getBoolean("camera-head.enabled", false);
-        armorStandNameVisible = config.getBoolean("armorstand.name-visible", true);
-        armorStandVisible = config.getBoolean("armorstand.visible", true);
-        armorStandGravity = config.getBoolean("armorstand.gravity", true);
         bodyType = resolveBodyType(config, config.getInt("body.type", BodyType.ARMOR_STAND.getId()));
+        bodyNameVisible = config.getBoolean("body.name-visible", true);
+        bodyVisible = config.getBoolean("body.visible", true);
         movementSensitivity = resolveMovementSensitivity(config,
                 config.getInt("body.movement-sensitivity", MovementSensitivity.NORMAL.getId()));
         double moveThreshold = config.getDouble("body.move-threshold", 0.05, MIN_MOVE_THRESHOLD);
@@ -1545,10 +1583,25 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         // Read one by one while the server runs, so a wrong value would show up
         // again and again instead of once. Checked here in one go instead.
         config.checkBooleanSection("message-settings");
+        warnAboutOldArmorStandSection();
         if (camFireGuard != null) {
             camFireGuard.loadConfig(config);
         }
         return config.getWarnings();
+    }
+
+    /**
+     * Says once that a leftover {@code armorstand} section is not read any
+     * more. Its two remaining settings now sit in {@code body}, and gravity is
+     * decided by {@code body.movement-sensitivity} - without this note a config
+     * file from an older version would quietly run on the default values.
+     */
+    private void warnAboutOldArmorStandSection() {
+        if (!getConfig().isConfigurationSection("armorstand")) {
+            return;
+        }
+        getLogger().warning("Der Abschnitt \"armorstand\" wird nicht mehr gelesen: name-visible und visible"
+                + " stehen jetzt unter \"body\", gravity ist durch body.movement-sensitivity ersetzt.");
     }
 
     /**
