@@ -112,8 +112,17 @@ camera-mode:
   # Umrandet den unsichtbaren Spieler mit einem leuchtenden Umriss, damit
   # andere ihn als Geist sehen statt gar nicht. Ohne ihn ist er für alle
   # unsichtbar, die ihn laut player_visibility_mode sehen dürften.
-  # Achtung: Ein Leuchten ist auch durch Wände sichtbar - auf einem
-  # PvP-Server verrät es die Position des Spielers.
+  # true  = leuchtet immer. Achtung: Ein Leuchten ist auch durch Wände
+  #         sichtbar - auf einem PvP-Server verrät es die Position des
+  #         Spielers.
+  # false = kein Umriss
+  # sight = leuchtet nur, solange mindestens ein anderer Spieler direkte
+  #         Sicht auf ihn hat (von Augen zu Augen, ohne Block dazwischen).
+  #         Das Leuchten gilt für alle zugleich: Sieht ihn einer, sehen den
+  #         Umriss auch Spieler hinter einer Wand. Sieht ihn niemand, verrät
+  #         der Umriss nichts. Spieler im Zuschauermodus zählen nicht mit,
+  #         bei player_visibility_mode "cam" nur Spieler im Cam-Modus.
+  # Leuchtete der Spieler schon vor dem Cam-Modus, bleibt das Leuchten an.
   # Getragene Ausrüstung, etwa der Kamera-Kopf, bleibt davon unberührt
   # sichtbar.
   # Bei player_visibility_mode "false" wird der Umriss nicht gesetzt.
