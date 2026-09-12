@@ -2,6 +2,7 @@ package de.elia.cameraplugin.body;
 
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Player;
+import org.bukkit.profile.PlayerProfile;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -24,14 +25,18 @@ public final class MannequinSkin {
     /**
      * Applies the player's skin to the mannequin.
      *
+     * <p>The name in that profile is never drawn: a mannequin shows the name it
+     * was given, like every other entity, and the grey line under it comes from
+     * its description, see {@link MannequinLabel}.</p>
+     *
      * @return {@code true} when the profile could be handed to the mannequin
      */
     public static boolean apply(Mannequin mannequin, Player player) {
-        Object profile = player.getPlayerProfile();
         Method setter = findProfileSetter();
         if (setter == null) {
             return false;
         }
+        PlayerProfile profile = player.getPlayerProfile();
         Object argument = asExpectedProfile(profile, setter.getParameterTypes()[0]);
         if (argument == null) {
             return false;

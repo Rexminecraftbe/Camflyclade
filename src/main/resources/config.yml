@@ -147,11 +147,23 @@ body:
   #     des Spielers auch sichtbar trägt
   # Bei einem unbekannten Wert wird 1 verwendet.
   type: 1
+  # Zeigt den Namen über dem Körper an. Gilt für beide Typen.
+  # Der Text dazu steht unter messages.armorstand.name-format.
+  name-visible: true
+  # Ob der Körper zu sehen ist. Auf false sind beide Typen gleich: Der
+  # Rüstungsständer wird unsichtbar und bekommt den Kopf des Spielers gar
+  # nicht erst aufgesetzt, sonst schwebte er allein weiter in der Luft, und
+  # daneben steht wie bei Typ 1 das unsichtbare Mannequin, das die Treffer
+  # nimmt. Auch bei Typ 2 wird also kein Mannequin mehr angezeigt - eines,
+  # das nicht gezeichnet wird, würde nämlich auch seinen Namen nicht mehr
+  # anzeigen, und der soll stehen bleiben.
+  # Der Name über dem Körper bleibt in beiden Fällen stehen, den schaltet
+  # name-visible ab.
+  visible: true
   # Wie empfindlich der Körper auf Verschiebung reagiert
   # 0 = reagiert auf gar nichts. Körper und Mannequin stehen fest, weder
   #     Schwerkraft noch Wasser noch Kolben bewegen sie. Damit ist die
-  #     Bewegungserkennung aus, "body-moved" kommt nie. Die Einstellung
-  #     armorstand.gravity wird auf dieser Stufe ignoriert.
+  #     Bewegungserkennung aus, "body-moved" kommt nie.
   # 1 = normal. Schwerkraft, Wasser und Kolben bewegen den Körper und jede
   #     Bewegung beendet den Kamera-Modus. Spieler und Mobs können ihn
   #     nicht anrempeln.
@@ -166,19 +178,6 @@ body:
   # in Blöcken. Gilt bei beiden Körpertypen und ist auf Stufe 0 wirkungslos.
   # Werte unter 0.01 werden automatisch auf 0.01 angehoben.
   move-threshold: 0.05
-
-# Einstellungen des Körpers
-# name-visible und gravity gelten für den Körper beider Typen,
-# visible nur für den Rüstungsständer (Typ 1)
-armorstand:
-  # Zeigt den Namen über dem Rüstungsständer an
-  name-visible: true
-  # Ob der Rüstungsständer sichtbar ist
-  visible: true
-  # Schwerkraft für den Körper; bei Typ 1 gilt sie auch für das unsichtbare
-  # Mannequin, damit beide gemeinsam fallen.
-  # Wird ignoriert, wenn body.movement-sensitivity auf 0 steht
-  gravity: true
 
 # Begrenzung der Dauer des Kamera-Modus
 time-limit:
