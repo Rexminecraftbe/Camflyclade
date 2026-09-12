@@ -310,21 +310,16 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         // so the server calculates the damage the same way for both body types.
         // It is also the entity the movement check watches for both types.
         Mannequin hitbox = null;
-        if (bodyType.usesSeparateHitbox()) {
+        if (usesMannequinBody()) {
+            EntityEquipment bodyEquipment = body.getEquipment();
+            if (bodyEquipment != null) {
+                bodyEquipment.setArmorContents(createMirrorArmor(originalArmor));
+            }
+        } else {
             // The mannequin next to the armour stand is invisible, so it wears
             // copies whose armour is not rendered either.
             hitbox = spawnHitbox(player, playerLocation, createHiddenArmor(originalArmor));
             hitbox.teleport(body.getLocation());
-        } else {
-            EntityEquipment bodyEquipment = body.getEquipment();
-            if (bodyEquipment != null) {
-                // A body that is not meant to be seen must not have its armour
-                // floating where it stands, so an invisible mannequin wears the
-                // same unrendered copies as the hitbox of body type 1.
-                bodyEquipment.setArmorContents(bodyVisible
-                        ? createMirrorArmor(originalArmor)
-                        : createHiddenArmor(originalArmor));
-            }
         }
         // Whoever wears the armour is the entity that takes the hits.
         LivingEntity damageTarget = hitbox != null ? hitbox : body;
@@ -449,10 +444,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Creates the invisible mannequin that takes the hits for an armour stand
-     * body. A mannequin has the same hitbox as a player and wears the player's
-     * armour, so the server calculates the damage just like it would for the
-     * player himself.
+     * Creates the invisible mannequin that takes the hits for a body that is
+     * not a mannequin itself. A mannequin has the same hitbox as a player and
+     * wears the player's armour, so the server calculates the damage just like
+     * it would for the player himself.
      *
      * <p>It is invisible and its armour is not rendered either, but it is a
      * normal entity otherwise: players, mobs and the world hit it directly, just
@@ -481,13 +476,13 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Spawns the body that stays behind while the player is in camera mode.
-     * Depending on {@code body.type} this is either an armour stand wearing the
-     * player's head or, on Minecraft 1.21.9 and newer, a mannequin that uses the
-     * player's own skin.
+     * Spawns the body that stays behind while the player is in camera mode:
+     * either a mannequin that uses the player's own skin or an armour stand
+     * wearing his head, see {@link #usesMannequinBody()}. An invisible body
+     * gets neither the skin nor the head, only its name stays above it.
      */
     private LivingEntity spawnCameraBody(Player player, Location location, int remainingAir) {
-        LivingEntity body = bodyType == BodyType.MANNEQUIN
+        LivingEntity body = usesMannequinBody()
                 ? spawnMannequinBody(player, location)
                 : spawnArmorStandBody(player, location);
 
@@ -515,12 +510,22 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         applyMovementSensitivity(mannequin);
         // Without this the grey "NPC" line sits under the body's name.
         MannequinLabel.hideDescription(mannequin);
-        if (!bodyVisible) {
-            // Out of sight in exactly the way body type 1 keeps its
-            // mannequin next to the armour stand.
-            hideMannequin(mannequin);
-        }
         return mannequin;
+    }
+
+    /**
+     * Whether the body itself is the mannequin. Only a visible body of type 2
+     * is.
+     *
+     * <p>A mannequin that is not drawn does not show a name either, so an
+     * invisible body is built the way type 1 always is: an invisible armour
+     * stand that carries the name, with the mannequin standing in it taking the
+     * hits. Both types therefore end up the same as soon as the body is
+     * switched invisible - and either way a mannequin is the entity that is
+     * hit, so the server calculates the damage like it would for a player.</p>
+     */
+    private boolean usesMannequinBody() {
+        return bodyType == BodyType.MANNEQUIN && bodyVisible;
     }
 
     /**
@@ -557,9 +562,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * gravity, water and pistons, because that movement is what ends camera
      * mode. Only level 2 also lets players and mobs push it.</p>
      *
-     * <p>The same call fits the invisible hitbox and the visible body: level 2
-     * has already fallen back to level 1 for an armour stand body, so the
-     * hitbox, which only exists for that body type, never becomes collidable.</p>
+     * <p>The same call fits the hitbox and the body, because the mannequin is
+     * the entity that gets pushed in either case. Behind the armour stand of
+     * body type 1 level 2 has already fallen back to level 1, so the hitbox
+     * standing in that body never becomes collidable.</p>
      */
     private void applyMovementSensitivity(Mannequin mannequin) {
         mannequin.setImmovable(movementSensitivity.isFixed());

@@ -141,13 +141,13 @@ body:
   # Zeigt den Namen über dem Körper an. Gilt für beide Typen.
   # Der Text dazu steht unter messages.armorstand.name-format.
   name-visible: true
-  # Ob der Körper zu sehen ist. Gilt für beide Typen:
-  # Typ 1 = der Rüstungsständer wird unsichtbar und bekommt den Kopf des
-  #         Spielers gar nicht erst aufgesetzt, sonst schwebte er allein
-  #         weiter in der Luft.
-  # Typ 2 = das Mannequin wird unsichtbar, genauso wie es das unsichtbare
-  #         Mannequin bei Typ 1 schon ist. Seine Rüstung wird dann ebenfalls
-  #         nicht mehr angezeigt.
+  # Ob der Körper zu sehen ist. Auf false sind beide Typen gleich: Der
+  # Rüstungsständer wird unsichtbar und bekommt den Kopf des Spielers gar
+  # nicht erst aufgesetzt, sonst schwebte er allein weiter in der Luft, und
+  # daneben steht wie bei Typ 1 das unsichtbare Mannequin, das die Treffer
+  # nimmt. Auch bei Typ 2 wird also kein Mannequin mehr angezeigt - eines,
+  # das nicht gezeichnet wird, würde nämlich auch seinen Namen nicht mehr
+  # anzeigen, und der soll stehen bleiben.
   # Der Name über dem Körper bleibt in beiden Fällen stehen, den schaltet
   # name-visible ab.
   visible: true

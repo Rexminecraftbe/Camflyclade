@@ -12,7 +12,11 @@ public enum BodyType {
      * standing in the same spot that takes the hits.
      */
     ARMOR_STAND(1),
-    /** Visible mannequin using the player's own skin, which is hit directly. */
+    /**
+     * Visible mannequin using the player's own skin, which is hit directly.
+     * Switched invisible it is built like {@link #ARMOR_STAND}, because a
+     * mannequin that is not drawn does not show its name either.
+     */
     MANNEQUIN(2);
 
     private final int id;
@@ -23,17 +27,6 @@ public enum BodyType {
 
     public int getId() {
         return id;
-    }
-
-    /**
-     * Whether this body needs a separate entity to take the hits for the player.
-     *
-     * <p>An armour stand does not calculate armour the way a player does, so the
-     * damage is taken by an invisible mannequin wearing the player's armour. A
-     * visible mannequin is hit directly and wears that armour itself.</p>
-     */
-    public boolean usesSeparateHitbox() {
-        return this == ARMOR_STAND;
     }
 
     /**
