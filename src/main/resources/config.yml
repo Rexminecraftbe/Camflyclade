@@ -241,7 +241,11 @@ mirror-damage:
   damage-armor: true
   # Art der Schadensübertragung: mirror | custom | off
   damage-mode: mirror  # mirror | custom | off
-  # Fester Schaden in Herzen für den Modus "custom"
+  # Stößt der übertragene Treffer den Spieler zurück? Mit false kommt der
+  # Schaden an, der Stoß dahinter nicht.
+  knockback: true
+  # Fester Schaden in Herzen für den Modus "custom". 0 bedeutet kein Schaden,
+  # dann zählen auch Verzauberungen der Waffe nicht mehr dazu.
   custom-damage-hearts: 0.5
   # Schreibt zu jedem übertragenen Treffer eine Zeile mit allen Werten in den
   # Chat des Spielers und ins Log. Nur zum Nachmessen gedacht.

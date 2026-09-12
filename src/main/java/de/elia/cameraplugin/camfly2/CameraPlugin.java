@@ -159,6 +159,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private DamageMode damageMode;
     /** Whether the player's armour loses durability from the transferred hit. */
     private boolean damageArmor;
+    /** Whether the transferred hit pushes the player back. */
+    private boolean mirrorKnockback;
     /** Whether every transferred hit reports its numbers, for measuring. */
     private boolean mirrorDebug;
     private double customDamageHearts;
@@ -1101,7 +1103,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             case MIRROR -> applyDamage = event.getDamage();
             case CUSTOM -> {
                 applyDamage = customDamageHearts * 2.0;
-                if (event instanceof EntityDamageByEntityEvent ede) {
+                // At zero hearts the mode is meant to cost nothing at all, so
+                // no enchantment puts anything on top of it either.
+                if (applyDamage > 0 && event instanceof EntityDamageByEntityEvent ede) {
                     Entity dmg = ede.getDamager();
                     if (dmg instanceof LivingEntity attacker) {
                         ItemStack wpn = attacker.getEquipment().getItemInMainHand();
@@ -1147,6 +1151,16 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             // was: the source decides whether armour counts at all, which
             // protection enchantment counts, and who gets the kill.
             mirrorDamageToPlayer(owner, applyDamage, event.getDamageSource(), damagerEntity);
+        } else {
+            // Nothing is passed on - but the hit did happen, it only landed on
+            // the body standing in for the player. The invulnerability it would
+            // have left behind is his as well: without it the next swing of the
+            // attacker, or the fire his body stood in, reaches him in the same
+            // moment and takes exactly the hearts and the durability that this
+            // mode is meant to save him. So he keeps the pause after the hit,
+            // just not the damage.
+            owner.setNoDamageTicks(20);
+            owner.setLastDamage(event.getDamage());
         }
 
         pendingDamage.remove(ownerUUID);
@@ -1246,6 +1260,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             }
         } finally {
             damageImmunityBypass.remove(ownerId);
+        }
+        if (!mirrorKnockback) {
+            // The hit is passed on, the push behind it is not: the server has
+            // just turned it into movement, and that movement is taken back
+            // before anyone sees it.
+            owner.setVelocity(new Vector(0, 0, 0));
         }
         if (mirrorDebug) {
             sendMirrorDebug(owner, String.format(Locale.ROOT,
@@ -1776,6 +1796,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 "§cDu kannst den Cam-Modus nicht starten! Du musst noch %seconds% Sekunden in Sicherheit bleiben.");
 
         damageArmor = config.getBoolean("mirror-damage.damage-armor", true);
+        mirrorKnockback = config.getBoolean("mirror-damage.knockback", true);
         mirrorDebug = config.getBoolean("mirror-damage.debug", false);
         String modeRaw = config.getChoice("mirror-damage.damage-mode", "mirror", "mirror", "custom", "off", "false");
         if ("custom".equalsIgnoreCase(modeRaw)) {
