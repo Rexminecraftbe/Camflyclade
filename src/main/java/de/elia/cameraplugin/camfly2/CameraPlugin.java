@@ -74,7 +74,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     private final Map<UUID, CameraData> cameraPlayers = new HashMap<>();
     private final Map<UUID, Long> distanceMessageCooldown = new HashMap<>();
+    /** The player who is taking the hit his body took right now. */
     private final Set<UUID> damageImmunityBypass = new HashSet<>();
+    /** Players whose body was hit and whose hit has not reached them yet. */
+    private final Set<UUID> pendingMirrorHit = new HashSet<>();
     private final Map<UUID, UUID> bodyOwners = new HashMap<>();
     private final Map<UUID, UUID> hitboxEntities = new HashMap<>();
     private final Set<UUID> pendingDamage = new HashSet<>();
@@ -1167,12 +1170,15 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      */
     private void mirrorDamageToPlayer(Player owner, double amount, org.bukkit.damage.DamageSource source, Entity attacker) {
         int restoredAt = owner.getTicksLived();
+        // Nothing else may reach him until this hit has landed, see onPlayerDamage.
+        pendingMirrorHit.add(owner.getUniqueId());
         new BukkitRunnable() {
             private int waited = 0;
 
             @Override
             public void run() {
                 if (!owner.isOnline() || owner.isDead()) {
+                    pendingMirrorHit.remove(owner.getUniqueId());
                     cancel();
                     return;
                 }
@@ -1226,17 +1232,29 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         double toughness = attributeValue(owner, Attribute.ARMOR_TOUGHNESS);
         double knockbackResistance = attributeValue(owner, Attribute.KNOCKBACK_RESISTANCE);
         double healthBefore = owner.getHealth();
-        if (source != null) {
-            owner.damage(amount, source);
-        } else {
-            owner.damage(amount, attacker);
+        int framesBefore = owner.getNoDamageTicks();
+        double lastBefore = owner.getLastDamage();
+        int fireBefore = owner.getFireTicks();
+        UUID ownerId = owner.getUniqueId();
+        pendingMirrorHit.remove(ownerId);
+        damageImmunityBypass.add(ownerId);
+        try {
+            if (source != null) {
+                owner.damage(amount, source);
+            } else {
+                owner.damage(amount, attacker);
+            }
+        } finally {
+            damageImmunityBypass.remove(ownerId);
         }
         if (mirrorDebug) {
             sendMirrorDebug(owner, String.format(Locale.ROOT,
                     "uebertragen: roh %.3f (%s) | Ruestung %.1f, Haerte %.1f, KB-Schutz %.2f"
-                            + " | Leben %.2f -> %.2f (-%.3f) | Tempo %.3f | Wartezeit %d Ticks",
+                            + " | Leben %.2f -> %.2f (-%.3f) | Tempo %.3f | Wartezeit %d Ticks"
+                            + " | Unverwundbar %d, letzter Treffer %.2f, Feuer %d",
                     amount, damageTypeName(source), armor, toughness, knockbackResistance,
-                    healthBefore, owner.getHealth(), healthBefore - owner.getHealth(), speed, waitedTicks));
+                    healthBefore, owner.getHealth(), healthBefore - owner.getHealth(), speed, waitedTicks,
+                    framesBefore, lastBefore, fireBefore));
         }
         if (attacker instanceof LivingEntity living) {
             ItemStack weapon = living.getEquipment().getItemInMainHand();
@@ -1384,11 +1402,29 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * The camera player takes no damage himself: while camera mode runs his
+     * body stands in for him, and in the tick or two between the hit on the
+     * body and that hit reaching him nothing else may hit him either.
+     *
+     * <p>That second part matters more than it looks. The hit on the body came
+     * first - without camera mode the player would have taken it right there,
+     * and everything reaching him in the next few ticks would have run into the
+     * invulnerability of that hit. Letting something hit him while his own hit
+     * is still on its way would take it on top instead: the fire his body stood
+     * in, or the next swing of the attacker, would cost him hearts that the
+     * same situation never costs outside camera mode.</p>
+     */
     @EventHandler
     public void onPlayerDamage(EntityDamageEvent event) {
-        if (event.getEntity() instanceof Player &&
-                cameraPlayers.containsKey(event.getEntity().getUniqueId()) &&
-                !damageImmunityBypass.contains(event.getEntity().getUniqueId())) {
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
+        UUID playerId = player.getUniqueId();
+        if (damageImmunityBypass.contains(playerId)) {
+            return; // his own hit, on its way through
+        }
+        if (cameraPlayers.containsKey(playerId) || pendingMirrorHit.contains(playerId)) {
             event.setCancelled(true);
         }
     }
