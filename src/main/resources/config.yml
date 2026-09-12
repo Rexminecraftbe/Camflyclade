@@ -243,3 +243,6 @@ mirror-damage:
   damage-mode: mirror  # mirror | custom | off
   # Fester Schaden in Herzen für den Modus "custom"
   custom-damage-hearts: 0.5
+  # Schreibt zu jedem übertragenen Treffer eine Zeile mit allen Werten in den
+  # Chat des Spielers und ins Log. Nur zum Nachmessen gedacht.
+  debug: false

@@ -49,6 +49,7 @@ import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -155,6 +156,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private DamageMode damageMode;
     /** Whether the player's armour loses durability from the transferred hit. */
     private boolean damageArmor;
+    /** Whether every transferred hit reports its numbers, for measuring. */
+    private boolean mirrorDebug;
     private double customDamageHearts;
 
     private boolean cameraHeadEnabled;
@@ -1129,6 +1132,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             );
         }
 
+        if (mirrorDebug) {
+            sendMirrorDebug(owner, String.format(Locale.ROOT,
+                    "Koerper getroffen: roh %.3f | nach Koerper-Ruestung %.3f | %s",
+                    event.getDamage(), event.getFinalDamage(), event.getCause()));
+        }
+
         if (applyDamage > 0) {
             // The hit keeps the damage source it had. Only with it does the
             // server treat it as the fall, the drowning or the arrow it really
@@ -1171,7 +1180,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                     return; // his tick is still to come, his armour is not on yet
                 }
                 cancel();
-                applyMirroredDamage(owner, amount, source, attacker);
+                applyMirroredDamage(owner, amount, source, attacker, waited);
             }
         }.runTaskTimer(this, 1L, 1L);
     }
@@ -1188,7 +1197,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * this hit through would take it on top of the other one, and the player
      * would lose more hearts than the same hit costs outside camera mode.</p>
      */
-    private void applyMirroredDamage(Player owner, double amount, org.bukkit.damage.DamageSource source, Entity attacker) {
+    private void applyMirroredDamage(Player owner, double amount, org.bukkit.damage.DamageSource source, Entity attacker, int waitedTicks) {
         ItemStack[] saved = null;
         if (!damageArmor) {
             // Copies protect exactly like the originals, so the player takes
@@ -1207,10 +1216,27 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             owner.getInventory().setArmorContents(copies);
             owner.updateInventory();
         }
+        // A moment ago the player was flying. That speed must not ride along
+        // into the knockback of this hit: outside camera mode he would have
+        // been standing where his body stood, and the hit would push him from
+        // a standstill.
+        double speed = owner.getVelocity().length();
+        owner.setVelocity(new Vector(0, 0, 0));
+        double armor = attributeValue(owner, Attribute.ARMOR);
+        double toughness = attributeValue(owner, Attribute.ARMOR_TOUGHNESS);
+        double knockbackResistance = attributeValue(owner, Attribute.KNOCKBACK_RESISTANCE);
+        double healthBefore = owner.getHealth();
         if (source != null) {
             owner.damage(amount, source);
         } else {
             owner.damage(amount, attacker);
+        }
+        if (mirrorDebug) {
+            sendMirrorDebug(owner, String.format(Locale.ROOT,
+                    "uebertragen: roh %.3f (%s) | Ruestung %.1f, Haerte %.1f, KB-Schutz %.2f"
+                            + " | Leben %.2f -> %.2f (-%.3f) | Tempo %.3f | Wartezeit %d Ticks",
+                    amount, damageTypeName(source), armor, toughness, knockbackResistance,
+                    healthBefore, owner.getHealth(), healthBefore - owner.getHealth(), speed, waitedTicks));
         }
         if (attacker instanceof LivingEntity living) {
             ItemStack weapon = living.getEquipment().getItemInMainHand();
@@ -1604,6 +1630,26 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
 
 
+    /** The value of one of the player's attributes, or zero when he has none. */
+    private double attributeValue(Player player, Attribute attribute) {
+        AttributeInstance instance = player.getAttribute(attribute);
+        return instance == null ? 0.0 : instance.getValue();
+    }
+
+    /** The name of the damage type a hit carries, for the measuring output. */
+    private String damageTypeName(org.bukkit.damage.DamageSource source) {
+        return source == null ? "ohne Quelle" : source.getDamageType().getKey().toString();
+    }
+
+    /**
+     * Puts one line of the measurement in front of the player and into the log.
+     * Only ever reached while {@code mirror-damage.debug} is switched on.
+     */
+    private void sendMirrorDebug(Player owner, String line) {
+        getLogger().info("[Schadensuebertragung] " + owner.getName() + ": " + line);
+        owner.sendMessage("§e[CamFly] §7" + line);
+    }
+
     /** {@code true} when the entity is the camera body of a player. */
     private boolean isCameraBody(Entity entity) {
         return entity != null && bodyOwners.containsKey(entity.getUniqueId());
@@ -1694,6 +1740,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 "§cDu kannst den Cam-Modus nicht starten! Du musst noch %seconds% Sekunden in Sicherheit bleiben.");
 
         damageArmor = config.getBoolean("mirror-damage.damage-armor", true);
+        mirrorDebug = config.getBoolean("mirror-damage.debug", false);
         String modeRaw = config.getChoice("mirror-damage.damage-mode", "mirror", "mirror", "custom", "off", "false");
         if ("custom".equalsIgnoreCase(modeRaw)) {
             damageMode = DamageMode.CUSTOM;
