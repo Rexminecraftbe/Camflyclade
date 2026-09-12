@@ -1180,6 +1180,13 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * Puts the hit onto the player: once, with his own armour, his own
      * enchantments and his own effects, and with the damage source it came
      * with.
+     *
+     * <p>His invulnerability is left alone on purpose. Should something else
+     * have hit him while this one was on its way, the server counts the two
+     * together the way it counts any two hits that land within the same
+     * invulnerability - the bigger one wins instead of both being taken. Forcing
+     * this hit through would take it on top of the other one, and the player
+     * would lose more hearts than the same hit costs outside camera mode.</p>
      */
     private void applyMirroredDamage(Player owner, double amount, org.bukkit.damage.DamageSource source, Entity attacker) {
         ItemStack[] saved = null;
@@ -1200,11 +1207,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             owner.getInventory().setArmorContents(copies);
             owner.updateInventory();
         }
-        // The hit belongs to this player, whatever else reached him while it
-        // was on its way: without this the invulnerability of that other hit
-        // would swallow it or cut it short.
-        owner.setNoDamageTicks(0);
-        owner.setLastDamage(0.0);
         if (source != null) {
             owner.damage(amount, source);
         } else {
