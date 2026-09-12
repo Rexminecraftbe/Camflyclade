@@ -117,6 +117,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private static final double MIN_MOVE_THRESHOLD = 0.01;
 
     /**
+     * How long a mirrored hit waits at most for the player to live through a
+     * tick, so that it never hangs should he stop ticking altogether.
+     */
+    private static final int MAX_ARMOR_WAIT_TICKS = 10;
+
+    /**
      * How many config notes are sent into the chat of the player who reloaded.
      * The rest is only in the console, so that a thoroughly broken file does not
      * bury the chat.
@@ -1124,68 +1130,103 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
 
         if (applyDamage > 0) {
-            double finalDamage = applyDamage;
-            Entity attacker = damagerEntity;
-            // The body was hit in the player's place, so the hit keeps the
-            // damage source it had. Only with it does the server treat it as
-            // the fall, the drowning or the arrow it really was: the source
-            // decides whether armour counts at all, which protection
-            // enchantment counts, and who gets the kill.
-            org.bukkit.damage.DamageSource damageSource = event.getDamageSource();
-            new BukkitRunnable() {
-                @Override
-                public void run() {
-                    ItemStack[] saved = null;
-                    if (!damageArmor) {
-                        // Copies protect exactly like the originals, so the
-                        // player takes the same damage - only the copies wear
-                        // out, and they are thrown away right afterwards.
-                        // Taking the armour off instead would not work: the
-                        // protection sits in attribute modifiers the server
-                        // only refreshes in the entity's own tick, so it would
-                        // still count here while the durability was gone.
-                        saved = owner.getInventory().getArmorContents();
-                        ItemStack[] copies = new ItemStack[saved.length];
-                        for (int i = 0; i < saved.length; i++) {
-                            if (saved[i] != null) {
-                                copies[i] = saved[i].clone();
-                            }
-                        }
-                        owner.getInventory().setArmorContents(copies);
-                        owner.updateInventory();
-                    }
-                    // The hit belongs to this player, whatever else reached him
-                    // in the tick in between: without this the invulnerability
-                    // of that other hit would swallow it or cut it short.
-                    owner.setNoDamageTicks(0);
-                    owner.setLastDamage(0.0);
-                    if (damageSource != null) {
-                        owner.damage(finalDamage, damageSource);
-                    } else {
-                        owner.damage(finalDamage, attacker);
-                    }
-                    if (attacker instanceof LivingEntity living) {
-                        ItemStack weapon = living.getEquipment().getItemInMainHand();
-                        int fireLevel = weapon.getEnchantmentLevel(Enchantment.FIRE_ASPECT);
-                        if (fireLevel > 0) {
-                            int ticks = Math.max(owner.getFireTicks(), fireLevel * 80);
-                            owner.setFireTicks(ticks);
-                        }
-                    } else if (attacker instanceof AbstractArrow arr) {
-                        if (arr.getFireTicks() > 0) {
-                            int ticks = Math.max(owner.getFireTicks(), 100);
-                            owner.setFireTicks(ticks);
-                        }
-                    }
-                    if (!damageArmor && saved != null) {
-                        owner.getInventory().setArmorContents(saved);
-                        owner.updateInventory();
-                    }
-                }
-            }.runTaskLater(this, 1L);
+            // The hit keeps the damage source it had. Only with it does the
+            // server treat it as the fall, the drowning or the arrow it really
+            // was: the source decides whether armour counts at all, which
+            // protection enchantment counts, and who gets the kill.
+            mirrorDamageToPlayer(owner, applyDamage, event.getDamageSource(), damagerEntity);
         }
 
         pendingDamage.remove(ownerUUID);
+    }
+
+    /**
+     * Hands the hit the body took to the player - as soon as his armour
+     * actually protects him again.
+     *
+     * <p>Camera mode has just put the armour back into his inventory, but that
+     * alone does not protect him: the server turns the pieces into attribute
+     * modifiers in the player's own tick, and scheduled tasks run before the
+     * entities of that tick. A hit passed on one tick later can therefore still
+     * find him standing there as if he wore nothing, while waiting longer than
+     * needed only gives something else the chance to hit him first.</p>
+     *
+     * <p>So the hit does not wait for a number of ticks, it waits for the
+     * player: as soon as he has lived through one tick since the armour came
+     * back, that tick has applied it, and the hit lands with the protection he
+     * really has.</p>
+     */
+    private void mirrorDamageToPlayer(Player owner, double amount, org.bukkit.damage.DamageSource source, Entity attacker) {
+        int restoredAt = owner.getTicksLived();
+        new BukkitRunnable() {
+            private int waited = 0;
+
+            @Override
+            public void run() {
+                if (!owner.isOnline() || owner.isDead()) {
+                    cancel();
+                    return;
+                }
+                if (owner.getTicksLived() <= restoredAt && ++waited < MAX_ARMOR_WAIT_TICKS) {
+                    return; // his tick is still to come, his armour is not on yet
+                }
+                cancel();
+                applyMirroredDamage(owner, amount, source, attacker);
+            }
+        }.runTaskTimer(this, 1L, 1L);
+    }
+
+    /**
+     * Puts the hit onto the player: once, with his own armour, his own
+     * enchantments and his own effects, and with the damage source it came
+     * with.
+     */
+    private void applyMirroredDamage(Player owner, double amount, org.bukkit.damage.DamageSource source, Entity attacker) {
+        ItemStack[] saved = null;
+        if (!damageArmor) {
+            // Copies protect exactly like the originals, so the player takes
+            // the same damage - only the copies wear out, and they are thrown
+            // away right afterwards. Taking the armour off instead would not
+            // work: the protection sits in attribute modifiers the server only
+            // refreshes in the entity's own tick, so it would still count here
+            // while the durability was already gone.
+            saved = owner.getInventory().getArmorContents();
+            ItemStack[] copies = new ItemStack[saved.length];
+            for (int i = 0; i < saved.length; i++) {
+                if (saved[i] != null) {
+                    copies[i] = saved[i].clone();
+                }
+            }
+            owner.getInventory().setArmorContents(copies);
+            owner.updateInventory();
+        }
+        // The hit belongs to this player, whatever else reached him while it
+        // was on its way: without this the invulnerability of that other hit
+        // would swallow it or cut it short.
+        owner.setNoDamageTicks(0);
+        owner.setLastDamage(0.0);
+        if (source != null) {
+            owner.damage(amount, source);
+        } else {
+            owner.damage(amount, attacker);
+        }
+        if (attacker instanceof LivingEntity living) {
+            ItemStack weapon = living.getEquipment().getItemInMainHand();
+            int fireLevel = weapon.getEnchantmentLevel(Enchantment.FIRE_ASPECT);
+            if (fireLevel > 0) {
+                int ticks = Math.max(owner.getFireTicks(), fireLevel * 80);
+                owner.setFireTicks(ticks);
+            }
+        } else if (attacker instanceof AbstractArrow arr) {
+            if (arr.getFireTicks() > 0) {
+                int ticks = Math.max(owner.getFireTicks(), 100);
+                owner.setFireTicks(ticks);
+            }
+        }
+        if (!damageArmor && saved != null) {
+            owner.getInventory().setArmorContents(saved);
+            owner.updateInventory();
+        }
     }
 
     /**
