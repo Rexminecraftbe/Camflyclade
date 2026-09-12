@@ -147,6 +147,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     // Damage transfer settings
     private DamageMode damageMode;
+    /** Whether the player's armour loses durability from the transferred hit. */
     private boolean damageArmor;
     private double customDamageHearts;
 
@@ -322,9 +323,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
         LivingEntity body = spawnCameraBody(player, playerLocation, originalRemainingAir);
 
-        // A mannequin always wears the player's armour and always takes the hits,
-        // so the server calculates the damage the same way for both body types.
-        // It is also the entity the movement check watches for both types.
+        // A mannequin takes the hits for both body types and is the entity the
+        // movement check watches. It carries the player's armour so the body
+        // looks like him; the damage itself is calculated on the player, see
+        // onBodyDamage.
         Mannequin hitbox = null;
         if (usesMannequinBody()) {
             EntityEquipment bodyEquipment = body.getEquipment();
@@ -337,7 +339,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             hitbox = spawnHitbox(player, playerLocation, createHiddenArmor(originalArmor));
             hitbox.teleport(body.getLocation());
         }
-        // Whoever wears the armour is the entity that takes the hits.
+        // The mannequin is the entity that takes the hits.
         LivingEntity damageTarget = hitbox != null ? hitbox : body;
 
         GameMode originalGameMode = player.getGameMode();
@@ -415,13 +417,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Copies the player's armour for the entity that mirrors the damage. The real
-     * items are used when they are supposed to lose durability, clones otherwise.
+     * Copies the player's armour for the visible body. Copies are all it takes:
+     * the pieces are only worn there, the damage is calculated on the player
+     * himself and his own armour is what wears out.
      */
     private ItemStack[] createMirrorArmor(ItemStack[] originalArmor) {
-        if (damageArmor) {
-            return originalArmor;
-        }
         ItemStack[] mirrorArmor = new ItemStack[originalArmor.length];
         for (int i = 0; i < originalArmor.length; i++) {
             if (originalArmor[i] != null) {
@@ -433,13 +433,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     /**
      * Copies the player's armour for the invisible mannequin and takes away its
-     * rendering, so that it protects the body without the pieces floating in
-     * front of the armour stand.
+     * rendering, so that the pieces do not float in front of the armour stand.
      *
      * <p>Copies are enough here: the body never really takes the damage, its
-     * damage event is cancelled. The durability is taken from the player's own
-     * armour when the damage is mirrored onto him, and his items are therefore
-     * left untouched.</p>
+     * damage event is cancelled. The reduction and the durability are both
+     * taken from the player's own armour when the hit is passed on to him, and
+     * the pieces on the mannequin change nothing about either.</p>
      */
     private ItemStack[] createHiddenArmor(ItemStack[] originalArmor) {
         ItemStack[] hiddenArmor = new ItemStack[originalArmor.length];
@@ -463,9 +462,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     /**
      * Creates the invisible mannequin that takes the hits for a body that is
-     * not a mannequin itself. A mannequin has the same hitbox as a player and
-     * wears the player's armour, so the server calculates the damage just like
-     * it would for the player himself.
+     * not a mannequin itself. A mannequin has the same hitbox as a player, so
+     * hits land on the body the way they would land on the player himself.
      *
      * <p>It is invisible and its armour is not rendered either, but it is a
      * normal entity otherwise: players, mobs and the world hit it directly, just
@@ -555,7 +553,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * stand that carries the name, with the mannequin standing in it taking the
      * hits. Both types therefore end up the same as soon as the body is
      * switched invisible - and either way a mannequin is the entity that is
-     * hit, so the server calculates the damage like it would for a player.</p>
+     * hit, so it is hit where the player himself would be hit.</p>
      */
     private boolean usesMannequinBody() {
         return bodyType == BodyType.MANNEQUIN && bodyVisible;
@@ -1002,11 +1000,17 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
 
     /**
-     * Every hit on the body ends camera mode. The mannequin takes the hit for
-     * both body types, so the damage is always calculated the same way, and
-     * there is no separate check for lava, water or blocks any more: the
-     * mannequin takes that damage itself and the damage event is all that is
-     * needed to notice it.
+     * Every hit on the body ends camera mode and is passed on to the player.
+     * There is no separate check for lava, water or blocks: the body takes that
+     * damage itself and the damage event is all that is needed to notice it.
+     *
+     * <p>Only the raw damage of the hit travels to the player, together with the
+     * damage source it came with. The server then reduces it exactly once, on
+     * the player: his armour, his enchantments, his resistance and his
+     * absorption, in the order and with the rules of the real damage type. What
+     * the body wears never counts - it would be a second, wrong reduction, and
+     * a damage type that ignores armour (falling, drowning, magic) would lose
+     * against armour it never touches in the first place.</p>
      */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBodyDamage(EntityDamageEvent event) {
@@ -1032,24 +1036,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             return;
         }
 
-        CameraData data = cameraPlayers.get(ownerUUID);
-
-        // The armour stand is a little taller than the mannequin, so a hit can
-        // land on it instead. Such a hit is passed on to the mannequin, so that
-        // the damage is calculated on the entity wearing the player's armour in
-        // every case. The player's own hit just ends camera mode below.
-        if (damagedBody && data != null && data.getHitbox() != null && !data.getHitbox().isDead()
-                && event instanceof EntityDamageByEntityEvent byEntity
-                && !byEntity.getDamager().getUniqueId().equals(owner.getUniqueId())
-                && !pendingDamage.contains(ownerUUID)) {
-            event.setCancelled(true);
-            data.getHitbox().damage(event.getDamage(), byEntity.getDamager());
-            if (!cameraPlayers.containsKey(ownerUUID)) {
-                return; // the mannequin took the hit and camera mode has ended
-            }
-            // The mannequin ignored the hit, so it is handled here after all.
-        }
-
+        // Which of the two entities was hit makes no difference any more: only
+        // the raw damage is passed on, and the reduction happens on the player.
+        // A hit on the armour stand therefore no longer has to be forwarded to
+        // the mannequin standing in it.
         if (!pendingDamage.add(ownerUUID)) {
             // already scheduled damage for this hit
             return;
@@ -1088,29 +1078,15 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
 
 
-        boolean ignoreBodyArmor = event.getCause() == DamageCause.ENTITY_EXPLOSION ||
-                event.getCause() == DamageCause.BLOCK_EXPLOSION ||
-                event.getCause() == DamageCause.FALLING_BLOCK;
         double applyDamage;
         switch (damageMode) {
-            case MIRROR -> {
-                if (damageArmor) {
-                    // TNT explosions and falling anvils should only count the player's armour once
-                    if (ignoreBodyArmor) {
-                        applyDamage = event.getDamage();
-                    } else {
-                        applyDamage = event.getFinalDamage();
-                    }
-                } else {
-                    if (ignoreBodyArmor) {
-                        // use raw damage and let the player's armour reduce it later
-                        applyDamage = event.getDamage();
-                    } else {
-                        // armour shouldn't lose durability, so apply the already reduced amount
-                        applyDamage = event.getFinalDamage();
-                    }
-                }
-            }
+            // The damage the hit started with, before anything reduced it.
+            // Armour, armour toughness, protection enchantments, resistance and
+            // absorption all belong to the player: the server applies them once,
+            // when the hit is passed on to him below. Whatever the body wears
+            // does not count, so nothing is subtracted twice and explosions and
+            // falling anvils need no special case any more.
+            case MIRROR -> applyDamage = event.getDamage();
             case CUSTOM -> {
                 applyDamage = customDamageHearts * 2.0;
                 if (event instanceof EntityDamageByEntityEvent ede) {
@@ -1149,53 +1125,53 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
         if (applyDamage > 0) {
             double finalDamage = applyDamage;
-            Entity finalDamager = damagerEntity == null ? damagedEntity : damagerEntity;
-            final org.bukkit.damage.DamageSource damageSource;
-            if (event.getCause() == DamageCause.ENTITY_EXPLOSION || event.getCause() == DamageCause.BLOCK_EXPLOSION) {
-                org.bukkit.damage.DamageType type = event.getCause() == DamageCause.ENTITY_EXPLOSION
-                        ? org.bukkit.damage.DamageType.PLAYER_EXPLOSION
-                        : org.bukkit.damage.DamageType.EXPLOSION;
-                var builder = org.bukkit.damage.DamageSource.builder(type);
-                if (damagerEntity != null) {
-                    builder.withCausingEntity(damagerEntity).withDirectEntity(damagerEntity);
-                }
-                damageSource = builder.build();
-            } else if (event.getCause() == DamageCause.FALLING_BLOCK) {
-                damageSource = null;
-            } else {
-                damageSource = null;
-            }
+            Entity attacker = damagerEntity;
+            // The body was hit in the player's place, so the hit keeps the
+            // damage source it had. Only with it does the server treat it as
+            // the fall, the drowning or the arrow it really was: the source
+            // decides whether armour counts at all, which protection
+            // enchantment counts, and who gets the kill.
+            org.bukkit.damage.DamageSource damageSource = event.getDamageSource();
             new BukkitRunnable() {
                 @Override
                 public void run() {
                     ItemStack[] saved = null;
                     if (!damageArmor) {
+                        // Copies protect exactly like the originals, so the
+                        // player takes the same damage - only the copies wear
+                        // out, and they are thrown away right afterwards.
+                        // Taking the armour off instead would not work: the
+                        // protection sits in attribute modifiers the server
+                        // only refreshes in the entity's own tick, so it would
+                        // still count here while the durability was gone.
                         saved = owner.getInventory().getArmorContents();
-                        ItemStack[] temp;
-                        if (ignoreBodyArmor) {
-                            temp = new ItemStack[saved.length];
-                            for (int i = 0; i < saved.length; i++) {
-                                if (saved[i] != null) temp[i] = saved[i].clone();
+                        ItemStack[] copies = new ItemStack[saved.length];
+                        for (int i = 0; i < saved.length; i++) {
+                            if (saved[i] != null) {
+                                copies[i] = saved[i].clone();
                             }
-                        } else {
-                            temp = new ItemStack[4];
                         }
-                        owner.getInventory().setArmorContents(temp);
+                        owner.getInventory().setArmorContents(copies);
                         owner.updateInventory();
                     }
+                    // The hit belongs to this player, whatever else reached him
+                    // in the tick in between: without this the invulnerability
+                    // of that other hit would swallow it or cut it short.
+                    owner.setNoDamageTicks(0);
+                    owner.setLastDamage(0.0);
                     if (damageSource != null) {
                         owner.damage(finalDamage, damageSource);
                     } else {
-                        owner.damage(finalDamage, finalDamager);
+                        owner.damage(finalDamage, attacker);
                     }
-                    if (finalDamager instanceof LivingEntity attacker) {
-                        ItemStack weapon = attacker.getEquipment().getItemInMainHand();
+                    if (attacker instanceof LivingEntity living) {
+                        ItemStack weapon = living.getEquipment().getItemInMainHand();
                         int fireLevel = weapon.getEnchantmentLevel(Enchantment.FIRE_ASPECT);
                         if (fireLevel > 0) {
                             int ticks = Math.max(owner.getFireTicks(), fireLevel * 80);
                             owner.setFireTicks(ticks);
                         }
-                    } else if (finalDamager instanceof AbstractArrow arr) {
+                    } else if (attacker instanceof AbstractArrow arr) {
                         if (arr.getFireTicks() > 0) {
                             int ticks = Math.max(owner.getFireTicks(), 100);
                             owner.setFireTicks(ticks);
@@ -1206,7 +1182,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                         owner.updateInventory();
                     }
                 }
-            }.runTaskLater(this, 2L);
+            }.runTaskLater(this, 1L);
         }
 
         pendingDamage.remove(ownerUUID);

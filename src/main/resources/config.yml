@@ -235,7 +235,9 @@ cam-safety:
 
 # Einstellungen zur Übertragung von Schaden
 mirror-damage:
-  # Verwendet die echte Rüstung des Spielers
+  # Die Rüstung des Spielers verliert beim übertragenen Treffer Haltbarkeit.
+  # Geschützt wird der Spieler in jedem Fall: der Schaden wird immer genau
+  # einmal an ihm berechnet, mit seiner Rüstung und seinen Effekten.
   damage-armor: true
   # Art der Schadensübertragung: mirror | custom | off
   damage-mode: mirror  # mirror | custom | off
