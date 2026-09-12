@@ -165,8 +165,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private int customArmorDamage;
     /** Whether the Unbreaking enchantment counts against that wear. */
     private boolean respectUnbreaking;
-    /** Whether the player's armour still takes its share off the custom damage. */
-    private boolean customDamageCountsArmor;
+    /** Whether the player's armour still takes its share off the damage. */
+    private boolean damageCountsArmor;
     /** Whether the transferred hit pushes the player back. */
     private boolean mirrorKnockback;
     /** Whether every transferred hit reports its numbers, for measuring. */
@@ -1300,7 +1300,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         } finally {
             damageImmunityBypass.remove(ownerId);
         }
-        if (damageMode == DamageMode.CUSTOM && !customDamageCountsArmor) {
+        if (!damageCountsArmor) {
             takeWhatTheArmorKeptAway(owner, amount, healthBefore + absorptionBefore, framesBefore);
         }
         if (!mirrorKnockback) {
@@ -1374,14 +1374,19 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Takes off afterwards what the armour kept away, so that "custom" costs
-     * exactly the hearts it is set to.
+     * Takes off afterwards what the armour kept away, so that the hit costs
+     * exactly what it is worth: the hearts "custom" is set to, or the whole of
+     * the real hit under "mirror".
      *
-     * <p>Only reached with {@code custom-damage-counts-armor} switched off. The
-     * hit is still dealt the normal way first, with its damage source, its push
-     * and the death message it brings; what the armour, the protection
-     * enchantments or an effect took off it is then taken from the player by
-     * hand.</p>
+     * <p>Only reached with {@code damage-counts-armor} switched off. The hit is
+     * still dealt the normal way first, with its damage source, its push and
+     * the death message it brings; what the armour, the protection enchantments
+     * or an effect took off it is then taken from the player by hand.</p>
+     *
+     * <p>What this does not touch is the armour itself: how hard the hit wears
+     * it down is {@code damage-armor-mode}'s to say alone, so the pieces still
+     * take their durability - and on the body they are worn and shown the whole
+     * time either way.</p>
      *
      * <p>A hit that does not land at all stays at nothing, though: something
      * cancelled it outright - fire resistance against fire, a protected region -
@@ -1466,11 +1471,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             return;
         }
         sendMirrorDebug(owner, String.format(Locale.ROOT,
-                "uebertragen: roh %.3f (%s) | Ruestung %.1f, Haerte %.1f, KB-Schutz %.2f"
+                "uebertragen: roh %.3f (%s) | Ruestung %.1f (zaehlt %s), Haerte %.1f, KB-Schutz %.2f"
                         + " | Leben %.2f -> %.2f (-%.3f) | Tempo %.3f | Wartezeit %d Ticks"
                         + " | Unverwundbar %d, letzter Treffer %.2f, Feuer %d | Rueckstoss %s"
                         + " | Abnutzung %s",
-                amount, damageTypeName(source), armor, toughness, knockbackResistance,
+                amount, damageTypeName(source), armor, damageCountsArmor ? "an" : "aus",
+                toughness, knockbackResistance,
                 healthBefore, owner.getHealth(), healthBefore - owner.getHealth(), speed, waitedTicks,
                 framesBefore, lastBefore, fireBefore, mirrorKnockback ? "an" : "aus", armorNote));
     }
@@ -1986,7 +1992,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             damageMode = DamageMode.MIRROR;
         }
         customDamageHearts = config.getDouble("mirror-damage.custom-damage-hearts", 0.5, 0.0);
-        customDamageCountsArmor = config.getBoolean("mirror-damage.custom-damage-counts-armor", true);
+        // Used to be called custom-damage-counts-armor, back when it only had a
+        // say over the custom damage. A file that still carries the old name
+        // keeps its setting, it is simply read as the default of the new one.
+        damageCountsArmor = config.getBoolean("mirror-damage.damage-counts-armor",
+                config.getBoolean("mirror-damage.custom-damage-counts-armor", true));
         // The mode grew out of the old truth value damage-armor, so a config
         // file that still carries only that one keeps saying what it said:
         // true wears the armour down, false leaves it alone.
