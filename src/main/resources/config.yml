@@ -241,8 +241,9 @@ mirror-damage:
   damage-armor: true
   # Art der Schadensübertragung: mirror | custom | off
   damage-mode: mirror  # mirror | custom | off
-  # Stößt der übertragene Treffer den Spieler zurück? Mit false kommt der
-  # Schaden an, der Stoß dahinter nicht.
+  # Stößt der Treffer auf den Körper den Spieler zurück? Gilt unabhängig von
+  # damage-mode: auch bei "off" oder 0 Herzen wird der Spieler zurückgestoßen,
+  # und mit false bleibt er stehen, egal wie viel Schaden übertragen wird.
   knockback: true
   # Fester Schaden in Herzen für den Modus "custom". 0 bedeutet kein Schaden,
   # dann zählen auch Verzauberungen der Waffe nicht mehr dazu.

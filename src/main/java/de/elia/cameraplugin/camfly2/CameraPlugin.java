@@ -1145,23 +1145,13 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                     event.getDamage(), event.getFinalDamage(), event.getCause()));
         }
 
-        if (applyDamage > 0) {
-            // The hit keeps the damage source it had. Only with it does the
-            // server treat it as the fall, the drowning or the arrow it really
-            // was: the source decides whether armour counts at all, which
-            // protection enchantment counts, and who gets the kill.
-            mirrorDamageToPlayer(owner, applyDamage, event.getDamageSource(), damagerEntity);
-        } else {
-            // Nothing is passed on - but the hit did happen, it only landed on
-            // the body standing in for the player. The invulnerability it would
-            // have left behind is his as well: without it the next swing of the
-            // attacker, or the fire his body stood in, reaches him in the same
-            // moment and takes exactly the hearts and the durability that this
-            // mode is meant to save him. So he keeps the pause after the hit,
-            // just not the damage.
-            owner.setNoDamageTicks(20);
-            owner.setLastDamage(event.getDamage());
-        }
+        // The hit always reaches the player, whatever the mode passes on of it:
+        // the damage, the push, or only the pause it leaves behind. It also
+        // keeps the damage source it had - only with it does the server treat
+        // it as the fall, the drowning or the arrow it really was, and the
+        // source decides whether armour counts at all, which protection
+        // enchantment counts, and who gets the kill.
+        mirrorHitToPlayer(owner, applyDamage, event.getDamage(), event.getDamageSource(), damagerEntity);
 
         pendingDamage.remove(ownerUUID);
     }
@@ -1182,7 +1172,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * back, that tick has applied it, and the hit lands with the protection he
      * really has.</p>
      */
-    private void mirrorDamageToPlayer(Player owner, double amount, org.bukkit.damage.DamageSource source, Entity attacker) {
+    private void mirrorHitToPlayer(Player owner, double amount, double rawDamage,
+                                   org.bukkit.damage.DamageSource source, Entity attacker) {
         int restoredAt = owner.getTicksLived();
         // Nothing else may reach him until this hit has landed, see onPlayerDamage.
         pendingMirrorHit.add(owner.getUniqueId());
@@ -1200,7 +1191,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                     return; // his tick is still to come, his armour is not on yet
                 }
                 cancel();
-                applyMirroredDamage(owner, amount, source, attacker, waited);
+                applyMirroredHit(owner, amount, rawDamage, source, attacker, waited);
             }
         }.runTaskTimer(this, 1L, 1L);
     }
@@ -1216,8 +1207,44 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * invulnerability - the bigger one wins instead of both being taken. Forcing
      * this hit through would take it on top of the other one, and the player
      * would lose more hearts than the same hit costs outside camera mode.</p>
+     *
+     * <p>When the mode passes on no damage at all, the hit still arrives: as
+     * the push, if the push is switched on, and as the pause it leaves behind
+     * either way.</p>
      */
-    private void applyMirroredDamage(Player owner, double amount, org.bukkit.damage.DamageSource source, Entity attacker, int waitedTicks) {
+    private void applyMirroredHit(Player owner, double amount, double rawDamage,
+                                  org.bukkit.damage.DamageSource source, Entity attacker, int waitedTicks) {
+        double speed = owner.getVelocity().length();
+        double armor = attributeValue(owner, Attribute.ARMOR);
+        double toughness = attributeValue(owner, Attribute.ARMOR_TOUGHNESS);
+        double knockbackResistance = attributeValue(owner, Attribute.KNOCKBACK_RESISTANCE);
+        double healthBefore = owner.getHealth();
+        int framesBefore = owner.getNoDamageTicks();
+        double lastBefore = owner.getLastDamage();
+        int fireBefore = owner.getFireTicks();
+        UUID ownerId = owner.getUniqueId();
+        pendingMirrorHit.remove(ownerId);
+
+        if (amount <= 0) {
+            // Nothing to pass on - but the hit did happen, it only landed on
+            // the body standing in for the player. The pause it leaves behind
+            // is his as well: without it the next swing of the attacker, or the
+            // fire his body stood in, would reach him in the same moment and
+            // take exactly the hearts and the durability this mode is meant to
+            // save him. The push is his too, as long as it is switched on - the
+            // server hands it out only together with damage, so here it has to
+            // be handed out by hand.
+            if (mirrorKnockback) {
+                owner.setVelocity(new Vector(0, 0, 0));
+                pushAwayFrom(owner, attacker, knockbackResistance);
+            }
+            owner.setNoDamageTicks(20);
+            owner.setLastDamage(rawDamage);
+            reportMirroredHit(owner, amount, source, armor, toughness, knockbackResistance,
+                    healthBefore, speed, waitedTicks, framesBefore, lastBefore, fireBefore);
+            return;
+        }
+
         ItemStack[] saved = null;
         if (!damageArmor) {
             // Copies protect exactly like the originals, so the player takes
@@ -1240,17 +1267,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         // into the knockback of this hit: outside camera mode he would have
         // been standing where his body stood, and the hit would push him from
         // a standstill.
-        double speed = owner.getVelocity().length();
         owner.setVelocity(new Vector(0, 0, 0));
-        double armor = attributeValue(owner, Attribute.ARMOR);
-        double toughness = attributeValue(owner, Attribute.ARMOR_TOUGHNESS);
-        double knockbackResistance = attributeValue(owner, Attribute.KNOCKBACK_RESISTANCE);
-        double healthBefore = owner.getHealth();
-        int framesBefore = owner.getNoDamageTicks();
-        double lastBefore = owner.getLastDamage();
-        int fireBefore = owner.getFireTicks();
-        UUID ownerId = owner.getUniqueId();
-        pendingMirrorHit.remove(ownerId);
         damageImmunityBypass.add(ownerId);
         try {
             if (source != null) {
@@ -1267,15 +1284,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             // before anyone sees it.
             owner.setVelocity(new Vector(0, 0, 0));
         }
-        if (mirrorDebug) {
-            sendMirrorDebug(owner, String.format(Locale.ROOT,
-                    "uebertragen: roh %.3f (%s) | Ruestung %.1f, Haerte %.1f, KB-Schutz %.2f"
-                            + " | Leben %.2f -> %.2f (-%.3f) | Tempo %.3f | Wartezeit %d Ticks"
-                            + " | Unverwundbar %d, letzter Treffer %.2f, Feuer %d",
-                    amount, damageTypeName(source), armor, toughness, knockbackResistance,
-                    healthBefore, owner.getHealth(), healthBefore - owner.getHealth(), speed, waitedTicks,
-                    framesBefore, lastBefore, fireBefore));
-        }
+        reportMirroredHit(owner, amount, source, armor, toughness, knockbackResistance,
+                healthBefore, speed, waitedTicks, framesBefore, lastBefore, fireBefore);
         if (attacker instanceof LivingEntity living) {
             ItemStack weapon = living.getEquipment().getItemInMainHand();
             int fireLevel = weapon.getEnchantmentLevel(Enchantment.FIRE_ASPECT);
@@ -1293,6 +1303,56 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             owner.getInventory().setArmorContents(saved);
             owner.updateInventory();
         }
+    }
+
+    /**
+     * Pushes the player away from whoever hit his body, the way the server
+     * pushes anyone it hits: with the same strength, against his knockback
+     * resistance, and from a standstill.
+     *
+     * <p>Needed because the server only ever hands out that push together with
+     * damage. Where no damage is passed on, the push would be lost with it -
+     * and whether the player is pushed is not meant to depend on how much of
+     * the hit the mode passes on.</p>
+     */
+    private void pushAwayFrom(Player owner, Entity attacker, double knockbackResistance) {
+        if (attacker == null) {
+            return;
+        }
+        double strength = 0.4 * (1.0 - knockbackResistance);
+        if (strength <= 0.0) {
+            return;
+        }
+        Location from = attacker.getLocation();
+        Location to = owner.getLocation();
+        Vector direction = new Vector(from.getX() - to.getX(), 0.0, from.getZ() - to.getZ());
+        if (direction.lengthSquared() < 1.0E-7) {
+            return; // standing in the same spot, there is no direction to push in
+        }
+        Vector push = direction.normalize().multiply(strength);
+        Vector velocity = owner.getVelocity();
+        double lift = owner.isOnGround() ? Math.min(0.4, velocity.getY() / 2.0 + strength) : velocity.getY();
+        owner.setVelocity(new Vector(
+                velocity.getX() / 2.0 - push.getX(),
+                lift,
+                velocity.getZ() / 2.0 - push.getZ()));
+    }
+
+    /** One line of the measurement, whenever {@code mirror-damage.debug} is on. */
+    private void reportMirroredHit(Player owner, double amount, org.bukkit.damage.DamageSource source,
+                                   double armor, double toughness, double knockbackResistance,
+                                   double healthBefore, double speed, int waitedTicks,
+                                   int framesBefore, double lastBefore, int fireBefore) {
+        if (!mirrorDebug) {
+            return;
+        }
+        sendMirrorDebug(owner, String.format(Locale.ROOT,
+                "uebertragen: roh %.3f (%s) | Ruestung %.1f, Haerte %.1f, KB-Schutz %.2f"
+                        + " | Leben %.2f -> %.2f (-%.3f) | Tempo %.3f | Wartezeit %d Ticks"
+                        + " | Unverwundbar %d, letzter Treffer %.2f, Feuer %d | Rueckstoss %s",
+                amount, damageTypeName(source), armor, toughness, knockbackResistance,
+                healthBefore, owner.getHealth(), healthBefore - owner.getHealth(), speed, waitedTicks,
+                framesBefore, lastBefore, fireBefore, mirrorKnockback ? "an" : "aus"));
     }
 
     /**
