@@ -234,20 +234,71 @@ cam-safety:
   delay: 5
 
 # Einstellungen zur Übertragung von Schaden
+# Die beiden Modi damage-mode und damage-armor-mode sind voneinander
+# unabhängig: der eine sagt, wie viele Herzen der Treffer den Spieler kostet,
+# der andere, wie stark er dessen Rüstung abnutzt. Keiner richtet sich
+# stillschweigend nach dem anderen - wer beides aus haben will, stellt beide
+# auf "off".
+# Gerechnet wird in jedem Fall genau einmal, und zwar am Spieler selbst: mit
+# seiner Rüstung und seinen Effekten, oder ohne sie, wenn damage-counts-armor
+# auf false steht. Die Rüstung am Körper ist nur zu sehen, gerechnet wird mit
+# ihr nie.
 mirror-damage:
-  # Die Rüstung des Spielers verliert beim übertragenen Treffer Haltbarkeit.
-  # Geschützt wird der Spieler in jedem Fall: der Schaden wird immer genau
-  # einmal an ihm berechnet, mit seiner Rüstung und seinen Effekten.
-  damage-armor: true
   # Art der Schadensübertragung: mirror | custom | off
+  # mirror = der echte Treffer, custom = fester Wert, off = kein Schaden
   damage-mode: mirror  # mirror | custom | off
+  # Fester Schaden in Herzen für den Modus "custom". 0 bedeutet kein Schaden,
+  # dann zählen auch Verzauberungen der Waffe nicht mehr dazu.
+  custom-damage-hearts: 0.5
+  # Ob die Rüstung des Spielers beim übertragenen Schaden mitgerechnet wird.
+  # Gilt für beide Modi: bei "mirror" für den echten Treffer, bei "custom" für
+  # custom-damage-hearts.
+  # true  = wie ein echter Treffer. Der Schaden trifft auf den Spieler und
+  #         Rüstung, Schutz-Verzauberungen und Effekte ziehen davon noch ihren
+  #         Teil ab.
+  # false = der Spieler verliert genau den Schaden, um den es geht: bei
+  #         "mirror" den vollen echten Treffer, bei "custom" die eingestellten
+  #         Herzen samt Aufschlag der Waffen-Verzauberung - so, als trüge er
+  #         keine Rüstung. Rüstung, Schutz-Verzauberungen und schadensmindernde
+  #         Effekte ändern daran nichts mehr. Nur ein Treffer, der gar nicht
+  #         erst ankommt - etwa Feuerschutz gegen Feuer oder die
+  #         Unverwundbarkeit nach einem Treffer kurz davor - kostet weiterhin
+  #         nichts bzw. weniger.
+  # Auf die Rüstung selbst hat der Schalter keinen Einfluss: wie stark sie sich
+  # abnutzt, sagt allein damage-armor-mode, sie geht also auch auf false
+  # weiterhin kaputt. Und getragen und sichtbar am Körper bleibt sie ohnehin die
+  # ganze Zeit, egal wie hier gerechnet wird.
+  damage-counts-armor: true
+  # Wie stark der übertragene Treffer die Rüstung des Spielers abnutzt:
+  # mirror | custom | off
+  # mirror = wie der echte Treffer. Genau die Haltbarkeitspunkte, die der
+  #          Treffer außerhalb des Kamera-Modus gekostet hätte, also
+  #          max(1, Schaden/4) pro Teil - und nur bei Schadensarten, die
+  #          überhaupt auf die Rüstung gehen. Sturz, Ertrinken oder Magie
+  #          lassen sie in Ruhe, wie in Vanilla.
+  # custom = jeder übertragene Treffer kostet die unter custom-armor-damage
+  #          eingestellten Haltbarkeitspunkte, egal wie stark er war und woher
+  #          er kam. Nur Teile, die gegen diese Schadensart unempfindlich sind
+  #          (etwa Netherit im Feuer), nutzen sich weiterhin nicht ab.
+  # off    = die Rüstung nutzt sich gar nicht ab.
+  # Der alte Schalter damage-armor wird weiter gelesen, solange dieser
+  # Schlüssel fehlt: true heißt mirror, false heißt off.
+  damage-armor-mode: mirror  # mirror | custom | off
+  # Haltbarkeitspunkte pro Treffer für den Modus "custom". 0 bedeutet keine
+  # Abnutzung. Zum Vergleich: ein Treffer mit 8 Schaden (4 Herzen) kostet in
+  # Vanilla 2 Punkte.
+  custom-armor-damage: 1
+  # Ob die Haltbarkeits-Verzauberung (Unbreaking) bei der Abnutzung mitgerechnet
+  # wird. Gilt für "mirror" und für "custom".
+  # true  = wie in Vanilla. Rüstung verliert je Punkt mit der Wahrscheinlichkeit
+  #         0,6 + 0,4/(Stufe+1) Haltbarkeit, hält mit Haltbarkeit III also rund
+  #         ein Drittel länger.
+  # false = die Verzauberung zählt nicht, jedes Teil verliert die vollen Punkte.
+  respect-unbreaking: true
   # Stößt der Treffer auf den Körper den Spieler zurück? Gilt unabhängig von
   # damage-mode: auch bei "off" oder 0 Herzen wird der Spieler zurückgestoßen,
   # und mit false bleibt er stehen, egal wie viel Schaden übertragen wird.
   knockback: true
-  # Fester Schaden in Herzen für den Modus "custom". 0 bedeutet kein Schaden,
-  # dann zählen auch Verzauberungen der Waffe nicht mehr dazu.
-  custom-damage-hearts: 0.5
   # Schreibt zu jedem übertragenen Treffer eine Zeile mit allen Werten in den
   # Chat des Spielers und ins Log. Nur zum Nachmessen gedacht.
   debug: false

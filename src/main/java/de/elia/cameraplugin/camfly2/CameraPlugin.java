@@ -44,6 +44,8 @@ import org.bukkit.scoreboard.Team;
 import org.bukkit.util.Vector;
 import org.bukkit.NamespacedKey;
 import org.bukkit.persistence.PersistentDataType;
+import de.elia.cameraplugin.mirrordamage.ArmorDamageMode;
+import de.elia.cameraplugin.mirrordamage.ArmorWear;
 import de.elia.cameraplugin.mirrordamage.DamageMode;
 import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
@@ -157,8 +159,14 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     // Damage transfer settings
     private DamageMode damageMode;
-    /** Whether the player's armour loses durability from the transferred hit. */
-    private boolean damageArmor;
+    /** How hard the transferred hit wears down the player's armour. */
+    private ArmorDamageMode armorDamageMode;
+    /** Durability points per hit in the armour mode "custom". */
+    private int customArmorDamage;
+    /** Whether the Unbreaking enchantment counts against that wear. */
+    private boolean respectUnbreaking;
+    /** Whether the player's armour still takes its share off the damage. */
+    private boolean damageCountsArmor;
     /** Whether the transferred hit pushes the player back. */
     private boolean mirrorKnockback;
     /** Whether every transferred hit reports its numbers, for measuring. */
@@ -1210,7 +1218,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      *
      * <p>When the mode passes on no damage at all, the hit still arrives: as
      * the push, if the push is switched on, and as the pause it leaves behind
-     * either way.</p>
+     * either way - and as the wear on the armour, which follows a mode of its
+     * own.</p>
      */
     private void applyMirroredHit(Player owner, double amount, double rawDamage,
                                   org.bukkit.damage.DamageSource source, Entity attacker, int waitedTicks) {
@@ -1219,6 +1228,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         double toughness = attributeValue(owner, Attribute.ARMOR_TOUGHNESS);
         double knockbackResistance = attributeValue(owner, Attribute.KNOCKBACK_RESISTANCE);
         double healthBefore = owner.getHealth();
+        double absorptionBefore = owner.getAbsorptionAmount();
         int framesBefore = owner.getNoDamageTicks();
         double lastBefore = owner.getLastDamage();
         int fireBefore = owner.getFireTicks();
@@ -1230,23 +1240,35 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             // the body standing in for the player. The pause it leaves behind
             // is his as well: without it the next swing of the attacker, or the
             // fire his body stood in, would reach him in the same moment and
-            // take exactly the hearts and the durability this mode is meant to
-            // save him. The push is his too, as long as it is switched on - the
-            // server hands it out only together with damage, so here it has to
-            // be handed out by hand.
+            // take exactly the hearts this mode is meant to save him. The
+            // push is his too, as long as it is switched on - the server hands
+            // it out only together with damage, so here it has to be handed
+            // out by hand.
             if (mirrorKnockback) {
                 owner.setVelocity(new Vector(0, 0, 0));
                 pushAwayFrom(owner, attacker, knockbackResistance);
             }
             owner.setNoDamageTicks(20);
             owner.setLastDamage(rawDamage);
+            // The armour follows its own mode: that no hearts are passed on
+            // does not mean the hit left the armour alone.
+            int wornPoints = wearWornArmor(owner, rawDamage, source);
             reportMirroredHit(owner, amount, source, armor, toughness, knockbackResistance,
-                    healthBefore, speed, waitedTicks, framesBefore, lastBefore, fireBefore);
+                    healthBefore, speed, waitedTicks, framesBefore, lastBefore, fireBefore,
+                    armorNote(false, wornPoints));
             return;
         }
 
+        // The server wears the armour down out of the very damage it deals, and
+        // that number is the only one it can use. It is therefore left to do the
+        // wear in the one case where its number is the right one anyway: the
+        // real hit, mirrored, with the Unbreaking enchantment counting. In every
+        // other case the armour is swapped for copies, the server wears those
+        // out, and the real pieces get the wear their own mode asks for.
+        boolean serverWearsArmor = armorDamageMode == ArmorDamageMode.MIRROR
+                && respectUnbreaking && amount == rawDamage;
         ItemStack[] saved = null;
-        if (!damageArmor) {
+        if (!serverWearsArmor) {
             // Copies protect exactly like the originals, so the player takes
             // the same damage - only the copies wear out, and they are thrown
             // away right afterwards. Taking the armour off instead would not
@@ -1278,14 +1300,22 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         } finally {
             damageImmunityBypass.remove(ownerId);
         }
+        if (!damageCountsArmor) {
+            takeWhatTheArmorKeptAway(owner, amount, healthBefore + absorptionBefore, framesBefore);
+        }
         if (!mirrorKnockback) {
             // The hit is passed on, the push behind it is not: the server has
             // just turned it into movement, and that movement is taken back
             // before anyone sees it.
             owner.setVelocity(new Vector(0, 0, 0));
         }
+        // A dead player keeps nothing of this: what he dropped are the copies,
+        // so wearing the originals down would only be heard and seen for a set
+        // of pieces that is about to be thrown away.
+        int wornPoints = saved == null || owner.isDead() ? 0 : wearArmor(owner, saved, rawDamage, source);
         reportMirroredHit(owner, amount, source, armor, toughness, knockbackResistance,
-                healthBefore, speed, waitedTicks, framesBefore, lastBefore, fireBefore);
+                healthBefore, speed, waitedTicks, framesBefore, lastBefore, fireBefore,
+                armorNote(serverWearsArmor, wornPoints));
         if (attacker instanceof LivingEntity living) {
             ItemStack weapon = living.getEquipment().getItemInMainHand();
             int fireLevel = weapon.getEnchantmentLevel(Enchantment.FIRE_ASPECT);
@@ -1299,10 +1329,103 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 owner.setFireTicks(ticks);
             }
         }
-        if (!damageArmor && saved != null) {
+        if (saved != null && !owner.isDead()) {
             owner.getInventory().setArmorContents(saved);
             owner.updateInventory();
         }
+        // Died from the hit: the copies are what he dropped, and they carry the
+        // same pieces. Handing the originals back into an inventory the server
+        // has just emptied would only put them into the world twice.
+    }
+
+    /**
+     * Wears down the pieces the player has on, for a hit that passes on no
+     * damage of its own. Only that one case needs this - everywhere else the
+     * armour is off his body already, swapped for the copies the server wears
+     * out in its stead.
+     */
+    private int wearWornArmor(Player owner, double rawDamage, org.bukkit.damage.DamageSource source) {
+        if (armorDamageMode == ArmorDamageMode.OFF) {
+            return 0;
+        }
+        ItemStack[] worn = owner.getInventory().getArmorContents();
+        int points = wearArmor(owner, worn, rawDamage, source);
+        if (points > 0) {
+            owner.getInventory().setArmorContents(worn);
+            owner.updateInventory();
+        }
+        return points;
+    }
+
+    /**
+     * Wears the pieces down after {@code mirror-damage.damage-armor-mode}:
+     * after the real hit, after a fixed number of durability points, or not at
+     * all.
+     *
+     * @return the durability points every piece was asked to give up
+     */
+    private int wearArmor(Player owner, ItemStack[] armor, double rawDamage,
+                          org.bukkit.damage.DamageSource source) {
+        return switch (armorDamageMode) {
+            case MIRROR -> ArmorWear.wearMirrored(owner, armor, rawDamage, source, respectUnbreaking);
+            case CUSTOM -> ArmorWear.wearFixed(owner, armor, customArmorDamage, source, respectUnbreaking);
+            case OFF -> 0;
+        };
+    }
+
+    /**
+     * Takes off afterwards what the armour kept away, so that the hit costs
+     * exactly what it is worth: the hearts "custom" is set to, or the whole of
+     * the real hit under "mirror".
+     *
+     * <p>Only reached with {@code damage-counts-armor} switched off. The hit is
+     * still dealt the normal way first, with its damage source, its push and
+     * the death message it brings; what the armour, the protection enchantments
+     * or an effect took off it is then taken from the player by hand.</p>
+     *
+     * <p>What this does not touch is the armour itself: how hard the hit wears
+     * it down is {@code damage-armor-mode}'s to say alone, so the pieces still
+     * take their durability - and on the body they are worn and shown the whole
+     * time either way.</p>
+     *
+     * <p>A hit that does not land at all stays at nothing, though: something
+     * cancelled it outright - fire resistance against fire, a protected region -
+     * and that is not the armour taking its share. Neither is the
+     * invulnerability of a hit the player had just taken, which this one is
+     * meant to run into the same way it would outside camera mode.</p>
+     */
+    private void takeWhatTheArmorKeptAway(Player owner, double target, double poolBefore,
+                                          int framesBefore) {
+        if (owner.isDead() || framesBefore > 0) {
+            return;
+        }
+        double dealt = poolBefore - (owner.getHealth() + owner.getAbsorptionAmount());
+        if (dealt <= 0 || dealt >= target - 1.0E-4) {
+            return;
+        }
+        double missing = target - dealt;
+        double absorption = owner.getAbsorptionAmount();
+        if (absorption > 0) {
+            // Absorption hearts stand in front of the real ones here as well.
+            double taken = Math.min(absorption, missing);
+            owner.setAbsorptionAmount(absorption - taken);
+            missing -= taken;
+        }
+        if (missing > 0) {
+            owner.setHealth(Math.max(0.0, owner.getHealth() - missing));
+        }
+    }
+
+    /** How the wear on the armour reads in the measuring line. */
+    private String armorNote(boolean serverWears, int points) {
+        if (serverWears) {
+            return "mirror, vom Server";
+        }
+        return switch (armorDamageMode) {
+            case MIRROR -> "mirror, " + points + " Punkte";
+            case CUSTOM -> "custom, " + points + " Punkte";
+            case OFF -> "off";
+        };
     }
 
     /**
@@ -1342,17 +1465,20 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private void reportMirroredHit(Player owner, double amount, org.bukkit.damage.DamageSource source,
                                    double armor, double toughness, double knockbackResistance,
                                    double healthBefore, double speed, int waitedTicks,
-                                   int framesBefore, double lastBefore, int fireBefore) {
+                                   int framesBefore, double lastBefore, int fireBefore,
+                                   String armorNote) {
         if (!mirrorDebug) {
             return;
         }
         sendMirrorDebug(owner, String.format(Locale.ROOT,
-                "uebertragen: roh %.3f (%s) | Ruestung %.1f, Haerte %.1f, KB-Schutz %.2f"
+                "uebertragen: roh %.3f (%s) | Ruestung %.1f (zaehlt %s), Haerte %.1f, KB-Schutz %.2f"
                         + " | Leben %.2f -> %.2f (-%.3f) | Tempo %.3f | Wartezeit %d Ticks"
-                        + " | Unverwundbar %d, letzter Treffer %.2f, Feuer %d | Rueckstoss %s",
-                amount, damageTypeName(source), armor, toughness, knockbackResistance,
+                        + " | Unverwundbar %d, letzter Treffer %.2f, Feuer %d | Rueckstoss %s"
+                        + " | Abnutzung %s",
+                amount, damageTypeName(source), armor, damageCountsArmor ? "an" : "aus",
+                toughness, knockbackResistance,
                 healthBefore, owner.getHealth(), healthBefore - owner.getHealth(), speed, waitedTicks,
-                framesBefore, lastBefore, fireBefore, mirrorKnockback ? "an" : "aus"));
+                framesBefore, lastBefore, fireBefore, mirrorKnockback ? "an" : "aus", armorNote));
     }
 
     /**
@@ -1855,7 +1981,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         camSafetyMessage = config.getString("messages.cam-safety",
                 "§cDu kannst den Cam-Modus nicht starten! Du musst noch %seconds% Sekunden in Sicherheit bleiben.");
 
-        damageArmor = config.getBoolean("mirror-damage.damage-armor", true);
         mirrorKnockback = config.getBoolean("mirror-damage.knockback", true);
         mirrorDebug = config.getBoolean("mirror-damage.debug", false);
         String modeRaw = config.getChoice("mirror-damage.damage-mode", "mirror", "mirror", "custom", "off", "false");
@@ -1867,10 +1992,31 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             damageMode = DamageMode.MIRROR;
         }
         customDamageHearts = config.getDouble("mirror-damage.custom-damage-hearts", 0.5, 0.0);
+        // Used to be called custom-damage-counts-armor, back when it only had a
+        // say over the custom damage. A file that still carries the old name
+        // keeps its setting, it is simply read as the default of the new one.
+        damageCountsArmor = config.getBoolean("mirror-damage.damage-counts-armor",
+                config.getBoolean("mirror-damage.custom-damage-counts-armor", true));
+        // The mode grew out of the old truth value damage-armor, so a config
+        // file that still carries only that one keeps saying what it said:
+        // true wears the armour down, false leaves it alone.
+        String armorDefault = config.getBoolean("mirror-damage.damage-armor", true) ? "mirror" : "off";
+        String armorRaw = config.getChoice("mirror-damage.damage-armor-mode", armorDefault,
+                "mirror", "custom", "off", "true", "false");
+        if ("custom".equalsIgnoreCase(armorRaw)) {
+            armorDamageMode = ArmorDamageMode.CUSTOM;
+        } else if ("false".equalsIgnoreCase(armorRaw) || "off".equalsIgnoreCase(armorRaw)) {
+            armorDamageMode = ArmorDamageMode.OFF;
+        } else {
+            armorDamageMode = ArmorDamageMode.MIRROR;
+        }
+        customArmorDamage = config.getInt("mirror-damage.custom-armor-damage", 1, 0);
+        respectUnbreaking = config.getBoolean("mirror-damage.respect-unbreaking", true);
         // Read one by one while the server runs, so a wrong value would show up
         // again and again instead of once. Checked here in one go instead.
         config.checkBooleanSection("message-settings");
         warnAboutOldArmorStandSection();
+        warnAboutOldDamageArmorKey();
         if (camFireGuard != null) {
             camFireGuard.loadConfig(config);
         }
@@ -1889,6 +2035,20 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         getLogger().warning("Der Abschnitt \"armorstand\" wird nicht mehr gelesen: name-visible und visible"
                 + " stehen jetzt unter \"body\", gravity ist durch body.movement-sensitivity ersetzt.");
+    }
+
+    /**
+     * Says once that {@code mirror-damage.damage-armor} has become a mode of
+     * its own. The truth value is still read, as the default of the new key,
+     * so that a config file from an older version keeps behaving the way it
+     * reads - but only the new key knows the third mode.
+     */
+    private void warnAboutOldDamageArmorKey() {
+        if (!getConfig().isSet("mirror-damage.damage-armor")) {
+            return;
+        }
+        getLogger().warning("mirror-damage.damage-armor heisst jetzt damage-armor-mode und kennt drei Werte:"
+                + " mirror, custom und off. true wird als mirror gelesen, false als off.");
     }
 
     /**
