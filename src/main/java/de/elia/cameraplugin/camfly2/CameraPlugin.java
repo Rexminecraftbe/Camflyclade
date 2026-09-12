@@ -89,6 +89,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private boolean showOwnParticles;
     private final Map<UUID, BukkitRunnable> particleTasks = new HashMap<>();
     private final Map<UUID, BukkitRunnable> sightGlowTasks = new HashMap<>();
+    private final Map<UUID, BukkitRunnable> mobTargetTasks = new HashMap<>();
     private final Map<UUID, BukkitRunnable> actionBarTasks = new HashMap<>();
     private final Map<UUID, BukkitRunnable> offMessageTasks = new HashMap<>();
     private final Map<UUID, BukkitRunnable> timeLimitTasks = new HashMap<>();
@@ -141,6 +142,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      */
     private static final long SIGHT_GLOW_INTERVAL = 5L;
 
+    /**
+     * How often {@code body.mob-target} looks around the body for hostile mobs
+     * to send after it, in ticks.
+     */
+    private static final long MOB_TARGET_INTERVAL = 20L;
+
     // Configurable values
     private boolean maxDistanceEnabled;
     private double maxDistance;
@@ -151,6 +158,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private MovementSensitivity movementSensitivity;
     /** {@code body.move-threshold} squared, so the square root can be skipped. */
     private double moveThresholdSquared;
+    /** Whether hostile mobs go for the body on their own. */
+    private boolean mobTargetEnabled;
+    /** How far the body draws hostile mobs to itself, in blocks. */
+    private double mobTargetRadius;
     private VisibilityMode playerVisibilityMode;
     private boolean allowInvisibilityPotion;
     private GlowMode glowMode;
@@ -418,6 +429,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         // level and only one of them does anything.
         startBodyMovementCheck(player, damageTarget);
         startBodyPin(player, body, hitbox);
+        startMobTargeting(player, damageTarget);
         addPlayerToNoCollisionTeam(player);
         // Team wurde evtl. gerade neu erstellt -> alle Mitglieder neu setzen.
         refreshNoCollisionTeam();
@@ -671,6 +683,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             return;
         }
         cancelTimeLimit(player);
+        stopMobTargeting(player);
         LivingEntity body = cameraData.getBody();
         Mannequin hitbox = cameraData.getHitbox();
 
@@ -840,6 +853,80 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 }
             }
         }.runTaskTimer(this, 1L, 1L);
+    }
+
+    /**
+     * Sends the hostile mobs around the body after it, as long as
+     * {@code body.mob-target} is switched on.
+     *
+     * <p>Without it the body stands there untouched: no mob picks a mannequin
+     * as its target by itself. Only the ones that were already after the player
+     * follow his body, and they leave it again as soon as something else
+     * catches their eye. With the setting on the body stands in for the player
+     * here as well - what would have come for him comes for it.</p>
+     *
+     * <p>The target is set again and again, not once: a mob works out its
+     * target anew every so often and would drop a target it did not pick
+     * itself.</p>
+     *
+     * @param damageTarget the mannequin that takes the hits, see
+     *                     {@link CameraData#getDamageTarget()}
+     */
+    private void startMobTargeting(Player player, LivingEntity damageTarget) {
+        if (!mobTargetEnabled || mobTargetRadius <= 0.0) {
+            return;
+        }
+        stopMobTargeting(player);
+        BukkitRunnable task = new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (!cameraPlayers.containsKey(player.getUniqueId()) || !player.isOnline()
+                        || damageTarget.isDead()) {
+                    this.cancel();
+                    mobTargetTasks.remove(player.getUniqueId(), this);
+                    return;
+                }
+                sendMobsAfterBody(player, damageTarget);
+            }
+        };
+        task.runTaskTimer(this, 0L, MOB_TARGET_INTERVAL);
+        mobTargetTasks.put(player.getUniqueId(), task);
+    }
+
+    private void stopMobTargeting(Player player) {
+        BukkitRunnable task = mobTargetTasks.remove(player.getUniqueId());
+        if (task != null) {
+            task.cancel();
+        }
+    }
+
+    /**
+     * One pass of {@link #startMobTargeting(Player, LivingEntity)}: every
+     * hostile mob within {@code body.mob-target-radius} gets the body as its
+     * target.
+     *
+     * <p>A mob that is busy with somebody else keeps the target it has - that
+     * fight is not ours to take away. Left out on purpose: the warden, which
+     * {@link #onWardenTarget(EntityTargetLivingEntityEvent)} keeps off the body
+     * and off the camera player alike, and a mob whose AI is switched off.</p>
+     */
+    private void sendMobsAfterBody(Player player, LivingEntity damageTarget) {
+        for (Entity entity : damageTarget.getNearbyEntities(mobTargetRadius, mobTargetRadius, mobTargetRadius)) {
+            if (!(entity instanceof Mob mob) || !(entity instanceof Enemy) || mob instanceof Warden) {
+                continue;
+            }
+            if (!mob.isAware()) {
+                continue;
+            }
+            LivingEntity current = mob.getTarget();
+            if (damageTarget.equals(current)) {
+                continue;
+            }
+            if (current != null && !current.isDead() && !current.equals(player)) {
+                continue;
+            }
+            mob.setTarget(damageTarget);
+        }
     }
 
     /** Teleports the entity back to its spot when something pushed it away. */
@@ -1960,6 +2047,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 config.getInt("body.movement-sensitivity", MovementSensitivity.NORMAL.getId()));
         double moveThreshold = config.getDouble("body.move-threshold", 0.05, MIN_MOVE_THRESHOLD);
         moveThresholdSquared = moveThreshold * moveThreshold;
+        mobTargetEnabled = config.getBoolean("body.mob-target", false);
+        mobTargetRadius = config.getDouble("body.mob-target-radius", 16.0, 0.0);
         particleHeight = config.getDouble("camera-particles.height", 1.0);
         particlesPerTick = config.getInt("camera-particles.particles-per-tick", 5, 0);
         showOwnParticles = config.getBoolean("camera-particles.show-own-particles", false);

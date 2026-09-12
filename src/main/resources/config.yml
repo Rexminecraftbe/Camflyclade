@@ -178,6 +178,26 @@ body:
   # in Blöcken. Gilt bei beiden Körpertypen und ist auf Stufe 0 wirkungslos.
   # Werte unter 0.01 werden automatisch auf 0.01 angehoben.
   move-threshold: 0.05
+  # Ob feindliche Mobs den Körper von sich aus angreifen
+  # false = Mobs lassen den Körper in Ruhe. Von selbst sucht sich kein Mob ein
+  #         Mannequin als Ziel; nur wer den Spieler schon im Visier hatte, wird
+  #         beim Start auf den Körper umgelenkt und verliert ihn wieder, sobald
+  #         ihn etwas anderes ablenkt.
+  # true  = der Körper steht auch hier für den Spieler ein: Jeder feindliche Mob
+  #         im Umkreis von mob-target-radius nimmt ihn sich als Ziel, kommt
+  #         heran und schlägt zu. Der Treffer beendet wie jeder andere den
+  #         Kamera-Modus und wird nach den Regeln unter mirror-damage auf den
+  #         Spieler übertragen.
+  #         Mobs, die gerade jemand anderen angreifen, behalten ihr Ziel, und
+  #         Mobs ohne KI bleiben stehen. Ausgenommen ist der Warden: Er lässt
+  #         Körper und Kamera-Spieler ohnehin in Ruhe.
+  # Gilt für beide Körpertypen und auch für einen unsichtbaren Körper - getroffen
+  # wird immer das Mannequin, das an der Stelle des Spielers steht.
+  mob-target: false
+  # Umkreis in Blöcken, in dem Mobs auf den Körper aufmerksam werden. 0 schaltet
+  # mob-target ab. Zum Vergleich: ein Zombie bemerkt einen Spieler auf rund
+  # 16 Blöcke.
+  mob-target-radius: 16.0
 
 # Begrenzung der Dauer des Kamera-Modus
 time-limit:
