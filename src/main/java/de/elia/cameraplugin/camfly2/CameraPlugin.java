@@ -90,6 +90,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private final Map<UUID, BukkitRunnable> cooldownTasks = new HashMap<>();
     private final Map<UUID, Long> lastDamageTimes = new HashMap<>();
     private boolean shuttingDown = false;
+    /** Whether the missing way to hide the "NPC" line has already been reported. */
+    private boolean mannequinLabelReported = false;
     private NamespacedKey bodyKey;
     private NamespacedKey hitboxKey;
     private NamespacedKey hiddenArmorAsset;
@@ -470,7 +472,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         hitbox.setInvulnerable(false);
         hitbox.setCustomName(getMessage("hitbox.name-format").replace("{player}", player.getName()));
         hitbox.setCustomNameVisible(false);
-        MannequinLabel.hideDescription(hitbox);
+        hideMannequinDescription(hitbox);
         hitbox.setCanPickupItems(false);
         return hitbox;
     }
@@ -503,14 +505,29 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     /** Creates a mannequin that shows the player's own skin. */
     private Mannequin spawnMannequinBody(Player player, Location location) {
         Mannequin mannequin = (Mannequin) location.getWorld().spawnEntity(location, EntityType.MANNEQUIN);
-        if (!MannequinSkin.apply(mannequin, player, bodyNameVisible)) {
+        if (!MannequinSkin.apply(mannequin, player)) {
             getLogger().warning("Der Skin von " + player.getName()
                     + " konnte nicht auf das Mannequin übertragen werden, es benutzt den Standard-Skin.");
         }
         applyMovementSensitivity(mannequin);
-        // Without this the grey "NPC" line sits under the body's name.
-        MannequinLabel.hideDescription(mannequin);
+        hideMannequinDescription(mannequin);
         return mannequin;
+    }
+
+    /**
+     * Takes the grey "NPC" line off a mannequin, the line the client draws
+     * under its name.
+     *
+     * <p>Reported once when this server's API offers no way to do it: the line
+     * would otherwise sit under every body without a word about why.</p>
+     */
+    private void hideMannequinDescription(Mannequin mannequin) {
+        if (MannequinLabel.hideDescription(mannequin) || mannequinLabelReported) {
+            return;
+        }
+        mannequinLabelReported = true;
+        getLogger().warning("Die Zeile \"NPC\" unter dem Namen des Mannequins konnte nicht abgeschaltet werden."
+                + " Setter: " + MannequinLabel.describeSetter());
     }
 
     /**
@@ -529,14 +546,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Puts the configured name above the body or takes it away for good.
-     *
-     * <p>An armour stand only ever shows the name it was given, so the flag
-     * alone does the job there. A mannequin is drawn like a player and carries
-     * a second name: the one of the profile its skin comes from, which is shown
-     * whatever the flag says. A body without a name therefore gets no name to
-     * begin with, and {@link MannequinSkin} keeps the profile name away from
-     * the mannequin on top of that.</p>
+     * Puts the configured name above the body, or leaves it without one. The
+     * grey line a mannequin draws under that name is taken away separately, by
+     * {@link #hideMannequinDescription(Mannequin)}.
      */
     private void applyBodyName(LivingEntity body, Player player) {
         body.setCustomName(bodyNameVisible
