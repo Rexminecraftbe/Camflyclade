@@ -235,9 +235,19 @@ cam-safety:
 
 # Einstellungen zur Übertragung von Schaden
 mirror-damage:
-  # Verwendet die echte Rüstung des Spielers
+  # Die Rüstung des Spielers verliert beim übertragenen Treffer Haltbarkeit.
+  # Geschützt wird der Spieler in jedem Fall: der Schaden wird immer genau
+  # einmal an ihm berechnet, mit seiner Rüstung und seinen Effekten.
   damage-armor: true
   # Art der Schadensübertragung: mirror | custom | off
   damage-mode: mirror  # mirror | custom | off
-  # Fester Schaden in Herzen für den Modus "custom"
+  # Stößt der Treffer auf den Körper den Spieler zurück? Gilt unabhängig von
+  # damage-mode: auch bei "off" oder 0 Herzen wird der Spieler zurückgestoßen,
+  # und mit false bleibt er stehen, egal wie viel Schaden übertragen wird.
+  knockback: true
+  # Fester Schaden in Herzen für den Modus "custom". 0 bedeutet kein Schaden,
+  # dann zählen auch Verzauberungen der Waffe nicht mehr dazu.
   custom-damage-hearts: 0.5
+  # Schreibt zu jedem übertragenen Treffer eine Zeile mit allen Werten in den
+  # Chat des Spielers und ins Log. Nur zum Nachmessen gedacht.
+  debug: false
