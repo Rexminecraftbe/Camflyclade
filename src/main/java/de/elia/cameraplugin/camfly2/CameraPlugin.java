@@ -82,6 +82,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private int particlesPerTick;
     private boolean showOwnParticles;
     private final Map<UUID, BukkitRunnable> particleTasks = new HashMap<>();
+    private final Map<UUID, BukkitRunnable> sightGlowTasks = new HashMap<>();
     private final Map<UUID, BukkitRunnable> actionBarTasks = new HashMap<>();
     private final Map<UUID, BukkitRunnable> offMessageTasks = new HashMap<>();
     private final Map<UUID, BukkitRunnable> timeLimitTasks = new HashMap<>();
@@ -120,6 +121,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      */
     private static final int MAX_CHAT_WARNINGS = 8;
 
+    /**
+     * How often {@code glowing-outline: sight} checks whether somebody has the
+     * camera player in sight, in ticks.
+     */
+    private static final long SIGHT_GLOW_INTERVAL = 5L;
+
     // Configurable values
     private boolean maxDistanceEnabled;
     private double maxDistance;
@@ -133,7 +140,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private double moveThresholdSquared;
     private VisibilityMode playerVisibilityMode;
     private boolean allowInvisibilityPotion;
-    private boolean glowingOutline;
+    private GlowMode glowMode;
     private boolean allowLavaFlight;
     private Object Sound;
 
@@ -160,6 +167,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private String camSafetyMessage;
 
     private enum VisibilityMode { CAM, ALL, NONE }
+
+    /** The values of {@code camera-mode.glowing-outline}: true, false and sight. */
+    private enum GlowMode { ALWAYS, OFF, SIGHT }
 
     @Override
     public void onEnable() {
@@ -259,6 +269,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             task.cancel();
         }
         particleTasks.clear();
+        for (BukkitRunnable task : sightGlowTasks.values()) {
+            task.cancel();
+        }
+        sightGlowTasks.clear();
         for (BukkitRunnable task : actionBarTasks.values()) {
             task.cancel();
         }
@@ -332,11 +346,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         player.setGameMode(GameMode.CREATIVE);
         player.setAllowFlight(true);
         player.setFlying(true);
-        if (glowingOutline && playerVisibilityMode != VisibilityMode.NONE) {
+        if (glowMode == GlowMode.ALWAYS && playerVisibilityMode != VisibilityMode.NONE) {
             // The invisibility takes the body away, the outline puts a visible
             // shape back - that is what everyone else sees of the camera player.
             // In mode NONE nobody is meant to see him, so an outline would give
-            // away exactly what that mode hides.
+            // away exactly what that mode hides. For "sight" the outline is
+            // switched by startSightGlow instead.
             player.setGlowing(true);
         }
 
@@ -370,6 +385,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
 
         startCameraParticles(player);
+        startSightGlow(player);
         startActionBar(player);
         camFireGuard.startFor(player);
         // The entity taking the hits is the mannequin for both body types, so the
@@ -594,6 +610,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         // Zuerst zum Körper teleportieren
         player.teleport(body.getLocation());
         stopCameraParticles(player);
+        stopSightGlow(player);
         stopActionBar(player);
         if (!shuttingDown) {
             showActionBarOffMessage(player);
@@ -798,6 +815,69 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     private void stopCameraParticles(Player player) {
         BukkitRunnable task = particleTasks.remove(player.getUniqueId());
+        if (task != null) {
+            task.cancel();
+        }
+    }
+
+    /**
+     * Outline for {@code glowing-outline: sight}: the camera player only glows
+     * while at least one other player looks at him without a block in between.
+     *
+     * <p>Glowing is a single flag on the entity and every client draws it
+     * through walls, so no viewer can be left out of it. Once one player has
+     * him in sight, the ones behind a wall see the outline as well. What this
+     * does prevent is the outline giving him away while nobody sees him.</p>
+     */
+    private void startSightGlow(Player player) {
+        if (glowMode != GlowMode.SIGHT || playerVisibilityMode == VisibilityMode.NONE) {
+            return;
+        }
+        stopSightGlow(player);
+        BukkitRunnable task = new BukkitRunnable() {
+            @Override
+            public void run() {
+                CameraData data = cameraPlayers.get(player.getUniqueId());
+                if (data == null || !player.isOnline()) {
+                    this.cancel();
+                    sightGlowTasks.remove(player.getUniqueId(), this);
+                    return;
+                }
+                // A glow he already had before camera mode is left alone.
+                boolean glowing = data.getOriginalGlowing() || isInSightOfAnyone(player);
+                if (player.isGlowing() != glowing) {
+                    player.setGlowing(glowing);
+                }
+            }
+        };
+        task.runTaskTimer(this, 0L, SIGHT_GLOW_INTERVAL);
+        sightGlowTasks.put(player.getUniqueId(), task);
+    }
+
+    /**
+     * Whether another player has the camera player in sight right now. Only
+     * players he is shown to count, which leaves out everybody outside camera
+     * mode in mode CAM. Spectators do not count either: they are not part of
+     * the game and would switch the outline on for everybody else.
+     */
+    private boolean isInSightOfAnyone(Player camPlayer) {
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            if (viewer.equals(camPlayer)
+                    || viewer.getGameMode() == GameMode.SPECTATOR
+                    || !viewer.getWorld().equals(camPlayer.getWorld())
+                    || !viewer.canSee(camPlayer)) {
+                continue;
+            }
+            // Eye to eye, the same check hostile mobs use to spot a player.
+            if (viewer.hasLineOfSight(camPlayer)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void stopSightGlow(Player player) {
+        BukkitRunnable task = sightGlowTasks.remove(player.getUniqueId());
         if (task != null) {
             task.cancel();
         }
@@ -1500,7 +1580,13 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             default -> VisibilityMode.CAM;
         };
         allowInvisibilityPotion = config.getBoolean("camera-mode.allow_invisibility_potion", true);
-        glowingOutline = config.getBoolean("camera-mode.glowing-outline", true);
+        String glow = config.getChoice("camera-mode.glowing-outline", "true", "true", "false", "sight")
+                .toLowerCase();
+        glowMode = switch (glow) {
+            case "false" -> GlowMode.OFF;
+            case "sight" -> GlowMode.SIGHT;
+            default -> GlowMode.ALWAYS;
+        };
         allowLavaFlight = config.getBoolean("camera-mode.allow_lava_flight", false);
         cameraHeadEnabled = config.getBoolean("camera-head.enabled", false);
         armorStandNameVisible = config.getBoolean("armorstand.name-visible", true);
