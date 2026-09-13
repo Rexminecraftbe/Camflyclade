@@ -162,10 +162,11 @@ camera-mode:
 body:
   # Welche Entität als Körper benutzt wird
   # 1 = Rüstungsständer mit dem Kopf des Spielers, dazu ein unsichtbares
-  #     Mannequin an derselben Stelle, das die Treffer abbekommt.
-  #     Auch seine Rüstung wird nicht angezeigt (kein Resourcepack nötig).
-  # 2 = sichtbares Mannequin mit dem Skin des Spielers, das die Rüstung
-  #     des Spielers auch sichtbar trägt
+  #     Mannequin an derselben Stelle, das die Treffer abbekommt. Die Rüstung
+  #     des Mannequins wird nie angezeigt; was man sieht, trägt der
+  #     Rüstungsständer, siehe armor-visible.
+  # 2 = sichtbares Mannequin mit dem Skin des Spielers, das die Rüstung des
+  #     Spielers trägt, siehe armor-visible
   # Bei einem unbekannten Wert wird 1 verwendet.
   type: 1
   # Zeigt den Namen über dem Körper an. Gilt für beide Typen.
@@ -180,7 +181,28 @@ body:
   # anzeigen, und der soll stehen bleiben.
   # Der Name über dem Körper bleibt in beiden Fällen stehen, den schaltet
   # name-visible ab.
+  # Die Rüstung bekommt ein unsichtbarer Körper aus demselben Grund nicht
+  # angezogen wie den Kopf, siehe armor-visible.
   visible: true
+  # Ob die Rüstung des Spielers am Körper zu sehen ist.
+  # true  = sie wird angezeigt. Bei Typ 1 trägt der Rüstungsständer Brustplatte,
+  #         Hose und Schuhe sichtbar, den Helm aber nicht: In dem Slot steckt
+  #         schon der Kopf des Spielers, an dem man den Körper erkennt. Den Helm
+  #         trägt weiterhin das unsichtbare Mannequin im Körper. Bei Typ 2 trägt
+  #         das Mannequin alle vier Teile sichtbar.
+  # false = die Rüstung wird nicht gezeichnet. Angezogen ist sie trotzdem, man
+  #         sieht sie nur nicht mehr - ein Resourcepack braucht es dafür nicht.
+  #         Klappt es auf diesem Server nicht, steht eine Warnung im Log und die
+  #         Rüstung bleibt sichtbar.
+  # Bei visible: false wird die Rüstung gar nicht erst angezogen, egal was hier
+  # steht: Sie wird mit dem Körper nicht unsichtbar, sondern hinge frei in der
+  # Luft - genau wie der Kopf, den ein unsichtbarer Körper deshalb auch nicht
+  # bekommt.
+  # Der Schalter ist reine Optik. Was ein Treffer den Spieler kostet und wie
+  # stark sich seine Rüstung abnutzt, wird immer an ihm selbst und mit seiner
+  # echten Rüstung gerechnet, siehe mirror-damage. Auch ein Mobkopf zählt
+  # weiter mit, siehe mob-target-heads.
+  armor-visible: true
   # Wie empfindlich der Körper auf Verschiebung reagiert
   # 0 = reagiert auf gar nichts. Körper und Mannequin stehen fest, weder
   #     Schwerkraft noch Wasser noch Kolben bewegen sie. Damit ist die
@@ -250,8 +272,9 @@ body:
   # Skelette. Welcher Kopf zu welchem Mob gehört, steht im Namen des Kopfes,
   # deshalb zählt auch der Kopf eines Mobs aus einer neueren Version.
   # Gilt in allen Modi, also auch für die Reichweite aus mob-target-radius, und
-  # bei beiden Körpertypen: Der Körper trägt den Helm des Spielers, bei Typ 1
-  # unsichtbar, aber angezogen.
+  # bei beiden Körpertypen: Das Mannequin, das die Treffer nimmt, trägt den Helm
+  # des Spielers immer - bei Typ 1 unsichtbar, und auch dann, wenn
+  # armor-visible auf false steht.
   mob-target-heads: true
 
 # Begrenzung der Dauer des Kamera-Modus
@@ -420,8 +443,8 @@ cam-area:
 # auf "off".
 # Gerechnet wird in jedem Fall genau einmal, und zwar am Spieler selbst: mit
 # seiner Rüstung und seinen Effekten, oder ohne sie, wenn damage-counts-armor
-# auf false steht. Die Rüstung am Körper ist nur zu sehen, gerechnet wird mit
-# ihr nie.
+# auf false steht. Die Rüstung am Körper ist nur Ansichtssache
+# (body.armor-visible), gerechnet wird mit ihr nie.
 mirror-damage:
   # Art der Schadensübertragung: mirror | custom | off
   # mirror = der echte Treffer, custom = fester Wert, off = kein Schaden
@@ -445,8 +468,9 @@ mirror-damage:
   #         nichts bzw. weniger.
   # Auf die Rüstung selbst hat der Schalter keinen Einfluss: wie stark sie sich
   # abnutzt, sagt allein damage-armor-mode, sie geht also auch auf false
-  # weiterhin kaputt. Und getragen und sichtbar am Körper bleibt sie ohnehin die
-  # ganze Zeit, egal wie hier gerechnet wird.
+  # weiterhin kaputt. Und angezogen bleibt sie am Körper ohnehin die ganze Zeit,
+  # egal wie hier gerechnet wird; ob man sie dort sieht, sagt allein
+  # body.armor-visible.
   damage-counts-armor: true
   # Wie stark der übertragene Treffer die Rüstung des Spielers abnutzt:
   # mirror | custom | off

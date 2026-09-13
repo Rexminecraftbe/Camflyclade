@@ -196,6 +196,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private int distanceWarningCooldown;
     private boolean bodyNameVisible;
     private boolean bodyVisible;
+    /** Whether the armour the body wears is drawn, {@code body.armor-visible}. */
+    private boolean bodyArmorVisible;
     private BodyType bodyType;
     private MovementSensitivity movementSensitivity;
     /** {@code body.move-threshold} squared, so the square root can be skipped. */
@@ -421,7 +423,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
         Location playerLocation = player.getLocation();
 
-        LivingEntity body = spawnCameraBody(player, playerLocation, originalRemainingAir);
+        LivingEntity body = spawnCameraBody(player, playerLocation, originalRemainingAir, originalArmor);
 
         // A mannequin takes the hits for both body types and is the entity the
         // movement check watches. It carries the player's armour so the body
@@ -431,11 +433,17 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (usesMannequinBody()) {
             EntityEquipment bodyEquipment = body.getEquipment();
             if (bodyEquipment != null) {
-                bodyEquipment.setArmorContents(createMirrorArmor(originalArmor));
+                // Here body and hitbox are one and the same entity, so it wears
+                // the armour either way: shown the way the player wears it, or
+                // with its rendering taken away.
+                bodyEquipment.setArmorContents(showsBodyArmor()
+                        ? createMirrorArmor(originalArmor)
+                        : createHiddenArmor(originalArmor));
             }
         } else {
             // The mannequin next to the armour stand is invisible, so it wears
-            // copies whose armour is not rendered either.
+            // copies whose armour is not rendered either. What is seen of the
+            // armour hangs on the armour stand, see spawnArmorStandBody.
             hitbox = spawnHitbox(player, playerLocation, createHiddenArmor(originalArmor));
             hitbox.teleport(body.getLocation());
         }
@@ -534,8 +542,26 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Copies the player's armour for the invisible mannequin and takes away its
-     * rendering, so that the pieces do not float in front of the armour stand.
+     * Copies the armour the armour stand of body type 1 shows. Everything but
+     * the helmet: the player's head sits in that slot and is what the body is
+     * recognised by. The helmet itself is worn by the mannequin standing in the
+     * body, hidden, so a mob head still shortens the range of its kind of mob.
+     */
+    private ItemStack[] createArmorStandArmor(ItemStack[] originalArmor) {
+        ItemStack[] worn = createMirrorArmor(originalArmor);
+        for (int i = 0; i < worn.length && i < ARMOR_SLOTS.length; i++) {
+            if (ARMOR_SLOTS[i] == EquipmentSlot.HEAD) {
+                worn[i] = null;
+            }
+        }
+        return worn;
+    }
+
+    /**
+     * Copies the player's armour for a mannequin that is not to show it and
+     * takes away its rendering: the invisible mannequin, whose pieces would
+     * otherwise float in front of the armour stand, and the visible one when
+     * {@code body.armor-visible} is off.
      *
      * <p>Copies are enough here: the body never really takes the damage, its
      * damage event is cancelled. The reduction and the durability are both
@@ -556,7 +582,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             hiddenArmor[i] = copy;
         }
         if (stillVisible) {
-            getLogger().warning("Die Rüstung des unsichtbaren Mannequins konnte nicht ausgeblendet werden, "
+            getLogger().warning("Die Rüstung des Mannequins konnte nicht ausgeblendet werden, "
                     + "sie bleibt am Körper sichtbar. Setter: " + EquipmentVisibility.describeAssetSetter());
         }
         return hiddenArmor;
@@ -598,11 +624,16 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * either a mannequin that uses the player's own skin or an armour stand
      * wearing his head, see {@link #usesMannequinBody()}. An invisible body
      * gets neither the skin nor the head, only its name stays above it.
+     *
+     * <p>The armour stand puts the armour on right here, the mannequin gets it
+     * from the caller: it is the entity taking the hits as well and therefore
+     * wears the pieces even when they are not meant to be seen.</p>
      */
-    private LivingEntity spawnCameraBody(Player player, Location location, int remainingAir) {
+    private LivingEntity spawnCameraBody(Player player, Location location, int remainingAir,
+                                         ItemStack[] originalArmor) {
         LivingEntity body = usesMannequinBody()
                 ? spawnMannequinBody(player, location)
-                : spawnArmorStandBody(player, location);
+                : spawnArmorStandBody(player, location, originalArmor);
 
         body.setRemainingAir(remainingAir);
         body.getPersistentDataContainer().set(bodyKey, PersistentDataType.INTEGER, 1);
@@ -662,6 +693,23 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
+     * Whether the armour of the player is drawn on his body,
+     * {@code body.armor-visible}.
+     *
+     * <p>An invisible body never shows it, whatever the setting says: armour
+     * does not turn invisible along with what wears it, the pieces would hang
+     * in the air on their own - the same reason an invisible armour stand is
+     * left without the player's head.</p>
+     *
+     * <p>Purely a matter of looks: the hit is calculated on the player himself
+     * with his own armour, and his own armour is what wears out, see
+     * {@link #onBodyDamage(EntityDamageEvent)}.</p>
+     */
+    private boolean showsBodyArmor() {
+        return bodyArmorVisible && bodyVisible;
+    }
+
+    /**
      * Puts the configured name above the body, or leaves it without one. The
      * grey line a mannequin draws under that name is taken away separately, by
      * {@link #hideMannequinDescription(Mannequin)}.
@@ -709,8 +757,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         return !movementSensitivity.isFixed();
     }
 
-    /** Creates the classic body: an armour stand wearing the player's head. */
-    private ArmorStand spawnArmorStandBody(Player player, Location location) {
+    /**
+     * Creates the classic body: an armour stand wearing the player's head, and
+     * his armour with it when {@link #showsBodyArmor()} says so.
+     */
+    private ArmorStand spawnArmorStandBody(Player player, Location location, ItemStack[] originalArmor) {
         ArmorStand armorStand = (ArmorStand) location.getWorld().spawnEntity(location, EntityType.ARMOR_STAND);
         armorStand.setVisible(bodyVisible);
         // Never a marker: that would take away its hitbox and drop the name tag
@@ -725,6 +776,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         armorStand.addEquipmentLock(EquipmentSlot.OFF_HAND, ArmorStand.LockType.REMOVING_OR_CHANGING);
 
         if (bodyVisible) {
+            EntityEquipment equipment = armorStand.getEquipment();
+            if (showsBodyArmor()) {
+                // Before the head goes on, not after: this call writes the whole
+                // set of four slots and would take the head off again.
+                equipment.setArmorContents(createArmorStandArmor(originalArmor));
+            }
             // Only a body that is meant to be seen gets the head: on an
             // invisible armour stand it would go on floating by itself.
             ItemStack playerHead = new ItemStack(Material.PLAYER_HEAD);
@@ -733,7 +790,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 skullMeta.setOwningPlayer(player);
                 playerHead.setItemMeta(skullMeta);
             }
-            armorStand.getEquipment().setHelmet(playerHead);
+            equipment.setHelmet(playerHead);
         }
         return armorStand;
     }
@@ -2223,6 +2280,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         bodyType = resolveBodyType(config, config.getInt("body.type", BodyType.ARMOR_STAND.getId()));
         bodyNameVisible = config.getBoolean("body.name-visible", true);
         bodyVisible = config.getBoolean("body.visible", true);
+        bodyArmorVisible = config.getBoolean("body.armor-visible", true);
         movementSensitivity = resolveMovementSensitivity(config,
                 config.getInt("body.movement-sensitivity", MovementSensitivity.NORMAL.getId()));
         double moveThreshold = config.getDouble("body.move-threshold", 0.05, MIN_MOVE_THRESHOLD);
