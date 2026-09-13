@@ -68,6 +68,7 @@ import de.elia.cameraplugin.body.MannequinSkin;
 import de.elia.cameraplugin.body.MobHeads;
 import de.elia.cameraplugin.body.MobTargetMode;
 import de.elia.cameraplugin.body.MovementSensitivity;
+import de.elia.cameraplugin.area.CamAreaRules;
 import de.elia.cameraplugin.config.ConfigIssue;
 import de.elia.cameraplugin.config.ConfigReader;
 
@@ -78,6 +79,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     private final Map<UUID, CameraData> cameraPlayers = new HashMap<>();
     private final Map<UUID, Long> distanceMessageCooldown = new HashMap<>();
+    /** Players who were just told that camera mode is not allowed where they are heading. */
+    private final Map<UUID, Long> areaMessageCooldown = new HashMap<>();
     /** The player who is taking the hit his body took right now. */
     private final Set<UUID> damageImmunityBypass = new HashSet<>();
     /** Players whose body was hit and whose hit has not reached them yet. */
@@ -182,6 +185,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private double mobTargetRadius;
     /** Whether a mob head on the body halves the range of that kind of mob. */
     private boolean mobTargetHeads;
+    /** Where camera mode may be started and flown, the section {@code cam-area}. */
+    private final CamAreaRules camAreaRules = new CamAreaRules();
     private VisibilityMode playerVisibilityMode;
     private boolean allowInvisibilityPotion;
     private GlowMode glowMode;
@@ -1862,6 +1867,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             exitCameraMode(event.getPlayer());
         }
         distanceMessageCooldown.remove(event.getPlayer().getUniqueId());
+        areaMessageCooldown.remove(event.getPlayer().getUniqueId());
         removePlayerFromNoCollisionTeam(event.getPlayer());
         lastDamageTimes.remove(event.getPlayer().getUniqueId());
     }
@@ -1891,6 +1897,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (!allowLavaFlight && blockAt.getType() == Material.LAVA) {
             sendConfiguredMessage(player, "cant-fly-in-lava");
             exitCameraMode(player);
+            return;
+        }
+
+        if (entersForbiddenArea(player, event.getFrom(), to)) {
+            event.setCancelled(true);
             return;
         }
 
@@ -2197,6 +2208,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         camSafetyDelay = config.getInt("cam-safety.delay", 5, 0);
         camSafetyMessage = config.getString("messages.cam-safety",
                 "§cDu kannst den Cam-Modus nicht starten! Du musst noch %seconds% Sekunden in Sicherheit bleiben.");
+        camAreaRules.load(config);
 
         mirrorKnockback = config.getBoolean("mirror-damage.knockback", true);
         mirrorDebug = config.getBoolean("mirror-damage.debug", false);
@@ -2632,6 +2644,66 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             player.sendMessage(ChatColor.RED + ChatColor.translateAlternateColorCodes('&', msg));
         }
         return false;
+    }
+
+    /**
+     * Checks whether camera mode may be started where the player is standing,
+     * as long as {@code cam-area.level} is not 0.
+     *
+     * <p>Which areas those are is decided by {@link CamAreaRules}: the
+     * dimension the world belongs to and the biome the player stands in.</p>
+     *
+     * @return {@code true} when he may start, otherwise {@code false} and he
+     *         has been told why
+     */
+    public boolean checkCamArea(Player player) {
+        if (!camAreaRules.getLevel().blocksStart()) {
+            return true;
+        }
+        String area = camAreaRules.forbiddenArea(player.getLocation());
+        if (area == null) {
+            return true;
+        }
+        if (isMessageEnabled("cam-area-start")) {
+            player.sendMessage(getMessage("cam-area-start").replace("{area}", area));
+        }
+        return false;
+    }
+
+    /**
+     * Whether this step would carry the player into an area camera mode is not
+     * allowed in, which only level 2 keeps him out of.
+     *
+     * <p>He is stopped at the border and not sent back to his body: the step is
+     * simply cancelled, the same way {@code camera-mode.max-distance} does it.
+     * Whoever already stands in such an area - because the rule only came later,
+     * say - may keep moving until he is out of it, otherwise he would sit there
+     * stuck.</p>
+     *
+     * <p>Only a step that leaves the block is looked at. Looking around fires
+     * this event as well, and the biome of a spot does not change from that.</p>
+     */
+    private boolean entersForbiddenArea(Player player, Location from, Location to) {
+        if (!camAreaRules.getLevel().blocksFlight()
+                || (from.getBlockX() == to.getBlockX()
+                    && from.getBlockY() == to.getBlockY()
+                    && from.getBlockZ() == to.getBlockZ()
+                    && from.getWorld().equals(to.getWorld()))) {
+            return false;
+        }
+        String area = camAreaRules.forbiddenArea(to);
+        if (area == null || camAreaRules.forbiddenArea(from) != null) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        if (areaMessageCooldown.getOrDefault(player.getUniqueId(), 0L) < now) {
+            if (isMessageEnabled("cam-area-limit")) {
+                player.sendMessage(getMessage("cam-area-limit").replace("{area}", area));
+            }
+            areaMessageCooldown.put(player.getUniqueId(),
+                    now + TimeUnit.SECONDS.toMillis(camAreaRules.getWarningCooldown()));
+        }
+        return true;
     }
 
     public void reloadPlugin(Player initiator) {

@@ -11,6 +11,10 @@ messages:
   body-moved: "&cYour body was moved! Camera mode ended."
   body-suffocating: "&cYour body is stuck and suffocating! Camera mode ended."
   bossbar-text: "Cam mode ends in: %time%"
+  # Meldungen zum Abschnitt cam-area. Platzhalter {area}: die Dimension oder
+  # das Biom, so geschrieben wie dort in der Konfiguration.
+  cam-area-limit: "&cYou cannot go any further, cam mode is not allowed in {area}."
+  cam-area-start: "&cYou cannot start cam mode in {area}."
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
   camera-off: "&aCamera mode ended."
   camera-on: "&aCamera mode activated! Use /cam again to exit."
@@ -28,9 +32,11 @@ messages:
   config-error-header-single: "&cDie Konfiguration hat eine ungültige Stelle:"
   config-error-more: "&c... und {count} weitere. Alle stehen in der Server-Konsole."
   config-expected-boolean: "&cFalscher Wert für {path}: '{value}'. Erwartet wird true oder false. Es wird {used} verwendet."
+  config-expected-list: "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Liste. Es wird {used} verwendet."
   config-expected-number: "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Zahl. Es wird {used} verwendet."
   config-expected-text: "&cFalscher Wert für {path}: '{value}'. Erwartet wird Text. Es wird {used} verwendet."
   config-too-small: "&cWert für {path} ist zu klein: {value}. Es wird {min} verwendet."
+  config-unknown-entry: "&cUnbekannter Eintrag in {path}: '{value}'. Er wird nicht beachtet."
   config-unknown-value: "&cUnbekannter Wert für {path}: '{value}'. Erlaubt sind: {allowed}. Es wird {used} verwendet."
   cooldown-available: "&aCam mode available again"
   cooldown-text: "You can start cam mode again in %time%."
@@ -61,6 +67,8 @@ message-settings:
   body-moved: true
   body-suffocating: true
   bossbar-text: true
+  cam-area-limit: true
+  cam-area-start: true
   cam-safety: true
   camera-off: false
   camera-on: false
@@ -286,6 +294,55 @@ cam-safety:
   enabled: true
   # Wartezeit nach letztem Schaden in Sekunden
   delay: 5
+
+# Wo der Kamera-Modus überhaupt erlaubt ist
+# Geprüft wird immer die Stelle, an der der Spieler steht: beim Start sein
+# Standort, im Flug der Block, auf den er sich zubewegt. Zuerst zählt die
+# Dimension, danach das Biom - wer gar nicht im Nether sein darf, muss nicht
+# noch erfahren, in welchem seiner Biome er gerade steht.
+cam-area:
+  # Wie streng die Verbote gelten
+  # 0 = aus. Weder Biom noch Dimension werden geprüft, die Listen darunter
+  #     bleiben unbeachtet liegen.
+  # 1 = nur der Start. In einem verbotenen Biom oder einer verbotenen Dimension
+  #     lässt sich der Kamera-Modus nicht starten. Wer ihn woanders gestartet
+  #     hat, darf aber hineinfliegen.
+  # 2 = Start und Flug. Zusätzlich kommt man im Kamera-Modus nicht in ein
+  #     verbotenes Gebiet hinein: An der Grenze geht es einfach nicht weiter,
+  #     genau wie bei camera-mode.max-distance. Zum Körper zurückgesetzt wird
+  #     dabei niemand.
+  #     Wer schon in einem verbotenen Gebiet steht - etwa weil das Verbot erst
+  #     nachträglich dazugekommen ist -, darf sich weiter bewegen, bis er
+  #     draußen ist. Sonst säße er dort fest.
+  # Bei einem unbekannten Wert wird 2 verwendet.
+  level: 2
+  # Abklingzeit zwischen den Meldungen an der Grenze, in Sekunden. Gilt nur auf
+  # Stufe 2; ohne sie stünde die Meldung bei jedem Schritt erneut im Chat.
+  warning-cooldown: 3
+  # Biome, in denen der Kamera-Modus verboten ist
+  # Geschrieben wie in Minecraft, Großschreibung und Leerzeichen sind egal:
+  # "lush_caves", "LUSH_CAVES" und "Lush Caves" meinen dasselbe Biom. Ein Biom
+  # aus einem Datenpack braucht seinen Namensraum davor, etwa
+  # "meinpack:tiefe_hoehle"; ohne einen solchen wird "minecraft:" angenommen.
+  # Kennt der Server ein Biom nicht, steht das als Meldung in der Konsole - ein
+  # Tippfehler bleibt so nicht unbemerkt.
+  # Eine leere Liste ([]) verbietet kein einziges Biom.
+  forbidden-biomes:
+    - lush_caves
+    - dripstone_caves
+    - deep_dark
+    - sulfur_caves
+  # Dimensionen, in denen der Kamera-Modus erlaubt ist
+  # Hier steht also, wo er erlaubt ist - andersherum als bei den Biomen, wo
+  # steht, wo er verboten ist. Das hält beide Listen kurz: Biome gibt es
+  # hunderte, Dimensionen nur diese drei.
+  # Eine Welt mit einer eigenen Dimension, die ein anderes Plugin oder ein
+  # Datenpack anlegt, gehört zu keiner der drei: Von dieser Liste her ist sie
+  # immer erlaubt, die verbotenen Biome gelten dort aber trotzdem.
+  dimensions:
+    overworld: true
+    nether: false
+    end: false
 
 # Einstellungen zur Übertragung von Schaden
 # Die beiden Modi damage-mode und damage-armor-mode sind voneinander

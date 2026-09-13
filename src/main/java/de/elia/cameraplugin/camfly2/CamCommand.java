@@ -49,6 +49,9 @@ public class CamCommand implements CommandExecutor {
                 }
                 return true;
             }
+            if (!plugin.checkCamArea(player)) {
+                return true;
+            }
             if (!plugin.checkCamSafety(player)) {
                 return true;
             }
