@@ -113,6 +113,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private final Map<UUID, BukkitRunnable> cooldownTasks = new HashMap<>();
     private final Map<UUID, Long> lastDamageTimes = new HashMap<>();
     private boolean shuttingDown = false;
+    /** Whether the start got past the config file and actually set anything up. */
+    private boolean startedUp = false;
     /** Whether the missing way to hide the "NPC" line has already been reported. */
     private boolean mannequinLabelReported = false;
     private NamespacedKey bodyKey;
@@ -252,13 +254,23 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     public void onEnable() {
         shuttingDown = false;
         saveDefaultConfig();
-        // Created before the config is read, so its values go through the same
+        // Read before anything is set up, and not left to the first getConfig():
+        // Bukkit would answer a file it cannot parse with a stack trace and an
+        // empty configuration. A file that cannot be read at all stops the
+        // start here - camera mode on settings nobody wrote down is worse than
+        // no camera mode, and the file has to be repaired either way. Single
+        // values that do not fit are a different matter: they fall back one by
+        // one, are listed below, and the plugin starts.
+        if (!readConfigInto(null)) {
+            getLogger().severe(ChatColor.stripColor(configMessage("config-start-failed",
+                    "&cStart fehlgeschlagen. Zum Aktivieren den Fehler in der Konfiguration"
+                            + " beheben und den Server neu starten.")));
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        // Created before the values are read, so its own go through the same
         // load and its notes end up in the same report.
         camFireGuard = new CamFireGuard(this);
-        // Read here and not left to the first getConfig(), so that a file that
-        // cannot be parsed is reported in one line instead of by Bukkit as a
-        // stack trace.
-        readConfigInto(null);
         reportConfigWarnings(loadConfigValues(), null);
         bodyKey = new NamespacedKey(this, "cam_body");
         hitboxKey = new NamespacedKey(this, "cam_hitbox");
@@ -284,6 +296,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         this.getCommand("cam").setTabCompleter(new CamTabCompleter());
         this.getServer().getPluginManager().registerEvents(this, this);
         refreshNoCollisionTeam();
+        startedUp = true;
         getLogger().info("CameraPlugin wurde aktiviert!");
     }
 
@@ -336,6 +349,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     @Override
     public void onDisable() {
         shuttingDown = true;
+        if (!startedUp) {
+            // The start stopped at the config file, so there is nothing set up
+            // that would have to be taken down.
+            return;
+        }
         // Erstellt eine Kopie der Keys, um ConcurrentModificationException zu vermeiden
         for (UUID playerId : new HashSet<>(cameraPlayers.keySet())) {
             Player player = Bukkit.getPlayer(playerId);
@@ -2480,7 +2498,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         String fallback = "config-broken".equals(key)
                 ? "&cDie Konfiguration hat einen Fehler und wurde nicht übernommen,"
                         + " es gelten weiter die bisherigen Einstellungen: {error}"
-                : "&cDie Konfiguration hat einen Fehler, es gelten die Standardwerte: {error}";
+                : "&cDie Konfiguration hat einen Fehler: {error}";
         String text = configMessage(key, fallback).replace("{error}", describeProblem(problem.getMessage()));
         getLogger().severe(ChatColor.stripColor(text));
         if (initiator != null && isMessageEnabled("config-errors")) {

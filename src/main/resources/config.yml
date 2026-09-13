@@ -29,12 +29,17 @@ messages:
   # Meldungen, {error} der Grund, an dem die Datei gescheitert ist.
   # Leer lassen bringt nichts, dann greift der eingebaute Text - zum
   # Abschalten message-settings.config-errors auf false setzen.
-  # config-broken kommt, wenn die Datei gar nicht erst gelesen werden kann,
-  # etwa weil bei einem Listeneintrag der Strich fehlt. Dann bleibt alles so,
-  # wie es war; nur beim Serverstart gibt es nichts zu behalten, dafür steht
-  # config-broken-startup da.
+  # config-broken kommt bei /cam reload, wenn die Datei gar nicht erst gelesen
+  # werden kann, etwa weil bei einem Listeneintrag der Strich fehlt. Dann
+  # bleibt alles so, wie es war, und der Kamera-Modus läuft weiter.
+  # Beim Serverstart gibt es nichts zu behalten: Dort kommt
+  # config-broken-startup, danach config-start-failed, und das Plugin wird
+  # nicht aktiviert. Einzelne Werte, die nicht passen, sind etwas anderes -
+  # die fallen einzeln auf ihren Standardwert zurück, werden oben gemeldet,
+  # und das Plugin startet ganz normal.
   config-broken: "&cDie Konfiguration hat einen Fehler und wurde nicht übernommen, es gelten weiter die bisherigen Einstellungen: {error}"
-  config-broken-startup: "&cDie Konfiguration hat einen Fehler, es gelten die Standardwerte: {error}"
+  config-broken-startup: "&cDie Konfiguration hat einen Fehler: {error}"
+  config-start-failed: "&cStart fehlgeschlagen. Zum Aktivieren den Fehler in der Konfiguration beheben und den Server neu starten."
   config-entry-in-both-lists: "&cDer Eintrag '{value}' steht in {path} und in {other}. Er wird in keiner der beiden beachtet."
   config-error-header: "&cDie Konfiguration hat {count} ungültige Stellen:"
   config-error-header-single: "&cDie Konfiguration hat eine ungültige Stelle:"
