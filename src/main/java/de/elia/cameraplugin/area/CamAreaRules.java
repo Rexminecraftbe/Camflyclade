@@ -137,6 +137,7 @@ public final class CamAreaRules {
         readKeys(config, "cam-area.forbidden-structures-components",
                 onlyList != null ? List.of() : DEFAULT_COMPONENT_STRUCTURES,
                 Registry.STRUCTURE, componentStructures);
+        dropStructuresInBothLists(config);
         rememberedChunks = config.getInt("cam-area.structures-cache-chunks",
                 DEFAULT_REMEMBERED_CHUNKS, 0);
         knownChunks.clear();
@@ -206,7 +207,8 @@ public final class CamAreaRules {
      * box it occupies as a whole, or only the boxes of its single pieces. The
      * first takes the cellar of a mansion along with the air above its roof,
      * the second leaves the gaps between the corridors of a fortress open.
-     * A structure named in both lists is measured by its pieces.</p>
+     * A structure named in both lists is measured by neither, see
+     * {@link #dropStructuresInBothLists(ConfigReader)}.</p>
      */
     private String forbiddenStructure(World world, Location location) {
         if (!structuresEnabled || (boxStructures.isEmpty() && componentStructures.isEmpty())) {
@@ -299,6 +301,25 @@ public final class CamAreaRules {
     @SuppressWarnings({"deprecation", "removal"})
     private static NamespacedKey structureKey(GeneratedStructure generated) {
         return generated.getStructure().getKey();
+    }
+
+    /**
+     * Takes every structure standing in both lists out of both of them.
+     *
+     * <p>The two lists say how closely a structure is measured, so naming one in
+     * both says two things about it at once. That is a mistake and not a choice
+     * between them: it is reported and the structure is left alone, as if it
+     * stood in neither list.</p>
+     */
+    private void dropStructuresInBothLists(ConfigReader config) {
+        Set<NamespacedKey> inBoth = new HashSet<>(boxStructures);
+        inBoth.retainAll(componentStructures);
+        for (NamespacedKey structure : inBoth) {
+            config.warnEntryInBothLists("cam-area.forbidden-structures-box",
+                    "cam-area.forbidden-structures-components", displayName(structure));
+        }
+        boxStructures.removeAll(inBoth);
+        componentStructures.removeAll(inBoth);
     }
 
     /**

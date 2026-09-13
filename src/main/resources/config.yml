@@ -25,9 +25,11 @@ messages:
   # Server-Log und bei /cam reload zusätzlich an den Spieler, der ihn
   # ausgelöst hat. Platzhalter: {path} der Schlüssel, {value} der eingetragene
   # Wert, {used} der stattdessen benutzte Wert, {allowed} die erlaubten Werte,
-  # {min} der Mindestwert, {count} die Anzahl der Meldungen.
+  # {min} der Mindestwert, {other} die zweite Liste, {count} die Anzahl der
+  # Meldungen.
   # Leer lassen bringt nichts, dann greift der eingebaute Text - zum
   # Abschalten message-settings.config-errors auf false setzen.
+  config-entry-in-both-lists: "&cDer Eintrag '{value}' steht in {path} und in {other}. Er wird in keiner der beiden beachtet."
   config-error-header: "&cDie Konfiguration hat {count} ungültige Stellen:"
   config-error-header-single: "&cDie Konfiguration hat eine ungültige Stelle:"
   config-error-more: "&c... und {count} weitere. Alle stehen in der Server-Konsole."
@@ -357,7 +359,9 @@ cam-area:
   #              weiterhin. Das Richtige für alles Weitläufige, dessen Kasten
   #              sonst halb leere Landschaft mitsperrt.
   #
-  # Steht eine Struktur in beiden Listen, wird sie nach Bauteilen gemessen.
+  # Eine Struktur gehört in genau eine der beiden Listen. Steht sie in beiden,
+  # ist das ein Fehler: Das Plugin meldet ihn und lässt die Struktur dann ganz
+  # in Ruhe, als stünde sie in keiner der Listen.
   forbidden-structures-box:
     - monument           # Ozeanmonument
     - swamp_hut          # Hexenhütte

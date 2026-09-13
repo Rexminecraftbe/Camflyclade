@@ -35,6 +35,7 @@ public final class ConfigReader {
     public static final String EXPECTED_LIST = "config-expected-list";
     public static final String UNKNOWN_VALUE = "config-unknown-value";
     public static final String UNKNOWN_ENTRY = "config-unknown-entry";
+    public static final String ENTRY_IN_BOTH_LISTS = "config-entry-in-both-lists";
     public static final String TOO_SMALL = "config-too-small";
 
     /** Wording used when a key is missing from the config file. */
@@ -50,6 +51,8 @@ public final class ConfigReader {
             UNKNOWN_VALUE, "&cUnbekannter Wert für {path}: '{value}'. Erlaubt sind: {allowed}."
                     + " Es wird {used} verwendet.",
             UNKNOWN_ENTRY, "&cUnbekannter Eintrag in {path}: '{value}'. Er wird nicht beachtet.",
+            ENTRY_IN_BOTH_LISTS, "&cDer Eintrag '{value}' steht in {path} und in {other}."
+                    + " Er wird in keiner der beiden beachtet.",
             TOO_SMALL, "&cWert für {path} ist zu klein: {value}. Es wird {min} verwendet.");
 
     private final FileConfiguration config;
@@ -264,6 +267,20 @@ public final class ConfigReader {
         warnings.add(ConfigIssue.of(UNKNOWN_ENTRY, FALLBACKS.get(UNKNOWN_ENTRY))
                 .with("path", path)
                 .with("value", value));
+    }
+
+    /**
+     * Adds a note that one entry stands in two lists that rule each other out.
+     * Saying two things at once about the same entry is a mistake, not a choice
+     * between them, so neither list is followed for it.
+     *
+     * @param other the other list the entry stands in
+     */
+    public void warnEntryInBothLists(String path, String other, Object value) {
+        warnings.add(ConfigIssue.of(ENTRY_IN_BOTH_LISTS, FALLBACKS.get(ENTRY_IN_BOTH_LISTS))
+                .with("path", path)
+                .with("value", value)
+                .with("other", other));
     }
 
     private void warnTooSmall(String path, String value, String min) {
