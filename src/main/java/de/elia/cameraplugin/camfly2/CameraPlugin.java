@@ -2481,7 +2481,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 ? "&cDie Konfiguration hat einen Fehler und wurde nicht übernommen,"
                         + " es gelten weiter die bisherigen Einstellungen: {error}"
                 : "&cDie Konfiguration hat einen Fehler, es gelten die Standardwerte: {error}";
-        String text = configMessage(key, fallback).replace("{error}", oneLine(problem.getMessage()));
+        String text = configMessage(key, fallback).replace("{error}", describeProblem(problem.getMessage()));
         getLogger().severe(ChatColor.stripColor(text));
         if (initiator != null && isMessageEnabled("config-errors")) {
             initiator.sendMessage(text);
@@ -2489,17 +2489,76 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Squeezes the reason a YAML error gives into a single line. It comes with
-     * the offending line of the file and a caret underneath, which reads as a
-     * wall of text in the chat, so the line breaks go and the rest is cut off.
+     * What the parser says about a spot in the file, and what it means in
+     * German. Matched by a piece of the sentence, because the exact wording
+     * differs between versions of the parser. These are the mistakes that
+     * really happen while editing the file by hand; anything else keeps the
+     * parser's own words.
      */
-    private static String oneLine(String message) {
+    private static final String[][] CONFIG_PROBLEMS = {
+            {"could not find expected ':'",
+                    "Hier fehlt ein \"-\" am Zeilenanfang oder ein \":\" hinter dem Namen"},
+            {"mapping values are not allowed",
+                    "Hier steht ein \":\" zu viel, oder der Wert gehört in Anführungszeichen"},
+            {"cannot start any token",
+                    "Hier steht ein Tabulator; eingerückt wird nur mit Leerzeichen"},
+            {"expected <block end>",
+                    "Hier stimmt die Einrückung nicht mit den Zeilen darüber überein", "zweite"},
+            {"found unexpected end of stream",
+                    "Hier fehlt das schließende Anführungszeichen"},
+    };
+
+    /**
+     * Turns what the parser reports into one short sentence: where it is, and
+     * what is missing there.
+     *
+     * <p>The parser hands out several lines for one mistake - its own wording,
+     * the offending line of the file, a caret underneath, and the spot where it
+     * finally gave up. Only two of those are worth anything: the spot to
+     * repair and the reason. Its own sentences are the ones that start at the
+     * very left, the last of them names the problem; the spots are indented.
+     * </p>
+     *
+     * <p>Read out of the text and not out of the parser's own error class,
+     * which is none of the server API and need not be the same everywhere. A
+     * text this cannot make sense of is passed on as it is.</p>
+     */
+    private static String describeProblem(String message) {
         if (message == null) {
             return "";
         }
-        // "in 'reader'" is what SnakeYAML calls the file it was handed; the
-        // name of the file is already in the sentence around this.
-        String text = message.replace("in 'reader', ", "").replaceAll("\\s+", " ").trim();
+        String reason = "";
+        for (String line : message.split("\\R")) {
+            if (!line.isBlank() && !Character.isWhitespace(line.charAt(0))) {
+                reason = line.trim();
+            }
+        }
+        // Which of the two spots to name: usually the first, where the mistake
+        // begins. Only a broken indentation is the other way round - there the
+        // first spot is the block that was still fine.
+        boolean secondSpot = false;
+        for (String[] known : CONFIG_PROBLEMS) {
+            if (message.contains(known[0])) {
+                reason = known[1];
+                secondSpot = known.length > 2;
+                break;
+            }
+        }
+        List<String> spots = new ArrayList<>();
+        java.util.regex.Matcher marks = java.util.regex.Pattern
+                .compile("line (\\d+), column (\\d+)").matcher(message);
+        while (marks.find()) {
+            spots.add("Zeile " + marks.group(1) + ", Spalte " + marks.group(2));
+        }
+        if (spots.isEmpty()) {
+            return shorten(message.replaceAll("\\s+", " ").trim());
+        }
+        String spot = secondSpot && spots.size() > 1 ? spots.get(1) : spots.get(0);
+        return shorten(spot + ": " + (reason.isEmpty() ? "unlesbar" : reason));
+    }
+
+    /** Cuts a reason that is longer than a line of chat. */
+    private static String shorten(String text) {
         return text.length() <= MAX_CONFIG_ERROR_LENGTH
                 ? text
                 : text.substring(0, MAX_CONFIG_ERROR_LENGTH) + "...";
