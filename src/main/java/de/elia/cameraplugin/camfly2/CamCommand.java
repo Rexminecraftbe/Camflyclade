@@ -32,8 +32,9 @@ public class CamCommand implements CommandExecutor {
                 return true;
             }
             plugin.sendConfiguredMessage(player, "reload-start");
-            plugin.reloadPlugin(player);
-            plugin.sendConfiguredMessage(player, "reload-success");
+            if (plugin.reloadPlugin(player)) {
+                plugin.sendConfiguredMessage(player, "reload-success");
+            }
             return true;
         }
 

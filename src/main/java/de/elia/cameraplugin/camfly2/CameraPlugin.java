@@ -24,6 +24,9 @@ import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.profile.PlayerProfile;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
+import org.bukkit.configuration.InvalidConfigurationException;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
@@ -49,6 +52,11 @@ import de.elia.cameraplugin.mirrordamage.ArmorWear;
 import de.elia.cameraplugin.mirrordamage.DamageMode;
 import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
@@ -77,6 +85,8 @@ import static org.bukkit.Sound.ENTITY_ITEM_BREAK;
 @SuppressWarnings("removal")
 public final class CameraPlugin extends JavaPlugin implements Listener {
 
+    /** The config file as it was last read, see {@link #readConfigInto}. */
+    private FileConfiguration config;
     private final Map<UUID, CameraData> cameraPlayers = new HashMap<>();
     private final Map<UUID, Long> distanceMessageCooldown = new HashMap<>();
     /** Players who were just told that camera mode is not allowed where they are heading. */
@@ -133,6 +143,13 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * tick, so that it never hangs should he stop ticking altogether.
      */
     private static final int MAX_ARMOR_WAIT_TICKS = 10;
+
+    /**
+     * How much of the reason a broken config file gives is passed on. The rest
+     * is cut off: a YAML error carries the offending line and a caret under it
+     * and would otherwise fill the chat.
+     */
+    private static final int MAX_CONFIG_ERROR_LENGTH = 200;
 
     /**
      * How many config notes are sent into the chat of the player who reloaded.
@@ -238,6 +255,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         // Created before the config is read, so its values go through the same
         // load and its notes end up in the same report.
         camFireGuard = new CamFireGuard(this);
+        // Read here and not left to the first getConfig(), so that a file that
+        // cannot be parsed is reported in one line instead of by Bukkit as a
+        // stack trace.
+        readConfigInto(null);
         reportConfigWarnings(loadConfigValues(), null);
         bodyKey = new NamespacedKey(this, "cam_body");
         hitboxKey = new NamespacedKey(this, "cam_hitbox");
@@ -2389,6 +2410,101 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * it is about. Use {@code message-settings.config-errors} to switch the
      * notes in the chat off instead.
      */
+    @Override
+    public FileConfiguration getConfig() {
+        if (config == null) {
+            reloadConfig();
+        }
+        return config;
+    }
+
+    /**
+     * Reads the config file again, without a player waiting for an answer.
+     *
+     * <p>Overridden because Bukkit answers a file it cannot parse with an empty
+     * configuration and a stack trace in the log: every single setting would
+     * quietly fall back to its default, and a {@code /cam reload} would still
+     * report success. Here such a file changes nothing, and the reason is said
+     * in one line.</p>
+     */
+    @Override
+    public void reloadConfig() {
+        readConfigInto(null);
+    }
+
+    /**
+     * Reads the config file and puts it in place.
+     *
+     * <p>A file that cannot be read leaves the settings exactly as they are - a
+     * forgotten dash must not put the whole server back to the default values.
+     * Only while the plugin is starting is there nothing to keep, and the
+     * values built into the jar have to carry it; that is what the two
+     * different messages say.</p>
+     *
+     * @param initiator the player who asked for the reload, told about a broken
+     *                  file as well, or {@code null} for the console alone
+     * @return whether the file could be read
+     */
+    private boolean readConfigInto(CommandSender initiator) {
+        YamlConfiguration loaded = new YamlConfiguration();
+        File file = new File(getDataFolder(), "config.yml");
+        Exception problem = null;
+        if (file.exists()) {
+            try {
+                loaded.load(file);
+            } catch (IOException | InvalidConfigurationException ex) {
+                problem = ex;
+            }
+        }
+        // Reported only once something is in place, because the report looks
+        // its own wording up in the config file.
+        if (problem != null && config != null) {
+            reportBrokenConfig("config-broken", problem, initiator);
+            return false;
+        }
+        InputStream defaults = getResource("config.yml");
+        if (defaults != null) {
+            loaded.setDefaults(YamlConfiguration.loadConfiguration(
+                    new InputStreamReader(defaults, StandardCharsets.UTF_8)));
+        }
+        config = loaded;
+        if (problem != null) {
+            reportBrokenConfig("config-broken-startup", problem, initiator);
+            return false;
+        }
+        return true;
+    }
+
+    /** Says in one line why the config file could not be read. */
+    private void reportBrokenConfig(String key, Exception problem, CommandSender initiator) {
+        String fallback = "config-broken".equals(key)
+                ? "&cDie Konfiguration hat einen Fehler und wurde nicht übernommen,"
+                        + " es gelten weiter die bisherigen Einstellungen: {error}"
+                : "&cDie Konfiguration hat einen Fehler, es gelten die Standardwerte: {error}";
+        String text = configMessage(key, fallback).replace("{error}", oneLine(problem.getMessage()));
+        getLogger().severe(ChatColor.stripColor(text));
+        if (initiator != null && isMessageEnabled("config-errors")) {
+            initiator.sendMessage(text);
+        }
+    }
+
+    /**
+     * Squeezes the reason a YAML error gives into a single line. It comes with
+     * the offending line of the file and a caret underneath, which reads as a
+     * wall of text in the chat, so the line breaks go and the rest is cut off.
+     */
+    private static String oneLine(String message) {
+        if (message == null) {
+            return "";
+        }
+        // "in 'reader'" is what SnakeYAML calls the file it was handed; the
+        // name of the file is already in the sentence around this.
+        String text = message.replace("in 'reader', ", "").replaceAll("\\s+", " ").trim();
+        return text.length() <= MAX_CONFIG_ERROR_LENGTH
+                ? text
+                : text.substring(0, MAX_CONFIG_ERROR_LENGTH) + "...";
+    }
+
     private String configMessage(String key, String fallback) {
         String raw = getConfig().getString("messages." + key, fallback);
         if (raw == null || raw.isEmpty()) {
@@ -2723,7 +2839,20 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         return true;
     }
 
-    public void reloadPlugin(Player initiator) {
+    /**
+     * Reads the config file again and puts everything that depends on it back
+     * together.
+     *
+     * <p>The file is read first, before anybody is disturbed: a file with a
+     * mistake in it changes nothing at all then, and whoever is in camera mode
+     * stays there.</p>
+     *
+     * @return whether the reload went through
+     */
+    public boolean reloadPlugin(Player initiator) {
+        if (!readConfigInto(initiator)) {
+            return false;
+        }
         for (UUID uuid : new HashSet<>(cameraPlayers.keySet())) {
             Player camPlayer = Bukkit.getPlayer(uuid);
             if (camPlayer != null) {
@@ -2731,7 +2860,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 exitCameraMode(camPlayer);
             }
         }
-        reloadConfig();
         reportConfigWarnings(loadConfigValues(), initiator);
         refreshNoCollisionTeam();
         for (BukkitRunnable task : cooldownTasks.values()) {
@@ -2739,6 +2867,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         cooldownTasks.clear();
         camCooldowns.clear();
+        return true;
     }
     private ItemStack createCameraHead() {
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);

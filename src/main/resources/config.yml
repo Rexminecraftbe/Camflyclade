@@ -26,9 +26,15 @@ messages:
   # ausgelöst hat. Platzhalter: {path} der Schlüssel, {value} der eingetragene
   # Wert, {used} der stattdessen benutzte Wert, {allowed} die erlaubten Werte,
   # {min} der Mindestwert, {other} die zweite Liste, {count} die Anzahl der
-  # Meldungen.
+  # Meldungen, {error} der Grund, an dem die Datei gescheitert ist.
   # Leer lassen bringt nichts, dann greift der eingebaute Text - zum
   # Abschalten message-settings.config-errors auf false setzen.
+  # config-broken kommt, wenn die Datei gar nicht erst gelesen werden kann,
+  # etwa weil bei einem Listeneintrag der Strich fehlt. Dann bleibt alles so,
+  # wie es war; nur beim Serverstart gibt es nichts zu behalten, dafür steht
+  # config-broken-startup da.
+  config-broken: "&cDie Konfiguration hat einen Fehler und wurde nicht übernommen, es gelten weiter die bisherigen Einstellungen: {error}"
+  config-broken-startup: "&cDie Konfiguration hat einen Fehler, es gelten die Standardwerte: {error}"
   config-entry-in-both-lists: "&cDer Eintrag '{value}' steht in {path} und in {other}. Er wird in keiner der beiden beachtet."
   config-error-header: "&cDie Konfiguration hat {count} ungültige Stellen:"
   config-error-header-single: "&cDie Konfiguration hat eine ungültige Stelle:"
