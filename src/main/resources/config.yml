@@ -178,6 +178,60 @@ body:
   # in Blöcken. Gilt bei beiden Körpertypen und ist auf Stufe 0 wirkungslos.
   # Werte unter 0.01 werden automatisch auf 0.01 angehoben.
   move-threshold: 0.05
+  # Ob feindliche Mobs den Körper von sich aus angreifen: vanilla | custom | off
+  # vanilla = jeder Mob mit der Sichtweite, die er in Vanilla hat. Ein Zombie
+  #           bemerkt den Körper also auf 16 Blöcke, eine Lohe auf 48. Die
+  #           Reichweite wird am Mob selbst abgelesen (sein Attribut
+  #           follow_range), nicht aus einer Liste im Plugin - deshalb gilt sie
+  #           auch für Mobs aus neueren Versionen und für Mobs, denen ein
+  #           anderes Plugin eine eigene Reichweite gegeben hat.
+  #           Weiter als 64 Blöcke schaut das Plugin nicht; so weit bemerkt in
+  #           Vanilla ohnehin kein Mob etwas.
+  # custom  = eine Reichweite für alle Mobs, siehe mob-target-radius.
+  # off     = kein Mob geht auf den Körper los. Auch wer den Spieler ins Visier
+  #           nimmt oder ihn beim Start des Kamera-Modus schon angriff, wird
+  #           nicht auf den Körper umgelenkt: Er verliert sein Ziel und bleibt,
+  #           wo er ist. Ein Zombie, an dem der Spieler vorbeifliegt, setzt sich
+  #           also nicht in Bewegung.
+  # Der alte Schalter true wird als custom gelesen, false als off.
+  #
+  # In allen drei Modi gilt: Der Kamera-Spieler selbst ist nie ein Ziel - er
+  # nimmt im Kamera-Modus keinen Schaden, ein Mob auf ihm schlüge also ins
+  # Leere. Bei vanilla und custom nimmt sein Körper diesen Platz ein, solange er
+  # in der Reichweite des Mobs steht, sonst bekommt der Mob gar kein Ziel. Ohne
+  # das schossen Lohen und Ghasts auf den fliegenden Spieler, ohne ihn je
+  # treffen zu können.
+  #
+  # Sehen heißt in jedem Modus auch wirklich sehen: von Augen zu Augen, ohne
+  # Block dazwischen. Wer hinter einer Wand, unter der Erde oder hinter einem
+  # Hügel steht, bemerkt den Körper nicht, egal wie nah er ist. Erst wenn er ihn
+  # zu Gesicht bekommt, macht er sich auf den Weg - und was dann unterwegs
+  # passiert, ist seine Sache, genau wie bei der Jagd auf einen Spieler.
+  # Mobs, die gerade jemand anderen angreifen, behalten ihr Ziel, und Mobs ohne
+  # KI bleiben stehen. Ausgenommen ist der Warden: Er lässt Körper und
+  # Kamera-Spieler ohnehin in Ruhe.
+  # Der Treffer beendet wie jeder andere den Kamera-Modus und wird nach den
+  # Regeln unter mirror-damage auf den Spieler übertragen.
+  # Gilt für beide Körpertypen und auch für einen unsichtbaren Körper -
+  # getroffen wird immer das Mannequin, das an der Stelle des Spielers steht.
+  mob-target: "off"
+  # Reichweite in Blöcken für den Modus "custom", für jeden Mob dieselbe. 0
+  # bedeutet, dass kein Mob den Körper bemerkt. Zum Vergleich: ein Zombie
+  # bemerkt einen Spieler auf rund 16 Blöcke.
+  # Die Reichweite ist keine Anziehungskraft: Freie Sicht muss dazukommen, sonst
+  # bleibt der Mob stehen. Ein größerer Wert holt also keine Mobs aus dem Berg
+  # nebenan, er lässt nur die weiter entfernten kommen, die den Körper wirklich
+  # sehen. Im Modus "vanilla" wird der Wert nicht benutzt.
+  mob-target-radius: 16.0
+  # Ob ein Mobkopf auf dem Körper die Sichtweite noch einmal halbiert, wie in
+  # Vanilla: ein Zombiekopf gegen Zombies, ein Kreeperkopf gegen Creeper, ein
+  # Piglinkopf gegen Piglins und Piglin-Barbaren, ein Skelettschädel gegen
+  # Skelette. Welcher Kopf zu welchem Mob gehört, steht im Namen des Kopfes,
+  # deshalb zählt auch der Kopf eines Mobs aus einer neueren Version.
+  # Gilt in allen Modi, also auch für die Reichweite aus mob-target-radius, und
+  # bei beiden Körpertypen: Der Körper trägt den Helm des Spielers, bei Typ 1
+  # unsichtbar, aber angezogen.
+  mob-target-heads: true
 
 # Begrenzung der Dauer des Kamera-Modus
 time-limit:
