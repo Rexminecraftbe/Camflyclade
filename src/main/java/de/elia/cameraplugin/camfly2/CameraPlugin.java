@@ -65,6 +65,8 @@ import de.elia.cameraplugin.body.BodyType;
 import de.elia.cameraplugin.body.EquipmentVisibility;
 import de.elia.cameraplugin.body.MannequinLabel;
 import de.elia.cameraplugin.body.MannequinSkin;
+import de.elia.cameraplugin.body.MobHeads;
+import de.elia.cameraplugin.body.MobTargetMode;
 import de.elia.cameraplugin.body.MovementSensitivity;
 import de.elia.cameraplugin.config.ConfigIssue;
 import de.elia.cameraplugin.config.ConfigReader;
@@ -148,6 +150,22 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      */
     private static final long MOB_TARGET_INTERVAL = 20L;
 
+    /**
+     * The range of a mob that carries no follow range attribute, in blocks.
+     * That is what most mobs have in vanilla.
+     */
+    private static final double DEFAULT_FOLLOW_RANGE = 16.0;
+
+    /**
+     * How far the search around the body reaches at most, in blocks. No mob in
+     * vanilla notices anything from further away, so looking further would only
+     * cost time.
+     */
+    private static final double MAX_MOB_TARGET_RANGE = 64.0;
+
+    /** What a mob head on the body leaves of the range of that kind of mob. */
+    private static final double MOB_HEAD_SIGHT_FACTOR = 0.5;
+
     // Configurable values
     private boolean maxDistanceEnabled;
     private double maxDistance;
@@ -158,10 +176,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private MovementSensitivity movementSensitivity;
     /** {@code body.move-threshold} squared, so the square root can be skipped. */
     private double moveThresholdSquared;
-    /** Whether hostile mobs go for the body on their own. */
-    private boolean mobTargetEnabled;
-    /** How far the body draws hostile mobs to itself, in blocks. */
+    /** Which range decides whether a mob notices the body. */
+    private MobTargetMode mobTargetMode;
+    /** The range of the mode {@code custom}, in blocks. */
     private double mobTargetRadius;
+    /** Whether a mob head on the body halves the range of that kind of mob. */
+    private boolean mobTargetHeads;
     private VisibilityMode playerVisibilityMode;
     private boolean allowInvisibilityPotion;
     private GlowMode glowMode;
@@ -405,11 +425,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
         double reaggroRadius = 64.0;
         for (Entity entity : player.getNearbyEntities(reaggroRadius, reaggroRadius, reaggroRadius)) {
-            if (entity instanceof Mob) {
-                Mob mob = (Mob) entity;
-                if (player.equals(mob.getTarget())) {
-                    mob.setTarget(damageTarget); // redirect aggro away from the player
-                }
+            if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
+                // Aggro away from the player: onto his body, or nowhere at all
+                // when the body is out of the reach of that mob.
+                mob.setTarget(noticesBody(mob, damageTarget) ? damageTarget : null);
             }
         }
 
@@ -687,16 +706,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         LivingEntity body = cameraData.getBody();
         Mannequin hitbox = cameraData.getHitbox();
 
-        double reaggroRadius = 64.0;
-        for (Entity entity : body.getNearbyEntities(reaggroRadius, reaggroRadius, reaggroRadius)) {
-            if (entity instanceof Mob) {
-                Mob mob = (Mob) entity;
-                if (body.equals(mob.getTarget()) || (hitbox != null && hitbox.equals(mob.getTarget()))) {
-                    mob.setTarget(player);
-                }
-            }
-        }
-
         // Zuerst zum Körper teleportieren
         player.teleport(body.getLocation());
         stopCameraParticles(player);
@@ -740,6 +749,18 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
         // Safety check to ensure the player really left the no-collision team
         removePlayerFromNoCollisionTeam(player);
+
+        // The aggro goes back to the player, who is standing where his body
+        // stood. Deliberately only here, after he has stopped being a camera
+        // player: onMobTarget keeps mobs off a camera player and would send
+        // them straight back to the body that is removed a moment later.
+        double reaggroRadius = 64.0;
+        for (Entity entity : body.getNearbyEntities(reaggroRadius, reaggroRadius, reaggroRadius)) {
+            if (entity instanceof Mob mob
+                    && (body.equals(mob.getTarget()) || (hitbox != null && hitbox.equals(mob.getTarget())))) {
+                mob.setTarget(player);
+            }
+        }
 
         // Aufräumen
         bodyOwners.remove(body.getUniqueId());
@@ -857,24 +878,24 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     /**
      * Sends the hostile mobs around the body after it, as long as
-     * {@code body.mob-target} is switched on.
+     * {@code body.mob-target} names a mode that does so.
      *
      * <p>Without it the body stands there untouched: no mob picks a mannequin
      * as its target by itself. Only the ones that were already after the player
      * follow his body, and they leave it again as soon as something else
-     * catches their eye. With the setting on the body stands in for the player
-     * here as well - what would have come for him comes for it.</p>
+     * catches their eye. With a mode set the body stands in for the player here
+     * as well - what would have come for him comes for it, as far as it would
+     * have noticed him, see {@link #sightRangeFor(Mob, LivingEntity)}.</p>
      *
-     * <p>Only mobs that really see the body are sent after it, see
-     * {@link #sendMobsAfterBody(Player, LivingEntity)}. The target is set again
-     * and again, not once: a mob works out its target anew every so often and
-     * would drop a target it did not pick itself.</p>
+     * <p>The target is set again and again, not once: a mob works out its
+     * target anew every so often and would drop a target it did not pick
+     * itself.</p>
      *
      * @param damageTarget the mannequin that takes the hits, see
      *                     {@link CameraData#getDamageTarget()}
      */
     private void startMobTargeting(Player player, LivingEntity damageTarget) {
-        if (!mobTargetEnabled || mobTargetRadius <= 0.0) {
+        if (!mobTargetMode.attractsMobs() || searchRadius() <= 0.0) {
             return;
         }
         stopMobTargeting(player);
@@ -903,25 +924,24 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     /**
      * One pass of {@link #startMobTargeting(Player, LivingEntity)}: the hostile
-     * mobs within {@code body.mob-target-radius} that can see the body get it
-     * as their target.
+     * mobs that notice the body and can see it get it as their target.
      *
-     * <p>Seeing it is the point of the check: the radius alone would send every
-     * mob in it on its way, including the ones standing behind a wall, in a
-     * cave below or on the other side of a hill, which never noticed anything.
-     * So the same look a mob takes at a player decides here as well - eye to
-     * eye, without a block in between.</p>
+     * <p>Noticing it is the point of the range: without it every mob around
+     * would set off, including the ones standing behind a wall, in a cave below
+     * or on the other side of a hill. On top of the range comes the same look a
+     * mob takes at a player - eye to eye, without a block in between.</p>
      *
      * <p>A mob that is busy with somebody else keeps the target it has - that
      * fight is not ours to take away. One that is already after the body is
-     * left alone too: it is on its way, and losing sight of the body on that
-     * way is its own business, exactly as it would be while chasing a player.
-     * Left out on purpose: the warden, which
+     * left alone too: it is on its way, and losing sight of it on that way is
+     * its own business, exactly as it would be while chasing a player. Left out
+     * on purpose: the warden, which
      * {@link #onWardenTarget(EntityTargetLivingEntityEvent)} keeps off the body
      * and off the camera player alike, and a mob whose AI is switched off.</p>
      */
     private void sendMobsAfterBody(Player player, LivingEntity damageTarget) {
-        for (Entity entity : damageTarget.getNearbyEntities(mobTargetRadius, mobTargetRadius, mobTargetRadius)) {
+        double radius = searchRadius();
+        for (Entity entity : damageTarget.getNearbyEntities(radius, radius, radius)) {
             if (!(entity instanceof Mob mob) || !(entity instanceof Enemy) || mob instanceof Warden) {
                 continue;
             }
@@ -932,14 +952,71 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             if (damageTarget.equals(current)) {
                 continue;
             }
-            if (current != null && !current.isDead() && !current.equals(player)) {
+            if (player.equals(current)) {
+                // Beating on the camera player gains nothing, he takes no
+                // damage. Either the body takes his place right below, or the
+                // mob is left without a target.
+                mob.setTarget(null);
+                current = null;
+            }
+            if (current != null && !current.isDead()) {
                 continue;
             }
-            if (!mob.hasLineOfSight(damageTarget)) {
+            if (!noticesBody(mob, damageTarget) || !mob.hasLineOfSight(damageTarget)) {
                 continue;
             }
             mob.setTarget(damageTarget);
         }
+    }
+
+    /**
+     * How far the search around the body looks, in blocks. The mode
+     * {@code custom} has one range for everybody, {@code vanilla} has to look as
+     * far as the mob with the longest reach and sorts the rest out mob by mob.
+     */
+    private double searchRadius() {
+        return mobTargetMode == MobTargetMode.CUSTOM ? mobTargetRadius : MAX_MOB_TARGET_RANGE;
+    }
+
+    /**
+     * How far this mob may notice the body, in blocks.
+     *
+     * <p>In the mode {@code custom} that is the configured radius, the same one
+     * for every mob. In {@code vanilla} it is the range the mob brings with it:
+     * its follow range, the 16 blocks of a zombie, the 48 of a blaze. Read off
+     * the mob itself and not from a list here, so it fits every mob - the ones
+     * a later version adds and the ones another plugin hands a range of its own
+     * included.</p>
+     *
+     * <p>A mob head on the body halves it, the way it halves the distance at
+     * which that kind of mob notices a player wearing it. That part is switched
+     * by {@code body.mob-target-heads}.</p>
+     *
+     * <p>The mode {@code off} sends nobody to the body, but a mob that was
+     * already after the player still has to be told where he went - it goes by
+     * the vanilla range, see {@link #onMobTarget(EntityTargetEvent)}.</p>
+     */
+    private double sightRangeFor(Mob mob, LivingEntity body) {
+        double range = mobTargetMode == MobTargetMode.CUSTOM ? mobTargetRadius : vanillaFollowRange(mob);
+        if (mobTargetHeads && MobHeads.matches(body.getEquipment(), mob.getType())) {
+            range *= MOB_HEAD_SIGHT_FACTOR;
+        }
+        return range;
+    }
+
+    /** The distance at which this mob notices a player, out of its own attributes. */
+    private double vanillaFollowRange(Mob mob) {
+        AttributeInstance followRange = mob.getAttribute(Attribute.FOLLOW_RANGE);
+        return followRange != null ? followRange.getValue() : DEFAULT_FOLLOW_RANGE;
+    }
+
+    /** Whether the body stands close enough for this mob to go for it. */
+    private boolean noticesBody(Mob mob, LivingEntity body) {
+        if (body.isDead() || !mob.getWorld().equals(body.getWorld())) {
+            return false;
+        }
+        double range = sightRangeFor(mob, body);
+        return range > 0.0 && mob.getLocation().distanceSquared(body.getLocation()) <= range * range;
     }
 
     /** Teleports the entity back to its spot when something pushed it away. */
@@ -1635,16 +1712,37 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Keeps mobs off the camera player. He takes no damage while his body
+     * stands in for him, so a mob after him beats on nothing at all - and one
+     * that shoots, a blaze or a ghast, keeps firing at him from far away
+     * without ever being able to hit him.
+     *
+     * <p>His body takes his place instead, as long as it stands within the
+     * range this mob has, see {@link #sightRangeFor(Mob, LivingEntity)}. Is it
+     * further away - the player flies on, his body stays behind - then the mob
+     * gets no target rather than one it can never reach. This holds in every
+     * mode of {@code body.mob-target}, {@code off} included: that mode says
+     * that nobody is sent to the body, not that the camera player is fair
+     * game.</p>
+     */
     @EventHandler
     public void onMobTarget(EntityTargetEvent event) {
-        if (!(event.getTarget() instanceof Player)) return;
-        Player player = (Player) event.getTarget();
-        if (cameraPlayers.containsKey(player.getUniqueId())) {
-            CameraData data = cameraPlayers.get(player.getUniqueId());
-            if (data != null && !data.getDamageTarget().isDead()) {
-                event.setTarget(data.getDamageTarget());
-            }
+        if (!(event.getTarget() instanceof Player player)) {
+            return;
         }
+        CameraData data = cameraPlayers.get(player.getUniqueId());
+        if (data == null) {
+            return;
+        }
+        if (event.getEntity() instanceof Mob mob && noticesBody(mob, data.getDamageTarget())) {
+            event.setTarget(data.getDamageTarget());
+            return;
+        }
+        // Cancelled rather than handed an empty target: a mob that is already
+        // after the body keeps it that way, only the camera player is refused.
+        event.setCancelled(true);
+        event.setTarget(null);
     }
 
     @EventHandler
@@ -2060,8 +2158,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 config.getInt("body.movement-sensitivity", MovementSensitivity.NORMAL.getId()));
         double moveThreshold = config.getDouble("body.move-threshold", 0.05, MIN_MOVE_THRESHOLD);
         moveThresholdSquared = moveThreshold * moveThreshold;
-        mobTargetEnabled = config.getBoolean("body.mob-target", false);
+        mobTargetMode = resolveMobTargetMode(config);
         mobTargetRadius = config.getDouble("body.mob-target-radius", 16.0, 0.0);
+        mobTargetHeads = config.getBoolean("body.mob-target-heads", true);
         particleHeight = config.getDouble("camera-particles.height", 1.0);
         particlesPerTick = config.getInt("camera-particles.particles-per-tick", 5, 0);
         showOwnParticles = config.getBoolean("camera-particles.show-own-particles", false);
@@ -2151,6 +2250,24 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         getLogger().warning("mirror-damage.damage-armor heisst jetzt damage-armor-mode und kennt drei Werte:"
                 + " mirror, custom und off. true wird als mirror gelesen, false als off.");
+    }
+
+    /**
+     * Reads {@code body.mob-target}. The setting used to be a truth value, back
+     * when there was only the one range to switch on and off, so those two
+     * values keep saying what they said: {@code true} is the range out of the
+     * config file, {@code false} is nobody sent to the body.
+     */
+    private MobTargetMode resolveMobTargetMode(ConfigReader config) {
+        String raw = config.getChoice("body.mob-target", "off",
+                "vanilla", "custom", "off", "true", "false");
+        if ("vanilla".equalsIgnoreCase(raw)) {
+            return MobTargetMode.VANILLA;
+        }
+        if ("custom".equalsIgnoreCase(raw) || "true".equalsIgnoreCase(raw)) {
+            return MobTargetMode.CUSTOM;
+        }
+        return MobTargetMode.OFF;
     }
 
     /**
