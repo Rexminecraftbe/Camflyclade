@@ -2,7 +2,6 @@ package de.elia.cameraplugin.body;
 
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Player;
-import org.bukkit.profile.PlayerProfile;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -14,8 +13,12 @@ import java.lang.reflect.Modifier;
  * differs between server implementations: Paper expects its own
  * {@code ResolvableProfile}, which is built from a {@code PlayerProfile} through
  * a static factory, while other implementations take a {@code PlayerProfile}
- * straight away. Only this one call is therefore resolved at runtime; the rest
- * of the mannequin handling uses the API directly.</p>
+ * straight away. Even where the player's own profile comes from the types part
+ * ways - {@code getPlayerProfile} hands out Paper's profile on Paper and
+ * Bukkit's everywhere else, so the method cannot be called with a type written
+ * down here. Both calls are therefore resolved at runtime and the profile is
+ * passed along as it comes; the rest of the mannequin handling uses the API
+ * directly.</p>
  */
 public final class MannequinSkin {
 
@@ -36,7 +39,10 @@ public final class MannequinSkin {
         if (setter == null) {
             return false;
         }
-        PlayerProfile profile = player.getPlayerProfile();
+        Object profile = playerProfile(player);
+        if (profile == null) {
+            return false;
+        }
         Object argument = asExpectedProfile(profile, setter.getParameterTypes()[0]);
         if (argument == null) {
             return false;
@@ -46,6 +52,22 @@ public final class MannequinSkin {
             return true;
         } catch (ReflectiveOperationException | RuntimeException ex) {
             return false;
+        }
+    }
+
+    /**
+     * Reads the player's own profile, whatever type this server hands out for
+     * it. Looked up at runtime and kept as an {@code Object} on purpose: Paper
+     * returns its own profile type here, so a call written against the type in
+     * the Bukkit API would not be there at all.
+     *
+     * @return the profile, or {@code null} when it could not be read
+     */
+    private static Object playerProfile(Player player) {
+        try {
+            return Player.class.getMethod("getPlayerProfile").invoke(player);
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            return null;
         }
     }
 
