@@ -183,11 +183,17 @@ body:
   #         Mannequin als Ziel; nur wer den Spieler schon im Visier hatte, wird
   #         beim Start auf den Körper umgelenkt und verliert ihn wieder, sobald
   #         ihn etwas anderes ablenkt.
-  # true  = der Körper steht auch hier für den Spieler ein: Jeder feindliche Mob
-  #         im Umkreis von mob-target-radius nimmt ihn sich als Ziel, kommt
-  #         heran und schlägt zu. Der Treffer beendet wie jeder andere den
-  #         Kamera-Modus und wird nach den Regeln unter mirror-damage auf den
-  #         Spieler übertragen.
+  # true  = der Körper steht auch hier für den Spieler ein: Ein feindlicher Mob,
+  #         der ihn im Umkreis von mob-target-radius sieht, nimmt ihn sich als
+  #         Ziel, kommt heran und schlägt zu. Der Treffer beendet wie jeder
+  #         andere den Kamera-Modus und wird nach den Regeln unter mirror-damage
+  #         auf den Spieler übertragen.
+  #         Sehen heißt dabei dasselbe wie beim Spieler: von Augen zu Augen,
+  #         ohne Block dazwischen. Wer hinter einer Wand, unter der Erde oder
+  #         hinter einem Hügel steht, bemerkt den Körper nicht und bleibt, wo er
+  #         ist. Erst wenn er ihn zu Gesicht bekommt, macht er sich auf den Weg -
+  #         und was dann unterwegs passiert, ist seine Sache, genau wie bei der
+  #         Jagd auf einen Spieler.
   #         Mobs, die gerade jemand anderen angreifen, behalten ihr Ziel, und
   #         Mobs ohne KI bleiben stehen. Ausgenommen ist der Warden: Er lässt
   #         Körper und Kamera-Spieler ohnehin in Ruhe.
@@ -197,6 +203,10 @@ body:
   # Umkreis in Blöcken, in dem Mobs auf den Körper aufmerksam werden. 0 schaltet
   # mob-target ab. Zum Vergleich: ein Zombie bemerkt einen Spieler auf rund
   # 16 Blöcke.
+  # Der Umkreis ist nur die Obergrenze: Freie Sicht auf den Körper muss
+  # dazukommen, sonst bleibt der Mob stehen. Ein größerer Wert holt also keine
+  # Mobs aus dem Berg nebenan, er lässt nur die weiter entfernten kommen, die
+  # den Körper wirklich sehen.
   mob-target-radius: 16.0
 
 # Begrenzung der Dauer des Kamera-Modus

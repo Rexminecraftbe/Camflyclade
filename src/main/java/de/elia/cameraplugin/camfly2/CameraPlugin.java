@@ -865,9 +865,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * catches their eye. With the setting on the body stands in for the player
      * here as well - what would have come for him comes for it.</p>
      *
-     * <p>The target is set again and again, not once: a mob works out its
-     * target anew every so often and would drop a target it did not pick
-     * itself.</p>
+     * <p>Only mobs that really see the body are sent after it, see
+     * {@link #sendMobsAfterBody(Player, LivingEntity)}. The target is set again
+     * and again, not once: a mob works out its target anew every so often and
+     * would drop a target it did not pick itself.</p>
      *
      * @param damageTarget the mannequin that takes the hits, see
      *                     {@link CameraData#getDamageTarget()}
@@ -901,12 +902,21 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * One pass of {@link #startMobTargeting(Player, LivingEntity)}: every
-     * hostile mob within {@code body.mob-target-radius} gets the body as its
-     * target.
+     * One pass of {@link #startMobTargeting(Player, LivingEntity)}: the hostile
+     * mobs within {@code body.mob-target-radius} that can see the body get it
+     * as their target.
+     *
+     * <p>Seeing it is the point of the check: the radius alone would send every
+     * mob in it on its way, including the ones standing behind a wall, in a
+     * cave below or on the other side of a hill, which never noticed anything.
+     * So the same look a mob takes at a player decides here as well - eye to
+     * eye, without a block in between.</p>
      *
      * <p>A mob that is busy with somebody else keeps the target it has - that
-     * fight is not ours to take away. Left out on purpose: the warden, which
+     * fight is not ours to take away. One that is already after the body is
+     * left alone too: it is on its way, and losing sight of the body on that
+     * way is its own business, exactly as it would be while chasing a player.
+     * Left out on purpose: the warden, which
      * {@link #onWardenTarget(EntityTargetLivingEntityEvent)} keeps off the body
      * and off the camera player alike, and a mob whose AI is switched off.</p>
      */
@@ -923,6 +933,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 continue;
             }
             if (current != null && !current.isDead() && !current.equals(player)) {
+                continue;
+            }
+            if (!mob.hasLineOfSight(damageTarget)) {
                 continue;
             }
             mob.setTarget(damageTarget);
