@@ -193,6 +193,10 @@ public final class ConfigReader {
      * are turned into text, the way {@link #getString(String, String)} does it;
      * an entry that is neither - a whole section, say - is left out and
      * reported.
+     *
+     * @param def what is used when the key is not in the file, {@code null}
+     *            being allowed so that the caller can tell a missing key from
+     *            an empty list
      */
     public List<String> getStringList(String path, List<String> def) {
         Object raw = config.get(path);
@@ -200,7 +204,7 @@ public final class ConfigReader {
             return def;
         }
         if (!(raw instanceof List<?> list)) {
-            warnWrongType(path, raw, EXPECTED_LIST, String.join(", ", def));
+            warnWrongType(path, raw, EXPECTED_LIST, def == null ? "" : String.join(", ", def));
             return def;
         }
         List<String> values = new ArrayList<>(list.size());

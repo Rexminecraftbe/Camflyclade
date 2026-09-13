@@ -335,26 +335,38 @@ cam-area:
     - dripstone_caves
     - deep_dark
     - sulfur_caves
-  # Ob die Struktur-Liste überhaupt beachtet wird
+  # Ob die beiden Struktur-Listen überhaupt beachtet werden
   structures-enabled: false
   # Strukturen, in denen der Kamera-Modus verboten ist
   # Geschrieben wie die Biome darüber, mit denselben Regeln für Schreibweise,
   # Namensraum und Tippfehler. Die Namen sind die von Minecraft, nicht die
   # deutschen: das Waldanwesen heißt "mansion", das Ozeanmonument "monument",
   # die Hexenhütte "swamp_hut" und die Netherfestung "fortress".
-  # Als "in einer Struktur" gilt ihr ganzer Kasten, nicht nur der Raum, in dem
-  # jemand steht: Der Keller eines Waldanwesens gehört dazu und die Luft über
-  # seinem Dach auch. Eine Struktur, die über mehrere Chunks reicht, wird von
-  # jeder ihrer Ecken aus erkannt.
-  # Eine leere Liste ([]) verbietet keine einzige Struktur.
-  forbidden-structures:
-    - mansion            # Waldanwesen
+  # Eine Struktur, die über mehrere Chunks reicht, wird von jeder ihrer Ecken
+  # aus erkannt. Eine leere Liste ([]) verbietet nichts.
+  #
+  # Die zwei Listen unterscheiden, wie genau gemessen wird:
+  #
+  # -box         nimmt den Kasten, den die Struktur als Ganzes einnimmt. Grob,
+  #              dafür lückenlos: Der Keller eines Gebäudes gehört dazu und die
+  #              Luft über seinem Dach auch. Das Richtige für alles, was
+  #              kompakt gebaut ist.
+  # -components  nimmt nur die Kästen der einzelnen Bauteile. Genauer, dafür
+  #              durchlässig: Bei einer Netherfestung sind nur die Brücken und
+  #              Gänge gesperrt, in den Lücken dazwischen ginge der Kamera-Modus
+  #              weiterhin. Das Richtige für alles Weitläufige, dessen Kasten
+  #              sonst halb leere Landschaft mitsperrt.
+  #
+  # Steht eine Struktur in beiden Listen, wird sie nach Bauteilen gemessen.
+  forbidden-structures-box:
     - monument           # Ozeanmonument
-    - trial_chambers     # Prüfungskammern
-    - pillager_outpost   # Pillager-Außenposten
-    - ancient_city       # Antike Stadt
     - swamp_hut          # Hexenhütte
+    - pillager_outpost   # Pillager-Außenposten
+  forbidden-structures-components:
+    - mansion            # Waldanwesen
     - fortress           # Netherfestung
+    - ancient_city       # Antike Stadt
+    - trial_chambers     # Prüfungskammern
     - bastion_remnant    # Bastionsruine
     - end_city           # End-Stadt
   # Dimensionen, in denen der Kamera-Modus erlaubt ist

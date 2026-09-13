@@ -2246,6 +2246,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         config.checkBooleanSection("message-settings");
         warnAboutOldArmorStandSection();
         warnAboutOldDamageArmorKey();
+        warnAboutOldStructureKey();
         if (camFireGuard != null) {
             camFireGuard.loadConfig(config);
         }
@@ -2278,6 +2279,22 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         getLogger().warning("mirror-damage.damage-armor heisst jetzt damage-armor-mode und kennt drei Werte:"
                 + " mirror, custom und off. true wird als mirror gelesen, false als off.");
+    }
+
+    /**
+     * Says once that {@code cam-area.forbidden-structures} has become two
+     * lists. The old one is still read, as the default of the box list, so that
+     * a config file from an older version keeps behaving the way it reads - but
+     * measuring by pieces only happens once the new list is filled.
+     */
+    private void warnAboutOldStructureKey() {
+        if (!getConfig().isSet("cam-area.forbidden-structures")) {
+            return;
+        }
+        getLogger().warning("cam-area.forbidden-structures ist in zwei Listen aufgeteilt:"
+                + " forbidden-structures-box misst den ganzen Kasten einer Struktur,"
+                + " forbidden-structures-components nur ihre einzelnen Bauteile."
+                + " Die alten Eintraege werden als Kasten-Liste gelesen.");
     }
 
     /**
