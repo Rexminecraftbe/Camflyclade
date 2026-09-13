@@ -11,6 +11,10 @@ messages:
   body-moved: "&cYour body was moved! Camera mode ended."
   body-suffocating: "&cYour body is stuck and suffocating! Camera mode ended."
   bossbar-text: "Cam mode ends in: %time%"
+  # Meldungen zum Abschnitt cam-area. Platzhalter {area}: die Dimension oder
+  # das Biom, so geschrieben wie dort in der Konfiguration.
+  cam-area-limit: "&cYou cannot go any further, cam mode is not allowed in {area}."
+  cam-area-start: "&cYou cannot start cam mode in {area}."
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
   camera-off: "&aCamera mode ended."
   camera-on: "&aCamera mode activated! Use /cam again to exit."
@@ -21,16 +25,31 @@ messages:
   # Server-Log und bei /cam reload zusätzlich an den Spieler, der ihn
   # ausgelöst hat. Platzhalter: {path} der Schlüssel, {value} der eingetragene
   # Wert, {used} der stattdessen benutzte Wert, {allowed} die erlaubten Werte,
-  # {min} der Mindestwert, {count} die Anzahl der Meldungen.
+  # {min} der Mindestwert, {other} die zweite Liste, {count} die Anzahl der
+  # Meldungen, {error} der Grund, an dem die Datei gescheitert ist.
   # Leer lassen bringt nichts, dann greift der eingebaute Text - zum
   # Abschalten message-settings.config-errors auf false setzen.
+  # config-broken kommt bei /cam reload, wenn die Datei gar nicht erst gelesen
+  # werden kann, etwa weil bei einem Listeneintrag der Strich fehlt. Dann
+  # bleibt alles so, wie es war, und der Kamera-Modus läuft weiter.
+  # Beim Serverstart gibt es nichts zu behalten: Dort kommt
+  # config-broken-startup, danach config-start-failed, und das Plugin wird
+  # nicht aktiviert. Einzelne Werte, die nicht passen, sind etwas anderes -
+  # die fallen einzeln auf ihren Standardwert zurück, werden oben gemeldet,
+  # und das Plugin startet ganz normal.
+  config-broken: "&cDie Konfiguration hat einen Fehler und wurde nicht übernommen, es gelten weiter die bisherigen Einstellungen: {error}"
+  config-broken-startup: "&cDie Konfiguration hat einen Fehler: {error}"
+  config-start-failed: "&cStart fehlgeschlagen. Zum Aktivieren den Fehler in der Konfiguration beheben und den Server neu starten."
+  config-entry-in-both-lists: "&cDer Eintrag '{value}' steht in {path} und in {other}. Er wird in keiner der beiden beachtet."
   config-error-header: "&cDie Konfiguration hat {count} ungültige Stellen:"
   config-error-header-single: "&cDie Konfiguration hat eine ungültige Stelle:"
   config-error-more: "&c... und {count} weitere. Alle stehen in der Server-Konsole."
   config-expected-boolean: "&cFalscher Wert für {path}: '{value}'. Erwartet wird true oder false. Es wird {used} verwendet."
+  config-expected-list: "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Liste. Es wird {used} verwendet."
   config-expected-number: "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Zahl. Es wird {used} verwendet."
   config-expected-text: "&cFalscher Wert für {path}: '{value}'. Erwartet wird Text. Es wird {used} verwendet."
   config-too-small: "&cWert für {path} ist zu klein: {value}. Es wird {min} verwendet."
+  config-unknown-entry: "&cUnbekannter Eintrag in {path}: '{value}'. Er wird nicht beachtet."
   config-unknown-value: "&cUnbekannter Wert für {path}: '{value}'. Erlaubt sind: {allowed}. Es wird {used} verwendet."
   cooldown-available: "&aCam mode available again"
   cooldown-text: "You can start cam mode again in %time%."
@@ -61,6 +80,8 @@ message-settings:
   body-moved: true
   body-suffocating: true
   bossbar-text: true
+  cam-area-limit: true
+  cam-area-start: true
   cam-safety: true
   camera-off: false
   camera-on: false
@@ -286,6 +307,110 @@ cam-safety:
   enabled: true
   # Wartezeit nach letztem Schaden in Sekunden
   delay: 5
+
+# Wo der Kamera-Modus überhaupt erlaubt ist
+# Geprüft wird immer die Stelle, an der der Spieler steht: beim Start sein
+# Standort, im Flug der Block, auf den er sich zubewegt. Der Reihe nach zählen
+# Dimension, Biom und Struktur - wer gar nicht im Nether sein darf, muss nicht
+# noch erfahren, in welchem seiner Biome er gerade steht.
+cam-area:
+  # Wie streng die Verbote gelten
+  # 0 = aus. Weder Dimension noch Biom noch Struktur werden geprüft, die Listen
+  #     darunter bleiben unbeachtet liegen.
+  # 1 = nur der Start. In einem verbotenen Gebiet lässt sich der Kamera-Modus
+  #     nicht starten. Wer ihn woanders gestartet hat, darf aber hineinfliegen.
+  # 2 = Start und Flug. Zusätzlich kommt man im Kamera-Modus nicht in ein
+  #     verbotenes Gebiet hinein: An der Grenze geht es einfach nicht weiter,
+  #     genau wie bei camera-mode.max-distance. Zum Körper zurückgesetzt wird
+  #     dabei niemand.
+  #     Wer schon in einem verbotenen Gebiet steht - etwa weil das Verbot erst
+  #     nachträglich dazugekommen ist -, darf sich weiter bewegen, bis er
+  #     draußen ist. Sonst säße er dort fest.
+  # Bei einem unbekannten Wert wird 2 verwendet.
+  level: 2
+  # Abklingzeit zwischen den Meldungen an der Grenze, in Sekunden. Gilt nur auf
+  # Stufe 2; ohne sie stünde die Meldung bei jedem Schritt erneut im Chat.
+  warning-cooldown: 3
+  # Ob die Biom-Liste überhaupt beachtet wird. Auf false bleibt sie stehen, wie
+  # sie ist, und kein Biom verbietet etwas.
+  biomes-enabled: true
+  # Biome, in denen der Kamera-Modus verboten ist
+  # Geschrieben wie in Minecraft, Großschreibung und Leerzeichen sind egal:
+  # "lush_caves", "LUSH_CAVES" und "Lush Caves" meinen dasselbe Biom. Ein Biom
+  # aus einem Datenpack braucht seinen Namensraum davor, etwa
+  # "meinpack:tiefe_hoehle"; ohne einen solchen wird "minecraft:" angenommen.
+  # Kennt der Server ein Biom nicht, steht das als Meldung in der Konsole - ein
+  # Tippfehler bleibt so nicht unbemerkt. Geprüft wird die Liste auch dann,
+  # wenn biomes-enabled auf false steht.
+  # Eine leere Liste ([]) verbietet kein einziges Biom.
+  forbidden-biomes:
+    - lush_caves
+    - dripstone_caves
+    - deep_dark
+    - sulfur_caves
+  # Ob die beiden Struktur-Listen überhaupt beachtet werden
+  structures-enabled: false
+  # Strukturen, in denen der Kamera-Modus verboten ist
+  # Geschrieben wie die Biome darüber, mit denselben Regeln für Schreibweise,
+  # Namensraum und Tippfehler. Die Namen sind die von Minecraft, nicht die
+  # deutschen: das Waldanwesen heißt "mansion", das Ozeanmonument "monument",
+  # die Hexenhütte "swamp_hut" und die Netherfestung "fortress".
+  # Eine Struktur, die über mehrere Chunks reicht, wird von jeder ihrer Ecken
+  # aus erkannt. Eine leere Liste ([]) verbietet nichts.
+  #
+  # Die zwei Listen unterscheiden, wie genau gemessen wird:
+  #
+  # -box         nimmt den Kasten, den die Struktur als Ganzes einnimmt. Grob,
+  #              dafür lückenlos: Der Keller eines Gebäudes gehört dazu und die
+  #              Luft über seinem Dach auch. Das Richtige für alles, was
+  #              kompakt gebaut ist.
+  # -components  nimmt nur die Kästen der einzelnen Bauteile. Genauer, dafür
+  #              durchlässig: Bei einer Netherfestung sind nur die Brücken und
+  #              Gänge gesperrt, in den Lücken dazwischen ginge der Kamera-Modus
+  #              weiterhin. Das Richtige für alles Weitläufige, dessen Kasten
+  #              sonst halb leere Landschaft mitsperrt.
+  #
+  # Eine Struktur gehört in genau eine der beiden Listen. Steht sie in beiden,
+  # ist das ein Fehler: Das Plugin meldet ihn und lässt die Struktur dann ganz
+  # in Ruhe, als stünde sie in keiner der Listen.
+  forbidden-structures-box:
+    - monument           # Ozeanmonument
+    - swamp_hut          # Hexenhütte
+    - pillager_outpost   # Pillager-Außenposten
+  forbidden-structures-components:
+    - mansion            # Waldanwesen
+    - fortress           # Netherfestung
+    - ancient_city       # Antike Stadt
+    - trial_chambers     # Prüfungskammern
+    - bastion_remnant    # Bastionsruine
+    - end_city           # End-Stadt
+  # Wie viele Chunks sich das Plugin für die Struktur-Prüfung merkt
+  # Ein Schritt von einem Block löst die Prüfung aus, geradeaus durch einen
+  # Chunk wird also rund sechzehnmal dasselbe gefragt - das Gemerkte spart diese
+  # Wiederholungen. Ist der Vorrat voll, weicht der am längsten unbenutzte
+  # Chunk zuerst.
+  # 0 = aus. Jeder Schritt fragt neu. Spart den Speicher, kostet dafür bei
+  #     forbidden-structures-components Rechenzeit: Die Bauteile einer
+  #     Netherfestung werden dann bei jedem Schritt erneut durchgesehen.
+  # Gemessen: 256 Chunks belegen je nach Inhalt 18 KB (nichts Verbotenes in der
+  # Nähe) bis 211 KB (überall viele Bauteile), im Normalfall um 50 KB. Der
+  # Vorrat liegt nur im Arbeitsspeicher, wird bei /cam reload geleert und gar
+  # nicht erst angelegt, solange structures-enabled auf false steht.
+  # Eine Struktur, die zur Laufzeit gesetzt wird, fällt erst nach einem Reload
+  # auf - auf 0 sofort.
+  structures-cache-chunks: 256
+  # Dimensionen, in denen der Kamera-Modus erlaubt ist
+  # Hier steht also, wo er erlaubt ist - andersherum als bei Biomen und
+  # Strukturen, wo steht, wo er verboten ist. Das hält jede Liste kurz: Biome
+  # gibt es hunderte und Strukturen dutzende, Dimensionen nur diese drei.
+  # Eine Welt mit einer eigenen Dimension, die ein anderes Plugin oder ein
+  # Datenpack anlegt, gehört zu keiner der drei: Von dieser Liste her ist sie
+  # immer erlaubt, die verbotenen Biome und Strukturen gelten dort aber
+  # trotzdem.
+  dimensions:
+    overworld: true
+    nether: false
+    end: false
 
 # Einstellungen zur Übertragung von Schaden
 # Die beiden Modi damage-mode und damage-armor-mode sind voneinander

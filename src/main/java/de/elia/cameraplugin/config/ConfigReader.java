@@ -32,7 +32,10 @@ public final class ConfigReader {
     public static final String EXPECTED_BOOLEAN = "config-expected-boolean";
     public static final String EXPECTED_NUMBER = "config-expected-number";
     public static final String EXPECTED_TEXT = "config-expected-text";
+    public static final String EXPECTED_LIST = "config-expected-list";
     public static final String UNKNOWN_VALUE = "config-unknown-value";
+    public static final String UNKNOWN_ENTRY = "config-unknown-entry";
+    public static final String ENTRY_IN_BOTH_LISTS = "config-entry-in-both-lists";
     public static final String TOO_SMALL = "config-too-small";
 
     /** Wording used when a key is missing from the config file. */
@@ -43,8 +46,13 @@ public final class ConfigReader {
                     + " Es wird {used} verwendet.",
             EXPECTED_TEXT, "&cFalscher Wert für {path}: '{value}'. Erwartet wird Text."
                     + " Es wird {used} verwendet.",
+            EXPECTED_LIST, "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Liste."
+                    + " Es wird {used} verwendet.",
             UNKNOWN_VALUE, "&cUnbekannter Wert für {path}: '{value}'. Erlaubt sind: {allowed}."
                     + " Es wird {used} verwendet.",
+            UNKNOWN_ENTRY, "&cUnbekannter Eintrag in {path}: '{value}'. Er wird nicht beachtet.",
+            ENTRY_IN_BOTH_LISTS, "&cDer Eintrag '{value}' steht in {path} und in {other}."
+                    + " Er wird in keiner der beiden beachtet.",
             TOO_SMALL, "&cWert für {path} ist zu klein: {value}. Es wird {min} verwendet.");
 
     private final FileConfiguration config;
@@ -183,6 +191,36 @@ public final class ConfigReader {
         return def;
     }
 
+    /**
+     * Reads a list of text entries. Truth values and numbers inside the list
+     * are turned into text, the way {@link #getString(String, String)} does it;
+     * an entry that is neither - a whole section, say - is left out and
+     * reported.
+     *
+     * @param def what is used when the key is not in the file, {@code null}
+     *            being allowed so that the caller can tell a missing key from
+     *            an empty list
+     */
+    public List<String> getStringList(String path, List<String> def) {
+        Object raw = config.get(path);
+        if (raw == null) {
+            return def;
+        }
+        if (!(raw instanceof List<?> list)) {
+            warnWrongType(path, raw, EXPECTED_LIST, def == null ? "" : String.join(", ", def));
+            return def;
+        }
+        List<String> values = new ArrayList<>(list.size());
+        for (Object entry : list) {
+            if (entry instanceof Boolean || entry instanceof Number || entry instanceof String) {
+                values.add(entry.toString());
+            } else if (entry != null) {
+                warnUnknownEntry(path, entry);
+            }
+        }
+        return values;
+    }
+
     /** Reads the name of an enum constant, ignoring case. */
     public <T extends Enum<T>> T getEnum(String path, Class<T> type, T def) {
         String value = getString(path, def.name());
@@ -218,6 +256,31 @@ public final class ConfigReader {
                 .with("value", value)
                 .with("allowed", allowed)
                 .with("used", used));
+    }
+
+    /**
+     * Adds a note that one entry of a list says nothing the plugin knows, so
+     * that a mistyped entry does not simply go unnoticed. Public so that the
+     * checks the plugin does on its own read the same as these here.
+     */
+    public void warnUnknownEntry(String path, Object value) {
+        warnings.add(ConfigIssue.of(UNKNOWN_ENTRY, FALLBACKS.get(UNKNOWN_ENTRY))
+                .with("path", path)
+                .with("value", value));
+    }
+
+    /**
+     * Adds a note that one entry stands in two lists that rule each other out.
+     * Saying two things at once about the same entry is a mistake, not a choice
+     * between them, so neither list is followed for it.
+     *
+     * @param other the other list the entry stands in
+     */
+    public void warnEntryInBothLists(String path, String other, Object value) {
+        warnings.add(ConfigIssue.of(ENTRY_IN_BOTH_LISTS, FALLBACKS.get(ENTRY_IN_BOTH_LISTS))
+                .with("path", path)
+                .with("value", value)
+                .with("other", other));
     }
 
     private void warnTooSmall(String path, String value, String min) {

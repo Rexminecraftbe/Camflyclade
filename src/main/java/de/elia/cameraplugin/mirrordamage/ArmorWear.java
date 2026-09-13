@@ -18,7 +18,6 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.components.EquippableComponent;
 import org.bukkit.tag.DamageTypeTags;
 
-import java.util.Collection;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -131,8 +130,11 @@ public final class ArmorWear {
             return; // a piece told outright that hits leave it alone
         }
         if (type != null && meta.hasDamageResistant()) {
-            Collection<DamageType> resistances = meta.getDamageResistances();
-            if (resistances != null && resistances.contains(type)) {
+            // The tag and not getDamageResistances(): that list is only in the
+            // Spigot API, on Paper the call would fail. Both of them know the
+            // tag the component really carries.
+            Tag<DamageType> resistances = meta.getDamageResistant();
+            if (resistances != null && resistances.isTagged(type)) {
                 return; // netherite in fire and the like
             }
         }

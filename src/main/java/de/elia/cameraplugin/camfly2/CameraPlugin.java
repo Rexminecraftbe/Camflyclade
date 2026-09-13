@@ -24,6 +24,9 @@ import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.profile.PlayerProfile;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
+import org.bukkit.configuration.InvalidConfigurationException;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
@@ -32,7 +35,9 @@ import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.boss.BossBar;
 import org.bukkit.ChatColor;
+import org.bukkit.command.CommandMap;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.PluginCommand;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -49,6 +54,11 @@ import de.elia.cameraplugin.mirrordamage.ArmorWear;
 import de.elia.cameraplugin.mirrordamage.DamageMode;
 import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
@@ -68,6 +78,7 @@ import de.elia.cameraplugin.body.MannequinSkin;
 import de.elia.cameraplugin.body.MobHeads;
 import de.elia.cameraplugin.body.MobTargetMode;
 import de.elia.cameraplugin.body.MovementSensitivity;
+import de.elia.cameraplugin.area.CamAreaRules;
 import de.elia.cameraplugin.config.ConfigIssue;
 import de.elia.cameraplugin.config.ConfigReader;
 
@@ -76,8 +87,12 @@ import static org.bukkit.Sound.ENTITY_ITEM_BREAK;
 @SuppressWarnings("removal")
 public final class CameraPlugin extends JavaPlugin implements Listener {
 
+    /** The config file as it was last read, see {@link #readConfigInto}. */
+    private FileConfiguration config;
     private final Map<UUID, CameraData> cameraPlayers = new HashMap<>();
     private final Map<UUID, Long> distanceMessageCooldown = new HashMap<>();
+    /** Players who were just told that camera mode is not allowed where they are heading. */
+    private final Map<UUID, Long> areaMessageCooldown = new HashMap<>();
     /** The player who is taking the hit his body took right now. */
     private final Set<UUID> damageImmunityBypass = new HashSet<>();
     /** Players whose body was hit and whose hit has not reached them yet. */
@@ -100,6 +115,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private final Map<UUID, BukkitRunnable> cooldownTasks = new HashMap<>();
     private final Map<UUID, Long> lastDamageTimes = new HashMap<>();
     private boolean shuttingDown = false;
+    /** Whether the start got past the config file and actually set anything up. */
+    private boolean startedUp = false;
     /** Whether the missing way to hide the "NPC" line has already been reported. */
     private boolean mannequinLabelReported = false;
     private NamespacedKey bodyKey;
@@ -130,6 +147,13 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * tick, so that it never hangs should he stop ticking altogether.
      */
     private static final int MAX_ARMOR_WAIT_TICKS = 10;
+
+    /**
+     * How much of the reason a broken config file gives is passed on. The rest
+     * is cut off: a YAML error carries the offending line and a caret under it
+     * and would otherwise fill the chat.
+     */
+    private static final int MAX_CONFIG_ERROR_LENGTH = 200;
 
     /**
      * How many config notes are sent into the chat of the player who reloaded.
@@ -182,6 +206,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private double mobTargetRadius;
     /** Whether a mob head on the body halves the range of that kind of mob. */
     private boolean mobTargetHeads;
+    /** Where camera mode may be started and flown, the section {@code cam-area}. */
+    private final CamAreaRules camAreaRules = new CamAreaRules();
     private VisibilityMode playerVisibilityMode;
     private boolean allowInvisibilityPotion;
     private GlowMode glowMode;
@@ -230,7 +256,22 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     public void onEnable() {
         shuttingDown = false;
         saveDefaultConfig();
-        // Created before the config is read, so its values go through the same
+        // Read before anything is set up, and not left to the first getConfig():
+        // Bukkit would answer a file it cannot parse with a stack trace and an
+        // empty configuration. A file that cannot be read at all stops the
+        // start here - camera mode on settings nobody wrote down is worse than
+        // no camera mode, and the file has to be repaired either way. Single
+        // values that do not fit are a different matter: they fall back one by
+        // one, are listed below, and the plugin starts.
+        if (!readConfigInto(null)) {
+            getLogger().severe(ChatColor.stripColor(configMessage("config-start-failed",
+                    "&cStart fehlgeschlagen. Zum Aktivieren den Fehler in der Konfiguration"
+                            + " beheben und den Server neu starten.")));
+            unregisterCommands();
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        // Created before the values are read, so its own go through the same
         // load and its notes end up in the same report.
         camFireGuard = new CamFireGuard(this);
         reportConfigWarnings(loadConfigValues(), null);
@@ -258,6 +299,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         this.getCommand("cam").setTabCompleter(new CamTabCompleter());
         this.getServer().getPluginManager().registerEvents(this, this);
         refreshNoCollisionTeam();
+        startedUp = true;
         getLogger().info("CameraPlugin wurde aktiviert!");
     }
 
@@ -310,6 +352,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     @Override
     public void onDisable() {
         shuttingDown = true;
+        if (!startedUp) {
+            // The start stopped at the config file, so there is nothing set up
+            // that would have to be taken down.
+            return;
+        }
         // Erstellt eine Kopie der Keys, um ConcurrentModificationException zu vermeiden
         for (UUID playerId : new HashSet<>(cameraPlayers.keySet())) {
             Player player = Bukkit.getPlayer(playerId);
@@ -1862,6 +1909,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             exitCameraMode(event.getPlayer());
         }
         distanceMessageCooldown.remove(event.getPlayer().getUniqueId());
+        areaMessageCooldown.remove(event.getPlayer().getUniqueId());
         removePlayerFromNoCollisionTeam(event.getPlayer());
         lastDamageTimes.remove(event.getPlayer().getUniqueId());
     }
@@ -1891,6 +1939,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (!allowLavaFlight && blockAt.getType() == Material.LAVA) {
             sendConfiguredMessage(player, "cant-fly-in-lava");
             exitCameraMode(player);
+            return;
+        }
+
+        if (entersForbiddenArea(player, event.getFrom(), to)) {
+            event.setCancelled(true);
             return;
         }
 
@@ -2197,6 +2250,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         camSafetyDelay = config.getInt("cam-safety.delay", 5, 0);
         camSafetyMessage = config.getString("messages.cam-safety",
                 "§cDu kannst den Cam-Modus nicht starten! Du musst noch %seconds% Sekunden in Sicherheit bleiben.");
+        camAreaRules.load(config);
 
         mirrorKnockback = config.getBoolean("mirror-damage.knockback", true);
         mirrorDebug = config.getBoolean("mirror-damage.debug", false);
@@ -2234,6 +2288,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         config.checkBooleanSection("message-settings");
         warnAboutOldArmorStandSection();
         warnAboutOldDamageArmorKey();
+        warnAboutOldStructureKey();
         if (camFireGuard != null) {
             camFireGuard.loadConfig(config);
         }
@@ -2266,6 +2321,22 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         getLogger().warning("mirror-damage.damage-armor heisst jetzt damage-armor-mode und kennt drei Werte:"
                 + " mirror, custom und off. true wird als mirror gelesen, false als off.");
+    }
+
+    /**
+     * Says once that {@code cam-area.forbidden-structures} has become two
+     * lists. The old one is still read, as the default of the box list, so that
+     * a config file from an older version keeps behaving the way it reads - but
+     * measuring by pieces only happens once the new list is filled.
+     */
+    private void warnAboutOldStructureKey() {
+        if (!getConfig().isSet("cam-area.forbidden-structures")) {
+            return;
+        }
+        getLogger().warning("cam-area.forbidden-structures ist in zwei Listen aufgeteilt:"
+                + " forbidden-structures-box misst den ganzen Kasten einer Struktur,"
+                + " forbidden-structures-components nur ihre einzelnen Bauteile."
+                + " Die alten Eintraege werden als Kasten-Liste gelesen.");
     }
 
     /**
@@ -2360,6 +2431,198 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * it is about. Use {@code message-settings.config-errors} to switch the
      * notes in the chat off instead.
      */
+    @Override
+    public FileConfiguration getConfig() {
+        if (config == null) {
+            reloadConfig();
+        }
+        return config;
+    }
+
+    /**
+     * Reads the config file again, without a player waiting for an answer.
+     *
+     * <p>Overridden because Bukkit answers a file it cannot parse with an empty
+     * configuration and a stack trace in the log: every single setting would
+     * quietly fall back to its default, and a {@code /cam reload} would still
+     * report success. Here such a file changes nothing, and the reason is said
+     * in one line.</p>
+     */
+    @Override
+    public void reloadConfig() {
+        readConfigInto(null);
+    }
+
+    /**
+     * Reads the config file and puts it in place.
+     *
+     * <p>A file that cannot be read leaves the settings exactly as they are - a
+     * forgotten dash must not put the whole server back to the default values.
+     * Only while the plugin is starting is there nothing to keep, and the
+     * values built into the jar have to carry it; that is what the two
+     * different messages say.</p>
+     *
+     * @param initiator the player who asked for the reload, told about a broken
+     *                  file as well, or {@code null} for the console alone
+     * @return whether the file could be read
+     */
+    private boolean readConfigInto(CommandSender initiator) {
+        YamlConfiguration loaded = new YamlConfiguration();
+        File file = new File(getDataFolder(), "config.yml");
+        Exception problem = null;
+        if (file.exists()) {
+            try {
+                loaded.load(file);
+            } catch (IOException | InvalidConfigurationException ex) {
+                problem = ex;
+            }
+        }
+        // Reported only once something is in place, because the report looks
+        // its own wording up in the config file.
+        if (problem != null && config != null) {
+            reportBrokenConfig("config-broken", problem, initiator);
+            return false;
+        }
+        InputStream defaults = getResource("config.yml");
+        if (defaults != null) {
+            loaded.setDefaults(YamlConfiguration.loadConfiguration(
+                    new InputStreamReader(defaults, StandardCharsets.UTF_8)));
+        }
+        config = loaded;
+        if (problem != null) {
+            reportBrokenConfig("config-broken-startup", problem, initiator);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Takes the plugin's command out of the list the server answers from.
+     *
+     * <p>A command out of the plugin.yml stays registered even after the plugin
+     * has been switched off, and {@code PluginCommand} then answers it with an
+     * exception and a stack trace in the log - before a single line of this
+     * plugin is reached, so it cannot be caught from inside. Taken out here, a
+     * {@code /cam} is simply an unknown command while the plugin is off, which
+     * is the truth.</p>
+     *
+     * <p>Done by reflection because only Paper hands out that list
+     * ({@code Server#getCommandMap()}); the Spigot API the plugin is built
+     * against does not have it. Where it is missing nothing happens, and the
+     * command keeps answering the way the server means it to.</p>
+     */
+    private void unregisterCommands() {
+        PluginCommand command = getCommand("cam");
+        if (command == null) {
+            return;
+        }
+        try {
+            Object map = Bukkit.getServer().getClass().getMethod("getCommandMap")
+                    .invoke(Bukkit.getServer());
+            Object known = map.getClass().getMethod("getKnownCommands").invoke(map);
+            if (known instanceof Map<?, ?> commands) {
+                // Takes the plain name and every alias with it, whatever they
+                // are called.
+                commands.values().removeIf(entry -> entry == command);
+            }
+            if (map instanceof CommandMap commandMap) {
+                command.unregister(commandMap);
+            }
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            getLogger().warning("Der Befehl /cam konnte nicht abgemeldet werden, er antwortet"
+                    + " deshalb mit einem Fehler des Servers: " + ex);
+        }
+    }
+
+    /** Says in one line why the config file could not be read. */
+    private void reportBrokenConfig(String key, Exception problem, CommandSender initiator) {
+        String fallback = "config-broken".equals(key)
+                ? "&cDie Konfiguration hat einen Fehler und wurde nicht übernommen,"
+                        + " es gelten weiter die bisherigen Einstellungen: {error}"
+                : "&cDie Konfiguration hat einen Fehler: {error}";
+        String text = configMessage(key, fallback).replace("{error}", describeProblem(problem.getMessage()));
+        getLogger().severe(ChatColor.stripColor(text));
+        if (initiator != null && isMessageEnabled("config-errors")) {
+            initiator.sendMessage(text);
+        }
+    }
+
+    /**
+     * What the parser says about a spot in the file, and what it means in
+     * German. Matched by a piece of the sentence, because the exact wording
+     * differs between versions of the parser. These are the mistakes that
+     * really happen while editing the file by hand; anything else keeps the
+     * parser's own words.
+     */
+    private static final String[][] CONFIG_PROBLEMS = {
+            {"could not find expected ':'",
+                    "Hier fehlt ein \"-\" am Zeilenanfang oder ein \":\" hinter dem Namen"},
+            {"mapping values are not allowed",
+                    "Hier steht ein \":\" zu viel, oder der Wert gehört in Anführungszeichen"},
+            {"cannot start any token",
+                    "Hier steht ein Tabulator; eingerückt wird nur mit Leerzeichen"},
+            {"expected <block end>",
+                    "Hier stimmt die Einrückung nicht mit den Zeilen darüber überein", "zweite"},
+            {"found unexpected end of stream",
+                    "Hier fehlt das schließende Anführungszeichen"},
+    };
+
+    /**
+     * Turns what the parser reports into one short sentence: where it is, and
+     * what is missing there.
+     *
+     * <p>The parser hands out several lines for one mistake - its own wording,
+     * the offending line of the file, a caret underneath, and the spot where it
+     * finally gave up. Only two of those are worth anything: the spot to
+     * repair and the reason. Its own sentences are the ones that start at the
+     * very left, the last of them names the problem; the spots are indented.
+     * </p>
+     *
+     * <p>Read out of the text and not out of the parser's own error class,
+     * which is none of the server API and need not be the same everywhere. A
+     * text this cannot make sense of is passed on as it is.</p>
+     */
+    private static String describeProblem(String message) {
+        if (message == null) {
+            return "";
+        }
+        String reason = "";
+        for (String line : message.split("\\R")) {
+            if (!line.isBlank() && !Character.isWhitespace(line.charAt(0))) {
+                reason = line.trim();
+            }
+        }
+        // Which of the two spots to name: usually the first, where the mistake
+        // begins. Only a broken indentation is the other way round - there the
+        // first spot is the block that was still fine.
+        boolean secondSpot = false;
+        for (String[] known : CONFIG_PROBLEMS) {
+            if (message.contains(known[0])) {
+                reason = known[1];
+                secondSpot = known.length > 2;
+                break;
+            }
+        }
+        List<String> spots = new ArrayList<>();
+        java.util.regex.Matcher marks = java.util.regex.Pattern
+                .compile("line (\\d+), column (\\d+)").matcher(message);
+        while (marks.find()) {
+            spots.add("Zeile " + marks.group(1) + ", Spalte " + marks.group(2));
+        }
+        if (spots.isEmpty()) {
+            return shorten(message.replaceAll("\\s+", " ").trim());
+        }
+        String spot = secondSpot && spots.size() > 1 ? spots.get(1) : spots.get(0);
+        return shorten(spot + ": " + (reason.isEmpty() ? "unlesbar" : reason));
+    }
+
+    /** Cuts a reason that is longer than a line of chat. */
+    private static String shorten(String text) {
+        return text.length() <= MAX_CONFIG_ERROR_LENGTH
+                ? text
+                : text.substring(0, MAX_CONFIG_ERROR_LENGTH) + "...";
+    }
+
     private String configMessage(String key, String fallback) {
         String raw = getConfig().getString("messages." + key, fallback);
         if (raw == null || raw.isEmpty()) {
@@ -2634,7 +2897,80 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         return false;
     }
 
-    public void reloadPlugin(Player initiator) {
+    /**
+     * Checks whether camera mode may be started where the player is standing,
+     * as long as {@code cam-area.level} is not 0.
+     *
+     * <p>Which areas those are is decided by {@link CamAreaRules}: the
+     * dimension the world belongs to and the biome the player stands in.</p>
+     *
+     * @return {@code true} when he may start, otherwise {@code false} and he
+     *         has been told why
+     */
+    public boolean checkCamArea(Player player) {
+        if (!camAreaRules.getLevel().blocksStart()) {
+            return true;
+        }
+        String area = camAreaRules.forbiddenArea(player.getLocation());
+        if (area == null) {
+            return true;
+        }
+        if (isMessageEnabled("cam-area-start")) {
+            player.sendMessage(getMessage("cam-area-start").replace("{area}", area));
+        }
+        return false;
+    }
+
+    /**
+     * Whether this step would carry the player into an area camera mode is not
+     * allowed in, which only level 2 keeps him out of.
+     *
+     * <p>He is stopped at the border and not sent back to his body: the step is
+     * simply cancelled, the same way {@code camera-mode.max-distance} does it.
+     * Whoever already stands in such an area - because the rule only came later,
+     * say - may keep moving until he is out of it, otherwise he would sit there
+     * stuck.</p>
+     *
+     * <p>Only a step that leaves the block is looked at. Looking around fires
+     * this event as well, and the biome of a spot does not change from that.</p>
+     */
+    private boolean entersForbiddenArea(Player player, Location from, Location to) {
+        if (!camAreaRules.getLevel().blocksFlight()
+                || (from.getBlockX() == to.getBlockX()
+                    && from.getBlockY() == to.getBlockY()
+                    && from.getBlockZ() == to.getBlockZ()
+                    && from.getWorld().equals(to.getWorld()))) {
+            return false;
+        }
+        String area = camAreaRules.forbiddenArea(to);
+        if (area == null || camAreaRules.forbiddenArea(from) != null) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        if (areaMessageCooldown.getOrDefault(player.getUniqueId(), 0L) < now) {
+            if (isMessageEnabled("cam-area-limit")) {
+                player.sendMessage(getMessage("cam-area-limit").replace("{area}", area));
+            }
+            areaMessageCooldown.put(player.getUniqueId(),
+                    now + TimeUnit.SECONDS.toMillis(camAreaRules.getWarningCooldown()));
+        }
+        return true;
+    }
+
+    /**
+     * Reads the config file again and puts everything that depends on it back
+     * together.
+     *
+     * <p>The file is read first, before anybody is disturbed: a file with a
+     * mistake in it changes nothing at all then, and whoever is in camera mode
+     * stays there.</p>
+     *
+     * @return whether the reload went through
+     */
+    public boolean reloadPlugin(Player initiator) {
+        if (!readConfigInto(initiator)) {
+            return false;
+        }
         for (UUID uuid : new HashSet<>(cameraPlayers.keySet())) {
             Player camPlayer = Bukkit.getPlayer(uuid);
             if (camPlayer != null) {
@@ -2642,7 +2978,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 exitCameraMode(camPlayer);
             }
         }
-        reloadConfig();
         reportConfigWarnings(loadConfigValues(), initiator);
         refreshNoCollisionTeam();
         for (BukkitRunnable task : cooldownTasks.values()) {
@@ -2650,6 +2985,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         cooldownTasks.clear();
         camCooldowns.clear();
+        return true;
     }
     private ItemStack createCameraHead() {
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);

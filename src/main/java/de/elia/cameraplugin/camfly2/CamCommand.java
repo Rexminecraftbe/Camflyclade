@@ -32,8 +32,9 @@ public class CamCommand implements CommandExecutor {
                 return true;
             }
             plugin.sendConfiguredMessage(player, "reload-start");
-            plugin.reloadPlugin(player);
-            plugin.sendConfiguredMessage(player, "reload-success");
+            if (plugin.reloadPlugin(player)) {
+                plugin.sendConfiguredMessage(player, "reload-success");
+            }
             return true;
         }
 
@@ -47,6 +48,9 @@ public class CamCommand implements CommandExecutor {
                     String msg = plugin.getMessage("cooldown-text").replace("%time%", plugin.formatDuration(remaining));
                     player.sendMessage(ChatColor.RED + msg);
                 }
+                return true;
+            }
+            if (!plugin.checkCamArea(player)) {
                 return true;
             }
             if (!plugin.checkCamSafety(player)) {
