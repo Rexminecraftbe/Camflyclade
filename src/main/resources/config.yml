@@ -297,16 +297,15 @@ cam-safety:
 
 # Wo der Kamera-Modus überhaupt erlaubt ist
 # Geprüft wird immer die Stelle, an der der Spieler steht: beim Start sein
-# Standort, im Flug der Block, auf den er sich zubewegt. Zuerst zählt die
-# Dimension, danach das Biom - wer gar nicht im Nether sein darf, muss nicht
+# Standort, im Flug der Block, auf den er sich zubewegt. Der Reihe nach zählen
+# Dimension, Biom und Struktur - wer gar nicht im Nether sein darf, muss nicht
 # noch erfahren, in welchem seiner Biome er gerade steht.
 cam-area:
   # Wie streng die Verbote gelten
-  # 0 = aus. Weder Biom noch Dimension werden geprüft, die Listen darunter
-  #     bleiben unbeachtet liegen.
-  # 1 = nur der Start. In einem verbotenen Biom oder einer verbotenen Dimension
-  #     lässt sich der Kamera-Modus nicht starten. Wer ihn woanders gestartet
-  #     hat, darf aber hineinfliegen.
+  # 0 = aus. Weder Dimension noch Biom noch Struktur werden geprüft, die Listen
+  #     darunter bleiben unbeachtet liegen.
+  # 1 = nur der Start. In einem verbotenen Gebiet lässt sich der Kamera-Modus
+  #     nicht starten. Wer ihn woanders gestartet hat, darf aber hineinfliegen.
   # 2 = Start und Flug. Zusätzlich kommt man im Kamera-Modus nicht in ein
   #     verbotenes Gebiet hinein: An der Grenze geht es einfach nicht weiter,
   #     genau wie bei camera-mode.max-distance. Zum Körper zurückgesetzt wird
@@ -319,26 +318,53 @@ cam-area:
   # Abklingzeit zwischen den Meldungen an der Grenze, in Sekunden. Gilt nur auf
   # Stufe 2; ohne sie stünde die Meldung bei jedem Schritt erneut im Chat.
   warning-cooldown: 3
+  # Ob die Biom-Liste überhaupt beachtet wird. Auf false bleibt sie stehen, wie
+  # sie ist, und kein Biom verbietet etwas.
+  biomes-enabled: true
   # Biome, in denen der Kamera-Modus verboten ist
   # Geschrieben wie in Minecraft, Großschreibung und Leerzeichen sind egal:
   # "lush_caves", "LUSH_CAVES" und "Lush Caves" meinen dasselbe Biom. Ein Biom
   # aus einem Datenpack braucht seinen Namensraum davor, etwa
   # "meinpack:tiefe_hoehle"; ohne einen solchen wird "minecraft:" angenommen.
   # Kennt der Server ein Biom nicht, steht das als Meldung in der Konsole - ein
-  # Tippfehler bleibt so nicht unbemerkt.
+  # Tippfehler bleibt so nicht unbemerkt. Geprüft wird die Liste auch dann,
+  # wenn biomes-enabled auf false steht.
   # Eine leere Liste ([]) verbietet kein einziges Biom.
   forbidden-biomes:
     - lush_caves
     - dripstone_caves
     - deep_dark
     - sulfur_caves
+  # Ob die Struktur-Liste überhaupt beachtet wird
+  structures-enabled: false
+  # Strukturen, in denen der Kamera-Modus verboten ist
+  # Geschrieben wie die Biome darüber, mit denselben Regeln für Schreibweise,
+  # Namensraum und Tippfehler. Die Namen sind die von Minecraft, nicht die
+  # deutschen: das Waldanwesen heißt "mansion", das Ozeanmonument "monument",
+  # die Hexenhütte "swamp_hut" und die Netherfestung "fortress".
+  # Als "in einer Struktur" gilt ihr ganzer Kasten, nicht nur der Raum, in dem
+  # jemand steht: Der Keller eines Waldanwesens gehört dazu und die Luft über
+  # seinem Dach auch. Eine Struktur, die über mehrere Chunks reicht, wird von
+  # jeder ihrer Ecken aus erkannt.
+  # Eine leere Liste ([]) verbietet keine einzige Struktur.
+  forbidden-structures:
+    - mansion            # Waldanwesen
+    - monument           # Ozeanmonument
+    - trial_chambers     # Prüfungskammern
+    - pillager_outpost   # Pillager-Außenposten
+    - ancient_city       # Antike Stadt
+    - swamp_hut          # Hexenhütte
+    - fortress           # Netherfestung
+    - bastion_remnant    # Bastionsruine
+    - end_city           # End-Stadt
   # Dimensionen, in denen der Kamera-Modus erlaubt ist
-  # Hier steht also, wo er erlaubt ist - andersherum als bei den Biomen, wo
-  # steht, wo er verboten ist. Das hält beide Listen kurz: Biome gibt es
-  # hunderte, Dimensionen nur diese drei.
+  # Hier steht also, wo er erlaubt ist - andersherum als bei Biomen und
+  # Strukturen, wo steht, wo er verboten ist. Das hält jede Liste kurz: Biome
+  # gibt es hunderte und Strukturen dutzende, Dimensionen nur diese drei.
   # Eine Welt mit einer eigenen Dimension, die ein anderes Plugin oder ein
   # Datenpack anlegt, gehört zu keiner der drei: Von dieser Liste her ist sie
-  # immer erlaubt, die verbotenen Biome gelten dort aber trotzdem.
+  # immer erlaubt, die verbotenen Biome und Strukturen gelten dort aber
+  # trotzdem.
   dimensions:
     overworld: true
     nether: false
