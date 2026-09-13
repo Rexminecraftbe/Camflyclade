@@ -426,9 +426,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         double reaggroRadius = 64.0;
         for (Entity entity : player.getNearbyEntities(reaggroRadius, reaggroRadius, reaggroRadius)) {
             if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
-                // Aggro away from the player: onto his body, or nowhere at all
-                // when the body is out of the reach of that mob.
-                mob.setTarget(noticesBody(mob, damageTarget) ? damageTarget : null);
+                // Aggro away from the player: onto his body, or nowhere at all -
+                // when the body is out of the reach of that mob, and in the mode
+                // off, where nobody is handed the body at all.
+                boolean toBody = mobTargetMode.attractsMobs() && noticesBody(mob, damageTarget);
+                mob.setTarget(toBody ? damageTarget : null);
             }
         }
 
@@ -992,9 +994,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * which that kind of mob notices a player wearing it. That part is switched
      * by {@code body.mob-target-heads}.</p>
      *
-     * <p>The mode {@code off} sends nobody to the body, but a mob that was
-     * already after the player still has to be told where he went - it goes by
-     * the vanilla range, see {@link #onMobTarget(EntityTargetEvent)}.</p>
+     * <p>The mode {@code off} never asks: nothing is sent to the body there and
+     * nothing is handed over to it either.</p>
      */
     private double sightRangeFor(Mob mob, LivingEntity body) {
         double range = mobTargetMode == MobTargetMode.CUSTOM ? mobTargetRadius : vanillaFollowRange(mob);
@@ -1718,24 +1719,39 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * that shoots, a blaze or a ghast, keeps firing at him from far away
      * without ever being able to hit him.
      *
-     * <p>His body takes his place instead, as long as it stands within the
-     * range this mob has, see {@link #sightRangeFor(Mob, LivingEntity)}. Is it
-     * further away - the player flies on, his body stays behind - then the mob
-     * gets no target rather than one it can never reach. This holds in every
-     * mode of {@code body.mob-target}, {@code off} included: that mode says
-     * that nobody is sent to the body, not that the camera player is fair
-     * game.</p>
+     * <p>In the modes {@code vanilla} and {@code custom} his body takes his
+     * place, as long as it stands within the range this mob has, see
+     * {@link #sightRangeFor(Mob, LivingEntity)}. Is it further away - the
+     * player flies on, his body stays behind - then the mob gets no target
+     * rather than one it can never reach.</p>
+     *
+     * <p>In the mode {@code off} nothing is handed over: whoever takes aim at
+     * the camera player loses his target and stays where he is. Otherwise
+     * flying past a zombie would be enough to send it off to the body, which is
+     * exactly what that mode is meant to prevent. The body itself is refused
+     * there as well, so that mode holds even where a mob would pick a mannequin
+     * on its own.</p>
      */
     @EventHandler
     public void onMobTarget(EntityTargetEvent event) {
         if (!(event.getTarget() instanceof Player player)) {
+            // In the mode off the body is nobody's target either, not even of a
+            // mob that would go for a mannequin by itself.
+            if (!mobTargetMode.attractsMobs()) {
+                UUID owner = getBodyOrHitboxOwner(event.getTarget());
+                if (owner != null && cameraPlayers.containsKey(owner)) {
+                    event.setCancelled(true);
+                    event.setTarget(null);
+                }
+            }
             return;
         }
         CameraData data = cameraPlayers.get(player.getUniqueId());
         if (data == null) {
             return;
         }
-        if (event.getEntity() instanceof Mob mob && noticesBody(mob, data.getDamageTarget())) {
+        if (mobTargetMode.attractsMobs() && event.getEntity() instanceof Mob mob
+                && noticesBody(mob, data.getDamageTarget())) {
             event.setTarget(data.getDamageTarget());
             return;
         }

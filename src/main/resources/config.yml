@@ -188,16 +188,19 @@ body:
   #           Weiter als 64 Blöcke schaut das Plugin nicht; so weit bemerkt in
   #           Vanilla ohnehin kein Mob etwas.
   # custom  = eine Reichweite für alle Mobs, siehe mob-target-radius.
-  # off     = das Plugin schickt keinen Mob zum Körper.
+  # off     = kein Mob geht auf den Körper los. Auch wer den Spieler ins Visier
+  #           nimmt oder ihn beim Start des Kamera-Modus schon angriff, wird
+  #           nicht auf den Körper umgelenkt: Er verliert sein Ziel und bleibt,
+  #           wo er ist. Ein Zombie, an dem der Spieler vorbeifliegt, setzt sich
+  #           also nicht in Bewegung.
   # Der alte Schalter true wird als custom gelesen, false als off.
   #
   # In allen drei Modi gilt: Der Kamera-Spieler selbst ist nie ein Ziel - er
   # nimmt im Kamera-Modus keinen Schaden, ein Mob auf ihm schlüge also ins
-  # Leere. Wer ihn ins Visier nimmt, wird auf den Körper umgelenkt, solange der
-  # in der Reichweite dieses Mobs steht, und bekommt sonst gar kein Ziel. Ohne
+  # Leere. Bei vanilla und custom nimmt sein Körper diesen Platz ein, solange er
+  # in der Reichweite des Mobs steht, sonst bekommt der Mob gar kein Ziel. Ohne
   # das schossen Lohen und Ghasts auf den fliegenden Spieler, ohne ihn je
-  # treffen zu können. "off" heißt also: es kommt keiner von sich aus - nicht,
-  # dass der Kamera-Spieler Freiwild wäre.
+  # treffen zu können.
   #
   # Sehen heißt in jedem Modus auch wirklich sehen: von Augen zu Augen, ohne
   # Block dazwischen. Wer hinter einer Wand, unter der Erde oder hinter einem
