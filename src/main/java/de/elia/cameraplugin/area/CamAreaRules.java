@@ -97,6 +97,7 @@ public final class CamAreaRules {
      *         written in the config file, or {@code null} when camera mode is
      *         allowed there
      */
+    @SuppressWarnings("deprecation")
     public String forbiddenArea(Location location) {
         World world = location == null ? null : location.getWorld();
         if (world == null) {
@@ -112,9 +113,11 @@ public final class CamAreaRules {
             return null;
         }
         Biome biome = world.getBiome(location);
-        // getKeyOrNull and not getKey: a biome that is in no registry - one a
-        // plugin built for itself - has no key and would throw.
-        NamespacedKey key = biome == null ? null : biome.getKeyOrNull();
+        // getKey and not getKeyOrNull: the latter comes from RegistryAware,
+        // which the Spigot API puts on a biome but Paper does not - the call
+        // would fail there. getKey sits on Keyed, which both of them have, and
+        // a biome read out of a world is registered and therefore has a key.
+        NamespacedKey key = biome == null ? null : biome.getKey();
         if (key == null || !forbiddenBiomes.contains(key)) {
             return null;
         }
