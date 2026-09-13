@@ -74,8 +74,8 @@ public final class CamAreaRules {
             List.of("mansion", "fortress", "ancient_city", "trial_chambers",
                     "bastion_remnant", "end_city");
 
-    /** How many chunks the structure lookup keeps at once. */
-    private static final int REMEMBERED_CHUNKS = 256;
+    /** How many chunks the structure lookup keeps at once by default. */
+    private static final int DEFAULT_REMEMBERED_CHUNKS = 256;
 
     /** How long the message at the border waits before it is sent again, in seconds. */
     private static final int DEFAULT_WARNING_COOLDOWN = 3;
@@ -84,6 +84,7 @@ public final class CamAreaRules {
     private int warningCooldown = DEFAULT_WARNING_COOLDOWN;
     private boolean biomesEnabled = true;
     private boolean structuresEnabled = false;
+    private int rememberedChunks = DEFAULT_REMEMBERED_CHUNKS;
     private final Set<NamespacedKey> forbiddenBiomes = new HashSet<>();
     private final Set<NamespacedKey> boxStructures = new HashSet<>();
     private final Set<NamespacedKey> componentStructures = new HashSet<>();
@@ -92,17 +93,18 @@ public final class CamAreaRules {
 
     /**
      * What has already been worked out for a chunk, the least recently used
-     * entry giving way first. Worth keeping because a structure does not move:
-     * it is placed once while the chunk is generated and stays as it is. Only
-     * one that is set afterwards, by hand or by another plugin, is missed until
-     * the next {@code /cam reload}, which empties this.
+     * entry giving way first once {@code structures-cache-chunks} is reached.
+     * Worth keeping because a structure does not move: it is placed once while
+     * the chunk is generated and stays as it is. Only one that is set
+     * afterwards, by hand or by another plugin, is missed until the next
+     * {@code /cam reload}, which empties this.
      */
     private final Map<ChunkKey, List<ForbiddenStructure>> knownChunks =
             new LinkedHashMap<>(16, 0.75f, true) {
                 @Override
                 protected boolean removeEldestEntry(
                         Map.Entry<ChunkKey, List<ForbiddenStructure>> eldest) {
-                    return size() > REMEMBERED_CHUNKS;
+                    return size() > rememberedChunks;
                 }
             };
 
@@ -135,6 +137,8 @@ public final class CamAreaRules {
         readKeys(config, "cam-area.forbidden-structures-components",
                 onlyList != null ? List.of() : DEFAULT_COMPONENT_STRUCTURES,
                 Registry.STRUCTURE, componentStructures);
+        rememberedChunks = config.getInt("cam-area.structures-cache-chunks",
+                DEFAULT_REMEMBERED_CHUNKS, 0);
         knownChunks.clear();
         allowedDimensions.clear();
         for (Map.Entry<World.Environment, String> dimension : DIMENSIONS.entrySet()) {
@@ -225,16 +229,31 @@ public final class CamAreaRules {
      *
      * <p>Worth keeping because the same chunk is asked again and again: a step
      * of one block sets off this check, so flying straight through a chunk asks
-     * about it some sixteen times. Only the boxes reaching into the chunk are
-     * kept, so a fortress with a hundred pieces does not leave all hundred of
-     * them to be measured at every step.</p>
+     * about it some sixteen times. On 0 nothing is kept and every step asks
+     * anew.</p>
      */
     private List<ForbiddenStructure> structuresAround(World world, int chunkX, int chunkZ) {
+        if (rememberedChunks <= 0) {
+            return lookUpStructures(world, chunkX, chunkZ);
+        }
         ChunkKey chunk = new ChunkKey(world.getUID(), chunkX, chunkZ);
         List<ForbiddenStructure> known = knownChunks.get(chunk);
-        if (known != null) {
-            return known;
+        if (known == null) {
+            known = lookUpStructures(world, chunkX, chunkZ);
+            knownChunks.put(chunk, known);
         }
+        return known;
+    }
+
+    /**
+     * Asks the world which forbidden structures reach into this chunk and works
+     * out the boxes to measure against.
+     *
+     * <p>Only the boxes reaching into the chunk are taken, so a fortress with a
+     * hundred pieces does not leave all hundred of them to be measured at every
+     * step.</p>
+     */
+    private List<ForbiddenStructure> lookUpStructures(World world, int chunkX, int chunkZ) {
         BoundingBox chunkBox = new BoundingBox(chunkX << 4, world.getMinHeight(), chunkZ << 4,
                 (chunkX << 4) + 16, world.getMaxHeight(), (chunkZ << 4) + 16);
         List<ForbiddenStructure> found = new ArrayList<>();
@@ -251,9 +270,7 @@ public final class CamAreaRules {
                 found.add(new ForbiddenStructure(displayName(structure), boxes));
             }
         }
-        List<ForbiddenStructure> result = List.copyOf(found);
-        knownChunks.put(chunk, result);
-        return result;
+        return List.copyOf(found);
     }
 
     /**

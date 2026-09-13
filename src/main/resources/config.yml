@@ -369,6 +369,21 @@ cam-area:
     - trial_chambers     # Prüfungskammern
     - bastion_remnant    # Bastionsruine
     - end_city           # End-Stadt
+  # Wie viele Chunks sich das Plugin für die Struktur-Prüfung merkt
+  # Ein Schritt von einem Block löst die Prüfung aus, geradeaus durch einen
+  # Chunk wird also rund sechzehnmal dasselbe gefragt - das Gemerkte spart diese
+  # Wiederholungen. Ist der Vorrat voll, weicht der am längsten unbenutzte
+  # Chunk zuerst.
+  # 0 = aus. Jeder Schritt fragt neu. Spart den Speicher, kostet dafür bei
+  #     forbidden-structures-components Rechenzeit: Die Bauteile einer
+  #     Netherfestung werden dann bei jedem Schritt erneut durchgesehen.
+  # Gemessen: 256 Chunks belegen je nach Inhalt 18 KB (nichts Verbotenes in der
+  # Nähe) bis 211 KB (überall viele Bauteile), im Normalfall um 50 KB. Der
+  # Vorrat liegt nur im Arbeitsspeicher, wird bei /cam reload geleert und gar
+  # nicht erst angelegt, solange structures-enabled auf false steht.
+  # Eine Struktur, die zur Laufzeit gesetzt wird, fällt erst nach einem Reload
+  # auf - auf 0 sofort.
+  structures-cache-chunks: 256
   # Dimensionen, in denen der Kamera-Modus erlaubt ist
   # Hier steht also, wo er erlaubt ist - andersherum als bei Biomen und
   # Strukturen, wo steht, wo er verboten ist. Das hält jede Liste kurz: Biome
