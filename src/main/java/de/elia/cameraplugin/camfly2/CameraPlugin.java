@@ -35,7 +35,9 @@ import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.boss.BossBar;
 import org.bukkit.ChatColor;
+import org.bukkit.command.CommandMap;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.PluginCommand;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -265,6 +267,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             getLogger().severe(ChatColor.stripColor(configMessage("config-start-failed",
                     "&cStart fehlgeschlagen. Zum Aktivieren den Fehler in der Konfiguration"
                             + " beheben und den Server neu starten.")));
+            unregisterCommands();
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
@@ -2491,6 +2494,44 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Takes the plugin's command out of the list the server answers from.
+     *
+     * <p>A command out of the plugin.yml stays registered even after the plugin
+     * has been switched off, and {@code PluginCommand} then answers it with an
+     * exception and a stack trace in the log - before a single line of this
+     * plugin is reached, so it cannot be caught from inside. Taken out here, a
+     * {@code /cam} is simply an unknown command while the plugin is off, which
+     * is the truth.</p>
+     *
+     * <p>Done by reflection because only Paper hands out that list
+     * ({@code Server#getCommandMap()}); the Spigot API the plugin is built
+     * against does not have it. Where it is missing nothing happens, and the
+     * command keeps answering the way the server means it to.</p>
+     */
+    private void unregisterCommands() {
+        PluginCommand command = getCommand("cam");
+        if (command == null) {
+            return;
+        }
+        try {
+            Object map = Bukkit.getServer().getClass().getMethod("getCommandMap")
+                    .invoke(Bukkit.getServer());
+            Object known = map.getClass().getMethod("getKnownCommands").invoke(map);
+            if (known instanceof Map<?, ?> commands) {
+                // Takes the plain name and every alias with it, whatever they
+                // are called.
+                commands.values().removeIf(entry -> entry == command);
+            }
+            if (map instanceof CommandMap commandMap) {
+                command.unregister(commandMap);
+            }
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            getLogger().warning("Der Befehl /cam konnte nicht abgemeldet werden, er antwortet"
+                    + " deshalb mit einem Fehler des Servers: " + ex);
+        }
     }
 
     /** Says in one line why the config file could not be read. */
