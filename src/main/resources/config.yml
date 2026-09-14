@@ -587,8 +587,8 @@ mirror-damage:
   #          (etwa Netherit im Feuer), nutzen sich weiterhin nicht ab.
   # false  = die Rüstung nutzt sich gar nicht ab.
   # Der alte Schalter damage-armor wird weiter gelesen, solange dieser
-  # Schlüssel fehlt: true heißt mirror, false heißt aus. Wer hier noch "off"
-  # stehen hat, bekommt weiter dasselbe wie mit false.
+  # Schlüssel fehlt: true heißt mirror, false heißt keine Abnutzung. Wer hier
+  # noch "off" stehen hat, bekommt weiter dasselbe wie mit false.
   damage-armor-mode: mirror  # mirror | custom | false
   # Haltbarkeitspunkte pro Treffer für den Modus "custom". 0 bedeutet keine
   # Abnutzung. Zum Vergleich: ein Treffer mit 8 Schaden (4 Herzen) kostet in

@@ -1181,8 +1181,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * which that kind of mob notices a player wearing it. That part is switched
      * by {@code body.mob-target-heads}.</p>
      *
-     * <p>The mode {@code off} never asks: nothing is sent to the body there and
-     * nothing is handed over to it either.</p>
+     * <p>The mode {@code false} never asks: nothing is sent to the body there
+     * and nothing is handed over to it either.</p>
      */
     private double sightRangeFor(Mob mob, LivingEntity body) {
         double range = mobTargetMode == MobTargetMode.CUSTOM ? mobTargetRadius : vanillaFollowRange(mob);
@@ -1922,7 +1922,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * player flies on, his body stays behind - then the mob gets no target
      * rather than one it can never reach.</p>
      *
-     * <p>In the mode {@code off} nothing is handed over: whoever takes aim at
+     * <p>In the mode {@code false} nothing is handed over: whoever takes aim at
      * the camera player loses his target and stays where he is. Otherwise
      * flying past a zombie would be enough to send it off to the body, which is
      * exactly what that mode is meant to prevent. The body itself is refused
@@ -1932,8 +1932,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onMobTarget(EntityTargetEvent event) {
         if (!(event.getTarget() instanceof Player player)) {
-            // In the mode off the body is nobody's target either, not even of a
-            // mob that would go for a mannequin by itself.
+            // In the mode false the body is nobody's target either, not even of
+            // a mob that would go for a mannequin by itself.
             if (!mobTargetMode.attractsMobs()) {
                 UUID owner = getBodyOrHitboxOwner(event.getTarget());
                 if (owner != null && cameraPlayers.containsKey(owner)) {
@@ -2774,8 +2774,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (!getConfig().isSet("mirror-damage.damage-armor")) {
             return;
         }
-        getLogger().warning("mirror-damage.damage-armor heisst jetzt damage-armor-mode und kennt drei Werte:"
-                + " mirror, custom und off. true wird als mirror gelesen, false als off.");
+        log(Level.WARNING, "mirror-damage.damage-armor heisst jetzt damage-armor-mode und kennt drei Werte:"
+                + " mirror, custom und false. true wird als mirror gelesen, false bleibt false.");
     }
 
     /**
