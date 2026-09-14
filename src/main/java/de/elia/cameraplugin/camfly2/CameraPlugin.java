@@ -56,6 +56,8 @@ import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.Charset;
+import java.text.Normalizer;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -79,6 +81,9 @@ import de.elia.cameraplugin.body.MobHeads;
 import de.elia.cameraplugin.body.MobTargetMode;
 import de.elia.cameraplugin.body.MovementSensitivity;
 import de.elia.cameraplugin.area.CamAreaRules;
+import de.elia.cameraplugin.portal.PortalKind;
+import de.elia.cameraplugin.portal.PortalReturn;
+import de.elia.cameraplugin.portal.PortalRules;
 import de.elia.cameraplugin.config.ConfigIssue;
 import de.elia.cameraplugin.config.ConfigReader;
 
@@ -93,6 +98,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private final Map<UUID, Long> distanceMessageCooldown = new HashMap<>();
     /** Players who were just told that camera mode is not allowed where they are heading. */
     private final Map<UUID, Long> areaMessageCooldown = new HashMap<>();
+    /** Players who were just told that a portal does not let them through. */
+    private final Map<UUID, Long> portalMessageCooldown = new HashMap<>();
     /** The player who is taking the hit his body took right now. */
     private final Set<UUID> damageImmunityBypass = new HashSet<>();
     /** Players whose body was hit and whose hit has not reached them yet. */
@@ -190,6 +197,21 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     /** What a mob head on the body leaves of the range of that kind of mob. */
     private static final double MOB_HEAD_SIGHT_FACTOR = 0.5;
 
+    /** What the server console writes with, see {@link #consoleCharset()}. */
+    private static final Charset CONSOLE_CHARSET = consoleCharset();
+
+    /**
+     * How long a portal is left alone after it turned a camera player away, in
+     * ticks. Without it the server would try the very same trip again straight
+     * away - an end portal is stepped on and not waited in, so it would ask
+     * every single tick - and the player would stand in a portal that tells him
+     * off without end.
+     *
+     * <p>The same waiting time is put on a player who is brought back, in case
+     * he is set down in a portal himself: the one he set out through.</p>
+     */
+    private static final int PORTAL_COOLDOWN_TICKS = 100;
+
     // Configurable values
     private boolean maxDistanceEnabled;
     private double maxDistance;
@@ -210,6 +232,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private boolean mobTargetHeads;
     /** Where camera mode may be started and flown, the section {@code cam-area}. */
     private final CamAreaRules camAreaRules = new CamAreaRules();
+    /** Whether a portal lets a camera player through, the section {@code portals}. */
+    private final PortalRules portalRules = new PortalRules();
     private VisibilityMode playerVisibilityMode;
     private boolean allowInvisibilityPotion;
     private GlowMode glowMode;
@@ -266,7 +290,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         // values that do not fit are a different matter: they fall back one by
         // one, are listed below, and the plugin starts.
         if (!readConfigInto(null)) {
-            getLogger().severe(ChatColor.stripColor(configMessage("config-start-failed",
+            log(Level.SEVERE, ChatColor.stripColor(configMessage("config-start-failed",
                     "&cStart fehlgeschlagen. Zum Aktivieren den Fehler in der Konfiguration"
                             + " beheben und den Server neu starten.")));
             unregisterCommands();
@@ -348,7 +372,66 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (text.isEmpty()) {
             return;
         }
-        getLogger().log(level, error == null ? text : text.replace("{error}", error));
+        log(level, error == null ? text : text.replace("{error}", error));
+    }
+
+    /**
+     * Puts one line into the server console, written so that console can
+     * actually print it, see {@link #forConsole(String)}.
+     */
+    private void log(Level level, String text) {
+        getLogger().log(level, forConsole(text));
+    }
+
+    /**
+     * The charset the server console writes its lines with, which decides
+     * whether an umlaut survives the way out.
+     */
+    private static Charset consoleCharset() {
+        // Deliberately not System.out: the server puts a stream of its own in
+        // its place early on, and that one answers with the charset of the log
+        // framework rather than the one the line is written out with. These two
+        // properties carry the charset of the console itself.
+        for (String property : new String[] {"stdout.encoding", "native.encoding"}) {
+            String name = System.getProperty(property);
+            if (name == null || name.isBlank()) {
+                continue;
+            }
+            try {
+                return Charset.forName(name);
+            } catch (RuntimeException ignored) {
+                // A name this Java does not know - the next one counts.
+            }
+        }
+        // Nothing to go by: rewrite the umlauts rather than risk question marks.
+        return StandardCharsets.US_ASCII;
+    }
+
+    /**
+     * The same sentence, written so that the server console can print it.
+     *
+     * <p>A console that cannot write umlauts turns every one of them into a
+     * question mark - "Falscher Wert f?r ..." instead of "für". Which
+     * characters it can write is decided by how the server was started and not
+     * by this plugin, so the sentence is rewritten only when it really would
+     * not survive: ä becomes ae, ß becomes ss, and whatever is left over loses
+     * its accent. A console that can write them gets the sentence untouched,
+     * and the chat keeps the umlauts either way.</p>
+     */
+    private static String forConsole(String text) {
+        if (CONSOLE_CHARSET.newEncoder().canEncode(text)) {
+            return text;
+        }
+        String plain = text
+                .replace("ä", "ae").replace("ö", "oe").replace("ü", "ue")
+                .replace("Ä", "Ae").replace("Ö", "Oe").replace("Ü", "Ue")
+                .replace("ß", "ss");
+        if (CONSOLE_CHARSET.newEncoder().canEncode(plain)) {
+            return plain;
+        }
+        // Alles Übrige verliert seine Zeichen: é wird e, ein Zeichen ohne
+        // Entsprechung bleibt und wird zum Fragezeichen wie bisher.
+        return Normalizer.normalize(plain, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
     }
 
     @Override
@@ -582,7 +665,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             hiddenArmor[i] = copy;
         }
         if (stillVisible) {
-            getLogger().warning("Die Rüstung des Mannequins konnte nicht ausgeblendet werden, "
+            log(Level.WARNING, "Die Rüstung des Mannequins konnte nicht ausgeblendet werden, "
                     + "sie bleibt am Körper sichtbar. Setter: " + EquipmentVisibility.describeAssetSetter());
         }
         return hiddenArmor;
@@ -653,7 +736,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private Mannequin spawnMannequinBody(Player player, Location location) {
         Mannequin mannequin = (Mannequin) location.getWorld().spawnEntity(location, EntityType.MANNEQUIN);
         if (!MannequinSkin.apply(mannequin, player)) {
-            getLogger().warning("Der Skin von " + player.getName()
+            log(Level.WARNING, "Der Skin von " + player.getName()
                     + " konnte nicht auf das Mannequin übertragen werden, es benutzt den Standard-Skin.");
         }
         applyMovementSensitivity(mannequin);
@@ -673,7 +756,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             return;
         }
         mannequinLabelReported = true;
-        getLogger().warning("Die Zeile \"NPC\" unter dem Namen des Mannequins konnte nicht abgeschaltet werden."
+        log(Level.WARNING, "Die Zeile \"NPC\" unter dem Namen des Mannequins konnte nicht abgeschaltet werden."
                 + " Setter: " + MannequinLabel.describeSetter());
     }
 
@@ -1098,8 +1181,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * which that kind of mob notices a player wearing it. That part is switched
      * by {@code body.mob-target-heads}.</p>
      *
-     * <p>The mode {@code off} never asks: nothing is sent to the body there and
-     * nothing is handed over to it either.</p>
+     * <p>The mode {@code false} never asks: nothing is sent to the body there
+     * and nothing is handed over to it either.</p>
      */
     private double sightRangeFor(Mob mob, LivingEntity body) {
         double range = mobTargetMode == MobTargetMode.CUSTOM ? mobTargetRadius : vanillaFollowRange(mob);
@@ -1153,7 +1236,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 Location particleLoc = player.getLocation().add(0, particleHeight, 0);
                 for (Player viewer : Bukkit.getOnlinePlayers()) {
                     if (!showOwnParticles && viewer.equals(player)) continue;
-                    if (shouldShowParticlesTo(viewer)) {
+                    if (shouldShowParticlesTo(viewer, particleLoc)) {
                         viewer.spawnParticle(Particle.SOUL_FIRE_FLAME, particleLoc,
                                 particlesPerTick, 0.1, 0.1, 0.1, 0);
                     }
@@ -1164,7 +1247,17 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         particleTasks.put(player.getUniqueId(), task);
     }
 
-    private boolean shouldShowParticlesTo(Player viewer) {
+    /**
+     * Whether this player is shown the particles around a camera player.
+     *
+     * <p>The world is asked first: a camera player who went through a portal is
+     * a world away, and the particles carry only coordinates, so everybody over
+     * here would see them floating at the same spot in his own world.</p>
+     */
+    private boolean shouldShowParticlesTo(Player viewer, Location particleLoc) {
+        if (!viewer.getWorld().equals(particleLoc.getWorld())) {
+            return false;
+        }
         return switch (playerVisibilityMode) {
             case ALL -> true;
             case CAM -> cameraPlayers.containsKey(viewer.getUniqueId());
@@ -1706,7 +1799,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         return switch (armorDamageMode) {
             case MIRROR -> "mirror, " + points + " Punkte";
             case CUSTOM -> "custom, " + points + " Punkte";
-            case OFF -> "off";
+            case OFF -> "false";
         };
     }
 
@@ -1829,7 +1922,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * player flies on, his body stays behind - then the mob gets no target
      * rather than one it can never reach.</p>
      *
-     * <p>In the mode {@code off} nothing is handed over: whoever takes aim at
+     * <p>In the mode {@code false} nothing is handed over: whoever takes aim at
      * the camera player loses his target and stays where he is. Otherwise
      * flying past a zombie would be enough to send it off to the body, which is
      * exactly what that mode is meant to prevent. The body itself is refused
@@ -1839,8 +1932,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onMobTarget(EntityTargetEvent event) {
         if (!(event.getTarget() instanceof Player player)) {
-            // In the mode off the body is nobody's target either, not even of a
-            // mob that would go for a mannequin by itself.
+            // In the mode false the body is nobody's target either, not even of
+            // a mob that would go for a mannequin by itself.
             if (!mobTargetMode.attractsMobs()) {
                 UUID owner = getBodyOrHitboxOwner(event.getTarget());
                 if (owner != null && cameraPlayers.containsKey(owner)) {
@@ -1967,6 +2060,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         distanceMessageCooldown.remove(event.getPlayer().getUniqueId());
         areaMessageCooldown.remove(event.getPlayer().getUniqueId());
+        portalMessageCooldown.remove(event.getPlayer().getUniqueId());
         removePlayerFromNoCollisionTeam(event.getPlayer());
         lastDamageTimes.remove(event.getPlayer().getUniqueId());
     }
@@ -2004,19 +2098,298 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             return;
         }
 
-        Location standLoc = cameraPlayers.get(player.getUniqueId()).getBody().getLocation();
-        // Always prevent players from switching worlds, optionally limit distance
-        if (!to.getWorld().equals(standLoc.getWorld()) ||
-                (maxDistanceEnabled && to.distanceSquared(standLoc) > maxDistance * maxDistance)) {
-            event.setCancelled(true);
-            long now = System.currentTimeMillis();
-            if (distanceMessageCooldown.getOrDefault(player.getUniqueId(), 0L) < now) {
-                if (isMessageEnabled("distance-limit")) {
-                    player.sendMessage(getMessage("distance-limit").replace("{distance}", String.valueOf(maxDistance)));
-                }
-                distanceMessageCooldown.put(player.getUniqueId(), now + TimeUnit.SECONDS.toMillis(distanceWarningCooldown));
+        CameraData data = cameraPlayers.get(player.getUniqueId());
+        if (!maxDistanceEnabled || !beyondMaxDistance(data, to)) {
+            return;
+        }
+        if (beyondMaxDistance(data, event.getFrom())) {
+            // He is out there already, so stopping the step alone would nail him
+            // to the spot instead of keeping him near his body - which is
+            // exactly what a portal used to do to him. He is brought back.
+            //
+            // The step is deliberately not cancelled here: a cancelled step
+            // puts the player back where he came from once this returns, and
+            // that is out there - it would undo the teleport that just brought
+            // him in. The step is sent to the spot he belongs at instead.
+            warnDistanceLimit(player, "portal-return-distance", data, event.getFrom());
+            event.setTo(bringBack(player, data));
+            return;
+        }
+        event.setCancelled(true);
+        warnDistanceLimit(player, "distance-limit", data, to);
+    }
+
+    /**
+     * Tells the player that he has reached the end of his leash, at most once
+     * every {@code camera-mode.distance-warning-cooldown} seconds - the step is
+     * stopped over and over as long as he keeps walking against the border.
+     *
+     * @param key   the message: the one for a step that does not go through, or
+     *              the one for a player who is brought back
+     * @param where the spot the distance was measured at, which decides what
+     *              {@code {from}} names
+     */
+    private void warnDistanceLimit(Player player, String key, CameraData data, Location where) {
+        long now = System.currentTimeMillis();
+        if (distanceMessageCooldown.getOrDefault(player.getUniqueId(), 0L) >= now) {
+            return;
+        }
+        distanceMessageCooldown.put(player.getUniqueId(),
+                now + TimeUnit.SECONDS.toMillis(distanceWarningCooldown));
+        sendMessage(player, key, "{distance}", String.valueOf(maxDistance),
+                "{from}", distanceAnchorName(data, where));
+    }
+
+    /**
+     * What the distance is measured from at this spot, written out for a
+     * message: his body, or - in a world his body is not in - the portal he
+     * came out of there.
+     *
+     * <p>Follows {@link #distanceAnchor(CameraData, Location)}, so the message
+     * never sends a player looking for his body while he is a world away from
+     * it.</p>
+     */
+    private String distanceAnchorName(CameraData data, Location where) {
+        boolean fromPortal = !data.getBody().getWorld().equals(where.getWorld())
+                && data.getPortalAnchor() != null;
+        String text = getMessage(fromPortal ? "distance-from-portal" : "distance-from-body");
+        // Ein Satzteil, kein ganzer Satz: Fehlt er in einer Konfiguration aus
+        // einer aelteren Version, stuende sonst "... blocks from !" im Chat.
+        if (!text.isEmpty()) {
+            return text;
+        }
+        return fromPortal ? "the portal you came out of" : "your body";
+    }
+
+    /**
+     * Whether a portal lets the camera player through, and what he finds on the
+     * other side.
+     *
+     * <p>Two things can shut a portal: the switch of its own kind under
+     * {@code portals}, and {@code cam-area} forbidding the dimension behind it -
+     * but only on level 2, the level that keeps him out of such a place while he
+     * flies. A portal that is shut simply does not carry him anywhere; he keeps
+     * standing where he is.</p>
+     *
+     * <p>Where a portal comes out cannot be asked beforehand, so a forbidden
+     * biome or structure over there is found only by walking through once, see
+     * {@link #afterPortal(Player, Location)}. From then on the portal is known
+     * and shuts like the other two, as long as {@code portals.remember-blocked}
+     * is on.</p>
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onCameraPortal(PlayerPortalEvent event) {
+        Player player = event.getPlayer();
+        CameraData data = cameraPlayers.get(player.getUniqueId());
+        if (data == null) {
+            return;
+        }
+        PortalKind kind = PortalKind.of(event.getCause());
+        if (kind == null) {
+            // An end gateway or a chorus fruit: no setting here rules over
+            // those, only the distance to the body does.
+            return;
+        }
+        boolean open = portalRules.letsThrough(kind);
+        String area = null;
+        if (open) {
+            // Die Dimension hinter dem Portal steht schon vor der Reise fest.
+            // Ein verbotenes Biom oder eine verbotene Struktur erst danach -
+            // deshalb zaehlt hier, was eine fruehere Reise ergeben hat.
+            area = forbiddenPortalDimension(event.getTo());
+            if (area == null) {
+                area = portalRules.forbiddenAreaBehind(event.getFrom());
             }
         }
+        if (!open || area != null) {
+            event.setCancelled(true);
+            player.setPortalCooldown(PORTAL_COOLDOWN_TICKS);
+            warnPortalShut(player, kind, area);
+            return;
+        }
+        // The trip itself happens after this event, so the far side can only be
+        // looked at from the next tick on.
+        Location entry = event.getFrom().clone();
+        Bukkit.getScheduler().runTask(this, () -> afterPortal(player, entry));
+    }
+
+    /**
+     * The dimension a portal leads into, when {@code cam-area} does not allow
+     * camera mode in it at all.
+     *
+     * <p>Only level 2 keeps the player out of it: level 1 has a say over the
+     * start alone and lets him fly wherever he likes afterwards, portals
+     * included.</p>
+     *
+     * @return the name of the dimension, or {@code null} when the portal may be
+     *         used
+     */
+    private String forbiddenPortalDimension(Location to) {
+        return camAreaRules.getLevel().blocksFlight() ? camAreaRules.forbiddenDimension(to) : null;
+    }
+
+    /**
+     * Tells the player why the portal did not take him along: the portal itself
+     * is shut, or camera mode is not allowed in what lies behind it.
+     *
+     * <p>He keeps standing in the portal, which asks again and again, so the
+     * message waits {@code portals.warning-cooldown} seconds before it is sent
+     * a second time.</p>
+     *
+     * @param area the forbidden dimension behind the portal, or the biome or
+     *             structure an earlier trip through it came out in, or
+     *             {@code null} when the portal is shut on its own
+     */
+    private void warnPortalShut(Player player, PortalKind kind, String area) {
+        long now = System.currentTimeMillis();
+        if (portalMessageCooldown.getOrDefault(player.getUniqueId(), 0L) >= now) {
+            return;
+        }
+        portalMessageCooldown.put(player.getUniqueId(),
+                now + TimeUnit.SECONDS.toMillis(portalRules.getWarningCooldown()));
+        if (area != null) {
+            sendMessage(player, "cam-area-limit", "{area}", area);
+        } else {
+            sendMessage(player, "portal-blocked", "{portal}", kind.getConfigName());
+        }
+    }
+
+    /**
+     * What the camera player finds on the far side of a portal, one tick after
+     * the trip.
+     *
+     * <p>His body stays where it was, so the far side decides what
+     * {@code camera-mode.max-distance} is measured from: in another world it is
+     * the portal he came out of, and once he is back in the world of his body
+     * that body counts again. Whoever comes out too far away from it is brought
+     * back, and so is whoever comes out in a biome or a structure camera mode is
+     * not allowed in - a portal is not asked beforehand where it comes out. The
+     * second kind is written down, so that the same portal turns the next
+     * camera player away instead of sending him over first.</p>
+     *
+     * @param entry where he stepped into the portal, the spot he is brought back
+     *              to under {@code portals.return-to: portal}
+     */
+    private void afterPortal(Player player, Location entry) {
+        CameraData data = cameraPlayers.get(player.getUniqueId());
+        if (data == null || !player.isOnline()) {
+            return;
+        }
+        Location arrival = player.getLocation();
+        boolean withBody = data.getBody().getWorld().equals(arrival.getWorld());
+        data.setPortalAnchor(withBody ? null : arrival.clone());
+        if (!withBody && data.getPortalEntry() == null) {
+            // The first portal of the trip is the one he is brought back to,
+            // not whichever he went through last: that one is in the world he
+            // is being taken out of.
+            data.setPortalEntry(entry);
+        }
+        String area = camAreaRules.getLevel().blocksFlight()
+                ? camAreaRules.forbiddenArea(arrival)
+                : null;
+        if (area != null) {
+            // Jetzt ist bekannt, wo dieses Portal herauskommt. Ohne das wuerde
+            // es ihn bei jedem Durchgang aufs Neue hinueber und gleich wieder
+            // zurueck schicken.
+            portalRules.rememberForbiddenArea(entry, area);
+            sendMessage(player, "portal-return-area", "{area}", area);
+            bringBack(player, data);
+            return;
+        }
+        if (maxDistanceEnabled && beyondMaxDistance(data, arrival)) {
+            sendMessage(player, "portal-return-distance", "{distance}",
+                    String.valueOf(maxDistance), "{from}", distanceAnchorName(data, arrival));
+            bringBack(player, data);
+            return;
+        }
+        if (withBody) {
+            // He is home, the trip is over: the next one gets a starting portal
+            // of its own.
+            data.setPortalEntry(null);
+        }
+    }
+
+    /**
+     * Puts a player back where camera mode holds him: at his body, or at the
+     * portal he set out through, see {@code portals.return-to}.
+     *
+     * <p>The portal is only taken when it is a spot he would be allowed to stand
+     * in anyway - in the world of his body and inside the distance to it -
+     * otherwise he would be brought back to a place he would be brought back
+     * from again. Without a portal to go back to it is the body, which is always
+     * there.</p>
+     *
+     * @return the spot he was put down at
+     */
+    private Location bringBack(Player player, CameraData data) {
+        // Whatever he was measured against over there is done with.
+        data.setPortalAnchor(null);
+        Location entry = data.getPortalEntry();
+        data.setPortalEntry(null);
+        Location target = returnTarget(data, entry);
+        player.teleport(target);
+        // He may well have been set down in the portal he set out through.
+        player.setPortalCooldown(PORTAL_COOLDOWN_TICKS);
+        keepFlying(player);
+        return target;
+    }
+
+    /** Where {@link #bringBack(Player, CameraData)} puts the player down. */
+    private Location returnTarget(CameraData data, Location entry) {
+        if (portalRules.getReturnTo() == PortalReturn.PORTAL && entry != null
+                && entry.getWorld().equals(data.getBody().getWorld())
+                && (!maxDistanceEnabled || !beyondMaxDistance(data, entry))) {
+            return entry;
+        }
+        return data.getBody().getLocation();
+    }
+
+    /**
+     * Keeps the player in the air after he was teleported, which takes flight
+     * away from him. Done once more a tick later: the client is sent its own
+     * flight state along with the teleport and would otherwise let him drop.
+     */
+    private void keepFlying(Player player) {
+        player.setAllowFlight(true);
+        player.setFlying(true);
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (player.isOnline() && cameraPlayers.containsKey(player.getUniqueId())) {
+                    player.setAllowFlight(true);
+                    player.setFlying(true);
+                }
+            }
+        }.runTaskLater(this, 1L);
+    }
+
+    /**
+     * Whether this spot lies further from the body than
+     * {@code camera-mode.max-distance} allows.
+     *
+     * <p>Measured from the body, or, while the player is in a world his body is
+     * not in, from the portal he came out of there: his body cannot be reached
+     * from that world, so the portal takes its place. A player in a world
+     * neither of the two is in - one that something else carried him into - has
+     * nothing left to measure against and counts as too far away, which brings
+     * him back to his body.</p>
+     */
+    private boolean beyondMaxDistance(CameraData data, Location location) {
+        Location anchor = distanceAnchor(data, location);
+        return anchor == null || location.distanceSquared(anchor) > maxDistance * maxDistance;
+    }
+
+    /**
+     * What the distance to the body is measured from in the world of this spot,
+     * or {@code null} when nothing there can be measured against.
+     */
+    private Location distanceAnchor(CameraData data, Location location) {
+        Location body = data.getBody().getLocation();
+        if (body.getWorld().equals(location.getWorld())) {
+            return body;
+        }
+        Location portal = data.getPortalAnchor();
+        return portal != null && portal.getWorld().equals(location.getWorld()) ? portal : null;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -2251,6 +2624,27 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
+     * Sends a message with its placeholders filled in, unless it is switched
+     * off or carries no text at all - a config file from an older version does
+     * not have the newer keys in it, and a blank line in the chat says nothing.
+     *
+     * @param fills placeholder and value, one pair after the other
+     */
+    private void sendMessage(Player player, String key, String... fills) {
+        if (!isMessageEnabled(key)) {
+            return;
+        }
+        String text = getMessage(key);
+        if (text.isEmpty()) {
+            return;
+        }
+        for (int i = 0; i + 1 < fills.length; i += 2) {
+            text = text.replace(fills[i], fills[i + 1]);
+        }
+        player.sendMessage(text);
+    }
+
+    /**
      * Reads every value out of the config file.
      *
      * @return a note for each value that did not fit and was replaced
@@ -2309,10 +2703,13 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         camSafetyMessage = config.getString("messages.cam-safety",
                 "§cDu kannst den Cam-Modus nicht starten! Du musst noch %seconds% Sekunden in Sicherheit bleiben.");
         camAreaRules.load(config);
+        portalRules.load(config);
 
         mirrorKnockback = config.getBoolean("mirror-damage.knockback", true);
         mirrorDebug = config.getBoolean("mirror-damage.debug", false);
-        String modeRaw = config.getChoice("mirror-damage.damage-mode", "mirror", "mirror", "custom", "off", "false");
+        // "off" war frueher die Schreibweise fuer aus und wird weiter gelesen.
+        String modeRaw = readMode(config, "mirror-damage.damage-mode", "mirror",
+                List.of("mirror", "custom", "false"), List.of("off"));
         if ("custom".equalsIgnoreCase(modeRaw)) {
             damageMode = DamageMode.CUSTOM;
         } else if ("false".equalsIgnoreCase(modeRaw) || "off".equalsIgnoreCase(modeRaw)) {
@@ -2329,9 +2726,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         // The mode grew out of the old truth value damage-armor, so a config
         // file that still carries only that one keeps saying what it said:
         // true wears the armour down, false leaves it alone.
-        String armorDefault = config.getBoolean("mirror-damage.damage-armor", true) ? "mirror" : "off";
-        String armorRaw = config.getChoice("mirror-damage.damage-armor-mode", armorDefault,
-                "mirror", "custom", "off", "true", "false");
+        String armorDefault = config.getBoolean("mirror-damage.damage-armor", true) ? "mirror" : "false";
+        String armorRaw = readMode(config, "mirror-damage.damage-armor-mode", armorDefault,
+                List.of("mirror", "custom", "false"), List.of("off", "true"));
         if ("custom".equalsIgnoreCase(armorRaw)) {
             armorDamageMode = ArmorDamageMode.CUSTOM;
         } else if ("false".equalsIgnoreCase(armorRaw) || "off".equalsIgnoreCase(armorRaw)) {
@@ -2377,8 +2774,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (!getConfig().isSet("mirror-damage.damage-armor")) {
             return;
         }
-        getLogger().warning("mirror-damage.damage-armor heisst jetzt damage-armor-mode und kennt drei Werte:"
-                + " mirror, custom und off. true wird als mirror gelesen, false als off.");
+        log(Level.WARNING, "mirror-damage.damage-armor heisst jetzt damage-armor-mode und kennt drei Werte:"
+                + " mirror, custom und false. true wird als mirror gelesen, false bleibt false.");
     }
 
     /**
@@ -2398,14 +2795,47 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
+     * Reads a setting that knows more than two values and hands back the
+     * spelling it was written with.
+     *
+     * <p>Kept apart from {@link ConfigReader#getChoice} because of the
+     * spellings an older config file may carry: those are still read, they are
+     * simply not offered any more. Only {@code shown} turns up in the note
+     * about a value nobody knows, so nobody is sent back to a spelling this
+     * version has left behind.</p>
+     *
+     * @param shown  the spellings this version writes
+     * @param legacy the spellings an older version wrote, read but not offered
+     */
+    private String readMode(ConfigReader config, String path, String def,
+                            List<String> shown, List<String> legacy) {
+        String value = config.getString(path, def);
+        if (isOneOf(value, shown) || isOneOf(value, legacy)) {
+            return value;
+        }
+        config.warnUnknownValue(path, value, String.join(", ", shown), def);
+        return def;
+    }
+
+    /** Whether the value is one of these spellings, capitals not counting. */
+    private static boolean isOneOf(String value, List<String> spellings) {
+        for (String spelling : spellings) {
+            if (spelling.equalsIgnoreCase(value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Reads {@code body.mob-target}. The setting used to be a truth value, back
      * when there was only the one range to switch on and off, so those two
      * values keep saying what they said: {@code true} is the range out of the
      * config file, {@code false} is nobody sent to the body.
      */
     private MobTargetMode resolveMobTargetMode(ConfigReader config) {
-        String raw = config.getChoice("body.mob-target", "off",
-                "vanilla", "custom", "off", "true", "false");
+        String raw = readMode(config, "body.mob-target", "false",
+                List.of("vanilla", "custom", "false"), List.of("off", "true"));
         if ("vanilla".equalsIgnoreCase(raw)) {
             return MobTargetMode.VANILLA;
         }
@@ -2460,7 +2890,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         for (String text : texts) {
             // The console has no use for colour codes, only for the sentence.
-            getLogger().warning(ChatColor.stripColor(text));
+            log(Level.WARNING, ChatColor.stripColor(text));
         }
         if (initiator == null || texts.isEmpty() || !isMessageEnabled("config-errors")) {
             return;
@@ -2587,7 +3017,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 command.unregister(commandMap);
             }
         } catch (ReflectiveOperationException | RuntimeException ex) {
-            getLogger().warning("Der Befehl /cam konnte nicht abgemeldet werden, er antwortet"
+            log(Level.WARNING, "Der Befehl /cam konnte nicht abgemeldet werden, er antwortet"
                     + " deshalb mit einem Fehler des Servers: " + ex);
         }
     }
@@ -2599,7 +3029,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                         + " es gelten weiter die bisherigen Einstellungen: {error}"
                 : "&cDie Konfiguration hat einen Fehler: {error}";
         String text = configMessage(key, fallback).replace("{error}", describeProblem(problem.getMessage()));
-        getLogger().severe(ChatColor.stripColor(text));
+        log(Level.SEVERE, ChatColor.stripColor(text));
         if (initiator != null && isMessageEnabled("config-errors")) {
             initiator.sendMessage(text);
         }
@@ -3076,6 +3506,19 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         private final ItemStack[] originalInventoryContents; // Für Inventar
         private final ItemStack[] originalArmorContents;     // Für Rüstung
         private final Collection<PotionEffect> pausedEffects;
+        /**
+         * Where the distance to the body is measured from while the player is
+         * in a world his body is not in: the portal he came out of there.
+         * {@code null} while he is in the world of his body, where the body
+         * itself is measured from.
+         */
+        private Location portalAnchor;
+        /**
+         * Where he stepped into the first portal of his trip, the spot
+         * {@code portals.return-to: portal} brings him back to. {@code null}
+         * while he has not left the world of his body.
+         */
+        private Location portalEntry;
 
         public CameraData(LivingEntity body, Mannequin hitbox, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, ItemStack[] originalArmorContents, Collection<PotionEffect> pausedEffects, int originalRemainingAir) {
             this.body = body;
@@ -3104,5 +3547,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         public ItemStack[] getOriginalArmorContents() { return originalArmorContents; }
         public Collection<PotionEffect> getPausedEffects() { return pausedEffects; }
         public int getOriginalRemainingAir() { return originalRemainingAir; }
+        /** The portal the distance is measured from, or {@code null} for the body. */
+        public Location getPortalAnchor() { return portalAnchor; }
+        public void setPortalAnchor(Location portalAnchor) { this.portalAnchor = portalAnchor; }
+        /** The portal he set out through, or {@code null} when he is still home. */
+        public Location getPortalEntry() { return portalEntry; }
+        public void setPortalEntry(Location portalEntry) { this.portalEntry = portalEntry; }
     }
 }

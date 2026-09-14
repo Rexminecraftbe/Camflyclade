@@ -175,14 +175,34 @@ public final class CamAreaRules {
         if (world == null) {
             return null;
         }
-        String dimension = DIMENSIONS.get(world.getEnvironment());
-        // A world carrying a dimension of its own belongs to none of the three
-        // and is therefore forbidden by none of them.
-        if (dimension != null && !allowedDimensions.contains(world.getEnvironment())) {
+        String dimension = forbiddenDimension(location);
+        if (dimension != null) {
             return dimension;
         }
         String biome = forbiddenBiome(world, location);
         return biome != null ? biome : forbiddenStructure(world, location);
+    }
+
+    /**
+     * The dimension of this spot, when camera mode is not allowed in it at all.
+     * Asked on its own by the portal rules: a portal into a forbidden dimension
+     * does not let a camera player through in the first place, while a portal
+     * standing in a forbidden biome or structure does and brings him back.
+     *
+     * @return the name of the dimension, written the way it is written in the
+     *         config file, or {@code null} when camera mode is allowed in it
+     */
+    public String forbiddenDimension(Location location) {
+        World world = location == null ? null : location.getWorld();
+        if (world == null) {
+            return null;
+        }
+        String dimension = DIMENSIONS.get(world.getEnvironment());
+        // A world carrying a dimension of its own belongs to none of the three
+        // and is therefore forbidden by none of them.
+        return dimension != null && !allowedDimensions.contains(world.getEnvironment())
+                ? dimension
+                : null;
     }
 
     /** The name of the biome at this spot, when it is a forbidden one. */

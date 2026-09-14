@@ -53,11 +53,31 @@ messages:
   config-unknown-value: "&cUnbekannter Wert für {path}: '{value}'. Erlaubt sind: {allowed}. Es wird {used} verwendet."
   cooldown-available: "&aCam mode available again"
   cooldown-text: "You can start cam mode again in %time%."
-  distance-limit: "&cYou cannot move further than {distance} blocks from your body!"
+  # Die Grenze des Kamera-Modus. Platzhalter {distance}: die erlaubte
+  # Entfernung aus camera-mode.max-distance, {from}: wovon aus gemessen wird.
+  # Das ist nicht immer der Körper: In einer Welt, in der er nicht steht, wird
+  # ab dem Portal gemessen, durch das der Spieler gekommen ist. Die beiden
+  # Satzteile dafür stehen unter distance-from-body und distance-from-portal.
+  distance-from-body: "your body"
+  distance-from-portal: "the portal you came out of"
+  distance-limit: "&cYou cannot move further than {distance} blocks from {from}!"
   hitbox.name-format: "&c[HITBOX] {player}"
   no-permission: "&cYou don't have permission to use this command."
   no-player: "&cThis command can only be used by players."
   no-projectiles: "&cYou cannot shoot projectiles in camera mode."
+  # Meldungen zum Abschnitt portals.
+  # portal-blocked kommt am Portal selbst. Platzhalter {portal}: nether oder
+  # end, so geschrieben wie dort in der Konfiguration. Schließt cam-area die
+  # Dimension hinter dem Portal, kommt stattdessen cam-area-limit - dann ist
+  # nicht das Portal zu, sondern das, was dahinter liegt, verboten.
+  # Die beiden portal-return-Meldungen kommen auf der anderen Seite, wenn der
+  # Spieler zurückgeholt wird: {area} die Dimension, das Biom oder die
+  # Struktur, in der das Portal steht, {distance} die erlaubte Entfernung aus
+  # camera-mode.max-distance, {from} wovon aus gemessen wurde - derselbe
+  # Satzteil wie bei distance-limit, siehe dort.
+  portal-blocked: "&cYou cannot go through {portal} portals in camera mode."
+  portal-return-area: "&cCam mode is not allowed in {area}, you were brought back."
+  portal-return-distance: "&cYou ended up more than {distance} blocks away from {from} and were brought back."
   reload-exit: "&cCamera mode ended due to plugin restart."
   reload-start: "&ePlugin is restarting..."
   reload-success: "&aPlugin reload successful."
@@ -98,6 +118,9 @@ message-settings:
   no-permission: true
   no-player: true
   no-projectiles: true
+  portal-blocked: true
+  portal-return-area: true
+  portal-return-distance: true
   reload-exit: true
   reload-start: true
   reload-success: true
@@ -127,7 +150,7 @@ camera-mode:
   #         diesem Modus immer gesetzt, auch wenn allow_invisibility_potion
   #         auf false steht, und der leuchtende Umriss bleibt aus.
   #         Getragene Ausrüstung, etwa der Kamera-Kopf, bleibt sichtbar.
-  player_visibility_mode: "true"
+  player_visibility_mode: true
   # Macht den Spieler im Cam-Modus unsichtbar
   allow_invisibility_potion: true
   # Umrandet den unsichtbaren Spieler mit einem leuchtenden Umriss, damit
@@ -221,7 +244,7 @@ body:
   # in Blöcken. Gilt bei beiden Körpertypen und ist auf Stufe 0 wirkungslos.
   # Werte unter 0.01 werden automatisch auf 0.01 angehoben.
   move-threshold: 0.05
-  # Ob feindliche Mobs den Körper von sich aus angreifen: vanilla | custom | off
+  # Ob feindliche Mobs den Körper von sich aus angreifen: vanilla | custom | false
   # vanilla = jeder Mob mit der Sichtweite, die er in Vanilla hat. Ein Zombie
   #           bemerkt den Körper also auf 16 Blöcke, eine Lohe auf 48. Die
   #           Reichweite wird am Mob selbst abgelesen (sein Attribut
@@ -231,12 +254,13 @@ body:
   #           Weiter als 64 Blöcke schaut das Plugin nicht; so weit bemerkt in
   #           Vanilla ohnehin kein Mob etwas.
   # custom  = eine Reichweite für alle Mobs, siehe mob-target-radius.
-  # off     = kein Mob geht auf den Körper los. Auch wer den Spieler ins Visier
+  # false   = kein Mob geht auf den Körper los. Auch wer den Spieler ins Visier
   #           nimmt oder ihn beim Start des Kamera-Modus schon angriff, wird
   #           nicht auf den Körper umgelenkt: Er verliert sein Ziel und bleibt,
   #           wo er ist. Ein Zombie, an dem der Spieler vorbeifliegt, setzt sich
   #           also nicht in Bewegung.
-  # Der alte Schalter true wird als custom gelesen, false als off.
+  # Der alte Schalter true wird weiter als custom gelesen, und wer noch "off"
+  # stehen hat, bekommt weiter dasselbe wie mit false.
   #
   # In allen drei Modi gilt: Der Kamera-Spieler selbst ist nie ein Ziel - er
   # nimmt im Kamera-Modus keinen Schaden, ein Mob auf ihm schlüge also ins
@@ -257,7 +281,7 @@ body:
   # Regeln unter mirror-damage auf den Spieler übertragen.
   # Gilt für beide Körpertypen und auch für einen unsichtbaren Körper -
   # getroffen wird immer das Mannequin, das an der Stelle des Spielers steht.
-  mob-target: "off"
+  mob-target: false
   # Reichweite in Blöcken für den Modus "custom", für jeden Mob dieselbe. 0
   # bedeutet, dass kein Mob den Körper bemerkt. Zum Vergleich: ein Zombie
   # bemerkt einen Spieler auf rund 16 Blöcke.
@@ -435,20 +459,98 @@ cam-area:
     nether: false
     end: false
 
+# Ob ein Portal den Spieler im Kamera-Modus überhaupt durchlässt
+# Beide stehen auf false, weil der Kamera-Modus an seinem Körper hängt: Von ihm
+# aus wird die Entfernung gemessen, und bei ihm endet der Modus. Ein Portal
+# bringt den Spieler in eine Welt, in der sein Körper nicht steht, deshalb wird
+# es nur dort geöffnet, wo das gewollt ist.
+# Auf false bleibt der Spieler einfach stehen, wo er ist - er wird weder
+# zurückgesetzt noch endet der Kamera-Modus.
+#
+# Dazu reden zwei andere Abschnitte mit:
+#
+# cam-area auf level: 2. Steht die Dimension hinter dem Portal unter
+#   cam-area.dimensions auf false, kommt der Spieler nicht durch - auch dann
+#   nicht, wenn das Portal hier auf true steht. Ist die Dimension erlaubt, geht
+#   er grundsätzlich durch; steht das Portal drüben aber in einem verbotenen
+#   Biom oder einer verbotenen Struktur, wird er zurückgeholt. Wo ein Portal
+#   herauskommt, steht nämlich erst nach der Reise fest - danach merkt sich das
+#   Plugin dieses Portal und lässt ihn gar nicht mehr durch, siehe
+#   remember-blocked.
+#   Auf Stufe 0 und 1 entscheiden allein nether und end: Stufe 1 gilt nur für
+#   den Start, danach darf der Spieler fliegen, wohin er will.
+#
+# camera-mode.max-distance-enabled auf true. In einer Welt, in der sein Körper
+#   nicht steht, wird die Entfernung von dem Portal aus gemessen, durch das der
+#   Spieler herausgekommen ist - der Körper ist von dort aus nicht zu erreichen.
+#   Kommt er durch ein anderes Portal wieder in die Dimension seines Körpers,
+#   zählt wieder der Körper, und liegt er dann außerhalb der erlaubten
+#   Entfernung, wird er zurückgesetzt. Auf false wird gar nichts gemessen, dann
+#   darf er sich drüben frei bewegen.
+portals:
+  # Ob ein Netherportal den Kamera-Spieler durchlässt. Gilt in beide
+  # Richtungen, also auch für den Weg aus dem Nether zurück.
+  nether: false
+  # Ob ein Endportal den Kamera-Spieler durchlässt, ebenfalls in beide
+  # Richtungen. Das Endtor (End Gateway) zählt nicht dazu: Es bleibt im End,
+  # dort gilt nur die Entfernung.
+  end: false
+  # Wohin ein Spieler zurückgesetzt wird, der auf der anderen Seite zu weit weg
+  # oder in einem verbotenen Gebiet herauskommt:
+  # body   = zu seinem Körper, dem Mannequin bzw. Rüstungsständer
+  # portal = zu dem Portal, durch das er losgegangen ist
+  # Die zweite Möglichkeit braucht ein Portal, durch das er gegangen ist, und
+  # eine Stelle, an der er auch bleiben dürfte. Gibt es die nicht, wird er zu
+  # seinem Körper gebracht - den gibt es immer.
+  # Bei einem unbekannten Wert wird body verwendet.
+  return-to: body
+  # Abklingzeit zwischen den Meldungen an einem geschlossenen Portal, in
+  # Sekunden. Der Spieler steht im Portal, das immer wieder fragt; ohne sie
+  # stünde die Meldung ohne Ende im Chat.
+  warning-cooldown: 3
+  # Ob sich das Plugin die Portale merkt, die drüben in einem verbotenen Biom
+  # oder einer verbotenen Struktur herauskommen (cam-area auf Stufe 2).
+  # Wo ein Portal herauskommt, lässt sich nicht vorher erfragen - das steht erst
+  # nach der Reise fest. Ohne dieses Gedächtnis schickt dasselbe Portal den
+  # Spieler deshalb jedes Mal aufs Neue hinüber und gleich wieder zurück.
+  # true  = Beim ersten Mal geht er hindurch und wird zurückgeholt; danach
+  #         lässt ihn dieses Portal gar nicht mehr durch, mit derselben
+  #         Meldung, die auch eine verbotene Dimension gibt (cam-area-limit).
+  #         Wer mit return-to: portal an einem solchen Portal abgesetzt wird,
+  #         läuft damit auch nicht in dieselbe Reise zurück.
+  # false = Jeder Durchgang wird neu geprüft. Der Spieler geht also jedes Mal
+  #         hinüber und wird jedes Mal zurückgeholt.
+  # Gemerkt wird nur für diesen Serverlauf, und /cam reload leert das Gemerkte:
+  # Ein Portal führt dorthin, wohin die Welt es führen lässt, und das kann sich
+  # ändern - ein näher gebautes Portal drüben, ein abgebautes Ziel. Danach wird
+  # jedes Portal einmal neu ausprobiert.
+  # Für eine verbotene Dimension braucht es das nicht, die steht schon vor der
+  # Reise fest, siehe cam-area.dimensions.
+  # Gemerkt wird das Portal als Ganzes, nicht das einzelne Feld: Von dem Feld
+  # aus, in dem der Spieler stand, wird die untere Ecke des Portals gesucht, so
+  # dass jedes seiner Felder auf denselben Eintrag führt.
+  remember-blocked: true
+  # Wie viele solcher Portale gemerkt werden. Ist der Vorrat voll, weicht das
+  # am längsten unbenutzte zuerst. Ein Eintrag ist eine Handvoll Bytes, 128
+  # Portale fallen also nicht ins Gewicht.
+  # 0 merkt nichts und wirkt damit wie remember-blocked: false.
+  remember-blocked-count: 128
+
 # Einstellungen zur Übertragung von Schaden
 # Die beiden Modi damage-mode und damage-armor-mode sind voneinander
 # unabhängig: der eine sagt, wie viele Herzen der Treffer den Spieler kostet,
 # der andere, wie stark er dessen Rüstung abnutzt. Keiner richtet sich
 # stillschweigend nach dem anderen - wer beides aus haben will, stellt beide
-# auf "off".
+# auf false.
 # Gerechnet wird in jedem Fall genau einmal, und zwar am Spieler selbst: mit
 # seiner Rüstung und seinen Effekten, oder ohne sie, wenn damage-counts-armor
 # auf false steht. Die Rüstung am Körper ist nur Ansichtssache
 # (body.armor-visible), gerechnet wird mit ihr nie.
 mirror-damage:
-  # Art der Schadensübertragung: mirror | custom | off
-  # mirror = der echte Treffer, custom = fester Wert, off = kein Schaden
-  damage-mode: mirror  # mirror | custom | off
+  # Art der Schadensübertragung: mirror | custom | false
+  # mirror = der echte Treffer, custom = fester Wert, false = kein Schaden
+  # Wer noch "off" stehen hat, bekommt weiter dasselbe wie mit false.
+  damage-mode: mirror  # mirror | custom | false
   # Fester Schaden in Herzen für den Modus "custom". 0 bedeutet kein Schaden,
   # dann zählen auch Verzauberungen der Waffe nicht mehr dazu.
   custom-damage-hearts: 0.5
@@ -473,7 +575,7 @@ mirror-damage:
   # body.armor-visible.
   damage-counts-armor: true
   # Wie stark der übertragene Treffer die Rüstung des Spielers abnutzt:
-  # mirror | custom | off
+  # mirror | custom | false
   # mirror = wie der echte Treffer. Genau die Haltbarkeitspunkte, die der
   #          Treffer außerhalb des Kamera-Modus gekostet hätte, also
   #          max(1, Schaden/4) pro Teil - und nur bei Schadensarten, die
@@ -483,10 +585,11 @@ mirror-damage:
   #          eingestellten Haltbarkeitspunkte, egal wie stark er war und woher
   #          er kam. Nur Teile, die gegen diese Schadensart unempfindlich sind
   #          (etwa Netherit im Feuer), nutzen sich weiterhin nicht ab.
-  # off    = die Rüstung nutzt sich gar nicht ab.
+  # false  = die Rüstung nutzt sich gar nicht ab.
   # Der alte Schalter damage-armor wird weiter gelesen, solange dieser
-  # Schlüssel fehlt: true heißt mirror, false heißt off.
-  damage-armor-mode: mirror  # mirror | custom | off
+  # Schlüssel fehlt: true heißt mirror, false heißt keine Abnutzung. Wer hier
+  # noch "off" stehen hat, bekommt weiter dasselbe wie mit false.
+  damage-armor-mode: mirror  # mirror | custom | false
   # Haltbarkeitspunkte pro Treffer für den Modus "custom". 0 bedeutet keine
   # Abnutzung. Zum Vergleich: ein Treffer mit 8 Schaden (4 Herzen) kostet in
   # Vanilla 2 Punkte.
@@ -499,7 +602,7 @@ mirror-damage:
   # false = die Verzauberung zählt nicht, jedes Teil verliert die vollen Punkte.
   respect-unbreaking: true
   # Stößt der Treffer auf den Körper den Spieler zurück? Gilt unabhängig von
-  # damage-mode: auch bei "off" oder 0 Herzen wird der Spieler zurückgestoßen,
+  # damage-mode: auch bei false oder 0 Herzen wird der Spieler zurückgestoßen,
   # und mit false bleibt er stehen, egal wie viel Schaden übertragen wird.
   knockback: true
   # Schreibt zu jedem übertragenen Treffer eine Zeile mit allen Werten in den
