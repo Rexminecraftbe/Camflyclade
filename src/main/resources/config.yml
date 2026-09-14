@@ -473,7 +473,9 @@ cam-area:
 #   nicht, wenn das Portal hier auf true steht. Ist die Dimension erlaubt, geht
 #   er grundsätzlich durch; steht das Portal drüben aber in einem verbotenen
 #   Biom oder einer verbotenen Struktur, wird er zurückgeholt. Wo ein Portal
-#   herauskommt, steht nämlich erst nach der Reise fest.
+#   herauskommt, steht nämlich erst nach der Reise fest - danach merkt sich das
+#   Plugin dieses Portal und lässt ihn gar nicht mehr durch, siehe
+#   remember-blocked.
 #   Auf Stufe 0 und 1 entscheiden allein nether und end: Stufe 1 gilt nur für
 #   den Start, danach darf der Spieler fliegen, wohin er will.
 #
@@ -505,6 +507,33 @@ portals:
   # Sekunden. Der Spieler steht im Portal, das immer wieder fragt; ohne sie
   # stünde die Meldung ohne Ende im Chat.
   warning-cooldown: 3
+  # Ob sich das Plugin die Portale merkt, die drüben in einem verbotenen Biom
+  # oder einer verbotenen Struktur herauskommen (cam-area auf Stufe 2).
+  # Wo ein Portal herauskommt, lässt sich nicht vorher erfragen - das steht erst
+  # nach der Reise fest. Ohne dieses Gedächtnis schickt dasselbe Portal den
+  # Spieler deshalb jedes Mal aufs Neue hinüber und gleich wieder zurück.
+  # true  = Beim ersten Mal geht er hindurch und wird zurückgeholt; danach
+  #         lässt ihn dieses Portal gar nicht mehr durch, mit derselben
+  #         Meldung, die auch eine verbotene Dimension gibt (cam-area-limit).
+  #         Wer mit return-to: portal an einem solchen Portal abgesetzt wird,
+  #         läuft damit auch nicht in dieselbe Reise zurück.
+  # false = Jeder Durchgang wird neu geprüft. Der Spieler geht also jedes Mal
+  #         hinüber und wird jedes Mal zurückgeholt.
+  # Gemerkt wird nur für diesen Serverlauf, und /cam reload leert das Gemerkte:
+  # Ein Portal führt dorthin, wohin die Welt es führen lässt, und das kann sich
+  # ändern - ein näher gebautes Portal drüben, ein abgebautes Ziel. Danach wird
+  # jedes Portal einmal neu ausprobiert.
+  # Für eine verbotene Dimension braucht es das nicht, die steht schon vor der
+  # Reise fest, siehe cam-area.dimensions.
+  # Gemerkt wird das Portal als Ganzes, nicht das einzelne Feld: Von dem Feld
+  # aus, in dem der Spieler stand, wird die untere Ecke des Portals gesucht, so
+  # dass jedes seiner Felder auf denselben Eintrag führt.
+  remember-blocked: true
+  # Wie viele solcher Portale gemerkt werden. Ist der Vorrat voll, weicht das
+  # am längsten unbenutzte zuerst. Ein Eintrag ist eine Handvoll Bytes, 128
+  # Portale fallen also nicht ins Gewicht.
+  # 0 merkt nichts und wirkt damit wie remember-blocked: false.
+  remember-blocked-count: 128
 
 # Einstellungen zur Übertragung von Schaden
 # Die beiden Modi damage-mode und damage-armor-mode sind voneinander

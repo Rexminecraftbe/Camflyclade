@@ -2166,10 +2166,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * flies. A portal that is shut simply does not carry him anywhere; he keeps
      * standing where he is.</p>
      *
-     * <p>Only the dimension shuts a portal that way. A portal standing in a
-     * forbidden biome or structure lets him through and brings him back
-     * afterwards, see {@link #afterPortal(Player, Location)} - where the portal
-     * comes out is not known before the trip.</p>
+     * <p>Where a portal comes out cannot be asked beforehand, so a forbidden
+     * biome or structure over there is found only by walking through once, see
+     * {@link #afterPortal(Player, Location)}. From then on the portal is known
+     * and shuts like the other two, as long as {@code portals.remember-blocked}
+     * is on.</p>
      */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onCameraPortal(PlayerPortalEvent event) {
@@ -2185,11 +2186,20 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             return;
         }
         boolean open = portalRules.letsThrough(kind);
-        String dimension = open ? forbiddenPortalDimension(event.getTo()) : null;
-        if (!open || dimension != null) {
+        String area = null;
+        if (open) {
+            // Die Dimension hinter dem Portal steht schon vor der Reise fest.
+            // Ein verbotenes Biom oder eine verbotene Struktur erst danach -
+            // deshalb zaehlt hier, was eine fruehere Reise ergeben hat.
+            area = forbiddenPortalDimension(event.getTo());
+            if (area == null) {
+                area = portalRules.forbiddenAreaBehind(event.getFrom());
+            }
+        }
+        if (!open || area != null) {
             event.setCancelled(true);
             player.setPortalCooldown(PORTAL_COOLDOWN_TICKS);
-            warnPortalShut(player, kind, dimension);
+            warnPortalShut(player, kind, area);
             return;
         }
         // The trip itself happens after this event, so the far side can only be
@@ -2215,24 +2225,25 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     /**
      * Tells the player why the portal did not take him along: the portal itself
-     * is shut, or camera mode is not allowed in the dimension behind it.
+     * is shut, or camera mode is not allowed in what lies behind it.
      *
      * <p>He keeps standing in the portal, which asks again and again, so the
      * message waits {@code portals.warning-cooldown} seconds before it is sent
      * a second time.</p>
      *
-     * @param dimension the forbidden dimension behind the portal, or
-     *                  {@code null} when the portal is shut on its own
+     * @param area the forbidden dimension behind the portal, or the biome or
+     *             structure an earlier trip through it came out in, or
+     *             {@code null} when the portal is shut on its own
      */
-    private void warnPortalShut(Player player, PortalKind kind, String dimension) {
+    private void warnPortalShut(Player player, PortalKind kind, String area) {
         long now = System.currentTimeMillis();
         if (portalMessageCooldown.getOrDefault(player.getUniqueId(), 0L) >= now) {
             return;
         }
         portalMessageCooldown.put(player.getUniqueId(),
                 now + TimeUnit.SECONDS.toMillis(portalRules.getWarningCooldown()));
-        if (dimension != null) {
-            sendMessage(player, "cam-area-limit", "{area}", dimension);
+        if (area != null) {
+            sendMessage(player, "cam-area-limit", "{area}", area);
         } else {
             sendMessage(player, "portal-blocked", "{portal}", kind.getConfigName());
         }
@@ -2247,7 +2258,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * the portal he came out of, and once he is back in the world of his body
      * that body counts again. Whoever comes out too far away from it is brought
      * back, and so is whoever comes out in a biome or a structure camera mode is
-     * not allowed in - a portal is not asked beforehand where it comes out.</p>
+     * not allowed in - a portal is not asked beforehand where it comes out. The
+     * second kind is written down, so that the same portal turns the next
+     * camera player away instead of sending him over first.</p>
      *
      * @param entry where he stepped into the portal, the spot he is brought back
      *              to under {@code portals.return-to: portal}
@@ -2270,6 +2283,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 ? camAreaRules.forbiddenArea(arrival)
                 : null;
         if (area != null) {
+            // Jetzt ist bekannt, wo dieses Portal herauskommt. Ohne das wuerde
+            // es ihn bei jedem Durchgang aufs Neue hinueber und gleich wieder
+            // zurueck schicken.
+            portalRules.rememberForbiddenArea(entry, area);
             sendMessage(player, "portal-return-area", "{area}", area);
             bringBack(player, data);
             return;
