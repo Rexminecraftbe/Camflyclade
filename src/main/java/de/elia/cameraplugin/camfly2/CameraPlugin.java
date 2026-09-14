@@ -2102,15 +2102,20 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (!maxDistanceEnabled || !beyondMaxDistance(data, to)) {
             return;
         }
-        event.setCancelled(true);
         if (beyondMaxDistance(data, event.getFrom())) {
             // He is out there already, so stopping the step alone would nail him
             // to the spot instead of keeping him near his body - which is
             // exactly what a portal used to do to him. He is brought back.
+            //
+            // The step is deliberately not cancelled here: a cancelled step
+            // puts the player back where he came from once this returns, and
+            // that is out there - it would undo the teleport that just brought
+            // him in. The step is sent to the spot he belongs at instead.
             warnDistanceLimit(player, "portal-return-distance", data, event.getFrom());
-            bringBack(player, data);
+            event.setTo(bringBack(player, data));
             return;
         }
+        event.setCancelled(true);
         warnDistanceLimit(player, "distance-limit", data, to);
     }
 
@@ -2313,16 +2318,20 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * otherwise he would be brought back to a place he would be brought back
      * from again. Without a portal to go back to it is the body, which is always
      * there.</p>
+     *
+     * @return the spot he was put down at
      */
-    private void bringBack(Player player, CameraData data) {
+    private Location bringBack(Player player, CameraData data) {
         // Whatever he was measured against over there is done with.
         data.setPortalAnchor(null);
         Location entry = data.getPortalEntry();
         data.setPortalEntry(null);
-        player.teleport(returnTarget(data, entry));
+        Location target = returnTarget(data, entry);
+        player.teleport(target);
         // He may well have been set down in the portal he set out through.
         player.setPortalCooldown(PORTAL_COOLDOWN_TICKS);
         keepFlying(player);
+        return target;
     }
 
     /** Where {@link #bringBack(Player, CameraData)} puts the player down. */
