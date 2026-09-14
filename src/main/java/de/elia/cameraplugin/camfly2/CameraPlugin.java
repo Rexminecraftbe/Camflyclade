@@ -1799,7 +1799,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         return switch (armorDamageMode) {
             case MIRROR -> "mirror, " + points + " Punkte";
             case CUSTOM -> "custom, " + points + " Punkte";
-            case OFF -> "off";
+            case OFF -> "false";
         };
     }
 
@@ -2707,7 +2707,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
         mirrorKnockback = config.getBoolean("mirror-damage.knockback", true);
         mirrorDebug = config.getBoolean("mirror-damage.debug", false);
-        String modeRaw = config.getChoice("mirror-damage.damage-mode", "mirror", "mirror", "custom", "off", "false");
+        // "off" war frueher die Schreibweise fuer aus und wird weiter gelesen.
+        String modeRaw = readMode(config, "mirror-damage.damage-mode", "mirror",
+                List.of("mirror", "custom", "false"), List.of("off"));
         if ("custom".equalsIgnoreCase(modeRaw)) {
             damageMode = DamageMode.CUSTOM;
         } else if ("false".equalsIgnoreCase(modeRaw) || "off".equalsIgnoreCase(modeRaw)) {
@@ -2724,9 +2726,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         // The mode grew out of the old truth value damage-armor, so a config
         // file that still carries only that one keeps saying what it said:
         // true wears the armour down, false leaves it alone.
-        String armorDefault = config.getBoolean("mirror-damage.damage-armor", true) ? "mirror" : "off";
-        String armorRaw = config.getChoice("mirror-damage.damage-armor-mode", armorDefault,
-                "mirror", "custom", "off", "true", "false");
+        String armorDefault = config.getBoolean("mirror-damage.damage-armor", true) ? "mirror" : "false";
+        String armorRaw = readMode(config, "mirror-damage.damage-armor-mode", armorDefault,
+                List.of("mirror", "custom", "false"), List.of("off", "true"));
         if ("custom".equalsIgnoreCase(armorRaw)) {
             armorDamageMode = ArmorDamageMode.CUSTOM;
         } else if ("false".equalsIgnoreCase(armorRaw) || "off".equalsIgnoreCase(armorRaw)) {
@@ -2793,14 +2795,47 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
+     * Reads a setting that knows more than two values and hands back the
+     * spelling it was written with.
+     *
+     * <p>Kept apart from {@link ConfigReader#getChoice} because of the
+     * spellings an older config file may carry: those are still read, they are
+     * simply not offered any more. Only {@code shown} turns up in the note
+     * about a value nobody knows, so nobody is sent back to a spelling this
+     * version has left behind.</p>
+     *
+     * @param shown  the spellings this version writes
+     * @param legacy the spellings an older version wrote, read but not offered
+     */
+    private String readMode(ConfigReader config, String path, String def,
+                            List<String> shown, List<String> legacy) {
+        String value = config.getString(path, def);
+        if (isOneOf(value, shown) || isOneOf(value, legacy)) {
+            return value;
+        }
+        config.warnUnknownValue(path, value, String.join(", ", shown), def);
+        return def;
+    }
+
+    /** Whether the value is one of these spellings, capitals not counting. */
+    private static boolean isOneOf(String value, List<String> spellings) {
+        for (String spelling : spellings) {
+            if (spelling.equalsIgnoreCase(value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Reads {@code body.mob-target}. The setting used to be a truth value, back
      * when there was only the one range to switch on and off, so those two
      * values keep saying what they said: {@code true} is the range out of the
      * config file, {@code false} is nobody sent to the body.
      */
     private MobTargetMode resolveMobTargetMode(ConfigReader config) {
-        String raw = config.getChoice("body.mob-target", "off",
-                "vanilla", "custom", "off", "true", "false");
+        String raw = readMode(config, "body.mob-target", "false",
+                List.of("vanilla", "custom", "false"), List.of("off", "true"));
         if ("vanilla".equalsIgnoreCase(raw)) {
             return MobTargetMode.VANILLA;
         }

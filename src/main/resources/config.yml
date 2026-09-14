@@ -244,7 +244,7 @@ body:
   # in Blöcken. Gilt bei beiden Körpertypen und ist auf Stufe 0 wirkungslos.
   # Werte unter 0.01 werden automatisch auf 0.01 angehoben.
   move-threshold: 0.05
-  # Ob feindliche Mobs den Körper von sich aus angreifen: vanilla | custom | off
+  # Ob feindliche Mobs den Körper von sich aus angreifen: vanilla | custom | false
   # vanilla = jeder Mob mit der Sichtweite, die er in Vanilla hat. Ein Zombie
   #           bemerkt den Körper also auf 16 Blöcke, eine Lohe auf 48. Die
   #           Reichweite wird am Mob selbst abgelesen (sein Attribut
@@ -254,12 +254,13 @@ body:
   #           Weiter als 64 Blöcke schaut das Plugin nicht; so weit bemerkt in
   #           Vanilla ohnehin kein Mob etwas.
   # custom  = eine Reichweite für alle Mobs, siehe mob-target-radius.
-  # off     = kein Mob geht auf den Körper los. Auch wer den Spieler ins Visier
+  # false   = kein Mob geht auf den Körper los. Auch wer den Spieler ins Visier
   #           nimmt oder ihn beim Start des Kamera-Modus schon angriff, wird
   #           nicht auf den Körper umgelenkt: Er verliert sein Ziel und bleibt,
   #           wo er ist. Ein Zombie, an dem der Spieler vorbeifliegt, setzt sich
   #           also nicht in Bewegung.
-  # Der alte Schalter true wird als custom gelesen, false als off.
+  # Der alte Schalter true wird weiter als custom gelesen, und wer noch "off"
+  # stehen hat, bekommt weiter dasselbe wie mit false.
   #
   # In allen drei Modi gilt: Der Kamera-Spieler selbst ist nie ein Ziel - er
   # nimmt im Kamera-Modus keinen Schaden, ein Mob auf ihm schlüge also ins
@@ -280,7 +281,7 @@ body:
   # Regeln unter mirror-damage auf den Spieler übertragen.
   # Gilt für beide Körpertypen und auch für einen unsichtbaren Körper -
   # getroffen wird immer das Mannequin, das an der Stelle des Spielers steht.
-  mob-target: "off"
+  mob-target: false
   # Reichweite in Blöcken für den Modus "custom", für jeden Mob dieselbe. 0
   # bedeutet, dass kein Mob den Körper bemerkt. Zum Vergleich: ein Zombie
   # bemerkt einen Spieler auf rund 16 Blöcke.
@@ -540,15 +541,16 @@ portals:
 # unabhängig: der eine sagt, wie viele Herzen der Treffer den Spieler kostet,
 # der andere, wie stark er dessen Rüstung abnutzt. Keiner richtet sich
 # stillschweigend nach dem anderen - wer beides aus haben will, stellt beide
-# auf "off".
+# auf false.
 # Gerechnet wird in jedem Fall genau einmal, und zwar am Spieler selbst: mit
 # seiner Rüstung und seinen Effekten, oder ohne sie, wenn damage-counts-armor
 # auf false steht. Die Rüstung am Körper ist nur Ansichtssache
 # (body.armor-visible), gerechnet wird mit ihr nie.
 mirror-damage:
-  # Art der Schadensübertragung: mirror | custom | off
-  # mirror = der echte Treffer, custom = fester Wert, off = kein Schaden
-  damage-mode: mirror  # mirror | custom | off
+  # Art der Schadensübertragung: mirror | custom | false
+  # mirror = der echte Treffer, custom = fester Wert, false = kein Schaden
+  # Wer noch "off" stehen hat, bekommt weiter dasselbe wie mit false.
+  damage-mode: mirror  # mirror | custom | false
   # Fester Schaden in Herzen für den Modus "custom". 0 bedeutet kein Schaden,
   # dann zählen auch Verzauberungen der Waffe nicht mehr dazu.
   custom-damage-hearts: 0.5
@@ -573,7 +575,7 @@ mirror-damage:
   # body.armor-visible.
   damage-counts-armor: true
   # Wie stark der übertragene Treffer die Rüstung des Spielers abnutzt:
-  # mirror | custom | off
+  # mirror | custom | false
   # mirror = wie der echte Treffer. Genau die Haltbarkeitspunkte, die der
   #          Treffer außerhalb des Kamera-Modus gekostet hätte, also
   #          max(1, Schaden/4) pro Teil - und nur bei Schadensarten, die
@@ -583,10 +585,11 @@ mirror-damage:
   #          eingestellten Haltbarkeitspunkte, egal wie stark er war und woher
   #          er kam. Nur Teile, die gegen diese Schadensart unempfindlich sind
   #          (etwa Netherit im Feuer), nutzen sich weiterhin nicht ab.
-  # off    = die Rüstung nutzt sich gar nicht ab.
+  # false  = die Rüstung nutzt sich gar nicht ab.
   # Der alte Schalter damage-armor wird weiter gelesen, solange dieser
-  # Schlüssel fehlt: true heißt mirror, false heißt off.
-  damage-armor-mode: mirror  # mirror | custom | off
+  # Schlüssel fehlt: true heißt mirror, false heißt aus. Wer hier noch "off"
+  # stehen hat, bekommt weiter dasselbe wie mit false.
+  damage-armor-mode: mirror  # mirror | custom | false
   # Haltbarkeitspunkte pro Treffer für den Modus "custom". 0 bedeutet keine
   # Abnutzung. Zum Vergleich: ein Treffer mit 8 Schaden (4 Herzen) kostet in
   # Vanilla 2 Punkte.
@@ -599,7 +602,7 @@ mirror-damage:
   # false = die Verzauberung zählt nicht, jedes Teil verliert die vollen Punkte.
   respect-unbreaking: true
   # Stößt der Treffer auf den Körper den Spieler zurück? Gilt unabhängig von
-  # damage-mode: auch bei "off" oder 0 Herzen wird der Spieler zurückgestoßen,
+  # damage-mode: auch bei false oder 0 Herzen wird der Spieler zurückgestoßen,
   # und mit false bleibt er stehen, egal wie viel Schaden übertragen wird.
   knockback: true
   # Schreibt zu jedem übertragenen Treffer eine Zeile mit allen Werten in den
