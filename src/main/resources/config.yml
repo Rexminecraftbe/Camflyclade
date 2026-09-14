@@ -150,7 +150,7 @@ camera-mode:
   #         diesem Modus immer gesetzt, auch wenn allow_invisibility_potion
   #         auf false steht, und der leuchtende Umriss bleibt aus.
   #         Getragene Ausrüstung, etwa der Kamera-Kopf, bleibt sichtbar.
-  player_visibility_mode: "true"
+  player_visibility_mode: true
   # Macht den Spieler im Cam-Modus unsichtbar
   allow_invisibility_potion: true
   # Umrandet den unsichtbaren Spieler mit einem leuchtenden Umriss, damit
