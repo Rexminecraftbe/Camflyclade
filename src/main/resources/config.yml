@@ -53,7 +53,14 @@ messages:
   config-unknown-value: "&cUnbekannter Wert für {path}: '{value}'. Erlaubt sind: {allowed}. Es wird {used} verwendet."
   cooldown-available: "&aCam mode available again"
   cooldown-text: "You can start cam mode again in %time%."
-  distance-limit: "&cYou cannot move further than {distance} blocks from your body!"
+  # Die Grenze des Kamera-Modus. Platzhalter {distance}: die erlaubte
+  # Entfernung aus camera-mode.max-distance, {from}: wovon aus gemessen wird.
+  # Das ist nicht immer der Körper: In einer Welt, in der er nicht steht, wird
+  # ab dem Portal gemessen, durch das der Spieler gekommen ist. Die beiden
+  # Satzteile dafür stehen unter distance-from-body und distance-from-portal.
+  distance-from-body: "your body"
+  distance-from-portal: "the portal you came out of"
+  distance-limit: "&cYou cannot move further than {distance} blocks from {from}!"
   hitbox.name-format: "&c[HITBOX] {player}"
   no-permission: "&cYou don't have permission to use this command."
   no-player: "&cThis command can only be used by players."
@@ -66,10 +73,11 @@ messages:
   # Die beiden portal-return-Meldungen kommen auf der anderen Seite, wenn der
   # Spieler zurückgeholt wird: {area} die Dimension, das Biom oder die
   # Struktur, in der das Portal steht, {distance} die erlaubte Entfernung aus
-  # camera-mode.max-distance.
-  portal-blocked: "&cYou cannot go through a {portal} portal in camera mode."
+  # camera-mode.max-distance, {from} wovon aus gemessen wurde - derselbe
+  # Satzteil wie bei distance-limit, siehe dort.
+  portal-blocked: "&cYou cannot go through {portal} portals in camera mode."
   portal-return-area: "&cCam mode is not allowed in {area}, you were brought back."
-  portal-return-distance: "&cYou ended up more than {distance} blocks away from your body and were brought back."
+  portal-return-distance: "&cYou ended up more than {distance} blocks away from {from} and were brought back."
   reload-exit: "&cCamera mode ended due to plugin restart."
   reload-start: "&ePlugin is restarting..."
   reload-success: "&aPlugin reload successful."

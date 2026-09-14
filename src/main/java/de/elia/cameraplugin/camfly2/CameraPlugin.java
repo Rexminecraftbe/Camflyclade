@@ -56,6 +56,8 @@ import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.Charset;
+import java.text.Normalizer;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -195,6 +197,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     /** What a mob head on the body leaves of the range of that kind of mob. */
     private static final double MOB_HEAD_SIGHT_FACTOR = 0.5;
 
+    /** What the server console writes with, see {@link #consoleCharset()}. */
+    private static final Charset CONSOLE_CHARSET = consoleCharset();
+
     /**
      * How long a portal is left alone after it turned a camera player away, in
      * ticks. Without it the server would try the very same trip again straight
@@ -285,7 +290,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         // values that do not fit are a different matter: they fall back one by
         // one, are listed below, and the plugin starts.
         if (!readConfigInto(null)) {
-            getLogger().severe(ChatColor.stripColor(configMessage("config-start-failed",
+            log(Level.SEVERE, ChatColor.stripColor(configMessage("config-start-failed",
                     "&cStart fehlgeschlagen. Zum Aktivieren den Fehler in der Konfiguration"
                             + " beheben und den Server neu starten.")));
             unregisterCommands();
@@ -367,7 +372,66 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (text.isEmpty()) {
             return;
         }
-        getLogger().log(level, error == null ? text : text.replace("{error}", error));
+        log(level, error == null ? text : text.replace("{error}", error));
+    }
+
+    /**
+     * Puts one line into the server console, written so that console can
+     * actually print it, see {@link #forConsole(String)}.
+     */
+    private void log(Level level, String text) {
+        getLogger().log(level, forConsole(text));
+    }
+
+    /**
+     * The charset the server console writes its lines with, which decides
+     * whether an umlaut survives the way out.
+     */
+    private static Charset consoleCharset() {
+        // Deliberately not System.out: the server puts a stream of its own in
+        // its place early on, and that one answers with the charset of the log
+        // framework rather than the one the line is written out with. These two
+        // properties carry the charset of the console itself.
+        for (String property : new String[] {"stdout.encoding", "native.encoding"}) {
+            String name = System.getProperty(property);
+            if (name == null || name.isBlank()) {
+                continue;
+            }
+            try {
+                return Charset.forName(name);
+            } catch (RuntimeException ignored) {
+                // A name this Java does not know - the next one counts.
+            }
+        }
+        // Nothing to go by: rewrite the umlauts rather than risk question marks.
+        return StandardCharsets.US_ASCII;
+    }
+
+    /**
+     * The same sentence, written so that the server console can print it.
+     *
+     * <p>A console that cannot write umlauts turns every one of them into a
+     * question mark - "Falscher Wert f?r ..." instead of "für". Which
+     * characters it can write is decided by how the server was started and not
+     * by this plugin, so the sentence is rewritten only when it really would
+     * not survive: ä becomes ae, ß becomes ss, and whatever is left over loses
+     * its accent. A console that can write them gets the sentence untouched,
+     * and the chat keeps the umlauts either way.</p>
+     */
+    private static String forConsole(String text) {
+        if (CONSOLE_CHARSET.newEncoder().canEncode(text)) {
+            return text;
+        }
+        String plain = text
+                .replace("ä", "ae").replace("ö", "oe").replace("ü", "ue")
+                .replace("Ä", "Ae").replace("Ö", "Oe").replace("Ü", "Ue")
+                .replace("ß", "ss");
+        if (CONSOLE_CHARSET.newEncoder().canEncode(plain)) {
+            return plain;
+        }
+        // Alles Übrige verliert seine Zeichen: é wird e, ein Zeichen ohne
+        // Entsprechung bleibt und wird zum Fragezeichen wie bisher.
+        return Normalizer.normalize(plain, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
     }
 
     @Override
@@ -601,7 +665,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             hiddenArmor[i] = copy;
         }
         if (stillVisible) {
-            getLogger().warning("Die Rüstung des Mannequins konnte nicht ausgeblendet werden, "
+            log(Level.WARNING, "Die Rüstung des Mannequins konnte nicht ausgeblendet werden, "
                     + "sie bleibt am Körper sichtbar. Setter: " + EquipmentVisibility.describeAssetSetter());
         }
         return hiddenArmor;
@@ -672,7 +736,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private Mannequin spawnMannequinBody(Player player, Location location) {
         Mannequin mannequin = (Mannequin) location.getWorld().spawnEntity(location, EntityType.MANNEQUIN);
         if (!MannequinSkin.apply(mannequin, player)) {
-            getLogger().warning("Der Skin von " + player.getName()
+            log(Level.WARNING, "Der Skin von " + player.getName()
                     + " konnte nicht auf das Mannequin übertragen werden, es benutzt den Standard-Skin.");
         }
         applyMovementSensitivity(mannequin);
@@ -692,7 +756,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             return;
         }
         mannequinLabelReported = true;
-        getLogger().warning("Die Zeile \"NPC\" unter dem Namen des Mannequins konnte nicht abgeschaltet werden."
+        log(Level.WARNING, "Die Zeile \"NPC\" unter dem Namen des Mannequins konnte nicht abgeschaltet werden."
                 + " Setter: " + MannequinLabel.describeSetter());
     }
 
@@ -2043,11 +2107,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             // He is out there already, so stopping the step alone would nail him
             // to the spot instead of keeping him near his body - which is
             // exactly what a portal used to do to him. He is brought back.
-            warnDistanceLimit(player, "portal-return-distance");
+            warnDistanceLimit(player, "portal-return-distance", data, event.getFrom());
             bringBack(player, data);
             return;
         }
-        warnDistanceLimit(player, "distance-limit");
+        warnDistanceLimit(player, "distance-limit", data, to);
     }
 
     /**
@@ -2055,17 +2119,41 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * every {@code camera-mode.distance-warning-cooldown} seconds - the step is
      * stopped over and over as long as he keeps walking against the border.
      *
-     * @param key the message: the one for a step that does not go through, or
-     *            the one for a player who is brought back
+     * @param key   the message: the one for a step that does not go through, or
+     *              the one for a player who is brought back
+     * @param where the spot the distance was measured at, which decides what
+     *              {@code {from}} names
      */
-    private void warnDistanceLimit(Player player, String key) {
+    private void warnDistanceLimit(Player player, String key, CameraData data, Location where) {
         long now = System.currentTimeMillis();
         if (distanceMessageCooldown.getOrDefault(player.getUniqueId(), 0L) >= now) {
             return;
         }
         distanceMessageCooldown.put(player.getUniqueId(),
                 now + TimeUnit.SECONDS.toMillis(distanceWarningCooldown));
-        sendMessage(player, key, "{distance}", String.valueOf(maxDistance));
+        sendMessage(player, key, "{distance}", String.valueOf(maxDistance),
+                "{from}", distanceAnchorName(data, where));
+    }
+
+    /**
+     * What the distance is measured from at this spot, written out for a
+     * message: his body, or - in a world his body is not in - the portal he
+     * came out of there.
+     *
+     * <p>Follows {@link #distanceAnchor(CameraData, Location)}, so the message
+     * never sends a player looking for his body while he is a world away from
+     * it.</p>
+     */
+    private String distanceAnchorName(CameraData data, Location where) {
+        boolean fromPortal = !data.getBody().getWorld().equals(where.getWorld())
+                && data.getPortalAnchor() != null;
+        String text = getMessage(fromPortal ? "distance-from-portal" : "distance-from-body");
+        // Ein Satzteil, kein ganzer Satz: Fehlt er in einer Konfiguration aus
+        // einer aelteren Version, stuende sonst "... blocks from !" im Chat.
+        if (!text.isEmpty()) {
+            return text;
+        }
+        return fromPortal ? "the portal you came out of" : "your body";
     }
 
     /**
@@ -2188,7 +2276,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         if (maxDistanceEnabled && beyondMaxDistance(data, arrival)) {
             sendMessage(player, "portal-return-distance", "{distance}",
-                    String.valueOf(maxDistance));
+                    String.valueOf(maxDistance), "{from}", distanceAnchorName(data, arrival));
             bringBack(player, data);
             return;
         }
@@ -2741,7 +2829,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         for (String text : texts) {
             // The console has no use for colour codes, only for the sentence.
-            getLogger().warning(ChatColor.stripColor(text));
+            log(Level.WARNING, ChatColor.stripColor(text));
         }
         if (initiator == null || texts.isEmpty() || !isMessageEnabled("config-errors")) {
             return;
@@ -2868,7 +2956,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 command.unregister(commandMap);
             }
         } catch (ReflectiveOperationException | RuntimeException ex) {
-            getLogger().warning("Der Befehl /cam konnte nicht abgemeldet werden, er antwortet"
+            log(Level.WARNING, "Der Befehl /cam konnte nicht abgemeldet werden, er antwortet"
                     + " deshalb mit einem Fehler des Servers: " + ex);
         }
     }
@@ -2880,7 +2968,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                         + " es gelten weiter die bisherigen Einstellungen: {error}"
                 : "&cDie Konfiguration hat einen Fehler: {error}";
         String text = configMessage(key, fallback).replace("{error}", describeProblem(problem.getMessage()));
-        getLogger().severe(ChatColor.stripColor(text));
+        log(Level.SEVERE, ChatColor.stripColor(text));
         if (initiator != null && isMessageEnabled("config-errors")) {
             initiator.sendMessage(text);
         }
