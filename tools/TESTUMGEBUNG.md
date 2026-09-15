@@ -55,9 +55,11 @@ Der `apicheck`-Schritt zerlegt dazu jede Klasse mit `javap -p -c`, zieht die
 Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
-Sollmarke sind zurzeit **424 Aufrufe** (359 Methoden, 65 Felder), alle in beiden
-APIs vorhanden. Weicht die Zahl ab, sagt das Skript Bescheid; ein Fehler ist das
-nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
+Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
+zählt zurzeit **424** (359 Methoden und 65 Feldzugriffe) - alle 424 gibt es auch
+in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
+Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
 ## Fallen, die das Skript schon kennt
 

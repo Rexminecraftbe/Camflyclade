@@ -70,11 +70,11 @@ PAPER_API_DEPS = [
     ("org.slf4j", "slf4j-api", "2.0.17", CENTRAL),
 ]
 
-# Sollmarke aus dem letzten guten Lauf. Weicht die Zahl ab, ist das kein
-# Fehler - nur ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# In der alten Anleitung standen 348. Gezaehlt werden hier 359 Methoden- und
-# 65 Feldzugriffe, zusammen 424; alle 424 gibt es auch in paper-api.
-EXPECTED_API_CALLS = 424
+# Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
+# ein Hinweis, dass sich am Plugin etwas geaendert hat.
+# Dieser Pruefer zaehlt zurzeit 424: 359 Methoden- und 65 Feldzugriffe. Alle
+# 424 gibt es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
+EXPECTED_API_CALLS = 348
 
 # Der Bot-Name steht fest im Skript. Ueber eine Umgebungsvariable geht er
 # beim nohup-Start verloren, der zweite Bot joint dann als "TestBot" und
