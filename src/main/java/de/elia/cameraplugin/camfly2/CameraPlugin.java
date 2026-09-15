@@ -2525,10 +2525,26 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     /**
      * Transfer potion effects from splash potions that hit the camera body.
+     *
+     * <p>The camera player himself is taken out of the cloud beforehand. A
+     * thrown potion reaches him as little as a swing does while his body
+     * stands in for him - and the body is the one thing a potion can still
+     * find of him: it wets the mannequin, and from there the effect is passed
+     * on to him like everything else his body is met with. An armour stand
+     * does not take potions at all, the mannequin standing in it does.</p>
      */
     @EventHandler
     public void onPotionSplash(PotionSplashEvent event) {
-        for (LivingEntity entity : event.getAffectedEntities()) {
+        // Over a copy: taking somebody out of the cloud removes him from the
+        // very collection this loop walks.
+        for (LivingEntity entity : new ArrayList<>(event.getAffectedEntities())) {
+            if (entity instanceof Player camPlayer
+                    && cameraPlayers.containsKey(camPlayer.getUniqueId())) {
+                // Intensity zero is how the API says "not affected": he is
+                // dropped from the list the potion works through.
+                event.setIntensity(entity, 0.0);
+                continue;
+            }
             UUID owner = getBodyOrHitboxOwner(entity);
             if (owner == null) continue;
             Player player = Bukkit.getPlayer(owner);
