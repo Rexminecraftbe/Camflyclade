@@ -73,6 +73,7 @@ import java.util.Collection;
 import java.util.ArrayList;
 import java.util.List;
 import de.elia.cameraplugin.feuer.CamFireGuard;
+import de.elia.cameraplugin.hunger.CamHungerGuard;
 import de.elia.cameraplugin.body.BodyType;
 import de.elia.cameraplugin.body.EquipmentVisibility;
 import de.elia.cameraplugin.body.MannequinLabel;
@@ -108,6 +109,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private final Map<UUID, UUID> hitboxEntities = new HashMap<>();
     private final Set<UUID> pendingDamage = new HashSet<>();
     private CamFireGuard camFireGuard;
+    private CamHungerGuard camHungerGuard;
     private double particleHeight;
     private int particlesPerTick;
     private boolean showOwnParticles;
@@ -297,6 +299,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
+        camHungerGuard = new CamHungerGuard(this);
         // Created before the values are read, so its own go through the same
         // load and its notes end up in the same report.
         camFireGuard = new CamFireGuard(this);
@@ -583,6 +586,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         startSightGlow(player);
         startActionBar(player);
         camFireGuard.startFor(player);
+        camHungerGuard.startFor(player);
         // The entity taking the hits is the mannequin for both body types, so the
         // movement check always runs on it. Both calls look at the sensitivity
         // level and only one of them does anything.
@@ -881,9 +885,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     public void exitCameraMode(Player player) {
         CameraData cameraData = cameraPlayers.get(player.getUniqueId());
         if (cameraData == null) {
-            // Ensure players are removed from the no-collision team even if the
-            // CameraData has already been cleaned up by another call.
+            // Ensure players are removed from the no-collision team and get
+            // their hunger back even if the CameraData has already been
+            // cleaned up by another call.
             removePlayerFromNoCollisionTeam(player);
+            camHungerGuard.stopFor(player);
             updateViewerTeam(player);
             if (camModeObjective != null) {
                 camModeObjective.getScore(player.getName()).setScore(0);
@@ -927,6 +933,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         player.setFlying(cameraData.getOriginalFlying());
         player.setGlowing(cameraData.getOriginalGlowing());
         player.setRemainingAir(cameraData.getOriginalRemainingAir());
+        camHungerGuard.stopFor(player);
 
         removePlayerFromNoCollisionTeam(player);
 

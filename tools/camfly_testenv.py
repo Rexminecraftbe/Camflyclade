@@ -72,8 +72,8 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 424: 359 Methoden- und 65 Feldzugriffe. Alle
-# 424 gibt es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
+# Dieser Pruefer zaehlt zurzeit 435: 370 Methoden- und 65 Feldzugriffe. Alle
+# 435 gibt es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
 # Der Bot-Name steht fest im Skript. Ueber eine Umgebungsvariable geht er
@@ -856,6 +856,7 @@ function waitFor(check, timeout) {
 }
 
 const POS_RE = /\[\s*(-?[\d.]+)d,\s*(-?[\d.]+)d,\s*(-?[\d.]+)d\s*\]/;
+const DATA_RE = /entity data:\s*(-?[\d.]+)/;
 
 async function handle(cmd) {
   switch (cmd.op) {
@@ -899,6 +900,21 @@ async function handle(cmd) {
       }, cmd.timeout || 5000);
       return hit ? { pos: [parseFloat(hit[1]), parseFloat(hit[2]), parseFloat(hit[3])] }
                  : { pos: null };
+    }
+    case 'server_data': {
+      // Eine einzelne Zahl aus den Entitaetsdaten, serverseitig gelesen.
+      // Vom Hunger kennt der Client nur den Balken; Saettigung und
+      // Erschoepfung stehen allein auf dem Server.
+      const since = messages.length;
+      bot.chat('/data get entity @s ' + cmd.path);
+      const hit = await waitFor(() => {
+        for (let i = since; i < messages.length; i++) {
+          const m = DATA_RE.exec(messages[i].text);
+          if (m) return m;
+        }
+        return null;
+      }, cmd.timeout || 5000);
+      return { value: hit ? parseFloat(hit[1]) : null };
     }
     case 'state':
       return {
@@ -1116,6 +1132,16 @@ class BotClient:
     def server_pos(self):
         return self.call("server_pos", wait=20, timeout=8000).get("pos")
 
+    def server_data(self, path):
+        """Ein Wert aus den Entitaetsdaten des Bots, vom Server gelesen."""
+        return self.call("server_data", wait=20, path=path, timeout=8000).get("value")
+
+    def hunger(self):
+        """Balken, Saettigung und Erschoepfung, so wie der Server sie fuehrt."""
+        return (self.server_data("foodLevel"),
+                self.server_data("foodSaturationLevel"),
+                self.server_data("foodExhaustionLevel"))
+
 
 def strip_colors(text):
     return re.sub(r"[§&][0-9a-fk-or]", "", text or "")
@@ -1133,6 +1159,89 @@ def log_problems(env):
         if bad.search(line):
             hits.append(line.strip())
     return hits
+
+
+def hunger_checks(env, bot):
+    """Der Hungerbalken im Cam-Modus.
+
+    Der Spieler bleibt im Cam-Modus im Abenteuermodus, und dort laeuft der
+    Hunger des Servers weiter. Das Plugin haelt ihn an: keine Erschoepfung,
+    kein Abzug am Balken, und beim Aussteigen steht alles wieder so da wie
+    beim Einsteigen.
+
+    Gemessen wird serverseitig ueber /data. Der Bot braucht dafuer op - das
+    hat der Testlauf vorher schon erledigt.
+    """
+    # In "peaceful" nimmt der Server vom Balken ohnehin nichts weg, dort
+    # zeigte sich der Fehler gar nicht erst. Fuer diese Pruefungen geht die
+    # Schwierigkeit hoch. Monster kommen deswegen keine: das Spawnen ist
+    # ueber server.properties und die Spielregel abgeschaltet.
+    console(env, "difficulty easy")
+    try:
+        since = bot.mark()
+        bot.chat("/cam")
+        started = bot.expect("Camera mode activated|Cam mode activated", since, 8000)
+        if not FIND.test("/cam startet fuer den Hungertest", bool(started),
+                         "" if started else "keine Bestaetigung im Chat"):
+            return
+        time.sleep(1)
+
+        before = bot.hunger()
+        if not FIND.test("Hungerwerte sind serverseitig lesbar",
+                         all(v is not None for v in before),
+                         f"Balken {before[0]}, Saettigung {before[1]}, "
+                         f"Erschoepfung {before[2]}"):
+            bot.chat("/cam")
+            time.sleep(1)
+            return
+
+        # Der Hungereffekt fuellt die Erschoepfung schneller als alles andere,
+        # der Flug dazu ist die Bewegung, die sie im Spiel fuellt. Fuenf
+        # Sekunden auf der hoechsten Stufe sind gut dreissig Abzuege - genug,
+        # um erst die Saettigung und dann den halben Balken zu verbrauchen.
+        bot.chat("/effect give @s minecraft:hunger 5 255")
+        bot.call("fly", wait=30, dy=4, dx=4, timeout=15000)
+        time.sleep(6)
+        during = bot.hunger()
+        FIND.test("Im Cam-Modus faellt der Hungerbalken nicht",
+                  during[0] == before[0], f"{before[0]} -> {during[0]}")
+        FIND.test("Im Cam-Modus zehrt auch nichts an Saettigung und Erschoepfung",
+                  during[1:] == before[1:],
+                  f"Saettigung {before[1]} -> {during[1]}, "
+                  f"Erschoepfung {before[2]} -> {during[2]}")
+
+        # Erst den Effekt weg, sonst zehrt er nach dem Aussteigen sofort
+        # weiter und die Probe danach misst ihn statt des Plugins.
+        bot.chat("/effect clear @s minecraft:hunger")
+        time.sleep(1)
+        since = bot.mark()
+        bot.chat("/cam")
+        bot.expect("Camera mode ended|Cam mode ended", since, 8000)
+        time.sleep(1)
+        after = bot.hunger()
+        FIND.test("Nach dem Cam-Modus ist der Hunger der von vorher",
+                  after == before, f"{before} -> {after}")
+
+        # Gegenprobe: derselbe Effekt ohne Cam-Modus zehrt sehr wohl. Ohne
+        # sie sagte dieser Abschnitt nur, dass sich nichts bewegt hat - und
+        # das tut er auch, wenn gar nichts zehrt. Sie steht am Ende, weil der
+        # Balken danach unten ist: verhungert der Bot, laesst die
+        # cam-safety-Sperre danach kein /cam mehr zu.
+        plain_before = bot.server_data("foodLevel")
+        bot.chat("/effect give @s minecraft:hunger 5 255")
+        time.sleep(6)
+        plain_after = bot.server_data("foodLevel")
+        FIND.test("Gegenprobe: ohne Cam-Modus faellt der Balken sehr wohl",
+                  None not in (plain_before, plain_after) and plain_after < plain_before,
+                  f"{plain_before} -> {plain_after}")
+    finally:
+        # Die Schwierigkeit muss auch dann zurueck, wenn der Bot unterwegs
+        # abgehaengt ist - sonst steht der Server fuer alles Weitere falsch da.
+        try:
+            bot.chat("/effect clear @s minecraft:hunger")
+        except Exception:
+            pass
+        console(env, "difficulty peaceful")
 
 
 def step_tests(env):
@@ -1263,6 +1372,9 @@ def step_tests(env):
         if hit:
             bot.chat("/cam")
             time.sleep(1)
+
+        # --- Hunger im Cam-Modus ---
+        hunger_checks(env, bot)
 
     except Exception as exc:
         FIND.test("Testlauf", False, f"{type(exc).__name__}: {exc}")
