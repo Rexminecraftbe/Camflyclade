@@ -135,6 +135,11 @@ action-bar:
 
 
 # Grundeinstellungen des Kamera-Modus
+# Wer im Cam-Modus ist, bleibt im Abenteuermodus, nimmt dort aber keinen
+# Schaden, verliert nichts vom Hungerbalken und heilt auch nicht von selbst
+# nach. Sein Körper steht für ihn ein, und die Regeneration wird draußen aus
+# dem Hunger bezahlt - steht der Balken still, gäbe es sie hier umsonst.
+# Diese drei sind fest eingebaut, Schalter gibt es dafür keine.
 camera-mode:
   # Aktiviert die Begrenzung der Entfernung zum Körper
   max-distance-enabled: true

@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **435** (370 Methoden und 65 Feldzugriffe) - alle 435 gibt es auch
+zählt zurzeit **440** (373 Methoden und 67 Feldzugriffe) - alle 440 gibt es auch
 in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
@@ -99,6 +99,19 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
 * **Der Hunger wird serverseitig gelesen**, über `/data get entity @s
   foodLevel` und die beiden Nachbarwerte. Der Client kennt nur den Balken,
   Sättigung und Erschöpfung stehen allein auf dem Server.
+* **Der Heiltest läuft zweimal**, weil von selbst auf zwei Wegen Leben
+  nachwächst und das Plugin beide abfangen muss: in `peaceful` jede Sekunde
+  ein halbes Herz (Grund `REGEN`), in `easy` schnell aus der Sättigung
+  (`SATIATED`) und danach langsam über den vollen Balken. Geprüft wird auf
+  Gleichstand, ein einziges halbes Herz reicht also zum Durchfall - der
+  Durchgang in `easy` braucht deshalb keinen großen Abstand, nur Sättigung
+  und einen vollen Balken. Die holt er sich vorher mit dem
+  Sättigungseffekt, der nur greift, solange der Balken nicht voll ist.
+* **Erst verletzen, dann warten.** `/damage` setzt die `cam-safety`-Sperre in
+  Gang, fünf Sekunden lang geht danach kein `/cam`. Der Heiltest legt seine
+  Gegenprobe genau in diese Wartezeit. Wie viel Schaden, das rechnet er aus
+  dem aus, was der Bot noch hat: ein fester Wert erschlägt ihn, sobald ein
+  Durchgang auf den anderen folgt.
 * **Zwei „partial packet"-Warnungen beim Login** sind harmlos.
 * **Rechte des Bots:** `/cam` darf er ohne op, das ist Standardrecht. Für
   `/fillbiome` und `/data` wird er im Testlauf zum Operator gemacht - erst
@@ -114,7 +127,9 @@ von der Konsole · `/cam reload` vom Spieler · verbotenes Biom sperrt `/cam` ·
 im erlaubten Biom geht `/cam` wieder · der Hungerbalken bleibt im Cam-Modus
 stehen, samt Sättigung und Erschöpfung · nach dem Cam-Modus steht der Hunger
 wieder wie vorher · Gegenprobe: ohne Cam-Modus zehrt derselbe Effekt sehr wohl ·
-Server-Log ohne Fehler des Plugins.
+ein verletzter Spieler heilt im Cam-Modus nicht nach, weder in `peaceful` noch
+aus der Sättigung heraus · Gegenprobe: ohne Cam-Modus heilt er in beiden Fällen
+sehr wohl · Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
 Arbeitsordner.

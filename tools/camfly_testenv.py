@@ -72,8 +72,8 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 435: 370 Methoden- und 65 Feldzugriffe. Alle
-# 435 gibt es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
+# Dieser Pruefer zaehlt zurzeit 440: 373 Methoden- und 67 Feldzugriffe. Alle
+# 440 gibt es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
 # Der Bot-Name steht fest im Skript. Ueber eine Umgebungsvariable geht er
@@ -1244,6 +1244,90 @@ def hunger_checks(env, bot):
         console(env, "difficulty peaceful")
 
 
+def heal_probe(bot, label):
+    """Eine Heilprobe: verletzen, draussen heilen lassen, drinnen nicht.
+
+    Der Schaden richtet sich nach dem, was der Bot noch hat - ein fester Wert
+    wuerde ihn erschlagen, sobald eine Probe auf die andere folgt.
+    """
+    now = bot.server_data("Health")
+    if not FIND.test(f"Leben des Bots lesbar ({label})", now is not None, str(now)):
+        return
+    if now > 3:
+        bot.chat(f"/damage @s {int(now) - 2}")
+        time.sleep(0.5)
+    hurt = bot.server_data("Health")
+    if not FIND.test(f"Der Bot laesst sich verletzen ({label})",
+                     hurt is not None and hurt < 20.0, f"Leben {hurt}"):
+        return
+
+    # Die Gegenprobe steht vorn und laeuft dabei die cam-safety-Sperre ab:
+    # fuenf Sekunden nach dem letzten Schaden laesst das Plugin /cam wieder zu.
+    time.sleep(4)
+    healed = bot.server_data("Health")
+    FIND.test(f"Ohne Cam-Modus heilt der Spieler nach ({label})",
+              None not in (hurt, healed) and healed > hurt, f"{hurt} -> {healed}")
+    time.sleep(2)
+
+    since = bot.mark()
+    bot.chat("/cam")
+    started = bot.expect("Camera mode activated|Cam mode activated", since, 8000)
+    if not FIND.test(f"/cam startet fuer den Heiltest ({label})", bool(started),
+                     "" if started else "keine Bestaetigung im Chat"):
+        return
+    time.sleep(1)
+    before = bot.server_data("Health")
+    FIND.test(f"Der Bot geht verletzt in den Cam-Modus ({label})",
+              before is not None and before < 20.0, f"Leben {before}")
+    # Sechs Sekunden: geheilt wuerde in dieser Zeit in jedem Fall, ob nun
+    # schnell aus der Saettigung oder langsam aus dem vollen Balken. Geprueft
+    # wird auf Gleichstand, ein einziges halbes Herz reicht also zum Durchfall.
+    time.sleep(6)
+    after = bot.server_data("Health")
+    FIND.test(f"Im Cam-Modus heilt der Spieler nicht nach ({label})",
+              None not in (before, after) and after == before, f"{before} -> {after}")
+
+    since = bot.mark()
+    bot.chat("/cam")
+    bot.expect("Camera mode ended|Cam mode ended", since, 8000)
+    time.sleep(1)
+
+
+def heal_checks(env, bot):
+    """Die Heilung im Cam-Modus.
+
+    Seit der Hunger im Cam-Modus steht, waere die Regeneration dort umsonst zu
+    haben: draussen bezahlt sie Saettigung und am Ende den Balken. Das Plugin
+    haelt sie deshalb an, solange der Spieler zuschaut.
+
+    Zwei Durchgaenge, weil der Server zwei Wege kennt, auf denen von selbst
+    Leben nachwaechst, und das Plugin beide abfangen muss:
+
+    * "peaceful" heilt jede Sekunde ein halbes Herz, gleichmaessig und ohne
+      dass ihm die Saettigung ausgeht - der Grund heisst dort REGEN.
+    * "easy" ist der Fall des echten Servers: aus der Saettigung heraus geht
+      es schnell, das ist SATIATED, und wenn sie leer ist, langsam weiter
+      ueber den vollen Balken.
+    """
+    heal_probe(bot, "peaceful")
+
+    # Satt in den zweiten Durchgang: ohne vollen Balken regeneriert "easy"
+    # gar nicht erst. Der Saettigungseffekt fuellt Balken und Saettigung auf
+    # einen Schlag - er greift nur, solange der Balken nicht voll ist.
+    bot.chat("/effect give @s minecraft:saturation 1 255")
+    time.sleep(2)
+    console(env, "difficulty easy")
+    try:
+        food = bot.server_data("foodLevel")
+        sat = bot.server_data("foodSaturationLevel")
+        if FIND.test("Der Bot geht satt in den zweiten Heiltest",
+                     food == 20 and sat is not None and sat > 0,
+                     f"Balken {food}, Saettigung {sat}"):
+            heal_probe(bot, "easy")
+    finally:
+        console(env, "difficulty peaceful")
+
+
 def step_tests(env):
     Log.step("8. Tests im laufenden Spiel")
     if server_running(env) is None:
@@ -1375,6 +1459,9 @@ def step_tests(env):
 
         # --- Hunger im Cam-Modus ---
         hunger_checks(env, bot)
+
+        # --- Heilung im Cam-Modus ---
+        heal_checks(env, bot)
 
     except Exception as exc:
         FIND.test("Testlauf", False, f"{type(exc).__name__}: {exc}")
