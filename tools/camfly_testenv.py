@@ -72,8 +72,8 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 442: 375 Methoden- und 67 Feldzugriffe. Alle
-# 442 gibt es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
+# Dieser Pruefer zaehlt zurzeit 444: 377 Methoden- und 67 Feldzugriffe. Alle
+# 444 gibt es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
 # Der Bot-Name steht fest im Skript. Ueber eine Umgebungsvariable geht er
@@ -1397,20 +1397,25 @@ def potion_probe(env, bot, kind, label):
               bot.call("state").get("gameMode") == "adventure",
               str(bot.call("state").get("gameMode")))
 
-    # Und nun auf den Koerper: den trifft der Trank weiterhin. Geprueft wird am
-    # Zustand, nicht an einer Meldung - zu body-got-effect steht zwar ein Text
-    # in der Konfiguration, verschickt wird er nirgends.
+    # Und nun auf den Koerper: den trifft der Trank weiterhin. Dass der
+    # Cam-Modus endet, wird am Spielmodus gemessen; dass der Spieler auch
+    # erfaehrt, warum, steht im Chat und nennt den Effekt beim Namen.
     if body is None:
         FIND.test(f"Koerperstelle bekannt ({label})", False,
                   "keine serverseitige Position")
         bot.chat("/cam")
         return
     clear()
+    since = bot.mark()
     throw(f"{body[0]} {body[1] + 1} {body[2]}")
     FIND.test(f"Der Koerper wird weiterhin getroffen und beendet den "
               f"Cam-Modus ({label})",
               bot.call("state").get("gameMode") != "adventure",
               f"Spielmodus {bot.call('state').get('gameMode')}")
+    told = bot.expect("hit by the effect slowness", since, 8000)
+    FIND.test(f"Die Meldung nennt den Effekt, an dem es lag ({label})",
+              bool(told),
+              strip_colors(told["text"]) if told else "keine Meldung im Chat")
     if kind == "splash_potion":
         # Nur beim Splash ist das eindeutig: er wirkt einmal und ist vorbei.
         # Die Wolke liegt noch da, wenn der Spieler nach dem Ende des

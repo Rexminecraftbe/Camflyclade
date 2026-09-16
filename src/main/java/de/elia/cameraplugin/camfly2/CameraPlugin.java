@@ -2492,6 +2492,15 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * An effect on the body ends camera mode, and the effect itself goes on to
+     * the player - his body caught it for him, but it is still meant for him.
+     *
+     * <p>Which effect it was is what the message says. He notices the effect
+     * anyway, it is on him a moment later; what he would otherwise be missing
+     * is the reason he was put back into his body, the way
+     * {@code body-attacked} and {@code body-moved} give him theirs.</p>
+     */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBodyPotionEffect(EntityPotionEffectEvent event) {
         Entity entity = event.getEntity();
@@ -2506,6 +2515,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 owner.addPotionEffect(newEffect);
             }
             exitCameraMode(owner);
+            // After the exit, like the message about a hit on the body: first
+            // he is back in his body, then he reads why.
+            sendMessage(owner, "body-got-effect", "{effect}",
+                    event.getModifiedType().getKey().getKey());
         }
 
         event.setCancelled(true);

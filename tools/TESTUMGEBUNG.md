@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **442** (375 Methoden und 67 Feldzugriffe) - alle 442 gibt es auch
+zählt zurzeit **444** (377 Methoden und 67 Feldzugriffe) - alle 444 gibt es auch
 in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
@@ -133,9 +133,10 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
 * **Zum Trankstest fliegt der Bot zwölf Blöcke weg.** Steht er bei seinem
   Körper, benetzt ein Trank beide auf einmal, und die Probe sagt nicht mehr,
   wen von beiden er getroffen hat.
-* **`body-got-effect` steht in der Konfiguration, wird aber nirgends
-  verschickt.** Der Test prüft den Treffer auf den Körper deshalb am
-  Spielmodus, nicht an der Meldung.
+* **Den Treffer auf den Körper prüft der Test am Spielmodus**, nicht an der
+  Meldung: `adventure` heißt im Cam-Modus, alles andere heißt beendet. Die
+  Meldung `body-got-effect` wird zusätzlich geprüft, samt dem Effekt, den sie
+  benennen soll.
 * **Rechte des Bots:** `/cam` darf er ohne op, das ist Standardrecht. Für
   `/fillbiome` und `/data` wird er im Testlauf zum Operator gemacht - erst
   danach, damit das Standardrecht vorher wirklich geprüft wird.
@@ -155,7 +156,8 @@ aus der Sättigung heraus · Gegenprobe: ohne Cam-Modus heilt er in beiden Fäll
 sehr wohl · ein geworfener Trank geht im Cam-Modus am Spieler vorbei, der
 Splash-Trank wie der verweilende · Gegenprobe: ohne Cam-Modus wirken beide auf
 ihn · der Körper wird von beiden weiterhin getroffen und beendet damit den
-Cam-Modus · Server-Log ohne Fehler des Plugins.
+Cam-Modus · die Meldung dazu nennt den Effekt, an dem es lag · Server-Log ohne
+Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
 Arbeitsordner.

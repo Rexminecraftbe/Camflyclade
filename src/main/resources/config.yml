@@ -6,7 +6,9 @@ messages:
   body-attacked: "&cYour body was attacked by {damager}! Camera mode ended."
   body-drowning: "&cYour body is drowning! Camera mode ended."
   body-env-damage: "&cYour body was damaged by {cause}! Camera mode ended."
-  body-got-effect: "&cYour body was hit by an effect and camera mode was ended!"
+  # Platzhalter {effect}: der Effekt, der den Körper getroffen hat, unter
+  # seinem Minecraft-Namen - "poison", "instant_damage".
+  body-got-effect: "&cYour body was hit by the effect {effect}! Camera mode ended."
   body-missing: "&cYour body no longer exists! Camera mode ended."
   body-moved: "&cYour body was moved! Camera mode ended."
   body-suffocating: "&cYour body is stuck and suffocating! Camera mode ended."
