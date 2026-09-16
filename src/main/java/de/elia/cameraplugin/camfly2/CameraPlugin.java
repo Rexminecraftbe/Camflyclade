@@ -2226,8 +2226,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * biome or structure over there is found only by walking through once, see
      * {@link #afterPortal(Player, Location)}. From then on the portal is known
      * and shuts like the other two, as long as {@code portals.remember-blocked}
-     * is on - for as long as what was found over there still holds, which is
-     * looked over at every attempt.</p>
+     * is on - and, under {@code portals.forget-changed}, only for as long as
+     * what was found over there still holds, which is looked over at every
+     * attempt.</p>
      */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onCameraPortal(PlayerPortalEvent event) {

@@ -38,11 +38,13 @@ import java.util.UUID;
  * without that the same portal would send him over and fetch him back every
  * single time.</p>
  *
- * <p>What is remembered is not taken on trust. A portal leads where the world
- * lets it lead, and the world is built on: an entry is looked over before it
- * turns anybody away, see {@link #forbiddenAreaBehind(Location, AreaCheck)},
- * and a portal newly built next to the far side of a remembered one lets that
- * entry go, see {@link #forgetPortalsNear(World, Collection)}.</p>
+ * <p>What is remembered is not taken on trust, as long as
+ * {@code portals.forget-changed} is on. A portal leads where the world lets it
+ * lead, and the world is built on: an entry is looked over before it turns
+ * anybody away, see {@link #forbiddenAreaBehind(Location, AreaCheck)}, and a
+ * portal newly built next to the far side of a remembered one lets that entry
+ * go, see {@link #forgetPortalsNear(World, Collection)}. Switched off, an entry
+ * stands until {@code /cam reload}.</p>
  */
 public final class PortalRules {
 
@@ -79,6 +81,7 @@ public final class PortalRules {
     private int warningCooldown = DEFAULT_WARNING_COOLDOWN;
     private boolean rememberBlocked = true;
     private int rememberedPortals = DEFAULT_REMEMBERED_PORTALS;
+    private boolean forgetChanged = true;
     private int forgetRadius = DEFAULT_FORGET_RADIUS;
 
     /**
@@ -159,6 +162,7 @@ public final class PortalRules {
         rememberBlocked = config.getBoolean("portals.remember-blocked", true);
         rememberedPortals = config.getInt("portals.remember-blocked-count",
                 DEFAULT_REMEMBERED_PORTALS, 0);
+        forgetChanged = config.getBoolean("portals.forget-changed", true);
         forgetRadius = config.getInt("portals.forget-radius", DEFAULT_FORGET_RADIUS, 0);
         blockedPortals.clear();
     }
@@ -167,11 +171,12 @@ public final class PortalRules {
      * The area behind this portal, when it has already taken a camera player
      * into a biome or a structure camera mode is not allowed in.
      *
-     * <p>What was written down is looked over before it is used. Is the portal
-     * on the far side gone, or is the spot over there not forbidden any more,
-     * the entry is dropped and this portal is walked through once again -
-     * otherwise it would keep turning players away from a trip that has long
-     * since stopped ending where it did.</p>
+     * <p>What was written down is looked over before it is used, unless
+     * {@code portals.forget-changed} is off. Is the portal on the far side
+     * gone, or is the spot over there not forbidden any more, the entry is
+     * dropped and this portal is walked through once again - otherwise it would
+     * keep turning players away from a trip that has long since stopped ending
+     * where it did.</p>
      *
      * @param portal the spot the player is stepping into the portal at
      * @param check  what forbids camera mode at a spot, asked again at the spot
@@ -187,6 +192,9 @@ public final class PortalRules {
         BlockedPortal blocked = spot == null ? null : blockedPortals.get(spot);
         if (blocked == null) {
             return null;
+        }
+        if (!forgetChanged) {
+            return blocked.area();
         }
         String area = areaStillBehind(blocked, check);
         if (area == null) {
@@ -297,11 +305,15 @@ public final class PortalRules {
      * did - until {@code /cam reload}, which is a heavy answer to a portal
      * somebody moved by two chunks.</p>
      *
+     * <p>Hangs on {@code portals.forget-changed} like the checking does, and on
+     * {@code portals.forget-radius} of its own, which switches off this half
+     * alone.</p>
+     *
      * @param world  the world the new portal stands in
      * @param blocks the blocks it is made of
      */
     public void forgetPortalsNear(World world, Collection<BlockState> blocks) {
-        if (forgetRadius <= 0 || blockedPortals.isEmpty() || world == null
+        if (!forgetChanged || forgetRadius <= 0 || blockedPortals.isEmpty() || world == null
                 || blocks == null || blocks.isEmpty()) {
             return;
         }

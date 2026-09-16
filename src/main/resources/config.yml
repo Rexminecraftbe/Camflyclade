@@ -549,13 +549,8 @@ portals:
   # false = Jeder Durchgang wird neu geprüft. Der Spieler geht also jedes Mal
   #         hinüber und wird jedes Mal zurückgeholt.
   # Gemerkt wird nur für diesen Serverlauf, und /cam reload leert das Gemerkte.
-  # Einzelne Einträge fallen schon vorher weg, sobald die Welt sie überholt hat.
-  # Mit dem Portal wird nämlich die Stelle mitgeschrieben, an der die Reise
-  # herausgekommen ist, und dort wird nachgesehen, bevor ein Eintrag jemanden
-  # abweist: Steht drüben kein Portal mehr - abgebaut oder versetzt - oder ist
-  # die Stelle gar nicht mehr verboten, wird der Eintrag verworfen und das
-  # Portal einmal neu ausprobiert. Ein drüben neu gebautes Portal wirft ihn
-  # ebenfalls weg, siehe forget-radius.
+  # Einzelne Einträge fallen schon vorher weg, sobald die Welt sie überholt hat
+  # - das entscheidet forget-changed.
   # Für eine verbotene Dimension braucht es das nicht, die steht schon vor der
   # Reise fest, siehe cam-area.dimensions.
   # Gemerkt wird das Portal als Ganzes, nicht das einzelne Feld: Von dem Feld
@@ -567,6 +562,22 @@ portals:
   # Portale fallen also nicht ins Gewicht.
   # 0 merkt nichts und wirkt damit wie remember-blocked: false.
   remember-blocked-count: 128
+  # Ob ein gemerktes Portal wieder freigegeben wird, sobald die Welt den
+  # Eintrag überholt hat. Wohin ein Portal führt, hängt daran, wie es drüben
+  # aussieht, und daran kann sich jederzeit etwas ändern.
+  # true  = Mit dem Portal wird die Stelle mitgeschrieben, an der die Reise
+  #         herausgekommen ist, und dort wird nachgesehen, bevor der Eintrag
+  #         jemanden abweist. Steht drüben kein Portalfeld mehr - abgebaut
+  #         oder versetzt - oder ist die Stelle gar nicht mehr verboten, fällt
+  #         der Eintrag weg und das Portal wird einmal neu ausprobiert.
+  #         Dasselbe passiert, wenn drüben in der Nähe ein Portal gebaut wird,
+  #         siehe forget-radius.
+  # false = Ein Eintrag bleibt stehen, bis /cam reload ihn wegräumt. Wer
+  #         drüben etwas umbaut, muss danach also selbst neu laden.
+  # Das Nachsehen kostet drüben einen geladenen Chunk, und das höchstens
+  # einmal je Anlauf an einem gesperrten Portal - dafür sorgt die Sperrzeit,
+  # die das Plugin dem Spieler nach einer Abweisung auflegt.
+  forget-changed: true
   # Wie nah ein neu gebautes Portal an der Stelle stehen muss, an der ein
   # gemerktes Portal herausgekommen ist, damit dieser Eintrag verworfen wird -
   # in Blöcken und waagerecht gemessen, die Höhe zählt nicht mit.
@@ -579,7 +590,9 @@ portals:
   # sollte ihn hier mit hochsetzen, sonst bleibt so ein Eintrag stehen.
   # Zu großzügig ist nicht schlimm: Ein zu früh vergessenes Portal kostet eine
   # Probereise, ein zu lange gemerktes sperrt ein Portal ohne Grund.
-  # 0 schaltet dieses Vergessen ab.
+  # 0 schaltet diese Hälfte ab: Dann wird nur noch nachgesehen, ob drüben
+  # überhaupt noch ein Portal steht. Gilt ohnehin nur, solange forget-changed
+  # an ist - das schaltet beides zusammen ab.
   forget-radius: 128
 
 # Einstellungen zur Übertragung von Schaden
