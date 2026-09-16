@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **424** (359 Methoden und 65 Feldzugriffe) - alle 424 gibt es auch
+zählt zurzeit **446** (378 Methoden und 68 Feldzugriffe) - alle 446 gibt es auch
 in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
@@ -88,7 +88,67 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   (`--no-restore` lässt das bleiben.)
 * **Ausgabeordner werden geleert**, bevor neu übersetzt wird - sonst verdeckt
   eine alte Klassenkopie die frisch gebaute.
+* **Hunger braucht eine Schwierigkeit über `peaceful`.** Dort nimmt der
+  Server vom Balken gar nichts weg, der Hungertest liefe ins Leere. Er stellt
+  deshalb für sich auf `easy` und danach wieder zurück; Monster kommen dabei
+  keine, das Spawnen ist ohnehin aus.
+* **Die Sättigung liegt auf dem Testserver bei knapp 20**, nicht bei den 5
+  eines frisch gespawnten Spielers - `peaceful` füllt sie die ganze Zeit mit
+  auf. Ein Hungereffekt muss sie erst aufbrauchen, ehe der Balken selbst
+  fällt: zwei Sekunden auf Stufe 255 reichten dafür nicht, fünf reichen.
+* **Der Hunger wird serverseitig gelesen**, über `/data get entity @s
+  foodLevel` und die beiden Nachbarwerte. Der Client kennt nur den Balken,
+  Sättigung und Erschöpfung stehen allein auf dem Server.
+* **Der Heiltest läuft zweimal**, weil von selbst auf zwei Wegen Leben
+  nachwächst und das Plugin beide abfangen muss: in `peaceful` jede Sekunde
+  ein halbes Herz (Grund `REGEN`), in `easy` schnell aus der Sättigung
+  (`SATIATED`) und danach langsam über den vollen Balken. Geprüft wird auf
+  Gleichstand, ein einziges halbes Herz reicht also zum Durchfall - der
+  Durchgang in `easy` braucht deshalb keinen großen Abstand, nur Sättigung
+  und einen vollen Balken. Die holt er sich vorher mit dem
+  Sättigungseffekt, der nur greift, solange der Balken nicht voll ist.
+* **Erst verletzen, dann warten.** `/damage` setzt die `cam-safety`-Sperre in
+  Gang, fünf Sekunden lang geht danach kein `/cam`. Der Heiltest legt seine
+  Gegenprobe genau in diese Wartezeit. Wie viel Schaden, das rechnet er aus
+  dem aus, was der Bot noch hat: ein fester Wert erschlägt ihn, sobald ein
+  Durchgang auf den anderen folgt.
 * **Zwei „partial packet"-Warnungen beim Login** sind harmlos.
+* **Tränke setzt der Test mit `/summon` ab**, einen Block über dem Ziel: der
+  Trank fällt, zerschellt und wirkt vier Blöcke weit. Die Entitätstypen heißen
+  `minecraft:splash_potion` und `minecraft:lingering_potion`;
+  `minecraft:potion` gibt es nicht mehr. Genommen wird Langsamkeit - sie tut
+  niemandem weh und legt damit die `cam-safety`-Sperre nicht an, die jeder
+  Schaden auslösen würde.
+* **Die Wolke eines verweilenden Tranks braucht einen Moment** und fragt dann
+  etwa jede Sekunde neu nach, wer in ihr steht. Der Test wartet deshalb nach
+  jedem Wurf drei Sekunden - das deckt beim Splash die sofortige Wirkung und
+  bei der Wolke gleich mehrere Runden ab.
+* **Beim verweilenden Trank auf den Körper wird nur geprüft, dass der
+  Cam-Modus endet.** Ob die Wirkung danach am Spieler hängt, sagt nichts
+  mehr: Er steht nach dem Ende wieder bei seinem Körper und damit mitten in
+  der Wolke, die ihn dann ganz regulär erwischt.
+* **Der Rüstungsständer nimmt von Tränken nichts an**, das Mannequin in ihm
+  sehr wohl. Über das läuft der Treffer auf den Körper, bei beiden
+  Körpertypen.
+* **Zum Trankstest fliegt der Bot zwölf Blöcke weg.** Steht er bei seinem
+  Körper, benetzt ein Trank beide auf einmal, und die Probe sagt nicht mehr,
+  wen von beiden er getroffen hat.
+* **Den Treffer auf den Körper prüft der Test am Spielmodus**, nicht an der
+  Meldung: `adventure` heißt im Cam-Modus, alles andere heißt beendet. Die
+  Meldung `body-got-effect` wird zusätzlich geprüft, samt dem Effekt, den sie
+  benennen soll.
+* **`start-with-effects` stellt der Test selbst um**, in der
+  Konfigurationsdatei des Servers und mit `cam reload` von der Konsole; am
+  Ende steht wieder `positive` da. Die Voreinstellung wird nicht gesetzt,
+  sondern nachgesehen - so fällt auf, wenn in der ausgelieferten Datei etwas
+  anderes steht.
+* **Als schädlicher Effekt dient Langsamkeit, nicht Gift.** Gift macht
+  Schaden, und dann stünde die `cam-safety`-Sperre vor der Ablehnung, um die
+  es geht.
+* **Die Wolke eines verweilenden Tranks räumt der Test weg**, bevor er `/cam`
+  startet. Sie legt die Langsamkeit sonst sofort wieder auf, und mit
+  `start-with-effects: positive` käme der Bot damit nicht mehr in den
+  Cam-Modus.
 * **Rechte des Bots:** `/cam` darf er ohne op, das ist Standardrecht. Für
   `/fillbiome` und `/data` wird er im Testlauf zum Operator gemacht - erst
   danach, damit das Standardrecht vorher wirklich geprüft wird.
@@ -100,7 +160,18 @@ Plugin geladen · Bot verbindet sich · `/cam` ohne op · Körper wird gesetzt
 eingesammelt · serverseitige Position lesbar · Fliegen im Cam-Modus bewegt den
 Spieler · nach dem Cam-Modus steht der Spieler wieder am Körper · `/cam reload`
 von der Konsole · `/cam reload` vom Spieler · verbotenes Biom sperrt `/cam` ·
-im erlaubten Biom geht `/cam` wieder · Server-Log ohne Fehler des Plugins.
+im erlaubten Biom geht `/cam` wieder · der Hungerbalken bleibt im Cam-Modus
+stehen, samt Sättigung und Erschöpfung · nach dem Cam-Modus steht der Hunger
+wieder wie vorher · Gegenprobe: ohne Cam-Modus zehrt derselbe Effekt sehr wohl ·
+ein verletzter Spieler heilt im Cam-Modus nicht nach, weder in `peaceful` noch
+aus der Sättigung heraus · Gegenprobe: ohne Cam-Modus heilt er in beiden Fällen
+sehr wohl · ein geworfener Trank geht im Cam-Modus am Spieler vorbei, der
+Splash-Trank wie der verweilende · Gegenprobe: ohne Cam-Modus wirken beide auf
+ihn · der Körper wird von beiden weiterhin getroffen und beendet damit den
+Cam-Modus · die Meldung dazu nennt den Effekt, an dem es lag · `/cam` startet
+mit einem positiven und einem neutralen Effekt, mit einem schädlichen nicht ·
+auf `false` sperrt jeder Effekt, auf `true` keiner · die Ablehnung nennt jeden
+schädlichen Effekt und nur die · Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
 Arbeitsordner.

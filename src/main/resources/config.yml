@@ -6,7 +6,9 @@ messages:
   body-attacked: "&cYour body was attacked by {damager}! Camera mode ended."
   body-drowning: "&cYour body is drowning! Camera mode ended."
   body-env-damage: "&cYour body was damaged by {cause}! Camera mode ended."
-  body-got-effect: "&cYour body was hit by an effect and camera mode was ended!"
+  # Platzhalter {effect}: der Effekt, der den Körper getroffen hat, unter
+  # seinem Minecraft-Namen - "poison", "instant_damage".
+  body-got-effect: "&cYour body was hit by the effect {effect}! Camera mode ended."
   body-missing: "&cYour body no longer exists! Camera mode ended."
   body-moved: "&cYour body was moved! Camera mode ended."
   body-suffocating: "&cYour body is stuck and suffocating! Camera mode ended."
@@ -15,6 +17,9 @@ messages:
   # das Biom, so geschrieben wie dort in der Konfiguration.
   cam-area-limit: "&cYou cannot go any further, cam mode is not allowed in {area}."
   cam-area-start: "&cYou cannot start cam mode in {area}."
+  # Platzhalter {effect}: die Effekte, an denen der Start scheitert, unter
+  # ihren Minecraft-Namen und durch Komma getrennt.
+  cam-effect-start: "&cYou cannot start cam mode with {effect} on you."
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
   camera-off: "&aCamera mode ended."
   camera-on: "&aCamera mode activated! Use /cam again to exit."
@@ -102,6 +107,7 @@ message-settings:
   bossbar-text: true
   cam-area-limit: true
   cam-area-start: true
+  cam-effect-start: true
   cam-safety: true
   camera-off: false
   camera-on: false
@@ -135,6 +141,14 @@ action-bar:
 
 
 # Grundeinstellungen des Kamera-Modus
+# Wer im Cam-Modus ist, bleibt im Abenteuermodus, nimmt dort aber keinen
+# Schaden, verliert nichts vom Hungerbalken, heilt nicht von selbst nach und
+# wird von keinem geworfenen Trank benetzt - weder vom Splash-Trank noch von
+# der Wolke, die ein verweilender liegen lässt. Sein Körper steht für ihn ein:
+# Was den trifft, trifft ihn - ein Schlag wie ein Trank -, und der Cam-Modus
+# endet dabei. Die Regeneration wiederum wird draußen aus dem Hunger
+# bezahlt, und steht der Balken still, gäbe es sie hier umsonst.
+# Das alles ist fest eingebaut, Schalter gibt es dafür keine.
 camera-mode:
   # Aktiviert die Begrenzung der Entfernung zum Körper
   max-distance-enabled: true
@@ -173,6 +187,20 @@ camera-mode:
   glowing-outline: true
   # Erlaubt Flug durch Lava
   allow_lava_flight: true
+  # Ob der Cam-Modus mit einem Trankeffekt überhaupt gestartet werden darf
+  # true     = ja, mit jedem
+  # false    = nein, mit keinem einzigen
+  # positive = nur mit Effekten, die dem Spieler nicht schaden: positive wie
+  #            Schnelligkeit und neutrale wie Leuchten. Gift, Verwelken,
+  #            Blindheit und alles andere Schädliche sperren den Start.
+  # Was positiv, negativ oder neutral ist, sagt Minecraft selbst; das Plugin
+  # führt dazu keine eigene Liste.
+  # Der Grund für die Sperre: Der Cam-Modus nimmt dem Spieler seine Effekte ab
+  # und gibt sie ihm beim Aussteigen zurück. Wer vergiftet ist, könnte das Gift
+  # dort oben also aussitzen, solange er möchte.
+  # Der Text dazu steht unter messages.cam-effect-start.
+  # Bei einem unbekannten Wert wird positive verwendet.
+  start-with-effects: positive
 
 # Körper, der im Kamera-Modus an der Stelle des Spielers zurückbleibt
 # In beiden Fällen nimmt ein Mannequin den Schaden: Es hat die Hitbox eines

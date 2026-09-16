@@ -24,6 +24,7 @@ import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.profile.PlayerProfile;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
+import org.bukkit.event.entity.EntityRegainHealthEvent.RegainReason;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -40,6 +41,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.potion.PotionEffectTypeCategory;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.block.Block;
 import org.bukkit.scoreboard.Scoreboard;
@@ -73,6 +75,7 @@ import java.util.Collection;
 import java.util.ArrayList;
 import java.util.List;
 import de.elia.cameraplugin.feuer.CamFireGuard;
+import de.elia.cameraplugin.hunger.CamHungerGuard;
 import de.elia.cameraplugin.body.BodyType;
 import de.elia.cameraplugin.body.EquipmentVisibility;
 import de.elia.cameraplugin.body.MannequinLabel;
@@ -108,6 +111,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private final Map<UUID, UUID> hitboxEntities = new HashMap<>();
     private final Set<UUID> pendingDamage = new HashSet<>();
     private CamFireGuard camFireGuard;
+    private CamHungerGuard camHungerGuard;
     private double particleHeight;
     private int particlesPerTick;
     private boolean showOwnParticles;
@@ -275,8 +279,17 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     private enum VisibilityMode { CAM, ALL, NONE }
 
+    /** What {@code camera-mode.start-with-effects} allows him to start with. */
+    private EffectStart startWithEffects;
+
     /** The values of {@code camera-mode.glowing-outline}: true, false and sight. */
     private enum GlowMode { ALWAYS, OFF, SIGHT }
+
+    /**
+     * The values of {@code camera-mode.start-with-effects}: true, false and
+     * positive.
+     */
+    private enum EffectStart { ANY, NONE, POSITIVE }
 
     @Override
     public void onEnable() {
@@ -297,6 +310,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
+        camHungerGuard = new CamHungerGuard(this);
         // Created before the values are read, so its own go through the same
         // load and its notes end up in the same report.
         camFireGuard = new CamFireGuard(this);
@@ -583,6 +597,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         startSightGlow(player);
         startActionBar(player);
         camFireGuard.startFor(player);
+        camHungerGuard.startFor(player);
         // The entity taking the hits is the mannequin for both body types, so the
         // movement check always runs on it. Both calls look at the sensitivity
         // level and only one of them does anything.
@@ -881,9 +896,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     public void exitCameraMode(Player player) {
         CameraData cameraData = cameraPlayers.get(player.getUniqueId());
         if (cameraData == null) {
-            // Ensure players are removed from the no-collision team even if the
-            // CameraData has already been cleaned up by another call.
+            // Ensure players are removed from the no-collision team and get
+            // their hunger back even if the CameraData has already been
+            // cleaned up by another call.
             removePlayerFromNoCollisionTeam(player);
+            camHungerGuard.stopFor(player);
             updateViewerTeam(player);
             if (camModeObjective != null) {
                 camModeObjective.getScore(player.getName()).setScore(0);
@@ -927,6 +944,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         player.setFlying(cameraData.getOriginalFlying());
         player.setGlowing(cameraData.getOriginalGlowing());
         player.setRemainingAir(cameraData.getOriginalRemainingAir());
+        camHungerGuard.stopFor(player);
 
         removePlayerFromNoCollisionTeam(player);
 
@@ -2046,6 +2064,38 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * The camera player does not heal by himself either.
+     *
+     * <p>Natural regeneration is paid for out of the hunger: outside camera
+     * mode every half heart of it costs saturation first and then a haunch off
+     * the bar. That bar stands still while he watches - see
+     * {@link de.elia.cameraplugin.hunger.CamHungerGuard} - so left running it
+     * would be free here, and a player could sit his wounds out in the air
+     * instead of eating them off on the ground. Both of its reasons are
+     * therefore turned away while he is in camera mode: the fast one out of
+     * the saturation, and the slow one off the full bar, which is also the one
+     * a peaceful world heals with.</p>
+     *
+     * <p>Only those two. Healing that somebody hands him on purpose - an
+     * effect, another plugin - is none of this plugin's business. The one
+     * thing still moving his health is the hit his body takes, and that ends
+     * camera mode in the same breath.</p>
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onCameraRegainHealth(EntityRegainHealthEvent event) {
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
+        RegainReason reason = event.getRegainReason();
+        if (reason != RegainReason.REGEN && reason != RegainReason.SATIATED) {
+            return;
+        }
+        if (cameraPlayers.containsKey(player.getUniqueId())) {
+            event.setCancelled(true);
+        }
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void recordLastDamage(EntityDamageEvent event) {
         if (event.getEntity() instanceof Player player) {
@@ -2452,6 +2502,15 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * An effect on the body ends camera mode, and the effect itself goes on to
+     * the player - his body caught it for him, but it is still meant for him.
+     *
+     * <p>Which effect it was is what the message says. He notices the effect
+     * anyway, it is on him a moment later; what he would otherwise be missing
+     * is the reason he was put back into his body, the way
+     * {@code body-attacked} and {@code body-moved} give him theirs.</p>
+     */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBodyPotionEffect(EntityPotionEffectEvent event) {
         Entity entity = event.getEntity();
@@ -2466,6 +2525,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 owner.addPotionEffect(newEffect);
             }
             exitCameraMode(owner);
+            // After the exit, like the message about a hit on the body: first
+            // he is back in his body, then he reads why.
+            sendMessage(owner, "body-got-effect", "{effect}",
+                    event.getModifiedType().getKey().getKey());
         }
 
         event.setCancelled(true);
@@ -2485,10 +2548,26 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     /**
      * Transfer potion effects from splash potions that hit the camera body.
+     *
+     * <p>The camera player himself is taken out of the cloud beforehand. A
+     * thrown potion reaches him as little as a swing does while his body
+     * stands in for him - and the body is the one thing a potion can still
+     * find of him: it wets the mannequin, and from there the effect is passed
+     * on to him like everything else his body is met with. An armour stand
+     * does not take potions at all, the mannequin standing in it does.</p>
      */
     @EventHandler
     public void onPotionSplash(PotionSplashEvent event) {
-        for (LivingEntity entity : event.getAffectedEntities()) {
+        // Over a copy: taking somebody out of the cloud removes him from the
+        // very collection this loop walks.
+        for (LivingEntity entity : new ArrayList<>(event.getAffectedEntities())) {
+            if (entity instanceof Player camPlayer
+                    && cameraPlayers.containsKey(camPlayer.getUniqueId())) {
+                // Intensity zero is how the API says "not affected": he is
+                // dropped from the list the potion works through.
+                event.setIntensity(entity, 0.0);
+                continue;
+            }
             UUID owner = getBodyOrHitboxOwner(entity);
             if (owner == null) continue;
             Player player = Bukkit.getPlayer(owner);
@@ -2505,6 +2584,25 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /** Transfer potion effects from arrows that hit the camera body. */
+    /**
+     * The same for the cloud a lingering potion leaves lying: it does not
+     * touch the camera player either.
+     *
+     * <p>A cloud is not one throw but a question asked over and over, about
+     * once a second for as long as it lies there, so he is taken out of every
+     * single one of those rounds. What it does find of him is his body: the
+     * mannequin takes the effect, and from there it reaches him and ends
+     * camera mode - the same way it does when a potion is thrown at the body.
+     * Dragon's breath works through the same cloud and is covered with it.</p>
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onAreaEffectCloudApply(AreaEffectCloudApplyEvent event) {
+        // The list of this event is meant to be changed; taking somebody out
+        // of it is how the API says he is spared.
+        event.getAffectedEntities().removeIf(entity -> entity instanceof Player player
+                && cameraPlayers.containsKey(player.getUniqueId()));
+    }
+
     @EventHandler
     public void onProjectileHit(ProjectileHitEvent event) {
         Entity hit = event.getHitEntity();
@@ -2670,6 +2768,13 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             default -> GlowMode.ALWAYS;
         };
         allowLavaFlight = config.getBoolean("camera-mode.allow_lava_flight", false);
+        String effects = config.getChoice("camera-mode.start-with-effects",
+                "positive", "true", "false", "positive").toLowerCase();
+        startWithEffects = switch (effects) {
+            case "true" -> EffectStart.ANY;
+            case "false" -> EffectStart.NONE;
+            default -> EffectStart.POSITIVE;
+        };
         cameraHeadEnabled = config.getBoolean("camera-head.enabled", false);
         bodyType = resolveBodyType(config, config.getInt("body.type", BodyType.ARMOR_STAND.getId()));
         bodyNameVisible = config.getBoolean("body.name-visible", true);
@@ -3382,6 +3487,43 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (isMessageEnabled("cam-safety")) {
             player.sendMessage(ChatColor.RED + ChatColor.translateAlternateColorCodes('&', msg));
         }
+        return false;
+    }
+
+    /**
+     * Checks whether the player may start camera mode with the effects he is
+     * carrying, as {@code camera-mode.start-with-effects} has it.
+     *
+     * <p>There is something to keep him from here: camera mode takes his
+     * effects off him and gives them back when he leaves, so a poisoned player
+     * could sit his poison out up there for as long as he likes. On
+     * {@code positive} only that kind stands in his way - what does him no
+     * harm, a beneficial effect or a neutral one like glowing, lets him
+     * through.</p>
+     *
+     * <p>The message names every effect he is turned away over, not just the
+     * first: being sent back three times in a row, once per effect, tells him
+     * no more than being told all three at once.</p>
+     *
+     * @return whether he may start; if not, he has been told why
+     */
+    public boolean checkCamEffects(Player player) {
+        if (startWithEffects == EffectStart.ANY) {
+            return true;
+        }
+        List<String> blocking = new ArrayList<>();
+        for (PotionEffect effect : player.getActivePotionEffects()) {
+            PotionEffectType type = effect.getType();
+            if (startWithEffects == EffectStart.POSITIVE
+                    && type.getCategory() != PotionEffectTypeCategory.HARMFUL) {
+                continue;
+            }
+            blocking.add(type.getKey().getKey());
+        }
+        if (blocking.isEmpty()) {
+            return true;
+        }
+        sendMessage(player, "cam-effect-start", "{effect}", String.join(", ", blocking));
         return false;
     }
 

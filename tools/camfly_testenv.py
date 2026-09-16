@@ -72,8 +72,8 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 424: 359 Methoden- und 65 Feldzugriffe. Alle
-# 424 gibt es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
+# Dieser Pruefer zaehlt zurzeit 446: 378 Methoden- und 68 Feldzugriffe. Alle
+# 446 gibt es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
 # Der Bot-Name steht fest im Skript. Ueber eine Umgebungsvariable geht er
@@ -856,6 +856,7 @@ function waitFor(check, timeout) {
 }
 
 const POS_RE = /\[\s*(-?[\d.]+)d,\s*(-?[\d.]+)d,\s*(-?[\d.]+)d\s*\]/;
+const DATA_RE = /entity data:\s*(-?[\d.]+)/;
 
 async function handle(cmd) {
   switch (cmd.op) {
@@ -899,6 +900,21 @@ async function handle(cmd) {
       }, cmd.timeout || 5000);
       return hit ? { pos: [parseFloat(hit[1]), parseFloat(hit[2]), parseFloat(hit[3])] }
                  : { pos: null };
+    }
+    case 'server_data': {
+      // Eine einzelne Zahl aus den Entitaetsdaten, serverseitig gelesen.
+      // Vom Hunger kennt der Client nur den Balken; Saettigung und
+      // Erschoepfung stehen allein auf dem Server.
+      const since = messages.length;
+      bot.chat('/data get entity @s ' + cmd.path);
+      const hit = await waitFor(() => {
+        for (let i = since; i < messages.length; i++) {
+          const m = DATA_RE.exec(messages[i].text);
+          if (m) return m;
+        }
+        return null;
+      }, cmd.timeout || 5000);
+      return { value: hit ? parseFloat(hit[1]) : null };
     }
     case 'state':
       return {
@@ -1116,6 +1132,16 @@ class BotClient:
     def server_pos(self):
         return self.call("server_pos", wait=20, timeout=8000).get("pos")
 
+    def server_data(self, path):
+        """Ein Wert aus den Entitaetsdaten des Bots, vom Server gelesen."""
+        return self.call("server_data", wait=20, path=path, timeout=8000).get("value")
+
+    def hunger(self):
+        """Balken, Saettigung und Erschoepfung, so wie der Server sie fuehrt."""
+        return (self.server_data("foodLevel"),
+                self.server_data("foodSaturationLevel"),
+                self.server_data("foodExhaustionLevel"))
+
 
 def strip_colors(text):
     return re.sub(r"[§&][0-9a-fk-or]", "", text or "")
@@ -1133,6 +1159,377 @@ def log_problems(env):
         if bad.search(line):
             hits.append(line.strip())
     return hits
+
+
+def hunger_checks(env, bot):
+    """Der Hungerbalken im Cam-Modus.
+
+    Der Spieler bleibt im Cam-Modus im Abenteuermodus, und dort laeuft der
+    Hunger des Servers weiter. Das Plugin haelt ihn an: keine Erschoepfung,
+    kein Abzug am Balken, und beim Aussteigen steht alles wieder so da wie
+    beim Einsteigen.
+
+    Gemessen wird serverseitig ueber /data. Der Bot braucht dafuer op - das
+    hat der Testlauf vorher schon erledigt.
+    """
+    # In "peaceful" nimmt der Server vom Balken ohnehin nichts weg, dort
+    # zeigte sich der Fehler gar nicht erst. Fuer diese Pruefungen geht die
+    # Schwierigkeit hoch. Monster kommen deswegen keine: das Spawnen ist
+    # ueber server.properties und die Spielregel abgeschaltet.
+    console(env, "difficulty easy")
+    try:
+        since = bot.mark()
+        bot.chat("/cam")
+        started = bot.expect("Camera mode activated|Cam mode activated", since, 8000)
+        if not FIND.test("/cam startet fuer den Hungertest", bool(started),
+                         "" if started else "keine Bestaetigung im Chat"):
+            return
+        time.sleep(1)
+
+        before = bot.hunger()
+        if not FIND.test("Hungerwerte sind serverseitig lesbar",
+                         all(v is not None for v in before),
+                         f"Balken {before[0]}, Saettigung {before[1]}, "
+                         f"Erschoepfung {before[2]}"):
+            bot.chat("/cam")
+            time.sleep(1)
+            return
+
+        # Der Hungereffekt fuellt die Erschoepfung schneller als alles andere,
+        # der Flug dazu ist die Bewegung, die sie im Spiel fuellt. Fuenf
+        # Sekunden auf der hoechsten Stufe sind gut dreissig Abzuege - genug,
+        # um erst die Saettigung und dann den halben Balken zu verbrauchen.
+        bot.chat("/effect give @s minecraft:hunger 5 255")
+        bot.call("fly", wait=30, dy=4, dx=4, timeout=15000)
+        time.sleep(6)
+        during = bot.hunger()
+        FIND.test("Im Cam-Modus faellt der Hungerbalken nicht",
+                  during[0] == before[0], f"{before[0]} -> {during[0]}")
+        FIND.test("Im Cam-Modus zehrt auch nichts an Saettigung und Erschoepfung",
+                  during[1:] == before[1:],
+                  f"Saettigung {before[1]} -> {during[1]}, "
+                  f"Erschoepfung {before[2]} -> {during[2]}")
+
+        # Erst den Effekt weg, sonst zehrt er nach dem Aussteigen sofort
+        # weiter und die Probe danach misst ihn statt des Plugins.
+        bot.chat("/effect clear @s minecraft:hunger")
+        time.sleep(1)
+        since = bot.mark()
+        bot.chat("/cam")
+        bot.expect("Camera mode ended|Cam mode ended", since, 8000)
+        time.sleep(1)
+        after = bot.hunger()
+        FIND.test("Nach dem Cam-Modus ist der Hunger der von vorher",
+                  after == before, f"{before} -> {after}")
+
+        # Gegenprobe: derselbe Effekt ohne Cam-Modus zehrt sehr wohl. Ohne
+        # sie sagte dieser Abschnitt nur, dass sich nichts bewegt hat - und
+        # das tut er auch, wenn gar nichts zehrt. Sie steht am Ende, weil der
+        # Balken danach unten ist: verhungert der Bot, laesst die
+        # cam-safety-Sperre danach kein /cam mehr zu.
+        plain_before = bot.server_data("foodLevel")
+        bot.chat("/effect give @s minecraft:hunger 5 255")
+        time.sleep(6)
+        plain_after = bot.server_data("foodLevel")
+        FIND.test("Gegenprobe: ohne Cam-Modus faellt der Balken sehr wohl",
+                  None not in (plain_before, plain_after) and plain_after < plain_before,
+                  f"{plain_before} -> {plain_after}")
+    finally:
+        # Die Schwierigkeit muss auch dann zurueck, wenn der Bot unterwegs
+        # abgehaengt ist - sonst steht der Server fuer alles Weitere falsch da.
+        try:
+            bot.chat("/effect clear @s minecraft:hunger")
+        except Exception:
+            pass
+        console(env, "difficulty peaceful")
+
+
+def heal_probe(bot, label):
+    """Eine Heilprobe: verletzen, draussen heilen lassen, drinnen nicht.
+
+    Der Schaden richtet sich nach dem, was der Bot noch hat - ein fester Wert
+    wuerde ihn erschlagen, sobald eine Probe auf die andere folgt.
+    """
+    now = bot.server_data("Health")
+    if not FIND.test(f"Leben des Bots lesbar ({label})", now is not None, str(now)):
+        return
+    if now > 3:
+        bot.chat(f"/damage @s {int(now) - 2}")
+        time.sleep(0.5)
+    hurt = bot.server_data("Health")
+    if not FIND.test(f"Der Bot laesst sich verletzen ({label})",
+                     hurt is not None and hurt < 20.0, f"Leben {hurt}"):
+        return
+
+    # Die Gegenprobe steht vorn und laeuft dabei die cam-safety-Sperre ab:
+    # fuenf Sekunden nach dem letzten Schaden laesst das Plugin /cam wieder zu.
+    time.sleep(4)
+    healed = bot.server_data("Health")
+    FIND.test(f"Ohne Cam-Modus heilt der Spieler nach ({label})",
+              None not in (hurt, healed) and healed > hurt, f"{hurt} -> {healed}")
+    time.sleep(2)
+
+    since = bot.mark()
+    bot.chat("/cam")
+    started = bot.expect("Camera mode activated|Cam mode activated", since, 8000)
+    if not FIND.test(f"/cam startet fuer den Heiltest ({label})", bool(started),
+                     "" if started else "keine Bestaetigung im Chat"):
+        return
+    time.sleep(1)
+    before = bot.server_data("Health")
+    FIND.test(f"Der Bot geht verletzt in den Cam-Modus ({label})",
+              before is not None and before < 20.0, f"Leben {before}")
+    # Sechs Sekunden: geheilt wuerde in dieser Zeit in jedem Fall, ob nun
+    # schnell aus der Saettigung oder langsam aus dem vollen Balken. Geprueft
+    # wird auf Gleichstand, ein einziges halbes Herz reicht also zum Durchfall.
+    time.sleep(6)
+    after = bot.server_data("Health")
+    FIND.test(f"Im Cam-Modus heilt der Spieler nicht nach ({label})",
+              None not in (before, after) and after == before, f"{before} -> {after}")
+
+    since = bot.mark()
+    bot.chat("/cam")
+    bot.expect("Camera mode ended|Cam mode ended", since, 8000)
+    time.sleep(1)
+
+
+def heal_checks(env, bot):
+    """Die Heilung im Cam-Modus.
+
+    Seit der Hunger im Cam-Modus steht, waere die Regeneration dort umsonst zu
+    haben: draussen bezahlt sie Saettigung und am Ende den Balken. Das Plugin
+    haelt sie deshalb an, solange der Spieler zuschaut.
+
+    Zwei Durchgaenge, weil der Server zwei Wege kennt, auf denen von selbst
+    Leben nachwaechst, und das Plugin beide abfangen muss:
+
+    * "peaceful" heilt jede Sekunde ein halbes Herz, gleichmaessig und ohne
+      dass ihm die Saettigung ausgeht - der Grund heisst dort REGEN.
+    * "easy" ist der Fall des echten Servers: aus der Saettigung heraus geht
+      es schnell, das ist SATIATED, und wenn sie leer ist, langsam weiter
+      ueber den vollen Balken.
+    """
+    heal_probe(bot, "peaceful")
+
+    # Satt in den zweiten Durchgang: ohne vollen Balken regeneriert "easy"
+    # gar nicht erst. Der Saettigungseffekt fuellt Balken und Saettigung auf
+    # einen Schlag - er greift nur, solange der Balken nicht voll ist.
+    bot.chat("/effect give @s minecraft:saturation 1 255")
+    time.sleep(2)
+    console(env, "difficulty easy")
+    try:
+        food = bot.server_data("foodLevel")
+        sat = bot.server_data("foodSaturationLevel")
+        if FIND.test("Der Bot geht satt in den zweiten Heiltest",
+                     food == 20 and sat is not None and sat > 0,
+                     f"Balken {food}, Saettigung {sat}"):
+            heal_probe(bot, "easy")
+    finally:
+        console(env, "difficulty peaceful")
+
+
+# Ein geworfener Trank, den /summon einen Block ueber dem Ziel absetzt: er
+# faellt, zerschellt und wirkt vier Bloecke weit. Der Splash-Trank tut es auf
+# einen Schlag, der verweilende ueber die Wolke, die er liegen laesst und die
+# etwa jede Sekunde neu fragt, wer in ihr steht. Genommen wird Langsamkeit:
+# sie tut niemandem weh und legt damit die cam-safety-Sperre nicht an, die
+# jeder Schaden ausloesen wuerde.
+SLOWNESS = 'active_effects[{id:"minecraft:slowness"}].duration'
+
+
+def set_option(env, key, value):
+    """Einen Wert in der Konfiguration des Testservers setzen und neu laden."""
+    path = env.server / "plugins" / "CamFly" / "config.yml"
+    text = path.read_text(encoding="utf-8")
+    text, n = re.subn(rf"(?m)^(\s*{re.escape(key)}:\s*).*$", rf"\g<1>{value}", text)
+    if n != 1:
+        FIND.problem(f"{key} steht {n} Mal in der Testkonfiguration")
+    path.write_text(text, encoding="utf-8")
+    console(env, "cam reload", pause=2)
+
+
+def potion_item(kind):
+    """Die Gegenstandsdaten fuer /summon minecraft:<kind>."""
+    return ('{Item:{id:"minecraft:' + kind + '",count:1,'
+            'components:{"minecraft:potion_contents":'
+            '{potion:"minecraft:slowness"}}}}')
+
+
+def potion_probe(env, bot, kind, label):
+    """Ein Trank auf den Spieler und einer auf seinen Koerper.
+
+    Den Spieler selbst benetzt im Cam-Modus keiner mehr. Seinen Koerper schon:
+    der Ruestungsstaender nimmt von Traenken ohnehin nichts an, das Mannequin
+    in ihm sehr wohl, und von dort geht die Wirkung wie bisher an den Spieler
+    weiter und beendet den Cam-Modus.
+
+    Gemessen wird in den Entitaetsdaten statt an einer Chatmeldung: haengt die
+    Langsamkeit am Spieler, steht sie unter active_effects.
+    """
+    def throw(where):
+        bot.chat(f"/summon minecraft:{kind} {where} {potion_item(kind)}")
+        # Drei Sekunden: der Splash wirkt sofort, die Wolke erst nach ihrer
+        # Wartezeit, und dann noch ein paar Mal hintereinander.
+        time.sleep(3)
+
+    def clear():
+        bot.chat("/effect clear @s minecraft:slowness")
+        # Die Wolke eines verweilenden Tranks liegt noch da und legte die
+        # Langsamkeit sofort wieder auf - mit start-with-effects: positive
+        # kaeme der Bot damit nicht mehr in den Cam-Modus.
+        bot.chat("/kill @e[type=area_effect_cloud]")
+        time.sleep(0.5)
+
+    # Gegenprobe zuerst: ohne Cam-Modus wirkt derselbe Trank sehr wohl. Ohne
+    # sie hiesse "keine Wirkung" nur, dass der Trank nicht angekommen ist.
+    clear()
+    throw("~ ~1 ~")
+    FIND.test(f"Ohne Cam-Modus wirkt der Trank auf den Spieler ({label})",
+              bot.server_data(SLOWNESS) is not None,
+              f"Langsamkeit {bot.server_data(SLOWNESS)}")
+    clear()
+
+    body = bot.server_pos()
+    since = bot.mark()
+    bot.chat("/cam")
+    started = bot.expect("Camera mode activated|Cam mode activated", since, 8000)
+    if not FIND.test(f"/cam startet fuer den Trankstest ({label})", bool(started),
+                     "" if started else "keine Bestaetigung im Chat"):
+        return
+    time.sleep(1)
+
+    # Weg vom Koerper, sonst erwischt ein Trank beide auf einmal und die Probe
+    # sagt nicht mehr, wen von beiden er getroffen hat. Vier Bloecke reicht er
+    # weit, zwoelf sind Abstand genug.
+    fly = bot.call("fly", wait=30, dx=12, timeout=15000)
+    Log.detail(f"Flug vom Koerper weg: {fly.get('result')}")
+    time.sleep(1)
+    throw("~ ~1 ~")
+    FIND.test(f"Im Cam-Modus geht der Trank am Spieler vorbei ({label})",
+              bot.server_data(SLOWNESS) is None,
+              f"Langsamkeit {bot.server_data(SLOWNESS)}")
+    FIND.test(f"Der Cam-Modus laeuft nach dem Trank weiter ({label})",
+              bot.call("state").get("gameMode") == "adventure",
+              str(bot.call("state").get("gameMode")))
+
+    # Und nun auf den Koerper: den trifft der Trank weiterhin. Dass der
+    # Cam-Modus endet, wird am Spielmodus gemessen; dass der Spieler auch
+    # erfaehrt, warum, steht im Chat und nennt den Effekt beim Namen.
+    if body is None:
+        FIND.test(f"Koerperstelle bekannt ({label})", False,
+                  "keine serverseitige Position")
+        bot.chat("/cam")
+        return
+    clear()
+    since = bot.mark()
+    throw(f"{body[0]} {body[1] + 1} {body[2]}")
+    FIND.test(f"Der Koerper wird weiterhin getroffen und beendet den "
+              f"Cam-Modus ({label})",
+              bot.call("state").get("gameMode") != "adventure",
+              f"Spielmodus {bot.call('state').get('gameMode')}")
+    told = bot.expect("hit by the effect slowness", since, 8000)
+    FIND.test(f"Die Meldung nennt den Effekt, an dem es lag ({label})",
+              bool(told),
+              strip_colors(told["text"]) if told else "keine Meldung im Chat")
+    if kind == "splash_potion":
+        # Nur beim Splash ist das eindeutig: er wirkt einmal und ist vorbei.
+        # Die Wolke liegt noch da, wenn der Spieler nach dem Ende des
+        # Cam-Modus wieder an seinem Koerper steht - sie traefe ihn dann ganz
+        # regulaer, und die Probe sagte nichts mehr ueber den Weg ueber den
+        # Koerper aus.
+        FIND.test("Ueber den Koerper kommt die Wirkung beim Spieler an",
+                  bot.server_data(SLOWNESS) is not None,
+                  f"Langsamkeit {bot.server_data(SLOWNESS)}")
+
+    # Steht der Cam-Modus wider Erwarten noch, wird er hier abgeraeumt.
+    if bot.call("state").get("gameMode") == "adventure":
+        bot.chat("/cam")
+        time.sleep(1)
+    clear()
+
+
+def potion_checks(env, bot):
+    """Beide Sorten geworfener Traenke: der eine zerschellt, der andere bleibt
+    als Wolke liegen und fragt immer wieder nach."""
+    potion_probe(env, bot, "splash_potion", "Splash")
+    potion_probe(env, bot, "lingering_potion", "verweilend")
+
+
+def effect_start_checks(env, bot):
+    """Der Schalter camera-mode.start-with-effects.
+
+    Der Cam-Modus nimmt dem Spieler seine Effekte ab und gibt sie ihm beim
+    Aussteigen zurueck - wer vergiftet ist, koennte das Gift dort oben also
+    aussitzen. Der Schalter entscheidet, womit er ueberhaupt starten darf:
+    true mit allem, false mit gar nichts, positive nur mit dem, was ihm nicht
+    schadet.
+
+    Genommen werden Schnelligkeit (positiv), Leuchten (neutral) und
+    Langsamkeit (schaedlich, aber ohne Schaden - Gift wuerde die
+    cam-safety-Sperre anwerfen und vor der Ablehnung stehen).
+    """
+    def probe(name, effect, darf, genannt=None):
+        bot.chat("/effect clear @s")
+        time.sleep(0.4)
+        if effect:
+            bot.chat(f"/effect give @s minecraft:{effect} 60 0")
+            time.sleep(0.6)
+        since = bot.mark()
+        bot.chat("/cam")
+        if darf:
+            hit = bot.expect("Camera mode activated|Cam mode activated", since, 8000)
+            FIND.test(name, bool(hit), "" if hit else "der Start wurde abgelehnt")
+        else:
+            hit = bot.expect(f"cannot start cam mode with {genannt} on you",
+                             since, 8000)
+            FIND.test(name, bool(hit),
+                      strip_colors(hit["text"]) if hit else "keine Ablehnung im Chat")
+        # Steht er drin - gewollt oder nicht -, kommt er hier wieder heraus.
+        if bot.call("state").get("gameMode") == "adventure":
+            bot.chat("/cam")
+            time.sleep(1)
+
+    try:
+        # Die Voreinstellung wird nicht gesetzt, sondern nachgesehen: so faellt
+        # auf, wenn in der ausgelieferten Datei etwas anderes steht.
+        probe("Voreingestellt startet /cam mit einem positiven Effekt",
+              "speed", True)
+        probe("Voreingestellt startet /cam auch mit einem neutralen Effekt",
+              "glowing", True)
+        probe("Voreingestellt sperrt ein schaedlicher Effekt den Start",
+              "slowness", False, "slowness")
+
+        # Mehrere auf einmal: genannt wird alles, an dem es liegt, und nur
+        # das. Auf die Reihenfolge wird nicht geprueft - in welcher der Server
+        # seine Effekte herausgibt, ist nicht zugesichert.
+        bot.chat("/effect clear @s")
+        time.sleep(0.4)
+        for effect in ("slowness", "blindness", "speed"):
+            bot.chat(f"/effect give @s minecraft:{effect} 60 0")
+        time.sleep(1)
+        since = bot.mark()
+        bot.chat("/cam")
+        hit = bot.expect("cannot start cam mode with", since, 8000)
+        text = strip_colors(hit["text"]) if hit else ""
+        FIND.test("Die Ablehnung nennt jeden schaedlichen Effekt und nur die",
+                  "slowness" in text and "blindness" in text and "speed" not in text,
+                  text or "keine Ablehnung im Chat")
+        if bot.call("state").get("gameMode") == "adventure":
+            bot.chat("/cam")
+            time.sleep(1)
+
+        set_option(env, "start-with-effects", "false")
+        probe("Auf false sperrt auch ein positiver Effekt den Start",
+              "speed", False, "speed")
+        probe("Auf false geht es ohne jeden Effekt", None, True)
+
+        set_option(env, "start-with-effects", "true")
+        probe("Auf true geht es auch mit einem schaedlichen Effekt",
+              "slowness", True)
+    finally:
+        set_option(env, "start-with-effects", "positive")
+        bot.chat("/effect clear @s")
+        time.sleep(0.5)
 
 
 def step_tests(env):
@@ -1263,6 +1660,18 @@ def step_tests(env):
         if hit:
             bot.chat("/cam")
             time.sleep(1)
+
+        # --- Hunger im Cam-Modus ---
+        hunger_checks(env, bot)
+
+        # --- Heilung im Cam-Modus ---
+        heal_checks(env, bot)
+
+        # --- Start mit Trankeffekten ---
+        effect_start_checks(env, bot)
+
+        # --- Geworfene Traenke im Cam-Modus ---
+        potion_checks(env, bot)
 
     except Exception as exc:
         FIND.test("Testlauf", False, f"{type(exc).__name__}: {exc}")
