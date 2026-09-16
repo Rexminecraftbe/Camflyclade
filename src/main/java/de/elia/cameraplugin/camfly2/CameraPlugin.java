@@ -2561,6 +2561,25 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /** Transfer potion effects from arrows that hit the camera body. */
+    /**
+     * The same for the cloud a lingering potion leaves lying: it does not
+     * touch the camera player either.
+     *
+     * <p>A cloud is not one throw but a question asked over and over, about
+     * once a second for as long as it lies there, so he is taken out of every
+     * single one of those rounds. What it does find of him is his body: the
+     * mannequin takes the effect, and from there it reaches him and ends
+     * camera mode - the same way it does when a potion is thrown at the body.
+     * Dragon's breath works through the same cloud and is covered with it.</p>
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onAreaEffectCloudApply(AreaEffectCloudApplyEvent event) {
+        // The list of this event is meant to be changed; taking somebody out
+        // of it is how the API says he is spared.
+        event.getAffectedEntities().removeIf(entity -> entity instanceof Player player
+                && cameraPlayers.containsKey(player.getUniqueId()));
+    }
+
     @EventHandler
     public void onProjectileHit(ProjectileHitEvent event) {
         Entity hit = event.getHitEntity();

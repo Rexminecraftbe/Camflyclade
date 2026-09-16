@@ -72,8 +72,8 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 441: 374 Methoden- und 67 Feldzugriffe. Alle
-# 441 gibt es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
+# Dieser Pruefer zaehlt zurzeit 442: 375 Methoden- und 67 Feldzugriffe. Alle
+# 442 gibt es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
 # Der Bot-Name steht fest im Skript. Ueber eine Umgebungsvariable geht er
@@ -1328,91 +1328,111 @@ def heal_checks(env, bot):
         console(env, "difficulty peaceful")
 
 
-# Ein Splash-Trank, den /summon einen Block ueber dem Ziel absetzt: er faellt
-# herunter, zerschellt und benetzt alles im Umkreis von vier Bloecken.
-# Langsamkeit tut niemandem weh - damit legt der Test die cam-safety-Sperre
-# nicht an, die jeder Schaden ausloesen wuerde.
-SPLASH_POTION = ('{Item:{id:"minecraft:splash_potion",count:1,'
-                 'components:{"minecraft:potion_contents":'
-                 '{potion:"minecraft:slowness"}}}}')
+# Ein geworfener Trank, den /summon einen Block ueber dem Ziel absetzt: er
+# faellt, zerschellt und wirkt vier Bloecke weit. Der Splash-Trank tut es auf
+# einen Schlag, der verweilende ueber die Wolke, die er liegen laesst und die
+# etwa jede Sekunde neu fragt, wer in ihr steht. Genommen wird Langsamkeit:
+# sie tut niemandem weh und legt damit die cam-safety-Sperre nicht an, die
+# jeder Schaden ausloesen wuerde.
 SLOWNESS = 'active_effects[{id:"minecraft:slowness"}].duration'
 
 
-def potion_checks(env, bot):
-    """Splash-Traenke im Cam-Modus.
+def potion_item(kind):
+    """Die Gegenstandsdaten fuer /summon minecraft:<kind>."""
+    return ('{Item:{id:"minecraft:' + kind + '",count:1,'
+            'components:{"minecraft:potion_contents":'
+            '{potion:"minecraft:slowness"}}}}')
 
-    Den Spieler selbst benetzt keiner mehr, solange er zuschaut. Seinen
-    Koerper schon: der Ruestungsstaender nimmt von Traenken ohnehin nichts an,
-    das Mannequin in ihm sehr wohl, und von dort geht die Wirkung wie bisher
-    an den Spieler weiter und beendet den Cam-Modus.
+
+def potion_probe(env, bot, kind, label):
+    """Ein Trank auf den Spieler und einer auf seinen Koerper.
+
+    Den Spieler selbst benetzt im Cam-Modus keiner mehr. Seinen Koerper schon:
+    der Ruestungsstaender nimmt von Traenken ohnehin nichts an, das Mannequin
+    in ihm sehr wohl, und von dort geht die Wirkung wie bisher an den Spieler
+    weiter und beendet den Cam-Modus.
 
     Gemessen wird in den Entitaetsdaten statt an einer Chatmeldung: haengt die
     Langsamkeit am Spieler, steht sie unter active_effects.
     """
-    def splash(where):
-        bot.chat(f"/summon minecraft:splash_potion {where} {SPLASH_POTION}")
-        time.sleep(2)
+    def throw(where):
+        bot.chat(f"/summon minecraft:{kind} {where} {potion_item(kind)}")
+        # Drei Sekunden: der Splash wirkt sofort, die Wolke erst nach ihrer
+        # Wartezeit, und dann noch ein paar Mal hintereinander.
+        time.sleep(3)
 
-    bot.chat("/effect clear @s minecraft:slowness")
-    time.sleep(0.5)
+    def clear():
+        bot.chat("/effect clear @s minecraft:slowness")
+        time.sleep(0.5)
 
-    # Gegenprobe zuerst: ohne Cam-Modus benetzt derselbe Trank den Spieler.
-    # Ohne sie hiesse "keine Wirkung" nur, dass der Trank nicht angekommen ist.
-    splash("~ ~1 ~")
-    FIND.test("Ohne Cam-Modus benetzt der Splash-Trank den Spieler",
+    # Gegenprobe zuerst: ohne Cam-Modus wirkt derselbe Trank sehr wohl. Ohne
+    # sie hiesse "keine Wirkung" nur, dass der Trank nicht angekommen ist.
+    clear()
+    throw("~ ~1 ~")
+    FIND.test(f"Ohne Cam-Modus wirkt der Trank auf den Spieler ({label})",
               bot.server_data(SLOWNESS) is not None,
               f"Langsamkeit {bot.server_data(SLOWNESS)}")
-    bot.chat("/effect clear @s minecraft:slowness")
-    time.sleep(0.5)
+    clear()
 
     body = bot.server_pos()
     since = bot.mark()
     bot.chat("/cam")
     started = bot.expect("Camera mode activated|Cam mode activated", since, 8000)
-    if not FIND.test("/cam startet fuer den Trankstest", bool(started),
+    if not FIND.test(f"/cam startet fuer den Trankstest ({label})", bool(started),
                      "" if started else "keine Bestaetigung im Chat"):
         return
     time.sleep(1)
 
-    # Weg vom Koerper, sonst benetzt ein Trank beide auf einmal und die Probe
-    # sagt nicht, wen von beiden er getroffen hat. Vier Bloecke reicht der
-    # Trank weit, zwoelf sind Abstand genug.
+    # Weg vom Koerper, sonst erwischt ein Trank beide auf einmal und die Probe
+    # sagt nicht mehr, wen von beiden er getroffen hat. Vier Bloecke reicht er
+    # weit, zwoelf sind Abstand genug.
     fly = bot.call("fly", wait=30, dx=12, timeout=15000)
     Log.detail(f"Flug vom Koerper weg: {fly.get('result')}")
     time.sleep(1)
-    splash("~ ~1 ~")
-    FIND.test("Im Cam-Modus geht der Splash-Trank am Spieler vorbei",
+    throw("~ ~1 ~")
+    FIND.test(f"Im Cam-Modus geht der Trank am Spieler vorbei ({label})",
               bot.server_data(SLOWNESS) is None,
               f"Langsamkeit {bot.server_data(SLOWNESS)}")
-    FIND.test("Der Cam-Modus laeuft nach dem Trank weiter",
+    FIND.test(f"Der Cam-Modus laeuft nach dem Trank weiter ({label})",
               bot.call("state").get("gameMode") == "adventure",
               str(bot.call("state").get("gameMode")))
 
-    # Und nun auf den Koerper: den trifft der Trank weiterhin. Das Plugin
-    # reicht die Wirkung an den Spieler weiter und beendet den Cam-Modus -
-    # geprueft wird beides am Zustand, nicht an einer Meldung: zu
-    # body-got-effect steht zwar ein Text in der Konfiguration, verschickt
-    # wird er nirgends.
+    # Und nun auf den Koerper: den trifft der Trank weiterhin. Geprueft wird am
+    # Zustand, nicht an einer Meldung - zu body-got-effect steht zwar ein Text
+    # in der Konfiguration, verschickt wird er nirgends.
     if body is None:
-        FIND.test("Koerperstelle bekannt", False, "keine serverseitige Position")
+        FIND.test(f"Koerperstelle bekannt ({label})", False,
+                  "keine serverseitige Position")
         bot.chat("/cam")
         return
-    bot.chat("/effect clear @s minecraft:slowness")
-    time.sleep(0.5)
-    splash(f"{body[0]} {body[1] + 1} {body[2]}")
-    FIND.test("Der Koerper wird vom Splash-Trank weiterhin getroffen und "
-              "beendet den Cam-Modus",
+    clear()
+    throw(f"{body[0]} {body[1] + 1} {body[2]}")
+    FIND.test(f"Der Koerper wird weiterhin getroffen und beendet den "
+              f"Cam-Modus ({label})",
               bot.call("state").get("gameMode") != "adventure",
               f"Spielmodus {bot.call('state').get('gameMode')}")
-    FIND.test("Ueber den Koerper kommt die Wirkung beim Spieler an",
-              bot.server_data(SLOWNESS) is not None,
-              f"Langsamkeit {bot.server_data(SLOWNESS)}")
+    if kind == "splash_potion":
+        # Nur beim Splash ist das eindeutig: er wirkt einmal und ist vorbei.
+        # Die Wolke liegt noch da, wenn der Spieler nach dem Ende des
+        # Cam-Modus wieder an seinem Koerper steht - sie traefe ihn dann ganz
+        # regulaer, und die Probe sagte nichts mehr ueber den Weg ueber den
+        # Koerper aus.
+        FIND.test("Ueber den Koerper kommt die Wirkung beim Spieler an",
+                  bot.server_data(SLOWNESS) is not None,
+                  f"Langsamkeit {bot.server_data(SLOWNESS)}")
 
     # Steht der Cam-Modus wider Erwarten noch, wird er hier abgeraeumt.
     if bot.call("state").get("gameMode") == "adventure":
         bot.chat("/cam")
         time.sleep(1)
-    bot.chat("/effect clear @s minecraft:slowness")
+    clear()
+
+
+def potion_checks(env, bot):
+    """Beide Sorten geworfener Traenke: der eine zerschellt, der andere bleibt
+    als Wolke liegen und fragt immer wieder nach."""
+    potion_probe(env, bot, "splash_potion", "Splash")
+    potion_probe(env, bot, "lingering_potion", "verweilend")
 
 
 def step_tests(env):

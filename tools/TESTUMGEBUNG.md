@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **441** (374 Methoden und 67 Feldzugriffe) - alle 441 gibt es auch
+zählt zurzeit **442** (375 Methoden und 67 Feldzugriffe) - alle 442 gibt es auch
 in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
@@ -113,11 +113,20 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   dem aus, was der Bot noch hat: ein fester Wert erschlägt ihn, sobald ein
   Durchgang auf den anderen folgt.
 * **Zwei „partial packet"-Warnungen beim Login** sind harmlos.
-* **Splash-Tränke setzt der Test mit `/summon` ab**, einen Block über dem
-  Ziel: der Trank fällt, zerschellt und benetzt vier Blöcke weit. Der
-  Entitätstyp heißt `minecraft:splash_potion`, `minecraft:potion` gibt es
-  nicht mehr. Genommen wird Langsamkeit - sie tut niemandem weh und legt
-  damit die `cam-safety`-Sperre nicht an, die jeder Schaden auslösen würde.
+* **Tränke setzt der Test mit `/summon` ab**, einen Block über dem Ziel: der
+  Trank fällt, zerschellt und wirkt vier Blöcke weit. Die Entitätstypen heißen
+  `minecraft:splash_potion` und `minecraft:lingering_potion`;
+  `minecraft:potion` gibt es nicht mehr. Genommen wird Langsamkeit - sie tut
+  niemandem weh und legt damit die `cam-safety`-Sperre nicht an, die jeder
+  Schaden auslösen würde.
+* **Die Wolke eines verweilenden Tranks braucht einen Moment** und fragt dann
+  etwa jede Sekunde neu nach, wer in ihr steht. Der Test wartet deshalb nach
+  jedem Wurf drei Sekunden - das deckt beim Splash die sofortige Wirkung und
+  bei der Wolke gleich mehrere Runden ab.
+* **Beim verweilenden Trank auf den Körper wird nur geprüft, dass der
+  Cam-Modus endet.** Ob die Wirkung danach am Spieler hängt, sagt nichts
+  mehr: Er steht nach dem Ende wieder bei seinem Körper und damit mitten in
+  der Wolke, die ihn dann ganz regulär erwischt.
 * **Der Rüstungsständer nimmt von Tränken nichts an**, das Mannequin in ihm
   sehr wohl. Über das läuft der Treffer auf den Körper, bei beiden
   Körpertypen.
@@ -143,9 +152,10 @@ stehen, samt Sättigung und Erschöpfung · nach dem Cam-Modus steht der Hunger
 wieder wie vorher · Gegenprobe: ohne Cam-Modus zehrt derselbe Effekt sehr wohl ·
 ein verletzter Spieler heilt im Cam-Modus nicht nach, weder in `peaceful` noch
 aus der Sättigung heraus · Gegenprobe: ohne Cam-Modus heilt er in beiden Fällen
-sehr wohl · ein Splash-Trank geht im Cam-Modus am Spieler vorbei · Gegenprobe:
-ohne Cam-Modus benetzt er ihn · der Körper wird weiterhin getroffen und beendet
-damit den Cam-Modus · Server-Log ohne Fehler des Plugins.
+sehr wohl · ein geworfener Trank geht im Cam-Modus am Spieler vorbei, der
+Splash-Trank wie der verweilende · Gegenprobe: ohne Cam-Modus wirken beide auf
+ihn · der Körper wird von beiden weiterhin getroffen und beendet damit den
+Cam-Modus · Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
 Arbeitsordner.
