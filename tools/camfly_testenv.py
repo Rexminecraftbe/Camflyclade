@@ -72,8 +72,8 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 444: 377 Methoden- und 67 Feldzugriffe. Alle
-# 444 gibt es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
+# Dieser Pruefer zaehlt zurzeit 446: 378 Methoden- und 68 Feldzugriffe. Alle
+# 446 gibt es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
 # Der Bot-Name steht fest im Skript. Ueber eine Umgebungsvariable geht er
@@ -1337,6 +1337,17 @@ def heal_checks(env, bot):
 SLOWNESS = 'active_effects[{id:"minecraft:slowness"}].duration'
 
 
+def set_option(env, key, value):
+    """Einen Wert in der Konfiguration des Testservers setzen und neu laden."""
+    path = env.server / "plugins" / "CamFly" / "config.yml"
+    text = path.read_text(encoding="utf-8")
+    text, n = re.subn(rf"(?m)^(\s*{re.escape(key)}:\s*).*$", rf"\g<1>{value}", text)
+    if n != 1:
+        FIND.problem(f"{key} steht {n} Mal in der Testkonfiguration")
+    path.write_text(text, encoding="utf-8")
+    console(env, "cam reload", pause=2)
+
+
 def potion_item(kind):
     """Die Gegenstandsdaten fuer /summon minecraft:<kind>."""
     return ('{Item:{id:"minecraft:' + kind + '",count:1,'
@@ -1363,6 +1374,10 @@ def potion_probe(env, bot, kind, label):
 
     def clear():
         bot.chat("/effect clear @s minecraft:slowness")
+        # Die Wolke eines verweilenden Tranks liegt noch da und legte die
+        # Langsamkeit sofort wieder auf - mit start-with-effects: positive
+        # kaeme der Bot damit nicht mehr in den Cam-Modus.
+        bot.chat("/kill @e[type=area_effect_cloud]")
         time.sleep(0.5)
 
     # Gegenprobe zuerst: ohne Cam-Modus wirkt derselbe Trank sehr wohl. Ohne
@@ -1438,6 +1453,83 @@ def potion_checks(env, bot):
     als Wolke liegen und fragt immer wieder nach."""
     potion_probe(env, bot, "splash_potion", "Splash")
     potion_probe(env, bot, "lingering_potion", "verweilend")
+
+
+def effect_start_checks(env, bot):
+    """Der Schalter camera-mode.start-with-effects.
+
+    Der Cam-Modus nimmt dem Spieler seine Effekte ab und gibt sie ihm beim
+    Aussteigen zurueck - wer vergiftet ist, koennte das Gift dort oben also
+    aussitzen. Der Schalter entscheidet, womit er ueberhaupt starten darf:
+    true mit allem, false mit gar nichts, positive nur mit dem, was ihm nicht
+    schadet.
+
+    Genommen werden Schnelligkeit (positiv), Leuchten (neutral) und
+    Langsamkeit (schaedlich, aber ohne Schaden - Gift wuerde die
+    cam-safety-Sperre anwerfen und vor der Ablehnung stehen).
+    """
+    def probe(name, effect, darf, genannt=None):
+        bot.chat("/effect clear @s")
+        time.sleep(0.4)
+        if effect:
+            bot.chat(f"/effect give @s minecraft:{effect} 60 0")
+            time.sleep(0.6)
+        since = bot.mark()
+        bot.chat("/cam")
+        if darf:
+            hit = bot.expect("Camera mode activated|Cam mode activated", since, 8000)
+            FIND.test(name, bool(hit), "" if hit else "der Start wurde abgelehnt")
+        else:
+            hit = bot.expect(f"cannot start cam mode with {genannt} on you",
+                             since, 8000)
+            FIND.test(name, bool(hit),
+                      strip_colors(hit["text"]) if hit else "keine Ablehnung im Chat")
+        # Steht er drin - gewollt oder nicht -, kommt er hier wieder heraus.
+        if bot.call("state").get("gameMode") == "adventure":
+            bot.chat("/cam")
+            time.sleep(1)
+
+    try:
+        # Die Voreinstellung wird nicht gesetzt, sondern nachgesehen: so faellt
+        # auf, wenn in der ausgelieferten Datei etwas anderes steht.
+        probe("Voreingestellt startet /cam mit einem positiven Effekt",
+              "speed", True)
+        probe("Voreingestellt startet /cam auch mit einem neutralen Effekt",
+              "glowing", True)
+        probe("Voreingestellt sperrt ein schaedlicher Effekt den Start",
+              "slowness", False, "slowness")
+
+        # Mehrere auf einmal: genannt wird alles, an dem es liegt, und nur
+        # das. Auf die Reihenfolge wird nicht geprueft - in welcher der Server
+        # seine Effekte herausgibt, ist nicht zugesichert.
+        bot.chat("/effect clear @s")
+        time.sleep(0.4)
+        for effect in ("slowness", "blindness", "speed"):
+            bot.chat(f"/effect give @s minecraft:{effect} 60 0")
+        time.sleep(1)
+        since = bot.mark()
+        bot.chat("/cam")
+        hit = bot.expect("cannot start cam mode with", since, 8000)
+        text = strip_colors(hit["text"]) if hit else ""
+        FIND.test("Die Ablehnung nennt jeden schaedlichen Effekt und nur die",
+                  "slowness" in text and "blindness" in text and "speed" not in text,
+                  text or "keine Ablehnung im Chat")
+        if bot.call("state").get("gameMode") == "adventure":
+            bot.chat("/cam")
+            time.sleep(1)
+
+        set_option(env, "start-with-effects", "false")
+        probe("Auf false sperrt auch ein positiver Effekt den Start",
+              "speed", False, "speed")
+        probe("Auf false geht es ohne jeden Effekt", None, True)
+
+        set_option(env, "start-with-effects", "true")
+        probe("Auf true geht es auch mit einem schaedlichen Effekt",
+              "slowness", True)
+    finally:
+        set_option(env, "start-with-effects", "positive")
+        bot.chat("/effect clear @s")
+        time.sleep(0.5)
 
 
 def step_tests(env):
@@ -1575,7 +1667,10 @@ def step_tests(env):
         # --- Heilung im Cam-Modus ---
         heal_checks(env, bot)
 
-        # --- Splash-Traenke im Cam-Modus ---
+        # --- Start mit Trankeffekten ---
+        effect_start_checks(env, bot)
+
+        # --- Geworfene Traenke im Cam-Modus ---
         potion_checks(env, bot)
 
     except Exception as exc:

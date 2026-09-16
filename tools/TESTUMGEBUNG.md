@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **444** (377 Methoden und 67 Feldzugriffe) - alle 444 gibt es auch
+zählt zurzeit **446** (378 Methoden und 68 Feldzugriffe) - alle 446 gibt es auch
 in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
@@ -137,6 +137,18 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   Meldung: `adventure` heißt im Cam-Modus, alles andere heißt beendet. Die
   Meldung `body-got-effect` wird zusätzlich geprüft, samt dem Effekt, den sie
   benennen soll.
+* **`start-with-effects` stellt der Test selbst um**, in der
+  Konfigurationsdatei des Servers und mit `cam reload` von der Konsole; am
+  Ende steht wieder `positive` da. Die Voreinstellung wird nicht gesetzt,
+  sondern nachgesehen - so fällt auf, wenn in der ausgelieferten Datei etwas
+  anderes steht.
+* **Als schädlicher Effekt dient Langsamkeit, nicht Gift.** Gift macht
+  Schaden, und dann stünde die `cam-safety`-Sperre vor der Ablehnung, um die
+  es geht.
+* **Die Wolke eines verweilenden Tranks räumt der Test weg**, bevor er `/cam`
+  startet. Sie legt die Langsamkeit sonst sofort wieder auf, und mit
+  `start-with-effects: positive` käme der Bot damit nicht mehr in den
+  Cam-Modus.
 * **Rechte des Bots:** `/cam` darf er ohne op, das ist Standardrecht. Für
   `/fillbiome` und `/data` wird er im Testlauf zum Operator gemacht - erst
   danach, damit das Standardrecht vorher wirklich geprüft wird.
@@ -156,8 +168,10 @@ aus der Sättigung heraus · Gegenprobe: ohne Cam-Modus heilt er in beiden Fäll
 sehr wohl · ein geworfener Trank geht im Cam-Modus am Spieler vorbei, der
 Splash-Trank wie der verweilende · Gegenprobe: ohne Cam-Modus wirken beide auf
 ihn · der Körper wird von beiden weiterhin getroffen und beendet damit den
-Cam-Modus · die Meldung dazu nennt den Effekt, an dem es lag · Server-Log ohne
-Fehler des Plugins.
+Cam-Modus · die Meldung dazu nennt den Effekt, an dem es lag · `/cam` startet
+mit einem positiven und einem neutralen Effekt, mit einem schädlichen nicht ·
+auf `false` sperrt jeder Effekt, auf `true` keiner · die Ablehnung nennt jeden
+schädlichen Effekt und nur die · Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
 Arbeitsordner.

@@ -41,6 +41,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.potion.PotionEffectTypeCategory;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.block.Block;
 import org.bukkit.scoreboard.Scoreboard;
@@ -278,8 +279,17 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     private enum VisibilityMode { CAM, ALL, NONE }
 
+    /** What {@code camera-mode.start-with-effects} allows him to start with. */
+    private EffectStart startWithEffects;
+
     /** The values of {@code camera-mode.glowing-outline}: true, false and sight. */
     private enum GlowMode { ALWAYS, OFF, SIGHT }
+
+    /**
+     * The values of {@code camera-mode.start-with-effects}: true, false and
+     * positive.
+     */
+    private enum EffectStart { ANY, NONE, POSITIVE }
 
     @Override
     public void onEnable() {
@@ -2758,6 +2768,13 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             default -> GlowMode.ALWAYS;
         };
         allowLavaFlight = config.getBoolean("camera-mode.allow_lava_flight", false);
+        String effects = config.getChoice("camera-mode.start-with-effects",
+                "positive", "true", "false", "positive").toLowerCase();
+        startWithEffects = switch (effects) {
+            case "true" -> EffectStart.ANY;
+            case "false" -> EffectStart.NONE;
+            default -> EffectStart.POSITIVE;
+        };
         cameraHeadEnabled = config.getBoolean("camera-head.enabled", false);
         bodyType = resolveBodyType(config, config.getInt("body.type", BodyType.ARMOR_STAND.getId()));
         bodyNameVisible = config.getBoolean("body.name-visible", true);
@@ -3470,6 +3487,43 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (isMessageEnabled("cam-safety")) {
             player.sendMessage(ChatColor.RED + ChatColor.translateAlternateColorCodes('&', msg));
         }
+        return false;
+    }
+
+    /**
+     * Checks whether the player may start camera mode with the effects he is
+     * carrying, as {@code camera-mode.start-with-effects} has it.
+     *
+     * <p>There is something to keep him from here: camera mode takes his
+     * effects off him and gives them back when he leaves, so a poisoned player
+     * could sit his poison out up there for as long as he likes. On
+     * {@code positive} only that kind stands in his way - what does him no
+     * harm, a beneficial effect or a neutral one like glowing, lets him
+     * through.</p>
+     *
+     * <p>The message names every effect he is turned away over, not just the
+     * first: being sent back three times in a row, once per effect, tells him
+     * no more than being told all three at once.</p>
+     *
+     * @return whether he may start; if not, he has been told why
+     */
+    public boolean checkCamEffects(Player player) {
+        if (startWithEffects == EffectStart.ANY) {
+            return true;
+        }
+        List<String> blocking = new ArrayList<>();
+        for (PotionEffect effect : player.getActivePotionEffects()) {
+            PotionEffectType type = effect.getType();
+            if (startWithEffects == EffectStart.POSITIVE
+                    && type.getCategory() != PotionEffectTypeCategory.HARMFUL) {
+                continue;
+            }
+            blocking.add(type.getKey().getKey());
+        }
+        if (blocking.isEmpty()) {
+            return true;
+        }
+        sendMessage(player, "cam-effect-start", "{effect}", String.join(", ", blocking));
         return false;
     }
 

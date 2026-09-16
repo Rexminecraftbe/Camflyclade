@@ -17,6 +17,9 @@ messages:
   # das Biom, so geschrieben wie dort in der Konfiguration.
   cam-area-limit: "&cYou cannot go any further, cam mode is not allowed in {area}."
   cam-area-start: "&cYou cannot start cam mode in {area}."
+  # Platzhalter {effect}: die Effekte, an denen der Start scheitert, unter
+  # ihren Minecraft-Namen und durch Komma getrennt.
+  cam-effect-start: "&cYou cannot start cam mode with {effect} on you."
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
   camera-off: "&aCamera mode ended."
   camera-on: "&aCamera mode activated! Use /cam again to exit."
@@ -104,6 +107,7 @@ message-settings:
   bossbar-text: true
   cam-area-limit: true
   cam-area-start: true
+  cam-effect-start: true
   cam-safety: true
   camera-off: false
   camera-on: false
@@ -183,6 +187,20 @@ camera-mode:
   glowing-outline: true
   # Erlaubt Flug durch Lava
   allow_lava_flight: true
+  # Ob der Cam-Modus mit einem Trankeffekt überhaupt gestartet werden darf
+  # true     = ja, mit jedem
+  # false    = nein, mit keinem einzigen
+  # positive = nur mit Effekten, die dem Spieler nicht schaden: positive wie
+  #            Schnelligkeit und neutrale wie Leuchten. Gift, Verwelken,
+  #            Blindheit und alles andere Schädliche sperren den Start.
+  # Was positiv, negativ oder neutral ist, sagt Minecraft selbst; das Plugin
+  # führt dazu keine eigene Liste.
+  # Der Grund für die Sperre: Der Cam-Modus nimmt dem Spieler seine Effekte ab
+  # und gibt sie ihm beim Aussteigen zurück. Wer vergiftet ist, könnte das Gift
+  # dort oben also aussitzen, solange er möchte.
+  # Der Text dazu steht unter messages.cam-effect-start.
+  # Bei einem unbekannten Wert wird positive verwendet.
+  start-with-effects: positive
 
 # Körper, der im Kamera-Modus an der Stelle des Spielers zurückbleibt
 # In beiden Fällen nimmt ein Mannequin den Schaden: Es hat die Hitbox eines

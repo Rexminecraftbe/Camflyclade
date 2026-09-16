@@ -48,6 +48,12 @@ public class CamCommand implements CommandExecutor {
             if (!plugin.checkCamArea(player)) {
                 return true;
             }
+            // Vor der Sicherheitspruefung: Ein schaedlicher Effekt tut meist
+            // auch weh, und dann stuende erst "warte noch fuenf Sekunden" da
+            // und danach erst der Grund, an dem es wirklich liegt.
+            if (!plugin.checkCamEffects(player)) {
+                return true;
+            }
             if (!plugin.checkCamSafety(player)) {
                 return true;
             }
