@@ -548,10 +548,14 @@ portals:
   #         läuft damit auch nicht in dieselbe Reise zurück.
   # false = Jeder Durchgang wird neu geprüft. Der Spieler geht also jedes Mal
   #         hinüber und wird jedes Mal zurückgeholt.
-  # Gemerkt wird nur für diesen Serverlauf, und /cam reload leert das Gemerkte:
-  # Ein Portal führt dorthin, wohin die Welt es führen lässt, und das kann sich
-  # ändern - ein näher gebautes Portal drüben, ein abgebautes Ziel. Danach wird
-  # jedes Portal einmal neu ausprobiert.
+  # Gemerkt wird nur für diesen Serverlauf, und /cam reload leert das Gemerkte.
+  # Einzelne Einträge fallen schon vorher weg, sobald die Welt sie überholt hat.
+  # Mit dem Portal wird nämlich die Stelle mitgeschrieben, an der die Reise
+  # herausgekommen ist, und dort wird nachgesehen, bevor ein Eintrag jemanden
+  # abweist: Steht drüben kein Portal mehr - abgebaut oder versetzt - oder ist
+  # die Stelle gar nicht mehr verboten, wird der Eintrag verworfen und das
+  # Portal einmal neu ausprobiert. Ein drüben neu gebautes Portal wirft ihn
+  # ebenfalls weg, siehe forget-radius.
   # Für eine verbotene Dimension braucht es das nicht, die steht schon vor der
   # Reise fest, siehe cam-area.dimensions.
   # Gemerkt wird das Portal als Ganzes, nicht das einzelne Feld: Von dem Feld
@@ -563,6 +567,20 @@ portals:
   # Portale fallen also nicht ins Gewicht.
   # 0 merkt nichts und wirkt damit wie remember-blocked: false.
   remember-blocked-count: 128
+  # Wie nah ein neu gebautes Portal an der Stelle stehen muss, an der ein
+  # gemerktes Portal herausgekommen ist, damit dieser Eintrag verworfen wird -
+  # in Blöcken und waagerecht gemessen, die Höhe zählt nicht mit.
+  # Der Server nimmt immer das Portal, das der Ankunftsstelle am nächsten liegt.
+  # Wer drüben ein neues Portal baut, ändert damit also, wo dasselbe Portal von
+  # hüben herauskommt, ohne dass sich an diesem etwas ändert - und nur deshalb
+  # braucht es diesen Radius.
+  # Der Standardwert ist der Radius, in dem der Server nach einem vorhandenen
+  # Portal sucht. Wer den am Server hochgesetzt hat (portal-search-radius),
+  # sollte ihn hier mit hochsetzen, sonst bleibt so ein Eintrag stehen.
+  # Zu großzügig ist nicht schlimm: Ein zu früh vergessenes Portal kostet eine
+  # Probereise, ein zu lange gemerktes sperrt ein Portal ohne Grund.
+  # 0 schaltet dieses Vergessen ab.
+  forget-radius: 128
 
 # Einstellungen zur Übertragung von Schaden
 # Die beiden Modi damage-mode und damage-armor-mode sind voneinander

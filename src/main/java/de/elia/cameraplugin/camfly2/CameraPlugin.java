@@ -16,6 +16,7 @@ import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
+import org.bukkit.event.world.PortalCreateEvent;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -2225,7 +2226,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * biome or structure over there is found only by walking through once, see
      * {@link #afterPortal(Player, Location)}. From then on the portal is known
      * and shuts like the other two, as long as {@code portals.remember-blocked}
-     * is on.</p>
+     * is on - for as long as what was found over there still holds, which is
+     * looked over at every attempt.</p>
      */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onCameraPortal(PlayerPortalEvent event) {
@@ -2248,7 +2250,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             // deshalb zaehlt hier, was eine fruehere Reise ergeben hat.
             area = forbiddenPortalDimension(event.getTo());
             if (area == null) {
-                area = portalRules.forbiddenAreaBehind(event.getFrom());
+                area = portalRules.forbiddenAreaBehind(event.getFrom(),
+                        this::forbiddenCamArea);
             }
         }
         if (!open || area != null) {
@@ -2264,6 +2267,25 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
+     * A portal newly built lets go of every remembered portal it stands close
+     * enough to, see {@link PortalRules#forgetPortalsNear(World, Collection)}.
+     *
+     * <p>Watched in every world and not only where camera players are: the one
+     * building the portal is usually not the one who will be turned away by
+     * it.</p>
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPortalCreated(PortalCreateEvent event) {
+        // Die Endplattform zaehlt nicht dazu: Sie wird jedes Mal neu gesetzt,
+        // wenn jemand im End ankommt, und wuerde das Gemerkte dort bei jedem
+        // fremden Besuch wegwerfen.
+        if (event.getReason() == PortalCreateEvent.CreateReason.END_PLATFORM) {
+            return;
+        }
+        portalRules.forgetPortalsNear(event.getWorld(), event.getBlocks());
+    }
+
+    /**
      * The dimension a portal leads into, when {@code cam-area} does not allow
      * camera mode in it at all.
      *
@@ -2276,6 +2298,23 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      */
     private String forbiddenPortalDimension(Location to) {
         return camAreaRules.getLevel().blocksFlight() ? camAreaRules.forbiddenDimension(to) : null;
+    }
+
+    /**
+     * The dimension, biome or structure that keeps camera mode out of this
+     * spot, gated by the same level as {@link #forbiddenPortalDimension}.
+     *
+     * <p>Asked at the far side of a portal twice: once when a trip comes out
+     * there, and from then on every time that portal is stepped into again -
+     * an area that has been taken apart in the meantime is not to hold the
+     * portal shut, see
+     * {@link PortalRules#forbiddenAreaBehind(Location, PortalRules.AreaCheck)}.</p>
+     *
+     * @return the name of the area, or {@code null} when camera mode is allowed
+     *         there
+     */
+    private String forbiddenCamArea(Location where) {
+        return camAreaRules.getLevel().blocksFlight() ? camAreaRules.forbiddenArea(where) : null;
     }
 
     /**
@@ -2314,8 +2353,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * that body counts again. Whoever comes out too far away from it is brought
      * back, and so is whoever comes out in a biome or a structure camera mode is
      * not allowed in - a portal is not asked beforehand where it comes out. The
-     * second kind is written down, so that the same portal turns the next
-     * camera player away instead of sending him over first.</p>
+     * second kind is written down, together with the spot the trip came out at,
+     * so that the same portal turns the next camera player away instead of
+     * sending him over first - and so that the note can be checked against the
+     * world later on instead of being believed.</p>
      *
      * @param entry where he stepped into the portal, the spot he is brought back
      *              to under {@code portals.return-to: portal}
@@ -2334,14 +2375,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             // is being taken out of.
             data.setPortalEntry(entry);
         }
-        String area = camAreaRules.getLevel().blocksFlight()
-                ? camAreaRules.forbiddenArea(arrival)
-                : null;
+        String area = forbiddenCamArea(arrival);
         if (area != null) {
             // Jetzt ist bekannt, wo dieses Portal herauskommt. Ohne das wuerde
             // es ihn bei jedem Durchgang aufs Neue hinueber und gleich wieder
             // zurueck schicken.
-            portalRules.rememberForbiddenArea(entry, area);
+            portalRules.rememberForbiddenArea(entry, area, arrival);
             sendMessage(player, "portal-return-area", "{area}", area);
             bringBack(player, data);
             return;
