@@ -14,6 +14,7 @@ import org.bukkit.event.entity.PotionSplashEvent;
 import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
 import org.bukkit.event.world.PortalCreateEvent;
@@ -76,6 +77,7 @@ import java.util.Collection;
 import java.util.ArrayList;
 import java.util.List;
 import de.elia.cameraplugin.feuer.CamFireGuard;
+import de.elia.cameraplugin.ghast.CamGhastGuard;
 import de.elia.cameraplugin.hunger.CamHungerGuard;
 import de.elia.cameraplugin.body.BodyType;
 import de.elia.cameraplugin.body.EquipmentVisibility;
@@ -113,6 +115,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private final Set<UUID> pendingDamage = new HashSet<>();
     private CamFireGuard camFireGuard;
     private CamHungerGuard camHungerGuard;
+    private CamGhastGuard camGhastGuard;
     private double particleHeight;
     private int particlesPerTick;
     private boolean showOwnParticles;
@@ -315,6 +318,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         // Created before the values are read, so its own go through the same
         // load and its notes end up in the same report.
         camFireGuard = new CamFireGuard(this);
+        camGhastGuard = new CamGhastGuard(this);
         reportConfigWarnings(loadConfigValues(), null);
         bodyKey = new NamespacedKey(this, "cam_body");
         hitboxKey = new NamespacedKey(this, "cam_hitbox");
@@ -467,6 +471,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (camFireGuard != null) {
             camFireGuard.onDisable();
         }
+        if (camGhastGuard != null) {
+            camGhastGuard.onDisable();
+        }
         for (BukkitRunnable task : particleTasks.values()) {
             task.cancel();
         }
@@ -599,6 +606,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         startActionBar(player);
         camFireGuard.startFor(player);
         camHungerGuard.startFor(player);
+        camGhastGuard.startFor(player);
         // The entity taking the hits is the mannequin for both body types, so the
         // movement check always runs on it. Both calls look at the sensitivity
         // level and only one of them does anything.
@@ -902,6 +910,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             // cleaned up by another call.
             removePlayerFromNoCollisionTeam(player);
             camHungerGuard.stopFor(player);
+            camGhastGuard.stopFor(player);
             updateViewerTeam(player);
             if (camModeObjective != null) {
                 camModeObjective.getScore(player.getName()).setScore(0);
@@ -922,6 +931,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             showActionBarOffMessage(player);
         }
         boolean standingInFire = camFireGuard.stopFor(player);
+        camGhastGuard.stopFor(player);
 
         // *** Inventar und Rüstung wiederherstellen ***
         PlayerInventory playerInventory = player.getInventory();
@@ -1906,11 +1916,32 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         handleBodyInteract(event);
     }
 
+    /**
+     * Taking a piece off an armour stand, or hanging one on it, is a third event
+     * with a handler list of its own. It is only ever reached through the
+     * interact-at above, which turns it away already - but a click that somehow
+     * gets past that one must not end up moving armour around either.
+     */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onArmorStandManipulate(PlayerArmorStandManipulateEvent event) {
+        handleBodyInteract(event);
+    }
+
     private void handleBodyInteract(PlayerInteractEntityEvent event) {
         Entity entity = event.getRightClicked();
         Player player = event.getPlayer();
         UUID ownerUUID = getBodyOrHitboxOwner(entity);
         if (ownerUUID == null) {
+            // Anything that is not a camera body. The camera player has no hands
+            // out here: blocks are shut in onPlayerInteract already, and this is
+            // the same rule for the entities standing among them - the item
+            // frame he would turn, the armour stand he would undress, the
+            // villager he would trade with, the chest minecart, the boat with
+            // the chest, the horse. His own body is the one thing left to him,
+            // and that is the case below.
+            if (cameraPlayers.containsKey(player.getUniqueId())) {
+                event.setCancelled(true);
+            }
             return;
         }
         event.setCancelled(true);
@@ -2527,6 +2558,23 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Nothing carries a camera player.
+     *
+     * <p>The event above already turns away what the API counts as a vehicle -
+     * boats, minecarts, horses, and the happy ghast among them. This is the same
+     * rule for everything else that can be sat on, and it covers the mount that
+     * no right click of his goes through: being put onto something by a command
+     * or by another plugin.</p>
+     */
+    @EventHandler
+    public void onCameraMount(EntityMountEvent event) {
+        if (event.getEntity() instanceof Player player
+                && cameraPlayers.containsKey(player.getUniqueId())) {
+            event.setCancelled(true);
+        }
+    }
+
     @EventHandler
     public void onPlayerPickupItem(EntityPickupItemEvent event) {
         if (event.getEntity() instanceof Player &&
@@ -2701,6 +2749,23 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     public void onInventoryClick(InventoryClickEvent event) {
         if (event.getWhoClicked() instanceof Player &&
                 cameraPlayers.containsKey(event.getWhoClicked().getUniqueId())) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * No window opens in front of a camera player.
+     *
+     * <p>The click into one is turned away by the handler above, and the way
+     * into a chest or a barrel by the interaction lock. This shuts the windows
+     * that hang on an entity instead of on a block - the trade of a villager,
+     * the inventory of a chest minecart or of a horse - and it shuts them before
+     * they are seen, rather than only keeping his hands out of them.</p>
+     */
+    @EventHandler
+    public void onCameraInventoryOpen(InventoryOpenEvent event) {
+        if (event.getPlayer() instanceof Player player
+                && cameraPlayers.containsKey(player.getUniqueId())) {
             event.setCancelled(true);
         }
     }
