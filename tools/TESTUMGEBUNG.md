@@ -152,6 +152,59 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
 * **Rechte des Bots:** `/cam` darf er ohne op, das ist Standardrecht. Für
   `/fillbiome` und `/data` wird er im Testlauf zum Operator gemacht - erst
   danach, damit das Standardrecht vorher wirklich geprüft wird.
+* **Die Testkonfiguration kommt aus `src/main/resources/config.yml`**, nicht
+  aus `target/classes`. Dort läge nach jedem Lauf wieder die eingecheckte alte
+  Fassung - `restore_target` setzt den Ordner ja zurück -, und ein Lauf ohne
+  den Schritt `build` prüfte das Plugin dann gegen eine Konfiguration, in der
+  die neuen Schlüssel fehlen. Das sieht nach kaputtem Plugin aus und ist
+  keines. Platzhalter ersetzt Maven ohnehin nur in `plugin.yml`.
+* **Der Cam-Modus läuft im Abenteuermodus**, nicht in Kreativ - Kreativ steht
+  nur einen einzigen Tick lang da. Der Portalvorgang dauert dort deshalb die
+  vollen 80 Ticks; die Abkürzung auf einen Tick gilt nur für Unverwundbare,
+  also Kreativ und Zuschauer. Der Portaltest wartet auf jede Reise sechs
+  Sekunden.
+* **Nach jedem Anlauf am Portal liegt eine Portalsperre von 100 Ticks auf dem
+  Spieler**, die das Plugin selbst setzt. Wer sie nicht abwartet, steht beim
+  nächsten Anlauf in einem Portal, das gar nichts mehr tut - und solange er
+  darin stehen bleibt, läuft sie nicht einmal ab, sie wird jeden Tick neu
+  aufgezogen. Der Test verlässt deshalb nach jedem Anlauf den Cam-Modus, das
+  setzt ihn an seinen Körper und damit aus dem Portal heraus, und wartet.
+* **`cam reload` wirft jeden Kamera-Spieler aus dem Cam-Modus** -
+  `reloadPlugin` ruft für jeden `exitCameraMode` auf. Nach jeder Umstellung
+  der Konfiguration muss der Bot also erst wieder hinein, sonst geht er ganz
+  regulär durch das Portal und die Probe sagt nichts über das Plugin aus.
+  Jeder Anlauf des Portaltests stellt den Cam-Modus deshalb selbst sicher.
+* **`cam reload` leert das Gemerkte über gesperrte Portale.** Zwischen dem
+  Anlauf, der ein Portal sperrt, und dem, der die Sperre prüft, darf deshalb
+  nichts an der Konfiguration gedreht werden: Jede Umstellung braucht danach
+  erst wieder einen Anlauf, der die Sperre neu anlegt.
+* **Wo ein Portal drüben herauskommt, steht erst nach der Reise fest.** Der
+  Test geht deshalb einmal hinüber, ehe er drüben etwas umbaut - vorher weiß
+  er gar nicht, wo er das Biom setzen müsste.
+* **Die Testwelt bleibt zwischen zwei Läufen stehen.** Was ein Lauf drüben
+  gesetzt hat, findet der nächste wieder vor - ein abgebrochener Lauf kann
+  sogar den Bot im Nether zurücklassen. Der Portaltest setzt das Biom drüben
+  deshalb vor der ersten Reise selbst, holt den Bot nötigenfalls heim und
+  räumt am Ende wieder auf. Wer ganz von vorn anfangen will, löscht
+  `~/camfly-testenv/server/world`; der Server legt sie neu an.
+* **`allow-flight=true` steht in den Server-Einstellungen.** Sonst wirft der
+  Anticheat den Bot mit „kicked for floating too long" hinaus, sobald er
+  zwischen zwei Anläufen ein paar Sekunden ohne Cam-Modus in der Luft steht.
+* **Wo eine Reise durch ein Portal herauskommt, sucht sich der Server aus:**
+  das nächstgelegene Portal, und wo keines steht, baut er eines. Der Test
+  verlässt sich deshalb nicht darauf, zweimal an derselben Ecke zu landen -
+  landet der Bot in einem erlaubten Biom, nimmt er die Stelle in das verbotene
+  hinein und versucht es noch einmal.
+* **Die Chunks drüben hält der Test mit `/forceload` fest.** Ohne einen
+  Spieler im Nether fallen sie weg, und `/fill` und `/fillbiome` brauchen sie
+  geladen.
+* **`nether` steht zweimal in der Konfiguration**, unter `portals` und unter
+  `cam-area.dimensions`. `set_option` nimmt dafür einen Abschnitt entgegen,
+  sonst träfe das Muster beide Zeilen auf einmal.
+* **Das Testportal entsteht aus `/fill` und einem `/setblock ... fire`** im
+  ausgehöhlten Rahmen. Ob daraus wirklich ein Portal geworden ist, sieht der
+  Test mit `/execute if block ... run say` nach - so beantwortet der Server
+  auch die Frage, in welcher Welt der Bot gerade steht.
 
 ## Was die Tests abdecken
 
@@ -171,7 +224,13 @@ ihn · der Körper wird von beiden weiterhin getroffen und beendet damit den
 Cam-Modus · die Meldung dazu nennt den Effekt, an dem es lag · `/cam` startet
 mit einem positiven und einem neutralen Effekt, mit einem schädlichen nicht ·
 auf `false` sperrt jeder Effekt, auf `true` keiner · die Ablehnung nennt jeden
-schädlichen Effekt und nur die · Server-Log ohne Fehler des Plugins.
+schädlichen Effekt und nur die · ein offenes Portal trägt den Kamera-Spieler in
+den Nether · ein verbotenes Biom dahinter holt ihn zurück · danach lässt
+dasselbe Portal ihn gar nicht mehr durch · ein drüben neu gebautes Portal gibt
+das gemerkte wieder frei · ein drüben abgebautes ebenso · mit
+`forget-changed: false` bleibt der Eintrag stehen · auf `portals.nether: false`
+trägt das Portal ihn gar nicht erst hinüber · Server-Log ohne Fehler des
+Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
 Arbeitsordner.

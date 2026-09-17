@@ -639,6 +639,7 @@ enable-command-block=false
 sync-chunk-writes=false
 allow-nether=true
 spawn-monsters=false
+allow-flight=true
 """
 
 
@@ -716,10 +717,14 @@ def prepare_server_files(env):
         raise RuntimeError("Kein gebautes Jar in artifacts/ - erst Schritt 'build'")
     shutil.copy2(env.plugin_jar, plugins / "CamFly.jar")
 
-    # Die Konfiguration kommt aus dem Bau, nicht aus dem Quellordner: im Jar
-    # sind die Platzhalter schon ersetzt.
-    built_config = env.repo / "target" / "classes" / "config.yml"
-    source = built_config if built_config.exists() else env.repo / "src" / "main" / "resources" / "config.yml"
+    # Die Konfiguration kommt aus dem Quellordner. Aus target/classes zu lesen
+    # waere eine Falle: restore_target setzt den Ordner nach jedem Lauf wieder
+    # auf HEAD, ein Lauf ohne den Schritt build faende dort also die
+    # eingecheckte alte Fassung und pruefte das Plugin gegen eine
+    # Konfiguration, in der die neuen Schluessel gar nicht stehen. Zu holen
+    # gibt es dort ohnehin nichts: Platzhalter ersetzt Maven in plugin.yml,
+    # config.yml hat keine.
+    source = env.repo / "src" / "main" / "resources" / "config.yml"
     text = source.read_text(encoding="utf-8")
     # Partikel aus. Sonst stirbt jeder Bot in Sichtweite eines Cam-Spielers am
     # Partikel-Paket: minecraft-data 26.1 kennt die 26.2-IDs nicht.
@@ -1337,15 +1342,50 @@ def heal_checks(env, bot):
 SLOWNESS = 'active_effects[{id:"minecraft:slowness"}].duration'
 
 
-def set_option(env, key, value):
-    """Einen Wert in der Konfiguration des Testservers setzen und neu laden."""
+def replace_option(text, key, value, section=None):
+    """Den Wert eines Schluessels in der Konfiguration ersetzen.
+
+    Ohne section wird die ganze Datei durchsucht, mit section nur der
+    Abschnitt dieses Namens auf der obersten Ebene. Das braucht es, wo
+    derselbe Schluesselname zweimal vorkommt: nether steht unter portals und
+    noch einmal unter cam-area.dimensions.
+
+    Gibt den neuen Text und die Zahl der Treffer zurueck.
+    """
+    pattern = rf"(?m)^(\s*{re.escape(key)}:\s*).*$"
+    if section is None:
+        return re.subn(pattern, rf"\g<1>{value}", text)
+    head = re.search(rf"(?m)^{re.escape(section)}:.*$", text)
+    if head is None:
+        return text, 0
+    rest = text[head.end():]
+    # Der Abschnitt reicht bis zur naechsten Zeile, die ganz links anfaengt.
+    nxt = re.search(r"(?m)^\S", rest)
+    cut = nxt.start() if nxt else len(rest)
+    block, n = re.subn(pattern, rf"\g<1>{value}", rest[:cut])
+    return text[:head.end()] + block + rest[cut:], n
+
+
+def set_options(env, changes):
+    """Mehrere Werte in der Konfiguration des Testservers setzen und einmal
+    neu laden. Jede Aenderung ist (Schluessel, Wert) oder, wo der Name
+    mehrdeutig ist, (Schluessel, Wert, Abschnitt)."""
     path = env.server / "plugins" / "CamFly" / "config.yml"
     text = path.read_text(encoding="utf-8")
-    text, n = re.subn(rf"(?m)^(\s*{re.escape(key)}:\s*).*$", rf"\g<1>{value}", text)
-    if n != 1:
-        FIND.problem(f"{key} steht {n} Mal in der Testkonfiguration")
+    for change in changes:
+        key, value = change[0], change[1]
+        section = change[2] if len(change) > 2 else None
+        text, n = replace_option(text, key, value, section)
+        if n != 1:
+            where = f" unter {section}" if section else ""
+            FIND.problem(f"{key} steht {n} Mal in der Testkonfiguration{where}")
     path.write_text(text, encoding="utf-8")
     console(env, "cam reload", pause=2)
+
+
+def set_option(env, key, value, section=None):
+    """Einen Wert in der Konfiguration des Testservers setzen und neu laden."""
+    set_options(env, [(key, value, section)])
 
 
 def potion_item(kind):
@@ -1532,6 +1572,424 @@ def effect_start_checks(env, bot):
         time.sleep(0.5)
 
 
+# ---------------------------------------------------------------------------
+# Portale
+# ---------------------------------------------------------------------------
+
+# Die Marke, mit der der Server eine Ja-Nein-Frage beantwortet: Ein
+# /execute if ... run say sagt sie nur, wenn die Bedingung zutrifft. Jede
+# Frage bekommt ihre eigene Nummer, sonst koennte eine spaet eingetroffene
+# Antwort von vorhin als Antwort auf die naechste Frage durchgehen.
+SERVER_YES = "CAMFLY-JA"
+_server_yes_zaehler = [0]
+
+# Wie lange auf die Reise durch ein Portal gewartet wird, in Sekunden. Der
+# Cam-Modus laeuft im Abenteuermodus - Kreativ steht nur einen Tick lang da -
+# und dort dauert der Portalvorgang die vollen 80 Ticks. Die Abkuerzung auf
+# einen einzigen Tick gilt nur fuer Unverwundbare, also Kreativ und Zuschauer.
+PORTAL_TRAVEL_WAIT = 6.0
+
+# Wie lange nach jedem Anlauf gewartet wird, in Sekunden. Das Plugin legt dem
+# Spieler nach jeder Abweisung und nach jedem Zurueckholen eine Portalsperre
+# von 100 Ticks auf. Wer sie nicht abwartet, steht beim naechsten Anlauf in
+# einem Portal, das gar nichts mehr tut - und solange er darin steht, laeuft
+# sie nicht einmal ab.
+PORTAL_COOLDOWN_WAIT = 7.0
+
+# Dasselbe nach einer Reise, die wirklich in der anderen Welt geendet hat:
+# Dort hat niemand die Sperre des Plugins ueberschrieben, und Minecraft selbst
+# legt nach einem Weltwechsel 300 Ticks auf.
+DIMENSION_COOLDOWN_WAIT = 17.0
+
+# Wie weit um das Reiseziel herum drueben gearbeitet wird, waagerecht, in
+# Bloecken. Der Server setzt ein neues Portal in die Naehe des Ziels, nimmt
+# aber auch ein vorhandenes im Umkreis von 128 - was er waehlt, steht nicht
+# vorher fest, also wird grosszuegig gearbeitet.
+NETHER_REACH = 22
+
+# Der Nether ist 128 Bloecke hoch, und in welcher Hoehe der Server ein Portal
+# hinsetzt, steht ebenso wenig vorher fest. Gearbeitet wird deshalb ueber die
+# ganze Saeule, in Scheiben: /fillbiome und /fill vertragen hoechstens 32768
+# Bloecke, und 45 * 16 * 45 sind 32400.
+NETHER_MIN_Y, NETHER_MAX_Y = 0, 127
+NETHER_SLICE = 16
+
+
+def server_says(bot, command, timeout=4000):
+    """Eine Ja-Nein-Frage an den Server. Das Kommando traegt {marke} und sagt
+    diese Marke genau dann, wenn die Bedingung zutrifft."""
+    _server_yes_zaehler[0] += 1
+    marke = f"{SERVER_YES}-{_server_yes_zaehler[0]}"
+    since = bot.mark()
+    bot.chat(command.format(marke=marke))
+    return bool(bot.expect(re.escape(marke), since, timeout))
+
+
+def block_is(bot, dimension, where, block):
+    """Ob an dieser Stelle dieser Block steht, in dieser Welt."""
+    return server_says(bot, f"/execute in {dimension} if block {where} {block} "
+                            f"run say {{marke}}")
+
+
+def in_nether(bot):
+    """Ob der Bot gerade im Nether steht."""
+    return server_says(bot, "/execute if dimension minecraft:the_nether "
+                            "run say {marke}")
+
+
+def build_portal(bot, dimension, x, y, z):
+    """Ein Netherportal setzen und anzuenden.
+
+    Der Rahmen ist die uebliche Platte aus Obsidian, vier breit und fuenf
+    hoch, innen ausgehoehlt; das Feuer im untersten Innenfeld zuendet sie an.
+    Die Innenfelder liegen bei x..x+1 und y..y+2, die ganze Platte in der
+    Ebene z. Gesetzt wird von ueberall aus ueber /execute in, damit es nicht
+    darauf ankommt, wo der Bot gerade steht.
+
+    Gibt zurueck, ob danach wirklich ein Portalfeld dasteht.
+    """
+    at = f"/execute in {dimension} run"
+    bot.chat(f"{at} fill {x-1} {y-1} {z} {x+2} {y+3} {z} minecraft:obsidian")
+    time.sleep(0.5)
+    bot.chat(f"{at} fill {x} {y} {z} {x+1} {y+2} {z} minecraft:air")
+    time.sleep(0.5)
+    bot.chat(f"{at} setblock {x} {y} {z} minecraft:fire")
+    time.sleep(1.0)
+    return block_is(bot, dimension, f"{x} {y} {z}", "minecraft:nether_portal")
+
+
+def nether_slices(center):
+    """Die Saeule um diese Stelle herum, in Scheiben, jede als Koordinatenpaar
+    fuer /fill und /fillbiome. Eine ganze Saeule auf einmal waere zu gross."""
+    cx, cz = center
+    y = NETHER_MIN_Y
+    while y <= NETHER_MAX_Y:
+        top = min(NETHER_MAX_Y, y + NETHER_SLICE - 1)
+        yield (f"{cx - NETHER_REACH} {y} {cz - NETHER_REACH} "
+               f"{cx + NETHER_REACH} {top} {cz + NETHER_REACH}")
+        y = top + 1
+
+
+def hold_nether_chunks(bot, center):
+    """Die Chunks um das Reiseziel herum festhalten. Das laedt sie auch, und
+    ohne geladene Chunks tun /fill und /fillbiome drueben gar nichts."""
+    cx, cz = center
+    bot.chat(f"/execute in minecraft:the_nether run forceload add "
+             f"{cx - NETHER_REACH} {cz - NETHER_REACH} "
+             f"{cx + NETHER_REACH} {cz + NETHER_REACH}")
+    time.sleep(2)
+
+
+def fill_nether_biome(bot, center, biome):
+    """Das Biom der ganzen Saeule um diese Stelle herum setzen.
+
+    Gesetzt und nicht vorausgesetzt: Die Testwelt bleibt zwischen zwei Laeufen
+    stehen, drueben kann also noch stehen, was ein frueherer Lauf dort gesetzt
+    hat.
+    """
+    for box in nether_slices(center):
+        bot.chat(f"/execute in minecraft:the_nether run fillbiome {box} {biome}")
+        time.sleep(1.2)
+
+
+def clear_nether_portals(bot, center):
+    """Jedes Portalfeld der Saeule wegnehmen. Der Rahmen bleibt stehen -
+    gesucht wird ohnehin nach Portalfeldern, nicht nach Rahmen."""
+    for box in nether_slices(center):
+        bot.chat(f"/execute in minecraft:the_nether run fill {box} "
+                 f"minecraft:air replace minecraft:nether_portal")
+        time.sleep(1.0)
+
+
+def cam_schalten(bot, an):
+    """Den Cam-Modus ein- oder ausschalten und am Ergebnis nachsehen.
+
+    Nicht am Spielmodus des Clients: Nach einem Weltwechsel steht der bei
+    mineflayer nicht mehr zuverlaessig - es laeuft hier auf geflickten
+    Paketdaten -, und eine falsche Auskunft schaltet genau verkehrt herum.
+    Gefragt wird deshalb, was das Plugin auf /cam antwortet; hat es das
+    Gegenteil getan, geht noch ein /cam hinterher.
+    """
+    for _ in range(2):
+        since = bot.mark()
+        bot.chat("/cam")
+        time.sleep(1.5)
+        gesagt = [strip_colors(m["text"])
+                  for m in bot.call("messages", since=since).get("messages", [])]
+        ein = any(re.search(r"[Cc]am mode activated", t) for t in gesagt)
+        aus = any(re.search(r"[Cc]am mode ended", t) for t in gesagt)
+        if ein == an and aus != an:
+            return True
+        if not ein and not aus:
+            return False    # /cam hat gar nicht geantwortet, etwa abgelehnt
+    return False
+
+
+def cam_off(bot):
+    """Den Cam-Modus beenden. Laeuft er nicht, bleibt alles, wie es ist."""
+    return cam_schalten(bot, False)
+
+
+def cam_on(bot):
+    """Den Cam-Modus starten, falls er nicht schon laeuft."""
+    return cam_schalten(bot, True)
+
+
+def portal_probe(bot, portal, heim, label=""):
+    """Einmal ins Portal treten und sagen, was daraus geworden ist:
+
+        zu            - das Portal selbst laesst Kamera-Spieler nicht durch
+        abgewiesen    - cam-area hinter dem Portal, er kam gar nicht erst hin
+        zurueckgeholt - er war drueben und wurde gleich wieder geholt
+        zu weit       - er kam zu weit von seinem Anker heraus
+        drueben       - er ist drueben und bleibt dort
+        nichts        - gar keine Reaktion
+
+    Danach steht er wieder am Koerper, im Cam-Modus, und die Portalsperre ist
+    abgelaufen: Der naechste Anlauf faengt sauber an.
+    """
+    # Jeder Anlauf sorgt selbst dafuer, dass der Cam-Modus laeuft: Ein
+    # cam reload wirft jeden Kamera-Spieler heraus, und ohne Cam-Modus ginge
+    # der Bot ganz regulaer durch das Portal - die Probe sagte dann gar nichts
+    # ueber das Plugin aus.
+    cam_on(bot)
+    since = bot.mark()
+    # Mit Welt davor: Ohne sie setzt /tp ihn dorthin, wo er gerade ist, und
+    # nach einer Reise ist das der Nether - dann stuende er unter dessen Boden
+    # statt in seinem Portal.
+    bot.chat("/execute in minecraft:overworld run tp @s {:.1f} {:d} {:.1f}".format(
+        portal[0] + 0.5, portal[1], portal[2] + 0.5))
+    time.sleep(PORTAL_TRAVEL_WAIT)
+    where = bot.server_pos()
+    said = [strip_colors(m["text"])
+            for m in bot.call("messages", since=since).get("messages", [])]
+
+    def heard(pattern):
+        return any(re.search(pattern, line, re.I) for line in said)
+
+    if heard(r"cannot go through .*portals"):
+        was = "zu"
+    elif heard(r"cannot go any further"):
+        was = "abgewiesen"
+    elif heard(r"not allowed in .*brought back"):
+        was = "zurueckgeholt"
+    elif heard(r"blocks away from .*brought back"):
+        was = "zu weit"
+    elif in_nether(bot):
+        was = "drueben"
+    else:
+        was = "nichts"
+    Log.detail(f"Anlauf{' ' + label if label else ''}: {was}, danach bei {where}")
+
+    # Zurueck auf Anfang: aus dem Cam-Modus heraus, heim in die Overworld und
+    # wieder hinein. Der Ausstieg setzt ihn zwar schon an seinen Koerper, aber
+    # der Test verlaesst sich darauf nicht - und aus dem Portal heraus muss er
+    # auf jeden Fall, sonst zieht die Portalsperre sich jeden Tick neu auf und
+    # laeuft nie ab. Gewartet wird zum Schluss, im Cam-Modus: draussen stuende
+    # er derweil als Fliegender ohne Erlaubnis da.
+    cam_off(bot)
+    bot.chat("/execute in minecraft:overworld run tp @s {:.1f} {:d} {:.1f}".format(
+        heim[0] + 0.5, heim[1], heim[2] + 0.5))
+    time.sleep(1)
+    cam_on(bot)
+    time.sleep(DIMENSION_COOLDOWN_WAIT if was == "drueben" else PORTAL_COOLDOWN_WAIT)
+    return {"was": was, "pos": where}
+
+
+def durchgelassen(ergebnis):
+    """Ob das Portal ihn ueberhaupt hat reisen lassen - gleich, ob er drueben
+    bleiben durfte oder gleich wieder geholt wurde. Genau das ist die Frage,
+    wenn geprueft wird, ob ein gemerktes Portal wieder freigegeben wurde."""
+    return ergebnis["was"] in ("zurueckgeholt", "drueben")
+
+
+def sperre_herstellen(bot, portal, heim, label):
+    """Dafuer sorgen, dass dieses Portal im Gedaechtnis des Plugins steht.
+
+    Steht es schon drin, weist es den Anlauf ab und es ist nichts weiter zu
+    tun. Sonst geht die Reise hinueber, und drueben muss sie in einem
+    verbotenen Biom herauskommen. Wo genau, sucht sich der Server aber selbst
+    aus: Er nimmt das Portal, das seinem Ziel am naechsten liegt, und baut
+    eines, wo keines steht. Landet der Bot deshalb in einem erlaubten Biom,
+    wird diese Stelle dazugenommen und der Anlauf wiederholt - darauf, dass
+    zweimal dieselbe Ecke herauskommt, kann der Test sich nicht verlassen.
+
+    Gibt zurueck, ob das Portal danach gesperrt ist, und den letzten Anlauf.
+    """
+    ergebnis = {"was": "nichts", "pos": None}
+    for versuch in range(1, 4):
+        ergebnis = portal_probe(bot, portal, heim, f"{label}, {versuch}. Versuch")
+        if ergebnis["was"] in ("abgewiesen", "zurueckgeholt"):
+            return True, ergebnis
+        if ergebnis["was"] != "drueben" or not ergebnis["pos"]:
+            return False, ergebnis
+        dort = (int(ergebnis["pos"][0]), int(ergebnis["pos"][2]))
+        Log.detail(f"Ankunft liegt in einem erlaubten Biom, wird verboten: {dort}")
+        fill_nether_biome(bot, dort, "minecraft:lush_caves")
+    return False, ergebnis
+
+
+def portal_checks(env, bot):
+    """Portale im Cam-Modus, und wie lange sich das Plugin ein gesperrtes
+    Portal merkt.
+
+    Wo ein Portal herauskommt, laesst sich nicht vorher erfragen - das steht
+    erst nach der Reise fest. Kommt der Kamera-Spieler drueben in einem
+    verbotenen Biom heraus, holt das Plugin ihn zurueck und merkt sich das
+    Portal; beim naechsten Mal laesst es ihn gar nicht mehr durch. Dieses
+    Gemerkte wird aber nachgeprueft, und darum geht es hier: Ein Portal fuehrt
+    dorthin, wohin die Welt es fuehren laesst, und die wird umgebaut.
+
+    Der Ablauf baut aufeinander auf, jeder Anlauf setzt den naechsten auf:
+
+      1. Ein Portal in der Overworld bauen und einmal hindurchgehen. Das legt
+         das Portal drueben an, laedt die Chunks und sagt, wo die Reise
+         herauskommt.
+      2. Das Biom um die Ankunft herum auf lush_caves setzen, eines der
+         verbotenen. Der naechste Anlauf muss ihn zurueckholen, der uebernaechste
+         am Portal abgewiesen werden.
+      3. Drueben ein zweites Portal in die Naehe bauen. Damit kaeme die Reise
+         woanders heraus, also muss der Eintrag fallen.
+      4. Drueben alle Portalfelder wegnehmen. Dasselbe noch einmal, nur ueber
+         den anderen Weg: Das Nachsehen an der Ankunft.
+      5. Mit forget-changed: false muss beides aufhoeren - der Eintrag steht
+         dann, bis /cam reload ihn wegraeumt.
+      6. Zum Schluss der Schalter portals.nether selbst.
+
+    Die Chunks drueben werden festgehalten (/forceload): Ohne einen Spieler
+    dort fallen sie weg, und /fill und /fillbiome brauchen sie geladen.
+
+    Zwei Wartezeiten stecken drin, beide unvermeidlich. Der Portalvorgang
+    dauert im Abenteuermodus 80 Ticks, und nach jedem Anlauf liegt eine
+    Portalsperre von 100 Ticks auf dem Spieler.
+
+    Und: Jedes cam reload leert das Gemerkte. Zwischen dem Anlauf, der ein
+    Portal sperrt, und dem, der die Sperre prueft, darf deshalb nichts an der
+    Konfiguration gedreht werden.
+    """
+    bot.chat("/effect clear @s")
+    time.sleep(0.5)
+    # Die Welt bleibt zwischen zwei Laeufen stehen, und ein abgebrochener Lauf
+    # kann den Bot drueben zurueckgelassen haben. Von dort aus baute dieser
+    # Test sein Portal in den Nether und nichts passte mehr zusammen.
+    cam_off(bot)
+    if in_nether(bot):
+        Log.detail("Der Bot steht noch im Nether - erst zurueck in die Overworld")
+        bot.chat("/execute in minecraft:overworld run tp @s 0 -59 0")
+        time.sleep(2)
+    pos = bot.server_pos()
+    if not FIND.test("Position fuer den Portaltest lesbar", pos is not None, str(pos)):
+        return
+    bx, by, bz = int(pos[0]), int(pos[1]), int(pos[2])
+    # Weit genug vom Koerper, dass der Rahmen ihn nicht einmauert, und nah
+    # genug, dass max-distance nicht dazwischenfunkt.
+    portal = (bx + 5, by, bz + 6)
+    # Wohin jeder Anlauf ihn zwischendurch zuruecksetzt: dorthin, wo er steht,
+    # und ausdruecklich in die Overworld.
+    heim = (bx, by, bz)
+    # Wohin die Reise fuehrt, rechnet der Server aus: Im Nether gilt ein Achtel
+    # der Koordinaten. Das Portal drueben setzt er in die Naehe dieser Stelle.
+    ziel = (portal[0] // 8, portal[2] // 8)
+    vorbereitet = False
+
+    try:
+        set_options(env, [("nether", "true", "portals"),
+                          ("nether", "true", "cam-area")])
+
+        steht = build_portal(bot, "minecraft:overworld", *portal)
+        if not FIND.test("Testportal steht in der Overworld", steht, str(portal)):
+            return
+
+        # Erst drueben aufraeumen, dann hinuebergehen: Die Testwelt bleibt
+        # zwischen zwei Laeufen stehen, und was ein frueherer Lauf dort gesetzt
+        # hat, darf diesen hier nicht entscheiden.
+        Log.detail(f"Reiseziel drueben liegt um {ziel} herum")
+        hold_nether_chunks(bot, ziel)
+        vorbereitet = True
+        fill_nether_biome(bot, ziel, "minecraft:nether_wastes")
+
+        cam_on(bot)
+        erste = portal_probe(bot, portal, heim, "1: hinueber")
+        FIND.test("Ein offenes Portal traegt den Kamera-Spieler in den Nether",
+                  erste["was"] == "drueben", erste["was"])
+        if erste["pos"] is None or erste["was"] != "drueben":
+            return
+        arrival = (int(erste["pos"][0]), int(erste["pos"][1]), int(erste["pos"][2]))
+        Log.detail(f"Ankunft drueben: {arrival}")
+
+        # --- Verbotenes Biom hinter dem Portal ---
+        fill_nether_biome(bot, ziel, "minecraft:lush_caves")
+        gesperrt, zweite = sperre_herstellen(bot, portal, heim, "2: verbotenes Biom")
+        FIND.test("Ein verbotenes Biom hinter dem Portal holt ihn zurueck",
+                  zweite["was"] == "zurueckgeholt", zweite["was"])
+        dritte = portal_probe(bot, portal, heim, "3: gemerkt")
+        FIND.test("Danach laesst dasselbe Portal ihn gar nicht mehr durch",
+                  dritte["was"] == "abgewiesen", dritte["was"])
+
+        # --- Ein neu gebautes Portal drueben gibt das gemerkte wieder frei ---
+        neben = (arrival[0] + 10, arrival[1], arrival[2])
+        gebaut = build_portal(bot, "minecraft:the_nether", *neben)
+        FIND.test("Zweites Portal drueben steht", gebaut, str(neben))
+        vierte = portal_probe(bot, portal, heim, "4: nach dem Neubau drueben")
+        FIND.test("Ein neu gebautes Portal drueben gibt das gemerkte wieder frei",
+                  durchgelassen(vierte), vierte["was"])
+        gesperrt, fuenfte = sperre_herstellen(bot, portal, heim, "5: wieder sperren")
+        FIND.test("Nach der Reise steht das Portal wieder im Gedaechtnis",
+                  gesperrt, fuenfte["was"])
+
+        # --- Ist das Portal drueben weg, wird das Gemerkte nachgeprueft ---
+        clear_nether_portals(bot, ziel)
+        sechste = portal_probe(bot, portal, heim, "6: Portal drueben weg")
+        FIND.test("Ist das Portal drueben abgebaut, wird das Gemerkte verworfen",
+                  durchgelassen(sechste), sechste["was"])
+
+        # --- Und mit forget-changed: false bleibt es stehen ---
+        # Das Umstellen leert das Gemerkte, der Eintrag muss also erst wieder
+        # angelegt werden.
+        set_option(env, "forget-changed", "false")
+        gesperrt, siebte = sperre_herstellen(bot, portal, heim,
+                                            "7: sperren mit forget-changed false")
+        FIND.test("Auch mit forget-changed: false wird ein Portal gemerkt",
+                  gesperrt, siebte["was"])
+        achte = portal_probe(bot, portal, heim, "8: gemerkt")
+        FIND.test("Mit forget-changed: false greift das Gemerkte genauso",
+                  achte["was"] == "abgewiesen", achte["was"])
+        clear_nether_portals(bot, ziel)
+        neunte = portal_probe(bot, portal, heim, "9: Portal drueben weg, ohne Freigabe")
+        FIND.test("Mit forget-changed: false bleibt der Eintrag trotzdem stehen",
+                  neunte["was"] == "abgewiesen", neunte["was"])
+
+        # --- Der Schalter fuer das Portal selbst ---
+        set_options(env, [("forget-changed", "true"),
+                          ("nether", "false", "portals")])
+        zehnte = portal_probe(bot, portal, heim, "10: portals.nether false")
+        FIND.test("Auf portals.nether: false traegt das Portal ihn gar nicht",
+                  zehnte["was"] == "zu", zehnte["was"])
+    finally:
+        cam_off(bot)
+        # Nicht im Nether stehen lassen: Die Welt bleibt stehen, und der
+        # naechste Lauf faengt sonst drueben an.
+        bot.chat("/execute in minecraft:overworld run tp @s {:.1f} {:d} {:.1f}".format(
+            heim[0] + 0.5, heim[1], heim[2] + 0.5))
+        time.sleep(1)
+        if vorbereitet:
+            # Drueben wieder wie vorher: kein Portal, ein erlaubtes Biom, und
+            # die Chunks los. Sonst finge der naechste Lauf mit dem an, was
+            # dieser hier stehen gelassen hat.
+            clear_nether_portals(bot, ziel)
+            fill_nether_biome(bot, ziel, "minecraft:nether_wastes")
+            bot.chat("/execute in minecraft:the_nether run forceload remove all")
+            time.sleep(1)
+        # Das Testportal wieder abraeumen, samt Rahmen.
+        px, py, pz = portal
+        bot.chat(f"/execute in minecraft:overworld run fill "
+                 f"{px-1} {py-1} {pz} {px+2} {py+3} {pz} minecraft:air")
+        time.sleep(0.5)
+        set_options(env, [("nether", "false", "portals"),
+                          ("nether", "false", "cam-area"),
+                          ("forget-changed", "true")])
+
+
 def step_tests(env):
     Log.step("8. Tests im laufenden Spiel")
     if server_running(env) is None:
@@ -1672,6 +2130,9 @@ def step_tests(env):
 
         # --- Geworfene Traenke im Cam-Modus ---
         potion_checks(env, bot)
+
+        # --- Portale und das Gedaechtnis fuer gesperrte Portale ---
+        portal_checks(env, bot)
 
     except Exception as exc:
         FIND.test("Testlauf", False, f"{type(exc).__name__}: {exc}")
