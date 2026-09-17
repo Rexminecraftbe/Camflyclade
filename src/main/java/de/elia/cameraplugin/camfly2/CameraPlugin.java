@@ -106,6 +106,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private final Map<UUID, Long> areaMessageCooldown = new HashMap<>();
     /** Players who were just told that a portal does not let them through. */
     private final Map<UUID, Long> portalMessageCooldown = new HashMap<>();
+    /** Players who were just turned away from another player's body. */
+    private final Map<UUID, Long> bodyMessageCooldown = new HashMap<>();
     /** The player who is taking the hit his body took right now. */
     private final Set<UUID> damageImmunityBypass = new HashSet<>();
     /** Players whose body was hit and whose hit has not reached them yet. */
@@ -219,6 +221,18 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      * he is set down in a portal himself: the one he set out through.</p>
      */
     private static final int PORTAL_COOLDOWN_TICKS = 100;
+
+    /**
+     * How long the refusal at another player's body stays quiet afterwards, in
+     * milliseconds.
+     *
+     * <p>Two ticks, which is what it takes to hold the events of one click
+     * together - see {@link #tellOnce(Player)}. They all land in the same tick,
+     * so one would do; the second is there for the tick border. Nobody clicks
+     * twice inside of it, and a second click that did fall into it would be the
+     * same refusal on the same body anyway.</p>
+     */
+    private static final long BODY_MESSAGE_QUIET = 100L;
 
     // Configurable values
     private boolean maxDistanceEnabled;
@@ -1955,9 +1969,31 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             if (owner != null) {
                 exitCameraMode(owner);
             }
-        } else {
+        } else if (tellOnce(player)) {
             sendConfiguredMessage(player, "cant-interact-other");
         }
+    }
+
+    /**
+     * Whether the refusal at another player's body is to be said now.
+     *
+     * <p>One right click on an entity reaches the server up to four times: the
+     * "interact at" variant of the event and the plain one, and each of them
+     * once for the main hand and once for the off hand. The body of another
+     * player is still in camera mode through all four of them, so the refusal
+     * stood in the chat four times over for a single click.</p>
+     *
+     * <p>His own body needs none of this: the first of the four ends camera
+     * mode, and the three behind it find the owner gone and turn back at the
+     * check above - which is what that check has always been for.</p>
+     */
+    private boolean tellOnce(Player player) {
+        long now = System.currentTimeMillis();
+        if (bodyMessageCooldown.getOrDefault(player.getUniqueId(), 0L) >= now) {
+            return false;
+        }
+        bodyMessageCooldown.put(player.getUniqueId(), now + BODY_MESSAGE_QUIET);
+        return true;
     }
 
     /**
@@ -2143,6 +2179,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         distanceMessageCooldown.remove(event.getPlayer().getUniqueId());
         areaMessageCooldown.remove(event.getPlayer().getUniqueId());
         portalMessageCooldown.remove(event.getPlayer().getUniqueId());
+        bodyMessageCooldown.remove(event.getPlayer().getUniqueId());
         removePlayerFromNoCollisionTeam(event.getPlayer());
         lastDamageTimes.remove(event.getPlayer().getUniqueId());
     }
