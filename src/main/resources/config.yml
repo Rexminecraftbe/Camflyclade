@@ -25,7 +25,6 @@ messages:
   camera-on: "&aCamera mode activated! Use /cam again to exit."
   cant-attack-other-body: "&cYou cannot attack other bodies in camera mode."
   cant-fly-in-lava: "&cYou cannot fly through lava! Camera mode will be ended."
-  cant-interact-other: "&cYou cannot interact with another player's body!"
   # Meldungen über fehlerhafte Werte in dieser Datei. Sie gehen immer ins
   # Server-Log und bei /cam reload zusätzlich an den Spieler, der ihn
   # ausgelöst hat. Platzhalter: {path} der Schlüssel, {value} der eingetragene
@@ -113,7 +112,6 @@ message-settings:
   camera-on: false
   cant-attack-other-body: true
   cant-fly-in-lava: true
-  cant-interact-other: true
   # Gilt für den ganzen config-*-Block und nur für den Chat beim Reload,
   # ins Server-Log gehen die Meldungen immer
   config-errors: true
