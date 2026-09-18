@@ -1769,11 +1769,16 @@ def interact_proben(bot, base):
     # --- Abbauen: die Blume geht mit einem Schlag, Stein dauerte zu lange ---
     bot.chat(f"/setblock {bx + 5} {by} {bz} minecraft:dandelion")
     time.sleep(0.6)
+    # Erst nachsehen, ob sie steht: Eine Blume, die gar nicht gesetzt wurde,
+    # ist hinterher auch weg, und die Probe hiesse "abgebaut", ohne dass
+    # jemand sie angefasst haette.
+    steht = block_is(bot, "minecraft:overworld", f"{bx + 5} {by} {bz}",
+                     "minecraft:dandelion")
     hinstellen(bot, bx + 5.5, by, bz + 2.5)
     klicken(bot, "dig_block", x=bx + 5, y=by, z=bz, timeout=8000)
     time.sleep(INTERACT_WAIT)
-    ergebnis["abbau"] = not block_is(bot, "minecraft:overworld", f"{bx + 5} {by} {bz}",
-                                     "minecraft:dandelion")
+    ergebnis["abbau"] = steht and not block_is(
+        bot, "minecraft:overworld", f"{bx + 5} {by} {bz}", "minecraft:dandelion")
 
     # --- Druckplatte: die Interaktion ohne Klick, Action.PHYSICAL ---
     bot.chat(f"/setblock {bx + 7} {by} {bz} minecraft:stone_pressure_plate")
@@ -1794,9 +1799,13 @@ def interact_proben(bot, base):
              f'Tags:["{INTERACT_TAG}"]}}')
     time.sleep(0.8)
     hinstellen(bot, bx + 3.5, by, bz + 3.5)
+    # Dass er dasteht, gehoert zur Antwort: Ein Rahmen, der gar nicht erst
+    # erschienen ist, hat auch keine Drehung auf null - und die Probe hiesse
+    # "gedreht", ohne dass jemand ihn angefasst haette.
+    da = entity_da(bot, "minecraft:item_frame")
     klicken(bot, "activate_entity", type="item_frame", radius=4)
     time.sleep(INTERACT_WAIT)
-    ergebnis["rahmen"] = not nbt_frage(bot, rahmen, "{ItemRotation:0b}")
+    ergebnis["rahmen"] = da and not nbt_frage(bot, rahmen, "{ItemRotation:0b}")
 
     # --- Fremder Ruestungsstaender: die Stiefel abnehmen ---
     # Die Stiefel und nicht der Helm: Welches Teil ein leerer Rechtsklick
@@ -1810,9 +1819,11 @@ def interact_proben(bot, base):
     bot.chat(f"/item replace entity {stand} armor.feet with minecraft:diamond_boots")
     time.sleep(0.6)
     hinstellen(bot, bx + 5.5, by, bz + 3.5)
+    # Wie beim Rahmen: Erst muss dastehen, was ausgezogen werden soll.
+    angezogen = nbt_frage(bot, stand, '{equipment:{feet:{id:"minecraft:diamond_boots"}}}')
     klicken(bot, "activate_entity", type="armor_stand", radius=3, at=True, aim=0.1)
     time.sleep(INTERACT_WAIT)
-    ergebnis["ruestung"] = not nbt_frage(
+    ergebnis["ruestung"] = angezogen and not nbt_frage(
         bot, stand, '{equipment:{feet:{id:"minecraft:diamond_boots"}}}')
 
     # --- Kistenlore: das Fenster einer Entitaet ---
