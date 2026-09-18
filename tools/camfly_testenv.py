@@ -1030,15 +1030,31 @@ async function handle(cmd) {
       // haengt an der ersten, das Boot an der zweiten -, also werden hier
       // beide geschickt. 'aim' ist die Hoehe des Treffers ueber ihren Fuessen;
       // am Ruestungsstaender entscheidet sie, welches Teil abgenommen wird.
+      //
+      // Geschrieben werden die Pakete selbst und nicht ueber activateEntity
+      // und activateEntityAt: Die drehen den Kopf weich (lookAt ohne force)
+      // und warten dabei auf den Physik-Tick, und dieses Warten hat den Bot
+      // schon einmal haengen lassen. Hier wird einmal hart hingesehen und
+      // dann geschrieben - der Inhalt der Pakete ist derselbe.
+      const Vec3 = require('vec3');
       const e = pickEntity(cmd);
       if (!e) return { done: false, reason: 'keine solche Entitaet in der Naehe' };
       const hoehe = cmd.aim === undefined ? 0.5 : cmd.aim;
-      const ziel = e.position.offset(0, hoehe, 0);
       try {
-        await bot.lookAt(ziel, true);
-        await bot.activateEntityAt(e, ziel);
-        await new Promise((r) => setTimeout(r, 150));
-        await bot.activateEntity(e);
+        await Promise.race([
+          bot.lookAt(e.position.offset(0, hoehe, 0), true),
+          new Promise((r) => setTimeout(r, 2000))
+        ]);
+        bot._client.write('use_entity', {
+          target: e.id, mouse: 2, sneaking: false, hand: 0,
+          x: 0, y: hoehe, z: 0, location: new Vec3(0, hoehe, 0)
+        });
+        await new Promise((r) => setTimeout(r, 200));
+        bot._client.write('use_entity', {
+          target: e.id, mouse: 0, sneaking: false, hand: 0,
+          location: new Vec3(0, 0, 0)
+        });
+        await new Promise((r) => setTimeout(r, 100));
         return { done: true, id: e.id, type: e.name };
       } catch (err) {
         return { done: false, id: e.id, type: e.name,

@@ -216,6 +216,14 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
 * **Abgebaut wird eine Blume, kein Stein.** Der Bot ist außerhalb des
   Cam-Modus im Überlebensmodus und schlägt Stein von Hand minutenlang; die
   Blume geht mit einem Schlag.
+* **`activateEntity` und `activateEntityAt` schreibt das Skript selbst.**
+  Beide drehen in mineflayer den Kopf weich (`lookAt` ohne `force`) und warten
+  dabei auf den Physik-Tick - und dieses Warten hat den Bot schon hängen
+  lassen, mit `TimeoutError: Keine Antwort auf activate_entity`. Der Abschnitt
+  sieht deshalb einmal hart hin und schreibt das `use_entity`-Paket danach
+  direkt; sein Inhalt ist derselbe. Jeder Klick des Bots steht außerdem in
+  einem `Promise.race` mit hartem Timeout, damit eine Frage immer eine Antwort
+  bekommt.
 * **Ein Rechtsklick geht zweimal hinaus.** Der echte Client schickt erst die
   „interact at"-Fassung mit dem Trefferpunkt und dann die schlichte, und
   welche von beiden wirkt, hängt an der Entität: Der Rüstungsständer hängt an
