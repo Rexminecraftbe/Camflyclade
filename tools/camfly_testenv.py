@@ -1024,19 +1024,21 @@ async function handle(cmd) {
       }
     }
     case 'activate_entity': {
-      // 'at' schickt die "interact at"-Fassung mit einem Zielpunkt. Der
-      // Ruestungsstaender braucht sie: sein schlichtes interact tut nichts,
-      // und welches Teil abgenommen wird, haengt an der Hoehe des Treffers.
+      // Ein Rechtsklick geht beim echten Client zweimal hinaus: erst die
+      // "interact at"-Fassung mit dem Trefferpunkt, dann die schlichte. Welche
+      // von beiden wirkt, haengt an der Entitaet - der Ruestungsstaender
+      // haengt an der ersten, das Boot an der zweiten -, also werden hier
+      // beide geschickt. 'aim' ist die Hoehe des Treffers ueber ihren Fuessen;
+      // am Ruestungsstaender entscheidet sie, welches Teil abgenommen wird.
       const e = pickEntity(cmd);
       if (!e) return { done: false, reason: 'keine solche Entitaet in der Naehe' };
       const hoehe = cmd.aim === undefined ? 0.5 : cmd.aim;
+      const ziel = e.position.offset(0, hoehe, 0);
       try {
-        await bot.lookAt(e.position.offset(0, hoehe, 0), true);
-        if (cmd.at) {
-          await bot.activateEntityAt(e, e.position.offset(0, hoehe, 0));
-        } else {
-          await bot.activateEntity(e);
-        }
+        await bot.lookAt(ziel, true);
+        await bot.activateEntityAt(e, ziel);
+        await new Promise((r) => setTimeout(r, 150));
+        await bot.activateEntity(e);
         return { done: true, id: e.id, type: e.name };
       } catch (err) {
         return { done: false, id: e.id, type: e.name,
@@ -1754,6 +1756,13 @@ def interact_proben(bot, base):
     bx, by, bz = base
     ergebnis = {}
 
+    # Mit etwas in der Hand legt ein Rechtsklick auf einen Ruestungsstaender
+    # das Mitgebrachte an, statt etwas abzunehmen - und die Probe sagte dann
+    # nichts mehr darueber, ob der Klick angekommen ist. Was der Bot aus den
+    # Abschnitten davor noch hat, kommt deshalb weg.
+    bot.chat(f"/clear {BOT_NAME}")
+    time.sleep(0.6)
+
     # --- Hebel: der Rechtsklick auf einen Block ---
     bot.chat(f"/setblock {bx + 3} {by} {bz} minecraft:stone")
     time.sleep(0.4)
@@ -1821,7 +1830,7 @@ def interact_proben(bot, base):
     hinstellen(bot, bx + 5.5, by, bz + 3.5)
     # Wie beim Rahmen: Erst muss dastehen, was ausgezogen werden soll.
     angezogen = nbt_frage(bot, stand, '{equipment:{feet:{id:"minecraft:diamond_boots"}}}')
-    klicken(bot, "activate_entity", type="armor_stand", radius=3, at=True, aim=0.1)
+    klicken(bot, "activate_entity", type="armor_stand", radius=3, aim=0.1)
     time.sleep(INTERACT_WAIT)
     ergebnis["ruestung"] = angezogen and not nbt_frage(
         bot, stand, '{equipment:{feet:{id:"minecraft:diamond_boots"}}}')

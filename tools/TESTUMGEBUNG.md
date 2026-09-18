@@ -216,11 +216,20 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
 * **Abgebaut wird eine Blume, kein Stein.** Der Bot ist außerhalb des
   Cam-Modus im Überlebensmodus und schlägt Stein von Hand minutenlang; die
   Blume geht mit einem Schlag.
+* **Ein Rechtsklick geht zweimal hinaus.** Der echte Client schickt erst die
+  „interact at"-Fassung mit dem Trefferpunkt und dann die schlichte, und
+  welche von beiden wirkt, hängt an der Entität: Der Rüstungsständer hängt an
+  der ersten, das Boot an der zweiten. `activate_entity` schickt deshalb
+  immer beide. Mit nur einer davon blieben im ersten Lauf genau diese zwei
+  Gegenproben hängen, während Item-Rahmen und Kistenlore längst gingen.
 * **Der fremde Rüstungsständer wird an den Stiefeln geprüft, nicht am Helm.**
   Welches Teil ein leerer Rechtsklick abnimmt, hängt an der Höhe des
-  Treffers, und der Bot zielt unten hin. Er braucht dafür außerdem die
-  „interact at"-Fassung des Klicks (`activate_entity` mit `at`): das
-  schlichte `interact` tut an einem Rüstungsständer gar nichts.
+  Treffers, und der Bot zielt unten hin (`aim`).
+* **Die Hand des Bots muss leer sein.** Mit etwas darin legt der Rechtsklick
+  auf einen Rüstungsständer das Mitgebrachte an, statt etwas abzunehmen - und
+  ist das Mitgebrachte keine Rüstung, passiert gar nichts. Der Abschnitt räumt
+  dem Bot deshalb vorher die Taschen aus; aus den Tests davor bleibt sonst
+  etwas darin liegen.
 * **Die nächste Entität gewinnt.** Der Kamera-Körper des Bots ist selbst ein
   Rüstungsständer und kann dieselbe Art haben wie das Testobjekt. Der Bot
   stellt sich deshalb direkt neben sein Ziel, und der Suchradius bleibt
