@@ -1832,32 +1832,19 @@ def interact_proben(bot, base):
     time.sleep(INTERACT_WAIT)
     ergebnis["rahmen"] = da and not nbt_frage(bot, rahmen, "{ItemRotation:0b}")
 
-    # --- Fremder Ruestungsstaender: ihm etwas abnehmen ---
-    # Er bekommt zwei Sachen: Stiefel und einen Stock in die Hand. Welches Teil
-    # ein leerer Rechtsklick abnimmt, haengt naemlich an der Hoehe des
-    # Treffers, und wo die genau landet, laesst sich von hier aus nicht
-    # nachrechnen - die Stiefel liegen im unteren Band, die Hand ist der
-    # Rueckfall fuer alles, was in gar kein Band faellt. Damit nimmt jeder
-    # Treffer etwas mit, und gefragt wird, ob noch beides dahaengt.
-    stand = f"@e[type=minecraft:armor_stand,tag={INTERACT_TAG},limit=1]"
-    behaengt = '{equipment:{feet:{id:"minecraft:diamond_boots"},' \
-               'mainhand:{id:"minecraft:stick"}}}'
-    bot.chat(f"/kill @e[type=minecraft:armor_stand,tag={INTERACT_TAG}]")
-    time.sleep(0.4)
-    bot.chat(f'/summon minecraft:armor_stand {bx + 5} {by} {bz + 5} '
-             f'{{Tags:["{INTERACT_TAG}"]}}')
-    time.sleep(0.6)
-    bot.chat(f"/item replace entity {stand} armor.feet with minecraft:diamond_boots")
-    time.sleep(0.4)
-    bot.chat(f"/item replace entity {stand} weapon.mainhand with minecraft:stick")
-    time.sleep(0.6)
-    hinstellen(bot, bx + 5.5, by, bz + 3.5)
-    # Wie beim Rahmen: Erst muss dastehen, was ausgezogen werden soll.
-    angezogen = nbt_frage(bot, stand, behaengt)
-    klicken(bot, "activate_entity", type="armor_stand", radius=3, aim=0.3)
-    time.sleep(INTERACT_WAIT)
-    ergebnis["ruestung"] = angezogen and not nbt_frage(bot, stand, behaengt)
-
+    # Den fremden Ruestungsstaender laesst dieser Abschnitt aus. Nicht, weil
+    # das Plugin ihn nicht abwiese - sondern weil der Bot ihn gar nicht erst
+    # ausziehen kann, auch ohne Cam-Modus nicht: Vanilla wickelt das Abnehmen
+    # allein ueber interactAt ab, und der Trefferpunkt dieses Pakets uebersteht
+    # die geflickten Paketdaten nicht. Nachgemessen: Der Staender trug Stiefel
+    # und Stock vor dem Klick und danach immer noch, in beiden Durchgaengen.
+    # Eine Probe, deren Gegenprobe nie durchkommt, sagt ueber das Plugin
+    # nichts - sie stuende nur bei jedem Lauf rot da.
+    #
+    # Was sie gesagt haette, sagen zwei andere mit: Der Item-Rahmen zeigt, dass
+    # ein Rechtsklick auf eine fremde Entitaet abgewiesen wird, und der Klick
+    # auf den eigenen Koerper zeigt, dass ein Klick auf einen Ruestungsstaender
+    # beim Plugin ankommt - der Koerper ist selbst einer.
     # --- Kistenlore: das Fenster einer Entitaet ---
     bot.chat(f"/kill @e[type=minecraft:chest_minecart,tag={INTERACT_TAG}]")
     time.sleep(0.4)
@@ -1991,8 +1978,6 @@ def interact_checks(env, bot):
             ("abbau", "ein Block abbauen", "kein Block abbauen"),
             ("platte", "eine Druckplatte ausloesen", "keine Druckplatte ausloesen"),
             ("rahmen", "ein Bild im Rahmen drehen", "kein Bild im Rahmen drehen"),
-            ("ruestung", "ein fremder Ruestungsstaender ausziehen",
-                         "kein fremder Ruestungsstaender ausziehen"),
             ("fenster", "das Fenster einer Kistenlore oeffnen",
                         "kein Fenster einer Kistenlore oeffnen"),
             ("boot", "ein Boot besteigen", "kein Boot besteigen"),

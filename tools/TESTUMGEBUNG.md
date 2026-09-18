@@ -230,13 +230,18 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   der ersten, das Boot an der zweiten. `activate_entity` schickt deshalb
   immer beide. Mit nur einer davon blieben im ersten Lauf genau diese zwei
   Gegenproben hängen, während Item-Rahmen und Kistenlore längst gingen.
-* **Der fremde Rüstungsständer bekommt Stiefel *und* einen Stock in die
-  Hand.** Welches Teil ein leerer Rechtsklick abnimmt, hängt an der Höhe des
-  Treffers: Die Stiefel liegen im unteren Band, die Hand ist der Rückfall für
-  alles, was in gar kein Band fällt. Wo der Treffer über den geflickten
-  Paketdaten genau landet, lässt sich von außen nicht nachrechnen - mit beidem
-  dran nimmt jeder Treffer etwas mit, und gefragt wird, ob noch beides
-  dahängt.
+* **Den fremden Rüstungsständer prüft der Abschnitt nicht.** Nicht, weil das
+  Plugin ihn nicht abwiese, sondern weil der Bot ihn gar nicht erst ausziehen
+  kann - auch ohne Cam-Modus nicht. Vanilla wickelt das Abnehmen allein über
+  `interactAt` ab, und der Trefferpunkt dieses Pakets übersteht die geflickten
+  Paketdaten nicht. Nachgemessen am Server-Log: Der Ständer trug Stiefel und
+  Stock vor dem Klick und danach immer noch, in beiden Durchgängen und mit
+  beiden Klickfassungen. Eine Probe, deren Gegenprobe nie durchkommt, sagt
+  über das Plugin nichts und stünde nur bei jedem Lauf rot da. Was sie gesagt
+  hätte, sagen zwei andere mit: Der Item-Rahmen zeigt, dass ein Rechtsklick
+  auf eine fremde Entität abgewiesen wird, und der Klick auf den eigenen
+  Körper zeigt, dass ein Klick auf einen Rüstungsständer beim Plugin ankommt -
+  der Körper ist selbst einer.
 * **Ins Boot steigt der Bot über `/ride`, nicht über den Klick.** Der Klick
   kommt an, das Boot nimmt ihn nur nicht an - an dieser einen Stelle reichen
   die geflickten Paketdaten nicht. `/ride` geht im Server denselben Weg
@@ -304,8 +309,8 @@ das gemerkte wieder frei · ein drüben abgebautes ebenso · mit
 `forget-changed: false` bleibt der Eintrag stehen · auf `portals.nether: false`
 trägt das Portal ihn gar nicht erst hinüber · im Cam-Modus lässt sich kein
 Hebel umlegen, kein Block abbauen und keine Druckplatte auslösen · kein Bild
-im Rahmen drehen, kein fremder Rüstungsständer ausziehen, kein Fenster einer
-Kistenlore öffnen und kein Boot besteigen · Gegenprobe: ohne Cam-Modus geht
+im Rahmen drehen, kein Fenster einer Kistenlore öffnen und kein Boot
+besteigen · Gegenprobe: ohne Cam-Modus geht
 jedes davon sehr wohl · das Inventar ist im Cam-Modus leer und danach wieder
 da · der eigene Körper bleibt anklickbar und beendet damit den Cam-Modus ·
 die Kamera wird von einem Happy Ghast abgehoben, ohne Cam-Modus bleibt der
