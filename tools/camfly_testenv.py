@@ -860,6 +860,24 @@ function waitFor(check, timeout) {
   });
 }
 
+// Die naechste Entitaet einer Art. Der Kamera-Koerper des Bots ist auch eine
+// Entitaet und kann dieselbe Art haben wie das Testobjekt - genommen wird
+// deshalb die naechste, und der Test stellt den Bot direkt neben sein Ziel.
+function pickEntity(cmd) {
+  const me = bot.entity && bot.entity.position;
+  let best = null;
+  for (const id of Object.keys(bot.entities)) {
+    const e = bot.entities[id];
+    if (!e || e === bot.entity || !e.position) continue;
+    if (cmd.type && e.name !== cmd.type) continue;
+    if (!me) continue;
+    const weg = e.position.distanceTo(me);
+    if (weg > (cmd.radius || 6)) continue;
+    if (!best || weg < best.position.distanceTo(me)) best = e;
+  }
+  return best;
+}
+
 const POS_RE = /\[\s*(-?[\d.]+)d,\s*(-?[\d.]+)d,\s*(-?[\d.]+)d\s*\]/;
 const DATA_RE = /entity data:\s*(-?[\d.]+)/;
 
@@ -968,6 +986,91 @@ async function handle(cmd) {
     case 'stop_fly':
       try { bot.creative.stopFlying(); } catch (e) { /* egal */ }
       return { ok: true };
+    case 'activate_block': {
+      // Rechtsklick auf einen Block. Was schiefgeht, kommt als Ergebnis
+      // zurueck und nicht als Ausnahme: Ob der Klick durchgeht, ist genau die
+      // Frage des Tests - er soll sie beantworten und nicht daran sterben.
+      const Vec3 = require('vec3');
+      const at = new Vec3(cmd.x, cmd.y, cmd.z);
+      const block = bot.blockAt(at);
+      if (!block) return { done: false, reason: 'kein Block bekannt' };
+      try {
+        await bot.lookAt(at.offset(0.5, 0.5, 0.5), true);
+        await Promise.race([
+          bot.activateBlock(block),
+          new Promise((_, rej) => setTimeout(
+            () => rej(new Error('Zeit abgelaufen')), cmd.timeout || 5000))
+        ]);
+        return { done: true, block: block.name };
+      } catch (e) {
+        return { done: false, block: block.name, reason: String(e && e.message || e) };
+      }
+    }
+    case 'dig_block': {
+      const Vec3 = require('vec3');
+      const at = new Vec3(cmd.x, cmd.y, cmd.z);
+      const block = bot.blockAt(at);
+      if (!block) return { done: false, reason: 'kein Block bekannt' };
+      try {
+        await bot.lookAt(at.offset(0.5, 0.5, 0.5), true);
+        const fertig = await Promise.race([
+          bot.dig(block).then(() => true).catch(() => false),
+          new Promise((r) => setTimeout(() => r(false), cmd.timeout || 8000))
+        ]);
+        try { bot.stopDigging(); } catch (e) { /* egal */ }
+        return { done: !!fertig, block: block.name };
+      } catch (e) {
+        return { done: false, block: block.name, reason: String(e && e.message || e) };
+      }
+    }
+    case 'activate_entity': {
+      // Ein Rechtsklick geht beim echten Client zweimal hinaus: erst die
+      // "interact at"-Fassung mit dem Trefferpunkt, dann die schlichte. Welche
+      // von beiden wirkt, haengt an der Entitaet - der Ruestungsstaender
+      // haengt an der ersten, das Boot an der zweiten -, also werden hier
+      // beide geschickt. 'aim' ist die Hoehe des Treffers ueber ihren Fuessen;
+      // am Ruestungsstaender entscheidet sie, welches Teil abgenommen wird.
+      //
+      // Geschrieben werden die Pakete selbst und nicht ueber activateEntity
+      // und activateEntityAt: Die drehen den Kopf weich (lookAt ohne force)
+      // und warten dabei auf den Physik-Tick, und dieses Warten hat den Bot
+      // schon einmal haengen lassen. Hier wird einmal hart hingesehen und
+      // dann geschrieben - der Inhalt der Pakete ist derselbe.
+      const Vec3 = require('vec3');
+      const e = pickEntity(cmd);
+      if (!e) return { done: false, reason: 'keine solche Entitaet in der Naehe' };
+      const hoehe = cmd.aim === undefined ? 0.5 : cmd.aim;
+      try {
+        await Promise.race([
+          bot.lookAt(e.position.offset(0, hoehe, 0), true),
+          new Promise((r) => setTimeout(r, 2000))
+        ]);
+        bot._client.write('use_entity', {
+          target: e.id, mouse: 2, sneaking: false, hand: 0,
+          x: 0, y: hoehe, z: 0, location: new Vec3(0, hoehe, 0)
+        });
+        await new Promise((r) => setTimeout(r, 200));
+        bot._client.write('use_entity', {
+          target: e.id, mouse: 0, sneaking: false, hand: 0,
+          location: new Vec3(0, 0, 0)
+        });
+        await new Promise((r) => setTimeout(r, 100));
+        return { done: true, id: e.id, type: e.name };
+      } catch (err) {
+        return { done: false, id: e.id, type: e.name,
+                 reason: String(err && err.message || err) };
+      }
+    }
+    case 'window':
+      return { open: !!bot.currentWindow,
+               title: bot.currentWindow ? String(bot.currentWindow.title || '') : null };
+    case 'close_window':
+      try { if (bot.currentWindow) bot.closeWindow(bot.currentWindow); } catch (e) { /* egal */ }
+      return { open: !!bot.currentWindow };
+    case 'inventory': {
+      const items = bot.inventory ? bot.inventory.items() : [];
+      return { count: items.length, names: items.map((i) => i.name) };
+    }
     case 'quit':
       setTimeout(() => process.exit(0), 200);
       try { bot.quit(); } catch (e) { /* egal */ }
@@ -1573,6 +1676,347 @@ def effect_start_checks(env, bot):
 
 
 # ---------------------------------------------------------------------------
+# Interaktionen: Bloecke und Entitaeten
+# ---------------------------------------------------------------------------
+
+# Gefragt wird ueber server_says, block_is und cam_on/cam_off aus dem
+# Portalteil. Die stehen unter diesem Abschnitt - gesucht werden sie erst beim
+# Aufruf, und beisammen bleiben sie dort, wo sie hergekommen sind.
+
+# Die Marke an allem, was dieser Abschnitt in die Welt setzt. Die Testwelt
+# bleibt zwischen zwei Laeufen stehen; ohne die Marke faende der naechste Lauf
+# die Entitaeten eines abgebrochenen wieder vor und klickte auf die alten.
+INTERACT_TAG = "camflytest"
+
+# Wie lange nach einem Klick gewartet wird, ehe am Server nachgesehen wird.
+# Der Klick geht als Paket hinaus, gewirkt hat er fruehestens im naechsten Tick.
+INTERACT_WAIT = 1.0
+
+
+def _floor(wert):
+    """Ganze Zahl nach unten, auch unter null. int() schnitte dort zur
+    falschen Seite ab, und der Boden der Flachwelt liegt bei -64."""
+    return int(wert // 1)
+
+
+def hinstellen(bot, x, y, z):
+    """Den Bot an eine Stelle setzen und ihm einen Moment geben.
+
+    Ein Teleport und kein Flug: Wohin er kommt, steht damit fest, und der
+    Abstand zum Ziel entscheidet darueber, ob sein Klick ueberhaupt in
+    Reichweite ist.
+    """
+    bot.chat(f"/tp {BOT_NAME} {x} {y} {z}")
+    time.sleep(1.0)
+
+
+def nbt_frage(bot, auswahl, nbt):
+    """Ob die Daten dieser Entitaet diesen Ausschnitt enthalten.
+
+    Das NBT wird verdoppelt weitergereicht: server_says schickt das Kommando
+    durch format(), und geschweifte Klammern, die stehen bleiben sollen,
+    muessen dort doppelt stehen.
+    """
+    geschuetzt = nbt.replace("{", "{{").replace("}", "}}")
+    return server_says(bot, f"/execute if data entity {auswahl} {geschuetzt} "
+                            f"run say {{marke}}")
+
+
+def entity_da(bot, art):
+    """Ob eine Entitaet dieser Art mit unserer Marke dasteht."""
+    return server_says(bot, f"/execute if entity @e[type={art},tag={INTERACT_TAG}] "
+                            f"run say {{marke}}")
+
+
+def klicken(bot, op, **kw):
+    """Einen Klick des Bots absetzen und ins Protokoll schreiben, was er
+    daraus gemacht hat.
+
+    Der Grund zaehlt: Faellt spaeter eine Gegenprobe durch, steht sonst nur
+    da, dass sich nichts geruehrt hat - und nicht, ob der Klick ueberhaupt
+    hinausging.
+    """
+    antwort = bot.call(op, wait=25, **kw)
+    if not antwort.get("done"):
+        Log.detail(f"{op}: {antwort.get('reason') or 'ohne Angabe'}")
+    return antwort
+
+
+def interact_aufraeumen(bot, base):
+    """Alles wegnehmen, was dieser Abschnitt in die Welt gesetzt hat."""
+    bx, by, bz = base
+    bot.chat(f"/kill @e[tag={INTERACT_TAG}]")
+    time.sleep(0.4)
+    # Auch, was herumliegt: Der Abbau im Durchgang ohne Cam-Modus laesst eine
+    # Blume fallen, und die zaehlte beim Klick auf den eigenen Koerper als
+    # naechste Entitaet mit.
+    bot.chat("/kill @e[type=minecraft:item]")
+    time.sleep(0.4)
+    bot.chat(f"/fill {bx + 1} {by} {bz - 1} {bx + 11} {by + 8} {bz + 8} minecraft:air")
+    time.sleep(0.8)
+
+
+def interact_proben(bot, base):
+    """Einmal alles anfassen und sagen, was davon durchging.
+
+    Jeder Eintrag im Ergebnis ist wahr, wenn die Interaktion gewirkt hat - der
+    Hebel also umgelegt wurde, der Block weg ist, das Fenster aufging. Der
+    Abschnitt spielt das zweimal durch, einmal ohne Cam-Modus und einmal darin;
+    verglichen werden die beiden Ergebnisse.
+
+    Aufgebaut wird bei jedem Durchgang neu. Der erste Durchgang laesst den
+    Hebel umgelegt und die Blume abgebaut zurueck, und ohne den Neuaufbau
+    pruefte der zweite an einer Welt, die schon so aussieht, wie sie am Ende
+    aussehen soll.
+    """
+    bx, by, bz = base
+    ergebnis = {}
+
+    # Mit etwas in der Hand legt ein Rechtsklick auf einen Ruestungsstaender
+    # das Mitgebrachte an, statt etwas abzunehmen - und die Probe sagte dann
+    # nichts mehr darueber, ob der Klick angekommen ist. Was der Bot aus den
+    # Abschnitten davor noch hat, kommt deshalb weg.
+    bot.chat(f"/clear {BOT_NAME}")
+    time.sleep(0.6)
+
+    # --- Hebel: der Rechtsklick auf einen Block ---
+    bot.chat(f"/setblock {bx + 3} {by} {bz} minecraft:stone")
+    time.sleep(0.4)
+    bot.chat(f"/setblock {bx + 3} {by + 1} {bz} "
+             f"minecraft:lever[face=floor,facing=north,powered=false]")
+    time.sleep(0.6)
+    hinstellen(bot, bx + 3.5, by, bz + 2.5)
+    klicken(bot, "activate_block", x=bx + 3, y=by + 1, z=bz, timeout=5000)
+    time.sleep(INTERACT_WAIT)
+    ergebnis["hebel"] = block_is(bot, "minecraft:overworld", f"{bx + 3} {by + 1} {bz}",
+                                 "minecraft:lever[powered=true]")
+
+    # --- Abbauen: die Blume geht mit einem Schlag, Stein dauerte zu lange ---
+    bot.chat(f"/setblock {bx + 5} {by} {bz} minecraft:dandelion")
+    time.sleep(0.6)
+    # Erst nachsehen, ob sie steht: Eine Blume, die gar nicht gesetzt wurde,
+    # ist hinterher auch weg, und die Probe hiesse "abgebaut", ohne dass
+    # jemand sie angefasst haette.
+    steht = block_is(bot, "minecraft:overworld", f"{bx + 5} {by} {bz}",
+                     "minecraft:dandelion")
+    hinstellen(bot, bx + 5.5, by, bz + 2.5)
+    klicken(bot, "dig_block", x=bx + 5, y=by, z=bz, timeout=8000)
+    time.sleep(INTERACT_WAIT)
+    ergebnis["abbau"] = steht and not block_is(
+        bot, "minecraft:overworld", f"{bx + 5} {by} {bz}", "minecraft:dandelion")
+
+    # --- Druckplatte: die Interaktion ohne Klick, Action.PHYSICAL ---
+    bot.chat(f"/setblock {bx + 7} {by} {bz} minecraft:stone_pressure_plate")
+    time.sleep(0.6)
+    hinstellen(bot, bx + 7.5, by, bz + 0.5)
+    time.sleep(0.8)
+    ergebnis["platte"] = block_is(bot, "minecraft:overworld", f"{bx + 7} {by} {bz}",
+                                  "minecraft:stone_pressure_plate[powered=true]")
+
+    # --- Item-Rahmen: das Bild drehen ---
+    rahmen = f"@e[type=minecraft:item_frame,tag={INTERACT_TAG},limit=1]"
+    bot.chat(f"/kill @e[type=minecraft:item_frame,tag={INTERACT_TAG}]")
+    time.sleep(0.4)
+    bot.chat(f"/setblock {bx + 3} {by} {bz + 5} minecraft:stone")
+    time.sleep(0.4)
+    bot.chat(f'/summon minecraft:item_frame {bx + 3} {by + 1} {bz + 5} '
+             f'{{Facing:1b,ItemRotation:0b,Item:{{id:"minecraft:stone",count:1}},'
+             f'Tags:["{INTERACT_TAG}"]}}')
+    time.sleep(0.8)
+    hinstellen(bot, bx + 3.5, by, bz + 3.5)
+    # Dass er dasteht, gehoert zur Antwort: Ein Rahmen, der gar nicht erst
+    # erschienen ist, hat auch keine Drehung auf null - und die Probe hiesse
+    # "gedreht", ohne dass jemand ihn angefasst haette.
+    da = entity_da(bot, "minecraft:item_frame")
+    klicken(bot, "activate_entity", type="item_frame", radius=4)
+    time.sleep(INTERACT_WAIT)
+    ergebnis["rahmen"] = da and not nbt_frage(bot, rahmen, "{ItemRotation:0b}")
+
+    # Den fremden Ruestungsstaender laesst dieser Abschnitt aus. Nicht, weil
+    # das Plugin ihn nicht abwiese - sondern weil der Bot ihn gar nicht erst
+    # ausziehen kann, auch ohne Cam-Modus nicht: Vanilla wickelt das Abnehmen
+    # allein ueber interactAt ab, und der Trefferpunkt dieses Pakets uebersteht
+    # die geflickten Paketdaten nicht. Nachgemessen: Der Staender trug Stiefel
+    # und Stock vor dem Klick und danach immer noch, in beiden Durchgaengen.
+    # Eine Probe, deren Gegenprobe nie durchkommt, sagt ueber das Plugin
+    # nichts - sie stuende nur bei jedem Lauf rot da.
+    #
+    # Was sie gesagt haette, sagen zwei andere mit: Der Item-Rahmen zeigt, dass
+    # ein Rechtsklick auf eine fremde Entitaet abgewiesen wird, und der Klick
+    # auf den eigenen Koerper zeigt, dass ein Klick auf einen Ruestungsstaender
+    # beim Plugin ankommt - der Koerper ist selbst einer.
+    # --- Kistenlore: das Fenster einer Entitaet ---
+    bot.chat(f"/kill @e[type=minecraft:chest_minecart,tag={INTERACT_TAG}]")
+    time.sleep(0.4)
+    bot.chat(f'/summon minecraft:chest_minecart {bx + 7} {by} {bz + 5} '
+             f'{{NoGravity:1b,Tags:["{INTERACT_TAG}"]}}')
+    time.sleep(0.8)
+    hinstellen(bot, bx + 7.5, by, bz + 3.5)
+    bot.call("close_window", wait=10)
+    klicken(bot, "activate_entity", type="chest_minecart", radius=3)
+    time.sleep(INTERACT_WAIT)
+    ergebnis["fenster"] = bool(bot.call("window", wait=10).get("open"))
+    bot.call("close_window", wait=10)
+
+    # --- Boot: aufsteigen, ueber /ride statt ueber den Klick ---
+    # Der Klick taugt hier nicht: Er kommt an, das Boot nimmt ihn nur nicht an
+    # - der Bot spricht auf geflickten Paketdaten, und an dieser einen Stelle
+    # reicht das nicht. /ride geht denselben Weg im Server (startRiding, und
+    # damit EntityMountEvent und VehicleEnterEvent), nur ohne Client dazwischen
+    # - und genau die beiden sind es, die das Plugin abfaengt.
+    boot = f"@e[type=minecraft:oak_boat,tag={INTERACT_TAG},limit=1]"
+    bot.chat(f"/kill @e[type=minecraft:oak_boat,tag={INTERACT_TAG}]")
+    time.sleep(0.4)
+    bot.chat(f'/summon minecraft:oak_boat {bx + 9} {by} {bz + 5} '
+             f'{{Tags:["{INTERACT_TAG}"]}}')
+    time.sleep(0.8)
+    hinstellen(bot, bx + 9.5, by, bz + 3.5)
+    bot.chat(f"/ride {BOT_NAME} mount {boot}")
+    time.sleep(INTERACT_WAIT)
+    ergebnis["boot"] = server_says(bot, "/execute on vehicle run say {marke}")
+    bot.chat(f"/ride {BOT_NAME} dismount")
+    time.sleep(0.4)
+    # Wieder heraus: Ein Bot, der im Boot sitzt, laesst sich nicht mehr
+    # hinstellen, und die Proben danach liefen alle an derselben Stelle.
+    bot.chat(f"/kill @e[type=minecraft:oak_boat,tag={INTERACT_TAG}]")
+    time.sleep(0.6)
+
+    return ergebnis
+
+
+def ghast_probe(bot, base):
+    """Den Bot auf einen Happy Ghast setzen und sagen, wo er danach steht.
+
+    Der Ghast steht still: NoAI und NoGravity, sonst zoege er davon und die
+    Stelle, an der der Bot aufgesetzt wird, waere jedes Mal eine andere. Er ist
+    vier Bloecke hoch, sein Ruecken liegt also vier ueber seinen Fuessen.
+
+    Gibt die Hoehe zurueck, an der der Bot danach steht, oder None.
+    """
+    bx, by, bz = base
+    bot.chat(f"/kill @e[type=minecraft:happy_ghast,tag={INTERACT_TAG}]")
+    time.sleep(0.5)
+    bot.chat(f'/summon minecraft:happy_ghast {bx + 11} {by + 2} {bz} '
+             f'{{NoAI:1b,NoGravity:1b,Silent:1b,Tags:["{INTERACT_TAG}"]}}')
+    time.sleep(1.2)
+    if not entity_da(bot, "minecraft:happy_ghast"):
+        return None
+    bot.chat(f"/tp {BOT_NAME} {bx + 11} {by + 6} {bz}")
+    time.sleep(2.0)
+    pos = bot.server_pos()
+    return None if pos is None else pos[1]
+
+
+def interact_checks(env, bot):
+    """Was der Cam-Modus anfassen darf - und was nicht.
+
+    Im Cam-Modus geht kein Block mehr auf und keine Entitaet mehr an. Das
+    Einzige, was dem Spieler bleibt, ist sein eigener Koerper, und der Klick
+    darauf beendet den Cam-Modus.
+
+    Jede Probe steht zweimal da: einmal ohne Cam-Modus und einmal darin. Ohne
+    die Gegenprobe sagte dieser Abschnitt nur, dass sich nichts geruehrt hat -
+    und das sagt er auch dann, wenn der Klick des Bots gar nicht erst ankommt.
+    Faellt eine Gegenprobe durch, ist die Probe daneben nichts wert, und das
+    steht dann auch so da.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Interaktionstest aus", cam_off(bot), ""):
+        return
+    pos = bot.server_pos()
+    if not FIND.test("Standort fuer den Interaktionstest lesbar", pos is not None, str(pos)):
+        return
+    base = (_floor(pos[0]), _floor(pos[1] + 0.5), _floor(pos[2]))
+    bx, by, bz = base
+    Log.detail(f"Testplatz bei {base}")
+
+    try:
+        # --- Erst ohne Cam-Modus: geht der Klick des Bots ueberhaupt durch? ---
+        interact_aufraeumen(bot, base)
+        hinstellen(bot, bx + 0.5, by, bz + 0.5)
+        ohne = interact_proben(bot, base)
+        ghast_ohne = ghast_probe(bot, base)
+
+        # --- Und nun im Cam-Modus, von derselben Stelle aus ---
+        interact_aufraeumen(bot, base)
+        hinstellen(bot, bx + 0.5, by, bz + 0.5)
+        bot.chat(f"/give {BOT_NAME} minecraft:stone 1")
+        time.sleep(0.8)
+        if not FIND.test("/cam startet fuer den Interaktionstest", cam_on(bot), ""):
+            return
+
+        # Das leere Inventar gehoert zum Schutz: Ohne Gegenstand in der Hand
+        # gibt es auch keinen mit CanPlaceOn oder CanDestroy, mit dem sich im
+        # Abenteuermodus doch bauen liesse.
+        inv = bot.call("inventory", wait=10)
+        FIND.test("Im Cam-Modus ist das Inventar leer", inv.get("count") == 0,
+                  ", ".join(inv.get("names") or []) or "leer")
+
+        drin = interact_proben(bot, base)
+        ghast_drin = ghast_probe(bot, base)
+
+        # --- Der eigene Koerper ist das Einzige, was ihm bleibt ---
+        hinstellen(bot, bx + 0.5, by, bz + 0.5)
+        klicken(bot, "activate_entity", radius=3)
+        time.sleep(INTERACT_WAIT)
+        # Am Spielmodus gemessen und nicht an der Meldung: adventure heisst im
+        # Cam-Modus, alles andere heisst beendet.
+        beendet = server_says(bot, "/execute if entity @s[gamemode=survival] "
+                                   "run say {marke}")
+        FIND.test("Der Klick auf den eigenen Koerper beendet den Cam-Modus", beendet,
+                  "" if beendet else "der Cam-Modus lief weiter")
+        cam_off(bot)
+        time.sleep(1)
+
+        inv = bot.call("inventory", wait=10)
+        FIND.test("Nach dem Cam-Modus ist das Inventar wieder da",
+                  inv.get("count", 0) > 0,
+                  ", ".join(inv.get("names") or []) or "leer geblieben")
+
+        # --- Die Ergebnisse gegenueberstellen ---
+        proben = [
+            ("hebel", "ein Hebel umlegen", "kein Hebel umlegen"),
+            ("abbau", "ein Block abbauen", "kein Block abbauen"),
+            ("platte", "eine Druckplatte ausloesen", "keine Druckplatte ausloesen"),
+            ("rahmen", "ein Bild im Rahmen drehen", "kein Bild im Rahmen drehen"),
+            ("fenster", "das Fenster einer Kistenlore oeffnen",
+                        "kein Fenster einer Kistenlore oeffnen"),
+            ("boot", "ein Boot besteigen", "kein Boot besteigen"),
+        ]
+        for schluessel, ja, nein in proben:
+            FIND.test(f"Gegenprobe: ohne Cam-Modus laesst sich {ja}",
+                      ohne.get(schluessel),
+                      "" if ohne.get(schluessel) else
+                      "kam nicht durch - die Probe daneben sagt damit nichts")
+            FIND.test(f"Im Cam-Modus laesst sich {nein}",
+                      not drin.get(schluessel),
+                      "" if not drin.get(schluessel) else "es ging doch")
+
+        # --- Der Happy Ghast ---
+        # Die Gegenprobe wird nach beiden Seiten eingegrenzt. Nur "nicht
+        # abgehoben" hiesse sie auch gut, wenn der Bot glatt durch den Ghast
+        # hindurchgefallen waere - und dann sagte die Probe darunter nichts
+        # mehr darueber, wer ihn angehoben hat.
+        rueckenhoehe = by + 6            # Fuesse bei by+2, vier Bloecke hoch
+        steht = (ghast_ohne is not None
+                 and rueckenhoehe - 0.5 <= ghast_ohne <= rueckenhoehe + 0.5)
+        FIND.test("Gegenprobe: ohne Cam-Modus bleibt der Bot auf dem Happy Ghast stehen",
+                  steht, f"Hoehe {ghast_ohne}, Ruecken bei {rueckenhoehe}")
+        FIND.test("Im Cam-Modus wird die Kamera vom Happy Ghast abgehoben",
+                  ghast_drin is not None and ghast_drin >= rueckenhoehe + 1.5,
+                  f"Hoehe {ghast_drin}, Ruecken bei {rueckenhoehe}")
+    finally:
+        # Auch dann aufraeumen, wenn unterwegs etwas schiefging: Die Testwelt
+        # bleibt stehen, und der naechste Lauf faende sonst alles wieder vor.
+        try:
+            cam_off(bot)
+            interact_aufraeumen(bot, base)
+            bot.chat(f"/clear {BOT_NAME}")
+            hinstellen(bot, bx + 0.5, by, bz + 0.5)
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Interaktionstest: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # Portale
 # ---------------------------------------------------------------------------
 
@@ -2130,6 +2574,9 @@ def step_tests(env):
 
         # --- Geworfene Traenke im Cam-Modus ---
         potion_checks(env, bot)
+
+        # --- Bloecke und Entitaeten im Cam-Modus ---
+        interact_checks(env, bot)
 
         # --- Portale und das Gedaechtnis fuer gesperrte Portale ---
         portal_checks(env, bot)
