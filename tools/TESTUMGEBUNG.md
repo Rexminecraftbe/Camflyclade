@@ -230,9 +230,19 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   der ersten, das Boot an der zweiten. `activate_entity` schickt deshalb
   immer beide. Mit nur einer davon blieben im ersten Lauf genau diese zwei
   Gegenproben hängen, während Item-Rahmen und Kistenlore längst gingen.
-* **Der fremde Rüstungsständer wird an den Stiefeln geprüft, nicht am Helm.**
-  Welches Teil ein leerer Rechtsklick abnimmt, hängt an der Höhe des
-  Treffers, und der Bot zielt unten hin (`aim`).
+* **Der fremde Rüstungsständer bekommt Stiefel *und* einen Stock in die
+  Hand.** Welches Teil ein leerer Rechtsklick abnimmt, hängt an der Höhe des
+  Treffers: Die Stiefel liegen im unteren Band, die Hand ist der Rückfall für
+  alles, was in gar kein Band fällt. Wo der Treffer über den geflickten
+  Paketdaten genau landet, lässt sich von außen nicht nachrechnen - mit beidem
+  dran nimmt jeder Treffer etwas mit, und gefragt wird, ob noch beides
+  dahängt.
+* **Ins Boot steigt der Bot über `/ride`, nicht über den Klick.** Der Klick
+  kommt an, das Boot nimmt ihn nur nicht an - an dieser einen Stelle reichen
+  die geflickten Paketdaten nicht. `/ride` geht im Server denselben Weg
+  (`startRiding`, und damit `EntityMountEvent` und `VehicleEnterEvent`), nur
+  ohne Client dazwischen, und genau die beiden fängt das Plugin ab. Gefragt
+  wird danach mit `/execute on vehicle`.
 * **Die Hand des Bots muss leer sein.** Mit etwas darin legt der Rechtsklick
   auf einen Rüstungsständer das Mitgebrachte an, statt etwas abzunehmen - und
   ist das Mitgebrachte keine Rüstung, passiert gar nichts. Der Abschnitt räumt

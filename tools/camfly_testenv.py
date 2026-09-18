@@ -1832,24 +1832,31 @@ def interact_proben(bot, base):
     time.sleep(INTERACT_WAIT)
     ergebnis["rahmen"] = da and not nbt_frage(bot, rahmen, "{ItemRotation:0b}")
 
-    # --- Fremder Ruestungsstaender: die Stiefel abnehmen ---
-    # Die Stiefel und nicht der Helm: Welches Teil ein leerer Rechtsklick
-    # abnimmt, haengt an der Hoehe des Treffers, und der Bot zielt unten hin.
+    # --- Fremder Ruestungsstaender: ihm etwas abnehmen ---
+    # Er bekommt zwei Sachen: Stiefel und einen Stock in die Hand. Welches Teil
+    # ein leerer Rechtsklick abnimmt, haengt naemlich an der Hoehe des
+    # Treffers, und wo die genau landet, laesst sich von hier aus nicht
+    # nachrechnen - die Stiefel liegen im unteren Band, die Hand ist der
+    # Rueckfall fuer alles, was in gar kein Band faellt. Damit nimmt jeder
+    # Treffer etwas mit, und gefragt wird, ob noch beides dahaengt.
     stand = f"@e[type=minecraft:armor_stand,tag={INTERACT_TAG},limit=1]"
+    behaengt = '{equipment:{feet:{id:"minecraft:diamond_boots"},' \
+               'mainhand:{id:"minecraft:stick"}}}'
     bot.chat(f"/kill @e[type=minecraft:armor_stand,tag={INTERACT_TAG}]")
     time.sleep(0.4)
     bot.chat(f'/summon minecraft:armor_stand {bx + 5} {by} {bz + 5} '
              f'{{Tags:["{INTERACT_TAG}"]}}')
     time.sleep(0.6)
     bot.chat(f"/item replace entity {stand} armor.feet with minecraft:diamond_boots")
+    time.sleep(0.4)
+    bot.chat(f"/item replace entity {stand} weapon.mainhand with minecraft:stick")
     time.sleep(0.6)
     hinstellen(bot, bx + 5.5, by, bz + 3.5)
     # Wie beim Rahmen: Erst muss dastehen, was ausgezogen werden soll.
-    angezogen = nbt_frage(bot, stand, '{equipment:{feet:{id:"minecraft:diamond_boots"}}}')
-    klicken(bot, "activate_entity", type="armor_stand", radius=3, aim=0.1)
+    angezogen = nbt_frage(bot, stand, behaengt)
+    klicken(bot, "activate_entity", type="armor_stand", radius=3, aim=0.3)
     time.sleep(INTERACT_WAIT)
-    ergebnis["ruestung"] = angezogen and not nbt_frage(
-        bot, stand, '{equipment:{feet:{id:"minecraft:diamond_boots"}}}')
+    ergebnis["ruestung"] = angezogen and not nbt_frage(bot, stand, behaengt)
 
     # --- Kistenlore: das Fenster einer Entitaet ---
     bot.chat(f"/kill @e[type=minecraft:chest_minecart,tag={INTERACT_TAG}]")
@@ -1864,7 +1871,12 @@ def interact_proben(bot, base):
     ergebnis["fenster"] = bool(bot.call("window", wait=10).get("open"))
     bot.call("close_window", wait=10)
 
-    # --- Boot: aufsteigen ---
+    # --- Boot: aufsteigen, ueber /ride statt ueber den Klick ---
+    # Der Klick taugt hier nicht: Er kommt an, das Boot nimmt ihn nur nicht an
+    # - der Bot spricht auf geflickten Paketdaten, und an dieser einen Stelle
+    # reicht das nicht. /ride geht denselben Weg im Server (startRiding, und
+    # damit EntityMountEvent und VehicleEnterEvent), nur ohne Client dazwischen
+    # - und genau die beiden sind es, die das Plugin abfaengt.
     boot = f"@e[type=minecraft:oak_boat,tag={INTERACT_TAG},limit=1]"
     bot.chat(f"/kill @e[type=minecraft:oak_boat,tag={INTERACT_TAG}]")
     time.sleep(0.4)
@@ -1872,9 +1884,11 @@ def interact_proben(bot, base):
              f'{{Tags:["{INTERACT_TAG}"]}}')
     time.sleep(0.8)
     hinstellen(bot, bx + 9.5, by, bz + 3.5)
-    klicken(bot, "activate_entity", type="oak_boat", radius=3)
+    bot.chat(f"/ride {BOT_NAME} mount {boot}")
     time.sleep(INTERACT_WAIT)
-    ergebnis["boot"] = nbt_frage(bot, boot, "{Passengers:[{}]}")
+    ergebnis["boot"] = server_says(bot, "/execute on vehicle run say {marke}")
+    bot.chat(f"/ride {BOT_NAME} dismount")
+    time.sleep(0.4)
     # Wieder heraus: Ein Bot, der im Boot sitzt, laesst sich nicht mehr
     # hinstellen, und die Proben danach liefen alle an derselben Stelle.
     bot.chat(f"/kill @e[type=minecraft:oak_boat,tag={INTERACT_TAG}]")
@@ -1987,7 +2001,7 @@ def interact_checks(env, bot):
             FIND.test(f"Gegenprobe: ohne Cam-Modus laesst sich {ja}",
                       ohne.get(schluessel),
                       "" if ohne.get(schluessel) else
-                      "der Klick kam nicht an - die Probe daneben sagt damit nichts")
+                      "kam nicht durch - die Probe daneben sagt damit nichts")
             FIND.test(f"Im Cam-Modus laesst sich {nein}",
                       not drin.get(schluessel),
                       "" if not drin.get(schluessel) else "es ging doch")
