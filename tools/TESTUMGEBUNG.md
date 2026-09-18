@@ -205,6 +205,52 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   ausgehöhlten Rahmen. Ob daraus wirklich ein Portal geworden ist, sieht der
   Test mit `/execute if block ... run say` nach - so beantwortet der Server
   auch die Frage, in welcher Welt der Bot gerade steht.
+* **Jede Interaktionsprobe steht zweimal da**, einmal ohne Cam-Modus und
+  einmal darin. Ohne die Gegenprobe sagte der Abschnitt nur, dass sich nichts
+  gerührt hat - und das sagt er auch dann, wenn der Klick des Bots gar nicht
+  erst ankommt. Fällt eine Gegenprobe durch, ist die Probe daneben nichts
+  wert, und genau das steht dann auch in der Zusammenfassung.
+* **Der Bot wird per `/tp` neben sein Ziel gestellt**, nicht hingeflogen. Wo
+  er steht, entscheidet darüber, ob sein Klick überhaupt in Reichweite ist,
+  und ein Teleport landet zuverlässig an derselben Stelle.
+* **Abgebaut wird eine Blume, kein Stein.** Der Bot ist außerhalb des
+  Cam-Modus im Überlebensmodus und schlägt Stein von Hand minutenlang; die
+  Blume geht mit einem Schlag.
+* **Der fremde Rüstungsständer wird an den Stiefeln geprüft, nicht am Helm.**
+  Welches Teil ein leerer Rechtsklick abnimmt, hängt an der Höhe des
+  Treffers, und der Bot zielt unten hin. Er braucht dafür außerdem die
+  „interact at"-Fassung des Klicks (`activate_entity` mit `at`): das
+  schlichte `interact` tut an einem Rüstungsständer gar nichts.
+* **Die nächste Entität gewinnt.** Der Kamera-Körper des Bots ist selbst ein
+  Rüstungsständer und kann dieselbe Art haben wie das Testobjekt. Der Bot
+  stellt sich deshalb direkt neben sein Ziel, und der Suchradius bleibt
+  klein genug, dass der eigene Körper nicht hineinfällt.
+* **Was herumliegt, wird mit weggeräumt.** Der Abbau im Durchgang ohne
+  Cam-Modus lässt eine Blume fallen, und die zählte beim Klick auf den
+  eigenen Körper als nächste Entität mit.
+* **Alles Gesetzte trägt die Marke `camflytest`** und wird am Ende wieder
+  weggenommen, Blöcke mit `/fill ... air`. Die Testwelt bleibt zwischen zwei
+  Läufen stehen; ohne die Marke fände der nächste Lauf die Entitäten eines
+  abgebrochenen wieder vor und klickte auf die alten.
+* **NBT-Fragen an den Server müssen ihre Klammern verdoppeln.** `server_says`
+  schickt das Kommando durch `format()`, und `{ItemRotation:0b}` wäre dort
+  ein Platzhalter. Dafür gibt es `nbt_frage`.
+* **Der Klick auf den eigenen Körper wird am Spielmodus gemessen**, nicht an
+  einer Meldung: `adventure` heißt im Cam-Modus, alles andere heißt beendet.
+  Die Absage am fremden Körper gibt es nicht mehr, da wäre nichts zu hören.
+* **Das leere Inventar prüft der Test mit einem `/give` davor.** Ein frisch
+  gespawnter Bot hat ohnehin nichts in der Hand, und die Probe sagte ohne den
+  Gegenstand gar nichts. Sie gehört zum Blockschutz: Ohne Gegenstand gibt es
+  auch keinen mit `CanPlaceOn` oder `CanDestroy`, mit dem sich im
+  Abenteuermodus doch bauen ließe.
+* **Der Happy Ghast steht mit `NoAI` und `NoGravity` still.** Sonst zöge er
+  davon, und die Stelle, an der der Bot aufgesetzt wird, wäre jedes Mal eine
+  andere. Er ist vier Blöcke hoch, sein Rücken liegt also vier über seinen
+  Füßen.
+* **Die Gegenprobe am Happy Ghast wird nach beiden Seiten eingegrenzt.** Nur
+  „nicht abgehoben" hieße sie auch dann gut, wenn der Bot glatt durch den
+  Ghast hindurchgefallen wäre - und dann sagte die Probe darunter nichts mehr
+  darüber, wer ihn angehoben hat.
 
 ## Was die Tests abdecken
 
@@ -229,8 +275,14 @@ den Nether · ein verbotenes Biom dahinter holt ihn zurück · danach lässt
 dasselbe Portal ihn gar nicht mehr durch · ein drüben neu gebautes Portal gibt
 das gemerkte wieder frei · ein drüben abgebautes ebenso · mit
 `forget-changed: false` bleibt der Eintrag stehen · auf `portals.nether: false`
-trägt das Portal ihn gar nicht erst hinüber · Server-Log ohne Fehler des
-Plugins.
+trägt das Portal ihn gar nicht erst hinüber · im Cam-Modus lässt sich kein
+Hebel umlegen, kein Block abbauen und keine Druckplatte auslösen · kein Bild
+im Rahmen drehen, kein fremder Rüstungsständer ausziehen, kein Fenster einer
+Kistenlore öffnen und kein Boot besteigen · Gegenprobe: ohne Cam-Modus geht
+jedes davon sehr wohl · das Inventar ist im Cam-Modus leer und danach wieder
+da · der eigene Körper bleibt anklickbar und beendet damit den Cam-Modus ·
+die Kamera wird von einem Happy Ghast abgehoben, ohne Cam-Modus bleibt der
+Bot darauf stehen · Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
 Arbeitsordner.
