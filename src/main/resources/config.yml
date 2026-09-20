@@ -20,6 +20,10 @@ messages:
   # Platzhalter {effect}: die Effekte, an denen der Start scheitert, unter
   # ihren Minecraft-Namen und durch Komma getrennt.
   cam-effect-start: "&cYou cannot start cam mode with {effect} on you."
+  # Kommt nur bei camera-mode.gamemode "keep": Wer im Zuschauermodus steht,
+  # bliebe dort auch im Cam-Modus, und das geht nicht. Bei den drei festen
+  # Modi kommt die Meldung nie - die holen ihn aus dem Zuschauermodus heraus.
+  cam-gamemode-start: "&cYou cannot start cam mode in spectator mode."
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
   camera-off: "&aCamera mode ended."
   camera-on: "&aCamera mode activated! Use /cam again to exit."
@@ -107,6 +111,7 @@ message-settings:
   cam-area-limit: true
   cam-area-start: true
   cam-effect-start: true
+  cam-gamemode-start: true
   cam-safety: true
   camera-off: false
   camera-on: false
@@ -139,14 +144,16 @@ action-bar:
 
 
 # Grundeinstellungen des Kamera-Modus
-# Wer im Cam-Modus ist, bleibt im Abenteuermodus, nimmt dort aber keinen
-# Schaden, verliert nichts vom Hungerbalken, heilt nicht von selbst nach und
-# wird von keinem geworfenen Trank benetzt - weder vom Splash-Trank noch von
-# der Wolke, die ein verweilender liegen lässt. Sein Körper steht für ihn ein:
-# Was den trifft, trifft ihn - ein Schlag wie ein Trank -, und der Cam-Modus
-# endet dabei. Die Regeneration wiederum wird draußen aus dem Hunger
-# bezahlt, und steht der Balken still, gäbe es sie hier umsonst.
-# Das alles ist fest eingebaut, Schalter gibt es dafür keine.
+# Wer im Cam-Modus ist, fliegt in dem Spielmodus, den gamemode weiter unten
+# festlegt - voreingestellt ist der Abenteuermodus. In jedem davon nimmt er
+# keinen Schaden, verliert nichts vom Hungerbalken, heilt nicht von selbst
+# nach und wird von keinem geworfenen Trank benetzt - weder vom Splash-Trank
+# noch von der Wolke, die ein verweilender liegen lässt. Sein Körper steht
+# für ihn ein: Was den trifft, trifft ihn - ein Schlag wie ein Trank -, und
+# der Cam-Modus endet dabei. Die Regeneration wiederum wird draußen aus dem
+# Hunger bezahlt, und steht der Balken still, gäbe es sie hier umsonst.
+# Das alles ist fest eingebaut, Schalter gibt es dafür keine - nur der
+# Spielmodus selbst lässt sich mit gamemode wählen.
 camera-mode:
   # Aktiviert die Begrenzung der Entfernung zum Körper
   max-distance-enabled: true
@@ -185,6 +192,25 @@ camera-mode:
   glowing-outline: true
   # Erlaubt Flug durch Lava
   allow_lava_flight: true
+  # Der Spielmodus, in dem der Cam-Modus geflogen wird. Beim Aussteigen kommt
+  # der Spieler in jedem Fall in den Modus zurück, in dem er gestartet ist.
+  # adventure = Abenteuermodus, die Voreinstellung
+  # survival  = Überlebensmodus
+  # creative  = Kreativmodus
+  # keep      = der Modus, in dem der Spieler gerade steht, bleibt stehen
+  # Was der Cam-Modus sperrt, hängt nicht am Spielmodus: Blöcke abbauen und
+  # setzen, Kisten öffnen, das Inventar anfassen, Items aufheben und fallen
+  # lassen gehen in keinem von ihnen. Schaden nimmt der Spieler in keinem,
+  # getroffen wird immer nur sein Körper, und der Hungerbalken steht überall
+  # still.
+  # Der Zuschauermodus steht nicht zur Wahl: Er lässt durch Blöcke fliegen,
+  # und damit wären max-distance, cam-area und die Portalregeln umgangen -
+  # die messen alle einen Spieler, der um eine Wand herum muss. Bei "keep"
+  # kommt ein Zuschauer deshalb gar nicht erst in den Cam-Modus hinein und
+  # bekommt die Meldung messages.cam-gamemode-start. Bei den drei festen Modi
+  # wird er wie jeder andere in den eingestellten Modus gesetzt.
+  # Bei einem unbekannten Wert wird adventure verwendet.
+  gamemode: adventure
   # Ob der Cam-Modus mit einem Trankeffekt überhaupt gestartet werden darf
   # true     = ja, mit jedem
   # false    = nein, mit keinem einzigen

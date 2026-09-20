@@ -15,17 +15,19 @@ import java.util.UUID;
 /**
  * Holds the hunger of a camera player where it was when he started.
  *
- * <p>The camera player stays in adventure mode, and there the hunger of the
- * server keeps running: an effect, a heal, a flight through water - all of it
- * fills his exhaustion, and every four points of that cost a point of
- * saturation and, once that is used up, a haunch off the bar. He is only
- * watching, though, and pays for nothing else either: his body stands in for
- * him and the damage never reaches him. The hunger is treated the same way.</p>
+ * <p>The camera player flies in the mode {@code camera-mode.gamemode} names,
+ * and in the adventure and the survival mode the hunger of the server keeps
+ * running there: an effect, a heal, a flight through water - all of it fills
+ * his exhaustion, and every four points of that cost a point of saturation
+ * and, once that is used up, a haunch off the bar. He is only watching,
+ * though, and pays for nothing else either: his body stands in for him and the
+ * damage never reaches him. The hunger is treated the same way.</p>
  *
- * <p>Creative mode gets out of it by being invulnerable, which is not open
- * here - the player is meant to stay in adventure mode. So the counter the
- * whole hunger system runs on is stopped instead: a camera player gains no
- * exhaustion, therefore nothing is ever taken from his saturation or his bar.
+ * <p>The creative mode gets out of it by being invulnerable, but that is only
+ * one of the modes camera mode can run in. So the counter the whole hunger
+ * system runs on is stopped instead, and that holds in every one of them: a
+ * camera player gains no exhaustion, therefore nothing is ever taken from his
+ * saturation or his bar.
  * Below that sits {@link FoodLevelChangeEvent} as the backstop for anything
  * that would reach the bar past the exhaustion. What he brought with him is
  * written down at the start and put back at the end, so camera mode hands him

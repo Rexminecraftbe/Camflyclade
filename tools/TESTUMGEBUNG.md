@@ -157,11 +157,14 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   den Schritt `build` prüfte das Plugin dann gegen eine Konfiguration, in der
   die neuen Schlüssel fehlen. Das sieht nach kaputtem Plugin aus und ist
   keines. Platzhalter ersetzt Maven ohnehin nur in `plugin.yml`.
-* **Der Cam-Modus läuft im Abenteuermodus**, nicht in Kreativ - Kreativ steht
-  nur einen einzigen Tick lang da. Der Portalvorgang dauert dort deshalb die
-  vollen 80 Ticks; die Abkürzung auf einen Tick gilt nur für Unverwundbare,
+* **Der Cam-Modus läuft voreingestellt im Abenteuermodus**, nicht in Kreativ -
+  Kreativ steht nur einen einzigen Tick lang da. Der Portalvorgang dauert dort
+  deshalb die vollen 80 Ticks; die Abkürzung auf einen Tick gilt nur für Unverwundbare,
   also Kreativ und Zuschauer. Der Portaltest wartet auf jede Reise sechs
-  Sekunden.
+  Sekunden. Umstellen lässt sich der Modus mit `camera-mode.gamemode`. Die
+  Tests lassen die Voreinstellung stehen und erkennen den laufenden Cam-Modus
+  an mehreren Stellen an `gameMode == "adventure"` - wer den Schlüssel im
+  Test umstellt, muss diese Proben mit umstellen.
 * **Nach jedem Anlauf am Portal liegt eine Portalsperre von 100 Ticks auf dem
   Spieler**, die das Plugin selbst setzt. Wer sie nicht abwartet, steht beim
   nächsten Anlauf in einem Portal, das gar nichts mehr tut - und solange er
