@@ -524,11 +524,11 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      *
      * <p>On {@code keep} that is the mode he walked in with, and camera mode
      * leaves it alone - the spectator mode excepted, which nobody flies in:
-     * {@link #checkCamGameMode(Player)} turns a spectator away before camera
-     * mode starts. That check sits at the command, and
-     * {@link #enterCameraMode} can be called past it, so the same answer is
-     * given here once more; the adventure mode is what camera mode ran in
-     * before this setting existed.</p>
+     * {@link #checkCamSpectator(Player)} turns a spectator away before camera
+     * mode starts, in every one of these modes. That check sits at the
+     * command, and {@link #enterCameraMode} can be called past it, so the same
+     * answer is given here once more; the adventure mode is what camera mode
+     * ran in before this setting existed.</p>
      *
      * @param startMode the mode the player stood in when he started, read
      *                  before the creative tick in {@link #enterCameraMode}
@@ -3683,30 +3683,31 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Checks whether the player may start camera mode out of the mode he is
-     * standing in. Only {@code camera-mode.gamemode: keep} has a say here, and
-     * only over the spectator mode.
+     * Checks whether the player may start camera mode where he is: out of the
+     * spectator mode he may not, whatever {@code camera-mode.gamemode} says.
      *
-     * <p>A spectator is turned away rather than flown as one: he passes
-     * through blocks, and that walks straight through {@code max-distance},
-     * through the areas of {@code cam-area} and through the portal rules,
-     * which all measure a player who has to fly around a wall. With one click
-     * he also puts himself next to any entity on the server. Nobody outside
-     * the spectator mode sees him either, so the body left behind, the glowing
-     * outline and the particles would say nothing about where he is.</p>
+     * <p>On {@code keep} he would stay a spectator, and that is the mode
+     * camera mode has no answer to: he passes through blocks, and that walks
+     * straight through {@code max-distance}, through the areas of
+     * {@code cam-area} and through the portal rules, which all measure a
+     * player who has to fly around a wall. With one click he also puts himself
+     * next to any entity on the server. Nobody outside the spectator mode sees
+     * him either, so the body left behind, the glowing outline and the
+     * particles would say nothing about where he is.</p>
      *
-     * <p>Only {@code keep} turns him away, because only there would he stay a
-     * spectator. The three fixed modes take him out of it the same way they
-     * take anybody else into their mode, and that is what they did before this
-     * setting existed.</p>
+     * <p>The three fixed modes would take him out of the spectator mode, and
+     * camera mode used to do exactly that. He is turned away there as well: a
+     * spectator is watching already and is not where his body would be put
+     * down, so starting camera mode would drop a body at a spot he only flew
+     * past and hand him back a mode he did not ask for when he leaves.</p>
      *
      * @return whether he may start; if not, he has been told why
      */
-    public boolean checkCamGameMode(Player player) {
-        if (camGameMode != CamGameMode.KEEP || player.getGameMode() != GameMode.SPECTATOR) {
+    public boolean checkCamSpectator(Player player) {
+        if (player.getGameMode() != GameMode.SPECTATOR) {
             return true;
         }
-        sendMessage(player, "cam-gamemode-start");
+        sendMessage(player, "cam-spectator-start");
         return false;
     }
 

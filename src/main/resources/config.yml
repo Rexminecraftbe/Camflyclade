@@ -20,11 +20,11 @@ messages:
   # Platzhalter {effect}: die Effekte, an denen der Start scheitert, unter
   # ihren Minecraft-Namen und durch Komma getrennt.
   cam-effect-start: "&cYou cannot start cam mode with {effect} on you."
-  # Kommt nur bei camera-mode.gamemode "keep": Wer im Zuschauermodus steht,
-  # bliebe dort auch im Cam-Modus, und das geht nicht. Bei den drei festen
-  # Modi kommt die Meldung nie - die holen ihn aus dem Zuschauermodus heraus.
-  cam-gamemode-start: "&cYou cannot start cam mode in spectator mode."
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
+  # Kommt, wenn jemand aus dem Zuschauermodus heraus /cam tippt. Von dort
+  # lässt sich der Cam-Modus nicht starten, unabhängig davon, was
+  # camera-mode.gamemode sagt - siehe die Begründung dort.
+  cam-spectator-start: "&cYou cannot start cam mode in spectator mode."
   camera-off: "&aCamera mode ended."
   camera-on: "&aCamera mode activated! Use /cam again to exit."
   cant-attack-other-body: "&cYou cannot attack other bodies in camera mode."
@@ -111,8 +111,8 @@ message-settings:
   cam-area-limit: true
   cam-area-start: true
   cam-effect-start: true
-  cam-gamemode-start: true
   cam-safety: true
+  cam-spectator-start: true
   camera-off: false
   camera-on: false
   cant-attack-other-body: true
@@ -205,10 +205,11 @@ camera-mode:
   # still.
   # Der Zuschauermodus steht nicht zur Wahl: Er lässt durch Blöcke fliegen,
   # und damit wären max-distance, cam-area und die Portalregeln umgangen -
-  # die messen alle einen Spieler, der um eine Wand herum muss. Bei "keep"
-  # kommt ein Zuschauer deshalb gar nicht erst in den Cam-Modus hinein und
-  # bekommt die Meldung messages.cam-gamemode-start. Bei den drei festen Modi
-  # wird er wie jeder andere in den eingestellten Modus gesetzt.
+  # die messen alle einen Spieler, der um eine Wand herum muss.
+  # Wer im Zuschauermodus steht, kommt deshalb gar nicht erst in den
+  # Cam-Modus hinein, egal welcher Wert hier steht, und bekommt die Meldung
+  # messages.cam-spectator-start. Er schaut ohnehin schon zu und steht nicht
+  # dort, wo sein Körper abgelegt würde.
   # Bei einem unbekannten Wert wird adventure verwendet.
   gamemode: adventure
   # Ob der Cam-Modus mit einem Trankeffekt überhaupt gestartet werden darf

@@ -37,10 +37,9 @@ public class CamCommand implements CommandExecutor {
             plugin.exitCameraMode(player);
             plugin.sendConfiguredMessage(player, "camera-off");
         } else {
-            // Vor der Abklingzeit: Wer als Zuschauer gar nicht hinein darf,
-            // dem sagt "warte noch zehn Sekunden" das Falsche - danach darf er
-            // genauso wenig.
-            if (!plugin.checkCamGameMode(player)) {
+            // Vor der Abklingzeit: Einem Zuschauer sagt "warte noch zehn
+            // Sekunden" das Falsche - danach darf er genauso wenig.
+            if (!plugin.checkCamSpectator(player)) {
                 return true;
             }
             if (plugin.isCooldownActive(player)) {
