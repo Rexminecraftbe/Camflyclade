@@ -72,8 +72,8 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 446: 378 Methoden- und 68 Feldzugriffe. Alle
-# 446 gibt es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
+# Dieser Pruefer zaehlt zurzeit 473 Methoden- und Feldzugriffe. Alle 473 gibt
+# es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
 # Der Bot-Name steht fest im Skript. Ueber eine Umgebungsvariable geht er

@@ -2102,9 +2102,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
-        if (soundsSuppressed(player)) {
-            player.stopSound(SoundCategory.PLAYERS);
-        }
         if (!cameraPlayers.containsKey(player.getUniqueId())) {
             return;
         }
@@ -2116,7 +2113,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 action == Action.LEFT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK ||
                 action == Action.PHYSICAL) {
             event.setCancelled(true);
-            player.stopSound(SoundCategory.PLAYERS);
         }
     }
 
@@ -2594,25 +2590,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         return portal != null && portal.getWorld().equals(location.getWorld()) ? portal : null;
     }
 
-    /**
-     * Whether the sounds of that player are kept from him: the camera player,
-     * whatever mode {@code camera-mode.gamemode} flies him in, and - as it has
-     * been here all along - anybody else in adventure mode.
-     */
-    private boolean soundsSuppressed(Player player) {
-        return cameraPlayers.containsKey(player.getUniqueId())
-                || player.getGameMode() == GameMode.ADVENTURE;
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void suppressCameraMoveSound(PlayerMoveEvent event) {
-        Player player = event.getPlayer();
-        if (soundsSuppressed(player)) {
-            player.stopSound(SoundCategory.PLAYERS);
-            player.stopSound(SoundCategory.BLOCKS);
-        }
-    }
-
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
         // Der Spieler soll sterben, aber vorher den Kamera-Modus korrekt beenden.
@@ -2825,13 +2802,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             if (ownerUUID != null && !ownerUUID.equals(attacker.getUniqueId())) {
                 sendConfiguredMessage(attacker, "cant-attack-other-body");
             }
-        }
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void suppressCameraHitSound(EntityDamageByEntityEvent event) {
-        if (event.getDamager() instanceof Player attacker && soundsSuppressed(attacker)) {
-            attacker.stopSound(SoundCategory.PLAYERS);
         }
     }
 
