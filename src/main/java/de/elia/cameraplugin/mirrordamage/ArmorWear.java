@@ -159,15 +159,8 @@ public final class ArmorWear {
         if (used >= maxDamage) {
             armor[slot] = null;
             Bukkit.getPluginManager().callEvent(new PlayerItemBreakEvent(owner, piece));
-            if (!owner.isSilent()) {
-                // The one sound of a camera player that the server does not ask
-                // him about: this one is played here by hand, at his place in
-                // the world, so the question has to be asked here. A silent
-                // player breaks his armour quietly, like everything else of
-                // him - see camera-mode.silent.
-                owner.getWorld().playSound(owner.getLocation(), Sound.ENTITY_ITEM_BREAK, SoundCategory.PLAYERS,
-                        0.8f, 0.8f + ThreadLocalRandom.current().nextFloat() * 0.4f);
-            }
+            owner.getWorld().playSound(owner.getLocation(), Sound.ENTITY_ITEM_BREAK, SoundCategory.PLAYERS,
+                    0.8f, 0.8f + ThreadLocalRandom.current().nextFloat() * 0.4f);
             return;
         }
         durability.setDamage(used);

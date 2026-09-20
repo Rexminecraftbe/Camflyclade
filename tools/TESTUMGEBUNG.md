@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **479** - alle 479 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **466** - alle 466 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -288,13 +288,6 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   Ghast hindurchgefallen wäre - und dann sagte die Probe darunter nichts mehr
   darüber, wer ihn angehoben hat.
 
-* **Ob der Kamera-Spieler stumm ist, fragt `silent_checks` am Entitätsdatum
-  `Silent`**, mit `/execute if entity @s[nbt={Silent:1b}]`, und nicht daran, ob
-  ein zweiter Bot einen Ton gehört hat. An genau diesem Datum entscheidet der
-  Server, ob er einen Ton des Spielers überhaupt verschickt; ein nicht
-  gehörter Ton hieße die Probe dagegen auch dann gut, wenn er nur in den
-  geflickten Paketdaten des Bots verloren gegangen wäre. Wer nicht stumm ist,
-  hat das Datum gar nicht - Minecraft schreibt es nur hin, wenn es gesetzt ist.
 * **Den Spielmodus fragt `gamemode_checks` beim Server**, mit
   `/execute if entity @s[gamemode=...]`, und nicht bei mineflayer.
   `bot.game.gameMode` ist die Sicht des Clients und läuft hier auf

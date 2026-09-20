@@ -152,9 +152,8 @@ action-bar:
 # für ihn ein: Was den trifft, trifft ihn - ein Schlag wie ein Trank -, und
 # der Cam-Modus endet dabei. Die Regeneration wiederum wird draußen aus dem
 # Hunger bezahlt, und steht der Balken still, gäbe es sie hier umsonst.
-# Das alles ist fest eingebaut, Schalter gibt es dafür keine - wählen lassen
-# sich nur der Spielmodus selbst mit gamemode und mit silent, ob man den
-# Kamera-Spieler hört.
+# Das alles ist fest eingebaut, Schalter gibt es dafür keine - nur der
+# Spielmodus selbst lässt sich mit gamemode wählen.
 camera-mode:
   # Aktiviert die Begrenzung der Entfernung zum Körper
   max-distance-enabled: true
@@ -216,24 +215,6 @@ camera-mode:
   # dort, wo sein Körper abgelegt würde.
   # Bei einem unbekannten Wert wird adventure verwendet.
   gamemode: adventure
-  # Ob der Spieler im Cam-Modus stumm ist
-  # true  = niemand hört ihn, auch er selbst nicht. Die Voreinstellung.
-  # false = jeder hört ihn, auch er selbst.
-  # Gemeint sind die Geräusche, die der Spieler selbst von sich gibt: seine
-  # Schritte vor allem, dazu Platschen im Wasser, Aufschlagen und Treffer.
-  # Sie werden dort abgestellt, wo sie entstehen, nicht an dem Ohr, das sie
-  # hört - deshalb gilt der Wert für alle gleichzeitig und lässt sich nicht
-  # für den Spieler und die anderen getrennt setzen.
-  # Vorher stumm heißt nachher stumm: War der Spieler schon vor dem
-  # Cam-Modus stumm gestellt, bleibt er es auch danach.
-  # Was der Spieler im Cam-Modus ohnehin nicht tun kann, macht auch keinen
-  # Lärm: Blöcke abbauen und setzen, Kisten öffnen, Gegenstände benutzen,
-  # aufheben und fallen lassen sind gesperrt, siehe gamemode.
-  # Eine Ausnahme bleibt: der Schlag auf den eigenen Körper. Den Ton dazu
-  # spielt der Server unabhängig vom Spieler ab, an ihm hängt kein Schalter.
-  # Der Spieler selbst hört ihn nicht, die anderen um ihn herum schon.
-  # Bei einem unbekannten Wert wird true verwendet.
-  silent: true
   # Ob der Cam-Modus mit einem Trankeffekt überhaupt gestartet werden darf
   # true     = ja, mit jedem
   # false    = nein, mit keinem einzigen
