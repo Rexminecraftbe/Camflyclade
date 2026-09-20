@@ -7,6 +7,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.*;
 import org.bukkit.event.block.BlockReceiveGameEvent;
 import org.bukkit.event.entity.EntityPotionEffectEvent;
@@ -79,6 +81,7 @@ import java.util.List;
 import de.elia.cameraplugin.feuer.CamFireGuard;
 import de.elia.cameraplugin.ghast.CamGhastGuard;
 import de.elia.cameraplugin.hunger.CamHungerGuard;
+import de.elia.cameraplugin.inventory.CamInventoryGuard;
 import de.elia.cameraplugin.body.BodyType;
 import de.elia.cameraplugin.body.EquipmentVisibility;
 import de.elia.cameraplugin.body.MannequinLabel;
@@ -116,6 +119,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private CamFireGuard camFireGuard;
     private CamHungerGuard camHungerGuard;
     private CamGhastGuard camGhastGuard;
+    private CamInventoryGuard camInventoryGuard;
     private double particleHeight;
     private int particlesPerTick;
     private boolean showOwnParticles;
@@ -246,6 +250,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private boolean allowInvisibilityPotion;
     private GlowMode glowMode;
     private boolean allowLavaFlight;
+    /** The mode the camera player flies in, {@code camera-mode.gamemode}. */
+    private CamGameMode camGameMode;
     private Object Sound;
 
     // Damage transfer settings
@@ -290,6 +296,12 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private enum GlowMode { ALWAYS, OFF, SIGHT }
 
     /**
+     * The values of {@code camera-mode.gamemode}: the three modes camera mode
+     * puts the player into, and {@code keep} for the one he already stands in.
+     */
+    private enum CamGameMode { ADVENTURE, SURVIVAL, CREATIVE, KEEP }
+
+    /**
      * The values of {@code camera-mode.start-with-effects}: true, false and
      * positive.
      */
@@ -319,6 +331,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         // load and its notes end up in the same report.
         camFireGuard = new CamFireGuard(this);
         camGhastGuard = new CamGhastGuard(this);
+        camInventoryGuard = new CamInventoryGuard(this, this::isInCameraMode);
         reportConfigWarnings(loadConfigValues(), null);
         bodyKey = new NamespacedKey(this, "cam_body");
         hitboxKey = new NamespacedKey(this, "cam_hitbox");
@@ -471,6 +484,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (camFireGuard != null) {
             camFireGuard.onDisable();
         }
+        if (camInventoryGuard != null) {
+            camInventoryGuard.onDisable();
+        }
         if (camGhastGuard != null) {
             camGhastGuard.onDisable();
         }
@@ -507,6 +523,31 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         getLogger().info("CameraPlugin wurde deaktiviert!");
     }
 
+
+    /**
+     * The mode the camera player flies in, as {@code camera-mode.gamemode} has
+     * it.
+     *
+     * <p>On {@code keep} that is the mode he walked in with, and camera mode
+     * leaves it alone - the spectator mode excepted, which nobody flies in:
+     * {@link #checkCamSpectator(Player)} turns a spectator away before camera
+     * mode starts, in every one of these modes. That check sits at the
+     * command, and {@link #enterCameraMode} can be called past it, so the same
+     * answer is given here once more; the adventure mode is what camera mode
+     * ran in before this setting existed.</p>
+     *
+     * @param startMode the mode the player stood in when he started, read
+     *                  before the creative tick in {@link #enterCameraMode}
+     *                  overwrites it
+     */
+    private GameMode cameraGameMode(GameMode startMode) {
+        return switch (camGameMode) {
+            case SURVIVAL -> GameMode.SURVIVAL;
+            case CREATIVE -> GameMode.CREATIVE;
+            case KEEP -> startMode == GameMode.SPECTATOR ? GameMode.ADVENTURE : startMode;
+            case ADVENTURE -> GameMode.ADVENTURE;
+        };
+    }
 
     public void enterCameraMode(Player player) {
         // *** Inventar und Rüstung speichern ***
@@ -558,6 +599,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         GameMode originalGameMode = player.getGameMode();
         boolean originalAllowFlight = player.getAllowFlight();
         boolean originalFlying = player.isFlying();
+        // Read here and not a tick later: the creative mode below is the kick
+        // that gets the flight going, and on "keep" it would be the answer to
+        // "which mode was he in" from then on.
+        GameMode flyingGameMode = cameraGameMode(originalGameMode);
 
         player.setGameMode(GameMode.CREATIVE);
         player.setAllowFlight(true);
@@ -574,7 +619,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         new BukkitRunnable() {
             @Override
             public void run() {
-                player.setGameMode(GameMode.ADVENTURE);
+                player.setGameMode(flyingGameMode);
                 player.setAllowFlight(true); // ensure flight remains enabled
                 player.setFlying(true);       // keep player flying
                 if (needsInvisibility() && !player.hasPotionEffect(PotionEffectType.INVISIBILITY)) {
@@ -607,6 +652,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         camFireGuard.startFor(player);
         camHungerGuard.startFor(player);
         camGhastGuard.startFor(player);
+        camInventoryGuard.startFor(player);
         // The entity taking the hits is the mannequin for both body types, so the
         // movement check always runs on it. Both calls look at the sensitivity
         // level and only one of them does anything.
@@ -911,6 +957,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             removePlayerFromNoCollisionTeam(player);
             camHungerGuard.stopFor(player);
             camGhastGuard.stopFor(player);
+            camInventoryGuard.stopFor(player);
             updateViewerTeam(player);
             if (camModeObjective != null) {
                 camModeObjective.getScore(player.getName()).setScore(0);
@@ -932,6 +979,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         boolean standingInFire = camFireGuard.stopFor(player);
         camGhastGuard.stopFor(player);
+        // Vor der Rückgabe: Der Sweep räumt die Taschen des Kamera-Spielers
+        // leer und nähme dem Spieler sonst sein eigenes Inventar wieder ab.
+        camInventoryGuard.stopFor(player);
 
         // *** Inventar und Rüstung wiederherstellen ***
         PlayerInventory playerInventory = player.getInventory();
@@ -2052,7 +2102,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
-        if (player.getGameMode() == GameMode.ADVENTURE) {
+        if (soundsSuppressed(player)) {
             player.stopSound(SoundCategory.PLAYERS);
         }
         if (!cameraPlayers.containsKey(player.getUniqueId())) {
@@ -2067,6 +2117,36 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 action == Action.PHYSICAL) {
             event.setCancelled(true);
             player.stopSound(SoundCategory.PLAYERS);
+        }
+    }
+
+    /**
+     * The camera player breaks no blocks, whatever mode he flies in.
+     *
+     * <p>The adventure mode used to answer for this on its own, and in the
+     * creative mode the cancelled left click above still does: there the block
+     * goes in that very click. In the survival mode it does not - the click
+     * only starts the digging, and what finishes it is this event. Since
+     * {@code camera-mode.gamemode} can put him into that mode, the ban is
+     * written down here instead of being left to the mode he happens to be
+     * in.</p>
+     */
+    @EventHandler(ignoreCancelled = true)
+    public void onCameraBlockBreak(BlockBreakEvent event) {
+        if (cameraPlayers.containsKey(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * And he places none either. His inventory is empty while he flies, so
+     * there is usually nothing to place; this catches what another plugin
+     * hands him anyway, for the same reason as the break above.
+     */
+    @EventHandler(ignoreCancelled = true)
+    public void onCameraBlockPlace(BlockPlaceEvent event) {
+        if (cameraPlayers.containsKey(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
         }
     }
 
@@ -2514,10 +2594,20 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         return portal != null && portal.getWorld().equals(location.getWorld()) ? portal : null;
     }
 
+    /**
+     * Whether the sounds of that player are kept from him: the camera player,
+     * whatever mode {@code camera-mode.gamemode} flies him in, and - as it has
+     * been here all along - anybody else in adventure mode.
+     */
+    private boolean soundsSuppressed(Player player) {
+        return cameraPlayers.containsKey(player.getUniqueId())
+                || player.getGameMode() == GameMode.ADVENTURE;
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void suppressAdventureMoveSound(PlayerMoveEvent event) {
+    public void suppressCameraMoveSound(PlayerMoveEvent event) {
         Player player = event.getPlayer();
-        if (player.getGameMode() == GameMode.ADVENTURE) {
+        if (soundsSuppressed(player)) {
             player.stopSound(SoundCategory.PLAYERS);
             player.stopSound(SoundCategory.BLOCKS);
         }
@@ -2739,9 +2829,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void suppressAdventureHitSound(EntityDamageByEntityEvent event) {
-        if (event.getDamager() instanceof Player attacker &&
-                attacker.getGameMode() == GameMode.ADVENTURE) {
+    public void suppressCameraHitSound(EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof Player attacker && soundsSuppressed(attacker)) {
             attacker.stopSound(SoundCategory.PLAYERS);
         }
     }
@@ -2874,6 +2963,14 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             default -> GlowMode.ALWAYS;
         };
         allowLavaFlight = config.getBoolean("camera-mode.allow_lava_flight", false);
+        String camMode = config.getChoice("camera-mode.gamemode",
+                "adventure", "adventure", "survival", "creative", "keep").toLowerCase();
+        camGameMode = switch (camMode) {
+            case "survival" -> CamGameMode.SURVIVAL;
+            case "creative" -> CamGameMode.CREATIVE;
+            case "keep" -> CamGameMode.KEEP;
+            default -> CamGameMode.ADVENTURE;
+        };
         String effects = config.getChoice("camera-mode.start-with-effects",
                 "positive", "true", "false", "positive").toLowerCase();
         startWithEffects = switch (effects) {
@@ -3593,6 +3690,35 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (isMessageEnabled("cam-safety")) {
             player.sendMessage(ChatColor.RED + ChatColor.translateAlternateColorCodes('&', msg));
         }
+        return false;
+    }
+
+    /**
+     * Checks whether the player may start camera mode where he is: out of the
+     * spectator mode he may not, whatever {@code camera-mode.gamemode} says.
+     *
+     * <p>On {@code keep} he would stay a spectator, and that is the mode
+     * camera mode has no answer to: he passes through blocks, and that walks
+     * straight through {@code max-distance}, through the areas of
+     * {@code cam-area} and through the portal rules, which all measure a
+     * player who has to fly around a wall. With one click he also puts himself
+     * next to any entity on the server. Nobody outside the spectator mode sees
+     * him either, so the body left behind, the glowing outline and the
+     * particles would say nothing about where he is.</p>
+     *
+     * <p>The three fixed modes would take him out of the spectator mode, and
+     * camera mode used to do exactly that. He is turned away there as well: a
+     * spectator is watching already and is not where his body would be put
+     * down, so starting camera mode would drop a body at a spot he only flew
+     * past and hand him back a mode he did not ask for when he leaves.</p>
+     *
+     * @return whether he may start; if not, he has been told why
+     */
+    public boolean checkCamSpectator(Player player) {
+        if (player.getGameMode() != GameMode.SPECTATOR) {
+            return true;
+        }
+        sendMessage(player, "cam-spectator-start");
         return false;
     }
 
