@@ -140,6 +140,18 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private boolean mannequinLabelReported = false;
     private NamespacedKey bodyKey;
     private NamespacedKey hitboxKey;
+    /**
+     * Written on the player while camera mode has him silenced, and only while
+     * it was camera mode that silenced him.
+     *
+     * <p>It is there for the one exit that runs no code: a server that is
+     * killed leaves everybody where they stood, and a silence nobody takes
+     * back cannot be taken back by hand either - the command that edits
+     * entity data refuses to touch a player. The mark outlives the crash in
+     * the player's own data, and the next login reads it, see
+     * {@link #onPlayerJoin}.</p>
+     */
+    private NamespacedKey silencedKey;
     private NamespacedKey hiddenArmorAsset;
     /** Armour slots in the order of {@link org.bukkit.inventory.PlayerInventory#getArmorContents()}. */
     private static final EquipmentSlot[] ARMOR_SLOTS = {
@@ -252,6 +264,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private boolean allowLavaFlight;
     /** The mode the camera player flies in, {@code camera-mode.gamemode}. */
     private CamGameMode camGameMode;
+    /** Whether the camera player makes no sound, {@code camera-mode.silent}. */
+    private boolean camSilent;
     private Object Sound;
 
     // Damage transfer settings
@@ -335,6 +349,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         reportConfigWarnings(loadConfigValues(), null);
         bodyKey = new NamespacedKey(this, "cam_body");
         hitboxKey = new NamespacedKey(this, "cam_hitbox");
+        silencedKey = new NamespacedKey(this, "cam_silenced");
         // Deliberately not a real equipment asset: the client finds nothing for
         // it and therefore draws nothing.
         hiddenArmorAsset = new NamespacedKey(this, "hidden_armor");
@@ -560,6 +575,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             player.removePotionEffect(effect.getType());
         }
         boolean originalGlowing = player.isGlowing();
+        boolean originalSilent = player.isSilent();
         int originalRemainingAir = player.getRemainingAir();
 
         // *** Inventar und Rüstung leeren ***
@@ -615,6 +631,21 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             // switched by startSightGlow instead.
             player.setGlowing(true);
         }
+        if (camSilent && !originalSilent) {
+            // The sounds are stopped where they are made, not at the ear that
+            // hears them: the server asks every entity whether it is silent
+            // before it hands a sound of its own to anybody, so this one line
+            // takes the steps of the camera player away from everybody around
+            // him and from himself, and from nobody else. Stopping them at the
+            // listener could only be done by the category, which would cost
+            // him every other player and every block of the world as well.
+            //
+            // Somebody who was silent before camera mode is left alone: not
+            // his silence to lift, and nothing to mark either - it stays after
+            // a crash the same way it would have stayed without camera mode.
+            player.setSilent(true);
+            player.getPersistentDataContainer().set(silencedKey, PersistentDataType.INTEGER, 1);
+        }
 
         new BukkitRunnable() {
             @Override
@@ -640,7 +671,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
 
         // *** Gespeichertes Inventar an CameraData übergeben ***
-        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, originalArmor, pausedEffects, originalRemainingAir));
+        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalSilent, originalInventory, originalArmor, pausedEffects, originalRemainingAir));
         bodyOwners.put(body.getUniqueId(), player.getUniqueId());
         if (hitbox != null) {
             hitboxEntities.put(hitbox.getUniqueId(), player.getUniqueId());
@@ -1004,6 +1035,10 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         player.setAllowFlight(cameraData.getOriginalAllowFlight());
         player.setFlying(cameraData.getOriginalFlying());
         player.setGlowing(cameraData.getOriginalGlowing());
+        // Back to what he was before, not simply audible again: whoever was
+        // silenced by something else before camera mode stays silent.
+        player.setSilent(cameraData.getOriginalSilent());
+        player.getPersistentDataContainer().remove(silencedKey);
         player.setRemainingAir(cameraData.getOriginalRemainingAir());
         camHungerGuard.stopFor(player);
 
@@ -2230,6 +2265,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
+        liftLeftoverSilence(event.getPlayer());
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -2240,6 +2276,30 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
                 }
             }
         }.runTaskLater(this, 1L);
+    }
+
+    /**
+     * Gives a player his voice back when camera mode did not get to do it
+     * itself.
+     *
+     * <p>Leaving camera mode hands back the silence along with everything else,
+     * and that happens on the way out of the server as well. What it does not
+     * survive is a server that is killed: no code runs there, and the silence
+     * is written into the player's data as it stands. Without this it would
+     * stay for good - the command that edits entity data refuses to touch a
+     * player, and even a trip through camera mode would only read the silence
+     * as his own and put it back.</p>
+     *
+     * <p>Only a silence this plugin left behind is lifted: the mark is written
+     * where it is set and taken off where it is given back, and nobody who was
+     * silenced by something else ever carries it.</p>
+     */
+    private void liftLeftoverSilence(Player player) {
+        if (!player.getPersistentDataContainer().has(silencedKey, PersistentDataType.INTEGER)) {
+            return;
+        }
+        player.setSilent(false);
+        player.getPersistentDataContainer().remove(silencedKey);
     }
 
     @EventHandler
@@ -2595,19 +2655,44 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Whether the sounds of that player are kept from him: the camera player,
-     * whatever mode {@code camera-mode.gamemode} flies him in, and - as it has
-     * been here all along - anybody else in adventure mode.
+     * Whether the sound of a swing that goes nowhere is kept from that player:
+     * from the camera player, whatever mode {@code camera-mode.gamemode} flies
+     * him in, and - as it has been here all along - from anybody else in
+     * adventure mode.
+     *
+     * <p>Only the click belongs here, the one that is turned away before it
+     * reaches anything. What the camera player gives off into the world while
+     * he flies is a different question, and one that is answered at the source
+     * by {@code camera-mode.silent}, see {@link #suppressAdventureMoveSound}.</p>
      */
     private boolean soundsSuppressed(Player player) {
         return cameraPlayers.containsKey(player.getUniqueId())
                 || player.getGameMode() == GameMode.ADVENTURE;
     }
 
+    /**
+     * Takes the sounds of a step away from a player in adventure mode.
+     *
+     * <p>The camera player is deliberately not among them any more, whatever
+     * mode {@code camera-mode.gamemode} flies him in. What is heard of him is
+     * settled at the source by {@code camera-mode.silent}, and for everybody
+     * at once: either nobody hears him, himself included, or everybody does.
+     * Stopping the sounds on his own client on top would leave {@code silent:
+     * false} with nothing to say for him - he would be the one player who
+     * never hears himself walk.</p>
+     *
+     * <p>And it never cost him his own steps alone: this runs on every move,
+     * a look around included, and {@code stopSound} goes by category, so it
+     * took the steps of everybody standing around him and every block sound of
+     * the world - doors, chests, anvils - with it. Whoever is in adventure
+     * mode without being in camera mode keeps it the way it has been here all
+     * along.</p>
+     */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void suppressCameraMoveSound(PlayerMoveEvent event) {
+    public void suppressAdventureMoveSound(PlayerMoveEvent event) {
         Player player = event.getPlayer();
-        if (soundsSuppressed(player)) {
+        if (player.getGameMode() == GameMode.ADVENTURE
+                && !cameraPlayers.containsKey(player.getUniqueId())) {
             player.stopSound(SoundCategory.PLAYERS);
             player.stopSound(SoundCategory.BLOCKS);
         }
@@ -2971,6 +3056,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             case "keep" -> CamGameMode.KEEP;
             default -> CamGameMode.ADVENTURE;
         };
+        camSilent = config.getBoolean("camera-mode.silent", true);
         String effects = config.getChoice("camera-mode.start-with-effects",
                 "positive", "true", "false", "positive").toLowerCase();
         startWithEffects = switch (effects) {
@@ -3876,6 +3962,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         private final boolean originalAllowFlight;
         private final boolean originalFlying;
         private final boolean originalGlowing;
+        private final boolean originalSilent;
         private final int originalRemainingAir;
         private final ItemStack[] originalInventoryContents; // Für Inventar
         private final ItemStack[] originalArmorContents;     // Für Rüstung
@@ -3894,13 +3981,14 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
          */
         private Location portalEntry;
 
-        public CameraData(LivingEntity body, Mannequin hitbox, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, ItemStack[] originalArmorContents, Collection<PotionEffect> pausedEffects, int originalRemainingAir) {
+        public CameraData(LivingEntity body, Mannequin hitbox, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, boolean originalSilent, ItemStack[] originalInventoryContents, ItemStack[] originalArmorContents, Collection<PotionEffect> pausedEffects, int originalRemainingAir) {
             this.body = body;
             this.hitbox = hitbox;
             this.originalGameMode = originalGameMode;
             this.originalAllowFlight = originalAllowFlight;
             this.originalFlying = originalFlying;
             this.originalGlowing = originalGlowing;
+            this.originalSilent = originalSilent;
             this.originalInventoryContents = originalInventoryContents;
             this.originalArmorContents = originalArmorContents;
             this.pausedEffects = pausedEffects;
@@ -3917,6 +4005,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         public boolean getOriginalFlying() { return originalFlying; }
         /** Whether the player was already glowing before camera mode. */
         public boolean getOriginalGlowing() { return originalGlowing; }
+        /** Whether the player was already silent before camera mode. */
+        public boolean getOriginalSilent() { return originalSilent; }
         public ItemStack[] getOriginalInventoryContents() { return originalInventoryContents; }
         public ItemStack[] getOriginalArmorContents() { return originalArmorContents; }
         public Collection<PotionEffect> getPausedEffects() { return pausedEffects; }
