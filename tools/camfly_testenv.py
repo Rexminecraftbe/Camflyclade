@@ -2017,6 +2017,240 @@ def interact_checks(env, bot):
 
 
 # ---------------------------------------------------------------------------
+# Der Spielmodus, in dem der Cam-Modus laeuft
+# ---------------------------------------------------------------------------
+
+# Gefragt wird auch hier ueber server_says, block_is und cam_on/cam_off aus
+# dem Portalteil weiter unten - gesucht werden sie erst beim Aufruf.
+
+
+def spielmodus_ist(bot, modus):
+    """Ob der Server den Bot gerade in diesem Spielmodus fuehrt.
+
+    Serverseitig gefragt und nicht bei mineflayer: bot.game.gameMode ist die
+    Sicht des Clients, die hier auf geflickten Paketdaten laeuft, und eine
+    falsche Auskunft liesse genau die Probe durchgehen, um die es geht.
+    """
+    return server_says(bot, f"/execute if entity @s[gamemode={modus}] "
+                            f"run say {{marke}}")
+
+
+def spielmodus_setzen(bot, modus):
+    """Den Bot in diesen Spielmodus setzen und ihm einen Moment geben."""
+    bot.chat(f"/gamemode {modus} {BOT_NAME}")
+    time.sleep(0.8)
+
+
+def blume_abbauen(bot, base):
+    """Einmal versuchen, eine Blume abzubauen, und sagen, was daraus wurde.
+
+    True heisst: Sie ist weg. False heisst: Sie steht noch. None heisst: Sie
+    stand gar nicht erst da, und dann sagt die Probe nichts - eine Blume, die
+    nie gesetzt wurde, ist hinterher auch weg, und das hiesse sonst
+    "abgebaut", ohne dass jemand sie angefasst haette.
+
+    Eine Blume und kein Stein: Sie geht mit einem Schlag, Stein dauerte zu
+    lange.
+    """
+    bx, by, bz = base
+    wo = f"{bx + 5} {by} {bz}"
+    bot.chat(f"/setblock {wo} minecraft:dandelion")
+    time.sleep(0.6)
+    if not block_is(bot, "minecraft:overworld", wo, "minecraft:dandelion"):
+        return None
+    hinstellen(bot, bx + 5.5, by, bz + 2.5)
+    klicken(bot, "dig_block", x=bx + 5, y=by, z=bz, timeout=8000)
+    time.sleep(INTERACT_WAIT)
+    return not block_is(bot, "minecraft:overworld", wo, "minecraft:dandelion")
+
+
+def gamemode_checks(env, bot):
+    """Der Schalter camera-mode.gamemode.
+
+    Er sagt, in welchem Spielmodus der Cam-Modus geflogen wird: adventure wie
+    von jeher, survival, creative, oder keep - dann bleibt der Modus stehen,
+    in dem der Spieler gerade steht. Beim Aussteigen kommt er in jedem Fall
+    in den Modus zurueck, in dem er gestartet ist, und das wird bei jeder
+    Probe mitgeprueft.
+
+    Der Zuschauermodus steht nicht zur Wahl und wird bei jedem der vier Werte
+    abgelehnt. Geprueft wird beides: dass die Ablehnung im Chat steht und
+    dass der Bot danach wirklich noch Zuschauer ist. Die Meldung allein
+    sagte nur, dass etwas im Chat stand.
+
+    Dazu die beiden Sperren, die frueher am Abenteuermodus hingen und jetzt
+    am Kamera-Spieler:
+
+    * Der Abbau. In Kreativ faengt ihn der abgebrochene Linksklick ab, in
+      Ueberleben erst der BlockBreakEvent-Handler - in Ueberleben ist diese
+      Probe also die einzige, die ihn ueberhaupt prueft.
+    * Die Taschen. Was im Cam-Modus hineinkommt, raeumt der Sweep von
+      CamInventoryGuard im naechsten Tick wieder ab.
+
+    Der Mittelklick in Kreativ, an dem die Taschen aufgefallen sind, laesst
+    sich vom Bot nicht schicken: Das Paket dafuer kennt der Bot nicht - er
+    faehrt auf den Paketdaten von 26.1, siehe die Flickerei ganz oben.
+    Geprueft wird deshalb der Griff, der ihn unschaedlich macht, und zwar mit
+    /give: Der legt dem Spieler etwas in dieselben Taschen, die der
+    Mittelklick fuellen wuerde. Geht der Sweep kaputt, faellt diese Probe -
+    egal, auf welchem Weg etwas hineingekommen waere.
+
+    Das Blockplatzieren bekommt keine eigene Probe: Der Sweep haelt die Haende
+    leer, also ist nichts da, was sich setzen liesse. Die beiden haengen
+    zusammen, und faellt der Sweep, faellt die Probe darueber.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Spielmodus-Test aus", cam_off(bot), ""):
+        return
+    pos = bot.server_pos()
+    if not FIND.test("Standort fuer den Spielmodus-Test lesbar", pos is not None,
+                     str(pos)):
+        return
+    base = (_floor(pos[0]), _floor(pos[1] + 0.5), _floor(pos[2]))
+    bx, by, bz = base
+    Log.detail(f"Testplatz fuer den Spielmodus bei {base}")
+
+    def flug_probe(wert, start, erwartet):
+        """Aus `start` heraus starten: Worin fliegt er, und wohin kommt er
+        danach zurueck?"""
+        spielmodus_setzen(bot, start)
+        if not FIND.test(f"gamemode {wert}: /cam startet aus {start} heraus",
+                         cam_on(bot), ""):
+            return False
+        drin = spielmodus_ist(bot, erwartet)
+        FIND.test(f"gamemode {wert}: der Cam-Modus laeuft in {erwartet}", drin,
+                  "" if drin else f"der Server fuehrt ihn nicht in {erwartet}")
+        cam_off(bot)
+        time.sleep(1)
+        zurueck = spielmodus_ist(bot, start)
+        FIND.test(f"gamemode {wert}: danach steht er wieder in {start}", zurueck,
+                  "" if zurueck else f"der Server fuehrt ihn nicht in {start}")
+        return drin
+
+    def zuschauer_probe(wert):
+        """Aus dem Zuschauermodus heraus /cam - das wird abgelehnt."""
+        spielmodus_setzen(bot, "spectator")
+        since = bot.mark()
+        bot.chat("/cam")
+        time.sleep(1.5)
+        gesagt = [strip_colors(m["text"])
+                  for m in bot.call("messages", since=since).get("messages", [])]
+        abgelehnt = any("cannot start cam mode in spectator mode" in t.lower()
+                        for t in gesagt)
+        gestartet = any(re.search(r"[Cc]am mode activated", t) for t in gesagt)
+        FIND.test(f"gamemode {wert}: /cam lehnt den Zuschauermodus ab",
+                  abgelehnt and not gestartet,
+                  "" if abgelehnt and not gestartet else
+                  ("der Cam-Modus ist trotzdem angegangen" if gestartet
+                   else "keine Ablehnung im Chat"))
+        blieb = spielmodus_ist(bot, "spectator")
+        FIND.test(f"gamemode {wert}: er bleibt dabei Zuschauer", blieb,
+                  "" if blieb else "der Spielmodus hat sich doch geaendert")
+        spielmodus_setzen(bot, "survival")
+
+    def abbau_probe(wert, modus):
+        """Der Abbau, einmal ohne Cam-Modus und einmal darin.
+
+        Ohne die Gegenprobe sagte die zweite Haelfte nur, dass sich nichts
+        geruehrt hat - und das sagt sie auch dann, wenn der Klick des Bots
+        gar nicht erst ankommt.
+        """
+        spielmodus_setzen(bot, modus)
+        interact_aufraeumen(bot, base)
+        ohne = blume_abbauen(bot, base)
+        FIND.test(f"Gegenprobe gamemode {wert}: ohne Cam-Modus laesst sich "
+                  f"in {modus} abbauen", ohne is True,
+                  "" if ohne is True else
+                  ("die Blume stand nicht" if ohne is None else
+                   "kam nicht durch - die Probe daneben sagt damit nichts"))
+        interact_aufraeumen(bot, base)
+        hinstellen(bot, bx + 0.5, by, bz + 0.5)
+        if not FIND.test(f"gamemode {wert}: /cam startet fuer die Abbauprobe",
+                         cam_on(bot), ""):
+            return
+        drin = blume_abbauen(bot, base)
+        FIND.test(f"gamemode {wert}: im Cam-Modus laesst sich kein Block abbauen",
+                  drin is False,
+                  "" if drin is False else
+                  ("die Blume stand nicht" if drin is None else "sie wurde abgebaut"))
+        cam_off(bot)
+        time.sleep(1)
+
+    def taschen_probe(wert, modus):
+        """Was im Cam-Modus in die Taschen geraet, ist gleich wieder weg."""
+        spielmodus_setzen(bot, modus)
+        hinstellen(bot, bx + 0.5, by, bz + 0.5)
+        if not FIND.test(f"gamemode {wert}: /cam startet fuer die Taschenprobe",
+                         cam_on(bot), ""):
+            return
+        leer = bot.call("inventory", wait=10)
+        FIND.test(f"gamemode {wert}: der Cam-Modus faengt mit leeren Taschen an",
+                  leer.get("count") == 0,
+                  ", ".join(leer.get("names") or []) or "leer")
+        bot.chat(f"/give {BOT_NAME} minecraft:stone 1")
+        time.sleep(1.2)
+        inv = bot.call("inventory", wait=10)
+        FIND.test(f"gamemode {wert}: was im Cam-Modus hineinkommt, "
+                  f"wird wieder abgeraeumt", inv.get("count") == 0,
+                  ", ".join(inv.get("names") or []) or "leer")
+        cam_off(bot)
+        time.sleep(1)
+
+    try:
+        # --- Die Voreinstellung wird nicht gesetzt, sondern nachgesehen ---
+        # So faellt auf, wenn in der ausgelieferten Datei etwas anderes steht.
+        flug_probe("adventure (Voreinstellung)", "survival", "adventure")
+        zuschauer_probe("adventure (Voreinstellung)")
+
+        # --- Ueberleben ---
+        set_option(env, "gamemode", "survival")
+        flug_probe("survival", "survival", "survival")
+        # Aus Kreativ heraus derselbe Wert: Das trennt den festen Modus von
+        # keep, das hier denselben Ausgang haette, wenn man nur aus Ueberleben
+        # heraus startet.
+        flug_probe("survival", "creative", "survival")
+        zuschauer_probe("survival")
+        abbau_probe("survival", "survival")
+        taschen_probe("survival", "survival")
+
+        # --- Kreativ ---
+        set_option(env, "gamemode", "creative")
+        flug_probe("creative", "survival", "creative")
+        zuschauer_probe("creative")
+        abbau_probe("creative", "creative")
+        taschen_probe("creative", "creative")
+
+        # --- keep: der Modus bleibt stehen ---
+        set_option(env, "gamemode", "keep")
+        flug_probe("keep", "survival", "survival")
+        flug_probe("keep", "creative", "creative")
+        flug_probe("keep", "adventure", "adventure")
+        zuschauer_probe("keep")
+
+        # --- Ein unbekannter Wert faellt auf adventure zurueck ---
+        # "zuschauer" ist mit Absicht genommen: Das ist der Modus, den jemand
+        # hier am ehesten eintraegt, und genau der steht nicht zur Wahl.
+        set_option(env, "gamemode", "zuschauer")
+        # Beides in derselben Zeile: Das Log waechst ueber den ganzen Lauf,
+        # und "Unbekannter Wert" allein traefe auch auf eine Meldung von
+        # irgendwoher zu. Der Umlaut in der Meldung bleibt aussen vor - das
+        # Log wird mit errors="replace" gelesen.
+        meldung = any("Unbekannter Wert" in zeile and "camera-mode.gamemode" in zeile
+                      for zeile in server_log(env).splitlines())
+        FIND.test("Ein unbekannter Wert fuer gamemode wird gemeldet", meldung,
+                  "" if meldung else "keine Meldung im Server-Log")
+        flug_probe("unbekannt", "survival", "adventure")
+    finally:
+        try:
+            set_option(env, "gamemode", "adventure")
+            spielmodus_setzen(bot, "survival")
+            cam_off(bot)
+            interact_aufraeumen(bot, base)
+            hinstellen(bot, bx + 0.5, by, bz + 0.5)
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Spielmodus-Test: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # Portale
 # ---------------------------------------------------------------------------
 
@@ -2577,6 +2811,9 @@ def step_tests(env):
 
         # --- Bloecke und Entitaeten im Cam-Modus ---
         interact_checks(env, bot)
+
+        # --- Der Spielmodus, in dem der Cam-Modus laeuft ---
+        gamemode_checks(env, bot)
 
         # --- Portale und das Gedaechtnis fuer gesperrte Portale ---
         portal_checks(env, bot)

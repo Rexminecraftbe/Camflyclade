@@ -161,10 +161,12 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   Kreativ steht nur einen einzigen Tick lang da. Der Portalvorgang dauert dort
   deshalb die vollen 80 Ticks; die Abkürzung auf einen Tick gilt nur für Unverwundbare,
   also Kreativ und Zuschauer. Der Portaltest wartet auf jede Reise sechs
-  Sekunden. Umstellen lässt sich der Modus mit `camera-mode.gamemode`. Die
-  Tests lassen die Voreinstellung stehen und erkennen den laufenden Cam-Modus
-  an mehreren Stellen an `gameMode == "adventure"` - wer den Schlüssel im
-  Test umstellt, muss diese Proben mit umstellen.
+  Sekunden. Umstellen lässt sich der Modus mit `camera-mode.gamemode`.
+  Die übrigen Abschnitte lassen die Voreinstellung stehen und erkennen den
+  laufenden Cam-Modus an mehreren Stellen an `gameMode == "adventure"`. Nur
+  `gamemode_checks` stellt den Schlüssel um und setzt ihn in seinem `finally`
+  wieder auf `adventure` zurück - liefe ein anderer Abschnitt dazwischen,
+  prüfte er gegen den falschen Modus.
 * **Nach jedem Anlauf am Portal liegt eine Portalsperre von 100 Ticks auf dem
   Spieler**, die das Plugin selbst setzt. Wer sie nicht abwartet, steht beim
   nächsten Anlauf in einem Portal, das gar nichts mehr tut - und solange er
@@ -286,6 +288,29 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   Ghast hindurchgefallen wäre - und dann sagte die Probe darunter nichts mehr
   darüber, wer ihn angehoben hat.
 
+* **Den Spielmodus fragt `gamemode_checks` beim Server**, mit
+  `/execute if entity @s[gamemode=...]`, und nicht bei mineflayer.
+  `bot.game.gameMode` ist die Sicht des Clients und läuft hier auf
+  geflickten Paketdaten - eine falsche Auskunft liesse genau die Probe
+  durchgehen, um die es geht.
+* **Die Zuschauer-Probe prüft zweierlei:** dass die Ablehnung im Chat steht
+  und dass der Bot danach wirklich noch Zuschauer ist. Die Meldung allein
+  sagte nur, dass etwas im Chat stand.
+* **Der Mittelklick lässt sich vom Bot nicht schicken.** Das Paket dafür
+  kennt er nicht, er fährt auf den Paketdaten von 26.1. Geprüft wird
+  deshalb der Griff, der ihn unschädlich macht - der Sweep von
+  `CamInventoryGuard` -, und zwar mit `/give`: Der legt dem Spieler etwas in
+  dieselben Taschen, die der Mittelklick füllen würde. Geht der Sweep
+  kaputt, fällt diese Probe, egal auf welchem Weg etwas hineingekommen
+  wäre.
+* **Das Blockplatzieren hat keine eigene Probe.** Der Sweep hält die Hände
+  leer, also ist nichts da, was sich setzen liesse. Fällt der Sweep, fällt
+  die Probe darüber.
+* **Die Abbau-Gegenprobe läuft im selben Spielmodus wie die Probe daneben.**
+  In Kreativ fängt den Abbau der abgebrochene Linksklick ab, in Überleben
+  erst der `BlockBreakEvent`-Handler - in Überleben ist diese Probe also die
+  einzige, die ihn überhaupt prüft.
+
 ## Was die Tests abdecken
 
 Plugin geladen · Bot verbindet sich · `/cam` ohne op · Körper wird gesetzt
@@ -316,7 +341,15 @@ besteigen · Gegenprobe: ohne Cam-Modus geht
 jedes davon sehr wohl · das Inventar ist im Cam-Modus leer und danach wieder
 da · der eigene Körper bleibt anklickbar und beendet damit den Cam-Modus ·
 die Kamera wird von einem Happy Ghast abgehoben, ohne Cam-Modus bleibt der
-Bot darauf stehen · Server-Log ohne Fehler des Plugins.
+Bot darauf stehen · der Cam-Modus läuft voreingestellt im Abenteuermodus,
+auf `survival` und `creative` im eingestellten und auf `keep` in dem, in dem
+der Spieler gerade steht · beim Aussteigen kommt er in jedem Fall in seinen
+Startmodus zurück · ein unbekannter Wert wird gemeldet und fällt auf
+`adventure` zurück · aus dem Zuschauermodus heraus wird `/cam` bei jedem der
+vier Werte abgelehnt, und der Spieler bleibt dabei Zuschauer · auch in
+Überleben und Kreativ lässt sich im Cam-Modus kein Block abbauen, Gegenprobe:
+ohne Cam-Modus geht es in beiden sehr wohl · was im Cam-Modus in die Taschen
+kommt, ist im nächsten Tick wieder weg · Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
 Arbeitsordner.
