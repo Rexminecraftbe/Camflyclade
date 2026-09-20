@@ -81,6 +81,7 @@ import java.util.List;
 import de.elia.cameraplugin.feuer.CamFireGuard;
 import de.elia.cameraplugin.ghast.CamGhastGuard;
 import de.elia.cameraplugin.hunger.CamHungerGuard;
+import de.elia.cameraplugin.inventory.CamInventoryGuard;
 import de.elia.cameraplugin.body.BodyType;
 import de.elia.cameraplugin.body.EquipmentVisibility;
 import de.elia.cameraplugin.body.MannequinLabel;
@@ -118,6 +119,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private CamFireGuard camFireGuard;
     private CamHungerGuard camHungerGuard;
     private CamGhastGuard camGhastGuard;
+    private CamInventoryGuard camInventoryGuard;
     private double particleHeight;
     private int particlesPerTick;
     private boolean showOwnParticles;
@@ -329,6 +331,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         // load and its notes end up in the same report.
         camFireGuard = new CamFireGuard(this);
         camGhastGuard = new CamGhastGuard(this);
+        camInventoryGuard = new CamInventoryGuard(this, this::isInCameraMode);
         reportConfigWarnings(loadConfigValues(), null);
         bodyKey = new NamespacedKey(this, "cam_body");
         hitboxKey = new NamespacedKey(this, "cam_hitbox");
@@ -480,6 +483,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         if (camFireGuard != null) {
             camFireGuard.onDisable();
+        }
+        if (camInventoryGuard != null) {
+            camInventoryGuard.onDisable();
         }
         if (camGhastGuard != null) {
             camGhastGuard.onDisable();
@@ -646,6 +652,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         camFireGuard.startFor(player);
         camHungerGuard.startFor(player);
         camGhastGuard.startFor(player);
+        camInventoryGuard.startFor(player);
         // The entity taking the hits is the mannequin for both body types, so the
         // movement check always runs on it. Both calls look at the sensitivity
         // level and only one of them does anything.
@@ -950,6 +957,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
             removePlayerFromNoCollisionTeam(player);
             camHungerGuard.stopFor(player);
             camGhastGuard.stopFor(player);
+            camInventoryGuard.stopFor(player);
             updateViewerTeam(player);
             if (camModeObjective != null) {
                 camModeObjective.getScore(player.getName()).setScore(0);
@@ -971,6 +979,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         }
         boolean standingInFire = camFireGuard.stopFor(player);
         camGhastGuard.stopFor(player);
+        // Vor der Rückgabe: Der Sweep räumt die Taschen des Kamera-Spielers
+        // leer und nähme dem Spieler sonst sein eigenes Inventar wieder ab.
+        camInventoryGuard.stopFor(player);
 
         // *** Inventar und Rüstung wiederherstellen ***
         PlayerInventory playerInventory = player.getInventory();

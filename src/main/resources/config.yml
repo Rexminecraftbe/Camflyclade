@@ -202,7 +202,10 @@ camera-mode:
   # setzen, Kisten öffnen, das Inventar anfassen, Items aufheben und fallen
   # lassen gehen in keinem von ihnen. Schaden nimmt der Spieler in keinem,
   # getroffen wird immer nur sein Körper, und der Hungerbalken steht überall
-  # still.
+  # still. Auch der Mittelklick in Kreativ bringt nichts ein: Was er in die
+  # Hand legt, wird im nächsten Tick wieder abgeräumt. Die Taschen des
+  # Kamera-Spielers bleiben in jedem Modus leer, sein eigenes Inventar
+  # bekommt er beim Aussteigen vollständig zurück.
   # Der Zuschauermodus steht nicht zur Wahl: Er lässt durch Blöcke fliegen,
   # und damit wären max-distance, cam-area und die Portalregeln umgangen -
   # die messen alle einen Spieler, der um eine Wand herum muss.
