@@ -72,8 +72,8 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 446: 378 Methoden- und 68 Feldzugriffe. Alle
-# 446 gibt es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
+# Dieser Pruefer zaehlt zurzeit 479 Methoden- und Feldzugriffe. Alle 479 gibt
+# es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
 # Der Bot-Name steht fest im Skript. Ueber eine Umgebungsvariable geht er
@@ -2041,6 +2041,23 @@ def spielmodus_setzen(bot, modus):
     time.sleep(0.8)
 
 
+def ist_stumm(bot):
+    """Ob der Server den Bot als stumm fuehrt.
+
+    Gefragt wird nach dem Entitaetsdatum Silent, denn genau das ist der
+    Schalter: Der Server fragt jede Entitaet danach, bevor er einen ihrer
+    Toene ueberhaupt jemandem schickt. Wer nicht stumm ist, hat das Datum gar
+    nicht - Minecraft schreibt es nur hin, wenn es gesetzt ist -, und dann
+    trifft der Vergleich nicht zu. Das ist die Antwort "nicht stumm".
+
+    Nicht beim Bot nachgefragt: Was er gehoert hat, weiss mineflayer hier auf
+    geflickten Paketdaten nicht verlaesslich, und ein nicht gehoerter Ton
+    liesse die Probe auch dann durchgehen, wenn er nur im Bot verloren ging.
+    """
+    return server_says(bot, "/execute if entity @s[nbt={{Silent:1b}}] "
+                            "run say {marke}")
+
+
 def blume_abbauen(bot, base):
     """Einmal versuchen, eine Blume abzubauen, und sagen, was daraus wurde.
 
@@ -2248,6 +2265,74 @@ def gamemode_checks(env, bot):
             hinstellen(bot, bx + 0.5, by, bz + 0.5)
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Spielmodus-Test: {exc}")
+
+
+def silent_checks(env, bot):
+    """Der Schalter camera-mode.silent.
+
+    Er sagt, ob der Kamera-Spieler stumm ist. Stumm heisst: Der Server gibt
+    keinen Ton von ihm mehr heraus - nicht an die anderen und nicht an ihn
+    selbst. Die Schritte vor allem; frueher hoerten ihn alle ausser ihm.
+
+    Geprueft wird deshalb nicht, wer was hoert, sondern der Schalter, an dem
+    das haengt: das Entitaetsdatum Silent am Spieler. Ob ein Ton bei einem
+    zweiten Bot ankommt, liesse sich mit den geflickten Paketdaten hier nicht
+    verlaesslich messen, und der Server entscheidet genau an diesem Datum, ob
+    er den Ton ueberhaupt verschickt.
+
+    Drei Dinge pro Wert: vorher nicht stumm, im Cam-Modus so, wie der Wert es
+    sagt, und danach wieder nicht stumm. Das letzte ist der Teil, der beim
+    Aussteigen leicht liegen bleibt - ein Spieler, der nach dem Cam-Modus
+    stumm bleibt, faellt sonst erst Tage spaeter jemandem auf.
+    """
+    if not FIND.test("Cam-Modus ist vor der Stummprobe aus", cam_off(bot), ""):
+        return
+
+    def probe(wert, erwartet):
+        """Einmal in den Cam-Modus und wieder heraus, und dabei dreimal
+        nachsehen, ob der Server den Bot als stumm fuehrt."""
+        vorher = ist_stumm(bot)
+        FIND.test(f"silent {wert}: vor dem Cam-Modus ist er nicht stumm", not vorher,
+                  "" if not vorher else "der Server fuehrt ihn schon vorher als stumm")
+        if not FIND.test(f"silent {wert}: /cam startet", cam_on(bot), ""):
+            return
+        drin = ist_stumm(bot)
+        gewollt = "stumm" if erwartet else "hoerbar"
+        FIND.test(f"silent {wert}: im Cam-Modus ist er {gewollt}", drin == erwartet,
+                  "" if drin == erwartet
+                  else f"der Server fuehrt ihn als {'stumm' if drin else 'hoerbar'}")
+        cam_off(bot)
+        time.sleep(1)
+        zurueck = ist_stumm(bot)
+        FIND.test(f"silent {wert}: danach ist er wieder hoerbar", not zurueck,
+                  "" if not zurueck else "er ist nach dem Cam-Modus noch stumm")
+
+    try:
+        # --- Die Voreinstellung wird nicht gesetzt, sondern nachgesehen ---
+        # So faellt auf, wenn in der ausgelieferten Datei etwas anderes steht.
+        probe("true (Voreinstellung)", True)
+
+        # --- false: jeder hoert ihn, er selbst auch ---
+        set_option(env, "silent", "false")
+        probe("false", False)
+
+        # --- Ein Wert, der kein Wahrheitswert ist, faellt auf true zurueck ---
+        # Beides in derselben Zeile gesucht: Das Log waechst ueber den ganzen
+        # Lauf, und "Falscher Wert" allein traefe auch auf eine Meldung von
+        # irgendwoher zu. Der Umlaut in der Meldung bleibt aussen vor - das
+        # Log wird mit errors="replace" gelesen.
+        set_option(env, "silent", "vielleicht")
+        meldung = any("Falscher Wert" in zeile and "camera-mode.silent" in zeile
+                      for zeile in server_log(env).splitlines())
+        FIND.test("Ein falscher Wert fuer silent wird gemeldet", meldung,
+                  "" if meldung else "keine Meldung im Server-Log")
+        probe("unbekannt", True)
+    finally:
+        try:
+            set_option(env, "silent", "true")
+            cam_off(bot)
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach der Stummprobe: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -2814,6 +2899,9 @@ def step_tests(env):
 
         # --- Der Spielmodus, in dem der Cam-Modus laeuft ---
         gamemode_checks(env, bot)
+
+        # --- Ob man den Kamera-Spieler hoert ---
+        silent_checks(env, bot)
 
         # --- Portale und das Gedaechtnis fuer gesperrte Portale ---
         portal_checks(env, bot)
