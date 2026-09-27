@@ -11,7 +11,7 @@ Das Skript macht alles, was sonst von Hand gemacht wurde:
   5. Paper-Testserver holen, einrichten und starten (mit FIFO fuer die Konsole)
   6. mineflayer holen, auf Protokoll 26.2 flicken, Bot verbinden
   7. Tests im laufenden Spiel fahren
-  8. Aufraeumen: target/ aus HEAD zuruecksetzen, Server und Bot beenden
+  8. Aufraeumen: Server und Bot beenden
 
 Aufruf:
     python3 tools/camfly_testenv.py                  # alles
@@ -72,7 +72,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 477 Methoden- und Feldzugriffe. Alle 477 gibt
+# Dieser Pruefer zaehlt zurzeit 476 Methoden- und Feldzugriffe. Alle 476 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -236,8 +236,9 @@ class Env:
 
     @property
     def plugin_jar(self):
-        """Das gebaute Jar, aus target/ herauskopiert - target/ wird ja
-        wieder auf HEAD zurueckgesetzt."""
+        """Das gebaute Jar, aus target/ herauskopiert - das naechste
+        mvn clean raeumt target/ leer, und ein Lauf ohne den Schritt build
+        braucht das Jar trotzdem."""
         return self.artifacts / "CamFly.jar"
 
 
@@ -718,12 +719,10 @@ def prepare_server_files(env):
     shutil.copy2(env.plugin_jar, plugins / "CamFly.jar")
 
     # Die Konfiguration kommt aus dem Quellordner. Aus target/classes zu lesen
-    # waere eine Falle: restore_target setzt den Ordner nach jedem Lauf wieder
-    # auf HEAD, ein Lauf ohne den Schritt build faende dort also die
-    # eingecheckte alte Fassung und pruefte das Plugin gegen eine
-    # Konfiguration, in der die neuen Schluessel gar nicht stehen. Zu holen
-    # gibt es dort ohnehin nichts: Platzhalter ersetzt Maven in plugin.yml,
-    # config.yml hat keine.
+    # waere eine Falle: Ein Lauf ohne den Schritt build faende dort die
+    # Fassung vom letzten Bauen, womoeglich eine alte, und pruefte das Plugin
+    # gegen eine Konfiguration, in der die neuen Schluessel gar nicht stehen.
+    # Zu holen gibt es dort ohnehin nichts: Maven kopiert die Datei nur.
     source = env.repo / "src" / "main" / "resources" / "config.yml"
     text = source.read_text(encoding="utf-8")
     # Partikel aus. Sonst stirbt jeder Bot in Sichtweite eines Cam-Spielers am
@@ -2017,6 +2016,52 @@ def interact_checks(env, bot):
 
 
 # ---------------------------------------------------------------------------
+# Die Ruestung im Cam-Modus
+# ---------------------------------------------------------------------------
+
+def armor_checks(env, bot):
+    """Die Ruestung: im Cam-Modus abgelegt, danach wieder angezogen.
+
+    Das Plugin nimmt dem Spieler beim Start das ganze Inventar ab und gibt es
+    ihm beim Aussteigen zurueck. Die Ruestung reist dabei in denselben Slots
+    mit - einen eigenen Weg fuer sie gibt es nicht. Diese Probe haelt fest,
+    dass sie das auch wirklich tut: Der Interaktionstest weiter oben prueft das
+    Inventar nur an einem Stein in der Hand.
+
+    Gefragt wird serverseitig mit /execute if items, am Brustpanzer.
+    """
+    frage = ("/execute if items entity @s armor.chest minecraft:iron_chestplate "
+             "run say {marke}")
+    if not FIND.test("Cam-Modus ist vor dem Ruestungstest aus", cam_off(bot), ""):
+        return
+    try:
+        bot.chat(f"/clear {BOT_NAME}")
+        time.sleep(0.5)
+        bot.chat(f"/item replace entity {BOT_NAME} armor.chest "
+                 f"with minecraft:iron_chestplate")
+        time.sleep(0.8)
+        if not FIND.test("Der Bot traegt fuer den Ruestungstest einen Brustpanzer",
+                         server_says(bot, frage), ""):
+            return
+        if not FIND.test("/cam startet fuer den Ruestungstest", cam_on(bot), ""):
+            return
+        abgelegt = not server_says(bot, frage)
+        FIND.test("Im Cam-Modus ist die Ruestung abgelegt", abgelegt,
+                  "" if abgelegt else "er traegt den Brustpanzer noch")
+        cam_off(bot)
+        time.sleep(1)
+        wieder = server_says(bot, frage)
+        FIND.test("Nach dem Cam-Modus ist die Ruestung wieder angezogen", wieder,
+                  "" if wieder else "der Brustpanzer fehlt")
+    finally:
+        try:
+            bot.chat(f"/clear {BOT_NAME}")
+            time.sleep(0.5)
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Ruestungstest: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # Der Spielmodus, in dem der Cam-Modus laeuft
 # ---------------------------------------------------------------------------
 
@@ -2812,6 +2857,9 @@ def step_tests(env):
         # --- Bloecke und Entitaeten im Cam-Modus ---
         interact_checks(env, bot)
 
+        # --- Die Ruestung im Cam-Modus ---
+        armor_checks(env, bot)
+
         # --- Der Spielmodus, in dem der Cam-Modus laeuft ---
         gamemode_checks(env, bot)
 
@@ -2837,24 +2885,8 @@ def step_tests(env):
 
 
 # ---------------------------------------------------------------------------
-# 9. Aufraeumen und Zusammenfassung
+# 9. Zusammenfassung
 # ---------------------------------------------------------------------------
-
-def restore_target(env):
-    """target/ ist im Repo eingecheckt. Nach jedem mvn package muss der Ordner
-    wieder auf den Stand von HEAD, damit nur src/ im Commit landet."""
-    if not (env.repo / ".git").exists() or not (env.repo / "target").exists():
-        return
-    run(["git", "restore", "--source=HEAD", "--worktree", "target/"],
-        cwd=env.repo, check=False)
-    run(["git", "clean", "-fdq", "target/"], cwd=env.repo, check=False)
-    dirty = run(["git", "status", "--porcelain", "target/"], cwd=env.repo,
-                check=False).stdout.strip()
-    if dirty:
-        FIND.problem("target/ ist nach dem Zuruecksetzen noch veraendert:\n" + dirty)
-    else:
-        Log.detail("target/ steht wieder auf HEAD")
-
 
 def summary(env, results):
     print(f"\n{Log.BLUE}=== Zusammenfassung ==={Log.OFF}")
@@ -2891,8 +2923,6 @@ def main(argv=None):
     parser.add_argument("--skip", default="", help="Diese Schritte auslassen")
     parser.add_argument("--keep-running", action="store_true",
                         help="Server nach den Tests weiterlaufen lassen")
-    parser.add_argument("--no-restore", action="store_true",
-                        help="target/ nicht auf HEAD zuruecksetzen")
     parser.add_argument("--stop", action="store_true",
                         help="Nur einen laufenden Testserver beenden")
     args = parser.parse_args(argv)
@@ -2929,8 +2959,6 @@ def main(argv=None):
     finally:
         if not args.keep_running and "server" in plan:
             stop_server(env)
-        if not args.no_restore and "build" in plan:
-            restore_target(env)
         summary(env, results)
 
     if args.keep_running and "server" in plan:

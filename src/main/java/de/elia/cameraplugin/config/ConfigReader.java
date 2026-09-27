@@ -29,14 +29,14 @@ import java.util.Map;
 public final class ConfigReader {
 
     /** Message keys of the notes, matching the {@code messages} block. */
-    public static final String EXPECTED_BOOLEAN = "config-expected-boolean";
-    public static final String EXPECTED_NUMBER = "config-expected-number";
-    public static final String EXPECTED_TEXT = "config-expected-text";
-    public static final String EXPECTED_LIST = "config-expected-list";
-    public static final String UNKNOWN_VALUE = "config-unknown-value";
-    public static final String UNKNOWN_ENTRY = "config-unknown-entry";
-    public static final String ENTRY_IN_BOTH_LISTS = "config-entry-in-both-lists";
-    public static final String TOO_SMALL = "config-too-small";
+    private static final String EXPECTED_BOOLEAN = "config-expected-boolean";
+    private static final String EXPECTED_NUMBER = "config-expected-number";
+    private static final String EXPECTED_TEXT = "config-expected-text";
+    private static final String EXPECTED_LIST = "config-expected-list";
+    private static final String UNKNOWN_VALUE = "config-unknown-value";
+    private static final String UNKNOWN_ENTRY = "config-unknown-entry";
+    private static final String ENTRY_IN_BOTH_LISTS = "config-entry-in-both-lists";
+    private static final String TOO_SMALL = "config-too-small";
 
     /** Wording used when a key is missing from the config file. */
     private static final Map<String, String> FALLBACKS = Map.of(
@@ -65,11 +65,6 @@ public final class ConfigReader {
     /** The collected notes, in the order in which the values were read. */
     public List<ConfigIssue> getWarnings() {
         return warnings;
-    }
-
-    /** Adds a note from a check the caller does on its own. */
-    public void warn(ConfigIssue issue) {
-        warnings.add(issue);
     }
 
     // ------------------------------------------------------------- Wahrheitswerte

@@ -47,7 +47,8 @@ public final class MobTargeting implements Listener {
     /**
      * How far the search around the body reaches at most, in blocks. No mob in
      * vanilla notices anything from further away, so looking further would only
-     * cost time.
+     * cost time. The same reach decides which mobs are handed over when camera
+     * mode starts and ends.
      */
     private static final double MAX_MOB_TARGET_RANGE = 64.0;
 
@@ -73,8 +74,7 @@ public final class MobTargeting implements Listener {
      *                     {@link CameraData#getDamageTarget()}
      */
     public void turnMobsFromPlayer(Player player, LivingEntity damageTarget) {
-        double reaggroRadius = 64.0;
-        for (Entity entity : player.getNearbyEntities(reaggroRadius, reaggroRadius, reaggroRadius)) {
+        for (Entity entity : player.getNearbyEntities(MAX_MOB_TARGET_RANGE, MAX_MOB_TARGET_RANGE, MAX_MOB_TARGET_RANGE)) {
             if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
                 // Aggro away from the player: onto his body, or nowhere at all -
                 // when the body is out of the reach of that mob, and in the mode
@@ -90,8 +90,7 @@ public final class MobTargeting implements Listener {
      * that was after his body or his hitbox goes for him again.
      */
     public void turnMobsBackToPlayer(Player player, LivingEntity body, Mannequin hitbox) {
-        double reaggroRadius = 64.0;
-        for (Entity entity : body.getNearbyEntities(reaggroRadius, reaggroRadius, reaggroRadius)) {
+        for (Entity entity : body.getNearbyEntities(MAX_MOB_TARGET_RANGE, MAX_MOB_TARGET_RANGE, MAX_MOB_TARGET_RANGE)) {
             if (entity instanceof Mob mob
                     && (body.equals(mob.getTarget()) || (hitbox != null && hitbox.equals(mob.getTarget())))) {
                 mob.setTarget(player);
@@ -265,12 +264,8 @@ public final class MobTargeting implements Listener {
         if (!(event.getTarget() instanceof Player player)) {
             // In the mode false the body is nobody's target either, not even of
             // a mob that would go for a mannequin by itself.
-            if (!settings.getMobTargetMode().attractsMobs()) {
-                UUID owner = cameraPlayers.getBodyOrHitboxOwner(event.getTarget());
-                if (owner != null && cameraPlayers.contains(owner)) {
-                    event.setCancelled(true);
-                    event.setTarget(null);
-                }
+            if (!settings.getMobTargetMode().attractsMobs() && isActiveBody(event.getTarget())) {
+                refuse(event);
             }
             return;
         }
@@ -285,25 +280,30 @@ public final class MobTargeting implements Listener {
         }
         // Cancelled rather than handed an empty target: a mob that is already
         // after the body keeps it that way, only the camera player is refused.
-        event.setCancelled(true);
-        event.setTarget(null);
+        refuse(event);
     }
 
     @EventHandler
     public void onWardenTarget(EntityTargetLivingEntityEvent event) {
         if (!(event.getEntity() instanceof Warden)) return;
         LivingEntity target = event.getTarget();
-        if (target instanceof Player player) {
-            if (cameraPlayers.contains(player.getUniqueId())) {
-                event.setCancelled(true);
-                event.setTarget(null);
-            }
-        } else {
-            UUID owner = cameraPlayers.getBodyOrHitboxOwner(target);
-            if (owner != null && cameraPlayers.contains(owner)) {
-                event.setCancelled(true);
-                event.setTarget(null);
-            }
+        boolean camera = target instanceof Player player
+                ? cameraPlayers.contains(player.getUniqueId())
+                : isActiveBody(target);
+        if (camera) {
+            refuse(event);
         }
+    }
+
+    /** Whether the entity is the body or the hitbox of a player in camera mode right now. */
+    private boolean isActiveBody(Entity entity) {
+        UUID owner = cameraPlayers.getBodyOrHitboxOwner(entity);
+        return owner != null && cameraPlayers.contains(owner);
+    }
+
+    /** Leaves the mob without the target it was about to take. */
+    private static void refuse(EntityTargetEvent event) {
+        event.setCancelled(true);
+        event.setTarget(null);
     }
 }

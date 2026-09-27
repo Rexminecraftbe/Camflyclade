@@ -53,9 +53,13 @@ public final class CamActionBar {
         }
     }
 
+    /**
+     * Ends the line of a running camera mode and shows the one saying it has
+     * ended - the latter not while the plugin is being switched off.
+     */
     public void showActionBarOffMessage(Player player) {
-        if (!settings.isActionBarEnabled() || plugin.isShuttingDown()) return;
         stopActionBar(player);
+        if (!settings.isActionBarEnabled() || plugin.isShuttingDown()) return;
         BukkitRunnable existing = offMessageTasks.remove(player.getUniqueId());
         if (existing != null) existing.cancel();
 

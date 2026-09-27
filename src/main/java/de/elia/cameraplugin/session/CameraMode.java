@@ -3,7 +3,6 @@ package de.elia.cameraplugin.session;
 import de.elia.cameraplugin.body.BodySpawner;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
-import de.elia.cameraplugin.display.CamActionBar;
 import de.elia.cameraplugin.display.GlowMode;
 import de.elia.cameraplugin.scoreboard.NoCollisionTeam;
 import de.elia.cameraplugin.visibility.VisibilityMode;
@@ -69,6 +68,8 @@ public final class CameraMode {
 
     public void enterCameraMode(Player player) {
         // *** Inventar und Rüstung speichern ***
+        // getContents() hält jeden Slot, Rüstung und Zweithand eingeschlossen.
+        // Die Rüstung wird für den Körper noch einmal einzeln gebraucht.
         PlayerInventory playerInventory = player.getInventory();
         ItemStack[] originalInventory = playerInventory.getContents();
         ItemStack[] originalArmor = playerInventory.getArmorContents();
@@ -82,7 +83,6 @@ public final class CameraMode {
 
         // *** Inventar und Rüstung leeren ***
         playerInventory.clear();
-        playerInventory.setArmorContents(new ItemStack[4]);// Leeres Array für Rüstungsslots
         player.updateInventory();
 
         Location playerLocation = player.getLocation();
@@ -150,7 +150,7 @@ public final class CameraMode {
         plugin.getMobTargeting().turnMobsFromPlayer(player, damageTarget);
 
         // *** Gespeichertes Inventar an CameraData übergeben ***
-        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, originalArmor, pausedEffects, originalRemainingAir));
+        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects, originalRemainingAir));
         cameraPlayers.addBody(body.getUniqueId(), player.getUniqueId());
         if (hitbox != null) {
             cameraPlayers.addHitbox(hitbox.getUniqueId(), player.getUniqueId());
@@ -169,10 +169,9 @@ public final class CameraMode {
         plugin.getBodyWatch().startBodyMovementCheck(player, damageTarget);
         plugin.getBodyWatch().startBodyPin(player, body, hitbox);
         plugin.getMobTargeting().startMobTargeting(player, damageTarget);
-        NoCollisionTeam team = plugin.getNoCollisionTeam();
-        team.addPlayerToNoCollisionTeam(player);
-        // Team wurde evtl. gerade neu erstellt -> alle Mitglieder neu setzen.
-        team.refreshNoCollisionTeam();
+        // Legt das Team bei Bedarf an und setzt alle Mitglieder neu - der
+        // Spieler steht schon in cameraPlayers und kommt damit selbst hinein.
+        plugin.getNoCollisionTeam().refreshNoCollisionTeam();
         plugin.getVisibility().updateVisibilityForAll();
         plugin.getCamModeObjective().setScore(player, 1);
         plugin.getTimeLimit().startTimeLimit(player);
@@ -194,8 +193,8 @@ public final class CameraMode {
         if (cameraData == null) {
             // Ensure players are removed from the no-collision team and get
             // their hunger back even if the CameraData has already been
-            // cleaned up by another call.
-            team.removePlayerFromNoCollisionTeam(player);
+            // cleaned up by another call. updateViewerTeam takes him out of
+            // the team, he is no camera player any more.
             plugin.getHungerGuard().stopFor(player);
             plugin.getGhastGuard().stopFor(player);
             plugin.getInventoryGuard().stopFor(player);
@@ -212,11 +211,7 @@ public final class CameraMode {
         player.teleport(body.getLocation());
         plugin.getParticles().stopCameraParticles(player);
         plugin.getSightGlow().stopSightGlow(player);
-        CamActionBar actionBar = plugin.getActionBar();
-        actionBar.stopActionBar(player);
-        if (!plugin.isShuttingDown()) {
-            actionBar.showActionBarOffMessage(player);
-        }
+        plugin.getActionBar().showActionBarOffMessage(player);
         boolean standingInFire = plugin.getFireGuard().stopFor(player);
         plugin.getGhastGuard().stopFor(player);
         // Vor der Rückgabe: Der Sweep räumt die Taschen des Kamera-Spielers
@@ -224,10 +219,10 @@ public final class CameraMode {
         plugin.getInventoryGuard().stopFor(player);
 
         // *** Inventar und Rüstung wiederherstellen ***
+        // setContents() schreibt jeden Slot zurück, die Rüstung eingeschlossen.
         PlayerInventory playerInventory = player.getInventory();
         playerInventory.clear(); // Sicherheitshalber leeren, falls Items hinzugefügt wurden
         playerInventory.setContents(cameraData.getOriginalInventoryContents());
-        playerInventory.setArmorContents(cameraData.getOriginalArmorContents());
         player.updateInventory();
 
         player.removePotionEffect(PotionEffectType.INVISIBILITY);
@@ -247,14 +242,11 @@ public final class CameraMode {
         player.setRemainingAir(cameraData.getOriginalRemainingAir());
         plugin.getHungerGuard().stopFor(player);
 
-        team.removePlayerFromNoCollisionTeam(player);
-
         cameraPlayers.remove(player.getUniqueId());
+        // Takes him out of the team - or the whole team away, when he was the
+        // last camera player.
         team.updateViewerTeam(player);
         plugin.getCamModeObjective().setScore(player, 0);
-
-        // Safety check to ensure the player really left the no-collision team
-        team.removePlayerFromNoCollisionTeam(player);
 
         // The aggro goes back to the player, who is standing where his body
         // stood. Deliberately only here, after he has stopped being a camera

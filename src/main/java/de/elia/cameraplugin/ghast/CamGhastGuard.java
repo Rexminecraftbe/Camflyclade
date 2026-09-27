@@ -1,11 +1,11 @@
 package de.elia.cameraplugin.ghast;
 
+import de.elia.cameraplugin.camfly2.CameraPlugin;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.HappyGhast;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.BoundingBox;
 
@@ -59,10 +59,10 @@ public class CamGhastGuard {
      */
     private static final long INTERVAL = 2L;
 
-    private final JavaPlugin plugin;
+    private final CameraPlugin plugin;
     private final Map<UUID, BukkitRunnable> tasks = new HashMap<>();
 
-    public CamGhastGuard(JavaPlugin plugin) {
+    public CamGhastGuard(CameraPlugin plugin) {
         this.plugin = plugin;
     }
 
@@ -145,33 +145,18 @@ public class CamGhastGuard {
                 && camera.getZ() <= box.getMaxZ() + SIDE_REACH;
     }
 
-    /** Puts the camera above the ghast's reach and hands it back its flight. */
+    /**
+     * Puts the camera above the ghast's reach and hands it back its flight.
+     *
+     * <p>A teleport takes the flight away from him - without it back he drops
+     * straight onto the ghast he was just taken off. It is given back the way
+     * the plugin does it after carrying him through a portal, see
+     * {@link de.elia.cameraplugin.movement.CamMovementGuard#keepFlying(Player)}.</p>
+     */
     private void liftOff(Player player, HappyGhast ghast) {
         Location to = player.getLocation();
         to.setY(ghast.getBoundingBox().getMaxY() + STILL_REACH + CLEARANCE);
         player.teleport(to);
-        keepFlying(player);
-    }
-
-    /**
-     * Hands the player his flight back after the lift.
-     *
-     * <p>A teleport takes it away from him, and the client is sent that state
-     * along with it, so it is given back once more a tick later - without that
-     * he drops straight back onto the ghast he was just taken off. The same two
-     * steps the plugin itself takes after carrying him through a portal.</p>
-     */
-    private void keepFlying(Player player) {
-        player.setAllowFlight(true);
-        player.setFlying(true);
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (player.isOnline() && tasks.containsKey(player.getUniqueId())) {
-                    player.setAllowFlight(true);
-                    player.setFlying(true);
-                }
-            }
-        }.runTaskLater(plugin, 1L);
+        plugin.getMovementGuard().keepFlying(player);
     }
 }

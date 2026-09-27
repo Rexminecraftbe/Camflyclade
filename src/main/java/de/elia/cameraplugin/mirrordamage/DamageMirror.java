@@ -3,7 +3,6 @@ package de.elia.cameraplugin.mirrordamage;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
-import de.elia.cameraplugin.potion.CamPotionGuard;
 import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -11,7 +10,6 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.AbstractArrow;
-import org.bukkit.entity.Arrow;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
@@ -52,7 +50,6 @@ public final class DamageMirror implements Listener {
     private final Set<UUID> damageImmunityBypass = new HashSet<>();
     /** Players whose body was hit and whose hit has not reached them yet. */
     private final Set<UUID> pendingMirrorHit = new HashSet<>();
-    private final Set<UUID> pendingDamage = new HashSet<>();
 
     public DamageMirror(CameraPlugin plugin) {
         this.plugin = plugin;
@@ -102,15 +99,9 @@ public final class DamageMirror implements Listener {
         // the raw damage is passed on, and the reduction happens on the player.
         // A hit on the armour stand therefore no longer has to be forwarded to
         // the mannequin standing in it.
-        if (!pendingDamage.add(ownerUUID)) {
-            // already scheduled damage for this hit
-            return;
-        }
-
         if (owner.isDead()) {
             event.setCancelled(true);
             plugin.exitCameraMode(owner);
-            pendingDamage.remove(ownerUUID);
             return;
         }
 
@@ -121,7 +112,6 @@ public final class DamageMirror implements Listener {
                 selfHit.getDamager().getUniqueId().equals(owner.getUniqueId())) {
             messages.sendConfiguredMessage(owner, "camera-off");
             plugin.exitCameraMode(owner);
-            pendingDamage.remove(ownerUUID);
             return;
         }
 
@@ -132,13 +122,10 @@ public final class DamageMirror implements Listener {
         if (event instanceof EntityDamageByEntityEvent entityEvent) {
             damagerEntity = entityEvent.getDamager();
             damagerName = damagerEntity instanceof Player ? damagerEntity.getName() : damagerEntity.getType().toString();
-
-            // apply tipped arrow effects to the player
-            if (damagerEntity instanceof Arrow arrow) {
-                CamPotionGuard.applyArrowEffects(arrow, owner);
-            }
+            // The effects of a tipped arrow have reached the player already:
+            // CamPotionGuard passes them on when the arrow hits, which comes
+            // before this damage.
         }
-
 
         double applyDamage;
         switch (settings.getDamageMode()) {
@@ -178,14 +165,8 @@ public final class DamageMirror implements Listener {
 
         plugin.exitCameraMode(owner);
 
-        String messageKey = resolveDamageMessageKey(event, cause);
-        if (messages.isMessageEnabled(messageKey)) {
-            owner.sendMessage(
-                    messages.getMessage(messageKey)
-                            .replace("{damager}", damagerName)
-                            .replace("{cause}", event.getCause().toString())
-            );
-        }
+        messages.sendMessage(owner, resolveDamageMessageKey(event, cause),
+                "{damager}", damagerName, "{cause}", cause.toString());
 
         if (settings.isMirrorDebug()) {
             sendMirrorDebug(owner, String.format(Locale.ROOT,
@@ -200,8 +181,6 @@ public final class DamageMirror implements Listener {
         // source decides whether armour counts at all, which protection
         // enchantment counts, and who gets the kill.
         mirrorHitToPlayer(owner, applyDamage, event.getDamage(), event.getDamageSource(), damagerEntity);
-
-        pendingDamage.remove(ownerUUID);
     }
 
     /**
@@ -316,13 +295,7 @@ public final class DamageMirror implements Listener {
             // refreshes in the entity's own tick, so it would still count here
             // while the durability was already gone.
             saved = owner.getInventory().getArmorContents();
-            ItemStack[] copies = new ItemStack[saved.length];
-            for (int i = 0; i < saved.length; i++) {
-                if (saved[i] != null) {
-                    copies[i] = saved[i].clone();
-                }
-            }
-            owner.getInventory().setArmorContents(copies);
+            owner.getInventory().setArmorContents(plugin.getBodySpawner().createMirrorArmor(saved));
             owner.updateInventory();
         }
         // A moment ago the player was flying. That speed must not ride along

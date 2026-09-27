@@ -21,8 +21,8 @@ public class CameraData {
     private final boolean originalFlying;
     private final boolean originalGlowing;
     private final int originalRemainingAir;
-    private final ItemStack[] originalInventoryContents; // Für Inventar
-    private final ItemStack[] originalArmorContents;     // Für Rüstung
+    /** Every slot of his inventory, the armour and the off hand included. */
+    private final ItemStack[] originalInventoryContents;
     private final Collection<PotionEffect> pausedEffects;
     /**
      * Where the distance to the body is measured from while the player is
@@ -38,7 +38,7 @@ public class CameraData {
      */
     private Location portalEntry;
 
-    public CameraData(LivingEntity body, Mannequin hitbox, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, ItemStack[] originalArmorContents, Collection<PotionEffect> pausedEffects, int originalRemainingAir) {
+    public CameraData(LivingEntity body, Mannequin hitbox, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, Collection<PotionEffect> pausedEffects, int originalRemainingAir) {
         this.body = body;
         this.hitbox = hitbox;
         this.originalGameMode = originalGameMode;
@@ -46,7 +46,6 @@ public class CameraData {
         this.originalFlying = originalFlying;
         this.originalGlowing = originalGlowing;
         this.originalInventoryContents = originalInventoryContents;
-        this.originalArmorContents = originalArmorContents;
         this.pausedEffects = pausedEffects;
         this.originalRemainingAir = originalRemainingAir;
     }
@@ -62,7 +61,6 @@ public class CameraData {
     /** Whether the player was already glowing before camera mode. */
     public boolean getOriginalGlowing() { return originalGlowing; }
     public ItemStack[] getOriginalInventoryContents() { return originalInventoryContents; }
-    public ItemStack[] getOriginalArmorContents() { return originalArmorContents; }
     public Collection<PotionEffect> getPausedEffects() { return pausedEffects; }
     public int getOriginalRemainingAir() { return originalRemainingAir; }
     /** The portal the distance is measured from, or {@code null} for the body. */

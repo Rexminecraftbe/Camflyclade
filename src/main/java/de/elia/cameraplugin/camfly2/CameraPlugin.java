@@ -34,7 +34,6 @@ import de.elia.cameraplugin.visibility.CamVisibility;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandMap;
-import org.bukkit.command.CommandSender;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
@@ -274,7 +273,7 @@ public final class CameraPlugin extends JavaPlugin {
         for (UUID uuid : new HashSet<>(cameraPlayers.ids())) {
             Player camPlayer = Bukkit.getPlayer(uuid);
             if (camPlayer != null) {
-                sendConfiguredMessage(camPlayer, "reload-exit");
+                messages.sendConfiguredMessage(camPlayer, "reload-exit");
                 exitCameraMode(camPlayer);
             }
         }
@@ -323,7 +322,7 @@ public final class CameraPlugin extends JavaPlugin {
     }
 
     // ------------------------------------------------------------------------
-    // What CamCommand asks for
+    // Camera mode itself
     // ------------------------------------------------------------------------
 
     public void enterCameraMode(Player player) {
@@ -336,50 +335,6 @@ public final class CameraPlugin extends JavaPlugin {
 
     public boolean isInCameraMode(Player player) {
         return cameraPlayers.contains(player.getUniqueId());
-    }
-
-    public String getMessage(String path) {
-        return messages.getMessage(path);
-    }
-
-    public boolean isMessageEnabled(String path) {
-        return messages.isMessageEnabled(path);
-    }
-
-    public void sendConfiguredMessage(CommandSender sender, String path) {
-        messages.sendConfiguredMessage(sender, path);
-    }
-
-    public String formatDuration(long seconds) {
-        return CamTimeLimit.formatDuration(seconds);
-    }
-
-    public boolean isCooldownActive(Player player) {
-        return timeLimit.isCooldownActive(player);
-    }
-
-    public long getCooldownRemaining(Player player) {
-        return timeLimit.getCooldownRemaining(player);
-    }
-
-    /** See {@link StartChecks#checkCamSafety(Player)}. */
-    public boolean checkCamSafety(Player player) {
-        return startChecks.checkCamSafety(player);
-    }
-
-    /** See {@link StartChecks#checkCamSpectator(Player)}. */
-    public boolean checkCamSpectator(Player player) {
-        return startChecks.checkCamSpectator(player);
-    }
-
-    /** See {@link StartChecks#checkCamEffects(Player)}. */
-    public boolean checkCamEffects(Player player) {
-        return startChecks.checkCamEffects(player);
-    }
-
-    /** See {@link StartChecks#checkCamArea(Player)}. */
-    public boolean checkCamArea(Player player) {
-        return startChecks.checkCamArea(player);
     }
 
     // ------------------------------------------------------------------------

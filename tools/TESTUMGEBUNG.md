@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **477** - alle 477 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **476** - alle 476 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -81,10 +81,10 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
 * **Kein `pkill -f`.** Steht das Muster in der eigenen Kommandozeile, schießt es
   die eigene Shell ab. Das Skript merkt sich stattdessen die Prozessgruppe und
   beendet den Server erst über `stop` auf der Konsole, dann über die Gruppe.
-* **`target/` ist im Repo eingecheckt.** Nach jedem `mvn package` setzt das
-  Skript den Ordner mit `git restore --source=HEAD --worktree target/` und
-  `git clean -fd target/` zurück, damit nur `src/` im Commit landet.
-  (`--no-restore` lässt das bleiben.)
+* **`target/` ist nicht eingecheckt**, er steht in `.gitignore`. Was
+  `mvn package` dort ablegt, landet also nie im Commit, und das Skript muss
+  hinterher nichts zurücksetzen. Das gebaute Jar kopiert es nach
+  `artifacts/`, damit auch ein Lauf ohne den Schritt `build` eines findet.
 * **Ausgabeordner werden geleert**, bevor neu übersetzt wird - sonst verdeckt
   eine alte Klassenkopie die frisch gebaute.
 * **Hunger braucht eine Schwierigkeit über `peaceful`.** Dort nimmt der
@@ -152,11 +152,11 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   `/fillbiome` und `/data` wird er im Testlauf zum Operator gemacht - erst
   danach, damit das Standardrecht vorher wirklich geprüft wird.
 * **Die Testkonfiguration kommt aus `src/main/resources/config.yml`**, nicht
-  aus `target/classes`. Dort läge nach jedem Lauf wieder die eingecheckte alte
-  Fassung - `restore_target` setzt den Ordner ja zurück -, und ein Lauf ohne
-  den Schritt `build` prüfte das Plugin dann gegen eine Konfiguration, in der
-  die neuen Schlüssel fehlen. Das sieht nach kaputtem Plugin aus und ist
-  keines. Platzhalter ersetzt Maven ohnehin nur in `plugin.yml`.
+  aus `target/classes`. Dort läge die Fassung vom letzten Bauen, womöglich
+  eine alte, und ein Lauf ohne den Schritt `build` prüfte das Plugin dann
+  gegen eine Konfiguration, in der die neuen Schlüssel fehlen. Das sieht nach
+  kaputtem Plugin aus und ist keines. Maven kopiert die Datei ohnehin nur,
+  ersetzt wird darin nichts.
 * **Der Cam-Modus läuft voreingestellt im Abenteuermodus**, nicht in Kreativ -
   Kreativ steht nur einen einzigen Tick lang da. Der Portalvorgang dauert dort
   deshalb die vollen 80 Ticks; die Abkürzung auf einen Tick gilt nur für Unverwundbare,
@@ -279,6 +279,10 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   Gegenstand gar nichts. Sie gehört zum Blockschutz: Ohne Gegenstand gibt es
   auch keinen mit `CanPlaceOn` oder `CanDestroy`, mit dem sich im
   Abenteuermodus doch bauen ließe.
+* **Die Rüstung prüft ein eigener Abschnitt**, am Brustpanzer und mit
+  `/execute if items entity @s armor.chest`. Das Plugin gibt sie über
+  denselben Weg zurück wie das übrige Inventar - `getContents()` hält auch
+  die Rüstungsslots -, und diese Probe hält fest, dass das so bleibt.
 * **Der Happy Ghast steht mit `NoAI` und `NoGravity` still.** Sonst zöge er
   davon, und die Stelle, an der der Bot aufgesetzt wird, wäre jedes Mal eine
   andere. Er ist vier Blöcke hoch, sein Rücken liegt also vier über seinen
@@ -339,7 +343,8 @@ Hebel umlegen, kein Block abbauen und keine Druckplatte auslösen · kein Bild
 im Rahmen drehen, kein Fenster einer Kistenlore öffnen und kein Boot
 besteigen · Gegenprobe: ohne Cam-Modus geht
 jedes davon sehr wohl · das Inventar ist im Cam-Modus leer und danach wieder
-da · der eigene Körper bleibt anklickbar und beendet damit den Cam-Modus ·
+da · die Rüstung ist im Cam-Modus abgelegt und danach wieder angezogen · der
+eigene Körper bleibt anklickbar und beendet damit den Cam-Modus ·
 die Kamera wird von einem Happy Ghast abgehoben, ohne Cam-Modus bleibt der
 Bot darauf stehen · der Cam-Modus läuft voreingestellt im Abenteuermodus,
 auf `survival` und `creative` im eingestellten und auf `keep` in dem, in dem
