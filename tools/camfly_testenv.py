@@ -26,6 +26,7 @@ Alles, was es herunterlaedt, liegt unter --workdir (Standard:
 
 import argparse
 import json
+import math
 import os
 import re
 import shutil
@@ -72,7 +73,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 487 Methoden- und Feldzugriffe. Alle 487 gibt
+# Dieser Pruefer zaehlt zurzeit 505 Methoden- und Feldzugriffe. Alle 505 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -910,9 +911,10 @@ async function handle(cmd) {
     }
     case 'server_pos': {
       // bot.entity.position ist die Sicht des CLIENTS und laeuft optimistisch
-      // voraus. Die Wahrheit steht in den Entitaetsdaten.
+      // voraus. Die Wahrheit steht in den Entitaetsdaten. 'selector' fragt
+      // nach einer anderen Entitaet als dem Bot selbst.
       const since = messages.length;
-      bot.chat('/data get entity @s Pos');
+      bot.chat('/data get entity ' + (cmd.selector || '@s') + ' Pos');
       const hit = await waitFor(() => {
         for (let i = since; i < messages.length; i++) {
           const m = POS_RE.exec(messages[i].text);
@@ -1073,6 +1075,31 @@ async function handle(cmd) {
           target: e.id, mouse: 0, sneaking: false, hand: 0,
           location: new Vec3(0, 0, 0)
         });
+        await new Promise((r) => setTimeout(r, 100));
+        return { done: true, id: e.id, type: e.name };
+      } catch (err) {
+        return { done: false, id: e.id, type: e.name,
+                 reason: String(err && err.message || err) };
+      }
+    }
+    case 'attack_entity': {
+      // Ein Linksklick auf eine Entitaet. Der Schlag hat sein eigenes Paket,
+      // nur mit der Nummer der Entitaet darin, und der Arm schwingt danach -
+      // wie beim echten Client. Geschrieben wird wie bei activate_entity
+      // selbst, nach einem harten Blick auf das Ziel. Der Blick geht erst mit
+      // dem naechsten Physik-Tick hinaus, deshalb die kurze Pause: Ohne sie
+      // kaeme der Schlag mit der alten Blickrichtung an, und die bestimmt,
+      // wohin der Sulfur Cube fliegt.
+      const e = pickEntity(cmd);
+      if (!e) return { done: false, reason: 'keine solche Entitaet in der Naehe' };
+      try {
+        await Promise.race([
+          bot.lookAt(e.position.offset(0, cmd.aim === undefined ? 0.5 : cmd.aim, 0), true),
+          new Promise((r) => setTimeout(r, 2000))
+        ]);
+        await new Promise((r) => setTimeout(r, 150));
+        bot._client.write('attack', { entityId: e.id });
+        bot.swingArm();
         await new Promise((r) => setTimeout(r, 100));
         return { done: true, id: e.id, type: e.name };
       } catch (err) {
@@ -2125,6 +2152,225 @@ def interact_checks(env, bot):
             hinstellen(bot, bx + 0.5, by, bz + 0.5)
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Interaktionstest: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Der Sulfur Cube
+# ---------------------------------------------------------------------------
+
+# Der Wuerfel, an dem geprobt wird. Er hat einen Block geschluckt: Nur dann
+# rollt er, wenn man hineinlaeuft, und nur dann fliegt er beim Schlag weg,
+# statt ganz normal Schaden zu nehmen - den haelt der Interaktionsschutz
+# ohnehin ab.
+WUERFEL = f"@e[type=minecraft:sulfur_cube,tag={INTERACT_TAG},limit=1]"
+
+# Ab welcher Strecke der Wuerfel als bewegt zaehlt, in Bloecken. Geschoben
+# rollt er ein gutes Dutzend, geschlagen zweieinhalb.
+WUERFEL_BEWEGT = 0.5
+
+# Der Rueckstosswiderstand, den das Plugin dem Wuerfel gibt, solange eine
+# Kamera ihn schieben koennte - als NBT-Pfad fuer /execute if data.
+WUERFEL_FEST = ('attributes[{id:"minecraft:knockback_resistance"}]'
+                '.modifiers[{id:"camfly:cam_no_push"}]')
+
+
+def wuerfel_setzen(bot, x, y, z):
+    """Einen frischen Sulfur Cube hinsetzen, mit Erde darin.
+
+    Gibt zurueck, ob er wirklich einen Block traegt: Ohne ihn rollte er gar
+    nicht erst, und jede Probe hiesse "nicht bewegt", ohne dass das Plugin
+    etwas dazu getan haette.
+    """
+    bot.chat(f"/kill @e[type=minecraft:sulfur_cube,tag={INTERACT_TAG}]")
+    time.sleep(0.5)
+    bot.chat(f'/summon minecraft:sulfur_cube {x} {y} {z} '
+             f'{{Tags:["{INTERACT_TAG}"],equipment:{{body:{{id:"minecraft:dirt",count:1}}}}}}')
+    time.sleep(1.5)
+    return server_says(bot, f"/execute if data entity {WUERFEL} equipment.body "
+                            f"run say {{marke}}")
+
+
+def wuerfel_pos(bot):
+    """Wo der Wuerfel steht, vom Server gelesen."""
+    return bot.call("server_pos", wait=20, timeout=8000, selector=WUERFEL).get("pos")
+
+
+def wuerfel_fest(bot):
+    """Ob der Wuerfel gerade den Rueckstosswiderstand des Plugins traegt."""
+    return nbt_frage(bot, WUERFEL, WUERFEL_FEST)
+
+
+def wuerfel_strecke(vorher, nachher):
+    """Wie weit der Wuerfel gerollt ist, oder None, wenn eine Position fehlt."""
+    if vorher is None or nachher is None:
+        return None
+    return math.dist(vorher, nachher)
+
+
+def wuerfel_schieben(bot, base):
+    """Einmal quer durch den Wuerfel fliegen und sagen, wie weit er rollte.
+
+    Der Flug geht mitten durch ihn hindurch, einen halben Block alle 50 ms.
+    Geschoben wird er dabei von der Beruehrung, nicht vom Zusammenstoss: Den
+    nimmt der Cam-Modus ohnehin weg, und der Wuerfel rollte trotzdem - das ist
+    der Fehler, um den es hier geht.
+    """
+    bx, by, bz = base
+    if not wuerfel_setzen(bot, bx + 6.5, by, bz + 0.5):
+        return None
+    vorher = wuerfel_pos(bot)
+    hinstellen(bot, bx + 3.5, by, bz + 0.5)
+    bot.call("fly", wait=30, x=bx + 10.5, y=by, z=bz + 0.5, timeout=6000)
+    # Er rollt noch eine Weile aus.
+    time.sleep(2.0)
+    return wuerfel_strecke(vorher, wuerfel_pos(bot))
+
+
+def wuerfel_schlagen(bot, base):
+    """Den Wuerfel einmal schlagen und sagen, wie weit er flog.
+
+    Der Bot steht zweieinhalb Bloecke vor ihm: nah genug fuer den Schlag und
+    zu weit, um ihn schon zu beruehren. So prueft die Probe den Schlag allein
+    - aus der Naehe hielte ihn schon der Schutz gegen das Schieben fest.
+    """
+    bx, by, bz = base
+    if not wuerfel_setzen(bot, bx + 6.5, by, bz + 0.5):
+        return None
+    vorher = wuerfel_pos(bot)
+    hinstellen(bot, bx + 4.0, by, bz + 0.5)
+    # Drei Bloecke: Der Koerper steht im Cam-Modus dreieinhalb hinter dem
+    # Bot und darf nicht getroffen werden.
+    klicken(bot, "attack_entity", radius=3)
+    time.sleep(2.0)
+    return wuerfel_strecke(vorher, wuerfel_pos(bot))
+
+
+def wuerfel_entladen(bot, base):
+    """Einen Wuerfel mit dem Widerstand darauf entladen und wieder laden.
+
+    Der Widerstand wird mit /attribute von Hand aufgesetzt - so, wie ihn ein
+    Absturz auf der Platte zurueckliesse. Der Wuerfel steht dazu weit weg in
+    einem Chunk, den nur /forceload haelt; ohne das haelt ihn der Bot selbst
+    geladen.
+
+    Gibt zurueck: (trug er ihn vorher, ist er wieder da, traegt er ihn noch).
+    """
+    bx, by, bz = base
+    fx, fz = bx + 160, bz + 160
+    bot.chat(f"/forceload add {fx} {fz}")
+    time.sleep(2.0)
+    try:
+        if not wuerfel_setzen(bot, fx + 0.5, by, fz + 0.5):
+            return False, False, False
+        bot.chat(f"/attribute {WUERFEL} minecraft:knockback_resistance modifier add "
+                 f"camfly:cam_no_push 1024 add_value")
+        time.sleep(0.8)
+        vorher = wuerfel_fest(bot)
+        bot.chat(f"/forceload remove {fx} {fz}")
+        time.sleep(4.0)
+        bot.chat(f"/forceload add {fx} {fz}")
+        time.sleep(3.0)
+        da = server_says(bot, f"/execute if entity {WUERFEL} run say {{marke}}")
+        return vorher, da, da and wuerfel_fest(bot)
+    finally:
+        bot.chat(f"/kill @e[type=minecraft:sulfur_cube,tag={INTERACT_TAG}]")
+        time.sleep(0.5)
+        bot.chat(f"/forceload remove {fx} {fz}")
+        time.sleep(0.5)
+
+
+def sulfur_cube_checks(env, bot):
+    """Den Sulfur Cube kann die Kamera weder schieben noch wegschlagen.
+
+    Ein Wuerfel mit einem Block darin rollt, wenn ein Spieler hineinlaeuft,
+    und fliegt weg, wenn er ihn schlaegt. Beides ging auch im Cam-Modus: Das
+    Schieben kommt ohne jedes Event, und der Schlag macht ihm keinen Schaden,
+    der sich abfangen liesse, sondern stoesst ihn nur weg.
+
+    Das Plugin haelt beides auf zwei Wegen ab. Den Schlag faengt es am
+    Rueckstoss ab. Das Schieben laesst sich nur ueber den Rueckstosswiderstand
+    des Wuerfels aufhalten - den bekommt er, solange eine Kamera ihn beruehren
+    koennte, und verliert ihn wieder, sobald keine mehr so nah ist.
+
+    Jede Probe steht zweimal da, ohne Cam-Modus und darin. Ohne die
+    Gegenprobe sagte "nicht bewegt" nur, dass sich nichts geruehrt hat - und
+    das sagt sie auch dann, wenn der Flug oder der Schlag des Bots gar nicht
+    erst ankommt.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Sulfur-Cube-Test aus", cam_off(bot), ""):
+        return
+    pos = bot.server_pos()
+    if not FIND.test("Standort fuer den Sulfur-Cube-Test lesbar", pos is not None, str(pos)):
+        return
+    base = (_floor(pos[0]), _floor(pos[1] + 0.5), _floor(pos[2]))
+    bx, by, bz = base
+    Log.detail(f"Testplatz fuer den Sulfur Cube bei {base}")
+    # Die Bahn freiraeumen, auf der er rollt: Geschoben kommt er ein gutes
+    # Dutzend Bloecke weit, und die Testwelt bleibt zwischen zwei Laeufen
+    # stehen.
+    bahn = f"{bx + 1} {by} {bz - 1} {bx + 26} {by + 3} {bz + 2}"
+    bot.chat(f"/fill {bahn} minecraft:air")
+    time.sleep(0.8)
+
+    try:
+        # --- Erst ohne Cam-Modus: rollt er ueberhaupt? ---
+        hinstellen(bot, bx + 0.5, by, bz + 0.5)
+        geschoben_ohne = wuerfel_schieben(bot, base)
+        geschlagen_ohne = wuerfel_schlagen(bot, base)
+
+        # --- Und nun im Cam-Modus ---
+        hinstellen(bot, bx + 0.5, by, bz + 0.5)
+        if not FIND.test("/cam startet fuer den Sulfur-Cube-Test", cam_on(bot), ""):
+            return
+        geschoben_drin = wuerfel_schieben(bot, base)
+        geschlagen_drin = wuerfel_schlagen(bot, base)
+
+        # --- Der Widerstand: nur, solange die Kamera ihn beruehren koennte ---
+        wuerfel_setzen(bot, bx + 6.5, by, bz + 0.5)
+        hinstellen(bot, bx + 6.5, by, bz + 0.5)
+        fest_drin = wuerfel_fest(bot)
+        hinstellen(bot, bx + 6.5, by, bz + 4.5)
+        fest_daneben = wuerfel_fest(bot)
+        hinstellen(bot, bx + 6.5, by, bz + 0.5)
+        noch_im_cam = spielmodus_ist(bot, "adventure")
+        cam_off(bot)
+        time.sleep(1.0)
+        fest_danach = wuerfel_fest(bot)
+        geladen = wuerfel_entladen(bot, base)
+
+        # --- Die Ergebnisse gegenueberstellen ---
+        for name, ohne, drin in (("wegschieben", geschoben_ohne, geschoben_drin),
+                                 ("wegschlagen", geschlagen_ohne, geschlagen_drin)):
+            gerollt = ohne is not None and ohne > WUERFEL_BEWEGT
+            FIND.test(f"Gegenprobe: ohne Cam-Modus laesst sich ein Sulfur Cube {name}",
+                      gerollt,
+                      f"{ohne:.2f} Bloecke" if gerollt else
+                      f"Strecke {ohne} - die Probe daneben sagt damit nichts")
+            FIND.test(f"Im Cam-Modus laesst sich kein Sulfur Cube {name}",
+                      drin is not None and drin <= WUERFEL_BEWEGT,
+                      f"Strecke {drin}")
+        FIND.test("Steckt die Kamera im Sulfur Cube, steht er fest", fest_drin,
+                  "" if fest_drin else "kein Widerstand am Wuerfel")
+        FIND.test("Vier Bloecke daneben ist der Sulfur Cube wieder frei", not fest_daneben,
+                  "" if not fest_daneben else "der Widerstand blieb")
+        FIND.test("Der Cam-Modus lief bei der Probe am Sulfur Cube weiter", noch_im_cam,
+                  "" if noch_im_cam else "der Cam-Modus war vorher zu Ende")
+        FIND.test("Nach dem Cam-Modus ist der Sulfur Cube wieder frei", not fest_danach,
+                  "" if not fest_danach else "der Widerstand blieb")
+        vorher, da, noch = geladen
+        FIND.test("Gegenprobe: /attribute setzt den Widerstand von Hand", vorher, "")
+        FIND.test("Ein Sulfur Cube, mit dem Widerstand entladen, kommt ohne ihn wieder",
+                  da and not noch,
+                  "" if da and not noch else
+                  ("der Wuerfel kam nicht wieder" if not da else "der Widerstand blieb"))
+    finally:
+        try:
+            cam_off(bot)
+            bot.chat(f"/kill @e[type=minecraft:sulfur_cube,tag={INTERACT_TAG}]")
+            time.sleep(0.5)
+            hinstellen(bot, bx + 0.5, by, bz + 0.5)
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Sulfur-Cube-Test: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -3257,6 +3503,9 @@ def step_tests(env):
 
         # --- Bloecke und Entitaeten im Cam-Modus ---
         interact_checks(env, bot)
+
+        # --- Der Sulfur Cube: schieben und wegschlagen ---
+        sulfur_cube_checks(env, bot)
 
         # --- Die Ruestung im Cam-Modus ---
         armor_checks(env, bot)

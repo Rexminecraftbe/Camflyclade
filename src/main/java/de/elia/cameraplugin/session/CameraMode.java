@@ -162,6 +162,7 @@ public final class CameraMode {
         plugin.getFireGuard().startFor(player);
         plugin.getHungerGuard().startFor(player);
         plugin.getGhastGuard().startFor(player);
+        plugin.getSulfurCubeGuard().startFor(player);
         plugin.getInventoryGuard().startFor(player);
         // The entity taking the hits is the mannequin for both body types, so the
         // movement check always runs on it. Both calls look at the sensitivity
@@ -197,6 +198,7 @@ public final class CameraMode {
             // the team, he is no camera player any more.
             plugin.getHungerGuard().stopFor(player);
             plugin.getGhastGuard().stopFor(player);
+            plugin.getSulfurCubeGuard().stopFor(player);
             plugin.getInventoryGuard().stopFor(player);
             team.updateViewerTeam(player);
             plugin.getCamModeObjective().setScore(player, 0);
@@ -214,6 +216,7 @@ public final class CameraMode {
         plugin.getActionBar().showActionBarOffMessage(player);
         boolean standingInFire = plugin.getFireGuard().stopFor(player);
         plugin.getGhastGuard().stopFor(player);
+        plugin.getSulfurCubeGuard().stopFor(player);
         // Vor der Rückgabe: Der Sweep räumt die Taschen des Kamera-Spielers
         // leer und nähme dem Spieler sonst sein eigenes Inventar wieder ab.
         plugin.getInventoryGuard().stopFor(player);
