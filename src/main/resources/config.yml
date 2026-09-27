@@ -59,6 +59,8 @@ messages:
 
 # Nachrichten einzeln an- und abschalten
 message-settings:
+  actionbar-off: true
+  actionbar-on: true
   body-attacked: true
   body-drowning: true
   body-env-damage: true
@@ -81,7 +83,6 @@ message-settings:
   distance-limit: true
   enabled: true
   no-permission: true
-  no-player: true
   no-projectiles: true
   portal-blocked: true
   portal-return-area: true
@@ -89,6 +90,9 @@ message-settings:
   reload-exit: true
   reload-start: true
   reload-success: true
+  startup-skins-failed: true
+  startup-skins-loaded: true
+  startup-skins-loading: true
   time-limit-expired: true
 
 # Anzeige in der Action-Bar

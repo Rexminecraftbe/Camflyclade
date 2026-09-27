@@ -1675,6 +1675,98 @@ def effect_start_checks(env, bot):
 
 
 # ---------------------------------------------------------------------------
+# Meldungen einzeln abschalten
+# ---------------------------------------------------------------------------
+
+def message_switch_checks(env, bot):
+    """Die Schalter der Action-Bar und der Startzeilen unter message-settings.
+
+    actionbar-on und actionbar-off schalten die beiden Zeilen der Action-Bar
+    einzeln ab, der Hauptschalter enabled nimmt beide mit. Ob der Cam-Modus
+    dabei trotzdem laeuft, wird am Spielmodus gefragt: camera-on und
+    camera-off sind in der ausgelieferten Datei aus, ohne die Action-Bar sagt
+    das Plugin zu /cam also gar nichts.
+
+    Ist actionbar-off aus, kommt beim Ende eine leere Zeile - ohne sie stuende
+    "Cam mode activated" danach noch bis zu drei Sekunden da.
+
+    Die Startzeilen erscheinen nur beim Serverstart. Geprueft wird deshalb
+    nur, dass sie mit der Voreinstellung im Log stehen; zum Abschalten
+    muesste der Server neu starten.
+
+    Beide Schalter der Action-Bar heissen wie ihre Texte unter messages,
+    gesetzt wird deshalb immer mit dem Abschnitt.
+    """
+    def cam():
+        """Einmal /cam, und alles, was danach ankommt, ohne Farbcodes."""
+        since = bot.mark()
+        bot.chat("/cam")
+        time.sleep(2.5)
+        return [strip_colors(m["text"])
+                for m in bot.call("messages", since=since).get("messages", [])]
+
+    def said(lines, pattern):
+        return any(re.search(pattern, line) for line in lines)
+
+    def shown(lines):
+        return "; ".join(line for line in lines if line) or "nichts"
+
+    log = strip_colors(server_log(env))
+    FIND.test("Voreingestellt stehen die Startzeilen im Log",
+              "Skins werden geladen" in log
+              and ("Skins wurden erfolgreich geladen" in log
+                   or "Skins konnten beim Start nicht vorgeladen werden" in log),
+              "")
+
+    try:
+        # Gegenprobe zur leeren Zeile weiter unten: Voreingestellt folgt auf die
+        # Zeile zum Start die zum Ende, und geleert wird nichts. Kaeme hier
+        # auch eine leere an, sagte die Probe dort nichts ueber das Plugin.
+        cam()
+        ende = cam()
+        FIND.test("Gegenprobe: voreingestellt kommt beim Ende die Zeile und keine leere",
+                  said(ende, r"[Cc]am mode ended") and "" not in ende, shown(ende))
+
+        set_option(env, "actionbar-on", "false", "message-settings")
+        start = cam()
+        drin = spielmodus_ist(bot, "adventure")
+        FIND.test("actionbar-on: false - /cam startet ohne Zeile in der Action-Bar",
+                  drin and not said(start, r"[Cc]am mode activated"),
+                  shown(start) if drin else "der Cam-Modus startete nicht")
+        ende = cam()
+        FIND.test("actionbar-on: false - die Zeile zum Ende kommt weiter",
+                  said(ende, r"[Cc]am mode ended"), shown(ende))
+
+        set_options(env, [("actionbar-on", "true", "message-settings"),
+                          ("actionbar-off", "false", "message-settings")])
+        start = cam()
+        FIND.test("actionbar-off: false - die Zeile zum Start kommt weiter",
+                  said(start, r"[Cc]am mode activated"), shown(start))
+        ende = cam()
+        draussen = not spielmodus_ist(bot, "adventure")
+        FIND.test("actionbar-off: false - /cam endet ohne Zeile in der Action-Bar",
+                  draussen and not said(ende, r"[Cc]am mode ended"),
+                  shown(ende) if draussen else "der Cam-Modus lief weiter")
+        FIND.test("actionbar-off: false - die Zeile zum Start wird geleert",
+                  "" in ende, shown(ende))
+
+        set_options(env, [("actionbar-off", "true", "message-settings"),
+                          ("enabled", "false", "message-settings")])
+        start = cam()
+        drin = spielmodus_ist(bot, "adventure")
+        ende = cam()
+        FIND.test("enabled: false nimmt auch die Action-Bar mit",
+                  drin and not said(start + ende, r"[Cc]am mode (activated|ended)"),
+                  shown(start + ende) if drin else "der Cam-Modus startete nicht")
+    finally:
+        # Der Reload dabei holt ihn auch aus dem Cam-Modus, falls eine Probe
+        # mittendrin abgebrochen ist.
+        set_options(env, [("actionbar-on", "true", "message-settings"),
+                          ("actionbar-off", "true", "message-settings"),
+                          ("enabled", "true", "message-settings")])
+
+
+# ---------------------------------------------------------------------------
 # Interaktionen: Bloecke und Entitaeten
 # ---------------------------------------------------------------------------
 
@@ -2850,6 +2942,9 @@ def step_tests(env):
 
         # --- Start mit Trankeffekten ---
         effect_start_checks(env, bot)
+
+        # --- Meldungen einzeln abschalten ---
+        message_switch_checks(env, bot)
 
         # --- Geworfene Traenke im Cam-Modus ---
         potion_checks(env, bot)
