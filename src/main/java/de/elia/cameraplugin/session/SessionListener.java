@@ -47,28 +47,26 @@ public final class SessionListener implements Listener {
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
         // Der Spieler soll sterben, aber vorher den Kamera-Modus korrekt beenden.
-        // Die Drops und XP werden vom Tod selbst gehandhabt.
-        if (cameraPlayers.contains(event.getEntity().getUniqueId())) {
-            // Wichtig: Die Items sind im CameraData gespeichert.
-            // Wir müssen die Drops des Todes-Events leeren und unsere eigenen Items fallen lassen.
-            Player player = event.getEntity();
-            CameraData data = cameraPlayers.get(player.getUniqueId());
-
-            event.getDrops().clear(); // Leert die Standard-Drops (leeres Inventar)
-
-            // Füge die gespeicherten Items zu den Drops hinzu
+        // Die XP werden vom Tod selbst gehandhabt.
+        Player player = event.getEntity();
+        CameraData data = cameraPlayers.get(player.getUniqueId());
+        if (data == null) {
+            return;
+        }
+        // Der Server hat seine Drops aus dem leeren Inventar des Kamera-Spielers
+        // gesammelt. Fallen sollen stattdessen seine eigenen Sachen aus dem
+        // CameraData - getContents() hält alle Slots, Rüstung und Zweithand
+        // eingeschlossen, eine eigene Schleife für die Rüstung ließe sie
+        // doppelt fallen. Mit keepInventory fällt gar nichts: exitCameraMode
+        // gibt ihm sein Inventar zurück, und der Server lässt es ihm.
+        if (!event.getKeepInventory()) {
+            event.getDrops().clear();
             for (ItemStack item : data.getOriginalInventoryContents()) {
                 if (item != null && item.getType() != Material.AIR) {
                     event.getDrops().add(item);
                 }
             }
-            for (ItemStack item : data.getOriginalArmorContents()) {
-                if (item != null && item.getType() != Material.AIR) {
-                    event.getDrops().add(item);
-                }
-            }
-
-            plugin.exitCameraMode(player);
         }
+        plugin.exitCameraMode(player);
     }
 }
