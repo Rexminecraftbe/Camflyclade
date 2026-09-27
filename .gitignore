@@ -1,0 +1,2 @@
+# Build-Ausgabe von Maven, entsteht bei jedem "mvn package" neu
+target/
