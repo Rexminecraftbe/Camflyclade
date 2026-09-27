@@ -12,11 +12,11 @@ import java.util.EnumSet;
 import java.util.Set;
 
 /**
- * What a camera player can fly into besides air and be kept out of: water and
- * powder snow, each behind a switch of its own under {@code camera-mode}.
- *
- * <p>Lava is not one of them. Its switch does not stop the camera at the edge
- * but ends camera mode, see {@link CamMovementGuard}.</p>
+ * What a camera player can fly into besides air and be kept out of: lava,
+ * water and powder snow, each behind a switch of its own under
+ * {@code camera-mode}. All three are shut the same way: the camera stops at
+ * the edge, see {@link CamMovementGuard}, and camera mode does not start
+ * inside, see {@link de.elia.cameraplugin.start.StartChecks}.
  *
  * <p>The whole body counts, from the feet to the top of the head, and not only
  * the block the feet are in: flying up against a ceiling of powder snow, the
@@ -24,6 +24,12 @@ import java.util.Set;
  * to come out above it before the feet have even reached it.</p>
  */
 public enum FlightMedium {
+    /**
+     * Lava, {@code camera-mode.allow_lava_flight}. It used to end camera mode
+     * the moment the feet reached it; now it stops the camera like the other
+     * two.
+     */
+    LAVA("cant-fly-in-lava", "cam-lava-start"),
     /**
      * Water, {@code camera-mode.allow_water_flight}. The water standing in a
      * waterlogged block counts as well, and so does the water around kelp,
@@ -72,6 +78,7 @@ public enum FlightMedium {
     /** Whether its switch keeps camera mode out of it. */
     public boolean isClosed(CamSettings settings) {
         return switch (this) {
+            case LAVA -> !settings.allowsLavaFlight();
             case WATER -> !settings.allowsWaterFlight();
             case POWDER_SNOW -> !settings.allowsPowderSnowFlight();
         };
@@ -81,6 +88,7 @@ public enum FlightMedium {
     public boolean fills(Block block) {
         Material type = block.getType();
         return switch (this) {
+            case LAVA -> type == Material.LAVA;
             // Luft zuerst aussortiert: Um eine Kamera herum ist fast alles
             // Luft, und getBlockData legt fuer jeden Block ein neues Objekt an.
             case WATER -> ALWAYS_IN_WATER.contains(type) || (!type.isAir()
@@ -100,8 +108,9 @@ public enum FlightMedium {
      *
      * @param from where the step starts, or {@code null} when every block
      *             counts, as it does at the start of camera mode
-     * @return what was found, water before powder snow, or {@code null} when
-     *         the body stays clear of everything that is shut
+     * @return what was found, in the order lava, water, powder snow, or
+     *         {@code null} when the body stays clear of everything that is
+     *         shut
      */
     public static FlightMedium reachedInto(Player player, CamSettings settings, Location from, Location to) {
         Set<FlightMedium> closed = EnumSet.noneOf(FlightMedium.class);

@@ -2408,7 +2408,7 @@ def gamemode_checks(env, bot):
 
 
 # ---------------------------------------------------------------------------
-# Wasser und Pulverschnee
+# Lava, Wasser und Pulverschnee
 # ---------------------------------------------------------------------------
 
 # Wie lange ein Flug in diesem Abschnitt hoechstens dauert, in Millisekunden.
@@ -2452,7 +2452,7 @@ def medium_flug(bot, start, wegpunkte):
 
 
 def medium_start(bot, wo, heim):
-    """Mitten im Wasser oder im Pulverschnee /cam versuchen.
+    """Mitten in Lava, Wasser oder Pulverschnee /cam versuchen.
 
     Gibt zurueck, ob der Cam-Modus danach lief - am Spielmodus gefragt, siehe
     spielmodus_ist - und was im Chat stand. Danach ist er wieder aus und der
@@ -2472,14 +2472,16 @@ def medium_start(bot, wo, heim):
 
 
 def medium_checks(env, bot):
-    """Die Schalter camera-mode.allow_water_flight und allow_powder_snow_flight.
+    """Die Schalter allow_lava_flight, allow_water_flight und
+    allow_powder_snow_flight unter camera-mode.
 
     Steht einer auf false, kommt die Kamera nicht hinein: Der Schritt an der
-    Kante wird abgebrochen, und der Cam-Modus laeuft weiter - anders als bei
-    Lava, die ihn beendet. Darin starten laesst er sich auch nicht.
+    Kante wird abgebrochen, und der Cam-Modus laeuft weiter. Darin starten
+    laesst er sich auch nicht. Alle drei gehen denselben Weg.
 
-    Aufgebaut wird dreierlei, alles neben dem Testplatz:
+    Aufgebaut wird viererlei, alles neben dem Testplatz:
       * ein Becken aus Glas, drei Bloecke tief voll Wasser, oben offen,
+      * ein zweites daneben voll Lava,
       * ein Wuerfel aus Pulverschnee, drei Bloecke hoch,
       * eine Decke aus Pulverschnee, eine Lage dick, hoch in der Luft.
 
@@ -2494,35 +2496,41 @@ def medium_checks(env, bot):
     ankam, und das sagt sie auch, wenn der Flug des Bots gar nicht erst
     losgeht.
     """
-    if not FIND.test("Cam-Modus ist vor dem Wasser-Test aus", cam_off(bot), ""):
+    if not FIND.test("Cam-Modus ist vor dem Test an Lava, Wasser und Pulverschnee aus",
+                     cam_off(bot), ""):
         return
     pos = bot.server_pos()
-    if not FIND.test("Standort fuer den Wasser-Test lesbar", pos is not None,
-                     str(pos)):
+    if not FIND.test("Standort fuer den Test an Lava, Wasser und Pulverschnee lesbar",
+                     pos is not None, str(pos)):
         return
     bx, by, bz = _floor(pos[0]), _floor(pos[1] + 0.5), _floor(pos[2])
-    Log.detail(f"Testplatz fuer Wasser und Pulverschnee bei {(bx, by, bz)}")
+    Log.detail(f"Testplatz fuer Lava, Wasser und Pulverschnee bei {(bx, by, bz)}")
 
     becken = f"{bx + 6} {by} {bz - 2} {bx + 10} {by + 2} {bz + 2}"
     wasser = f"{bx + 7} {by} {bz - 1} {bx + 9} {by + 2} {bz + 1}"
+    lavabecken = f"{bx - 10} {by} {bz - 2} {bx - 6} {by + 2} {bz + 2}"
+    lava = f"{bx - 9} {by} {bz - 1} {bx - 7} {by + 2} {bz + 1}"
     wuerfel = f"{bx - 1} {by} {bz + 6} {bx + 1} {by + 2} {bz + 8}"
     decke = f"{bx - 1} {by + 5} {bz - 8} {bx + 1} {by + 5} {bz - 6}"
     heim = (bx + 0.5, by, bz + 0.5)
     im_becken = (bx + 8.5, by, bz + 0.5)
+    in_der_lava = (bx - 7.5, by, bz + 0.5)
     im_wuerfel = (bx + 0.5, by, bz + 7.5)
     unter_der_decke = (bx + 0.5, by, bz - 6.5)
     # Ueber den Rand hinweg und dann senkrecht hinein, bis knapp ueber den
-    # Boden. Becken und Wuerfel sind oben beide bei by + 3 zu Ende.
+    # Boden. Becken und Wuerfel sind oben alle bei by + 3 zu Ende.
     ins_becken = [(bx + 8.5, by + 6, bz + 0.5), (bx + 8.5, by + 0.2, bz + 0.5)]
+    in_die_lava = [(bx - 7.5, by + 6, bz + 0.5), (bx - 7.5, by + 0.2, bz + 0.5)]
     in_den_wuerfel = [(bx + 0.5, by + 6, bz + 7.5), (bx + 0.5, by + 0.2, bz + 7.5)]
     oben = by + 3
     # Senkrecht hinauf, bis die Augen ueber der Decke waeren. Sie liegt bei
     # by + 5 und ist oben bei by + 6 zu Ende; die Augen sitzen 1,62 ueber den
     # Fuessen, der Kopf endet bei 1,8.
     durch_die_decke = [(bx + 0.5, by + 4.5, bz - 6.5)]
+    schalter = ("allow_lava_flight", "allow_water_flight", "allow_powder_snow_flight")
 
     def aufraeumen():
-        for bereich in (becken, wuerfel, decke):
+        for bereich in (becken, lavabecken, wuerfel, decke):
             bot.chat(f"/fill {bereich} minecraft:air")
             time.sleep(0.5)
 
@@ -2545,26 +2553,47 @@ def medium_checks(env, bot):
             and ergebnis[1] and grenze(ergebnis[0][1]) \
             and any(meldung in g.lower() for g in ergebnis[2])
 
+    def gesagt_hat(gesagt, text):
+        return any(text in g.lower() for g in gesagt)
+
+    def start_in_lava():
+        """/cam mitten in der Lava, mit Feuerschutz: Ohne ihn verletzte die
+        Lava den Bot, und die cam-safety-Sperre laege auf allen weiteren
+        Proben. Danach loescht ihn das Wasserbecken, erst dann geht der
+        Feuerschutz wieder weg - er brennt noch eine Weile nach."""
+        bot.chat(f"/effect give {BOT_NAME} minecraft:fire_resistance 60 0 true")
+        time.sleep(0.5)
+        try:
+            return medium_start(bot, in_der_lava, heim)
+        finally:
+            hinstellen(bot, *im_becken)
+            hinstellen(bot, *heim)
+            bot.chat(f"/effect clear {BOT_NAME} minecraft:fire_resistance")
+            time.sleep(0.5)
+
     try:
         # Die Testwelt bleibt zwischen zwei Laeufen stehen: erst wegraeumen,
         # was ein abgebrochener Lauf hinterlassen hat.
         aufraeumen()
-        bot.chat(f"/fill {becken} minecraft:glass")
+        for bereich, block in ((becken, "glass"), (wasser, "water"),
+                               (lavabecken, "glass"), (lava, "lava"),
+                               (wuerfel, "powder_snow"), (decke, "powder_snow")):
+            bot.chat(f"/fill {bereich} minecraft:{block}")
+            time.sleep(0.5)
         time.sleep(0.5)
-        bot.chat(f"/fill {wasser} minecraft:water")
-        time.sleep(0.5)
-        bot.chat(f"/fill {wuerfel} minecraft:powder_snow")
-        time.sleep(0.5)
-        bot.chat(f"/fill {decke} minecraft:powder_snow")
-        time.sleep(1.0)
         welt = "minecraft:overworld"
         gebaut = (block_is(bot, welt, f"{bx + 8} {by + 2} {bz}", "minecraft:water")
+                  and block_is(bot, welt, f"{bx - 8} {by + 2} {bz}", "minecraft:lava")
                   and block_is(bot, welt, f"{bx} {by + 1} {bz + 7}", "minecraft:powder_snow")
                   and block_is(bot, welt, f"{bx} {by + 5} {bz - 7}", "minecraft:powder_snow"))
-        if not FIND.test("Wasserbecken und Pulverschnee stehen", gebaut, ""):
+        if not FIND.test("Becken mit Wasser und Lava und der Pulverschnee stehen",
+                         gebaut, ""):
             return
 
-        # --- Voreinstellung: beides offen, nachgesehen und nicht gesetzt ---
+        # --- Voreinstellung: alles offen, nachgesehen und nicht gesetzt ---
+        ergebnis = medium_flug(bot, heim, in_die_lava)
+        FIND.test("Gegenprobe: voreingestellt fliegt die Kamera in die Lava",
+                  drin_bis(ergebnis, oben - 1), zeige(ergebnis))
         ergebnis = medium_flug(bot, heim, ins_becken)
         FIND.test("Gegenprobe: voreingestellt fliegt die Kamera ins Wasser",
                   drin_bis(ergebnis, oben - 1), zeige(ergebnis))
@@ -2576,6 +2605,13 @@ def medium_checks(env, bot):
                   "die Pulverschnee-Decke",
                   ergebnis is not None and ergebnis[0] is not None
                   and ergebnis[0][1] + 1.62 > by + 6, zeige(ergebnis))
+        # Am Chat gemessen und nicht am Spielmodus: Der Koerper steht mit in
+        # der Lava, nimmt dort sofort Schaden und beendet den Cam-Modus
+        # gleich wieder. Die Zeile der Action-Bar kommt vorher.
+        lief, gesagt = start_in_lava()
+        FIND.test("Gegenprobe: voreingestellt startet /cam in der Lava",
+                  gesagt_hat(gesagt, "cam mode activated"),
+                  "; ".join(gesagt) or "nichts im Chat")
         lief, gesagt = medium_start(bot, im_becken, heim)
         FIND.test("Gegenprobe: voreingestellt startet /cam im Wasser", lief,
                   "; ".join(gesagt) or "nichts im Chat")
@@ -2583,9 +2619,20 @@ def medium_checks(env, bot):
         FIND.test("Gegenprobe: voreingestellt startet /cam im Pulverschnee", lief,
                   "; ".join(gesagt) or "nichts im Chat")
 
-        # --- Beides zu ---
-        set_options(env, [("allow_water_flight", "false"),
-                          ("allow_powder_snow_flight", "false")])
+        # --- Alles zu ---
+        set_options(env, [(name, "false") for name in schalter])
+
+        ergebnis = medium_flug(bot, heim, in_die_lava)
+        FIND.test("allow_lava_flight: false - die Kamera bleibt ueber der Lava "
+                  "stehen, der Cam-Modus laeuft weiter, die Meldung kommt",
+                  gestoppt(ergebnis, "cannot fly into lava",
+                           lambda y: y >= oben - 0.01), zeige(ergebnis))
+        lief, gesagt = start_in_lava()
+        FIND.test("allow_lava_flight: false - in der Lava startet /cam nicht, "
+                  "und die Ablehnung sagt warum",
+                  not lief and not gesagt_hat(gesagt, "cam mode activated")
+                  and gesagt_hat(gesagt, "cannot start cam mode in lava"),
+                  "; ".join(gesagt) or "nichts im Chat")
 
         ergebnis = medium_flug(bot, heim, ins_becken)
         FIND.test("allow_water_flight: false - die Kamera bleibt ueber dem Wasser "
@@ -2615,8 +2662,7 @@ def medium_checks(env, bot):
         lief, gesagt = medium_start(bot, im_becken, heim)
         FIND.test("allow_water_flight: false - im Wasser startet /cam nicht, "
                   "und die Ablehnung sagt warum",
-                  not lief and any("cannot start cam mode in water" in g.lower()
-                                   for g in gesagt),
+                  not lief and gesagt_hat(gesagt, "cannot start cam mode in water"),
                   "; ".join(gesagt) or "nichts im Chat")
 
         ergebnis = medium_flug(bot, heim, in_den_wuerfel)
@@ -2632,20 +2678,19 @@ def medium_checks(env, bot):
         lief, gesagt = medium_start(bot, im_wuerfel, heim)
         FIND.test("allow_powder_snow_flight: false - im Pulverschnee startet /cam "
                   "nicht, und die Ablehnung sagt warum",
-                  not lief and any("cannot start cam mode in powder snow" in g.lower()
-                                   for g in gesagt),
+                  not lief and gesagt_hat(gesagt, "cannot start cam mode in powder snow"),
                   "; ".join(gesagt) or "nichts im Chat")
     finally:
         try:
             # Der Reload holt ihn auch aus dem Cam-Modus, falls eine Probe
             # mittendrin abgebrochen ist.
-            set_options(env, [("allow_water_flight", "true"),
-                              ("allow_powder_snow_flight", "true")])
+            set_options(env, [(name, "true") for name in schalter])
             cam_off(bot)
             aufraeumen()
             hinstellen(bot, *heim)
         except Exception as exc:
-            FIND.problem(f"Aufraeumen nach dem Wasser-Test: {exc}")
+            FIND.problem(f"Aufraeumen nach dem Test an Lava, Wasser und "
+                         f"Pulverschnee: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -3219,7 +3264,7 @@ def step_tests(env):
         # --- Der Spielmodus, in dem der Cam-Modus laeuft ---
         gamemode_checks(env, bot)
 
-        # --- Wasser und Pulverschnee ---
+        # --- Lava, Wasser und Pulverschnee ---
         medium_checks(env, bot)
 
         # --- Portale und das Gedaechtnis fuer gesperrte Portale ---

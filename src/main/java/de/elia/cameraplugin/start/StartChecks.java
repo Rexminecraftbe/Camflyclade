@@ -23,7 +23,7 @@ import java.util.UUID;
 /**
  * Whether a player may start camera mode right now: not straight after a hit,
  * not as a spectator, not with the wrong effects on him, not in a forbidden
- * area and not in water or powder snow that camera mode is kept out of.
+ * area and not in lava, water or powder snow that camera mode is kept out of.
  */
 public final class StartChecks implements Listener {
 
@@ -154,8 +154,9 @@ public final class StartChecks implements Listener {
 
     /**
      * Checks whether camera mode may be started where the player is: not in
-     * water while {@code camera-mode.allow_water_flight} is off, and not in
-     * powder snow while {@code camera-mode.allow_powder_snow_flight} is.
+     * lava, water or powder snow while its switch under {@code camera-mode} -
+     * {@code allow_lava_flight}, {@code allow_water_flight},
+     * {@code allow_powder_snow_flight} - is off.
      *
      * <p>In flight the camera does not get in there, see
      * {@link de.elia.cameraplugin.movement.CamMovementGuard}. Started inside,

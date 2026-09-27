@@ -297,17 +297,24 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   davon, und die Stelle, an der der Bot aufgesetzt wird, wäre jedes Mal eine
   andere. Er ist vier Blöcke hoch, sein Rücken liegt also vier über seinen
   Füßen.
-* **Wasser und Pulverschnee baut der Test selbst auf**, neben dem Testplatz:
-  ein Becken aus Glas, drei Blöcke tief voll Wasser und oben offen, einen
-  Würfel aus Pulverschnee und eine Decke daraus, eine Lage dick und fünf
-  Blöcke über dem Boden. Die Voreinstellung `true` wird nachgesehen und nicht
-  gesetzt, danach stellt der Test beide Schalter auf `false` und am Ende
-  wieder zurück.
+* **Lava, Wasser und Pulverschnee baut der Test selbst auf**, neben dem
+  Testplatz: zwei Becken aus Glas, drei Blöcke tief und oben offen, eines
+  voll Wasser und eines voll Lava, dazu einen Würfel aus Pulverschnee und
+  eine Decke daraus, eine Lage dick und fünf Blöcke über dem Boden. Die
+  Voreinstellung `true` wird nachgesehen und nicht gesetzt, danach stellt
+  der Test alle drei Schalter auf `false` und am Ende wieder zurück.
 * **Die Decke prüft den Kopf.** Von unten kommt er als Erstes an, und eine
   einzige Lage ist so dünn, dass die Augen darüber herausschauen, noch ehe
   die Füße sie erreichen. Eine Sperre, die nur auf die Füße sieht, ließe die
   Kamera also hindurchschauen - die Gegenprobe mit `true` zeigt, dass die
   Augen dort wirklich darüber ankommen.
+* **In der Lava steht der Bot nur mit Feuerschutz.** Ohne ihn verletzte sie
+  ihn, und die `cam-safety`-Sperre läge auf allen weiteren Proben. Danach
+  löscht ihn das Wasserbecken; erst dann geht der Feuerschutz wieder weg,
+  denn er brennt noch eine Weile nach.
+* **Die Gegenprobe zum Start in Lava misst am Chat**, nicht am Spielmodus:
+  Der Körper steht mit in der Lava, nimmt dort sofort Schaden und beendet
+  den Cam-Modus gleich wieder. Die Zeile der Action-Bar kommt vorher.
 * **Pulverschnee friert.** Nach sieben Sekunden darin nimmt der Spieler
   Schaden, und der legte die `cam-safety`-Sperre auf die nächsten Proben. Die
   Startproben stellen den Bot deshalb nur kurz hinein und gleich danach
@@ -388,13 +395,14 @@ Startmodus zurück · ein unbekannter Wert wird gemeldet und fällt auf
 vier Werte abgelehnt, und der Spieler bleibt dabei Zuschauer · auch in
 Überleben und Kreativ lässt sich im Cam-Modus kein Block abbauen, Gegenprobe:
 ohne Cam-Modus geht es in beiden sehr wohl · was im Cam-Modus in die Taschen
-kommt, ist im nächsten Tick wieder weg · auf `allow_water_flight: false` bleibt
-die Kamera über dem Wasser stehen, auf `allow_powder_snow_flight: false` auf
-dem Pulverschnee und mit dem Kopf unter einer Decke daraus, der Cam-Modus läuft
-dabei weiter und die Meldung kommt · wer schon im Wasser ist, kommt heraus,
-aber nicht tiefer hinein · im Wasser und im Pulverschnee startet `/cam` dann
-nicht, und die Ablehnung sagt warum · Gegenprobe: voreingestellt geht all das
-· Server-Log ohne Fehler des Plugins.
+kommt, ist im nächsten Tick wieder weg · auf `allow_lava_flight: false` bleibt
+die Kamera über der Lava stehen, auf `allow_water_flight: false` über dem
+Wasser, auf `allow_powder_snow_flight: false` auf dem Pulverschnee und mit dem
+Kopf unter einer Decke daraus, der Cam-Modus läuft dabei weiter und die
+Meldung kommt · wer schon im Wasser ist, kommt heraus, aber nicht tiefer hinein
+· in Lava, Wasser und Pulverschnee startet `/cam` dann nicht, und die Ablehnung
+sagt warum · Gegenprobe: voreingestellt geht all das · Server-Log ohne Fehler
+des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
 Arbeitsordner.
