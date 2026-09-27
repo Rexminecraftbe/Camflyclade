@@ -1,0 +1,586 @@
+package de.elia.cameraplugin.mirrordamage;
+
+import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.config.CamSettings;
+import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.potion.CamPotionGuard;
+import de.elia.cameraplugin.session.CameraPlayers;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.AbstractArrow;
+import org.bukkit.entity.Arrow;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.projectiles.ProjectileSource;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.util.Vector;
+
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * Passes the hit the body takes on to the player, the section
+ * {@code mirror-damage}, and keeps every other hit off the camera player while
+ * his body stands in for him.
+ */
+public final class DamageMirror implements Listener {
+
+    /**
+     * How long a mirrored hit waits at most for the player to live through a
+     * tick, so that it never hangs should he stop ticking altogether.
+     */
+    private static final int MAX_ARMOR_WAIT_TICKS = 10;
+
+    private final CameraPlugin plugin;
+    private final CamSettings settings;
+    private final Messages messages;
+    private final CameraPlayers cameraPlayers;
+    /** The player who is taking the hit his body took right now. */
+    private final Set<UUID> damageImmunityBypass = new HashSet<>();
+    /** Players whose body was hit and whose hit has not reached them yet. */
+    private final Set<UUID> pendingMirrorHit = new HashSet<>();
+    private final Set<UUID> pendingDamage = new HashSet<>();
+
+    public DamageMirror(CameraPlugin plugin) {
+        this.plugin = plugin;
+        this.settings = plugin.getSettings();
+        this.messages = plugin.getMessages();
+        this.cameraPlayers = plugin.getCameraPlayers();
+    }
+
+    /**
+     * Every hit on the body ends camera mode and is passed on to the player.
+     * There is no separate check for lava, water or blocks: the body takes that
+     * damage itself and the damage event is all that is needed to notice it.
+     *
+     * <p>Only the raw damage of the hit travels to the player, together with the
+     * damage source it came with. The server then reduces it exactly once, on
+     * the player: his armour, his enchantments, his resistance and his
+     * absorption, in the order and with the rules of the real damage type. What
+     * the body wears never counts - it would be a second, wrong reduction, and
+     * a damage type that ignores armour (falling, drowning, magic) would lose
+     * against armour it never touches in the first place.</p>
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onBodyDamage(EntityDamageEvent event) {
+        Entity damagedEntity = event.getEntity();
+
+        // Prüfe, ob es sich um unseren Körper oder die zugehörige Hitbox handelt
+        boolean damagedBody = cameraPlayers.isCameraBody(damagedEntity);
+        UUID ownerUUID = cameraPlayers.getBodyOrHitboxOwner(damagedEntity);
+
+        if (ownerUUID == null) return; // Nicht von uns verwaltet
+
+        Player owner = Bukkit.getPlayer(ownerUUID);
+        if (owner == null || !owner.isOnline()) {
+            // Spieler offline -> Aufräumen
+            if (damagedBody) {
+                cameraPlayers.removeBody(damagedEntity.getUniqueId());
+            } else {
+                cameraPlayers.removeHitbox(damagedEntity.getUniqueId());
+            }
+            cameraPlayers.remove(ownerUUID);
+            plugin.getNoCollisionTeam().deleteNoCollisionTeamIfUnused();
+            damagedEntity.remove();
+            return;
+        }
+
+        // Which of the two entities was hit makes no difference any more: only
+        // the raw damage is passed on, and the reduction happens on the player.
+        // A hit on the armour stand therefore no longer has to be forwarded to
+        // the mannequin standing in it.
+        if (!pendingDamage.add(ownerUUID)) {
+            // already scheduled damage for this hit
+            return;
+        }
+
+        if (owner.isDead()) {
+            event.setCancelled(true);
+            plugin.exitCameraMode(owner);
+            pendingDamage.remove(ownerUUID);
+            return;
+        }
+
+        // Der Körper selbst soll keinen Schaden nehmen, jeder Treffer beendet den Cam-Modus.
+        event.setCancelled(true);
+
+        if (event instanceof EntityDamageByEntityEvent selfHit &&
+                selfHit.getDamager().getUniqueId().equals(owner.getUniqueId())) {
+            messages.sendConfiguredMessage(owner, "camera-off");
+            plugin.exitCameraMode(owner);
+            pendingDamage.remove(ownerUUID);
+            return;
+        }
+
+        DamageCause cause = event.getCause();
+
+        String damagerName = "Umgebung";
+        Entity damagerEntity = null;
+        if (event instanceof EntityDamageByEntityEvent entityEvent) {
+            damagerEntity = entityEvent.getDamager();
+            damagerName = damagerEntity instanceof Player ? damagerEntity.getName() : damagerEntity.getType().toString();
+
+            // apply tipped arrow effects to the player
+            if (damagerEntity instanceof Arrow arrow) {
+                CamPotionGuard.applyArrowEffects(arrow, owner);
+            }
+        }
+
+
+        double applyDamage;
+        switch (settings.getDamageMode()) {
+            // The damage the hit started with, before anything reduced it.
+            // Armour, armour toughness, protection enchantments, resistance and
+            // absorption all belong to the player: the server applies them once,
+            // when the hit is passed on to him below. Whatever the body wears
+            // does not count, so nothing is subtracted twice and explosions and
+            // falling anvils need no special case any more.
+            case MIRROR -> applyDamage = event.getDamage();
+            case CUSTOM -> {
+                applyDamage = settings.getCustomDamageHearts() * 2.0;
+                // At zero hearts the mode is meant to cost nothing at all, so
+                // no enchantment puts anything on top of it either.
+                if (applyDamage > 0 && event instanceof EntityDamageByEntityEvent ede) {
+                    Entity dmg = ede.getDamager();
+                    if (dmg instanceof LivingEntity attacker) {
+                        ItemStack wpn = attacker.getEquipment().getItemInMainHand();
+                        int sharp = wpn.getEnchantmentLevel(Enchantment.SHARPNESS);
+                        if (sharp > 0) {
+                            applyDamage += 1 + sharp; // rough Sharpness formula
+                        }
+                    } else if (dmg instanceof AbstractArrow arrow) {
+                        ProjectileSource src = arrow.getShooter();
+                        if (src instanceof LivingEntity attacker) {
+                            ItemStack bow = attacker.getEquipment().getItemInMainHand();
+                            int power = bow.getEnchantmentLevel(Enchantment.POWER);
+                            if (power > 0) {
+                                applyDamage += 1 + power; // approximate Power formula
+                            }
+                        }
+                    }
+                }
+            }
+            default -> applyDamage = 0.0;
+        }
+
+        plugin.exitCameraMode(owner);
+
+        String messageKey = resolveDamageMessageKey(event, cause);
+        if (messages.isMessageEnabled(messageKey)) {
+            owner.sendMessage(
+                    messages.getMessage(messageKey)
+                            .replace("{damager}", damagerName)
+                            .replace("{cause}", event.getCause().toString())
+            );
+        }
+
+        if (settings.isMirrorDebug()) {
+            sendMirrorDebug(owner, String.format(Locale.ROOT,
+                    "Koerper getroffen: roh %.3f | nach Koerper-Ruestung %.3f | %s",
+                    event.getDamage(), event.getFinalDamage(), event.getCause()));
+        }
+
+        // The hit always reaches the player, whatever the mode passes on of it:
+        // the damage, the push, or only the pause it leaves behind. It also
+        // keeps the damage source it had - only with it does the server treat
+        // it as the fall, the drowning or the arrow it really was, and the
+        // source decides whether armour counts at all, which protection
+        // enchantment counts, and who gets the kill.
+        mirrorHitToPlayer(owner, applyDamage, event.getDamage(), event.getDamageSource(), damagerEntity);
+
+        pendingDamage.remove(ownerUUID);
+    }
+
+    /**
+     * Hands the hit the body took to the player - as soon as his armour
+     * actually protects him again.
+     *
+     * <p>Camera mode has just put the armour back into his inventory, but that
+     * alone does not protect him: the server turns the pieces into attribute
+     * modifiers in the player's own tick, and scheduled tasks run before the
+     * entities of that tick. A hit passed on one tick later can therefore still
+     * find him standing there as if he wore nothing, while waiting longer than
+     * needed only gives something else the chance to hit him first.</p>
+     *
+     * <p>So the hit does not wait for a number of ticks, it waits for the
+     * player: as soon as he has lived through one tick since the armour came
+     * back, that tick has applied it, and the hit lands with the protection he
+     * really has.</p>
+     */
+    private void mirrorHitToPlayer(Player owner, double amount, double rawDamage,
+                                   org.bukkit.damage.DamageSource source, Entity attacker) {
+        int restoredAt = owner.getTicksLived();
+        // Nothing else may reach him until this hit has landed, see onPlayerDamage.
+        pendingMirrorHit.add(owner.getUniqueId());
+        new BukkitRunnable() {
+            private int waited = 0;
+
+            @Override
+            public void run() {
+                if (!owner.isOnline() || owner.isDead()) {
+                    pendingMirrorHit.remove(owner.getUniqueId());
+                    cancel();
+                    return;
+                }
+                if (owner.getTicksLived() <= restoredAt && ++waited < MAX_ARMOR_WAIT_TICKS) {
+                    return; // his tick is still to come, his armour is not on yet
+                }
+                cancel();
+                applyMirroredHit(owner, amount, rawDamage, source, attacker, waited);
+            }
+        }.runTaskTimer(plugin, 1L, 1L);
+    }
+
+    /**
+     * Puts the hit onto the player: once, with his own armour, his own
+     * enchantments and his own effects, and with the damage source it came
+     * with.
+     *
+     * <p>His invulnerability is left alone on purpose. Should something else
+     * have hit him while this one was on its way, the server counts the two
+     * together the way it counts any two hits that land within the same
+     * invulnerability - the bigger one wins instead of both being taken. Forcing
+     * this hit through would take it on top of the other one, and the player
+     * would lose more hearts than the same hit costs outside camera mode.</p>
+     *
+     * <p>When the mode passes on no damage at all, the hit still arrives: as
+     * the push, if the push is switched on, and as the pause it leaves behind
+     * either way - and as the wear on the armour, which follows a mode of its
+     * own.</p>
+     */
+    private void applyMirroredHit(Player owner, double amount, double rawDamage,
+                                  org.bukkit.damage.DamageSource source, Entity attacker, int waitedTicks) {
+        double speed = owner.getVelocity().length();
+        double armor = attributeValue(owner, Attribute.ARMOR);
+        double toughness = attributeValue(owner, Attribute.ARMOR_TOUGHNESS);
+        double knockbackResistance = attributeValue(owner, Attribute.KNOCKBACK_RESISTANCE);
+        double healthBefore = owner.getHealth();
+        double absorptionBefore = owner.getAbsorptionAmount();
+        int framesBefore = owner.getNoDamageTicks();
+        double lastBefore = owner.getLastDamage();
+        int fireBefore = owner.getFireTicks();
+        UUID ownerId = owner.getUniqueId();
+        pendingMirrorHit.remove(ownerId);
+
+        if (amount <= 0) {
+            // Nothing to pass on - but the hit did happen, it only landed on
+            // the body standing in for the player. The pause it leaves behind
+            // is his as well: without it the next swing of the attacker, or the
+            // fire his body stood in, would reach him in the same moment and
+            // take exactly the hearts this mode is meant to save him. The
+            // push is his too, as long as it is switched on - the server hands
+            // it out only together with damage, so here it has to be handed
+            // out by hand.
+            if (settings.isMirrorKnockback()) {
+                owner.setVelocity(new Vector(0, 0, 0));
+                pushAwayFrom(owner, attacker, knockbackResistance);
+            }
+            owner.setNoDamageTicks(20);
+            owner.setLastDamage(rawDamage);
+            // The armour follows its own mode: that no hearts are passed on
+            // does not mean the hit left the armour alone.
+            int wornPoints = wearWornArmor(owner, rawDamage, source);
+            reportMirroredHit(owner, amount, source, armor, toughness, knockbackResistance,
+                    healthBefore, speed, waitedTicks, framesBefore, lastBefore, fireBefore,
+                    armorNote(false, wornPoints));
+            return;
+        }
+
+        // The server wears the armour down out of the very damage it deals, and
+        // that number is the only one it can use. It is therefore left to do the
+        // wear in the one case where its number is the right one anyway: the
+        // real hit, mirrored, with the Unbreaking enchantment counting. In every
+        // other case the armour is swapped for copies, the server wears those
+        // out, and the real pieces get the wear their own mode asks for.
+        boolean serverWearsArmor = settings.getArmorDamageMode() == ArmorDamageMode.MIRROR
+                && settings.respectsUnbreaking() && amount == rawDamage;
+        ItemStack[] saved = null;
+        if (!serverWearsArmor) {
+            // Copies protect exactly like the originals, so the player takes
+            // the same damage - only the copies wear out, and they are thrown
+            // away right afterwards. Taking the armour off instead would not
+            // work: the protection sits in attribute modifiers the server only
+            // refreshes in the entity's own tick, so it would still count here
+            // while the durability was already gone.
+            saved = owner.getInventory().getArmorContents();
+            ItemStack[] copies = new ItemStack[saved.length];
+            for (int i = 0; i < saved.length; i++) {
+                if (saved[i] != null) {
+                    copies[i] = saved[i].clone();
+                }
+            }
+            owner.getInventory().setArmorContents(copies);
+            owner.updateInventory();
+        }
+        // A moment ago the player was flying. That speed must not ride along
+        // into the knockback of this hit: outside camera mode he would have
+        // been standing where his body stood, and the hit would push him from
+        // a standstill.
+        owner.setVelocity(new Vector(0, 0, 0));
+        damageImmunityBypass.add(ownerId);
+        try {
+            if (source != null) {
+                owner.damage(amount, source);
+            } else {
+                owner.damage(amount, attacker);
+            }
+        } finally {
+            damageImmunityBypass.remove(ownerId);
+        }
+        if (!settings.damageCountsArmor()) {
+            takeWhatTheArmorKeptAway(owner, amount, healthBefore + absorptionBefore, framesBefore);
+        }
+        if (!settings.isMirrorKnockback()) {
+            // The hit is passed on, the push behind it is not: the server has
+            // just turned it into movement, and that movement is taken back
+            // before anyone sees it.
+            owner.setVelocity(new Vector(0, 0, 0));
+        }
+        // A dead player keeps nothing of this: what he dropped are the copies,
+        // so wearing the originals down would only be heard and seen for a set
+        // of pieces that is about to be thrown away.
+        int wornPoints = saved == null || owner.isDead() ? 0 : wearArmor(owner, saved, rawDamage, source);
+        reportMirroredHit(owner, amount, source, armor, toughness, knockbackResistance,
+                healthBefore, speed, waitedTicks, framesBefore, lastBefore, fireBefore,
+                armorNote(serverWearsArmor, wornPoints));
+        if (attacker instanceof LivingEntity living) {
+            ItemStack weapon = living.getEquipment().getItemInMainHand();
+            int fireLevel = weapon.getEnchantmentLevel(Enchantment.FIRE_ASPECT);
+            if (fireLevel > 0) {
+                int ticks = Math.max(owner.getFireTicks(), fireLevel * 80);
+                owner.setFireTicks(ticks);
+            }
+        } else if (attacker instanceof AbstractArrow arr) {
+            if (arr.getFireTicks() > 0) {
+                int ticks = Math.max(owner.getFireTicks(), 100);
+                owner.setFireTicks(ticks);
+            }
+        }
+        if (saved != null && !owner.isDead()) {
+            owner.getInventory().setArmorContents(saved);
+            owner.updateInventory();
+        }
+        // Died from the hit: the copies are what he dropped, and they carry the
+        // same pieces. Handing the originals back into an inventory the server
+        // has just emptied would only put them into the world twice.
+    }
+
+    /**
+     * Wears down the pieces the player has on, for a hit that passes on no
+     * damage of its own. Only that one case needs this - everywhere else the
+     * armour is off his body already, swapped for the copies the server wears
+     * out in its stead.
+     */
+    private int wearWornArmor(Player owner, double rawDamage, org.bukkit.damage.DamageSource source) {
+        if (settings.getArmorDamageMode() == ArmorDamageMode.OFF) {
+            return 0;
+        }
+        ItemStack[] worn = owner.getInventory().getArmorContents();
+        int points = wearArmor(owner, worn, rawDamage, source);
+        if (points > 0) {
+            owner.getInventory().setArmorContents(worn);
+            owner.updateInventory();
+        }
+        return points;
+    }
+
+    /**
+     * Wears the pieces down after {@code mirror-damage.damage-armor-mode}:
+     * after the real hit, after a fixed number of durability points, or not at
+     * all.
+     *
+     * @return the durability points every piece was asked to give up
+     */
+    private int wearArmor(Player owner, ItemStack[] armor, double rawDamage,
+                          org.bukkit.damage.DamageSource source) {
+        return switch (settings.getArmorDamageMode()) {
+            case MIRROR -> ArmorWear.wearMirrored(owner, armor, rawDamage, source, settings.respectsUnbreaking());
+            case CUSTOM -> ArmorWear.wearFixed(owner, armor, settings.getCustomArmorDamage(), source, settings.respectsUnbreaking());
+            case OFF -> 0;
+        };
+    }
+
+    /**
+     * Takes off afterwards what the armour kept away, so that the hit costs
+     * exactly what it is worth: the hearts "custom" is set to, or the whole of
+     * the real hit under "mirror".
+     *
+     * <p>Only reached with {@code damage-counts-armor} switched off. The hit is
+     * still dealt the normal way first, with its damage source, its push and
+     * the death message it brings; what the armour, the protection enchantments
+     * or an effect took off it is then taken from the player by hand.</p>
+     *
+     * <p>What this does not touch is the armour itself: how hard the hit wears
+     * it down is {@code damage-armor-mode}'s to say alone, so the pieces still
+     * take their durability - and on the body they are worn and shown the whole
+     * time either way.</p>
+     *
+     * <p>A hit that does not land at all stays at nothing, though: something
+     * cancelled it outright - fire resistance against fire, a protected region -
+     * and that is not the armour taking its share. Neither is the
+     * invulnerability of a hit the player had just taken, which this one is
+     * meant to run into the same way it would outside camera mode.</p>
+     */
+    private void takeWhatTheArmorKeptAway(Player owner, double target, double poolBefore,
+                                          int framesBefore) {
+        if (owner.isDead() || framesBefore > 0) {
+            return;
+        }
+        double dealt = poolBefore - (owner.getHealth() + owner.getAbsorptionAmount());
+        if (dealt <= 0 || dealt >= target - 1.0E-4) {
+            return;
+        }
+        double missing = target - dealt;
+        double absorption = owner.getAbsorptionAmount();
+        if (absorption > 0) {
+            // Absorption hearts stand in front of the real ones here as well.
+            double taken = Math.min(absorption, missing);
+            owner.setAbsorptionAmount(absorption - taken);
+            missing -= taken;
+        }
+        if (missing > 0) {
+            owner.setHealth(Math.max(0.0, owner.getHealth() - missing));
+        }
+    }
+
+    /** How the wear on the armour reads in the measuring line. */
+    private String armorNote(boolean serverWears, int points) {
+        if (serverWears) {
+            return "mirror, vom Server";
+        }
+        return switch (settings.getArmorDamageMode()) {
+            case MIRROR -> "mirror, " + points + " Punkte";
+            case CUSTOM -> "custom, " + points + " Punkte";
+            case OFF -> "false";
+        };
+    }
+
+    /**
+     * Pushes the player away from whoever hit his body, the way the server
+     * pushes anyone it hits: with the same strength, against his knockback
+     * resistance, and from a standstill.
+     *
+     * <p>Needed because the server only ever hands out that push together with
+     * damage. Where no damage is passed on, the push would be lost with it -
+     * and whether the player is pushed is not meant to depend on how much of
+     * the hit the mode passes on.</p>
+     */
+    private void pushAwayFrom(Player owner, Entity attacker, double knockbackResistance) {
+        if (attacker == null) {
+            return;
+        }
+        double strength = 0.4 * (1.0 - knockbackResistance);
+        if (strength <= 0.0) {
+            return;
+        }
+        Location from = attacker.getLocation();
+        Location to = owner.getLocation();
+        Vector direction = new Vector(from.getX() - to.getX(), 0.0, from.getZ() - to.getZ());
+        if (direction.lengthSquared() < 1.0E-7) {
+            return; // standing in the same spot, there is no direction to push in
+        }
+        Vector push = direction.normalize().multiply(strength);
+        Vector velocity = owner.getVelocity();
+        double lift = owner.isOnGround() ? Math.min(0.4, velocity.getY() / 2.0 + strength) : velocity.getY();
+        owner.setVelocity(new Vector(
+                velocity.getX() / 2.0 - push.getX(),
+                lift,
+                velocity.getZ() / 2.0 - push.getZ()));
+    }
+
+    /** One line of the measurement, whenever {@code mirror-damage.debug} is on. */
+    private void reportMirroredHit(Player owner, double amount, org.bukkit.damage.DamageSource source,
+                                   double armor, double toughness, double knockbackResistance,
+                                   double healthBefore, double speed, int waitedTicks,
+                                   int framesBefore, double lastBefore, int fireBefore,
+                                   String armorNote) {
+        if (!settings.isMirrorDebug()) {
+            return;
+        }
+        sendMirrorDebug(owner, String.format(Locale.ROOT,
+                "uebertragen: roh %.3f (%s) | Ruestung %.1f (zaehlt %s), Haerte %.1f, KB-Schutz %.2f"
+                        + " | Leben %.2f -> %.2f (-%.3f) | Tempo %.3f | Wartezeit %d Ticks"
+                        + " | Unverwundbar %d, letzter Treffer %.2f, Feuer %d | Rueckstoss %s"
+                        + " | Abnutzung %s",
+                amount, damageTypeName(source), armor, settings.damageCountsArmor() ? "an" : "aus",
+                toughness, knockbackResistance,
+                healthBefore, owner.getHealth(), healthBefore - owner.getHealth(), speed, waitedTicks,
+                framesBefore, lastBefore, fireBefore, settings.isMirrorKnockback() ? "an" : "aus", armorNote));
+    }
+
+    /**
+     * Picks the message for the hit that ended camera mode. Drowning and
+     * suffocation keep their own text, everything else is reported as an attack
+     * or as generic environmental damage.
+     */
+    private String resolveDamageMessageKey(EntityDamageEvent event, DamageCause cause) {
+        if (event instanceof EntityDamageByEntityEvent) {
+            return "body-attacked";
+        }
+        return switch (cause) {
+            case DROWNING -> "body-drowning";
+            case SUFFOCATION -> "body-suffocating";
+            default -> "body-env-damage";
+        };
+    }
+
+    /**
+     * The camera player takes no damage himself: while camera mode runs his
+     * body stands in for him, and in the tick or two between the hit on the
+     * body and that hit reaching him nothing else may hit him either.
+     *
+     * <p>That second part matters more than it looks. The hit on the body came
+     * first - without camera mode the player would have taken it right there,
+     * and everything reaching him in the next few ticks would have run into the
+     * invulnerability of that hit. Letting something hit him while his own hit
+     * is still on its way would take it on top instead: the fire his body stood
+     * in, or the next swing of the attacker, would cost him hearts that the
+     * same situation never costs outside camera mode.</p>
+     */
+    @EventHandler
+    public void onPlayerDamage(EntityDamageEvent event) {
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
+        UUID playerId = player.getUniqueId();
+        if (damageImmunityBypass.contains(playerId)) {
+            return; // his own hit, on its way through
+        }
+        if (cameraPlayers.contains(playerId) || pendingMirrorHit.contains(playerId)) {
+            event.setCancelled(true);
+        }
+    }
+
+    /** The value of one of the player's attributes, or zero when he has none. */
+    private double attributeValue(Player player, Attribute attribute) {
+        AttributeInstance instance = player.getAttribute(attribute);
+        return instance == null ? 0.0 : instance.getValue();
+    }
+
+    /** The name of the damage type a hit carries, for the measuring output. */
+    private String damageTypeName(org.bukkit.damage.DamageSource source) {
+        return source == null ? "ohne Quelle" : source.getDamageType().getKey().toString();
+    }
+
+    /**
+     * Puts one line of the measurement in front of the player and into the log.
+     * Only ever reached while {@code mirror-damage.debug} is switched on.
+     */
+    private void sendMirrorDebug(Player owner, String line) {
+        plugin.getLogger().info("[Schadensuebertragung] " + owner.getName() + ": " + line);
+        owner.sendMessage("§e[CamFly] §7" + line);
+    }
+}
