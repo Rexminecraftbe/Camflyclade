@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **476** - alle 476 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **487** - alle 487 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -75,9 +75,12 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   das Skript rechnet die Grenzen deshalb aus und deckelt sie.
 * **`bot.entity.position` ist die Sicht des Clients** und läuft optimistisch
   voraus. Die Wahrheit holt das Skript mit `/data get entity @s Pos`.
-* **Fliegen im Cam-Modus** geht über `bot.creative.startFlying()` und
-  `bot.creative.flyTo()`, immer mit hartem Timeout drumherum, sonst hängt es an
-  der Sperre fest.
+* **Fliegen im Cam-Modus** geht über `bot.creative.startFlying()` und eine
+  eigene Schleife in `fly`, im selben Schritt wie `bot.creative.flyTo()`: ein
+  halber Block alle 50 ms. `flyTo` selbst lässt sich nicht abbrechen - hält
+  das Plugin die Kamera an einer Grenze fest, kommt es nie an und zieht den
+  Bot auch nach dem Timeout weiter zu seinem alten Ziel, gegen jeden späteren
+  Flug und jedes `/tp`. Die eigene Schleife hört am Timeout auf.
 * **Kein `pkill -f`.** Steht das Muster in der eigenen Kommandozeile, schießt es
   die eigene Shell ab. Das Skript merkt sich stattdessen die Prozessgruppe und
   beendet den Server erst über `stop` auf der Konsole, dann über die Gruppe.
@@ -294,6 +297,26 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   davon, und die Stelle, an der der Bot aufgesetzt wird, wäre jedes Mal eine
   andere. Er ist vier Blöcke hoch, sein Rücken liegt also vier über seinen
   Füßen.
+* **Wasser und Pulverschnee baut der Test selbst auf**, neben dem Testplatz:
+  ein Becken aus Glas, drei Blöcke tief voll Wasser und oben offen, einen
+  Würfel aus Pulverschnee und eine Decke daraus, eine Lage dick und fünf
+  Blöcke über dem Boden. Die Voreinstellung `true` wird nachgesehen und nicht
+  gesetzt, danach stellt der Test beide Schalter auf `false` und am Ende
+  wieder zurück.
+* **Die Decke prüft den Kopf.** Von unten kommt er als Erstes an, und eine
+  einzige Lage ist so dünn, dass die Augen darüber herausschauen, noch ehe
+  die Füße sie erreichen. Eine Sperre, die nur auf die Füße sieht, ließe die
+  Kamera also hindurchschauen - die Gegenprobe mit `true` zeigt, dass die
+  Augen dort wirklich darüber ankommen.
+* **Pulverschnee friert.** Nach sieben Sekunden darin nimmt der Spieler
+  Schaden, und der legte die `cam-safety`-Sperre auf die nächsten Proben. Die
+  Startproben stellen den Bot deshalb nur kurz hinein und gleich danach
+  wieder heraus.
+* **Im Wasser sinkt der Bot**, auch fliegend: `startFlying` nimmt nur die
+  normale Schwerkraft weg, nicht die im Wasser. Kleine Schritte meldet der
+  Server dem Plugin aber erst ab 1/16 Block. Nach der Probe „nicht tiefer“
+  steht er deshalb bis zu 1/16 Block unter der Stelle, an die er gesetzt
+  wurde, und die Probe lässt dafür Luft.
 * **Die Gegenprobe am Happy Ghast wird nach beiden Seiten eingegrenzt.** Nur
   „nicht abgehoben" hieße sie auch dann gut, wenn der Bot glatt durch den
   Ghast hindurchgefallen wäre - und dann sagte die Probe darunter nichts mehr
@@ -365,7 +388,13 @@ Startmodus zurück · ein unbekannter Wert wird gemeldet und fällt auf
 vier Werte abgelehnt, und der Spieler bleibt dabei Zuschauer · auch in
 Überleben und Kreativ lässt sich im Cam-Modus kein Block abbauen, Gegenprobe:
 ohne Cam-Modus geht es in beiden sehr wohl · was im Cam-Modus in die Taschen
-kommt, ist im nächsten Tick wieder weg · Server-Log ohne Fehler des Plugins.
+kommt, ist im nächsten Tick wieder weg · auf `allow_water_flight: false` bleibt
+die Kamera über dem Wasser stehen, auf `allow_powder_snow_flight: false` auf
+dem Pulverschnee und mit dem Kopf unter einer Decke daraus, der Cam-Modus läuft
+dabei weiter und die Meldung kommt · wer schon im Wasser ist, kommt heraus,
+aber nicht tiefer hinein · im Wasser und im Pulverschnee startet `/cam` dann
+nicht, und die Ablehnung sagt warum · Gegenprobe: voreingestellt geht all das
+· Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
 Arbeitsordner.

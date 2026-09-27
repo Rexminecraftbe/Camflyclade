@@ -72,7 +72,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 476 Methoden- und Feldzugriffe. Alle 476 gibt
+# Dieser Pruefer zaehlt zurzeit 487 Methoden- und Feldzugriffe. Alle 487 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -966,18 +966,38 @@ async function handle(cmd) {
       return { entities: list };
     }
     case 'fly': {
-      // Harter Timeout drumherum, sonst haengt es an der Sperre des Plugins fest.
+      // Selbst geflogen, im selben Schritt wie bot.creative.flyTo: ein halber
+      // Block alle 50 ms. flyTo selbst laesst sich nicht abbrechen - haelt das
+      // Plugin die Kamera an einer Grenze fest, kommt es nie an und zieht den
+      // Bot auch nach dem Timeout weiter zu seinem alten Ziel, gegen jeden
+      // spaeteren Flug und jedes /tp. Diese Schleife hoert am Timeout auf.
       const Vec3 = require('vec3');
       const p = bot.entity.position;
       const target = new Vec3(
         cmd.x !== undefined ? cmd.x : p.x + (cmd.dx || 0),
         cmd.y !== undefined ? cmd.y : p.y + (cmd.dy || 0),
         cmd.z !== undefined ? cmd.z : p.z + (cmd.dz || 0));
+      const STEP = 0.5;
+      const deadline = Date.now() + (cmd.timeout || 12000);
       try { bot.creative.startFlying(); } catch (e) { /* egal */ }
-      const done = await Promise.race([
-        bot.creative.flyTo(target).then(() => 'angekommen').catch((e) => 'abgebrochen: ' + e.message),
-        new Promise((r) => setTimeout(() => r('Zeit abgelaufen'), cmd.timeout || 12000))
-      ]);
+      let done = 'Zeit abgelaufen';
+      while (Date.now() < deadline) {
+        const vector = target.minus(bot.entity.position);
+        const magnitude = vector.norm();
+        if (magnitude <= STEP) {
+          bot.entity.position = target.clone();
+          await new Promise((r) => {
+            const t = setTimeout(r, 1000);
+            bot.once('move', () => { clearTimeout(t); r(); });
+          });
+          done = 'angekommen';
+          break;
+        }
+        bot.physics.gravity = 0;
+        bot.entity.velocity = new Vec3(0, 0, 0);
+        bot.entity.position.add(vector.scaled(STEP / magnitude));
+        await new Promise((r) => setTimeout(r, 50));
+      }
       const now = bot.entity.position;
       return { result: done, target: [target.x, target.y, target.z],
                pos: [now.x, now.y, now.z] };
@@ -2388,6 +2408,247 @@ def gamemode_checks(env, bot):
 
 
 # ---------------------------------------------------------------------------
+# Wasser und Pulverschnee
+# ---------------------------------------------------------------------------
+
+# Wie lange ein Flug in diesem Abschnitt hoechstens dauert, in Millisekunden.
+# Haelt das Plugin die Kamera an der Kante fest, kommt flyTo nie an und
+# versucht es bis zu dieser Grenze wieder und wieder.
+MEDIUM_FLY_TIMEOUT = 5000
+
+
+def medium_fliegen(bot, *wegpunkte):
+    """Die Wegpunkte der Reihe nach anfliegen, jeden mit hartem Timeout."""
+    for x, y, z in wegpunkte:
+        bot.call("fly", wait=MEDIUM_FLY_TIMEOUT / 1000 + 10,
+                 x=x, y=y, z=z, timeout=MEDIUM_FLY_TIMEOUT)
+    time.sleep(1.0)
+
+
+def medium_gesagt(bot, since):
+    """Was seit der Marke im Chat stand, ohne Farbcodes."""
+    return [strip_colors(m["text"])
+            for m in bot.call("messages", since=since).get("messages", [])]
+
+
+def medium_flug(bot, start, wegpunkte):
+    """Bei `start` in den Cam-Modus, die Wegpunkte abfliegen, aussteigen.
+
+    Gibt zurueck, wo der Server die Kamera am Ende gefuehrt hat, ob der
+    Cam-Modus da noch lief und was unterwegs im Chat stand - oder None, wenn
+    /cam gar nicht erst startete.
+    """
+    hinstellen(bot, *start)
+    if not cam_on(bot):
+        return None
+    since = bot.mark()
+    medium_fliegen(bot, *wegpunkte)
+    pos = bot.server_pos()
+    lief = spielmodus_ist(bot, "adventure")
+    gesagt = medium_gesagt(bot, since)
+    cam_off(bot)
+    time.sleep(1.0)
+    return pos, lief, gesagt
+
+
+def medium_start(bot, wo, heim):
+    """Mitten im Wasser oder im Pulverschnee /cam versuchen.
+
+    Gibt zurueck, ob der Cam-Modus danach lief - am Spielmodus gefragt, siehe
+    spielmodus_ist - und was im Chat stand. Danach ist er wieder aus und der
+    Bot wieder draussen: Der Pulverschnee friert ihn sonst ein, und der
+    Schaden daraus legte die cam-safety-Sperre auf die naechsten Proben.
+    """
+    hinstellen(bot, *wo)
+    since = bot.mark()
+    bot.chat("/cam")
+    time.sleep(1.5)
+    lief = spielmodus_ist(bot, "adventure")
+    gesagt = medium_gesagt(bot, since)
+    if lief:
+        cam_off(bot)
+    hinstellen(bot, *heim)
+    return lief, gesagt
+
+
+def medium_checks(env, bot):
+    """Die Schalter camera-mode.allow_water_flight und allow_powder_snow_flight.
+
+    Steht einer auf false, kommt die Kamera nicht hinein: Der Schritt an der
+    Kante wird abgebrochen, und der Cam-Modus laeuft weiter - anders als bei
+    Lava, die ihn beendet. Darin starten laesst er sich auch nicht.
+
+    Aufgebaut wird dreierlei, alles neben dem Testplatz:
+      * ein Becken aus Glas, drei Bloecke tief voll Wasser, oben offen,
+      * ein Wuerfel aus Pulverschnee, drei Bloecke hoch,
+      * eine Decke aus Pulverschnee, eine Lage dick, hoch in der Luft.
+
+    Die Decke prueft den Kopf. Von unten kommt er als Erstes an, und eine
+    einzige Lage ist so duenn, dass die Augen darueber herausschauen, noch
+    ehe die Fuesse sie erreichen. Eine Sperre, die nur auf die Fuesse sieht,
+    liesse die Kamera also hindurchschauen.
+
+    Jede Probe steht zweimal da: mit der Voreinstellung true, die
+    nachgesehen und nicht gesetzt wird, und mit false. Die erste ist die
+    Gegenprobe - ohne sie sagte die zweite nur, dass die Kamera nicht
+    ankam, und das sagt sie auch, wenn der Flug des Bots gar nicht erst
+    losgeht.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Wasser-Test aus", cam_off(bot), ""):
+        return
+    pos = bot.server_pos()
+    if not FIND.test("Standort fuer den Wasser-Test lesbar", pos is not None,
+                     str(pos)):
+        return
+    bx, by, bz = _floor(pos[0]), _floor(pos[1] + 0.5), _floor(pos[2])
+    Log.detail(f"Testplatz fuer Wasser und Pulverschnee bei {(bx, by, bz)}")
+
+    becken = f"{bx + 6} {by} {bz - 2} {bx + 10} {by + 2} {bz + 2}"
+    wasser = f"{bx + 7} {by} {bz - 1} {bx + 9} {by + 2} {bz + 1}"
+    wuerfel = f"{bx - 1} {by} {bz + 6} {bx + 1} {by + 2} {bz + 8}"
+    decke = f"{bx - 1} {by + 5} {bz - 8} {bx + 1} {by + 5} {bz - 6}"
+    heim = (bx + 0.5, by, bz + 0.5)
+    im_becken = (bx + 8.5, by, bz + 0.5)
+    im_wuerfel = (bx + 0.5, by, bz + 7.5)
+    unter_der_decke = (bx + 0.5, by, bz - 6.5)
+    # Ueber den Rand hinweg und dann senkrecht hinein, bis knapp ueber den
+    # Boden. Becken und Wuerfel sind oben beide bei by + 3 zu Ende.
+    ins_becken = [(bx + 8.5, by + 6, bz + 0.5), (bx + 8.5, by + 0.2, bz + 0.5)]
+    in_den_wuerfel = [(bx + 0.5, by + 6, bz + 7.5), (bx + 0.5, by + 0.2, bz + 7.5)]
+    oben = by + 3
+    # Senkrecht hinauf, bis die Augen ueber der Decke waeren. Sie liegt bei
+    # by + 5 und ist oben bei by + 6 zu Ende; die Augen sitzen 1,62 ueber den
+    # Fuessen, der Kopf endet bei 1,8.
+    durch_die_decke = [(bx + 0.5, by + 4.5, bz - 6.5)]
+
+    def aufraeumen():
+        for bereich in (becken, wuerfel, decke):
+            bot.chat(f"/fill {bereich} minecraft:air")
+            time.sleep(0.5)
+
+    def zeige(ergebnis):
+        if ergebnis is None:
+            return "/cam startete nicht"
+        pos, lief, gesagt = ergebnis
+        return f"{pos}, Cam-Modus {'laeuft' if lief else 'aus'}, Chat: " \
+               f"{'; '.join(g for g in gesagt if g) or 'nichts'}"
+
+    def drin_bis(ergebnis, hoehe):
+        """Ob die Kamera bis unter diese Hoehe kam, im laufenden Cam-Modus."""
+        return ergebnis is not None and ergebnis[0] is not None \
+            and ergebnis[1] and ergebnis[0][1] < hoehe
+
+    def gestoppt(ergebnis, meldung, grenze):
+        """Ob die Kamera an der Grenze haengen blieb, der Cam-Modus weiterlief
+        und die Meldung dazu kam."""
+        return ergebnis is not None and ergebnis[0] is not None \
+            and ergebnis[1] and grenze(ergebnis[0][1]) \
+            and any(meldung in g.lower() for g in ergebnis[2])
+
+    try:
+        # Die Testwelt bleibt zwischen zwei Laeufen stehen: erst wegraeumen,
+        # was ein abgebrochener Lauf hinterlassen hat.
+        aufraeumen()
+        bot.chat(f"/fill {becken} minecraft:glass")
+        time.sleep(0.5)
+        bot.chat(f"/fill {wasser} minecraft:water")
+        time.sleep(0.5)
+        bot.chat(f"/fill {wuerfel} minecraft:powder_snow")
+        time.sleep(0.5)
+        bot.chat(f"/fill {decke} minecraft:powder_snow")
+        time.sleep(1.0)
+        welt = "minecraft:overworld"
+        gebaut = (block_is(bot, welt, f"{bx + 8} {by + 2} {bz}", "minecraft:water")
+                  and block_is(bot, welt, f"{bx} {by + 1} {bz + 7}", "minecraft:powder_snow")
+                  and block_is(bot, welt, f"{bx} {by + 5} {bz - 7}", "minecraft:powder_snow"))
+        if not FIND.test("Wasserbecken und Pulverschnee stehen", gebaut, ""):
+            return
+
+        # --- Voreinstellung: beides offen, nachgesehen und nicht gesetzt ---
+        ergebnis = medium_flug(bot, heim, ins_becken)
+        FIND.test("Gegenprobe: voreingestellt fliegt die Kamera ins Wasser",
+                  drin_bis(ergebnis, oben - 1), zeige(ergebnis))
+        ergebnis = medium_flug(bot, heim, in_den_wuerfel)
+        FIND.test("Gegenprobe: voreingestellt fliegt die Kamera in den Pulverschnee",
+                  drin_bis(ergebnis, oben - 1), zeige(ergebnis))
+        ergebnis = medium_flug(bot, unter_der_decke, durch_die_decke)
+        FIND.test("Gegenprobe: voreingestellt schauen die Augen der Kamera ueber "
+                  "die Pulverschnee-Decke",
+                  ergebnis is not None and ergebnis[0] is not None
+                  and ergebnis[0][1] + 1.62 > by + 6, zeige(ergebnis))
+        lief, gesagt = medium_start(bot, im_becken, heim)
+        FIND.test("Gegenprobe: voreingestellt startet /cam im Wasser", lief,
+                  "; ".join(gesagt) or "nichts im Chat")
+        lief, gesagt = medium_start(bot, im_wuerfel, heim)
+        FIND.test("Gegenprobe: voreingestellt startet /cam im Pulverschnee", lief,
+                  "; ".join(gesagt) or "nichts im Chat")
+
+        # --- Beides zu ---
+        set_options(env, [("allow_water_flight", "false"),
+                          ("allow_powder_snow_flight", "false")])
+
+        ergebnis = medium_flug(bot, heim, ins_becken)
+        FIND.test("allow_water_flight: false - die Kamera bleibt ueber dem Wasser "
+                  "stehen, der Cam-Modus laeuft weiter, die Meldung kommt",
+                  gestoppt(ergebnis, "cannot fly into water",
+                           lambda y: y >= oben - 0.01), zeige(ergebnis))
+
+        # Wer schon drin ist - hier per /tp -, kommt heraus, aber nicht tiefer.
+        hinstellen(bot, *heim)
+        if FIND.test("allow_water_flight: false - /cam startet neben dem Becken",
+                     cam_on(bot), ""):
+            bot.chat(f"/tp {BOT_NAME} {bx + 8.5} {by + 1} {bz + 0.5}")
+            time.sleep(1.0)
+            medium_fliegen(bot, (bx + 8.5, by + 0.2, bz + 0.5))
+            tiefer = bot.server_pos()
+            medium_fliegen(bot, (bx + 8.5, by + 5, bz + 0.5))
+            heraus = bot.server_pos()
+            cam_off(bot)
+            time.sleep(1.0)
+            FIND.test("allow_water_flight: false - wer schon im Wasser ist, "
+                      "kommt nicht tiefer hinein",
+                      tiefer is not None and tiefer[1] > by + 0.9, str(tiefer))
+            FIND.test("allow_water_flight: false - wer schon im Wasser ist, "
+                      "kommt heraus", heraus is not None and heraus[1] > by + 4.5,
+                      str(heraus))
+
+        lief, gesagt = medium_start(bot, im_becken, heim)
+        FIND.test("allow_water_flight: false - im Wasser startet /cam nicht, "
+                  "und die Ablehnung sagt warum",
+                  not lief and any("cannot start cam mode in water" in g.lower()
+                                   for g in gesagt),
+                  "; ".join(gesagt) or "nichts im Chat")
+
+        ergebnis = medium_flug(bot, heim, in_den_wuerfel)
+        FIND.test("allow_powder_snow_flight: false - die Kamera bleibt auf dem "
+                  "Pulverschnee stehen, der Cam-Modus laeuft weiter, die Meldung kommt",
+                  gestoppt(ergebnis, "cannot fly into powder snow",
+                           lambda y: y >= oben - 0.01), zeige(ergebnis))
+        ergebnis = medium_flug(bot, unter_der_decke, durch_die_decke)
+        FIND.test("allow_powder_snow_flight: false - der Kopf der Kamera bleibt "
+                  "unter der Pulverschnee-Decke",
+                  gestoppt(ergebnis, "cannot fly into powder snow",
+                           lambda y: y + 1.8 <= by + 5.01), zeige(ergebnis))
+        lief, gesagt = medium_start(bot, im_wuerfel, heim)
+        FIND.test("allow_powder_snow_flight: false - im Pulverschnee startet /cam "
+                  "nicht, und die Ablehnung sagt warum",
+                  not lief and any("cannot start cam mode in powder snow" in g.lower()
+                                   for g in gesagt),
+                  "; ".join(gesagt) or "nichts im Chat")
+    finally:
+        try:
+            # Der Reload holt ihn auch aus dem Cam-Modus, falls eine Probe
+            # mittendrin abgebrochen ist.
+            set_options(env, [("allow_water_flight", "true"),
+                              ("allow_powder_snow_flight", "true")])
+            cam_off(bot)
+            aufraeumen()
+            hinstellen(bot, *heim)
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Wasser-Test: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # Portale
 # ---------------------------------------------------------------------------
 
@@ -2957,6 +3218,9 @@ def step_tests(env):
 
         # --- Der Spielmodus, in dem der Cam-Modus laeuft ---
         gamemode_checks(env, bot)
+
+        # --- Wasser und Pulverschnee ---
+        medium_checks(env, bot)
 
         # --- Portale und das Gedaechtnis fuer gesperrte Portale ---
         portal_checks(env, bot)

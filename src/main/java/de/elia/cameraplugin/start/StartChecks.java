@@ -2,6 +2,7 @@ package de.elia.cameraplugin.start;
 
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.movement.FlightMedium;
 import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
@@ -21,8 +22,8 @@ import java.util.UUID;
 
 /**
  * Whether a player may start camera mode right now: not straight after a hit,
- * not as a spectator, not with the wrong effects on him and not in a forbidden
- * area.
+ * not as a spectator, not with the wrong effects on him, not in a forbidden
+ * area and not in water or powder snow that camera mode is kept out of.
  */
 public final class StartChecks implements Listener {
 
@@ -148,6 +149,28 @@ public final class StartChecks implements Listener {
             return true;
         }
         messages.sendMessage(player, "cam-area-start", "{area}", area);
+        return false;
+    }
+
+    /**
+     * Checks whether camera mode may be started where the player is: not in
+     * water while {@code camera-mode.allow_water_flight} is off, and not in
+     * powder snow while {@code camera-mode.allow_powder_snow_flight} is.
+     *
+     * <p>In flight the camera does not get in there, see
+     * {@link de.elia.cameraplugin.movement.CamMovementGuard}. Started inside,
+     * it would already be where the switch keeps it out of - and could only
+     * get out, as every further block of it is shut.</p>
+     *
+     * @return whether the player may start; if not, the player has been told
+     *         why
+     */
+    public boolean checkCamMedium(Player player) {
+        FlightMedium medium = FlightMedium.reachedInto(player, settings, null, player.getLocation());
+        if (medium == null) {
+            return true;
+        }
+        messages.sendMessage(player, medium.getStartMessage());
         return false;
     }
 }
