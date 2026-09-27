@@ -96,8 +96,6 @@ import de.elia.cameraplugin.portal.PortalRules;
 import de.elia.cameraplugin.config.ConfigIssue;
 import de.elia.cameraplugin.config.ConfigReader;
 
-import static org.bukkit.Sound.ENTITY_ITEM_BREAK;
-
 @SuppressWarnings("removal")
 public final class CameraPlugin extends JavaPlugin implements Listener {
 
@@ -252,7 +250,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private boolean allowLavaFlight;
     /** The mode the camera player flies in, {@code camera-mode.gamemode}. */
     private CamGameMode camGameMode;
-    private Object Sound;
 
     // Damage transfer settings
     private DamageMode damageMode;
@@ -279,7 +276,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     private boolean showBossbar;
     private BarColor bossbarColor;
     private String bossbarText;
-    private String cooldownText;
     private String cooldownAvailableText;
 
     // Camera safety settings
@@ -1184,10 +1180,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     private void stopMobTargeting(Player player) {
-        BukkitRunnable task = mobTargetTasks.remove(player.getUniqueId());
-        if (task != null) {
-            task.cancel();
-        }
+        cancelTask(mobTargetTasks, player);
     }
 
     /**
@@ -1286,6 +1279,18 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         return range > 0.0 && mob.getLocation().distanceSquared(body.getLocation()) <= range * range;
     }
 
+    /**
+     * Ends the task standing for that player in the table, when one stands
+     * there. Every one of the tables is emptied by the same two steps, so they
+     * stand here once instead of once in each of the stop methods.
+     */
+    private void cancelTask(Map<UUID, BukkitRunnable> tasks, Player player) {
+        BukkitRunnable task = tasks.remove(player.getUniqueId());
+        if (task != null) {
+            task.cancel();
+        }
+    }
+
     /** Teleports the entity back to its spot when something pushed it away. */
     private void pinToSpot(Entity entity, Location anchor) {
         Location current = entity.getLocation();
@@ -1345,10 +1350,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     private void stopCameraParticles(Player player) {
-        BukkitRunnable task = particleTasks.remove(player.getUniqueId());
-        if (task != null) {
-            task.cancel();
-        }
+        cancelTask(particleTasks, player);
     }
 
     /**
@@ -1408,10 +1410,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     private void stopSightGlow(Player player) {
-        BukkitRunnable task = sightGlowTasks.remove(player.getUniqueId());
-        if (task != null) {
-            task.cancel();
-        }
+        cancelTask(sightGlowTasks, player);
     }
 
     private void startActionBar(Player player) {
@@ -1434,10 +1433,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     private void stopActionBar(Player player) {
-        BukkitRunnable task = actionBarTasks.remove(player.getUniqueId());
-        if (task != null) {
-            task.cancel();
-        }
+        cancelTask(actionBarTasks, player);
     }
 
     private void showActionBarOffMessage(Player player) {
@@ -2289,12 +2285,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      *              {@code {from}} names
      */
     private void warnDistanceLimit(Player player, String key, CameraData data, Location where) {
-        long now = System.currentTimeMillis();
-        if (distanceMessageCooldown.getOrDefault(player.getUniqueId(), 0L) >= now) {
+        if (!warningDue(distanceMessageCooldown, player, distanceWarningCooldown)) {
             return;
         }
-        distanceMessageCooldown.put(player.getUniqueId(),
-                now + TimeUnit.SECONDS.toMillis(distanceWarningCooldown));
         sendMessage(player, key, "{distance}", String.valueOf(maxDistance),
                 "{from}", distanceAnchorName(data, where));
     }
@@ -2439,12 +2432,9 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
      *             {@code null} when the portal is shut on its own
      */
     private void warnPortalShut(Player player, PortalKind kind, String area) {
-        long now = System.currentTimeMillis();
-        if (portalMessageCooldown.getOrDefault(player.getUniqueId(), 0L) >= now) {
+        if (!warningDue(portalMessageCooldown, player, portalRules.getWarningCooldown())) {
             return;
         }
-        portalMessageCooldown.put(player.getUniqueId(),
-                now + TimeUnit.SECONDS.toMillis(portalRules.getWarningCooldown()));
         if (area != null) {
             sendMessage(player, "cam-area-limit", "{area}", area);
         } else {
@@ -2908,6 +2898,24 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
     }
 
     /**
+     * Whether a warning may be sent to that player again, and writes down that
+     * it was. The three warnings that repeat while he flies - the distance, the
+     * area and the shut portal - all hold themselves back the same way, each
+     * with its own table and its own number of seconds out of the config file.
+     *
+     * @param seconds how long the warning stays quiet after it was sent
+     * @return whether it may be sent now
+     */
+    private boolean warningDue(Map<UUID, Long> cooldowns, Player player, int seconds) {
+        long now = System.currentTimeMillis();
+        if (cooldowns.getOrDefault(player.getUniqueId(), 0L) >= now) {
+            return false;
+        }
+        cooldowns.put(player.getUniqueId(), now + TimeUnit.SECONDS.toMillis(seconds));
+        return true;
+    }
+
+    /**
      * Reads every value out of the config file.
      *
      * @return a note for each value that did not fit and was replaced
@@ -2974,7 +2982,6 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         showBossbar = config.getBoolean("time-limit.show-bossbar", true);
         bossbarColor = config.getEnum("time-limit.bossbar-color", BarColor.class, BarColor.BLUE);
         bossbarText = ChatColor.translateAlternateColorCodes('&', config.getString("messages.bossbar-text", "Cam-Modus endet in: %time%"));
-        cooldownText = ChatColor.translateAlternateColorCodes('&', config.getString("messages.cooldown-text", "Du kannst den Cam-Modus erst in %time% erneut starten."));
         cooldownAvailableText = ChatColor.translateAlternateColorCodes('&', config.getString("messages.cooldown-available", "&aCam-Modus wieder verf\u00fcgbar"));
         camSafetyEnabled = config.getBoolean("cam-safety.enabled", true);
         camSafetyDelay = config.getInt("cam-safety.delay", 5, 0);
@@ -3747,9 +3754,7 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (area == null) {
             return true;
         }
-        if (isMessageEnabled("cam-area-start")) {
-            player.sendMessage(getMessage("cam-area-start").replace("{area}", area));
-        }
+        sendMessage(player, "cam-area-start", "{area}", area);
         return false;
     }
 
@@ -3778,13 +3783,8 @@ public final class CameraPlugin extends JavaPlugin implements Listener {
         if (area == null || camAreaRules.forbiddenArea(from) != null) {
             return false;
         }
-        long now = System.currentTimeMillis();
-        if (areaMessageCooldown.getOrDefault(player.getUniqueId(), 0L) < now) {
-            if (isMessageEnabled("cam-area-limit")) {
-                player.sendMessage(getMessage("cam-area-limit").replace("{area}", area));
-            }
-            areaMessageCooldown.put(player.getUniqueId(),
-                    now + TimeUnit.SECONDS.toMillis(camAreaRules.getWarningCooldown()));
+        if (warningDue(areaMessageCooldown, player, camAreaRules.getWarningCooldown())) {
+            sendMessage(player, "cam-area-limit", "{area}", area);
         }
         return true;
     }

@@ -67,11 +67,6 @@ public final class ConfigReader {
         return warnings;
     }
 
-    /** Adds a note from a check the caller does on its own. */
-    public void warn(ConfigIssue issue) {
-        warnings.add(issue);
-    }
-
     // ------------------------------------------------------------- Wahrheitswerte
 
     public boolean getBoolean(String path, boolean def) {

@@ -52,10 +52,6 @@ public class CamFireGuard implements Listener {
         rangeXZ = (int) Math.ceil(radiusH);
     }
 
-    public boolean isEnabled() {
-        return enabled;
-    }
-
     public void startFor(Player player) {
         if (!enabled || tasks.containsKey(player.getUniqueId())) return;
 
