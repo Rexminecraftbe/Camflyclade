@@ -59,7 +59,12 @@ public final class CamSettings {
     private VisibilityMode playerVisibilityMode;
     private boolean allowInvisibilityPotion;
     private GlowMode glowMode;
+    /** Whether the camera may fly into lava, {@code camera-mode.allow_lava_flight}. */
     private boolean allowLavaFlight;
+    /** Whether the camera may fly into water, {@code camera-mode.allow_water_flight}. */
+    private boolean allowWaterFlight;
+    /** Whether the camera may fly into powder snow, {@code camera-mode.allow_powder_snow_flight}. */
+    private boolean allowPowderSnowFlight;
     /** The mode the camera player flies in, {@code camera-mode.gamemode}. */
     private CamGameMode camGameMode;
     /** What {@code camera-mode.start-with-effects} allows him to start with. */
@@ -134,7 +139,9 @@ public final class CamSettings {
             case "sight" -> GlowMode.SIGHT;
             default -> GlowMode.ALWAYS;
         };
-        allowLavaFlight = config.getBoolean("camera-mode.allow_lava_flight", false);
+        allowLavaFlight = config.getBoolean("camera-mode.allow_lava_flight", true);
+        allowWaterFlight = config.getBoolean("camera-mode.allow_water_flight", true);
+        allowPowderSnowFlight = config.getBoolean("camera-mode.allow_powder_snow_flight", true);
         String camMode = config.getChoice("camera-mode.gamemode",
                 "adventure", "adventure", "survival", "creative", "keep").toLowerCase();
         camGameMode = switch (camMode) {
@@ -382,6 +389,14 @@ public final class CamSettings {
 
     public boolean allowsLavaFlight() {
         return allowLavaFlight;
+    }
+
+    public boolean allowsWaterFlight() {
+        return allowWaterFlight;
+    }
+
+    public boolean allowsPowderSnowFlight() {
+        return allowPowderSnowFlight;
     }
 
     public CamGameMode getCamGameMode() {

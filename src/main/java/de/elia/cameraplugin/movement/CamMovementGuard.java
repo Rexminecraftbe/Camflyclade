@@ -10,8 +10,6 @@ import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -28,7 +26,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Keeps the camera player where camera mode allows him to be: out of lava,
- * within {@code camera-mode.max-distance} of his body, out of the areas
+ * water and powder snow as far as their switches say, within
+ * {@code camera-mode.max-distance} of his body, out of the areas
  * {@code cam-area} forbids, and only through the portals that let him.
  */
 public final class CamMovementGuard implements Listener {
@@ -54,6 +53,8 @@ public final class CamMovementGuard implements Listener {
     private final Map<UUID, Long> areaMessageCooldown = new HashMap<>();
     /** Players who were just told that a portal does not let them through. */
     private final Map<UUID, Long> portalMessageCooldown = new HashMap<>();
+    /** Players who were just told that lava, water or powder snow does not let them in. */
+    private final Map<UUID, Long> mediumMessageCooldown = new HashMap<>();
 
     public CamMovementGuard(CameraPlugin plugin) {
         this.plugin = plugin;
@@ -67,6 +68,7 @@ public final class CamMovementGuard implements Listener {
         distanceMessageCooldown.remove(playerId);
         areaMessageCooldown.remove(playerId);
         portalMessageCooldown.remove(playerId);
+        mediumMessageCooldown.remove(playerId);
     }
 
     @EventHandler
@@ -76,10 +78,8 @@ public final class CamMovementGuard implements Listener {
         Location to = event.getTo();
         if (to == null) return;
 
-        Block blockAt = to.getBlock();
-        if (!settings.allowsLavaFlight() && blockAt.getType() == Material.LAVA) {
-            messages.sendConfiguredMessage(player, "cant-fly-in-lava");
-            plugin.exitCameraMode(player);
+        if (entersClosedMedium(player, event.getFrom(), to)) {
+            event.setCancelled(true);
             return;
         }
 
@@ -432,6 +432,32 @@ public final class CamMovementGuard implements Listener {
         }
         Location portal = data.getPortalAnchor();
         return portal != null && portal.getWorld().equals(location.getWorld()) ? portal : null;
+    }
+
+    /**
+     * Whether this step would carry the camera into lava, water or powder snow
+     * while its switch under {@code camera-mode} is off, see
+     * {@link FlightMedium}.
+     *
+     * <p>The step is simply cancelled, the way {@code cam-area} and
+     * {@code camera-mode.max-distance} stop it at their border: the camera
+     * stays at the edge, and camera mode goes on. Only a block the body is not
+     * in already counts, so a camera the water has run over can still get out
+     * of it, but no further in.</p>
+     *
+     * <p>The warning waits as long as the one at the distance border,
+     * {@code camera-mode.distance-warning-cooldown}: the step is stopped again
+     * and again as long as the player keeps pushing against the edge.</p>
+     */
+    private boolean entersClosedMedium(Player player, Location from, Location to) {
+        FlightMedium medium = FlightMedium.reachedInto(player, settings, from, to);
+        if (medium == null) {
+            return false;
+        }
+        if (mayWarn(mediumMessageCooldown, player, settings.getDistanceWarningCooldown())) {
+            messages.sendMessage(player, medium.getFlightMessage());
+        }
+        return true;
     }
 
     /**

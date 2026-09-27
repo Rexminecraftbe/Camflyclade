@@ -17,12 +17,17 @@ messages:
   cam-area-limit: "&cYou cannot go any further, cam mode is not allowed in {area}."
   cam-area-start: "&cYou cannot start cam mode in {area}."
   cam-effect-start: "&cYou cannot start cam mode with {effect} on you."
+  cam-lava-start: "&cYou cannot start cam mode in lava."
+  cam-powder-snow-start: "&cYou cannot start cam mode in powder snow."
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
   cam-spectator-start: "&cYou cannot start cam mode in spectator mode."
+  cam-water-start: "&cYou cannot start cam mode in water."
   camera-off: "&aCamera mode ended."
   camera-on: "&aCamera mode activated! Use /cam again to exit."
   cant-attack-other-body: "&cYou cannot attack other bodies in camera mode."
-  cant-fly-in-lava: "&cYou cannot fly through lava! Camera mode will be ended."
+  cant-fly-in-lava: "&cYou cannot fly into lava in camera mode."
+  cant-fly-in-powder-snow: "&cYou cannot fly into powder snow in camera mode."
+  cant-fly-in-water: "&cYou cannot fly into water in camera mode."
   config-broken: "&cDie Konfiguration hat einen Fehler und wurde nicht übernommen, es gelten weiter die bisherigen Einstellungen: {error}"
   config-broken-startup: "&cDie Konfiguration hat einen Fehler: {error}"
   config-start-failed: "&cStart fehlgeschlagen. Zum Aktivieren den Fehler in der Konfiguration beheben und den Server neu starten."
@@ -71,12 +76,17 @@ message-settings:
   cam-area-limit: true
   cam-area-start: true
   cam-effect-start: true
+  cam-lava-start: true
+  cam-powder-snow-start: true
   cam-safety: true
   cam-spectator-start: true
+  cam-water-start: true
   camera-off: false
   camera-on: false
   cant-attack-other-body: true
   cant-fly-in-lava: true
+  cant-fly-in-powder-snow: true
+  cant-fly-in-water: true
   config-errors: true
   cooldown-available: true
   cooldown-text: true
@@ -109,7 +119,7 @@ camera-mode:
   # Maximale Entfernung zum Körper in Blöcken
   max-distance: 100.0
 
-  # Sekunden zwischen zwei Warnungen an der Grenze
+  # Sekunden zwischen zwei Warnungen an der Grenze (auch an Lava, Wasser und Pulverschnee)
   distance-warning-cooldown: 3
 
   # Wer den Spieler im Cam-Modus sehen darf:
@@ -128,8 +138,14 @@ camera-mode:
   # Bei player_visibility_mode: false gibt es keinen Umriss.
   glowing-outline: true
 
-  # Flug durch Lava (false = Lava beendet den Cam-Modus)
+  # Flug durch Lava (false = an der Lava geht es nicht weiter, in Lava startet der Cam-Modus nicht)
   allow_lava_flight: true
+
+  # Flug durch Wasser (false = am Wasser geht es nicht weiter, im Wasser startet der Cam-Modus nicht)
+  allow_water_flight: true
+
+  # Flug durch Pulverschnee (false = am Pulverschnee geht es nicht weiter, darin startet der Cam-Modus nicht)
+  allow_powder_snow_flight: true
 
   # Spielmodus im Cam-Modus:
   #   adventure = Abenteuermodus
