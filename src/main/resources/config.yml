@@ -10,15 +10,12 @@ messages:
   body-attacked: "&cYour body was attacked by {damager}! Camera mode ended."
   body-drowning: "&cYour body is drowning! Camera mode ended."
   body-env-damage: "&cYour body was damaged by {cause}! Camera mode ended."
-  # {effect} = Minecraft-Name des Effekts, z. B. poison
   body-got-effect: "&cYour body was hit by the effect {effect}! Camera mode ended."
   body-moved: "&cYour body was moved! Camera mode ended."
   body-suffocating: "&cYour body is stuck and suffocating! Camera mode ended."
   bossbar-text: "Cam mode ends in: %time%"
-  # {area} = die verbotene Dimension, das Biom oder die Struktur
   cam-area-limit: "&cYou cannot go any further, cam mode is not allowed in {area}."
   cam-area-start: "&cYou cannot start cam mode in {area}."
-  # {effect} = die Effekte, die den Start verhindern, mit Komma getrennt
   cam-effect-start: "&cYou cannot start cam mode with {effect} on you."
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
   cam-spectator-start: "&cYou cannot start cam mode in spectator mode."
@@ -26,12 +23,6 @@ messages:
   camera-on: "&aCamera mode activated! Use /cam again to exit."
   cant-attack-other-body: "&cYou cannot attack other bodies in camera mode."
   cant-fly-in-lava: "&cYou cannot fly through lava! Camera mode will be ended."
-  # Fehler in dieser Datei - immer in der Konsole,
-  # bei /cam reload auch im Chat (siehe message-settings.config-errors).
-  # Ist die Datei gar nicht lesbar:
-  #   bei /cam reload  -> config-broken, die alten Einstellungen bleiben
-  #   beim Serverstart -> config-broken-startup und config-start-failed,
-  #                       das Plugin startet nicht
   config-broken: "&cDie Konfiguration hat einen Fehler und wurde nicht übernommen, es gelten weiter die bisherigen Einstellungen: {error}"
   config-broken-startup: "&cDie Konfiguration hat einen Fehler: {error}"
   config-start-failed: "&cStart fehlgeschlagen. Zum Aktivieren den Fehler in der Konfiguration beheben und den Server neu starten."
@@ -48,10 +39,6 @@ messages:
   config-unknown-value: "&cUnbekannter Wert für {path}: '{value}'. Erlaubt sind: {allowed}. Es wird {used} verwendet."
   cooldown-available: "&aCam mode available again"
   cooldown-text: "You can start cam mode again in %time%."
-  # Grenze aus camera-mode.max-distance
-  #   {distance} = erlaubte Entfernung
-  #   {from}     = distance-from-body, in einer anderen Welt
-  #                distance-from-portal
   distance-from-body: "your body"
   distance-from-portal: "the portal you came out of"
   distance-limit: "&cYou cannot move further than {distance} blocks from {from}!"
@@ -59,16 +46,12 @@ messages:
   no-permission: "&cYou don't have permission to use this command."
   no-player: "&cThis command can only be used by players."
   no-projectiles: "&cYou cannot shoot projectiles in camera mode."
-  # {portal} = nether oder end
   portal-blocked: "&cYou cannot go through {portal} portals in camera mode."
-  # Spieler wurde hinter einem Portal zurückgeholt (Platzhalter wie oben)
   portal-return-area: "&cCam mode is not allowed in {area}, you were brought back."
   portal-return-distance: "&cYou ended up more than {distance} blocks away from {from} and were brought back."
   reload-exit: "&cCamera mode ended due to plugin restart."
   reload-start: "&ePlugin is restarting..."
   reload-success: "&aPlugin reload successful."
-  # Zeilen in der Konsole beim Serverstart ("" = Zeile aus)
-  # {error} = Grund des Fehlers
   startup-skins-failed: "Skins konnten beim Start nicht vorgeladen werden: {error}"
   startup-skins-loaded: "Skins wurden erfolgreich geladen."
   startup-skins-loading: "Skins werden geladen..."
@@ -92,12 +75,10 @@ message-settings:
   camera-on: false
   cant-attack-other-body: true
   cant-fly-in-lava: true
-  # Fehler dieser Datei im Chat bei /cam reload (Konsole immer)
   config-errors: true
   cooldown-available: true
   cooldown-text: true
   distance-limit: true
-  # false = alle Nachrichten aus
   enabled: true
   no-permission: true
   no-player: true
@@ -110,7 +91,7 @@ message-settings:
   reload-success: true
   time-limit-expired: true
 
-# Anzeige in der Action-Bar (Texte: actionbar-on, actionbar-off)
+# Anzeige in der Action-Bar
 action-bar:
   enabled: true
   # Wie lange actionbar-off gesendet wird, in Ticks
@@ -130,19 +111,16 @@ camera-mode:
   # Wer den Spieler im Cam-Modus sehen darf:
   #   cam   = nur Spieler, die selbst im Cam-Modus sind
   #   true  = alle
-  #   false = niemand - er bleibt aber in der Tab-Liste, und getragene
-  #           Ausrüstung wie der Kamera-Kopf bleibt sichtbar
+  #   false = niemand er bleibt aber in der Tab-Liste, und getragene  ausrüstung wie der Kamera-Kopf bleibt sichtbar
   player_visibility_mode: true
 
-  # Unsichtbarkeitseffekt im Cam-Modus
-  # (bei player_visibility_mode: false immer an)
+  # Unsichtbarkeitseffekt im Cam-Modus (bei player_visibility_mode: false immer an)
   allow_invisibility_potion: true
 
   # Leuchtender Umriss, damit andere den unsichtbaren Spieler sehen:
-  #   true  = immer - auch durch Wände, verrät im PvP die Position
+  #   true  = immer - auch durch Wände
   #   false = kein Umriss
-  #   sight = nur, solange ihn ein anderer Spieler direkt sieht;
-  #           dann sehen den Umriss alle, auch durch Wände
+  #   sight = nur, solange ihn ein anderer Spieler nicht von blöcken vertägt wird dann sehen den Umriss alle, auch durch Wände
   # Bei player_visibility_mode: false gibt es keinen Umriss.
   glowing-outline: true
 
@@ -154,8 +132,6 @@ camera-mode:
   #   survival  = Überlebensmodus
   #   creative  = Kreativmodus
   #   keep      = der aktuelle Modus bleibt
-  # Blöcke, Inventar und Items bleiben in jedem Modus gesperrt.
-  # Beim Beenden kommt der vorherige Modus zurück.
   # Aus dem Zuschauermodus startet der Cam-Modus nie.
   gamemode: adventure
 
@@ -166,29 +142,25 @@ camera-mode:
   start-with-effects: positive
 
 # Körper, der im Cam-Modus an der Stelle des Spielers bleibt
-# Ein Treffer auf den Körper beendet den Cam-Modus,
-# ebenso eine Bewegung (siehe movement-sensitivity).
 body:
   # Art des Körpers:
   #   1 = Rüstungsständer mit dem Kopf des Spielers
   #   2 = Mannequin mit dem Skin des Spielers
   type: 1
 
-  # Name über dem Körper (Text: messages.armorstand.name-format)
+  # Name über dem Körper
   name-visible: true
 
   # Körper sichtbar (false = unsichtbar, der Name bleibt)
   visible: true
 
-  # Rüstung des Spielers am Körper zeigen (nur Optik)
-  # Typ 1 zeigt keinen Helm, dort sitzt der Kopf.
+  # Rüstung des Spielers am Körper zeigen (nur Optik, Typ: 1 zeigt keinen Helm, dort sitzt der Kopf.)
   armor-visible: true
 
   # Wodurch sich der Körper verschieben lässt:
   #   0 = durch nichts, er steht fest
   #   1 = durch Schwerkraft, Wasser und Kolben
-  #   2 = zusätzlich durch Spieler und Mobs
-  #       (nur bei type: 2, sonst gilt 1)
+  #   2 = zusätzlich durch Spieler und Mobs   (nur bei type: 2, sonst gilt 1)
   movement-sensitivity: 1
 
   # Erlaubte Bewegung in Blöcken, bevor der Cam-Modus endet
@@ -198,15 +170,12 @@ body:
   #   vanilla = mit ihrer normalen Sichtweite (Zombie: 16 Blöcke)
   #   custom  = mit mob-target-radius, für alle gleich
   #   false   = nie
-  # Nur bei freier Sicht auf den Körper.
-  # Den Spieler selbst greift im Cam-Modus kein Mob an.
   mob-target: false
 
   # Reichweite in Blöcken für mob-target: custom (0 = kein Mob)
   mob-target-radius: 16.0
 
-  # Mobkopf als Helm halbiert die Reichweite dieser Mobart,
-  # wie in Vanilla (z. B. Zombiekopf gegen Zombies)
+  # Mobkopf als Helm halbiert die Reichweite dieser Mobart (wie in Vanilla )
   mob-target-heads: true
 
 # Zeitlimit für den Cam-Modus
@@ -244,8 +213,7 @@ fireguard:
   radius-up: 2
   radius-down: 1
 
-# Kamera-Kopf auf dem Spieler im Cam-Modus
-# (auch bei unsichtbarem Spieler zu sehen)
+# Kamera-Kopf auf dem Spieler im Cam-Modus (auch bei unsichtbarem Spieler zu sehen)
 camera-head:
   enabled: false
 
@@ -269,8 +237,7 @@ cam-area:
   # Biom-Liste beachten
   biomes-enabled: true
 
-  # Verbotene Biome ([] = keine)
-  # Biome aus Datenpacks mit Namensraum, z. B. meinpack:tiefe_hoehle
+  # Verbotene Biome ([] = keine; Jede Struktur nur in eine Liste, sonst wird sie ignoriert)
   forbidden-biomes:
     - lush_caves
     - dripstone_caves
@@ -280,42 +247,32 @@ cam-area:
   # Struktur-Listen beachten
   structures-enabled: false
 
-  # Verbotene Strukturen, in zwei Listen:
-  #   -box        = der ganze Bereich der Struktur, lückenlos
-  #                 (für kompakte Bauten)
-  #   -components = nur die einzelnen Bauteile, dazwischen frei
-  #                 (für weitläufige Bauten wie die Netherfestung)
-  # Jede Struktur nur in eine Liste, sonst wird sie ignoriert.
+  # Verbotene Strukturen, in zwei Listen (Jede Struktur nur in eine Liste, sonst wird sie ignoriert):
+  #   -box        = der ganze Bereich der Struktur, lückenlos   (für kompakte Bauten)
+  #   -components = nur die einzelnen Bauteile, dazwischen frei  (für weitläufige Bauten wie die Netherfestung)
   forbidden-structures-box:
-    - monument           # Ozeanmonument
-    - swamp_hut          # Hexenhütte
-    - pillager_outpost   # Pillager-Außenposten
+    - monument
+    - swamp_hut
+    - pillager_outpost
   forbidden-structures-components:
-    - mansion            # Waldanwesen
-    - fortress           # Netherfestung
-    - ancient_city       # Antike Stadt
-    - trial_chambers     # Prüfungskammern
-    - bastion_remnant    # Bastionsruine
-    - end_city           # End-Stadt
+    - mansion
+    - fortress
+    - ancient_city
+    - trial_chambers
+    - bastion_remnant
+    - end_city
 
-  # Zwischenspeicher der Struktur-Prüfung in Chunks
-  # (256 = etwa 50 KB; 0 = aus, kostet dann mehr Rechenzeit)
+  # Zwischenspeicher der Struktur-Prüfung in Chunks (256 = etwa 50 KB RAM; 0 = aus, kostet dann mehr Rechenzeit)
   # Neu platzierte Strukturen zählen erst nach /cam reload (bei 0 sofort).
   structures-cache-chunks: 256
 
-  # Dimensionen, in denen der Cam-Modus erlaubt ist
-  # Eigene Dimensionen von Plugins oder Datenpacks sperrt diese Liste nie.
+  # Dimensionen, in denen der Cam-Modus erlaubt ist (Eigene Dimensionen von Plugins oder Datenpacks sperrt diese Liste nie.)
   dimensions:
     overworld: true
     nether: false
     end: false
 
-# Portale im Cam-Modus
-# Gesperrt: Der Spieler bleibt, wo er ist; der Cam-Modus läuft weiter.
-# In der anderen Welt zählt max-distance ab dem Portal, durch das er kam.
-# Bei cam-area Stufe 2 zusätzlich:
-#   verbotene Dimension -> Portal gesperrt, auch bei true
-#   verbotenes Biom oder Struktur drüben -> Spieler wird zurückgeholt
+# Portale im Cam-Modus (In der anderen Welt zählt max-distance ab dem Portal, wenn cam-area level:2 dann kann man zurück geschikt werden wenn Umgebung gespert ist)
 portals:
   # Netherportal durchlassen (in beide Richtungen)
   nether: false
@@ -323,8 +280,7 @@ portals:
   # Endportal durchlassen (in beide Richtungen, End Gateway zählt nicht)
   end: false
 
-  # Wohin ein Spieler zurückgebracht wird, der drüben zu weit weg
-  # oder in einem verbotenen Gebiet landet:
+  # Wohin ein Spieler zurückgebracht wird, der drüben zu weit weg oder in einem verbotenen Gebiet landet:
   #   body   = zu seinem Körper
   #   portal = zum Portal, durch das er ging (wenn möglich, sonst body)
   return-to: body
@@ -332,25 +288,21 @@ portals:
   # Sekunden zwischen zwei Meldungen an einem gesperrten Portal
   warning-cooldown: 3
 
-  # Portale merken, die in ein verbotenes Biom oder eine verbotene
-  # Struktur führen (cam-area Stufe 2):
+  # Portale merken, die in ein verbotenes Biom oder eine verbotene Struktur führen (cam-area Stufe 2, Gemerkt wird bis zum Neustart oder /cam reload.):
   #   true  = nach dem ersten Zurückholen bleibt das Portal gesperrt
   #   false = jedes Mal hin und gleich wieder zurück
-  # Gemerkt wird bis zum Neustart oder /cam reload.
   remember-blocked: true
 
   # Wie viele Portale höchstens gemerkt werden (0 = keine)
   remember-blocked-count: 128
 
-  # Gemerktes Portal wieder freigeben, wenn sich drüben etwas ändert:
+  # Gemerktes Portal wieder freigeben, wenn sich drüben etwas ändert (false = erst /cam reload gibt es frei):
   #   - das Portal dort ist abgebaut oder versetzt
   #   - die Stelle ist nicht mehr verboten
   #   - ein neues Portal steht in der Nähe (siehe forget-radius)
-  # false = erst /cam reload gibt es frei
   forget-changed: true
 
   # Umkreis in Blöcken (waagerecht) um die Ankunftsstelle:
-  # Ein neues Portal darin gibt ein gemerktes Portal frei.
   # 0 = aus. Sollte zu portal-search-radius des Servers passen.
   forget-radius: 128
 
@@ -362,8 +314,7 @@ mirror-damage:
   #   false  = kein Schaden
   damage-mode: mirror
 
-  # Schaden in Herzen für custom, plus Bonus durch Schärfe/Stärke
-  # (0 = gar kein Schaden)
+  # Schaden in Herzen für custom, plus Bonus durch Schärfe/Stärke  (0 = gar kein Schaden)
   custom-damage-hearts: 0.5
 
   # Ob Rüstung, Schutz-Verzauberungen und Effekte den Schaden mindern:
@@ -386,6 +337,5 @@ mirror-damage:
   # Rückstoß für den Spieler, unabhängig vom Schaden
   knockback: true
 
-  # Jeden Treffer mit allen Werten in Chat und Log schreiben
-  # (nur zum Testen)
+  # Jeden Treffer mit allen Werten in Chat und Log schreiben (nur zum Testen)
   debug: false
