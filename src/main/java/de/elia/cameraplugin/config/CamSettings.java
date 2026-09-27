@@ -185,6 +185,8 @@ public final class CamSettings {
         portalRules.load(config);
 
         mirrorKnockback = config.getBoolean("mirror-damage.knockback", true);
+        // Only for measuring, so left out of config.yml on purpose: whoever
+        // needs it adds "debug: true" under mirror-damage by hand.
         mirrorDebug = config.getBoolean("mirror-damage.debug", false);
         // "off" war frueher die Schreibweise fuer aus und wird weiter gelesen.
         String modeRaw = readMode(config, "mirror-damage.damage-mode", "mirror",

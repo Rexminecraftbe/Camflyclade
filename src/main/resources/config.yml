@@ -336,6 +336,3 @@ mirror-damage:
 
   # Rückstoß für den Spieler, unabhängig vom Schaden
   knockback: true
-
-  # Jeden Treffer mit allen Werten in Chat und Log schreiben (nur zum Testen)
-  debug: false
