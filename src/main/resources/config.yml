@@ -314,7 +314,7 @@ mirror-damage:
   #   false  = kein Schaden
   damage-mode: mirror
 
-  # Schaden in Herzen für custom, plus Bonus durch Schärfe/Stärke  (0 = gar kein Schaden)
+  # Schaden in Herzen für custom, plus Bonus durch Schärfe/Stärke (0 = gar kein Schaden)
   custom-damage-hearts: 0.5
 
   # Ob Rüstung, Schutz-Verzauberungen und Effekte den Schaden mindern:
