@@ -2,6 +2,7 @@ package de.elia.cameraplugin.display;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
+import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraPlayers;
 import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
@@ -17,6 +18,7 @@ public final class CamActionBar {
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
+    private final Messages messages;
     private final CameraPlayers cameraPlayers;
     private final Map<UUID, BukkitRunnable> actionBarTasks = new HashMap<>();
     private final Map<UUID, BukkitRunnable> offMessageTasks = new HashMap<>();
@@ -24,6 +26,7 @@ public final class CamActionBar {
     public CamActionBar(CameraPlugin plugin) {
         this.plugin = plugin;
         this.settings = plugin.getSettings();
+        this.messages = plugin.getMessages();
         this.cameraPlayers = plugin.getCameraPlayers();
     }
 
@@ -32,6 +35,7 @@ public final class CamActionBar {
         stopActionBar(player);
         BukkitRunnable off = offMessageTasks.remove(player.getUniqueId());
         if (off != null) off.cancel();
+        if (!messages.isMessageEnabled("actionbar-on")) return;
         BukkitRunnable task = new BukkitRunnable() {
             @Override
             public void run() {
@@ -56,12 +60,23 @@ public final class CamActionBar {
     /**
      * Ends the line of a running camera mode and shows the one saying it has
      * ended - the latter not while the plugin is being switched off.
+     *
+     * <p>With {@code actionbar-off} switched off the first line is cleared
+     * instead of replaced: the client keeps a line up for up to three seconds,
+     * and it would go on saying that camera mode is on after it has ended.</p>
      */
     public void showActionBarOffMessage(Player player) {
+        boolean onLineShown = actionBarTasks.containsKey(player.getUniqueId());
         stopActionBar(player);
         if (!settings.isActionBarEnabled() || plugin.isShuttingDown()) return;
         BukkitRunnable existing = offMessageTasks.remove(player.getUniqueId());
         if (existing != null) existing.cancel();
+        if (!messages.isMessageEnabled("actionbar-off")) {
+            if (onLineShown) {
+                player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(""));
+            }
+            return;
+        }
 
         BukkitRunnable task = new BukkitRunnable() {
             private int ticks = 0;

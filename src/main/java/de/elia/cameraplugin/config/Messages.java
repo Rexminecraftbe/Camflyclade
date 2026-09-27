@@ -28,6 +28,12 @@ public final class Messages {
         return plugin.getConfig().getBoolean("message-settings." + path, true);
     }
 
+    /**
+     * Sends a message unless its switch in {@code message-settings} is off.
+     * Only a player is held to that switch: the console and command blocks
+     * always get the answer to their command, which is also why
+     * {@code no-player}, sent to them alone, has no switch at all.
+     */
     public void sendConfiguredMessage(CommandSender sender, String path) {
         if (!(sender instanceof Player) || isMessageEnabled(path)) {
             sender.sendMessage(getMessage(path));

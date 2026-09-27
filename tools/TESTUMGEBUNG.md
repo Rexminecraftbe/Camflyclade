@@ -204,7 +204,14 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   geladen.
 * **`nether` steht zweimal in der Konfiguration**, unter `portals` und unter
   `cam-area.dimensions`. `set_option` nimmt dafür einen Abschnitt entgegen,
-  sonst träfe das Muster beide Zeilen auf einmal.
+  sonst träfe das Muster beide Zeilen auf einmal. Genauso bei `actionbar-on`
+  und `actionbar-off`, die auch unter `messages` stehen, und bei `enabled`,
+  das es in mehreren Abschnitten gibt: Die Schalter setzt der Test mit dem
+  Abschnitt `message-settings`.
+* **Die Schalter der Action-Bar prüft der Test am Spielmodus.** `camera-on`
+  und `camera-off` sind in der ausgelieferten Datei aus; ohne Action-Bar sagt
+  das Plugin zu `/cam` also gar nichts. Ob der Cam-Modus trotzdem läuft,
+  fragt der Test mit `/execute if entity @s[gamemode=adventure]`.
 * **Das Testportal entsteht aus `/fill` und einem `/setblock ... fire`** im
   ausgehöhlten Rahmen. Ob daraus wirklich ein Portal geworden ist, sieht der
   Test mit `/execute if block ... run say` nach - so beantwortet der Server
@@ -333,7 +340,11 @@ ihn · der Körper wird von beiden weiterhin getroffen und beendet damit den
 Cam-Modus · die Meldung dazu nennt den Effekt, an dem es lag · `/cam` startet
 mit einem positiven und einem neutralen Effekt, mit einem schädlichen nicht ·
 auf `false` sperrt jeder Effekt, auf `true` keiner · die Ablehnung nennt jeden
-schädlichen Effekt und nur die · ein offenes Portal trägt den Kamera-Spieler in
+schädlichen Effekt und nur die · `actionbar-on` und `actionbar-off` schalten
+jeweils nur ihre eigene Zeile ab · ohne `actionbar-off` wird die Zeile zum
+Start beim Ende geleert, voreingestellt nicht ·
+`message-settings.enabled: false` nimmt die Action-Bar mit · die Startzeilen
+stehen voreingestellt im Log · ein offenes Portal trägt den Kamera-Spieler in
 den Nether · ein verbotenes Biom dahinter holt ihn zurück · danach lässt
 dasselbe Portal ihn gar nicht mehr durch · ein drüben neu gebautes Portal gibt
 das gemerkte wieder frei · ein drüben abgebautes ebenso · mit

@@ -175,11 +175,14 @@ public final class CameraPlugin extends JavaPlugin {
     }
 
     /**
-     * Writes a startup line from the config file into the console. An empty
-     * entry switches the line off; {@code {error}} is replaced when a reason is
-     * given.
+     * Writes a startup line from the config file into the console. Its switch
+     * in {@code message-settings} or an empty entry switches the line off;
+     * {@code {error}} is replaced when a reason is given.
      */
     private void logStartupMessage(Level level, String key, String fallback, String error) {
+        if (!messages.isMessageEnabled(key)) {
+            return;
+        }
         String text = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&',
                 getConfig().getString("messages." + key, fallback)));
         if (text.isEmpty()) {
