@@ -279,6 +279,10 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   Gegenstand gar nichts. Sie gehört zum Blockschutz: Ohne Gegenstand gibt es
   auch keinen mit `CanPlaceOn` oder `CanDestroy`, mit dem sich im
   Abenteuermodus doch bauen ließe.
+* **Die Rüstung prüft ein eigener Abschnitt**, am Brustpanzer und mit
+  `/execute if items entity @s armor.chest`. Das Plugin gibt sie über
+  denselben Weg zurück wie das übrige Inventar - `getContents()` hält auch
+  die Rüstungsslots -, und diese Probe hält fest, dass das so bleibt.
 * **Der Happy Ghast steht mit `NoAI` und `NoGravity` still.** Sonst zöge er
   davon, und die Stelle, an der der Bot aufgesetzt wird, wäre jedes Mal eine
   andere. Er ist vier Blöcke hoch, sein Rücken liegt also vier über seinen
@@ -339,7 +343,8 @@ Hebel umlegen, kein Block abbauen und keine Druckplatte auslösen · kein Bild
 im Rahmen drehen, kein Fenster einer Kistenlore öffnen und kein Boot
 besteigen · Gegenprobe: ohne Cam-Modus geht
 jedes davon sehr wohl · das Inventar ist im Cam-Modus leer und danach wieder
-da · der eigene Körper bleibt anklickbar und beendet damit den Cam-Modus ·
+da · die Rüstung ist im Cam-Modus abgelegt und danach wieder angezogen · der
+eigene Körper bleibt anklickbar und beendet damit den Cam-Modus ·
 die Kamera wird von einem Happy Ghast abgehoben, ohne Cam-Modus bleibt der
 Bot darauf stehen · der Cam-Modus läuft voreingestellt im Abenteuermodus,
 auf `survival` und `creative` im eingestellten und auf `keep` in dem, in dem

@@ -2016,6 +2016,52 @@ def interact_checks(env, bot):
 
 
 # ---------------------------------------------------------------------------
+# Die Ruestung im Cam-Modus
+# ---------------------------------------------------------------------------
+
+def armor_checks(env, bot):
+    """Die Ruestung: im Cam-Modus abgelegt, danach wieder angezogen.
+
+    Das Plugin nimmt dem Spieler beim Start das ganze Inventar ab und gibt es
+    ihm beim Aussteigen zurueck. Die Ruestung reist dabei in denselben Slots
+    mit - einen eigenen Weg fuer sie gibt es nicht. Diese Probe haelt fest,
+    dass sie das auch wirklich tut: Der Interaktionstest weiter oben prueft das
+    Inventar nur an einem Stein in der Hand.
+
+    Gefragt wird serverseitig mit /execute if items, am Brustpanzer.
+    """
+    frage = ("/execute if items entity @s armor.chest minecraft:iron_chestplate "
+             "run say {marke}")
+    if not FIND.test("Cam-Modus ist vor dem Ruestungstest aus", cam_off(bot), ""):
+        return
+    try:
+        bot.chat(f"/clear {BOT_NAME}")
+        time.sleep(0.5)
+        bot.chat(f"/item replace entity {BOT_NAME} armor.chest "
+                 f"with minecraft:iron_chestplate")
+        time.sleep(0.8)
+        if not FIND.test("Der Bot traegt fuer den Ruestungstest einen Brustpanzer",
+                         server_says(bot, frage), ""):
+            return
+        if not FIND.test("/cam startet fuer den Ruestungstest", cam_on(bot), ""):
+            return
+        abgelegt = not server_says(bot, frage)
+        FIND.test("Im Cam-Modus ist die Ruestung abgelegt", abgelegt,
+                  "" if abgelegt else "er traegt den Brustpanzer noch")
+        cam_off(bot)
+        time.sleep(1)
+        wieder = server_says(bot, frage)
+        FIND.test("Nach dem Cam-Modus ist die Ruestung wieder angezogen", wieder,
+                  "" if wieder else "der Brustpanzer fehlt")
+    finally:
+        try:
+            bot.chat(f"/clear {BOT_NAME}")
+            time.sleep(0.5)
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Ruestungstest: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # Der Spielmodus, in dem der Cam-Modus laeuft
 # ---------------------------------------------------------------------------
 
@@ -2810,6 +2856,9 @@ def step_tests(env):
 
         # --- Bloecke und Entitaeten im Cam-Modus ---
         interact_checks(env, bot)
+
+        # --- Die Ruestung im Cam-Modus ---
+        armor_checks(env, bot)
 
         # --- Der Spielmodus, in dem der Cam-Modus laeuft ---
         gamemode_checks(env, bot)
