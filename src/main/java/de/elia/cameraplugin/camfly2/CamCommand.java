@@ -1,5 +1,8 @@
 package de.elia.cameraplugin.camfly2;
 
+import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.start.StartChecks;
+import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -9,9 +12,15 @@ import org.bukkit.ChatColor;
 public class CamCommand implements CommandExecutor {
 
     private final CameraPlugin plugin;
+    private final Messages messages;
+    private final StartChecks startChecks;
+    private final CamTimeLimit timeLimit;
 
     public CamCommand(CameraPlugin plugin) {
         this.plugin = plugin;
+        this.messages = plugin.getMessages();
+        this.startChecks = plugin.getStartChecks();
+        this.timeLimit = plugin.getTimeLimit();
     }
 
     @Override
@@ -24,46 +33,46 @@ public class CamCommand implements CommandExecutor {
         }
 
         if (!(sender instanceof Player player)) {
-            plugin.sendConfiguredMessage(sender, "no-player");
+            messages.sendConfiguredMessage(sender, "no-player");
             return true;
         }
 
         if (!player.hasPermission("camplugin.use")) {
-            plugin.sendConfiguredMessage(player, "no-permission");
+            messages.sendConfiguredMessage(player, "no-permission");
             return true;
         }
 
         if (plugin.isInCameraMode(player)) {
             plugin.exitCameraMode(player);
-            plugin.sendConfiguredMessage(player, "camera-off");
+            messages.sendConfiguredMessage(player, "camera-off");
         } else {
             // Vor der Abklingzeit: Einem Zuschauer sagt "warte noch zehn
             // Sekunden" das Falsche - danach darf er genauso wenig.
-            if (!plugin.checkCamSpectator(player)) {
+            if (!startChecks.checkCamSpectator(player)) {
                 return true;
             }
-            if (plugin.isCooldownActive(player)) {
-                long remaining = plugin.getCooldownRemaining(player);
-                if (plugin.isMessageEnabled("cooldown-text")) {
-                    String msg = plugin.getMessage("cooldown-text").replace("%time%", plugin.formatDuration(remaining));
+            if (timeLimit.isCooldownActive(player)) {
+                long remaining = timeLimit.getCooldownRemaining(player);
+                if (messages.isMessageEnabled("cooldown-text")) {
+                    String msg = messages.getMessage("cooldown-text").replace("%time%", CamTimeLimit.formatDuration(remaining));
                     player.sendMessage(ChatColor.RED + msg);
                 }
                 return true;
             }
-            if (!plugin.checkCamArea(player)) {
+            if (!startChecks.checkCamArea(player)) {
                 return true;
             }
             // Vor der Sicherheitspruefung: Ein schaedlicher Effekt tut meist
             // auch weh, und dann stuende erst "warte noch fuenf Sekunden" da
             // und danach erst der Grund, an dem es wirklich liegt.
-            if (!plugin.checkCamEffects(player)) {
+            if (!startChecks.checkCamEffects(player)) {
                 return true;
             }
-            if (!plugin.checkCamSafety(player)) {
+            if (!startChecks.checkCamSafety(player)) {
                 return true;
             }
             plugin.enterCameraMode(player);
-            plugin.sendConfiguredMessage(player, "camera-on");
+            messages.sendConfiguredMessage(player, "camera-on");
         }
         return true;
     }
@@ -80,12 +89,12 @@ public class CamCommand implements CommandExecutor {
     private boolean reload(CommandSender sender) {
         Player player = sender instanceof Player p ? p : null;
         if (player != null && (!player.hasPermission("camplugin.use") || !player.isOp())) {
-            plugin.sendConfiguredMessage(player, "no-permission");
+            messages.sendConfiguredMessage(player, "no-permission");
             return true;
         }
-        plugin.sendConfiguredMessage(sender, "reload-start");
+        messages.sendConfiguredMessage(sender, "reload-start");
         if (plugin.reloadPlugin(player)) {
-            plugin.sendConfiguredMessage(sender, "reload-success");
+            messages.sendConfiguredMessage(sender, "reload-success");
         }
         return true;
     }

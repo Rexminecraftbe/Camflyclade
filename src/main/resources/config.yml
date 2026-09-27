@@ -9,7 +9,6 @@ messages:
   # Platzhalter {effect}: der Effekt, der den Körper getroffen hat, unter
   # seinem Minecraft-Namen - "poison", "instant_damage".
   body-got-effect: "&cYour body was hit by the effect {effect}! Camera mode ended."
-  body-missing: "&cYour body no longer exists! Camera mode ended."
   body-moved: "&cYour body was moved! Camera mode ended."
   body-suffocating: "&cYour body is stuck and suffocating! Camera mode ended."
   bossbar-text: "Cam mode ends in: %time%"
@@ -104,7 +103,6 @@ message-settings:
   body-drowning: true
   body-env-damage: true
   body-got-effect: true
-  body-missing: true
   body-moved: true
   body-suffocating: true
   bossbar-text: true

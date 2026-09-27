@@ -70,7 +70,7 @@ public final class CamPotionGuard implements Listener {
     }
 
     /** Apply potion effects from a tipped arrow to the player. */
-    public static void applyArrowEffects(Arrow arrow, Player player) {
+    private static void applyArrowEffects(Arrow arrow, Player player) {
         var base = arrow.getBasePotionType();
         if (base != null) {
             base.getPotionEffects().forEach(effect -> player.addPotionEffect(effect, true));
@@ -137,7 +137,13 @@ public final class CamPotionGuard implements Listener {
                 && cameraPlayers.contains(player.getUniqueId()));
     }
 
-    /** Transfer potion effects from arrows that hit the camera body. */
+    /**
+     * Transfer potion effects from arrows that hit the camera body.
+     *
+     * <p>The only place they are handed over: this event comes before the
+     * damage of the same arrow, which {@link de.elia.cameraplugin.mirrordamage.DamageMirror}
+     * passes on to the player.</p>
+     */
     @EventHandler
     public void onProjectileHit(ProjectileHitEvent event) {
         Entity hit = event.getHitEntity();

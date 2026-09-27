@@ -76,10 +76,6 @@ public final class NoCollisionTeam {
         }
     }
 
-    public void addPlayerToNoCollisionTeam(Player player) {
-        ensureNoCollisionTeam().addEntry(player.getName());
-    }
-
     public void removePlayerFromNoCollisionTeam(Player player) {
         Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
         Team team = scoreboard.getTeam(NO_COLLISION_TEAM);

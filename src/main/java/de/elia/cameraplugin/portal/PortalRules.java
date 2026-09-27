@@ -358,7 +358,7 @@ public final class PortalRules {
         }
         Block block = portal.getBlock();
         Material material = block.getType();
-        if (material == Material.NETHER_PORTAL || material == Material.END_PORTAL) {
+        if (isPortal(material)) {
             block = walk(block, BlockFace.WEST, material);
             block = walk(block, BlockFace.DOWN, material);
             block = walk(block, BlockFace.NORTH, material);

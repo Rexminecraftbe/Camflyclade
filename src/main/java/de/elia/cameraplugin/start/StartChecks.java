@@ -147,9 +147,7 @@ public final class StartChecks implements Listener {
         if (area == null) {
             return true;
         }
-        if (messages.isMessageEnabled("cam-area-start")) {
-            player.sendMessage(messages.getMessage("cam-area-start").replace("{area}", area));
-        }
+        messages.sendMessage(player, "cam-area-start", "{area}", area);
         return false;
     }
 }

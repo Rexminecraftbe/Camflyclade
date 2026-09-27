@@ -52,10 +52,6 @@ public class CamFireGuard implements Listener {
         rangeXZ = (int) Math.ceil(radiusH);
     }
 
-    public boolean isEnabled() {
-        return enabled;
-    }
-
     public void startFor(Player player) {
         if (!enabled || tasks.containsKey(player.getUniqueId())) return;
 
@@ -115,8 +111,7 @@ public class CamFireGuard implements Listener {
                             loc.getBlockX() + dx,
                             loc.getBlockY() + dy,
                             loc.getBlockZ() + dz);
-                    Material t = b.getType();
-                    if (t == Material.FIRE || t == Material.SOUL_FIRE) current.add(b);
+                    if (isFire(b.getType())) current.add(b);
                 }
             }
 
@@ -153,8 +148,7 @@ public class CamFireGuard implements Listener {
     public void onBlockIgnite(BlockIgniteEvent event) {
         Block block = event.getBlock();
         Bukkit.getScheduler().runTask(plugin, () -> {
-            Material type = block.getType();
-            if (type == Material.FIRE || type == Material.SOUL_FIRE) {
+            if (isFire(block.getType())) {
                 hideFireForBlock(block);
             }
         });
@@ -163,8 +157,7 @@ public class CamFireGuard implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onBlockSpread(BlockSpreadEvent event) {
         Block block = event.getBlock();
-        Material to = event.getNewState().getType();
-        if (to == Material.FIRE || to == Material.SOUL_FIRE) {
+        if (isFire(event.getNewState().getType())) {
             Bukkit.getScheduler().runTask(plugin, () -> hideFireForBlock(block));
         }
     }
@@ -192,9 +185,13 @@ public class CamFireGuard implements Listener {
         Location loc = p.getLocation();
         World w = loc.getWorld();
         if (w == null) return false;
-        Block feet = loc.getBlock();
-        if (feet.getType() == Material.FIRE || feet.getType() == Material.SOUL_FIRE) return true;
+        if (isFire(loc.getBlock().getType())) return true;
         Block head = w.getBlockAt(loc.getBlockX(), loc.getBlockY() + 1, loc.getBlockZ());
-        return head.getType() == Material.FIRE || head.getType() == Material.SOUL_FIRE;
+        return isFire(head.getType());
+    }
+
+    /** Whether the block is fire, the normal kind or the blue one. */
+    private static boolean isFire(Material type) {
+        return type == Material.FIRE || type == Material.SOUL_FIRE;
     }
 }

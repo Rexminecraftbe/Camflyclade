@@ -99,7 +99,6 @@ public final class CamSettings {
     private boolean showBossbar;
     private BarColor bossbarColor;
     private String bossbarText;
-    private String cooldownText;
     private String cooldownAvailableText;
 
     // Camera safety settings
@@ -177,7 +176,6 @@ public final class CamSettings {
         showBossbar = config.getBoolean("time-limit.show-bossbar", true);
         bossbarColor = config.getEnum("time-limit.bossbar-color", BarColor.class, BarColor.BLUE);
         bossbarText = ChatColor.translateAlternateColorCodes('&', config.getString("messages.bossbar-text", "Cam-Modus endet in: %time%"));
-        cooldownText = ChatColor.translateAlternateColorCodes('&', config.getString("messages.cooldown-text", "Du kannst den Cam-Modus erst in %time% erneut starten."));
         cooldownAvailableText = ChatColor.translateAlternateColorCodes('&', config.getString("messages.cooldown-available", "&aCam-Modus wieder verf\u00fcgbar"));
         camSafetyEnabled = config.getBoolean("cam-safety.enabled", true);
         camSafetyDelay = config.getInt("cam-safety.delay", 5, 0);
@@ -492,10 +490,6 @@ public final class CamSettings {
 
     public String getBossbarText() {
         return bossbarText;
-    }
-
-    public String getCooldownText() {
-        return cooldownText;
     }
 
     public String getCooldownAvailableText() {

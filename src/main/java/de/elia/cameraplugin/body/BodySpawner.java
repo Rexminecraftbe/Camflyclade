@@ -62,6 +62,9 @@ public final class BodySpawner {
      * Copies the player's armour for the visible body. Copies are all it takes:
      * the pieces are only worn there, the damage is calculated on the player
      * himself and his own armour is what wears out.
+     *
+     * <p>{@link de.elia.cameraplugin.mirrordamage.DamageMirror} takes the same
+     * copies to wear out in place of the originals.</p>
      */
     public ItemStack[] createMirrorArmor(ItemStack[] originalArmor) {
         ItemStack[] mirrorArmor = new ItemStack[originalArmor.length];

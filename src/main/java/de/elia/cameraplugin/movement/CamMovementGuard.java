@@ -120,14 +120,25 @@ public final class CamMovementGuard implements Listener {
      *              {@code {from}} names
      */
     private void warnDistanceLimit(Player player, String key, CameraData data, Location where) {
-        long now = System.currentTimeMillis();
-        if (distanceMessageCooldown.getOrDefault(player.getUniqueId(), 0L) >= now) {
+        if (!mayWarn(distanceMessageCooldown, player, settings.getDistanceWarningCooldown())) {
             return;
         }
-        distanceMessageCooldown.put(player.getUniqueId(),
-                now + TimeUnit.SECONDS.toMillis(settings.getDistanceWarningCooldown()));
         messages.sendMessage(player, key, "{distance}", String.valueOf(settings.getMaxDistance()),
                 "{from}", distanceAnchorName(data, where));
+    }
+
+    /**
+     * Whether a warning of this kind may go out to the player now. If so, the
+     * next one has to wait {@code seconds}: the border and the portal ask over
+     * and over, and the chat would fill up with the same line.
+     */
+    private static boolean mayWarn(Map<UUID, Long> cooldowns, Player player, int seconds) {
+        long now = System.currentTimeMillis();
+        if (cooldowns.getOrDefault(player.getUniqueId(), 0L) >= now) {
+            return false;
+        }
+        cooldowns.put(player.getUniqueId(), now + TimeUnit.SECONDS.toMillis(seconds));
+        return true;
     }
 
     /**
@@ -272,12 +283,9 @@ public final class CamMovementGuard implements Listener {
      *             {@code null} when the portal is shut on its own
      */
     private void warnPortalShut(Player player, PortalKind kind, String area) {
-        long now = System.currentTimeMillis();
-        if (portalMessageCooldown.getOrDefault(player.getUniqueId(), 0L) >= now) {
+        if (!mayWarn(portalMessageCooldown, player, settings.getPortalRules().getWarningCooldown())) {
             return;
         }
-        portalMessageCooldown.put(player.getUniqueId(),
-                now + TimeUnit.SECONDS.toMillis(settings.getPortalRules().getWarningCooldown()));
         if (area != null) {
             messages.sendMessage(player, "cam-area-limit", "{area}", area);
         } else {
@@ -379,8 +387,11 @@ public final class CamMovementGuard implements Listener {
      * Keeps the player in the air after he was teleported, which takes flight
      * away from him. Done once more a tick later: the client is sent its own
      * flight state along with the teleport and would otherwise let him drop.
+     *
+     * <p>Also used by {@link de.elia.cameraplugin.ghast.CamGhastGuard} after it
+     * has lifted the camera off a happy ghast.</p>
      */
-    private void keepFlying(Player player) {
+    public void keepFlying(Player player) {
         player.setAllowFlight(true);
         player.setFlying(true);
         new BukkitRunnable() {
@@ -448,13 +459,8 @@ public final class CamMovementGuard implements Listener {
         if (area == null || settings.getCamAreaRules().forbiddenArea(from) != null) {
             return false;
         }
-        long now = System.currentTimeMillis();
-        if (areaMessageCooldown.getOrDefault(player.getUniqueId(), 0L) < now) {
-            if (messages.isMessageEnabled("cam-area-limit")) {
-                player.sendMessage(messages.getMessage("cam-area-limit").replace("{area}", area));
-            }
-            areaMessageCooldown.put(player.getUniqueId(),
-                    now + TimeUnit.SECONDS.toMillis(settings.getCamAreaRules().getWarningCooldown()));
+        if (mayWarn(areaMessageCooldown, player, settings.getCamAreaRules().getWarningCooldown())) {
+            messages.sendMessage(player, "cam-area-limit", "{area}", area);
         }
         return true;
     }
