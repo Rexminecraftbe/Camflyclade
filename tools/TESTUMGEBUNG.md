@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **505** - alle 505 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **524** - alle 524 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -380,6 +380,28 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   mit einer Warnung im Log. Das Plugin nimmt auf Paper deshalb Papers eigenes
   Event; landet die Warnung doch im Log, fällt sie in der Zusammenfassung
   auf.
+* **Die Wand von `border-mode: barrier` steht nur im Client.** `fly` versetzt
+  den Bot ohne Physik und liefe glatt durch sie hindurch, wie ein Client, der
+  von der Wand nichts weiß. Der Grenztest läuft deshalb mit `walk`: Vorwärts
+  mit der Physik von mineflayer, die an jedem Block anstößt, den der Server
+  dem Bot geschickt hat. Zu Fuß schafft er gut vier Blöcke in der Sekunde.
+* **barrier und push-back unterscheiden sich am Zurücksetzen.** Stehen bleibt
+  die Kamera in beiden Fällen an der Grenze; push-back setzt sie dabei aber
+  immer wieder auf die letzte Position zurück. `walk` zählt diese
+  Zurücksetzungen über das Ereignis `forcedMove` von mineflayer - bei
+  barrier müssen es null sein.
+* **`max-distance` steht im Grenztest auf 6**, sonst müsste der Bot hundert
+  Blöcke weit laufen. Die Wand steht an den Blöcken, von denen auch nur eine
+  Ecke hinter der Grenze liegt; bei 6 ist das am Boden der sechste Block
+  östlich des Körpers. Der Test sucht sie trotzdem selbst, mit `block_at` in
+  der Sicht des Clients, und fragt am Server nach, dass dort weiter Luft ist.
+* **Ob andere die Wand sehen, fragt ein zweiter Bot**, `CamFlyZuschauer`. Er
+  kommt nur für diese eine Frage herein und wird von der Konsole aus
+  hingestellt, op hat er nicht. Sein Name muss ein anderer sein als der des
+  ersten Bots, sonst kickt der eine den anderen.
+* **Das verbotene Biom im Grenztest fängt an einer 4er-Grenze an.** Das Spiel
+  führt Biome in Würfeln von vier Blöcken; `/fillbiome` füllt ganze Würfel,
+  und genau an deren Kante steht dann auch die Wand.
 
 ## Was die Tests abdecken
 
@@ -406,7 +428,8 @@ Start beim Ende geleert, voreingestellt nicht ·
 stehen voreingestellt im Log · ein offenes Portal trägt den Kamera-Spieler in
 den Nether · ein verbotenes Biom dahinter holt ihn zurück · danach lässt
 dasselbe Portal ihn gar nicht mehr durch · ein drüben neu gebautes Portal gibt
-das gemerkte wieder frei · ein drüben abgebautes ebenso · mit
+das gemerkte wieder frei · ein drüben abgebautes ebenso · auf
+`border-mode: false` holt ihn auch das verbotene Biom nicht zurück · mit
 `forget-changed: false` bleibt der Eintrag stehen · auf `portals.nether: false`
 trägt das Portal ihn gar nicht erst hinüber · im Cam-Modus lässt sich kein
 Hebel umlegen, kein Block abbauen und keine Druckplatte auslösen · kein Bild
@@ -435,8 +458,17 @@ Wasser, auf `allow_powder_snow_flight: false` auf dem Pulverschnee und mit dem
 Kopf unter einer Decke daraus, der Cam-Modus läuft dabei weiter und die
 Meldung kommt · wer schon im Wasser ist, kommt heraus, aber nicht tiefer hinein
 · in Lava, Wasser und Pulverschnee startet `/cam` dann nicht, und die Ablehnung
-sagt warum · Gegenprobe: voreingestellt geht all das · Server-Log ohne Fehler
-des Plugins.
+sagt warum · Gegenprobe: voreingestellt geht all das · voreingestellt steht
+`border-mode: barrier` mit `border-block: barrier` und `border-radius: 5` da ·
+die Kamera bleibt dann an `max-distance` und an einem verbotenen Biom stehen,
+ohne je zurückgesetzt zu werden, und die Meldung kommt · die Wand steht nur im
+Client des Kamera-Spielers: der Server hat dort Luft, ein zweiter Spieler
+ebenso, und nach dem Cam-Modus ist sie auch bei ihm wieder weg · sie steht
+auch im Wasser, und dort bleibt es Wasser · auf
+`push-back` kommt die Kamera auch nicht weiter, wird dabei aber zurückgesetzt ·
+auf `false`, mit `border-block: air` und mit `border-radius: 0` gibt es keine
+Grenze · ein unbekannter Block und ein zu großer Radius werden gemeldet, und
+die Wand steht mit dem Ersatz · Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
 Arbeitsordner.

@@ -21,6 +21,7 @@ import de.elia.cameraplugin.inventory.CamInventoryLock;
 import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.mirrordamage.DamageMirror;
 import de.elia.cameraplugin.mob.MobTargeting;
+import de.elia.cameraplugin.movement.CamBorderWall;
 import de.elia.cameraplugin.movement.CamMovementGuard;
 import de.elia.cameraplugin.potion.CamPotionGuard;
 import de.elia.cameraplugin.scoreboard.CamModeObjective;
@@ -74,6 +75,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamTimeLimit timeLimit = new CamTimeLimit(this);
     private final StartChecks startChecks = new StartChecks(settings, messages);
     private final CamMovementGuard movementGuard = new CamMovementGuard(this);
+    private final CamBorderWall borderWall = new CamBorderWall(this);
     private final CameraMode cameraMode = new CameraMode(this);
 
     private CamFireGuard camFireGuard;
@@ -139,6 +141,7 @@ public final class CameraPlugin extends JavaPlugin {
                 startChecks,
                 new SessionListener(this),
                 movementGuard,
+                borderWall,
                 camSulfurCubeGuard,
                 new CamInventoryLock(cameraPlayers),
                 new CamPotionGuard(this),
@@ -226,6 +229,7 @@ public final class CameraPlugin extends JavaPlugin {
         if (camSulfurCubeGuard != null) {
             camSulfurCubeGuard.onDisable();
         }
+        borderWall.onDisable();
         particles.onDisable();
         sightGlow.onDisable();
         actionBar.onDisable();
@@ -438,5 +442,9 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamMovementGuard getMovementGuard() {
         return movementGuard;
+    }
+
+    public CamBorderWall getBorderWall() {
+        return borderWall;
     }
 }

@@ -8,15 +8,21 @@ import de.elia.cameraplugin.display.GlowMode;
 import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.mirrordamage.ArmorDamageMode;
 import de.elia.cameraplugin.mirrordamage.DamageMode;
+import de.elia.cameraplugin.movement.BorderMode;
 import de.elia.cameraplugin.portal.PortalRules;
 import de.elia.cameraplugin.session.CamGameMode;
 import de.elia.cameraplugin.start.EffectStart;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.ChatColor;
+import org.bukkit.Material;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.MultipleFacing;
 import org.bukkit.boss.BarColor;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.logging.Level;
 
 /**
@@ -31,6 +37,14 @@ public final class CamSettings {
      */
     public static final double MIN_MOVE_THRESHOLD = 0.01;
 
+    /**
+     * Largest value accepted for {@code camera-mode.border-radius}, in blocks.
+     * The wall looks at every block that far around the player each time the
+     * player crosses into the next one, and that work grows with the cube of
+     * the radius.
+     */
+    public static final double MAX_BORDER_RADIUS = 16.0;
+
     private final JavaPlugin plugin;
     private final ConsoleLog log;
 
@@ -38,6 +52,23 @@ public final class CamSettings {
     private boolean maxDistanceEnabled;
     private double maxDistance;
     private int distanceWarningCooldown;
+    /** What happens at the border of camera mode, {@code camera-mode.border-mode}. */
+    private BorderMode borderMode;
+    /** What the wall of the mode barrier is made of, {@code camera-mode.border-block}. */
+    private BlockData borderBlock;
+    /** How far around the player that wall is built, {@code camera-mode.border-radius}. */
+    private double borderRadius;
+    /**
+     * Whether the border of {@code max-distance} and {@code cam-area} holds
+     * the camera back at all.
+     *
+     * <p>{@code push-back} does, and {@code barrier} does with a wall that
+     * stops somebody: made of a block that cannot be walked through, and
+     * built at least a little way around the player. Air, water, grass or a
+     * radius of 0 leave the camera exactly as free as {@code false} does - in
+     * flight and behind portals alike.</p>
+     */
+    private boolean bordersHold;
     private boolean bodyNameVisible;
     private boolean bodyVisible;
     /** Whether the armour the body wears is drawn, {@code body.armor-visible}. */
@@ -124,6 +155,22 @@ public final class CamSettings {
         maxDistanceEnabled = config.getBoolean("camera-mode.max-distance-enabled", true);
         maxDistance = config.getDouble("camera-mode.max-distance", 100.0, 0.0);
         distanceWarningCooldown = config.getInt("camera-mode.distance-warning-cooldown", 3, 0);
+        String border = config.getChoice("camera-mode.border-mode", "barrier", "barrier", "push-back", "false")
+                .toLowerCase(Locale.ROOT);
+        borderMode = switch (border) {
+            case "push-back" -> BorderMode.PUSH_BACK;
+            case "false" -> BorderMode.OFF;
+            default -> BorderMode.BARRIER;
+        };
+        borderBlock = resolveBorderBlock(config);
+        borderRadius = config.getDouble("camera-mode.border-radius", 5.0, 0.0, MAX_BORDER_RADIUS);
+        // A wall that nobody runs into holds nobody back: made of something
+        // that can be walked through, or not built anywhere around the player.
+        // Stopping the camera some other way would say the opposite of what
+        // the file says, so there is simply no border then, as with "false".
+        bordersHold = borderMode == BorderMode.PUSH_BACK
+                || (borderMode == BorderMode.BARRIER && borderRadius > 0.0
+                        && borderBlock.getMaterial().isSolid());
         String visibility = config.getChoice("camera-mode.player_visibility_mode", "cam", "cam", "true", "false")
                 .toLowerCase();
         playerVisibilityMode = switch (visibility) {
@@ -312,6 +359,54 @@ public final class CamSettings {
     }
 
     /**
+     * Reads {@code camera-mode.border-block}: the name of a block, with or
+     * without {@code minecraft:} in front, capitals and spaces not counting -
+     * {@code light_blue_stained_glass} and {@code Light Blue Stained Glass}
+     * are the same block. Its states may follow in square brackets, the way
+     * the game writes them, e.g. {@code glass_pane[north=true,south=true]}.
+     * Anything that is no block falls back to the barrier.
+     *
+     * <p>Fences, panes and iron bars given without states are joined on every
+     * side. Standing on its own, each of them is only a thin post, and a wall
+     * of posts has gaps wide enough to slip through.</p>
+     */
+    private BlockData resolveBorderBlock(ConfigReader config) {
+        String raw = config.getString("camera-mode.border-block", "barrier");
+        BlockData block = parseBlock(raw);
+        if (block == null) {
+            config.warnUnknownValue("camera-mode.border-block", raw,
+                    "jeder Block, z. B. barrier oder glass", "barrier");
+            return Material.BARRIER.createBlockData();
+        }
+        return block;
+    }
+
+    /** The block a {@code border-block} entry names, or {@code null} for none. */
+    private static BlockData parseBlock(String raw) {
+        String text = raw.trim().toLowerCase(Locale.ROOT);
+        int states = text.indexOf('[');
+        String name = (states < 0 ? text : text.substring(0, states)).trim().replace(' ', '_');
+        Material material = name.isEmpty() ? null : Material.matchMaterial(name);
+        if (material == null || !material.isBlock()) {
+            return null;
+        }
+        if (states >= 0) {
+            try {
+                return material.createBlockData(text.substring(states));
+            } catch (IllegalArgumentException ex) {
+                return null;
+            }
+        }
+        BlockData block = material.createBlockData();
+        if (block instanceof MultipleFacing sides) {
+            for (BlockFace face : sides.getAllowedFaces()) {
+                sides.setFace(face, true);
+            }
+        }
+        return block;
+    }
+
+    /**
      * Reads {@code body.mob-target}. The setting used to be a truth value, back
      * when there was only the one range to switch on and off, so those two
      * values keep saying what they said: {@code true} is the range out of the
@@ -363,16 +458,43 @@ public final class CamSettings {
 
     // ------------------------------------------------------------ camera-mode
 
-    public boolean isMaxDistanceEnabled() {
-        return maxDistanceEnabled;
-    }
-
     public double getMaxDistance() {
         return maxDistance;
     }
 
     public int getDistanceWarningCooldown() {
         return distanceWarningCooldown;
+    }
+
+    /** A copy of the block the wall is made of, free to be changed by the caller. */
+    public BlockData getBorderBlock() {
+        return borderBlock.clone();
+    }
+
+    public double getBorderRadius() {
+        return borderRadius;
+    }
+
+    /**
+     * Whether the wall of {@code border-mode: barrier} is built. Not when it
+     * would stop nobody, see {@link #bordersHold}.
+     */
+    public boolean buildsBorderWall() {
+        return borderMode == BorderMode.BARRIER && bordersHold;
+    }
+
+    /** Whether {@code max-distance} holds the camera back: switched on, and a border that holds. */
+    public boolean limitsDistance() {
+        return maxDistanceEnabled && bordersHold;
+    }
+
+    /**
+     * Whether {@code cam-area} keeps the camera out of forbidden areas in
+     * flight and behind portals: level 2, and a border that holds. The start
+     * is not part of this, level 1 and 2 turn it away whatever the border does.
+     */
+    public boolean keepsOutOfAreas() {
+        return camAreaRules.getLevel().blocksFlight() && bordersHold;
     }
 
     public VisibilityMode getPlayerVisibilityMode() {

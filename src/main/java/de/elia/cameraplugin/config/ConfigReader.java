@@ -37,6 +37,7 @@ public final class ConfigReader {
     private static final String UNKNOWN_ENTRY = "config-unknown-entry";
     private static final String ENTRY_IN_BOTH_LISTS = "config-entry-in-both-lists";
     private static final String TOO_SMALL = "config-too-small";
+    private static final String TOO_LARGE = "config-too-large";
 
     /** Wording used when a key is missing from the config file. */
     private static final Map<String, String> FALLBACKS = Map.of(
@@ -53,7 +54,8 @@ public final class ConfigReader {
             UNKNOWN_ENTRY, "&cUnbekannter Eintrag in {path}: '{value}'. Er wird nicht beachtet.",
             ENTRY_IN_BOTH_LISTS, "&cDer Eintrag '{value}' steht in {path} und in {other}."
                     + " Er wird in keiner der beiden beachtet.",
-            TOO_SMALL, "&cWert für {path} ist zu klein: {value}. Es wird {min} verwendet.");
+            TOO_SMALL, "&cWert für {path} ist zu klein: {value}. Es wird {min} verwendet.",
+            TOO_LARGE, "&cWert für {path} ist zu groß: {value}. Es wird {max} verwendet.");
 
     private final FileConfiguration config;
     private final List<ConfigIssue> warnings = new ArrayList<>();
@@ -139,6 +141,19 @@ public final class ConfigReader {
         if (value < min) {
             warnTooSmall(path, String.valueOf(value), String.valueOf(min));
             return min;
+        }
+        return value;
+    }
+
+    /**
+     * Reads a decimal number and keeps it between {@code min} and
+     * {@code max}, for a value that costs more work the larger it gets.
+     */
+    public double getDouble(String path, double def, double min, double max) {
+        double value = getDouble(path, def, min);
+        if (value > max) {
+            warnTooLarge(path, String.valueOf(value), String.valueOf(max));
+            return max;
         }
         return value;
     }
@@ -283,5 +298,12 @@ public final class ConfigReader {
                 .with("path", path)
                 .with("value", value)
                 .with("min", min));
+    }
+
+    private void warnTooLarge(String path, String value, String max) {
+        warnings.add(ConfigIssue.of(TOO_LARGE, FALLBACKS.get(TOO_LARGE))
+                .with("path", path)
+                .with("value", value)
+                .with("max", max));
     }
 }

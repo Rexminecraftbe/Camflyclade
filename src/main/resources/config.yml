@@ -39,6 +39,7 @@ messages:
   config-expected-list: "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Liste. Es wird {used} verwendet."
   config-expected-number: "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Zahl. Es wird {used} verwendet."
   config-expected-text: "&cFalscher Wert für {path}: '{value}'. Erwartet wird Text. Es wird {used} verwendet."
+  config-too-large: "&cWert für {path} ist zu groß: {value}. Es wird {max} verwendet."
   config-too-small: "&cWert für {path} ist zu klein: {value}. Es wird {min} verwendet."
   config-unknown-entry: "&cUnbekannter Eintrag in {path}: '{value}'. Er wird nicht beachtet."
   config-unknown-value: "&cUnbekannter Wert für {path}: '{value}'. Erlaubt sind: {allowed}. Es wird {used} verwendet."
@@ -121,6 +122,18 @@ camera-mode:
 
   # Sekunden zwischen zwei Warnungen an der Grenze (auch an Lava, Wasser und Pulverschnee)
   distance-warning-cooldown: 3
+
+  # Was an der Grenze von max-distance und cam-area (Stufe 2) passiert:
+  #   barrier   = eine Wand aus border-block, die nur der Spieler im Cam-Modus hat
+  #   push-back = der Schritt wird abgebrochen, zurück auf die letzte Position
+  #   false     = keine Grenze, auch hinter Portalen wird niemand zurückgeholt
+  border-mode: barrier
+
+  # Block der Wand: barrier ist unsichtbar, glass zeigt sie (Luft oder ein Block, durch den man durchkommt, z. B. Wasser oder Gras = keine Grenze)
+  border-block: barrier
+
+  # Wie weit um den Spieler die Wand erscheint, in Blöcken (0 = keine Grenze, höchstens 16)
+  border-radius: 5
 
   # Wer den Spieler im Cam-Modus sehen darf:
   #   cam   = nur Spieler, die selbst im Cam-Modus sind
@@ -248,7 +261,7 @@ cam-area:
   # Wie streng:
   #   0 = aus, die Listen werden nicht geprüft
   #   1 = nur beim Start
-  #   2 = beim Start und im Flug - an der Grenze geht es nicht weiter
+  #   2 = beim Start und im Flug - an der Grenze geht es nicht weiter (wie, sagt camera-mode.border-mode)
   level: 2
 
   # Sekunden zwischen zwei Meldungen an der Grenze (nur Stufe 2)
