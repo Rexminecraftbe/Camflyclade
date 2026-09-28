@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **487** - alle 487 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **505** - alle 505 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -351,6 +351,35 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   In Kreativ fängt den Abbau der abgebrochene Linksklick ab, in Überleben
   erst der `BlockBreakEvent`-Handler - in Überleben ist diese Probe also die
   einzige, die ihn überhaupt prüft.
+* **Der Bot kennt den Sulfur Cube nicht.** `minecraft-data` 26.1 hat ihn noch
+  nicht, und weil er in 26.2 mitten in die Liste der Entitätstypen gerutscht
+  ist, heißt er beim Bot „tadpole". Gesucht wird er deshalb wie der eigene
+  Körper nur über die Nähe, nie über den Namen.
+* **Der Würfel trägt Erde**, gesetzt mit `equipment:{body:...}` im
+  `/summon`. Nur mit einem Block darin rollt er, wenn man hineinläuft, und
+  fliegt beim Schlag weg; ohne nimmt er den Schlag als Schaden, und den hält
+  der Interaktionsschutz ohnehin ab. Ob der Block drin ist, fragt der Test
+  mit `/execute if data entity ... equipment.body` nach.
+* **Der Schlag hat sein eigenes Paket**, `attack` mit nur der Nummer der
+  Entität. `attack_entity` schreibt es selbst, wie `activate_entity` die
+  Klicks, und wartet nach dem Blick kurz: Der Blick geht erst mit dem nächsten
+  Physik-Tick hinaus, und ohne ihn käme der Schlag mit der alten Richtung an -
+  die bestimmt beim Sulfur Cube, wohin er fliegt.
+* **Geschlagen wird aus zweieinhalb Blöcken.** Nah genug für den Schlag, zu
+  weit, um den Würfel zu berühren. Aus der Nähe hielte ihn schon der Schutz
+  gegen das Schieben fest, und die Probe sagte nichts mehr über den Schlag.
+  Der Suchradius bleibt bei drei Blöcken, der Körper steht dreieinhalb
+  dahinter.
+* **Den Widerstand des Plugins liest der Test am Würfel ab**, als Modifier
+  `camfly:cam_no_push` auf `minecraft:knockback_resistance`. Er wird mit dem
+  Würfel gespeichert; die Probe zum Entladen setzt ihn deshalb mit
+  `/attribute` von Hand, wie ihn ein Absturz zurückließe, entlädt den Chunk
+  weit weg über `/forceload remove` und lädt ihn wieder.
+* **Paper warnt vor Bukkits `EntityKnockbackByEntityEvent`.** Es ist dort zum
+  Entfernen vorgemerkt, und jedes Plugin, das darauf hört, steht beim Start
+  mit einer Warnung im Log. Das Plugin nimmt auf Paper deshalb Papers eigenes
+  Event; landet die Warnung doch im Log, fällt sie in der Zusammenfassung
+  auf.
 
 ## Was die Tests abdecken
 
@@ -385,7 +414,12 @@ im Rahmen drehen, kein Fenster einer Kistenlore öffnen und kein Boot
 besteigen · Gegenprobe: ohne Cam-Modus geht
 jedes davon sehr wohl · das Inventar ist im Cam-Modus leer und danach wieder
 da · die Rüstung ist im Cam-Modus abgelegt und danach wieder angezogen · der
-eigene Körper bleibt anklickbar und beendet damit den Cam-Modus ·
+eigene Körper bleibt anklickbar und beendet damit den Cam-Modus · einen
+Sulfur Cube mit einem Block darin kann die Kamera weder wegschieben noch
+wegschlagen · Gegenprobe: ohne Cam-Modus geht beides · er steht nur fest,
+solange die Kamera ihn berühren könnte, vier Blöcke daneben und nach dem
+Cam-Modus ist er wieder frei · ein Würfel, der mit dem Widerstand entladen
+wurde, kommt ohne ihn wieder ·
 die Kamera wird von einem Happy Ghast abgehoben, ohne Cam-Modus bleibt der
 Bot darauf stehen · der Cam-Modus läuft voreingestellt im Abenteuermodus,
 auf `survival` und `creative` im eingestellten und auf `keep` in dem, in dem

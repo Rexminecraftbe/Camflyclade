@@ -15,6 +15,7 @@ import de.elia.cameraplugin.ghast.CamGhastGuard;
 import de.elia.cameraplugin.hunger.CamHungerGuard;
 import de.elia.cameraplugin.hunger.CamRegenGuard;
 import de.elia.cameraplugin.interaction.CamInteractionGuard;
+import de.elia.cameraplugin.interaction.CamKnockbackGuard;
 import de.elia.cameraplugin.inventory.CamInventoryGuard;
 import de.elia.cameraplugin.inventory.CamInventoryLock;
 import de.elia.cameraplugin.log.ConsoleLog;
@@ -29,6 +30,7 @@ import de.elia.cameraplugin.session.CameraMode;
 import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.session.SessionListener;
 import de.elia.cameraplugin.start.StartChecks;
+import de.elia.cameraplugin.sulfurcube.CamSulfurCubeGuard;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import de.elia.cameraplugin.visibility.CamVisibility;
 import org.bukkit.Bukkit;
@@ -77,6 +79,7 @@ public final class CameraPlugin extends JavaPlugin {
     private CamFireGuard camFireGuard;
     private CamHungerGuard camHungerGuard;
     private CamGhastGuard camGhastGuard;
+    private CamSulfurCubeGuard camSulfurCubeGuard;
     private CamInventoryGuard camInventoryGuard;
     private BodySpawner bodySpawner;
     private boolean shuttingDown = false;
@@ -107,11 +110,13 @@ public final class CameraPlugin extends JavaPlugin {
         // load and its notes end up in the same report.
         camFireGuard = new CamFireGuard(this);
         camGhastGuard = new CamGhastGuard(this);
+        camSulfurCubeGuard = new CamSulfurCubeGuard(this);
         camInventoryGuard = new CamInventoryGuard(this, this::isInCameraMode);
         configFile.reportConfigWarnings(loadConfigValues(), null);
         bodySpawner = new BodySpawner(this, settings, messages, log);
         camModeObjective.setUp();
         bodySpawner.removeLeftoverEntities();
+        camSulfurCubeGuard.releaseLeftovers();
         warmUpProfileService();
         // Beim Start ist niemand im Cam-Modus -> ein uebrig gebliebenes Team entfernen.
         noCollisionTeam.deleteNoCollisionTeam();
@@ -134,12 +139,15 @@ public final class CameraPlugin extends JavaPlugin {
                 startChecks,
                 new SessionListener(this),
                 movementGuard,
+                camSulfurCubeGuard,
                 new CamInventoryLock(cameraPlayers),
                 new CamPotionGuard(this),
                 new CamSuggestionFilter(this));
         for (Listener listener : listeners) {
             pluginManager.registerEvents(listener, this);
         }
+        // Registers itself: which event it listens to depends on the server.
+        new CamKnockbackGuard(this, cameraPlayers).register();
     }
 
     /**
@@ -214,6 +222,9 @@ public final class CameraPlugin extends JavaPlugin {
         }
         if (camGhastGuard != null) {
             camGhastGuard.onDisable();
+        }
+        if (camSulfurCubeGuard != null) {
+            camSulfurCubeGuard.onDisable();
         }
         particles.onDisable();
         sightGlow.onDisable();
@@ -395,6 +406,10 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamGhastGuard getGhastGuard() {
         return camGhastGuard;
+    }
+
+    public CamSulfurCubeGuard getSulfurCubeGuard() {
+        return camSulfurCubeGuard;
     }
 
     public CamInventoryGuard getInventoryGuard() {
