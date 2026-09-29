@@ -1036,6 +1036,28 @@ async function handle(cmd) {
       const now = bot.entity.position;
       return { forced, pos: [now.x, now.y, now.z] };
     }
+    case 'fall': {
+      // Mit Schwerkraft fallen, mit der Physik des Clients - wie ein echter
+      // Client, der mitten ueber etwas aufhoert zu fliegen. So landet der Bot
+      // auf einem Block, den der Server nur ihm geschickt hat. 'forced'
+      // zaehlt wie bei 'walk', wie oft der Server ihn dabei zurueckgesetzt hat.
+      const Vec3 = require('vec3');
+      let forced = 0;
+      const onForced = () => { forced += 1; };
+      bot.on('forcedMove', onForced);
+      try {
+        bot.entity.velocity = new Vec3(0, 0, 0);
+        bot.physics.gravity = 0.08;
+        await new Promise((r) => setTimeout(r, cmd.ms || 2500));
+      } finally {
+        bot.physics.gravity = 0;
+        bot.entity.velocity = new Vec3(0, 0, 0);
+        bot.removeListener('forcedMove', onForced);
+      }
+      await new Promise((r) => setTimeout(r, 500));
+      const now = bot.entity.position;
+      return { forced, pos: [now.x, now.y, now.z] };
+    }
     case 'block_at': {
       // Was der CLIENT an dieser Stelle sieht, samt allem, was der Server
       // nur ihm geschickt hat. Die Welt selbst fragt der Test beim Server.
@@ -2759,7 +2781,11 @@ def medium_checks(env, bot):
 
     Steht einer auf false, kommt die Kamera nicht hinein: Der Schritt an der
     Kante wird abgebrochen, und der Cam-Modus laeuft weiter. Darin starten
-    laesst er sich auch nicht. Alle drei gehen denselben Weg.
+    laesst er sich auch nicht. Alle drei gehen denselben Weg. Mit
+    border-mode: barrier, der Voreinstellung, steht an der Kante zudem eine
+    Wand - Magma, blaues Glas und Schnee -, an der ein echter Client landet,
+    ohne dass etwas abgebrochen werden muss; das prueft der Fall auf die Lava
+    am Schluss, samt der Gegenprobe mit push-back.
 
     Aufgebaut wird viererlei, alles neben dem Testplatz:
       * ein Becken aus Glas, drei Bloecke tief voll Wasser, oben offen,
@@ -2810,6 +2836,25 @@ def medium_checks(env, bot):
     # Fuessen, der Kopf endet bei 1,8.
     durch_die_decke = [(bx + 0.5, by + 4.5, bz - 6.5)]
     schalter = ("allow_lava_flight", "allow_water_flight", "allow_powder_snow_flight")
+    # Fuer die Wand: je ein Block vorn an Lava, Wasser und Pulverschnee, und
+    # der Weg dorthin, anderthalb Bloecke davor. Die Lava und das Wasser zeigen
+    # ihre oberste Lage, der Pulverschnee seine Seite zum Testplatz hin.
+    lava_oben = (bx - 8, by + 2, bz)
+    wasser_oben = (bx + 8, by + 2, bz)
+    pulverschnee_vorn = (bx, by + 1, bz + 6)
+    ueber_der_lava = [(bx - 7.5, by + 6, bz + 0.5), (bx - 7.5, oben + 1.5, bz + 0.5)]
+    zum_wasser = [(bx - 7.5, by + 6, bz + 0.5), (bx + 8.5, by + 6, bz + 0.5),
+                  (bx + 8.5, oben + 1.5, bz + 0.5)]
+    zum_pulverschnee = [(bx + 8.5, by + 6, bz + 0.5), (bx + 0.5, by + 6, bz + 4.5),
+                        (bx + 0.5, by + 1, bz + 4.5)]
+
+    def wand_sicht(wegpunkte, zelle):
+        """Im Cam-Modus die Wegpunkte abfliegen und sagen, was der Client an
+        der Zelle sieht. Gewartet wird eine Auffrischung der Wand lang, und
+        der Cam-Modus laeuft danach weiter."""
+        medium_fliegen(bot, *wegpunkte)
+        time.sleep(1.5)
+        return bot.call("block_at", x=zelle[0], y=zelle[1], z=zelle[2]).get("name")
 
     def aufraeumen():
         for bereich in (becken, lavabecken, wuerfel, decke):
@@ -2900,6 +2945,15 @@ def medium_checks(env, bot):
         lief, gesagt = medium_start(bot, im_wuerfel, heim)
         FIND.test("Gegenprobe: voreingestellt startet /cam im Pulverschnee", lief,
                   "; ".join(gesagt) or "nichts im Chat")
+        # Und keine Wand: Die Lava ist frei, also sieht der Client auch dicht
+        # davor Lava und kein Magma.
+        hinstellen(bot, *heim)
+        if FIND.test("Gegenprobe: /cam startet fuer den Blick auf die freie Lava",
+                     cam_on(bot), ""):
+            gesehen = wand_sicht(ueber_der_lava, lava_oben)
+            cam_off(bot)
+            FIND.test("Gegenprobe: voreingestellt bleibt die Lava auch dicht vor der "
+                      "Kamera Lava", gesehen == "lava", f"sieht: {gesehen}")
 
         # --- Alles zu ---
         set_options(env, [(name, "false") for name in schalter])
@@ -2962,11 +3016,59 @@ def medium_checks(env, bot):
                   "nicht, und die Ablehnung sagt warum",
                   not lief and gesagt_hat(gesagt, "cannot start cam mode in powder snow"),
                   "; ".join(gesagt) or "nichts im Chat")
+
+        # --- Mit border-mode: barrier wird das Gesperrte zur Wand ---
+        # Die Proben oben fliegen mit 'fly' und stossen an nichts - fuer sie
+        # haelt die Pruefung hinter der Wand, wie bei push-back. Hier faellt
+        # der Bot mit der Physik des Clients auf die Lava, wie ein echter
+        # Client, der ueber ihr aufhoert zu fliegen: Er landet auf Magma, das
+        # nur er hat, und niemand setzt ihn zurueck.
+        hinstellen(bot, *heim)
+        if FIND.test("allow_lava_flight: false - /cam startet fuer die Wand in der Lava",
+                     cam_on(bot), ""):
+            magma = wand_sicht(ueber_der_lava, lava_oben)
+            since = bot.mark()
+            fall = bot.call("fall", wait=20, ms=2500)
+            gelandet = bot.server_pos()
+            gesagt = medium_gesagt(bot, since)
+            glas = wand_sicht(zum_wasser, wasser_oben)
+            schnee = wand_sicht(zum_pulverschnee, pulverschnee_vorn)
+            cam_off(bot)
+            FIND.test("allow_lava_flight: false - mit border-mode: barrier landet die "
+                      "Kamera auf der Lava wie auf einem Block, ohne zurueckgesetzt zu "
+                      "werden, und die Meldung kommt",
+                      gelandet is not None and oben - 0.01 <= gelandet[1] <= oben + 0.1
+                      and fall.get("forced") == 0 and gesagt_hat(gesagt, "cannot fly into lava"),
+                      f"{gelandet}, {fall.get('forced')}x zurueckgesetzt, Chat: "
+                      f"{'; '.join(g for g in gesagt if g) or 'nichts'}")
+            FIND.test("Die Wand zeigt gesperrte Lava als Magma, gesperrtes Wasser als "
+                      "blaues Glas und gesperrten Pulverschnee als Schnee",
+                      magma == "magma_block" and glas == "blue_stained_glass"
+                      and schnee == "snow_block",
+                      f"Lava -> {magma}, Wasser -> {glas}, Pulverschnee -> {schnee}")
+
+        # Gegenprobe mit push-back: keine Wand, die Lava bleibt Lava, und wer
+        # hineinfaellt, wird zurueckgesetzt.
+        set_option(env, "border-mode", "push-back")
+        hinstellen(bot, *heim)
+        if FIND.test("border-mode: push-back - /cam startet fuer den Fall auf die Lava",
+                     cam_on(bot), ""):
+            gesehen = wand_sicht(ueber_der_lava, lava_oben)
+            fall = bot.call("fall", wait=20, ms=2500)
+            gelandet = bot.server_pos()
+            cam_off(bot)
+            FIND.test("allow_lava_flight: false - mit border-mode: push-back bleibt die "
+                      "Lava Lava, und wer hineinfaellt, wird zurueckgesetzt",
+                      gesehen == "lava" and fall.get("forced", 0) > 0
+                      and gelandet is not None and gelandet[1] >= oben - 0.01,
+                      f"Lava -> {gesehen}, {gelandet}, {fall.get('forced')}x zurueckgesetzt")
+        set_option(env, "border-mode", "barrier")
     finally:
         try:
             # Der Reload holt ihn auch aus dem Cam-Modus, falls eine Probe
             # mittendrin abgebrochen ist.
-            set_options(env, [(name, "true") for name in schalter])
+            set_options(env, [(name, "true") for name in schalter]
+                        + [("border-mode", "barrier")])
             cam_off(bot)
             aufraeumen()
             hinstellen(bot, *heim)

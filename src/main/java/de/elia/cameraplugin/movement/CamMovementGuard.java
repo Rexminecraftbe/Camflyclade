@@ -122,10 +122,16 @@ public final class CamMovementGuard implements Listener {
      * camera here, with the message and the waiting time a cancelled step
      * gets under {@code push-back}.
      *
-     * @param area the forbidden biome or structure behind the wall, or
-     *             {@code null} when it is the distance
+     * @param area   the forbidden biome or structure behind the wall, or
+     *               {@code null}
+     * @param medium the shut lava, water or powder snow the wall stands in,
+     *               or {@code null}; with neither it is the distance
      */
-    void warnAtWall(Player player, Location at, String area) {
+    void warnAtWall(Player player, Location at, String area, FlightMedium medium) {
+        if (medium != null) {
+            warnMedium(player, medium);
+            return;
+        }
         if (area != null) {
             warnAreaLimit(player, area);
             return;
@@ -473,7 +479,12 @@ public final class CamMovementGuard implements Listener {
      * {@code camera-mode.max-distance} stop it at their border: the camera
      * stays at the edge, and camera mode goes on. Only a block the body is not
      * in already counts, so a camera the water has run over can still get out
-     * of it, but no further in.</p>
+     * of it, but no further in. Under {@code border-mode: barrier} the edge is
+     * a wall of {@code border-block-lava}, {@code -water} or
+     * {@code -powder-snow} as well, see {@link CamBorderWall}, and this check
+     * only stays behind it - under {@code push-back} and {@code false} it is
+     * all there is, as the switch of the medium asks for a border whatever
+     * the mode.</p>
      *
      * <p>The warning waits as long as the one at the distance border,
      * {@code camera-mode.distance-warning-cooldown}: the step is stopped again
@@ -484,10 +495,19 @@ public final class CamMovementGuard implements Listener {
         if (medium == null) {
             return false;
         }
+        warnMedium(player, medium);
+        return true;
+    }
+
+    /**
+     * Tells the player which of lava, water and powder snow keeps the camera
+     * out, at most once every {@code camera-mode.distance-warning-cooldown}
+     * seconds.
+     */
+    private void warnMedium(Player player, FlightMedium medium) {
         if (mayWarn(mediumMessageCooldown, player, settings.getDistanceWarningCooldown())) {
             messages.sendMessage(player, medium.getFlightMessage());
         }
-        return true;
     }
 
     /**

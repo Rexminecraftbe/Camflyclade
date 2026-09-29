@@ -408,6 +408,13 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   der Ebene `x = biom_x` liegt vorn an ihr. Wasser und Lava liegen im Boden,
   rundum Gras, und weit genug auseinander, dass sie nicht zusammenlaufen; der
   Tropfstein steht auf dem Gras, sonst fiele er ab.
+* **Auf die gesperrte Lava fällt der Bot mit `fall`**, der Schwerkraft von
+  mineflayer - wie ein echter Client, der über der Lava aufhört zu fliegen.
+  Mit `barrier` landet er auf Magma, das nur er hat, ohne zurückgesetzt zu
+  werden; mit `push-back` fällt er in die Lava und wird immer wieder
+  zurückgesetzt. Die übrigen Proben an Lava, Wasser und Pulverschnee fliegen
+  mit `fly` und stoßen an nichts: Für sie hält wie bisher die Prüfung hinter
+  der Wand, und deshalb bestehen sie in beiden Modi gleich.
 * **Pulverschnee und Tropfstein kennt der Bot unter falschem Namen.** Er liest
   die Blöcke mit den Daten von 26.1, und dort tragen manche Blöcke von 26.2
   eine andere Nummer: Pulverschnee hält er für eine Kupfertruhe. Ob der
@@ -471,7 +478,12 @@ Wasser, auf `allow_powder_snow_flight: false` auf dem Pulverschnee und mit dem
 Kopf unter einer Decke daraus, der Cam-Modus läuft dabei weiter und die
 Meldung kommt · wer schon im Wasser ist, kommt heraus, aber nicht tiefer hinein
 · in Lava, Wasser und Pulverschnee startet `/cam` dann nicht, und die Ablehnung
-sagt warum · Gegenprobe: voreingestellt geht all das · voreingestellt steht
+sagt warum · Gegenprobe: voreingestellt geht all das, und die Lava bleibt auch
+dicht vor der Kamera Lava · gesperrt und mit `border-mode: barrier` landet die
+Kamera auf der Lava wie auf einem Block, ohne zurückgesetzt zu werden, und die
+Wand zeigt Lava als Magma, Wasser als blaues Glas und Pulverschnee als Schnee
+· mit `push-back` bleibt die Lava Lava, und wer hineinfällt, wird
+zurückgesetzt · voreingestellt steht
 `border-mode: barrier` mit `border-block: barrier`, `border-block-water:
 blue_stained_glass`, `border-block-lava: magma_block`,
 `border-block-powder-snow: snow_block` und `border-radius: 5` da · die Kamera

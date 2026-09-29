@@ -15,7 +15,8 @@ import java.util.Set;
  * What a camera player can fly into besides air and be kept out of: lava,
  * water and powder snow, each behind a switch of its own under
  * {@code camera-mode}. All three are shut the same way: the camera stops at
- * the edge, see {@link CamMovementGuard}, and camera mode does not start
+ * the edge, see {@link CamMovementGuard} - under {@code border-mode: barrier}
+ * at a wall, see {@link CamBorderWall} - and camera mode does not start
  * inside, see {@link de.elia.cameraplugin.start.StartChecks}.
  *
  * <p>The whole body counts, from the feet to the top of the head, and not only

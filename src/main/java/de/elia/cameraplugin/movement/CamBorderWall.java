@@ -27,8 +27,10 @@ import org.bukkit.util.BoundingBox;
 
 import java.util.Collection;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -43,16 +45,17 @@ import java.util.UUID;
  * is cancelled, which is what makes the camera jerk back under
  * {@code push-back}.</p>
  *
- * <p>Two borders are built: {@code camera-mode.max-distance} around the body
- * (or the portal the player came out of, see
- * {@link CamMovementGuard#distanceAnchor}), and the biomes and structures
- * {@code cam-area} keeps the camera out of on level 2. The wall never reaches
- * past what those two allow: a block of it is set wherever the body would be
- * too far away or in a forbidden block if it touched that block at all.
- * {@link CamMovementGuard} keeps its own checks behind it, which a player who
- * stays in front of the wall can therefore never set off. They are left for a
- * client that ignores the wall - and for the few gaps it cannot close, see
- * {@link #shownFor(Wall, Block)}.</p>
+ * <p>Three borders are built: {@code camera-mode.max-distance} around the
+ * body (or the portal the player came out of, see
+ * {@link CamMovementGuard#distanceAnchor}), the biomes and structures
+ * {@code cam-area} keeps the camera out of on level 2, and lava, water and
+ * powder snow where their switch shuts them, see {@link FlightMedium}. The
+ * wall never reaches past what those allow: a block of it is set wherever the
+ * body would be too far away, in a forbidden block or in a shut medium if it
+ * touched that block at all. {@link CamMovementGuard} keeps its own checks
+ * behind it, which a player who stays in front of the wall can therefore
+ * never set off. They are left for a client that ignores the wall - and for
+ * the few gaps it cannot close, see {@link #shownFor(Wall, Block)}.</p>
  *
  * <p>Only the front of the border is built, the blocks next to the space the
  * camera may use, and of those only the ones up to
@@ -134,12 +137,20 @@ public final class CamBorderWall implements Listener {
 
     /**
      * What the player is shown at one block of the wall, and what keeps the
-     * camera out of it.
+     * camera out of it. With neither an area nor a medium it is the
+     * distance.
      *
-     * @param area the forbidden biome or structure behind the wall, or
-     *             {@code null} when it is the distance
+     * @param area   the forbidden biome or structure behind the wall, or
+     *               {@code null}
+     * @param medium the shut lava, water or powder snow in the block, or
+     *               {@code null}
      */
-    private record Brick(BlockData shown, String area) {
+    private record Brick(BlockData shown, String area, FlightMedium medium) {
+
+        /** Which reason the message names when several walls meet, the highest first. */
+        int rank() {
+            return medium != null ? 3 : area != null ? 2 : 1;
+        }
     }
 
     /** The wall of one player: where it stands, and how it is kept up. */
@@ -176,7 +187,8 @@ public final class CamBorderWall implements Listener {
     public void startFor(Player player) {
         UUID id = player.getUniqueId();
         if (walls.containsKey(id) || !settings.buildsBorderWall()
-                || (!settings.limitsDistance() && !settings.keepsOutOfAreas())) {
+                || (!settings.limitsDistance() && !settings.keepsOutOfAreas()
+                    && shutMedia().isEmpty())) {
             return;
         }
         Map<FlightMedium, BlockData> media = new EnumMap<>(FlightMedium.class);
@@ -255,7 +267,7 @@ public final class CamBorderWall implements Listener {
         }
         Brick touched = touching(player, wall, to);
         if (touched != null) {
-            plugin.getMovementGuard().warnAtWall(player, to, touched.area());
+            plugin.getMovementGuard().warnAtWall(player, to, touched.area(), touched.medium());
         }
         Location last = wall.builtAt;
         double step = Math.min(REBUILD_MAX, Math.max(REBUILD_MIN, settings.getBorderRadius() * REBUILD_SHARE));
@@ -357,11 +369,13 @@ public final class CamBorderWall implements Listener {
     /**
      * Works out which blocks around this spot belong to the wall.
      *
-     * <p>A block is shut when the body would be too far away or in a
-     * forbidden area as soon as it touched it; of those, the wall takes the
-     * ones next to a block that is not shut - the front of the border - up to
-     * {@code border-radius} away from the body. The blocks deeper in cannot be
-     * reached without going through the front first.</p>
+     * <p>A block is shut when the body would be too far away, in a forbidden
+     * area or in shut lava, water or powder snow as soon as it touched it; of
+     * those, the wall takes the ones next to a block that is not shut - the
+     * front of the border - up to {@code border-radius} away from the body.
+     * The blocks deeper in cannot be reached without going through the front
+     * first: a lava lake gets a skin of magma where the camera comes near,
+     * and stays lava underneath.</p>
      */
     private Map<Cell, Brick> plan(Player player, Wall wall, CameraData data, Location at) {
         Map<Cell, Brick> wanted = new HashMap<>();
@@ -373,7 +387,8 @@ public final class CamBorderWall implements Listener {
                 // Whoever stands in a forbidden area already may leave it in
                 // every direction, the way CamMovementGuard allows it.
                 && rules.forbiddenArea(at) == null ? rules.blockLookup(world) : null;
-        if (anchor == null && areas == null) {
+        Set<FlightMedium> media = shutMedia();
+        if (anchor == null && areas == null && media.isEmpty()) {
             return wanted;
         }
         double maxSquared = settings.getMaxDistance() * settings.getMaxDistance();
@@ -398,6 +413,7 @@ public final class CamBorderWall implements Listener {
         int sizeZ = z1 - z0 + 3;
         boolean[] shut = new boolean[sizeX * sizeY * sizeZ];
         String[] areaOf = new String[shut.length];
+        FlightMedium[] mediumOf = new FlightMedium[shut.length];
         double sortedSquared = (reach + NEIGHBOUR_REACH) * (reach + NEIGHBOUR_REACH);
         for (int gx = 0; gx < sizeX; gx++) {
             int x = x0 - 1 + gx;
@@ -415,8 +431,11 @@ public final class CamBorderWall implements Listener {
                     }
                     int i = (gx * sizeZ + gz) * sizeY + gy;
                     String area = areas == null ? null : areas.forbidden(x, y, z);
+                    FlightMedium medium = media.isEmpty() ? null : shutMediumAt(world, x, y, z, media);
                     areaOf[i] = area;
-                    shut[i] = area != null || (anchor != null && tooFar(anchor, maxSquared, x, y, z));
+                    mediumOf[i] = medium;
+                    shut[i] = area != null || medium != null
+                            || (anchor != null && tooFar(anchor, maxSquared, x, y, z));
                 }
             }
         }
@@ -441,9 +460,10 @@ public final class CamBorderWall implements Listener {
                         continue;
                     }
                     if (inBody(x, minX, maxX) && inBody(y, minY, maxY) && inBody(z, minZ, maxZ)) {
-                        // The body is in this block already, which only a
-                        // teleport or a client that ignored the wall can
-                        // have done. A block around it would lock it in.
+                        // The body is in this block already, which a
+                        // teleport, a client that ignored the wall or water
+                        // flowing over the camera can have done. A block
+                        // around it would lock it in.
                         continue;
                     }
                     if (!touchesOpen(shut, sizeY, sizeZ, gx, gy, gz)) {
@@ -451,7 +471,7 @@ public final class CamBorderWall implements Listener {
                     }
                     BlockData shown = shownFor(wall, world.getBlockAt(x, y, z));
                     if (shown != null) {
-                        wanted.put(new Cell(x, y, z), new Brick(shown, areaOf[i]));
+                        wanted.put(new Cell(x, y, z), new Brick(shown, areaOf[i], mediumOf[i]));
                     }
                 }
             }
@@ -483,6 +503,35 @@ public final class CamBorderWall implements Listener {
             return null;
         }
         return anchor;
+    }
+
+    /** The media whose switch under {@code camera-mode} keeps the camera out. */
+    private Set<FlightMedium> shutMedia() {
+        Set<FlightMedium> shut = EnumSet.noneOf(FlightMedium.class);
+        for (FlightMedium medium : FlightMedium.values()) {
+            if (medium.isClosed(settings)) {
+                shut.add(medium);
+            }
+        }
+        return shut;
+    }
+
+    /**
+     * The shut medium this block is filled with, or {@code null} - the same
+     * question {@link FlightMedium#reachedInto} asks about every block the
+     * body reaches into. Outside the height of the world there is none.
+     */
+    private static FlightMedium shutMediumAt(World world, int x, int y, int z, Set<FlightMedium> media) {
+        if (y < world.getMinHeight() || y >= world.getMaxHeight()) {
+            return null;
+        }
+        Block block = world.getBlockAt(x, y, z);
+        for (FlightMedium medium : media) {
+            if (medium.fills(block)) {
+                return medium;
+            }
+        }
+        return null;
     }
 
     /**
@@ -598,8 +647,8 @@ public final class CamBorderWall implements Listener {
 
     /**
      * The block of the wall the body touches at this spot, or {@code null}.
-     * A forbidden area goes before the distance, as it does in
-     * {@link CamMovementGuard}.
+     * A shut medium goes first, then a forbidden area, then the distance -
+     * the order in which {@link CamMovementGuard} asks about a step.
      */
     private Brick touching(Player player, Wall wall, Location at) {
         if (wall.bricks.isEmpty() || !at.getWorld().getUID().equals(wall.world)) {
@@ -617,7 +666,7 @@ public final class CamBorderWall implements Listener {
             for (int y = y0; y <= y1; y++) {
                 for (int z = z0; z <= z1; z++) {
                     Brick brick = wall.bricks.get(new Cell(x, y, z));
-                    if (brick != null && (found == null || brick.area() != null)) {
+                    if (brick != null && (found == null || brick.rank() > found.rank())) {
                         found = brick;
                     }
                 }
