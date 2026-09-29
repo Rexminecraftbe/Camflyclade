@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **524** - alle 524 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **523** - alle 523 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -402,6 +402,19 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
 * **Das verbotene Biom im Grenztest fängt an einer 4er-Grenze an.** Das Spiel
   führt Biome in Würfeln von vier Blöcken; `/fillbiome` füllt ganze Würfel,
   und genau an deren Kante steht dann auch die Wand.
+* **Die Proben für die Blöcke der Wand stehen an der Wand des Bioms**, nicht an
+  `max-distance`. Die ist bei 6 Blöcken eine enge Kugel und schon zwei Blöcke
+  seitlich des Bots weiter innen; die Wand des Bioms ist eben, jede Probe in
+  der Ebene `x = biom_x` liegt vorn an ihr. Wasser und Lava liegen im Boden,
+  rundum Gras, und weit genug auseinander, dass sie nicht zusammenlaufen; der
+  Tropfstein steht auf dem Gras, sonst fiele er ab.
+* **Pulverschnee und Tropfstein kennt der Bot unter falschem Namen.** Er liest
+  die Blöcke mit den Daten von 26.1, und dort tragen manche Blöcke von 26.2
+  eine andere Nummer: Pulverschnee hält er für eine Kupfertruhe. Ob der
+  Spieler nach dem Cam-Modus wieder die echten Blöcke sieht, prüft der Test
+  deshalb am Vergleich mit dem, was derselbe Client vorher dort sah; was in
+  der Welt steht, fragt er beim Server. Die Blöcke der Wand selbst - Barriere,
+  Glas, Magma, Schnee, Stein - liest der Bot richtig.
 
 ## Was die Tests abdecken
 
@@ -459,12 +472,18 @@ Kopf unter einer Decke daraus, der Cam-Modus läuft dabei weiter und die
 Meldung kommt · wer schon im Wasser ist, kommt heraus, aber nicht tiefer hinein
 · in Lava, Wasser und Pulverschnee startet `/cam` dann nicht, und die Ablehnung
 sagt warum · Gegenprobe: voreingestellt geht all das · voreingestellt steht
-`border-mode: barrier` mit `border-block: barrier` und `border-radius: 5` da ·
-die Kamera bleibt dann an `max-distance` und an einem verbotenen Biom stehen,
-ohne je zurückgesetzt zu werden, und die Meldung kommt · die Wand steht nur im
-Client des Kamera-Spielers: der Server hat dort Luft, ein zweiter Spieler
-ebenso, und nach dem Cam-Modus ist sie auch bei ihm wieder weg · sie steht
-auch im Wasser, und dort bleibt es Wasser · auf
+`border-mode: barrier` mit `border-block: barrier`, `border-block-water:
+blue_stained_glass`, `border-block-lava: magma_block`,
+`border-block-powder-snow: snow_block` und `border-radius: 5` da · die Kamera
+bleibt dann an `max-distance` und an einem verbotenen Biom stehen, ohne je
+zurückgesetzt zu werden, und die Meldung kommt · die Wand steht nur im Client
+des Kamera-Spielers: der Server hat dort Luft, ein zweiter Spieler ebenso, und
+nach dem Cam-Modus ist sie auch bei ihm wieder weg · Wasser, Lava und
+Pulverschnee zeigt sie als blaues Glas, Magma und Schnee, eine Stufe und einen
+Tropfstein ersetzt sie, einen ganzen Steinblock lässt sie stehen - in der Welt
+bleibt alles, wie es war, und nach dem Cam-Modus sieht der Spieler es auch
+wieder · `border-block-water` nimmt einen anderen Block, und mit `water` steht
+dort `border-block` · auf
 `push-back` kommt die Kamera auch nicht weiter, wird dabei aber zurückgesetzt ·
 auf `false`, mit `border-block: air` und mit `border-radius: 0` gibt es keine
 Grenze · ein unbekannter Block und ein zu großer Radius werden gemeldet, und

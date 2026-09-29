@@ -73,7 +73,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 524 Methoden- und Feldzugriffe. Alle 524 gibt
+# Dieser Pruefer zaehlt zurzeit 523 Methoden- und Feldzugriffe. Alle 523 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -3049,7 +3049,7 @@ def zuschauer_sieht(env, x, y, z, wo):
 
 
 def border_checks(env, bot):
-    """camera-mode.border-mode, border-block und border-radius.
+    """camera-mode.border-mode, die Bloecke der Wand und border-radius.
 
     Gelaufen wird mit der Physik des Clients ('walk'), nicht mit 'fly': Die
     Wand von barrier steht nur im Client, und 'fly' versetzt den Bot, ohne an
@@ -3063,12 +3063,17 @@ def border_checks(env, bot):
         bleibt an der Grenze stehen, ohne je zurueckgesetzt zu werden, und
         die Meldung kommt. Die Wand steht nur in seinem Client: der Server
         hat dort Luft, ein zweiter Spieler ebenso, und nach dem Cam-Modus
-        ist sie auch bei ihm wieder weg. Im Wasser steht sie auch, und dort
-        bleibt es Wasser.
+        ist sie auch bei ihm wieder weg.
       * push-back: er kommt auch nicht weiter, wird dabei aber zurueckgesetzt.
       * false, Luft als border-block und border-radius 0: keine Grenze.
       * ein unbekannter Block und ein zu grosser Radius werden gemeldet, und
         die Wand steht mit dem, was dafuer genommen wird.
+      * an der Wand des Bioms, die eben ist und deshalb Platz fuer Proben
+        hat: Wasser, Lava und Pulverschnee zeigt sie voreingestellt als
+        blaues Glas, Magma und Schnee, halbe Bloecke ersetzt sie, ganze
+        laesst sie stehen - und in der Welt bleibt alles, wie es war.
+        border-block-water nimmt einen anderen Block, und einer, durch den
+        man durchkommt, gibt seinen Platz an border-block ab.
     """
     if not FIND.test("Cam-Modus ist vor dem Grenztest aus", cam_off(bot), ""):
         return
@@ -3079,22 +3084,37 @@ def border_checks(env, bot):
     bx, by, bz = _floor(pos[0]), _floor(pos[1] + 0.5), _floor(pos[2]) + 20
     heim = (bx + 0.5, by, bz + 0.5)
     gang = f"{bx - 2} {by} {bz - 3} {bx + 24} {by + 3} {bz + 3}"
-    # Ein Teich im Boden, dort, wo die Wand steht: Auch im Wasser muss sie
-    # stehen, sonst schwimmt die Kamera an Fluessen und Meeren durch.
-    teich = f"{bx + GRENZ_ABSTAND} {by - 1} {bz - 1} {bx + GRENZ_ABSTAND + 2} {by - 1} {bz + 1}"
     Log.detail(f"Testplatz fuer die Grenze bei {(bx, by, bz)}")
     # Das verbotene Biom faengt an einer Grenze der 4er-Wuerfel an, in denen
     # das Spiel Biome fuehrt - dort steht dann auch die Wand.
     biom_x = (bx + 4 + 3) // 4 * 4
     biom = f"{biom_x} {max(-64, by - 4)} {bz - 4} {biom_x + 7} {by + 4} {bz + 4}"
+    # Die Proben auf der Wand des Bioms: wo, was /setblock dort hinsetzt, was
+    # der Server danach dort hat und was der Client sehen muss. Alle liegen in
+    # der Ebene x = biom_x und in Reichweite des Bots, der mittig davor stehen
+    # bleibt. Wasser und Lava liegen im Boden, rundum Gras, und weit genug
+    # auseinander, dass sie nicht zusammenlaufen.
+    wasser = (biom_x, by - 1, bz + 2)
+    proben = [
+        (wasser, "water", "water", "blue_stained_glass"),
+        ((biom_x, by - 1, bz - 2), "lava", "lava", "magma_block"),
+        ((biom_x, by, bz + 4), "powder_snow", "powder_snow", "snow_block"),
+        ((biom_x, by, bz - 1), "stone_slab", "stone_slab", "barrier"),
+        ((biom_x, by, bz - 4), "pointed_dripstone[vertical_direction=up,thickness=tip]",
+         "pointed_dripstone", "barrier"),
+        ((biom_x, by, bz + 1), "stone", "stone", "stone"),
+    ]
 
     text = (env.server / "plugins" / "CamFly" / "config.yml").read_text(encoding="utf-8")
     voreingestellt = all(re.search(rf"(?m)^\s*{schluessel}:\s*{wert}\s*$", text)
                          for schluessel, wert in (("border-mode", "barrier"),
                                                   ("border-block", "barrier"),
+                                                  ("border-block-water", "blue_stained_glass"),
+                                                  ("border-block-lava", "magma_block"),
+                                                  ("border-block-powder-snow", "snow_block"),
                                                   ("border-radius", "5")))
-    FIND.test("Voreingestellt steht border-mode: barrier mit border-block: barrier "
-              "und border-radius: 5 da", voreingestellt, "")
+    FIND.test("Voreingestellt steht border-mode: barrier mit border-block: barrier, "
+              "blauem Glas, Magma und Schnee und border-radius: 5 da", voreingestellt, "")
 
     def drin(ergebnis):
         """Ob der Bot nicht ueber max-distance hinaus kam, aber bis an sie heran."""
@@ -3109,10 +3129,19 @@ def border_checks(env, bot):
     def gewarnt(ergebnis, text):
         return ergebnis is not None and any(text in g.lower() for g in ergebnis[2])
 
+    def sieht(zelle):
+        """Was der Client des Bots an dieser Stelle sieht."""
+        return bot.call("block_at", x=zelle[0], y=zelle[1], z=zelle[2]).get("name")
+
+    def proben_weg():
+        """Die Proben wieder wegnehmen: im Boden Gras, darueber Luft."""
+        for (x, y, z), _, _, _ in proben:
+            bot.chat(f"/setblock {x} {y} {z} minecraft:"
+                     f"{'grass_block' if y < by else 'air'}")
+            time.sleep(0.3)
+
     try:
         bot.chat(f"/fill {gang} minecraft:air")
-        time.sleep(0.5)
-        bot.chat(f"/fill {teich} minecraft:water")
         time.sleep(0.5)
         set_option(env, "max-distance", f"{GRENZ_ABSTAND}.0")
 
@@ -3124,7 +3153,7 @@ def border_checks(env, bot):
                   and gewarnt(ergebnis, "cannot move further"), grenz_zeige(ergebnis, heim))
         wand_x = None
         for x in range(bx + 1, bx + GRENZ_ABSTAND + 4):
-            if bot.call("block_at", x=x, y=by, z=bz).get("name") == "barrier":
+            if sieht((x, by, bz)) == "barrier":
                 wand_x = x
                 break
         FIND.test("border-mode: barrier - der Client sieht die Wand vor sich, "
@@ -3140,16 +3169,10 @@ def border_checks(env, bot):
             gesehen = zuschauer_sieht(env, wand_x, by, bz, (bx + 3.5, by, bz + 3.5))
             FIND.test("border-mode: barrier - ein Spieler ohne Cam-Modus sieht dort "
                       "keine Wand", gesehen == "air", f"sieht: {gesehen}")
-            im_teich = bot.call("block_at", x=wand_x, y=by - 1, z=bz).get("name")
-            FIND.test("border-mode: barrier - die Wand steht auch im Wasser, und dort "
-                      "bleibt es Wasser",
-                      im_teich == "barrier" and block_is(
-                          bot, "minecraft:overworld", f"{wand_x} {by - 1} {bz}",
-                          "minecraft:water"), f"sieht: {im_teich}")
         cam_off(bot)
         time.sleep(1.0)
         if wand_x is not None:
-            nachher = bot.call("block_at", x=wand_x, y=by, z=bz).get("name")
+            nachher = sieht((wand_x, by, bz))
             FIND.test("border-mode: barrier - nach dem Cam-Modus ist die Wand auch "
                       "beim Spieler wieder weg", nachher == "air", f"sieht: {nachher}")
 
@@ -3191,11 +3214,21 @@ def border_checks(env, bot):
                   drin(ergebnis) and ergebnis[1] == 0, grenz_zeige(ergebnis, heim))
         cam_off(bot)
 
-        # --- ein verbotenes Biom ---
+        # --- ein verbotenes Biom, und was die Wand dort ersetzt ---
         set_options(env, [("max-distance", "100.0"), ("border-block", "barrier"),
                           ("border-radius", "5")])
         bot.chat(f"/fillbiome {biom} minecraft:lush_caves")
         time.sleep(1.5)
+        for (x, y, z), setzen, _, _ in proben:
+            bot.chat(f"/setblock {x} {y} {z} minecraft:{setzen}")
+            time.sleep(0.3)
+        time.sleep(0.5)
+        # Was der Client vor dem Cam-Modus dort sieht. Nach dem Cam-Modus
+        # muss er genau das wieder sehen - verglichen wird damit und nicht
+        # mit dem Namen in der Welt: Der Bot liest die Bloecke mit den Daten
+        # von 26.1, und dort tragen manche Bloecke von 26.2 eine andere
+        # Nummer. Pulverschnee haelt er so fuer eine Kupfertruhe.
+        vorher = {zelle: sieht(zelle) for zelle, _, _, _ in proben}
         ergebnis = grenz_lauf(bot, heim)
         stand = ergebnis[0] if ergebnis is not None else None
         FIND.test("border-mode: barrier - die Kamera bleibt am verbotenen Biom "
@@ -3203,18 +3236,61 @@ def border_checks(env, bot):
                   stand is not None and biom_x - 1.5 <= stand[0] + 0.3 <= biom_x + 0.01
                   and ergebnis[1] == 0 and gewarnt(ergebnis, "not allowed in lush_caves"),
                   grenz_zeige(ergebnis, heim))
+        # Einmal auffrischen lassen: Die Wand wird um die Stelle gebaut, an
+        # der der Bot zuletzt stand, und die Proben liegen bis zu vier Bloecke
+        # seitlich davon.
+        time.sleep(1.5)
+        im_client = {zelle: sieht(zelle) for zelle, _, _, _ in proben}
+        zeige = "; ".join(f"{welt} -> {im_client[zelle]}" for zelle, _, welt, _ in proben)
+        FIND.test("Die Wand zeigt voreingestellt Wasser als blaues Glas, Lava als "
+                  "Magma und Pulverschnee als Schnee",
+                  all(im_client[zelle] == erwartet for zelle, _, welt, erwartet in proben
+                      if welt in ("water", "lava", "powder_snow")), zeige)
+        FIND.test("Halbe Bloecke - eine Stufe, ein Tropfstein - werden zur Wand, ein "
+                  "ganzer Block bleibt stehen",
+                  all(im_client[zelle] == erwartet for zelle, _, welt, erwartet in proben
+                      if welt not in ("water", "lava", "powder_snow")), zeige)
+        FIND.test("In der Welt steht an den Proben weiter, was dort stand",
+                  all(block_is(bot, "minecraft:overworld", f"{x} {y} {z}", f"minecraft:{welt}")
+                      for (x, y, z), _, welt, _ in proben), "")
+        cam_off(bot)
+        time.sleep(1.0)
+        danach = {zelle: sieht(zelle) for zelle, _, _, _ in proben}
+        FIND.test("Nach dem Cam-Modus sieht der Spieler an den Proben wieder, was "
+                  "wirklich dasteht",
+                  all(danach[zelle] == vorher[zelle] for zelle, _, _, _ in proben),
+                  "; ".join(f"{welt}: vorher {vorher[zelle]}, danach {danach[zelle]}"
+                            for zelle, _, welt, _ in proben))
+
+        # --- border-block-water ---
+        set_option(env, "border-block-water", "light_blue_stained_glass")
+        grenz_lauf(bot, heim)
+        time.sleep(1.5)
+        im_wasser = sieht(wasser)
+        FIND.test("border-block-water: light_blue_stained_glass - diesen Block zeigt "
+                  "die Wand dann im Wasser", im_wasser == "light_blue_stained_glass",
+                  f"sieht: {im_wasser}")
+        cam_off(bot)
+        set_option(env, "border-block-water", "water")
+        grenz_lauf(bot, heim)
+        time.sleep(1.5)
+        im_wasser = sieht(wasser)
+        FIND.test("border-block-water: water - ein Block, durch den man durchkommt, "
+                  "gibt seinen Platz an border-block ab", im_wasser == "barrier",
+                  f"sieht: {im_wasser}")
         cam_off(bot)
     finally:
         try:
             # Der Reload holt ihn auch aus dem Cam-Modus, falls eine Probe
             # mittendrin abgebrochen ist.
             set_options(env, [("max-distance", "100.0"), ("border-mode", "barrier"),
-                              ("border-block", "barrier"), ("border-radius", "5")])
+                              ("border-block", "barrier"),
+                              ("border-block-water", "blue_stained_glass"),
+                              ("border-radius", "5")])
             cam_off(bot)
+            proben_weg()
             bot.chat(f"/fillbiome {biom} minecraft:plains")
             time.sleep(1.0)
-            bot.chat(f"/fill {teich} minecraft:grass_block")
-            time.sleep(0.5)
             # Dorthin zurueck, wo er herkam, und nicht an den Testplatz: Die
             # Welt bleibt stehen, und jeder Lauf finge sonst 20 Bloecke weiter
             # an - mit ihm die Tests, die danach kommen.

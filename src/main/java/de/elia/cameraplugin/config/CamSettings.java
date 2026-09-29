@@ -9,6 +9,7 @@ import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.mirrordamage.ArmorDamageMode;
 import de.elia.cameraplugin.mirrordamage.DamageMode;
 import de.elia.cameraplugin.movement.BorderMode;
+import de.elia.cameraplugin.movement.FlightMedium;
 import de.elia.cameraplugin.portal.PortalRules;
 import de.elia.cameraplugin.session.CamGameMode;
 import de.elia.cameraplugin.start.EffectStart;
@@ -21,8 +22,10 @@ import org.bukkit.block.data.MultipleFacing;
 import org.bukkit.boss.BarColor;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.logging.Level;
 
 /**
@@ -56,6 +59,12 @@ public final class CamSettings {
     private BorderMode borderMode;
     /** What the wall of the mode barrier is made of, {@code camera-mode.border-block}. */
     private BlockData borderBlock;
+    /**
+     * What the wall shows in place of water, lava and powder snow,
+     * {@code camera-mode.border-block-water}, {@code -lava} and
+     * {@code -powder-snow}.
+     */
+    private final Map<FlightMedium, BlockData> mediumBorderBlocks = new EnumMap<>(FlightMedium.class);
     /** How far around the player that wall is built, {@code camera-mode.border-radius}. */
     private double borderRadius;
     /**
@@ -162,7 +171,12 @@ public final class CamSettings {
             case "false" -> BorderMode.OFF;
             default -> BorderMode.BARRIER;
         };
-        borderBlock = resolveBorderBlock(config);
+        borderBlock = resolveBlock(config, "camera-mode.border-block", "barrier");
+        mediumBorderBlocks.clear();
+        readMediumBorderBlock(config, FlightMedium.WATER, "camera-mode.border-block-water", "blue_stained_glass");
+        readMediumBorderBlock(config, FlightMedium.LAVA, "camera-mode.border-block-lava", "magma_block");
+        readMediumBorderBlock(config, FlightMedium.POWDER_SNOW, "camera-mode.border-block-powder-snow",
+                "snow_block");
         borderRadius = config.getDouble("camera-mode.border-radius", 5.0, 0.0, MAX_BORDER_RADIUS);
         // A wall that nobody runs into holds nobody back: made of something
         // that can be walked through, or not built anywhere around the player.
@@ -359,26 +373,41 @@ public final class CamSettings {
     }
 
     /**
-     * Reads {@code camera-mode.border-block}: the name of a block, with or
-     * without {@code minecraft:} in front, capitals and spaces not counting -
+     * Reads one of the blocks of the wall, {@code camera-mode.border-block}
+     * and its three companions: the name of a block, with or without
+     * {@code minecraft:} in front, capitals and spaces not counting -
      * {@code light_blue_stained_glass} and {@code Light Blue Stained Glass}
      * are the same block. Its states may follow in square brackets, the way
      * the game writes them, e.g. {@code glass_pane[north=true,south=true]}.
-     * Anything that is no block falls back to the barrier.
+     * Anything that is no block falls back to {@code def}.
      *
      * <p>Fences, panes and iron bars given without states are joined on every
      * side. Standing on its own, each of them is only a thin post, and a wall
      * of posts has gaps wide enough to slip through.</p>
      */
-    private BlockData resolveBorderBlock(ConfigReader config) {
-        String raw = config.getString("camera-mode.border-block", "barrier");
+    private BlockData resolveBlock(ConfigReader config, String path, String def) {
+        String raw = config.getString(path, def);
         BlockData block = parseBlock(raw);
         if (block == null) {
-            config.warnUnknownValue("camera-mode.border-block", raw,
-                    "jeder Block, z. B. barrier oder glass", "barrier");
-            return Material.BARRIER.createBlockData();
+            config.warnUnknownValue(path, raw, "jeder Block, z. B. barrier oder glass", def);
+            return parseBlock(def);
         }
         return block;
+    }
+
+    /**
+     * Reads what the wall shows in place of water, lava or powder snow.
+     *
+     * <p>A block that can be walked through would leave a hole in the wall
+     * right there - and would say nothing about how the border holds, which
+     * {@code border-block} alone decides. The wall takes its own block in
+     * such a place instead. A barrier stands under water, so with the barrier
+     * as {@code border-block} an entry of {@code water} keeps the water as it
+     * looks.</p>
+     */
+    private void readMediumBorderBlock(ConfigReader config, FlightMedium medium, String path, String def) {
+        BlockData block = resolveBlock(config, path, def);
+        mediumBorderBlocks.put(medium, block.getMaterial().isSolid() ? block : borderBlock.clone());
     }
 
     /** The block a {@code border-block} entry names, or {@code null} for none. */
@@ -469,6 +498,11 @@ public final class CamSettings {
     /** A copy of the block the wall is made of, free to be changed by the caller. */
     public BlockData getBorderBlock() {
         return borderBlock.clone();
+    }
+
+    /** A copy of the block the wall shows in place of this medium, free to be changed by the caller. */
+    public BlockData getBorderBlock(FlightMedium medium) {
+        return mediumBorderBlocks.get(medium).clone();
     }
 
     public double getBorderRadius() {

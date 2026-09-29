@@ -8,9 +8,9 @@ import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.TileState;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Waterlogged;
 import org.bukkit.entity.Player;
@@ -23,7 +23,10 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.util.BoundingBox;
 
+import java.util.Collection;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -49,12 +52,13 @@ import java.util.UUID;
  * {@link CamMovementGuard} keeps its own checks behind it, which a player who
  * stays in front of the wall can therefore never set off. They are left for a
  * client that ignores the wall - and for the few gaps it cannot close, see
- * {@link #holdsWall(Block)}.</p>
+ * {@link #shownFor(Wall, Block)}.</p>
  *
  * <p>Only the front of the border is built, the blocks next to the space the
  * camera may use, and of those only the ones up to
- * {@code camera-mode.border-radius} away from the body. The wall moves along
- * with the player, and every block it leaves behind is given back as it
+ * {@code camera-mode.border-radius} away from the body. Whole blocks keep
+ * their place in it, everything else gives way to the wall. The wall moves
+ * along with the player, and every block it leaves behind is given back as it
  * really is.</p>
  */
 public final class CamBorderWall implements Listener {
@@ -107,10 +111,22 @@ public final class CamBorderWall implements Listener {
      */
     private static final double OVERLAP_MARGIN = 1.0E-3;
 
+    /**
+     * How much a block may lack at its sides and at its bottom and still
+     * count as whole, see {@link #whole(Block)}: a sixteenth, as a cactus
+     * does.
+     */
+    private static final double SIDE_SLIVER = 1.0 / 16.0;
+
+    /** And how much at its top: two sixteenths, as soul sand and mud do. */
+    private static final double TOP_SLIVER = 2.0 / 16.0;
+
     private final CameraPlugin plugin;
     private final CamSettings settings;
     private final CameraPlayers cameraPlayers;
     private final Map<UUID, Wall> walls = new HashMap<>();
+    /** Which kinds of block keep data of their own, see {@link #keepsData(Block)}. */
+    private final Map<Material, Boolean> dataKinds = new HashMap<>();
 
     /** One block position of the wall. */
     private record Cell(int x, int y, int z) {
@@ -133,15 +149,16 @@ public final class CamBorderWall implements Listener {
         private Map<Cell, Brick> bricks = new HashMap<>();
         /** Where the body stood when the wall was last looked at. */
         private Location builtAt;
-        /** The block the wall is made of, and the same block standing in water. */
-        private final BlockData dry;
-        private final BlockData wet;
+        /** The block the wall is made of. */
+        private final BlockData block;
+        /** What it shows in place of water, lava and powder snow. */
+        private final Map<FlightMedium, BlockData> media;
         private BukkitRunnable task;
 
-        Wall(UUID world, BlockData dry, BlockData wet) {
+        Wall(UUID world, BlockData block, Map<FlightMedium, BlockData> media) {
             this.world = world;
-            this.dry = dry;
-            this.wet = wet;
+            this.block = block;
+            this.media = media;
         }
     }
 
@@ -162,16 +179,18 @@ public final class CamBorderWall implements Listener {
                 || (!settings.limitsDistance() && !settings.keepsOutOfAreas())) {
             return;
         }
-        BlockData dry = settings.getBorderBlock();
-        BlockData wet = dry;
-        if (dry instanceof Waterlogged) {
-            // A barrier stands in water like a fence does. Without this the
-            // water would drain out of every block the wall stands in.
-            Waterlogged inWater = (Waterlogged) dry.clone();
-            inWater.setWaterlogged(true);
-            wet = inWater;
+        Map<FlightMedium, BlockData> media = new EnumMap<>(FlightMedium.class);
+        for (FlightMedium medium : FlightMedium.values()) {
+            BlockData shown = settings.getBorderBlock(medium);
+            if (medium == FlightMedium.WATER && shown instanceof Waterlogged inWater) {
+                // A barrier or a pane stands in water like a fence does.
+                // Without this the water would drain out of every block the
+                // wall stands in.
+                inWater.setWaterlogged(true);
+            }
+            media.put(medium, shown);
         }
-        Wall wall = new Wall(player.getWorld().getUID(), dry, wet);
+        Wall wall = new Wall(player.getWorld().getUID(), settings.getBorderBlock(), media);
         wall.task = new BukkitRunnable() {
             @Override
             public void run() {
@@ -430,12 +449,10 @@ public final class CamBorderWall implements Listener {
                     if (!touchesOpen(shut, sizeY, sizeZ, gx, gy, gz)) {
                         continue;
                     }
-                    Block block = world.getBlockAt(x, y, z);
-                    if (!holdsWall(block)) {
-                        continue;
+                    BlockData shown = shownFor(wall, world.getBlockAt(x, y, z));
+                    if (shown != null) {
+                        wanted.put(new Cell(x, y, z), new Brick(shown, areaOf[i]));
                     }
-                    BlockData shown = FlightMedium.WATER.fills(block) ? wall.wet : wall.dry;
-                    wanted.put(new Cell(x, y, z), new Brick(shown, areaOf[i]));
                 }
             }
         }
@@ -506,29 +523,77 @@ public final class CamBorderWall implements Listener {
     }
 
     /**
-     * Whether a block of the wall may stand in place of this one: only where
-     * nothing stops the body yet, and only where the player loses nothing by
-     * it.
+     * What the wall shows in place of this block, or {@code null} when the
+     * block stays as it is.
      *
-     * <p>Everything solid stays as it is. It stops the camera on its own, and
-     * a see-through block in its place would open a window into the ground.
-     * Of what can be flown through, four kinds stay as well, and leave a gap
-     * the checks of {@link CamMovementGuard} close instead: whatever gives
-     * light, whose glow would go out around the camera; powder snow, which
-     * hides what lies behind it; and signs and banners, which lose their text
-     * and their pattern in the client once another block has stood in their
-     * place.</p>
+     * <p>A whole block stays, see {@link #whole(Block)}: it stops the camera
+     * on its own, and a see-through block in its place would open a window
+     * into the ground. Everything else gives way to the wall - air, plants,
+     * slabs, fences, pointed dripstone - and water, lava and powder snow to
+     * the block of their own, see {@code camera-mode.border-block-water},
+     * {@code -lava} and {@code -powder-snow}.</p>
+     *
+     * <p>Two kinds stay nevertheless and leave a gap, which the checks of
+     * {@link CamMovementGuard} close instead: fire, which
+     * {@link de.elia.cameraplugin.feuer.CamFireGuard} hides from the camera
+     * already, and every block that keeps data of its own - a sign keeps its
+     * text, a banner its pattern, a head its skin. The client forgets all of
+     * that as soon as another block has stood in the place. A gap of a single
+     * block lets nobody through anyway.</p>
      */
-    private static boolean holdsWall(Block block) {
-        if (!block.isPassable()) {
+    private BlockData shownFor(Wall wall, Block block) {
+        Material type = block.getType();
+        if (type.isAir()) {
+            return wall.block;
+        }
+        if (whole(block) || type == Material.FIRE || type == Material.SOUL_FIRE || keepsData(block)) {
+            return null;
+        }
+        for (Map.Entry<FlightMedium, BlockData> medium : wall.media.entrySet()) {
+            if (medium.getKey().fills(block)) {
+                return medium.getValue();
+            }
+        }
+        return wall.block;
+    }
+
+    /**
+     * Whether this block fills its space, or so nearly that nobody gets past
+     * what is left of it: stone, glass, leaves, stairs - and soul sand, mud,
+     * farmland, a cactus, which lack a sliver at the top or at the sides but
+     * look whole all the same.
+     */
+    private static boolean whole(Block block) {
+        Collection<BoundingBox> parts = block.getCollisionShape().getBoundingBoxes();
+        if (parts.isEmpty()) {
             return false;
         }
-        BlockData data = block.getBlockData();
-        Material type = data.getMaterial();
-        return data.getLightEmission() == 0
-                && type != Material.POWDER_SNOW
-                && !Tag.ALL_SIGNS.isTagged(type)
-                && !Tag.BANNERS.isTagged(type);
+        double minX = 1.0;
+        double minY = 1.0;
+        double minZ = 1.0;
+        double maxX = 0.0;
+        double maxY = 0.0;
+        double maxZ = 0.0;
+        for (BoundingBox part : parts) {
+            minX = Math.min(minX, part.getMinX());
+            minY = Math.min(minY, part.getMinY());
+            minZ = Math.min(minZ, part.getMinZ());
+            maxX = Math.max(maxX, part.getMaxX());
+            maxY = Math.max(maxY, part.getMaxY());
+            maxZ = Math.max(maxZ, part.getMaxZ());
+        }
+        return minX <= SIDE_SLIVER && maxX >= 1.0 - SIDE_SLIVER
+                && minZ <= SIDE_SLIVER && maxZ >= 1.0 - SIDE_SLIVER
+                && minY <= SIDE_SLIVER && maxY >= 1.0 - TOP_SLIVER;
+    }
+
+    /**
+     * Whether blocks of this kind keep data of their own, as a sign keeps its
+     * text. Asked once per kind of block and then kept: the answer does not
+     * change, and it takes a copy of the block to find out.
+     */
+    private boolean keepsData(Block block) {
+        return dataKinds.computeIfAbsent(block.getType(), kind -> block.getState() instanceof TileState);
     }
 
     /**

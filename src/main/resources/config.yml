@@ -130,7 +130,13 @@ camera-mode:
   border-mode: barrier
 
   # Block der Wand: barrier ist unsichtbar, glass zeigt sie (Luft oder ein Block, durch den man durchkommt, z. B. Wasser oder Gras = keine Grenze)
+  # Ganze Blöcke bleiben stehen, Luft und halbe Blöcke (Stufen, Zäune, Tropfstein ...) werden ersetzt.
   border-block: barrier
+
+  # Block der Wand in Wasser, Lava und Pulverschnee (ein Block, durch den man durchkommt, z. B. water = wie border-block)
+  border-block-water: blue_stained_glass
+  border-block-lava: magma_block
+  border-block-powder-snow: snow_block
 
   # Wie weit um den Spieler die Wand erscheint, in Blöcken (0 = keine Grenze, höchstens 16)
   border-radius: 5
