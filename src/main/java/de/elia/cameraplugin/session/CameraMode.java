@@ -164,6 +164,7 @@ public final class CameraMode {
         plugin.getGhastGuard().startFor(player);
         plugin.getSulfurCubeGuard().startFor(player);
         plugin.getInventoryGuard().startFor(player);
+        plugin.getBorderWall().startFor(player);
         // The entity taking the hits is the mannequin for both body types, so the
         // movement check always runs on it. Both calls look at the sensitivity
         // level and only one of them does anything.
@@ -200,6 +201,7 @@ public final class CameraMode {
             plugin.getGhastGuard().stopFor(player);
             plugin.getSulfurCubeGuard().stopFor(player);
             plugin.getInventoryGuard().stopFor(player);
+            plugin.getBorderWall().stopFor(player);
             team.updateViewerTeam(player);
             plugin.getCamModeObjective().setScore(player, 0);
             return;
@@ -217,6 +219,9 @@ public final class CameraMode {
         boolean standingInFire = plugin.getFireGuard().stopFor(player);
         plugin.getGhastGuard().stopFor(player);
         plugin.getSulfurCubeGuard().stopFor(player);
+        // Nach dem Teleport zum Koerper: Die Wand stand womoeglich in einer
+        // anderen Welt, dann ist dort nichts mehr zurueckzugeben.
+        plugin.getBorderWall().stopFor(player);
         // Vor der Rückgabe: Der Sweep räumt die Taschen des Kamera-Spielers
         // leer und nähme dem Spieler sonst sein eigenes Inventar wieder ab.
         plugin.getInventoryGuard().stopFor(player);

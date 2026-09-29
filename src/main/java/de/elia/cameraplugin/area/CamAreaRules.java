@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -179,8 +180,26 @@ public final class CamAreaRules {
         if (dimension != null) {
             return dimension;
         }
-        String biome = forbiddenBiome(world, location);
+        String biome = forbiddenBiome(world, location.getBlockX(), location.getBlockY(), location.getBlockZ());
         return biome != null ? biome : forbiddenStructure(world, location);
+    }
+
+    /**
+     * Whether any biome or structure is forbidden at all. Without one there is
+     * nothing to look for block by block, see {@link #blockLookup(World)}.
+     */
+    public boolean forbidsBlocks() {
+        return (biomesEnabled && !forbiddenBiomes.isEmpty())
+                || (structuresEnabled && (!boxStructures.isEmpty() || !componentStructures.isEmpty()));
+    }
+
+    /**
+     * A lookup for many blocks of one world in a row, the way the wall of
+     * {@code border-mode: barrier} asks: every block around the player, each
+     * time the player crosses into the next one.
+     */
+    public BlockLookup blockLookup(World world) {
+        return new BlockLookup(world);
     }
 
     /**
@@ -205,13 +224,13 @@ public final class CamAreaRules {
                 : null;
     }
 
-    /** The name of the biome at this spot, when it is a forbidden one. */
+    /** The name of the biome at this block, when it is a forbidden one. */
     @SuppressWarnings("deprecation")
-    private String forbiddenBiome(World world, Location location) {
+    private String forbiddenBiome(World world, int x, int y, int z) {
         if (!biomesEnabled || forbiddenBiomes.isEmpty()) {
             return null;
         }
-        Biome biome = world.getBiome(location);
+        Biome biome = world.getBiome(x, y, z);
         // getKey and not getKeyOrNull: the latter comes from RegistryAware,
         // which the Spigot API puts on a biome but Paper does not - the call
         // would fail there. getKey sits on Keyed, which both of them have, and
@@ -408,5 +427,73 @@ public final class CamAreaRules {
     /** The name of a biome or structure the way it is written in the config file. */
     private static String displayName(NamespacedKey key) {
         return NamespacedKey.MINECRAFT.equals(key.getNamespace()) ? key.getKey() : key.toString();
+    }
+
+    /**
+     * {@link #forbiddenArea(Location)} for whole blocks of one world, asked
+     * one after the other.
+     *
+     * <p>A block counts as forbidden when its middle does. That is exact and
+     * not a guess: a biome is the same across each cube of four by four by
+     * four blocks, and the boxes of structures run along the edges of blocks.
+     * A body that keeps out of every forbidden block therefore never stands
+     * with its feet in one either, and the feet are what
+     * {@link #forbiddenArea} looks at.</p>
+     *
+     * <p>The dimension is left out: whoever stands in a forbidden one is in a
+     * forbidden area already, and the wall leaves the way out of it open.
+     * What a cube of biome or a chunk said once is kept for the life of the
+     * lookup, which is one look around the player - hundreds of blocks share
+     * a handful of them.</p>
+     */
+    public final class BlockLookup {
+
+        private final World world;
+        private final Map<Long, String> biomes = new HashMap<>();
+        private final Map<Long, List<ForbiddenStructure>> chunks = new HashMap<>();
+
+        private BlockLookup(World world) {
+            this.world = world;
+        }
+
+        /**
+         * The biome or structure that keeps camera mode out of this block, or
+         * {@code null} when it is allowed there. Outside the height of the
+         * world nothing is forbidden, there is neither biome nor structure.
+         */
+        public String forbidden(int x, int y, int z) {
+            if (y < world.getMinHeight() || y >= world.getMaxHeight()) {
+                return null;
+            }
+            long cube = key(x >> 2, y >> 2, z >> 2);
+            String biome;
+            if (biomes.containsKey(cube)) {
+                biome = biomes.get(cube);
+            } else {
+                biome = forbiddenBiome(world, x, y, z);
+                biomes.put(cube, biome);
+            }
+            if (biome != null) {
+                return biome;
+            }
+            if (!structuresEnabled || (boxStructures.isEmpty() && componentStructures.isEmpty())) {
+                return null;
+            }
+            List<ForbiddenStructure> around = chunks.computeIfAbsent(key(x >> 4, 0, z >> 4),
+                    chunk -> structuresAround(world, x >> 4, z >> 4));
+            for (ForbiddenStructure structure : around) {
+                for (BoundingBox box : structure.boxes()) {
+                    if (box.contains(x + 0.5, y + 0.5, z + 0.5)) {
+                        return structure.name();
+                    }
+                }
+            }
+            return null;
+        }
+
+        /** Three coordinates in one number, each well inside what a world can hold. */
+        private static long key(int x, int y, int z) {
+            return ((long) x & 0x3FFFFFF) << 38 | ((long) z & 0x3FFFFFF) << 12 | (y & 0xFFF);
+        }
     }
 }

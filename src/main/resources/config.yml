@@ -39,6 +39,7 @@ messages:
   config-expected-list: "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Liste. Es wird {used} verwendet."
   config-expected-number: "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Zahl. Es wird {used} verwendet."
   config-expected-text: "&cFalscher Wert für {path}: '{value}'. Erwartet wird Text. Es wird {used} verwendet."
+  config-too-large: "&cWert für {path} ist zu groß: {value}. Es wird {max} verwendet."
   config-too-small: "&cWert für {path} ist zu klein: {value}. Es wird {min} verwendet."
   config-unknown-entry: "&cUnbekannter Eintrag in {path}: '{value}'. Er wird nicht beachtet."
   config-unknown-value: "&cUnbekannter Wert für {path}: '{value}'. Erlaubt sind: {allowed}. Es wird {used} verwendet."
@@ -122,6 +123,24 @@ camera-mode:
   # Sekunden zwischen zwei Warnungen an der Grenze (auch an Lava, Wasser und Pulverschnee)
   distance-warning-cooldown: 3
 
+  # Was an der Grenze von max-distance, cam-area (Stufe 2) und gesperrter Lava, Wasser, Pulverschnee passiert:
+  #   barrier   = eine Wand, die nur der Spieler im Cam-Modus hat
+  #   push-back = der Schritt wird abgebrochen, zurück auf die letzte Position
+  #   false     = keine Grenze, auch hinter Portalen wird niemand zurückgeholt (gesperrte Lava, Wasser, Pulverschnee halten wie bei push-back)
+  border-mode: barrier
+
+  # Block der Wand: barrier ist unsichtbar, glass zeigt sie (Luft oder ein Block, durch den man durchkommt, z. B. Wasser oder Gras = keine Grenze)
+  # Ganze Blöcke bleiben stehen, Luft und halbe Blöcke (Stufen, Zäune, Tropfstein ...) werden ersetzt.
+  border-block: barrier
+
+  # Block der Wand in Wasser, Lava und Pulverschnee (ein Block, durch den man durchkommt, z. B. water = wie border-block)
+  border-block-water: blue_stained_glass
+  border-block-lava: magma_block
+  border-block-powder-snow: snow_block
+
+  # Wie weit um den Spieler die Wand erscheint, in Blöcken (0 = keine Grenze, höchstens 16)
+  border-radius: 5
+
   # Wer den Spieler im Cam-Modus sehen darf:
   #   cam   = nur Spieler, die selbst im Cam-Modus sind
   #   true  = alle
@@ -138,13 +157,13 @@ camera-mode:
   # Bei player_visibility_mode: false gibt es keinen Umriss.
   glowing-outline: true
 
-  # Flug durch Lava (false = an der Lava geht es nicht weiter, in Lava startet der Cam-Modus nicht)
+  # Flug durch Lava (false = an der Lava geht es nicht weiter, bei border-mode: barrier wird sie zur Wand aus border-block-lava; in Lava startet der Cam-Modus nicht)
   allow_lava_flight: true
 
-  # Flug durch Wasser (false = am Wasser geht es nicht weiter, im Wasser startet der Cam-Modus nicht)
+  # Flug durch Wasser (false = am Wasser geht es nicht weiter, bei border-mode: barrier wird es zur Wand aus border-block-water; im Wasser startet der Cam-Modus nicht)
   allow_water_flight: true
 
-  # Flug durch Pulverschnee (false = am Pulverschnee geht es nicht weiter, darin startet der Cam-Modus nicht)
+  # Flug durch Pulverschnee (false = am Pulverschnee geht es nicht weiter, bei border-mode: barrier wird er zur Wand aus border-block-powder-snow; darin startet der Cam-Modus nicht)
   allow_powder_snow_flight: true
 
   # Spielmodus im Cam-Modus:
@@ -248,7 +267,7 @@ cam-area:
   # Wie streng:
   #   0 = aus, die Listen werden nicht geprüft
   #   1 = nur beim Start
-  #   2 = beim Start und im Flug - an der Grenze geht es nicht weiter
+  #   2 = beim Start und im Flug - an der Grenze geht es nicht weiter (wie, sagt camera-mode.border-mode)
   level: 2
 
   # Sekunden zwischen zwei Meldungen an der Grenze (nur Stufe 2)

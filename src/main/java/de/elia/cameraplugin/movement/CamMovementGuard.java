@@ -29,6 +29,14 @@ import java.util.concurrent.TimeUnit;
  * water and powder snow as far as their switches say, within
  * {@code camera-mode.max-distance} of his body, out of the areas
  * {@code cam-area} forbids, and only through the portals that let him.
+ *
+ * <p>How the distance and the areas stop the camera is up to
+ * {@code camera-mode.border-mode}. Under {@code push-back} the step over the
+ * border is cancelled here. Under {@code barrier} the same checks stay, but
+ * {@link CamBorderWall} stops the camera in front of them: they are left for a
+ * client that ignores the wall and for the few gaps it cannot close. Under
+ * {@code false} - or with a wall that stops nobody - neither of the two holds
+ * the camera back, not even behind a portal.</p>
  */
 public final class CamMovementGuard implements Listener {
 
@@ -89,7 +97,7 @@ public final class CamMovementGuard implements Listener {
         }
 
         CameraData data = cameraPlayers.get(player.getUniqueId());
-        if (!settings.isMaxDistanceEnabled() || !beyondMaxDistance(data, to)) {
+        if (!settings.limitsDistance() || !beyondMaxDistance(data, to)) {
             return;
         }
         if (beyondMaxDistance(data, event.getFrom())) {
@@ -107,6 +115,31 @@ public final class CamMovementGuard implements Listener {
         }
         event.setCancelled(true);
         warnDistanceLimit(player, "distance-limit", data, to);
+    }
+
+    /**
+     * Tells the player why the wall of {@code border-mode: barrier} stops the
+     * camera here, with the message and the waiting time a cancelled step
+     * gets under {@code push-back}.
+     *
+     * @param area   the forbidden biome or structure behind the wall, or
+     *               {@code null}
+     * @param medium the shut lava, water or powder snow the wall stands in,
+     *               or {@code null}; with neither it is the distance
+     */
+    void warnAtWall(Player player, Location at, String area, FlightMedium medium) {
+        if (medium != null) {
+            warnMedium(player, medium);
+            return;
+        }
+        if (area != null) {
+            warnAreaLimit(player, area);
+            return;
+        }
+        CameraData data = cameraPlayers.get(player.getUniqueId());
+        if (data != null) {
+            warnDistanceLimit(player, "distance-limit", data, at);
+        }
     }
 
     /**
@@ -169,7 +202,8 @@ public final class CamMovementGuard implements Listener {
      * <p>Two things can shut a portal: the switch of its own kind under
      * {@code portals}, and {@code cam-area} forbidding the dimension behind it -
      * but only on level 2, the level that keeps him out of such a place while he
-     * flies. A portal that is shut simply does not carry him anywhere; he keeps
+     * flies, and only while {@code camera-mode.border-mode} has a border that
+     * holds. A portal that is shut simply does not carry him anywhere; he keeps
      * standing where he is.</p>
      *
      * <p>Where a portal comes out cannot be asked beforehand, so a forbidden
@@ -244,13 +278,14 @@ public final class CamMovementGuard implements Listener {
      *
      * <p>Only level 2 keeps the player out of it: level 1 has a say over the
      * start alone and lets him fly wherever he likes afterwards, portals
-     * included.</p>
+     * included. So does a border that holds nobody back, see
+     * {@link CamSettings#keepsOutOfAreas()}.</p>
      *
      * @return the name of the dimension, or {@code null} when the portal may be
      *         used
      */
     private String forbiddenPortalDimension(Location to) {
-        return settings.getCamAreaRules().getLevel().blocksFlight() ? settings.getCamAreaRules().forbiddenDimension(to) : null;
+        return settings.keepsOutOfAreas() ? settings.getCamAreaRules().forbiddenDimension(to) : null;
     }
 
     /**
@@ -267,7 +302,7 @@ public final class CamMovementGuard implements Listener {
      *         there
      */
     private String forbiddenCamArea(Location where) {
-        return settings.getCamAreaRules().getLevel().blocksFlight() ? settings.getCamAreaRules().forbiddenArea(where) : null;
+        return settings.keepsOutOfAreas() ? settings.getCamAreaRules().forbiddenArea(where) : null;
     }
 
     /**
@@ -335,7 +370,7 @@ public final class CamMovementGuard implements Listener {
             bringBack(player, data);
             return;
         }
-        if (settings.isMaxDistanceEnabled() && beyondMaxDistance(data, arrival)) {
+        if (settings.limitsDistance() && beyondMaxDistance(data, arrival)) {
             messages.sendMessage(player, "portal-return-distance", "{distance}",
                     String.valueOf(settings.getMaxDistance()), "{from}", distanceAnchorName(data, arrival));
             bringBack(player, data);
@@ -377,7 +412,7 @@ public final class CamMovementGuard implements Listener {
     private Location returnTarget(CameraData data, Location entry) {
         if (settings.getPortalRules().getReturnTo() == PortalReturn.PORTAL && entry != null
                 && entry.getWorld().equals(data.getBody().getWorld())
-                && (!settings.isMaxDistanceEnabled() || !beyondMaxDistance(data, entry))) {
+                && (!settings.limitsDistance() || !beyondMaxDistance(data, entry))) {
             return entry;
         }
         return data.getBody().getLocation();
@@ -423,9 +458,10 @@ public final class CamMovementGuard implements Listener {
 
     /**
      * What the distance to the body is measured from in the world of this spot,
-     * or {@code null} when nothing there can be measured against.
+     * or {@code null} when nothing there can be measured against. The wall of
+     * {@link CamBorderWall} stands around the same spot.
      */
-    private Location distanceAnchor(CameraData data, Location location) {
+    Location distanceAnchor(CameraData data, Location location) {
         Location body = data.getBody().getLocation();
         if (body.getWorld().equals(location.getWorld())) {
             return body;
@@ -443,7 +479,12 @@ public final class CamMovementGuard implements Listener {
      * {@code camera-mode.max-distance} stop it at their border: the camera
      * stays at the edge, and camera mode goes on. Only a block the body is not
      * in already counts, so a camera the water has run over can still get out
-     * of it, but no further in.</p>
+     * of it, but no further in. Under {@code border-mode: barrier} the edge is
+     * a wall of {@code border-block-lava}, {@code -water} or
+     * {@code -powder-snow} as well, see {@link CamBorderWall}, and this check
+     * only stays behind it - under {@code push-back} and {@code false} it is
+     * all there is, as the switch of the medium asks for a border whatever
+     * the mode.</p>
      *
      * <p>The warning waits as long as the one at the distance border,
      * {@code camera-mode.distance-warning-cooldown}: the step is stopped again
@@ -454,10 +495,19 @@ public final class CamMovementGuard implements Listener {
         if (medium == null) {
             return false;
         }
+        warnMedium(player, medium);
+        return true;
+    }
+
+    /**
+     * Tells the player which of lava, water and powder snow keeps the camera
+     * out, at most once every {@code camera-mode.distance-warning-cooldown}
+     * seconds.
+     */
+    private void warnMedium(Player player, FlightMedium medium) {
         if (mayWarn(mediumMessageCooldown, player, settings.getDistanceWarningCooldown())) {
             messages.sendMessage(player, medium.getFlightMessage());
         }
-        return true;
     }
 
     /**
@@ -474,7 +524,7 @@ public final class CamMovementGuard implements Listener {
      * this event as well, and the biome of a spot does not change from that.</p>
      */
     private boolean entersForbiddenArea(Player player, Location from, Location to) {
-        if (!settings.getCamAreaRules().getLevel().blocksFlight()
+        if (!settings.keepsOutOfAreas()
                 || (from.getBlockX() == to.getBlockX()
                     && from.getBlockY() == to.getBlockY()
                     && from.getBlockZ() == to.getBlockZ()
@@ -485,9 +535,17 @@ public final class CamMovementGuard implements Listener {
         if (area == null || settings.getCamAreaRules().forbiddenArea(from) != null) {
             return false;
         }
+        warnAreaLimit(player, area);
+        return true;
+    }
+
+    /**
+     * Tells the player which area camera mode is not allowed in, at most once
+     * every {@code cam-area.warning-cooldown} seconds.
+     */
+    private void warnAreaLimit(Player player, String area) {
         if (mayWarn(areaMessageCooldown, player, settings.getCamAreaRules().getWarningCooldown())) {
             messages.sendMessage(player, "cam-area-limit", "{area}", area);
         }
-        return true;
     }
 }

@@ -73,7 +73,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 505 Methoden- und Feldzugriffe. Alle 505 gibt
+# Dieser Pruefer zaehlt zurzeit 523 Methoden- und Feldzugriffe. Alle 523 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -1007,6 +1007,64 @@ async function handle(cmd) {
     case 'stop_fly':
       try { bot.creative.stopFlying(); } catch (e) { /* egal */ }
       return { ok: true };
+    case 'walk': {
+      // Mit der Physik des Clients bewegt und nicht selbst versetzt wie in
+      // 'fly': Nur so stoesst der Bot an Bloecke, die der Server allein ihm
+      // geschickt hat - wie ein echter Client an die Wand von border-mode:
+      // barrier. 'forced' zaehlt, wie oft der Server ihn dabei auf eine
+      // Stelle zurueckgesetzt hat; genau das tut push-back und barrier nicht.
+      const Vec3 = require('vec3');
+      let forced = 0;
+      const onForced = () => { forced += 1; };
+      bot.on('forcedMove', onForced);
+      try {
+        try { bot.creative.startFlying(); } catch (e) { /* egal */ }
+        bot.physics.gravity = 0;
+        bot.entity.velocity = new Vec3(0, 0, 0);
+        const p = bot.entity.position;
+        await Promise.race([
+          bot.lookAt(new Vec3(p.x + (cmd.dx || 0) * 20, p.y + 1.62, p.z + (cmd.dz || 0) * 20), true),
+          new Promise((r) => setTimeout(r, 2000))
+        ]);
+        bot.setControlState('forward', true);
+        await new Promise((r) => setTimeout(r, cmd.ms || 3000));
+      } finally {
+        bot.clearControlStates();
+        bot.removeListener('forcedMove', onForced);
+      }
+      await new Promise((r) => setTimeout(r, 500));
+      const now = bot.entity.position;
+      return { forced, pos: [now.x, now.y, now.z] };
+    }
+    case 'fall': {
+      // Mit Schwerkraft fallen, mit der Physik des Clients - wie ein echter
+      // Client, der mitten ueber etwas aufhoert zu fliegen. So landet der Bot
+      // auf einem Block, den der Server nur ihm geschickt hat. 'forced'
+      // zaehlt wie bei 'walk', wie oft der Server ihn dabei zurueckgesetzt hat.
+      const Vec3 = require('vec3');
+      let forced = 0;
+      const onForced = () => { forced += 1; };
+      bot.on('forcedMove', onForced);
+      try {
+        bot.entity.velocity = new Vec3(0, 0, 0);
+        bot.physics.gravity = 0.08;
+        await new Promise((r) => setTimeout(r, cmd.ms || 2500));
+      } finally {
+        bot.physics.gravity = 0;
+        bot.entity.velocity = new Vec3(0, 0, 0);
+        bot.removeListener('forcedMove', onForced);
+      }
+      await new Promise((r) => setTimeout(r, 500));
+      const now = bot.entity.position;
+      return { forced, pos: [now.x, now.y, now.z] };
+    }
+    case 'block_at': {
+      // Was der CLIENT an dieser Stelle sieht, samt allem, was der Server
+      // nur ihm geschickt hat. Die Welt selbst fragt der Test beim Server.
+      const Vec3 = require('vec3');
+      const block = bot.blockAt(new Vec3(cmd.x, cmd.y, cmd.z));
+      return block ? { name: block.name, state: block.stateId } : { name: null };
+    }
     case 'activate_block': {
       // Rechtsklick auf einen Block. Was schiefgeht, kommt als Ergebnis
       // zurueck und nicht als Ausnahme: Ob der Klick durchgeht, ist genau die
@@ -2723,7 +2781,11 @@ def medium_checks(env, bot):
 
     Steht einer auf false, kommt die Kamera nicht hinein: Der Schritt an der
     Kante wird abgebrochen, und der Cam-Modus laeuft weiter. Darin starten
-    laesst er sich auch nicht. Alle drei gehen denselben Weg.
+    laesst er sich auch nicht. Alle drei gehen denselben Weg. Mit
+    border-mode: barrier, der Voreinstellung, steht an der Kante zudem eine
+    Wand - Magma, blaues Glas und Schnee -, an der ein echter Client landet,
+    ohne dass etwas abgebrochen werden muss; das prueft der Fall auf die Lava
+    am Schluss, samt der Gegenprobe mit push-back.
 
     Aufgebaut wird viererlei, alles neben dem Testplatz:
       * ein Becken aus Glas, drei Bloecke tief voll Wasser, oben offen,
@@ -2774,6 +2836,25 @@ def medium_checks(env, bot):
     # Fuessen, der Kopf endet bei 1,8.
     durch_die_decke = [(bx + 0.5, by + 4.5, bz - 6.5)]
     schalter = ("allow_lava_flight", "allow_water_flight", "allow_powder_snow_flight")
+    # Fuer die Wand: je ein Block vorn an Lava, Wasser und Pulverschnee, und
+    # der Weg dorthin, anderthalb Bloecke davor. Die Lava und das Wasser zeigen
+    # ihre oberste Lage, der Pulverschnee seine Seite zum Testplatz hin.
+    lava_oben = (bx - 8, by + 2, bz)
+    wasser_oben = (bx + 8, by + 2, bz)
+    pulverschnee_vorn = (bx, by + 1, bz + 6)
+    ueber_der_lava = [(bx - 7.5, by + 6, bz + 0.5), (bx - 7.5, oben + 1.5, bz + 0.5)]
+    zum_wasser = [(bx - 7.5, by + 6, bz + 0.5), (bx + 8.5, by + 6, bz + 0.5),
+                  (bx + 8.5, oben + 1.5, bz + 0.5)]
+    zum_pulverschnee = [(bx + 8.5, by + 6, bz + 0.5), (bx + 0.5, by + 6, bz + 4.5),
+                        (bx + 0.5, by + 1, bz + 4.5)]
+
+    def wand_sicht(wegpunkte, zelle):
+        """Im Cam-Modus die Wegpunkte abfliegen und sagen, was der Client an
+        der Zelle sieht. Gewartet wird eine Auffrischung der Wand lang, und
+        der Cam-Modus laeuft danach weiter."""
+        medium_fliegen(bot, *wegpunkte)
+        time.sleep(1.5)
+        return bot.call("block_at", x=zelle[0], y=zelle[1], z=zelle[2]).get("name")
 
     def aufraeumen():
         for bereich in (becken, lavabecken, wuerfel, decke):
@@ -2864,6 +2945,15 @@ def medium_checks(env, bot):
         lief, gesagt = medium_start(bot, im_wuerfel, heim)
         FIND.test("Gegenprobe: voreingestellt startet /cam im Pulverschnee", lief,
                   "; ".join(gesagt) or "nichts im Chat")
+        # Und keine Wand: Die Lava ist frei, also sieht der Client auch dicht
+        # davor Lava und kein Magma.
+        hinstellen(bot, *heim)
+        if FIND.test("Gegenprobe: /cam startet fuer den Blick auf die freie Lava",
+                     cam_on(bot), ""):
+            gesehen = wand_sicht(ueber_der_lava, lava_oben)
+            cam_off(bot)
+            FIND.test("Gegenprobe: voreingestellt bleibt die Lava auch dicht vor der "
+                      "Kamera Lava", gesehen == "lava", f"sieht: {gesehen}")
 
         # --- Alles zu ---
         set_options(env, [(name, "false") for name in schalter])
@@ -2926,17 +3016,389 @@ def medium_checks(env, bot):
                   "nicht, und die Ablehnung sagt warum",
                   not lief and gesagt_hat(gesagt, "cannot start cam mode in powder snow"),
                   "; ".join(gesagt) or "nichts im Chat")
+
+        # --- Mit border-mode: barrier wird das Gesperrte zur Wand ---
+        # Die Proben oben fliegen mit 'fly' und stossen an nichts - fuer sie
+        # haelt die Pruefung hinter der Wand, wie bei push-back. Hier faellt
+        # der Bot mit der Physik des Clients auf die Lava, wie ein echter
+        # Client, der ueber ihr aufhoert zu fliegen: Er landet auf Magma, das
+        # nur er hat, und niemand setzt ihn zurueck.
+        hinstellen(bot, *heim)
+        if FIND.test("allow_lava_flight: false - /cam startet fuer die Wand in der Lava",
+                     cam_on(bot), ""):
+            magma = wand_sicht(ueber_der_lava, lava_oben)
+            since = bot.mark()
+            fall = bot.call("fall", wait=20, ms=2500)
+            gelandet = bot.server_pos()
+            gesagt = medium_gesagt(bot, since)
+            glas = wand_sicht(zum_wasser, wasser_oben)
+            schnee = wand_sicht(zum_pulverschnee, pulverschnee_vorn)
+            cam_off(bot)
+            FIND.test("allow_lava_flight: false - mit border-mode: barrier landet die "
+                      "Kamera auf der Lava wie auf einem Block, ohne zurueckgesetzt zu "
+                      "werden, und die Meldung kommt",
+                      gelandet is not None and oben - 0.01 <= gelandet[1] <= oben + 0.1
+                      and fall.get("forced") == 0 and gesagt_hat(gesagt, "cannot fly into lava"),
+                      f"{gelandet}, {fall.get('forced')}x zurueckgesetzt, Chat: "
+                      f"{'; '.join(g for g in gesagt if g) or 'nichts'}")
+            FIND.test("Die Wand zeigt gesperrte Lava als Magma, gesperrtes Wasser als "
+                      "blaues Glas und gesperrten Pulverschnee als Schnee",
+                      magma == "magma_block" and glas == "blue_stained_glass"
+                      and schnee == "snow_block",
+                      f"Lava -> {magma}, Wasser -> {glas}, Pulverschnee -> {schnee}")
+
+        # Gegenprobe mit push-back: keine Wand, die Lava bleibt Lava, und wer
+        # hineinfaellt, wird zurueckgesetzt.
+        set_option(env, "border-mode", "push-back")
+        hinstellen(bot, *heim)
+        if FIND.test("border-mode: push-back - /cam startet fuer den Fall auf die Lava",
+                     cam_on(bot), ""):
+            gesehen = wand_sicht(ueber_der_lava, lava_oben)
+            fall = bot.call("fall", wait=20, ms=2500)
+            gelandet = bot.server_pos()
+            cam_off(bot)
+            FIND.test("allow_lava_flight: false - mit border-mode: push-back bleibt die "
+                      "Lava Lava, und wer hineinfaellt, wird zurueckgesetzt",
+                      gesehen == "lava" and fall.get("forced", 0) > 0
+                      and gelandet is not None and gelandet[1] >= oben - 0.01,
+                      f"Lava -> {gesehen}, {gelandet}, {fall.get('forced')}x zurueckgesetzt")
+        set_option(env, "border-mode", "barrier")
     finally:
         try:
             # Der Reload holt ihn auch aus dem Cam-Modus, falls eine Probe
             # mittendrin abgebrochen ist.
-            set_options(env, [(name, "true") for name in schalter])
+            set_options(env, [(name, "true") for name in schalter]
+                        + [("border-mode", "barrier")])
             cam_off(bot)
             aufraeumen()
             hinstellen(bot, *heim)
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test an Lava, Wasser und "
                          f"Pulverschnee: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Die Grenze: border-mode, border-block, border-radius
+# ---------------------------------------------------------------------------
+
+# Wie lange der Bot in einer Grenzprobe laeuft, in Millisekunden. Zu Fuss
+# schafft er gut vier Bloecke in der Sekunde: Ohne Grenze kommt er damit weit
+# ueber sie hinaus, mit Grenze steht er laengst an ihr.
+GRENZ_LAUF_MS = 3500
+
+# Was der Test fuer max-distance einstellt, in Bloecken. Klein, damit der Bot
+# in einer Probe hinkommt; die Voreinstellung 100 steht danach wieder da.
+GRENZ_ABSTAND = 6
+
+# Der zweite Spieler, der nachsieht, ob die Wand nur beim Kamera-Spieler
+# steht. Hoechstens 16 Zeichen, und nicht der Name des ersten Bots - sonst
+# kickt der eine den anderen mit duplicate_login.
+ZUSCHAUER_NAME = "CamFlyZuschauer"
+
+
+def grenz_lauf(bot, heim, ms=GRENZ_LAUF_MS):
+    """Bei heim in den Cam-Modus und mit der Physik des Clients nach Osten
+    laufen. Der Cam-Modus bleibt danach an, damit der Aufrufer sich noch
+    umsehen kann.
+
+    Gibt zurueck, wo der Server den Bot danach fuehrt, wie oft er ihn
+    unterwegs zurueckgesetzt hat und was im Chat stand - oder None, wenn
+    /cam gar nicht erst startete.
+    """
+    hinstellen(bot, *heim)
+    if not cam_on(bot):
+        return None
+    since = bot.mark()
+    lauf = bot.call("walk", wait=ms / 1000 + 15, dx=1, dz=0, ms=ms)
+    pos = bot.server_pos()
+    return pos, lauf.get("forced", 0), medium_gesagt(bot, since)
+
+
+def grenz_weg(ergebnis, heim):
+    """Wie weit der Bot nach einem grenz_lauf von heim weg ist, oder None."""
+    if ergebnis is None or ergebnis[0] is None:
+        return None
+    return math.dist(ergebnis[0], heim)
+
+
+def grenz_zeige(ergebnis, heim):
+    if ergebnis is None:
+        return "/cam startete nicht"
+    pos, forced, gesagt = ergebnis
+    weg = grenz_weg(ergebnis, heim)
+    weg = "?" if weg is None else f"{weg:.2f}"
+    return (f"{pos}, {weg} vom Koerper, {forced}x zurueckgesetzt, Chat: "
+            f"{'; '.join(g for g in gesagt if g) or 'nichts'}")
+
+
+def zuschauer_sieht(env, x, y, z, wo):
+    """Was ein zweiter Spieler ohne Cam-Modus an dieser Stelle sieht.
+
+    Er kommt nur fuer diese eine Frage herein: an wo gestellt, von der
+    Konsole aus, denn op hat er nicht. Gibt den Namen des Blocks zurueck,
+    oder None, wenn er nicht hereinkam.
+    """
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    try:
+        zuschauer.start()
+        if not zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"):
+            return None
+        time.sleep(1.5)
+        console(env, f"tp {ZUSCHAUER_NAME} {wo[0]} {wo[1]} {wo[2]}", pause=2.0)
+        return zuschauer.call("block_at", x=x, y=y, z=z).get("name")
+    finally:
+        zuschauer.stop()
+
+
+def border_checks(env, bot):
+    """camera-mode.border-mode, die Bloecke der Wand und border-radius.
+
+    Gelaufen wird mit der Physik des Clients ('walk'), nicht mit 'fly': Die
+    Wand von barrier steht nur im Client, und 'fly' versetzt den Bot, ohne an
+    irgendetwas anzustossen - wie ein Client, der von der Wand nichts weiss.
+    Ob der Server ihn unterwegs zurueckgesetzt hat, zaehlt der Bot mit; genau
+    darin unterscheiden sich barrier und push-back.
+
+    Die Grenze ist max-distance, dafuer auf GRENZ_ABSTAND gestellt, und ein
+    verbotenes Biom:
+      * barrier, die Voreinstellung - nachgesehen und nicht gesetzt: der Bot
+        bleibt an der Grenze stehen, ohne je zurueckgesetzt zu werden, und
+        die Meldung kommt. Die Wand steht nur in seinem Client: der Server
+        hat dort Luft, ein zweiter Spieler ebenso, und nach dem Cam-Modus
+        ist sie auch bei ihm wieder weg.
+      * push-back: er kommt auch nicht weiter, wird dabei aber zurueckgesetzt.
+      * false, Luft als border-block und border-radius 0: keine Grenze.
+      * ein unbekannter Block und ein zu grosser Radius werden gemeldet, und
+        die Wand steht mit dem, was dafuer genommen wird.
+      * an der Wand des Bioms, die eben ist und deshalb Platz fuer Proben
+        hat: Wasser, Lava und Pulverschnee zeigt sie voreingestellt als
+        blaues Glas, Magma und Schnee, halbe Bloecke ersetzt sie, ganze
+        laesst sie stehen - und in der Welt bleibt alles, wie es war.
+        border-block-water nimmt einen anderen Block, und einer, durch den
+        man durchkommt, gibt seinen Platz an border-block ab.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Grenztest aus", cam_off(bot), ""):
+        return
+    pos = bot.server_pos()
+    if not FIND.test("Standort fuer den Grenztest lesbar", pos is not None, str(pos)):
+        return
+    # Abseits der Becken aus dem Test davor, auf dem flachen Boden.
+    bx, by, bz = _floor(pos[0]), _floor(pos[1] + 0.5), _floor(pos[2]) + 20
+    heim = (bx + 0.5, by, bz + 0.5)
+    gang = f"{bx - 2} {by} {bz - 3} {bx + 24} {by + 3} {bz + 3}"
+    Log.detail(f"Testplatz fuer die Grenze bei {(bx, by, bz)}")
+    # Das verbotene Biom faengt an einer Grenze der 4er-Wuerfel an, in denen
+    # das Spiel Biome fuehrt - dort steht dann auch die Wand.
+    biom_x = (bx + 4 + 3) // 4 * 4
+    biom = f"{biom_x} {max(-64, by - 4)} {bz - 4} {biom_x + 7} {by + 4} {bz + 4}"
+    # Die Proben auf der Wand des Bioms: wo, was /setblock dort hinsetzt, was
+    # der Server danach dort hat und was der Client sehen muss. Alle liegen in
+    # der Ebene x = biom_x und in Reichweite des Bots, der mittig davor stehen
+    # bleibt. Wasser und Lava liegen im Boden, rundum Gras, und weit genug
+    # auseinander, dass sie nicht zusammenlaufen.
+    wasser = (biom_x, by - 1, bz + 2)
+    proben = [
+        (wasser, "water", "water", "blue_stained_glass"),
+        ((biom_x, by - 1, bz - 2), "lava", "lava", "magma_block"),
+        ((biom_x, by, bz + 4), "powder_snow", "powder_snow", "snow_block"),
+        ((biom_x, by, bz - 1), "stone_slab", "stone_slab", "barrier"),
+        ((biom_x, by, bz - 4), "pointed_dripstone[vertical_direction=up,thickness=tip]",
+         "pointed_dripstone", "barrier"),
+        ((biom_x, by, bz + 1), "stone", "stone", "stone"),
+    ]
+
+    text = (env.server / "plugins" / "CamFly" / "config.yml").read_text(encoding="utf-8")
+    voreingestellt = all(re.search(rf"(?m)^\s*{schluessel}:\s*{wert}\s*$", text)
+                         for schluessel, wert in (("border-mode", "barrier"),
+                                                  ("border-block", "barrier"),
+                                                  ("border-block-water", "blue_stained_glass"),
+                                                  ("border-block-lava", "magma_block"),
+                                                  ("border-block-powder-snow", "snow_block"),
+                                                  ("border-radius", "5")))
+    FIND.test("Voreingestellt steht border-mode: barrier mit border-block: barrier, "
+              "blauem Glas, Magma und Schnee und border-radius: 5 da", voreingestellt, "")
+
+    def drin(ergebnis):
+        """Ob der Bot nicht ueber max-distance hinaus kam, aber bis an sie heran."""
+        weg = grenz_weg(ergebnis, heim)
+        return weg is not None and GRENZ_ABSTAND - 1.5 <= weg <= GRENZ_ABSTAND + 0.01
+
+    def frei(ergebnis):
+        """Ob der Bot weit ueber max-distance hinaus kam."""
+        weg = grenz_weg(ergebnis, heim)
+        return weg is not None and weg > GRENZ_ABSTAND + 2
+
+    def gewarnt(ergebnis, text):
+        return ergebnis is not None and any(text in g.lower() for g in ergebnis[2])
+
+    def sieht(zelle):
+        """Was der Client des Bots an dieser Stelle sieht."""
+        return bot.call("block_at", x=zelle[0], y=zelle[1], z=zelle[2]).get("name")
+
+    def proben_weg():
+        """Die Proben wieder wegnehmen: im Boden Gras, darueber Luft."""
+        for (x, y, z), _, _, _ in proben:
+            bot.chat(f"/setblock {x} {y} {z} minecraft:"
+                     f"{'grass_block' if y < by else 'air'}")
+            time.sleep(0.3)
+
+    try:
+        bot.chat(f"/fill {gang} minecraft:air")
+        time.sleep(0.5)
+        set_option(env, "max-distance", f"{GRENZ_ABSTAND}.0")
+
+        # --- barrier ---
+        ergebnis = grenz_lauf(bot, heim)
+        FIND.test("border-mode: barrier - die Kamera bleibt an max-distance stehen, "
+                  "ohne zurueckgesetzt zu werden, und die Meldung kommt",
+                  drin(ergebnis) and ergebnis[1] == 0
+                  and gewarnt(ergebnis, "cannot move further"), grenz_zeige(ergebnis, heim))
+        wand_x = None
+        for x in range(bx + 1, bx + GRENZ_ABSTAND + 4):
+            if sieht((x, by, bz)) == "barrier":
+                wand_x = x
+                break
+        FIND.test("border-mode: barrier - der Client sieht die Wand vor sich, "
+                  "hinter max-distance und nicht davor",
+                  wand_x is not None and wand_x <= bx + GRENZ_ABSTAND
+                  and ergebnis is not None and ergebnis[0] is not None
+                  and ergebnis[0][0] + 0.3 <= wand_x + 0.01,
+                  f"Wand bei x={wand_x}, Bot bei {ergebnis[0] if ergebnis else None}")
+        if wand_x is not None:
+            FIND.test("border-mode: barrier - in der Welt steht dort weiter Luft",
+                      block_is(bot, "minecraft:overworld", f"{wand_x} {by} {bz}",
+                               "minecraft:air"), "")
+            gesehen = zuschauer_sieht(env, wand_x, by, bz, (bx + 3.5, by, bz + 3.5))
+            FIND.test("border-mode: barrier - ein Spieler ohne Cam-Modus sieht dort "
+                      "keine Wand", gesehen == "air", f"sieht: {gesehen}")
+        cam_off(bot)
+        time.sleep(1.0)
+        if wand_x is not None:
+            nachher = sieht((wand_x, by, bz))
+            FIND.test("border-mode: barrier - nach dem Cam-Modus ist die Wand auch "
+                      "beim Spieler wieder weg", nachher == "air", f"sieht: {nachher}")
+
+        # --- push-back ---
+        set_option(env, "border-mode", "push-back")
+        ergebnis = grenz_lauf(bot, heim)
+        FIND.test("border-mode: push-back - die Kamera kommt nicht ueber max-distance, "
+                  "wird dabei aber zurueckgesetzt, und die Meldung kommt",
+                  drin(ergebnis) and ergebnis[1] > 0
+                  and gewarnt(ergebnis, "cannot move further"), grenz_zeige(ergebnis, heim))
+        cam_off(bot)
+
+        # --- keine Grenze ---
+        for aenderungen, name in (
+                ([("border-mode", "false")], "border-mode: false"),
+                ([("border-mode", "barrier"), ("border-block", "air")],
+                 "border-block: air"),
+                ([("border-block", "barrier"), ("border-radius", "0")],
+                 "border-radius: 0")):
+            set_options(env, aenderungen)
+            ergebnis = grenz_lauf(bot, heim)
+            FIND.test(f"{name} - keine Grenze, die Kamera laeuft ueber max-distance "
+                      f"hinaus, ohne Meldung",
+                      frei(ergebnis) and ergebnis[1] == 0
+                      and not gewarnt(ergebnis, "cannot move further"),
+                      grenz_zeige(ergebnis, heim))
+            cam_off(bot)
+
+        # --- was nicht passt, wird gemeldet ---
+        vorher = len(server_log(env))
+        set_options(env, [("border-block", "diamond"), ("border-radius", "99")])
+        neu = strip_colors(server_log(env)[vorher:])
+        FIND.test("Ein unbekannter border-block wird gemeldet",
+                  "camera-mode.border-block: 'diamond'" in neu, "")
+        FIND.test("Ein zu grosser border-radius wird gemeldet",
+                  "camera-mode.border-radius ist zu gro" in neu, "")
+        ergebnis = grenz_lauf(bot, heim)
+        FIND.test("Mit dem Ersatz fuer beides steht die Wand trotzdem",
+                  drin(ergebnis) and ergebnis[1] == 0, grenz_zeige(ergebnis, heim))
+        cam_off(bot)
+
+        # --- ein verbotenes Biom, und was die Wand dort ersetzt ---
+        set_options(env, [("max-distance", "100.0"), ("border-block", "barrier"),
+                          ("border-radius", "5")])
+        bot.chat(f"/fillbiome {biom} minecraft:lush_caves")
+        time.sleep(1.5)
+        for (x, y, z), setzen, _, _ in proben:
+            bot.chat(f"/setblock {x} {y} {z} minecraft:{setzen}")
+            time.sleep(0.3)
+        time.sleep(0.5)
+        # Was der Client vor dem Cam-Modus dort sieht. Nach dem Cam-Modus
+        # muss er genau das wieder sehen - verglichen wird damit und nicht
+        # mit dem Namen in der Welt: Der Bot liest die Bloecke mit den Daten
+        # von 26.1, und dort tragen manche Bloecke von 26.2 eine andere
+        # Nummer. Pulverschnee haelt er so fuer eine Kupfertruhe.
+        vorher = {zelle: sieht(zelle) for zelle, _, _, _ in proben}
+        ergebnis = grenz_lauf(bot, heim)
+        stand = ergebnis[0] if ergebnis is not None else None
+        FIND.test("border-mode: barrier - die Kamera bleibt am verbotenen Biom "
+                  "stehen, ohne zurueckgesetzt zu werden, und die Meldung nennt es",
+                  stand is not None and biom_x - 1.5 <= stand[0] + 0.3 <= biom_x + 0.01
+                  and ergebnis[1] == 0 and gewarnt(ergebnis, "not allowed in lush_caves"),
+                  grenz_zeige(ergebnis, heim))
+        # Einmal auffrischen lassen: Die Wand wird um die Stelle gebaut, an
+        # der der Bot zuletzt stand, und die Proben liegen bis zu vier Bloecke
+        # seitlich davon.
+        time.sleep(1.5)
+        im_client = {zelle: sieht(zelle) for zelle, _, _, _ in proben}
+        zeige = "; ".join(f"{welt} -> {im_client[zelle]}" for zelle, _, welt, _ in proben)
+        FIND.test("Die Wand zeigt voreingestellt Wasser als blaues Glas, Lava als "
+                  "Magma und Pulverschnee als Schnee",
+                  all(im_client[zelle] == erwartet for zelle, _, welt, erwartet in proben
+                      if welt in ("water", "lava", "powder_snow")), zeige)
+        FIND.test("Halbe Bloecke - eine Stufe, ein Tropfstein - werden zur Wand, ein "
+                  "ganzer Block bleibt stehen",
+                  all(im_client[zelle] == erwartet for zelle, _, welt, erwartet in proben
+                      if welt not in ("water", "lava", "powder_snow")), zeige)
+        FIND.test("In der Welt steht an den Proben weiter, was dort stand",
+                  all(block_is(bot, "minecraft:overworld", f"{x} {y} {z}", f"minecraft:{welt}")
+                      for (x, y, z), _, welt, _ in proben), "")
+        cam_off(bot)
+        time.sleep(1.0)
+        danach = {zelle: sieht(zelle) for zelle, _, _, _ in proben}
+        FIND.test("Nach dem Cam-Modus sieht der Spieler an den Proben wieder, was "
+                  "wirklich dasteht",
+                  all(danach[zelle] == vorher[zelle] for zelle, _, _, _ in proben),
+                  "; ".join(f"{welt}: vorher {vorher[zelle]}, danach {danach[zelle]}"
+                            for zelle, _, welt, _ in proben))
+
+        # --- border-block-water ---
+        set_option(env, "border-block-water", "light_blue_stained_glass")
+        grenz_lauf(bot, heim)
+        time.sleep(1.5)
+        im_wasser = sieht(wasser)
+        FIND.test("border-block-water: light_blue_stained_glass - diesen Block zeigt "
+                  "die Wand dann im Wasser", im_wasser == "light_blue_stained_glass",
+                  f"sieht: {im_wasser}")
+        cam_off(bot)
+        set_option(env, "border-block-water", "water")
+        grenz_lauf(bot, heim)
+        time.sleep(1.5)
+        im_wasser = sieht(wasser)
+        FIND.test("border-block-water: water - ein Block, durch den man durchkommt, "
+                  "gibt seinen Platz an border-block ab", im_wasser == "barrier",
+                  f"sieht: {im_wasser}")
+        cam_off(bot)
+    finally:
+        try:
+            # Der Reload holt ihn auch aus dem Cam-Modus, falls eine Probe
+            # mittendrin abgebrochen ist.
+            set_options(env, [("max-distance", "100.0"), ("border-mode", "barrier"),
+                              ("border-block", "barrier"),
+                              ("border-block-water", "blue_stained_glass"),
+                              ("border-radius", "5")])
+            cam_off(bot)
+            proben_weg()
+            bot.chat(f"/fillbiome {biom} minecraft:plains")
+            time.sleep(1.0)
+            # Dorthin zurueck, wo er herkam, und nicht an den Testplatz: Die
+            # Welt bleibt stehen, und jeder Lauf finge sonst 20 Bloecke weiter
+            # an - mit ihm die Tests, die danach kommen.
+            hinstellen(bot, *pos)
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Grenztest: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -3219,9 +3681,11 @@ def portal_checks(env, bot):
          woanders heraus, also muss der Eintrag fallen.
       4. Drueben alle Portalfelder wegnehmen. Dasselbe noch einmal, nur ueber
          den anderen Weg: Das Nachsehen an der Ankunft.
-      5. Mit forget-changed: false muss beides aufhoeren - der Eintrag steht
-         dann, bis /cam reload ihn wegraeumt.
-      6. Zum Schluss der Schalter portals.nether selbst.
+      5. Mit border-mode: false gibt es keine Grenze: Drueben bleibt er, auch
+         im verbotenen Biom.
+      6. Mit forget-changed: false muss das Freigeben aufhoeren - der Eintrag
+         steht dann, bis /cam reload ihn wegraeumt.
+      7. Zum Schluss der Schalter portals.nether selbst.
 
     Die Chunks drueben werden festgehalten (/forceload): Ohne einen Spieler
     dort fallen sie weg, und /fill und /fillbiome brauchen sie geladen.
@@ -3310,6 +3774,15 @@ def portal_checks(env, bot):
         FIND.test("Ist das Portal drueben abgebaut, wird das Gemerkte verworfen",
                   durchgelassen(sechste), sechste["was"])
 
+        # --- Ohne Grenze holt ihn auch hinter dem Portal niemand zurueck ---
+        # Das Umstellen leert das Gemerkte, und drueben ist es weiter
+        # verboten: Mit einer Grenze kaeme er gleich wieder zurueck.
+        set_option(env, "border-mode", "false")
+        ohne = portal_probe(bot, portal, heim, "border-mode false")
+        FIND.test("Auf border-mode: false holt ihn auch ein verbotenes Biom hinter "
+                  "dem Portal nicht zurueck", ohne["was"] == "drueben", ohne["was"])
+        set_option(env, "border-mode", "barrier")
+
         # --- Und mit forget-changed: false bleibt es stehen ---
         # Das Umstellen leert das Gemerkte, der Eintrag muss also erst wieder
         # angelegt werden.
@@ -3354,7 +3827,8 @@ def portal_checks(env, bot):
         time.sleep(0.5)
         set_options(env, [("nether", "false", "portals"),
                           ("nether", "false", "cam-area"),
-                          ("forget-changed", "true")])
+                          ("forget-changed", "true"),
+                          ("border-mode", "barrier")])
 
 
 def step_tests(env):
@@ -3515,6 +3989,9 @@ def step_tests(env):
 
         # --- Lava, Wasser und Pulverschnee ---
         medium_checks(env, bot)
+
+        # --- Die Grenze: barrier, push-back und keine ---
+        border_checks(env, bot)
 
         # --- Portale und das Gedaechtnis fuer gesperrte Portale ---
         portal_checks(env, bot)
