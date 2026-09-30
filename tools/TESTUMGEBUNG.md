@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **543** - alle 543 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **547** - alle 547 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -498,11 +498,13 @@ Namensschild hinge, trägt den Text aus `armorstand.name-format`, folgt dem
 Körper und wird mit ihm eingesammelt · der Körper selbst trägt keinen Namen
 mehr · unsichtbar ist der Körper bei beiden Typen ein einziges unsichtbares
 Mannequin, ohne Rüstungsständer, mit dem Namen darüber · voreingestellt ist
-der Name nicht durch Wände zu sehen, hat den Hintergrund eines
-Namensschilds, keinen Schatten, Größe 1, 64 Blöcke Sichtweite und ist immer
-hell · jeder Schalter unter `body.name` ändert genau das · eine eigene Farbe
-als Hintergrund geht, ein unbekannter Wert wird gemeldet und fällt zurück ·
-`\n` beginnt eine neue Zeile · `name-visible: false` setzt keinen Namen · der
+der Name gelb, nicht durch Wände zu sehen, hat den Hintergrund eines
+Namensschilds, keinen Schatten, Größe 1 und 64 Blöcke Sichtweite · jeder
+Schalter unter `body.name` ändert genau das, und fest hell ist der Name
+dabei immer · eine unbekannte Farbe wird gemeldet und fällt auf gelb zurück ·
+`color` ersetzt einen Farbcode vorn in `name-format`, ein Farbcode weiter
+hinten gilt weiter · `\n` beginnt eine neue Zeile · `name-visible: false`
+setzt keinen Namen · der
 eigene Körper bleibt anklickbar und beendet damit den Cam-Modus · einen
 Sulfur Cube mit einem Block darin kann die Kamera weder wegschieben noch
 wegschlagen · Gegenprobe: ohne Cam-Modus geht beides · er steht nur fest,

@@ -74,7 +74,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 543 Methoden- und Feldzugriffe. Alle 543 gibt
+# Dieser Pruefer zaehlt zurzeit 547 Methoden- und Feldzugriffe. Alle 547 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -2532,9 +2532,9 @@ NAME_UEBER_MANNEQUIN = 1.8 + 0.275
 # Die Voreinstellungen unter body, auf die der Abschnitt am Ende zurueckstellt.
 NAME_VOREINSTELLUNG = [
     ("type", "1"), ("visible", "true"), ("name-visible", "true"),
-    ("through-walls", "false"), ("view-distance", "64"), ("background", "true"),
-    ("shadow", "false"), ("scale", "1.0"), ("always-bright", "true"),
-    ("armorstand.name-format", '"&e{player}\'s Body"'),
+    ("color", "yellow"), ("through-walls", "false"), ("view-distance", "64"),
+    ("background", "true"), ("shadow", "false"), ("scale", "1.0"),
+    ("armorstand.name-format", '"{player}\'s Body"'),
 ]
 
 
@@ -2586,8 +2586,8 @@ def name_checks(env, bot):
 
     Er ist nicht mehr das Namensschild des Koerpers, sondern eine eigene
     Entitaet ohne Hitbox, die ueber ihm steht. Nur so lassen sich die
-    Schalter unter body.name umsetzen - durch Waende, Sichtweite, Hintergrund,
-    Schatten, Groesse, Helligkeit -, und nur so behaelt ein unsichtbarer
+    Schalter unter body.name umsetzen - Farbe, durch Waende, Sichtweite,
+    Hintergrund, Schatten, Groesse -, und nur so behaelt ein unsichtbarer
     Koerper seinen Namen, ohne dass ein Ruestungsstaender ihn tragen muss:
     Unsichtbar ist der Koerper bei beiden Typen ein einziges Mannequin.
 
@@ -2623,6 +2623,8 @@ def name_checks(env, bot):
         text = daten_von(bot, NAME, "text")
         FIND.test("Der Name traegt den Text aus armorstand.name-format",
                   bool(text) and f"{BOT_NAME}'s Body" in text, text or "keine Antwort")
+        FIND.test("Voreingestellt ist der Name gelb",
+                  bool(text) and 'color: "yellow"' in text, text or "keine Antwort")
         eigener = server_says(bot, "/execute if data entity @e[type=minecraft:armor_stand,"
                                    "distance=..3,limit=1,sort=nearest] CustomName "
                                    "run say {marke}")
@@ -2692,57 +2694,60 @@ def name_checks(env, bot):
             time.sleep(1.0)
 
         # --- Die Schalter unter body.name ---
-        set_options(env, [("type", "1"), ("through-walls", "true"), ("view-distance", "32"),
-                          ("background", "false"), ("shadow", "true"), ("scale", "2.0"),
-                          ("always-bright", "false")])
+        set_options(env, [("type", "1"), ("color", "red"), ("through-walls", "true"),
+                          ("view-distance", "32"), ("background", "false"), ("shadow", "true"),
+                          ("scale", "2.0")])
         if FIND.test("/cam startet mit geaenderten Schaltern fuer den Namen", start(), ""):
+            text = daten_von(bot, NAME, "text")
+            FIND.test("color: red faerbt den Namen rot",
+                      bool(text) and 'color: "red"' in text and '"yellow"' not in text,
+                      text or "keine Antwort")
             for name, nbt in (("through-walls: true zeigt ihn durch Waende", "{see_through:1b}"),
                               ("view-distance: 32 halbiert die Sichtweite", "{view_range:0.5f}"),
                               ("background: false nimmt den Hintergrund weg",
                                "{default_background:0b,background:0}"),
                               ("shadow: true gibt ihm einen Schatten", "{shadow:1b}"),
                               ("scale: 2.0 macht ihn doppelt so gross",
-                               "{transformation:{scale:[2.0f,2.0f,2.0f]}}")):
+                               "{transformation:{scale:[2.0f,2.0f,2.0f]}}"),
+                              # Durch Waende zeichnet der Client ihn ohnehin voll hell;
+                              # fest hell ist er deshalb auch ohne.
+                              ("Er bleibt auch dabei fest hell", "{brightness:{block:15,sky:15}}")):
                 FIND.test(name, nbt_frage(bot, NAME, nbt), "")
-            hell = server_says(bot, f"/execute if data entity {NAME} brightness run say {{marke}}")
-            FIND.test("always-bright: false laesst ihn so hell wie die Umgebung", not hell,
-                      "" if not hell else "er hat noch eine feste Helligkeit")
             FIND.test("Auch doppelt so gross steht er auf derselben Hoehe",
                       name_ueber(bot, "armor_stand", NAME_UEBER_STAENDER), "")
             cam_off(bot)
             time.sleep(1.0)
 
-        # Eine eigene Farbe: #AARRGGBB, AA ist die Deckkraft.
-        set_option(env, "background", '"#80FF0000"')
-        if FIND.test("/cam startet mit einer Farbe als Hintergrund", start(), ""):
-            FIND.test("background: \"#80FF0000\" setzt diese Farbe",
-                      nbt_frage(bot, NAME, "{default_background:0b,background:-2130771968}"), "")
-            cam_off(bot)
-            time.sleep(1.0)
-
-        # Etwas, das keine Farbe ist, wird gemeldet und faellt auf true zurueck.
-        set_option(env, "background", "blau")
-        meldung = any("Unbekannter Wert" in zeile and "body.name.background" in zeile
+        # Etwas, das keine Farbe ist, wird gemeldet und faellt auf gelb zurueck.
+        set_option(env, "color", "blau")
+        meldung = any("Unbekannter Wert" in zeile and "body.name.color" in zeile
                       for zeile in server_log(env).splitlines())
-        FIND.test("Ein unbekannter Hintergrund wird gemeldet", meldung,
+        FIND.test("Eine unbekannte Farbe wird gemeldet", meldung,
                   "" if meldung else "keine Meldung im Server-Log")
         if start():
-            FIND.test("Ein unbekannter Hintergrund faellt auf den eines Namensschilds zurueck",
-                      nbt_frage(bot, NAME, "{default_background:1b}"), "")
+            text = daten_von(bot, NAME, "text")
+            FIND.test("Eine unbekannte Farbe faellt auf gelb zurueck",
+                      bool(text) and 'color: "yellow"' in text, text or "keine Antwort")
             cam_off(bot)
             time.sleep(1.0)
 
-        # --- Mehrere Zeilen: \n im Text ---
+        # --- Mehrere Zeilen, und ein Farbcode vorn im Text ---
+        # So stand der Name frueher in der Datei: &e vorn. color ersetzt ihn,
+        # der Farbcode der zweiten Zeile bleibt.
         # Doppelt geschuetzt: replace_option reicht den Wert durch re.subn,
         # das aus \\ einen einzelnen Rueckstrich macht. In der Datei steht
         # danach \n in Anfuehrungszeichen, und YAML macht daraus die neue Zeile.
-        set_option(env, "armorstand.name-format", '"&e{player}\'s Body\\\\n&7Kamera"')
+        set_options(env, [("color", "red"),
+                          ("armorstand.name-format", '"&e{player}\'s Body\\\\n&7Kamera"')])
         if FIND.test("/cam startet mit einem Namen ueber zwei Zeilen", start(), ""):
             # /data zeigt den Zeilenumbruch als \n, oder er steht selbst da.
             text = daten_von(bot, NAME, "text")
             FIND.test("\\n im Namen beginnt eine neue Zeile",
                       bool(text) and ("\\n" in text or "\n" in text) and "Kamera" in text,
                       text or "keine Antwort")
+            FIND.test("color ersetzt den Farbcode vorn im Text, weiter hinten gilt der eigene",
+                      bool(text) and 'color: "red"' in text and 'color: "gray"' in text
+                      and '"yellow"' not in text, text or "keine Antwort")
             cam_off(bot)
             time.sleep(1.0)
 

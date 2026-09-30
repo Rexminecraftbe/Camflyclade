@@ -34,6 +34,7 @@ import org.joml.AxisAngle4f;
 import org.joml.Vector3f;
 
 import java.util.logging.Level;
+import java.util.regex.Pattern;
 
 /**
  * Builds the body a player leaves behind in camera mode, the invisible
@@ -60,6 +61,16 @@ public final class BodySpawner {
 
     /** Light level 15 from blocks and sky: the name reads the same in a cave as in the sun. */
     private static final Display.Brightness FULL_BRIGHTNESS = new Display.Brightness(15, 15);
+
+    /** Nothing behind the name, for {@code body.name.background: false}. */
+    private static final Color NO_BACKGROUND = Color.fromARGB(0);
+
+    /**
+     * Colour codes at the very start of a text: the sixteen colours, a hex
+     * colour and the reset, which takes the colour away as well.
+     */
+    private static final Pattern LEADING_COLOR =
+            Pattern.compile("^(?:§[0-9a-fA-FrR]|§[xX](?:§[0-9a-fA-F]){6})+");
 
     /**
      * Over how many ticks the name glides after the body to a new spot,
@@ -288,10 +299,10 @@ public final class BodySpawner {
     /**
      * Puts the configured name over the body: a text display of its own, not
      * the name tag of the body. Only such a name can be kept from showing
-     * through walls, lit on its own, scaled, set on a background of any colour
-     * and written over several lines, the section {@code body.name}. It is
-     * also what an invisible body keeps as a name without a second entity to
-     * carry it: an invisible mannequin shows no name tag.
+     * through walls, coloured, scaled and written over several lines, the
+     * section {@code body.name}. It is also what an invisible body keeps as a
+     * name without a second entity to carry it: an invisible mannequin shows
+     * no name tag.
      *
      * <p>It has no hitbox, so every click, hit and potion still lands on the
      * body. It is not saved with the world either: should its chunk be
@@ -303,11 +314,16 @@ public final class BodySpawner {
         if (!settings.isBodyNameVisible()) {
             return null;
         }
-        String text = messages.getMessage("armorstand.name-format").replace("{player}", player.getName());
-        if (ChatColor.stripColor(text).isBlank()) {
+        String format = messages.getMessage("armorstand.name-format").replace("{player}", player.getName());
+        if (ChatColor.stripColor(format).isBlank()) {
             // An empty box would float over the body, saying nothing.
             return null;
         }
+        // The colour comes from body.name.color. It takes the place of a colour
+        // code at the very start of the text, where name-format carried it
+        // before the setting existed (&e), so an older config file follows the
+        // setting as well; codes further on still colour what comes after them.
+        String text = settings.getNameColor() + LEADING_COLOR.matcher(format).replaceFirst("");
         return body.getWorld().spawn(nameLocation(body), TextDisplay.class, display -> {
             display.setText(text);
             // Turned towards whoever looks at it, like a name tag, and never
@@ -316,18 +332,20 @@ public final class BodySpawner {
             display.setLineWidth(Integer.MAX_VALUE);
             display.setSeeThrough(settings.isNameThroughWalls());
             display.setViewRange((float) (settings.getNameViewDistance() / DISPLAY_RANGE_BLOCKS));
-            Color background = settings.getNameBackground();
-            display.setDefaultBackground(background == null);
-            if (background != null) {
-                display.setBackgroundColor(background);
+            display.setDefaultBackground(settings.hasNameBackground());
+            if (!settings.hasNameBackground()) {
+                display.setBackgroundColor(NO_BACKGROUND);
             }
             display.setShadowed(settings.isNameShadowed());
             float scale = (float) settings.getNameScale();
             display.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(),
                     new Vector3f(scale), new AxisAngle4f()));
-            if (settings.isNameAlwaysBright()) {
-                display.setBrightness(FULL_BRIGHTNESS);
-            }
+            // Always lit. Left to the light where it stands, the client dims the
+            // name in the dark - but only while it is not seen through walls: that
+            // kind of text the client always draws at full brightness. The name
+            // would be bright or dark depending on through-walls instead of on the
+            // light, so it is bright either way.
+            display.setBrightness(FULL_BRIGHTNESS);
             display.setTeleportDuration(NAME_FOLLOW_TICKS);
             display.setPersistent(false);
             display.getPersistentDataContainer().set(nameKey, PersistentDataType.INTEGER, 1);
