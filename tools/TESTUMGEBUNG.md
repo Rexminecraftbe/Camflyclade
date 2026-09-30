@@ -37,7 +37,7 @@ echo "say hallo" > ~/camfly-testenv/server/console.fifo
 | `crosscheck` | Denselben Quelltext noch einmal mit `javac` gegen `paper-api` übersetzen. |
 | `apicheck`   | Jeden Aufruf auf `org/bukkit`, `net/md_5`, `io/papermc` aus `target/classes` gegen `paper-api` auflösen. |
 | `server`     | Paper-Server holen, einrichten, starten, Konsole an eine FIFO hängen. |
-| `bot`        | `mineflayer` holen und auf Protokoll 26.2 flicken. |
+| `bot`        | `mineflayer` holen, auf Protokoll 26.2 flicken und seine Kollision wie im echten Client rechnen lassen. |
 | `tests`      | Der Bot spielt die Testfälle im laufenden Server durch. |
 
 ## Warum gegen beide APIs geprüft wird
@@ -411,6 +411,16 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   von der Wand nichts weiß. Der Grenztest läuft deshalb mit `walk`: Vorwärts
   mit der Physik von mineflayer, die an jedem Block anstößt, den der Server
   dem Bot geschickt hat. Zu Fuß schafft er gut vier Blöcke in der Sekunde.
+* **Die Physik von mineflayer lief an manchen Stellen durch Blöcke.**
+  prismarine-physics setzt nach dem Anstoßen die Position aus der Kante der
+  Box zusammen; an manchen Koordinaten ragt die Box danach um einen
+  Rundungsfehler in den Block, und ihr Vergleich ohne Toleranz lässt den Bot
+  im nächsten Tick hindurch - etwa an einer Wand bei x=-2. Der Grenztest fiel
+  deshalb je nach Startplatz durch: vom Platz bei x=-8 aus lief der Bot durch
+  die Wand und wurde zurückgesetzt, einen Block weiter westlich nicht. Der
+  echte Client rechnet mit 1e-7 Toleranz (`VoxelShape.collideX/Y/Z`) und
+  bleibt stehen; der Schritt `bot` flickt `prismarine-physics/lib/aabb.js`
+  genauso.
 * **barrier und push-back unterscheiden sich am Zurücksetzen.** Stehen bleibt
   die Kamera in beiden Fällen an der Grenze; push-back setzt sie dabei aber
   immer wieder auf die letzte Position zurück. `walk` zählt diese

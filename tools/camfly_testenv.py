@@ -9,7 +9,8 @@ Das Skript macht alles, was sonst von Hand gemacht wurde:
   3. Zusaetzlich gegen paper-api uebersetzen (die APIs sind nicht deckungsgleich)
   4. ApiCheck: jeden Bukkit-Aufruf im fertigen Jar gegen paper-api aufloesen
   5. Paper-Testserver holen, einrichten und starten (mit FIFO fuer die Konsole)
-  6. mineflayer holen, auf Protokoll 26.2 flicken, Bot verbinden
+  6. mineflayer holen, auf Protokoll 26.2 flicken, seine Kollision wie im
+     echten Client rechnen lassen, Bot verbinden
   7. Tests im laufenden Spiel fahren
   8. Aufraeumen: Server und Bot beenden
 
@@ -1226,6 +1227,44 @@ def patch_mineflayer(env):
     return True
 
 
+# Um wie viel eine Box in einen Block ragen darf und trotzdem noch davor
+# steht, in Bloecken. So rechnet der echte Client (VoxelShape.collideX/Y/Z).
+KOLLISIONS_TOLERANZ = "1e-7"
+
+
+def patch_physics(env):
+    """Die Kollision von prismarine-physics so rechnen lassen wie der Client.
+
+    Nach dem Anstossen setzt die Bibliothek die Position aus der Kante der
+    Box zusammen, und an manchen Koordinaten ragt die Box danach um einen
+    Rundungsfehler in den Block, etwa an einer Wand bei x=-2. Ihr Vergleich
+    kennt keine Toleranz, haelt den Block damit fuer schon betreten und
+    laesst den Bot im naechsten Tick hindurch. Der echte Client zieht 1e-7 ab
+    und bleibt stehen - so auch der Bot nach diesem Flicken.
+    """
+    aabb_js = env.bot / "node_modules" / "prismarine-physics" / "lib" / "aabb.js"
+    if not aabb_js.exists():
+        FIND.problem("prismarine-physics/lib/aabb.js nicht gefunden - der Bot "
+                     "laeuft womoeglich durch Bloecke")
+        return False
+    text = aabb_js.read_text(encoding="utf-8")
+    if KOLLISIONS_TOLERANZ in text:
+        return True
+    patched = text
+    for achse in "XYZ":
+        patched = patched.replace(f"other.max{achse} <= this.min{achse}",
+                                  f"other.max{achse} - {KOLLISIONS_TOLERANZ} <= this.min{achse}")
+        patched = patched.replace(f"other.min{achse} >= this.max{achse}",
+                                  f"other.min{achse} + {KOLLISIONS_TOLERANZ} >= this.max{achse}")
+    if patched.count(KOLLISIONS_TOLERANZ) != 6:
+        FIND.problem("prismarine-physics/lib/aabb.js hat nicht die erwarteten sechs "
+                     "Vergleiche - der Bot laeuft womoeglich durch Bloecke")
+        return False
+    aabb_js.write_text(patched, encoding="utf-8")
+    Log.detail(f"prismarine-physics rechnet die Kollision mit {KOLLISIONS_TOLERANZ} Toleranz")
+    return True
+
+
 def step_bot(env):
     Log.step("7. Bot (mineflayer)")
     env.bot.mkdir(parents=True, exist_ok=True)
@@ -1238,7 +1277,7 @@ def step_bot(env):
             cwd=env.bot, timeout=1200)
     else:
         Log.detail("mineflayer liegt schon im Arbeitsordner")
-    ok = patch_mineflayer(env)
+    ok = patch_mineflayer(env) and patch_physics(env)
     (env.bot / "bot.js").write_text(BOT_JS, encoding="utf-8")
     FIND.test("mineflayer bereit", ok, f"{MC_VERSION} / Protokoll {PROTOCOL_VERSION}")
     return ok
