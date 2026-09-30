@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **523** - alle 523 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **543** - alle 543 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -293,6 +293,32 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   `/execute if items entity @s armor.chest`. Das Plugin gibt sie über
   denselben Weg zurück wie das übrige Inventar - `getContents()` hält auch
   die Rüstungsslots -, und diese Probe hält fest, dass das so bleibt.
+* **Der Name über dem Körper ist ein TextDisplay und wird am Server
+  geprüft.** Was der Client daraus zeichnet, sieht der Bot nicht. Gefragt
+  wird mit `/execute as <Körper> at @s positioned ~ ~2.25 ~ if entity
+  @e[type=text_display,distance=..0.05]`, ob er genau über dem Körper steht,
+  und mit `/execute if data`, was er trägt. Die Höhe ist die des Körpers plus
+  0,275 - dort beginnt das Namensschild, das das Spiel selbst über ihn setzen
+  würde: 2,25 über dem Rüstungsständer, 2,075 über dem Mannequin.
+* **Gezählt wird über `say`**: Jede passende Entität sagt dieselbe Marke
+  einmal, und der Test zählt, wie oft sie im Chat steht. So steht fest, dass
+  der unsichtbare Körper ein einziges Mannequin ist und kein Rüstungsständer
+  mehr daneben steht. Die Antwort von `/execute if entity` ohne `run` („Test
+  passed, count: N“) kommt beim Bot ohne die Zahl an.
+* **Ein Kommando darf höchstens 256 Zeichen lang sein.** Ein längeres nimmt
+  der Server nicht an und wirft den Bot hinaus („Failed to decode packet
+  'serverbound/minecraft:chat_command'“) - danach fällt jede weitere Probe.
+  Der Namenstest fragt die Eigenschaften des TextDisplays deshalb einzeln ab.
+* **Vor dem Namenstest räumt der Abschnitt Rüstungsständer, Mannequins und
+  TextDisplays im Umkreis von acht Blöcken weg.** Er zählt sie um den Körper
+  herum, und die Testwelt bleibt zwischen zwei Läufen stehen.
+* **Dass der Name dem Körper folgt, prüft der Test am Rüstungsständer**: Er
+  wird per `/tp` einen Block versetzt. Der Cam-Modus läuft dabei weiter, auf
+  Bewegung prüft das Plugin das Mannequin, das in ihm steht.
+* **Einen Zeilenumbruch im Namen schreibt der Test doppelt geschützt** in die
+  Datei: `replace_option` reicht den Wert durch `re.subn`, das aus `\\`
+  einen einzelnen Rückstrich macht. In der Datei steht danach `\n` in
+  Anführungszeichen, und YAML macht daraus die neue Zeile.
 * **Der Happy Ghast steht mit `NoAI` und `NoGravity` still.** Sonst zöge er
   davon, und die Stelle, an der der Bot aufgesetzt wird, wäre jedes Mal eine
   andere. Er ist vier Blöcke hoch, sein Rücken liegt also vier über seinen
@@ -457,6 +483,16 @@ im Rahmen drehen, kein Fenster einer Kistenlore öffnen und kein Boot
 besteigen · Gegenprobe: ohne Cam-Modus geht
 jedes davon sehr wohl · das Inventar ist im Cam-Modus leer und danach wieder
 da · die Rüstung ist im Cam-Modus abgelegt und danach wieder angezogen · der
+Name steht als TextDisplay genau dort über dem Körper, wo sonst sein
+Namensschild hinge, trägt den Text aus `armorstand.name-format`, folgt dem
+Körper und wird mit ihm eingesammelt · der Körper selbst trägt keinen Namen
+mehr · unsichtbar ist der Körper bei beiden Typen ein einziges unsichtbares
+Mannequin, ohne Rüstungsständer, mit dem Namen darüber · voreingestellt ist
+der Name nicht durch Wände zu sehen, hat den Hintergrund eines
+Namensschilds, keinen Schatten, Größe 1, 64 Blöcke Sichtweite und ist immer
+hell · jeder Schalter unter `body.name` ändert genau das · eine eigene Farbe
+als Hintergrund geht, ein unbekannter Wert wird gemeldet und fällt zurück ·
+`\n` beginnt eine neue Zeile · `name-visible: false` setzt keinen Namen · der
 eigene Körper bleibt anklickbar und beendet damit den Cam-Modus · einen
 Sulfur Cube mit einem Block darin kann die Kamera weder wegschieben noch
 wegschlagen · Gegenprobe: ohne Cam-Modus geht beides · er steht nur fest,

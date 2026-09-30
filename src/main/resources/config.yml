@@ -190,7 +190,22 @@ body:
   # Name über dem Körper
   name-visible: true
 
-  # Körper sichtbar (false = unsichtbar, der Name bleibt)
+  # Aussehen des Namens (der Text steht in messages.armorstand.name-format, \n beginnt eine neue Zeile)
+  name:
+    # Durch Wände sichtbar (false = nur bei freier Sicht, der Name verrät nicht, wo der Körper steht)
+    through-walls: false
+    # Sichtweite in Blöcken (64 = wie ein Namensschild; mehr als entity-tracking-range: display in der spigot.yml geht nicht)
+    view-distance: 64
+    # Hintergrund: true = dunkel wie ein Namensschild, false = keiner, oder eine Farbe als "#AARRGGBB" in Anführungszeichen (AA = Deckkraft)
+    background: true
+    # Schatten unter der Schrift
+    shadow: false
+    # Größe (1 = wie ein Namensschild, 0.1 bis 10)
+    scale: 1.0
+    # Immer hell, auch im Dunkeln (false = so hell wie die Umgebung)
+    always-bright: true
+
+  # Körper sichtbar (false = unsichtbar, der Name bleibt; Typ 1 und 2 sind dann gleich)
   visible: true
 
   # Rüstung des Spielers am Körper zeigen (nur Optik, Typ: 1 zeigt keinen Helm, dort sitzt der Kopf.)
@@ -199,7 +214,7 @@ body:
   # Wodurch sich der Körper verschieben lässt:
   #   0 = durch nichts, er steht fest
   #   1 = durch Schwerkraft, Wasser und Kolben
-  #   2 = zusätzlich durch Spieler und Mobs   (nur bei type: 2, sonst gilt 1)
+  #   2 = zusätzlich durch Spieler und Mobs   (nur bei type: 2 oder visible: false, sonst gilt 1)
   movement-sensitivity: 1
 
   # Erlaubte Bewegung in Blöcken, bevor der Cam-Modus endet
