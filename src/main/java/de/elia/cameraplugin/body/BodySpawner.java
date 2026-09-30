@@ -4,6 +4,8 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.log.ConsoleLog;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -11,25 +13,33 @@ import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Display;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.TextDisplay;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.util.Transformation;
+import org.joml.AxisAngle4f;
+import org.joml.Vector3f;
 
 import java.util.logging.Level;
+import java.util.regex.Pattern;
 
 /**
- * Builds the body a player leaves behind in camera mode, and the invisible
- * mannequin that takes the hits for a body that is not a mannequin itself.
+ * Builds the body a player leaves behind in camera mode, the invisible
+ * mannequin that takes the hits for a body that is not a mannequin itself, and
+ * the name standing over the body.
  */
 public final class BodySpawner {
 
@@ -38,11 +48,42 @@ public final class BodySpawner {
             EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD
     };
 
+    /**
+     * How far over the head the name starts, in blocks. The game hangs the
+     * name tag of an entity from half a block over its head; a text display
+     * stands on its lowest line instead, so it is set that one line lower to
+     * end up in the same place.
+     */
+    private static final double NAME_ABOVE_HEAD = 0.275;
+
+    /** How far a text display is seen at a view range of 1, in blocks. */
+    private static final double DISPLAY_RANGE_BLOCKS = 64.0;
+
+    /** Light level 15 from blocks and sky: the name reads the same in a cave as in the sun. */
+    private static final Display.Brightness FULL_BRIGHTNESS = new Display.Brightness(15, 15);
+
+    /** Nothing behind the name, for {@code body.name.background: false}. */
+    private static final Color NO_BACKGROUND = Color.fromARGB(0);
+
+    /**
+     * Colour codes at the very start of a text: the sixteen colours, a hex
+     * colour and the reset, which takes the colour away as well.
+     */
+    private static final Pattern LEADING_COLOR =
+            Pattern.compile("^(?:§[0-9a-fA-FrR]|§[xX](?:§[0-9a-fA-F]){6})+");
+
+    /**
+     * Over how many ticks the name glides after the body to a new spot,
+     * instead of jumping there at once.
+     */
+    private static final int NAME_FOLLOW_TICKS = 3;
+
     private final CamSettings settings;
     private final Messages messages;
     private final ConsoleLog log;
     private final NamespacedKey bodyKey;
     private final NamespacedKey hitboxKey;
+    private final NamespacedKey nameKey;
     private final NamespacedKey hiddenArmorAsset;
     /** Whether the missing way to hide the "NPC" line has already been reported. */
     private boolean mannequinLabelReported = false;
@@ -53,6 +94,7 @@ public final class BodySpawner {
         this.log = log;
         bodyKey = new NamespacedKey(plugin, "cam_body");
         hitboxKey = new NamespacedKey(plugin, "cam_hitbox");
+        nameKey = new NamespacedKey(plugin, "cam_name");
         // Deliberately not a real equipment asset: the client finds nothing for
         // it and therefore draws nothing.
         hiddenArmorAsset = new NamespacedKey(plugin, "hidden_armor");
@@ -94,8 +136,9 @@ public final class BodySpawner {
 
     /**
      * Copies the player's armour for a mannequin that is not to show it and
-     * takes away its rendering: the invisible mannequin, whose pieces would
-     * otherwise float in front of the armour stand, and the visible one when
+     * takes away its rendering: an invisible mannequin, whose pieces would
+     * otherwise float in the air by themselves - in front of the armour stand
+     * or where the invisible body stands -, and the visible one when
      * {@code body.armor-visible} is off.
      *
      * <p>Copies are enough here: the body never really takes the damage, its
@@ -125,8 +168,9 @@ public final class BodySpawner {
 
     /**
      * Creates the invisible mannequin that takes the hits for a body that is
-     * not a mannequin itself. A mannequin has the same hitbox as a player, so
-     * hits land on the body the way they would land on the player himself.
+     * not a mannequin itself, the armour stand of a visible type 1. A
+     * mannequin has the same hitbox as a player, so hits land on the body the
+     * way they would land on the player himself.
      *
      * <p>It is invisible and its armour is not rendered either, but it is a
      * normal entity otherwise: players, mobs and the world hit it directly, just
@@ -156,9 +200,10 @@ public final class BodySpawner {
 
     /**
      * Spawns the body that stays behind while the player is in camera mode:
-     * either a mannequin that uses the player's own skin or an armour stand
-     * wearing his head, see {@link #usesMannequinBody()}. An invisible body
-     * gets neither the skin nor the head, only its name stays above it.
+     * either a mannequin or an armour stand wearing the player's head, see
+     * {@link #usesMannequinBody()}. An invisible body gets neither the skin
+     * nor the head. The name above it is an entity of its own, see
+     * {@link #spawnNameDisplay}.
      *
      * <p>The armour stand puts the armour on right here, the mannequin gets it
      * from the caller: it is the entity taking the hits as well and therefore
@@ -174,7 +219,6 @@ public final class BodySpawner {
         body.getPersistentDataContainer().set(bodyKey, PersistentDataType.INTEGER, 1);
         body.setGravity(useBodyGravity());
         body.setCanPickupItems(false);
-        applyBodyName(body, player);
         body.setInvulnerable(false);
         AttributeInstance maxHealth = body.getAttribute(Attribute.MAX_HEALTH);
         if (maxHealth != null) {
@@ -184,10 +228,18 @@ public final class BodySpawner {
         return body;
     }
 
-    /** Creates a mannequin that shows the player's own skin. */
+    /**
+     * Creates a mannequin as the body itself: one that shows the player's own
+     * skin, or one that is not drawn at all for an invisible body - it needs
+     * no skin then, and like the hitbox it makes no sound that would give its
+     * spot away.
+     */
     private Mannequin spawnMannequinBody(Player player, Location location) {
         Mannequin mannequin = (Mannequin) location.getWorld().spawnEntity(location, EntityType.MANNEQUIN);
-        if (!MannequinSkin.apply(mannequin, player)) {
+        if (!settings.isBodyVisible()) {
+            hideMannequin(mannequin);
+            mannequin.setSilent(true);
+        } else if (!MannequinSkin.apply(mannequin, player)) {
             log.log(Level.WARNING, "Der Skin von " + player.getName()
                     + " konnte nicht auf das Mannequin übertragen werden, es benutzt den Standard-Skin.");
         }
@@ -198,10 +250,12 @@ public final class BodySpawner {
 
     /**
      * Takes the grey "NPC" line off a mannequin, the line the client draws
-     * under its name.
+     * under its name tag. A body shows no name tag of its own - its name is a
+     * text display, see {@link #spawnNameDisplay} -, but the hitbox carries a
+     * name, and wherever that is shown the line would come along.
      *
-     * <p>Reported once when this server's API offers no way to do it: the line
-     * would otherwise sit under every body without a word about why.</p>
+     * <p>Reported once when this server's API offers no way to do it, so that
+     * such a line does not turn up without a word about why.</p>
      */
     private void hideMannequinDescription(Mannequin mannequin) {
         if (MannequinLabel.hideDescription(mannequin) || mannequinLabelReported) {
@@ -213,18 +267,16 @@ public final class BodySpawner {
     }
 
     /**
-     * Whether the body itself is the mannequin. Only a visible body of type 2
-     * is.
+     * Whether the body itself is the mannequin. Every body is, except the
+     * visible one of type 1, the armour stand wearing the player's head.
      *
-     * <p>A mannequin that is not drawn does not show a name either, so an
-     * invisible body is built the way type 1 always is: an invisible armour
-     * stand that carries the name, with the mannequin standing in it taking the
-     * hits. Both types therefore end up the same as soon as the body is
-     * switched invisible - and either way a mannequin is the entity that is
-     * hit, so it is hit where the player himself would be hit.</p>
+     * <p>An invisible body has no head to show, so both types end up the same
+     * there: an invisible mannequin, with the name standing over it on its
+     * own. Either way a mannequin is the entity that is hit, so it is hit
+     * where the player himself would be hit.</p>
      */
     public boolean usesMannequinBody() {
-        return settings.getBodyType() == BodyType.MANNEQUIN && settings.isBodyVisible();
+        return settings.getBodyType().isMannequinBody(settings.isBodyVisible());
     }
 
     /**
@@ -233,8 +285,8 @@ public final class BodySpawner {
      *
      * <p>An invisible body never shows it, whatever the setting says: armour
      * does not turn invisible along with what wears it, the pieces would hang
-     * in the air on their own - the same reason an invisible armour stand is
-     * left without the player's head.</p>
+     * in the air on their own - the same reason an invisible body wears no
+     * head.</p>
      *
      * <p>Purely a matter of looks: the hit is calculated on the player himself
      * with his own armour, and his own armour is what wears out, see
@@ -245,15 +297,68 @@ public final class BodySpawner {
     }
 
     /**
-     * Puts the configured name above the body, or leaves it without one. The
-     * grey line a mannequin draws under that name is taken away separately, by
-     * {@link #hideMannequinDescription(Mannequin)}.
+     * Puts the configured name over the body: a text display of its own, not
+     * the name tag of the body. Only such a name can be kept from showing
+     * through walls, coloured, scaled and written over several lines, the
+     * section {@code body.name}. It is also what an invisible body keeps as a
+     * name without a second entity to carry it: an invisible mannequin shows
+     * no name tag.
+     *
+     * <p>It has no hitbox, so every click, hit and potion still lands on the
+     * body. It is not saved with the world either: should its chunk be
+     * unloaded, it is gone instead of coming back as a name over nothing.</p>
+     *
+     * @return the name, or {@code null} when the body carries none
      */
-    private void applyBodyName(LivingEntity body, Player player) {
-        body.setCustomName(settings.isBodyNameVisible()
-                ? messages.getMessage("armorstand.name-format").replace("{player}", player.getName())
-                : null);
-        body.setCustomNameVisible(settings.isBodyNameVisible());
+    public TextDisplay spawnNameDisplay(Player player, LivingEntity body) {
+        if (!settings.isBodyNameVisible()) {
+            return null;
+        }
+        String format = messages.getMessage("armorstand.name-format").replace("{player}", player.getName());
+        if (ChatColor.stripColor(format).isBlank()) {
+            // An empty box would float over the body, saying nothing.
+            return null;
+        }
+        // The colour comes from body.name.color. It takes the place of a colour
+        // code at the very start of the text, where name-format carried it
+        // before the setting existed (&e), so an older config file follows the
+        // setting as well; codes further on still colour what comes after them.
+        String text = settings.getNameColor() + LEADING_COLOR.matcher(format).replaceFirst("");
+        return body.getWorld().spawn(nameLocation(body), TextDisplay.class, display -> {
+            display.setText(text);
+            // Turned towards whoever looks at it, like a name tag, and never
+            // broken into lines on its own: only where the text says so.
+            display.setBillboard(Display.Billboard.CENTER);
+            display.setLineWidth(Integer.MAX_VALUE);
+            display.setSeeThrough(settings.isNameThroughWalls());
+            display.setViewRange((float) (settings.getNameViewDistance() / DISPLAY_RANGE_BLOCKS));
+            display.setDefaultBackground(settings.hasNameBackground());
+            if (!settings.hasNameBackground()) {
+                display.setBackgroundColor(NO_BACKGROUND);
+            }
+            display.setShadowed(settings.isNameShadowed());
+            float scale = (float) settings.getNameScale();
+            display.setTransformation(new Transformation(new Vector3f(), new AxisAngle4f(),
+                    new Vector3f(scale), new AxisAngle4f()));
+            // Always lit. Left to the light where it stands, the client dims the
+            // name in the dark - but only while it is not seen through walls: that
+            // kind of text the client always draws at full brightness. The name
+            // would be bright or dark depending on through-walls instead of on the
+            // light, so it is bright either way.
+            display.setBrightness(FULL_BRIGHTNESS);
+            display.setTeleportDuration(NAME_FOLLOW_TICKS);
+            display.setPersistent(false);
+            display.getPersistentDataContainer().set(nameKey, PersistentDataType.INTEGER, 1);
+        });
+    }
+
+    /**
+     * Where the name of this body stands: over its head, where the game puts a
+     * name tag. The text grows upwards from there, so a larger name or a second
+     * line never covers the head.
+     */
+    public Location nameLocation(LivingEntity body) {
+        return body.getLocation().add(0.0, body.getHeight() + NAME_ABOVE_HEAD, 0.0);
     }
 
     /**
@@ -293,15 +398,16 @@ public final class BodySpawner {
     }
 
     /**
-     * Creates the classic body: an armour stand wearing the player's head, and
-     * his armour with it when {@link #showsBodyArmor()} says so.
+     * Creates the body of a visible type 1: an armour stand wearing the
+     * player's head, and his armour with it when {@link #showsBodyArmor()}
+     * says so. An invisible body never gets here, it is a mannequin, see
+     * {@link #usesMannequinBody()}.
      */
     private ArmorStand spawnArmorStandBody(Player player, Location location, ItemStack[] originalArmor) {
         ArmorStand armorStand = (ArmorStand) location.getWorld().spawnEntity(location, EntityType.ARMOR_STAND);
-        armorStand.setVisible(settings.isBodyVisible());
-        // Never a marker: that would take away its hitbox and drop the name tag
-        // from above the head down to its feet. Level 0 is held in place by
-        // startBodyPin instead.
+        // Never a marker: a marker neither falls nor is pushed by a piston, and
+        // the body everyone sees has to go wherever the mannequin standing in
+        // it goes. Level 0 is held in place by startBodyPin instead.
         armorStand.setMarker(false);
         armorStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
         armorStand.addEquipmentLock(EquipmentSlot.CHEST, ArmorStand.LockType.REMOVING_OR_CHANGING);
@@ -310,35 +416,33 @@ public final class BodySpawner {
         armorStand.addEquipmentLock(EquipmentSlot.HAND, ArmorStand.LockType.REMOVING_OR_CHANGING);
         armorStand.addEquipmentLock(EquipmentSlot.OFF_HAND, ArmorStand.LockType.REMOVING_OR_CHANGING);
 
-        if (settings.isBodyVisible()) {
-            EntityEquipment equipment = armorStand.getEquipment();
-            if (showsBodyArmor()) {
-                // Before the head goes on, not after: this call writes the whole
-                // set of four slots and would take the head off again.
-                equipment.setArmorContents(createArmorStandArmor(originalArmor));
-            }
-            // Only a body that is meant to be seen gets the head: on an
-            // invisible armour stand it would go on floating by itself.
-            ItemStack playerHead = new ItemStack(Material.PLAYER_HEAD);
-            SkullMeta skullMeta = (SkullMeta) playerHead.getItemMeta();
-            if (skullMeta != null) {
-                skullMeta.setOwningPlayer(player);
-                playerHead.setItemMeta(skullMeta);
-            }
-            equipment.setHelmet(playerHead);
+        EntityEquipment equipment = armorStand.getEquipment();
+        if (showsBodyArmor()) {
+            // Before the head goes on, not after: this call writes the whole
+            // set of four slots and would take the head off again.
+            equipment.setArmorContents(createArmorStandArmor(originalArmor));
         }
+        ItemStack playerHead = new ItemStack(Material.PLAYER_HEAD);
+        SkullMeta skullMeta = (SkullMeta) playerHead.getItemMeta();
+        if (skullMeta != null) {
+            skullMeta.setOwningPlayer(player);
+            playerHead.setItemMeta(skullMeta);
+        }
+        equipment.setHelmet(playerHead);
         return armorStand;
     }
 
     /**
-     * Removes every body and hitbox the plugin left standing, found by the mark
-     * each of them carries.
+     * Removes every body, hitbox and name the plugin left standing, found by
+     * the mark each of them carries.
      */
     public void removeLeftoverEntities() {
         for (World world : Bukkit.getWorlds()) {
             for (Entity entity : world.getEntities()) {
-                if (entity.getPersistentDataContainer().has(bodyKey, PersistentDataType.INTEGER) ||
-                        entity.getPersistentDataContainer().has(hitboxKey, PersistentDataType.INTEGER)) {
+                PersistentDataContainer marks = entity.getPersistentDataContainer();
+                if (marks.has(bodyKey, PersistentDataType.INTEGER)
+                        || marks.has(hitboxKey, PersistentDataType.INTEGER)
+                        || marks.has(nameKey, PersistentDataType.INTEGER)) {
                     entity.remove();
                 }
             }

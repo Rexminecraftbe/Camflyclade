@@ -37,7 +37,7 @@ echo "say hallo" > ~/camfly-testenv/server/console.fifo
 | `crosscheck` | Denselben Quelltext noch einmal mit `javac` gegen `paper-api` übersetzen. |
 | `apicheck`   | Jeden Aufruf auf `org/bukkit`, `net/md_5`, `io/papermc` aus `target/classes` gegen `paper-api` auflösen. |
 | `server`     | Paper-Server holen, einrichten, starten, Konsole an eine FIFO hängen. |
-| `bot`        | `mineflayer` holen und auf Protokoll 26.2 flicken. |
+| `bot`        | `mineflayer` holen, auf Protokoll 26.2 flicken und seine Kollision wie im echten Client rechnen lassen. |
 | `tests`      | Der Bot spielt die Testfälle im laufenden Server durch. |
 
 ## Warum gegen beide APIs geprüft wird
@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **523** - alle 523 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **547** - alle 547 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -293,6 +293,32 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   `/execute if items entity @s armor.chest`. Das Plugin gibt sie über
   denselben Weg zurück wie das übrige Inventar - `getContents()` hält auch
   die Rüstungsslots -, und diese Probe hält fest, dass das so bleibt.
+* **Der Name über dem Körper ist ein TextDisplay und wird am Server
+  geprüft.** Was der Client daraus zeichnet, sieht der Bot nicht. Gefragt
+  wird mit `/execute as <Körper> at @s positioned ~ ~2.25 ~ if entity
+  @e[type=text_display,distance=..0.05]`, ob er genau über dem Körper steht,
+  und mit `/execute if data`, was er trägt. Die Höhe ist die des Körpers plus
+  0,275 - dort beginnt das Namensschild, das das Spiel selbst über ihn setzen
+  würde: 2,25 über dem Rüstungsständer, 2,075 über dem Mannequin.
+* **Gezählt wird über `say`**: Jede passende Entität sagt dieselbe Marke
+  einmal, und der Test zählt, wie oft sie im Chat steht. So steht fest, dass
+  der unsichtbare Körper ein einziges Mannequin ist und kein Rüstungsständer
+  mehr daneben steht. Die Antwort von `/execute if entity` ohne `run` („Test
+  passed, count: N“) kommt beim Bot ohne die Zahl an.
+* **Ein Kommando darf höchstens 256 Zeichen lang sein.** Ein längeres nimmt
+  der Server nicht an und wirft den Bot hinaus („Failed to decode packet
+  'serverbound/minecraft:chat_command'“) - danach fällt jede weitere Probe.
+  Der Namenstest fragt die Eigenschaften des TextDisplays deshalb einzeln ab.
+* **Vor dem Namenstest räumt der Abschnitt Rüstungsständer, Mannequins und
+  TextDisplays im Umkreis von acht Blöcken weg.** Er zählt sie um den Körper
+  herum, und die Testwelt bleibt zwischen zwei Läufen stehen.
+* **Dass der Name dem Körper folgt, prüft der Test am Rüstungsständer**: Er
+  wird per `/tp` einen Block versetzt. Der Cam-Modus läuft dabei weiter, auf
+  Bewegung prüft das Plugin das Mannequin, das in ihm steht.
+* **Einen Zeilenumbruch im Namen schreibt der Test doppelt geschützt** in die
+  Datei: `replace_option` reicht den Wert durch `re.subn`, das aus `\\`
+  einen einzelnen Rückstrich macht. In der Datei steht danach `\n` in
+  Anführungszeichen, und YAML macht daraus die neue Zeile.
 * **Der Happy Ghast steht mit `NoAI` und `NoGravity` still.** Sonst zöge er
   davon, und die Stelle, an der der Bot aufgesetzt wird, wäre jedes Mal eine
   andere. Er ist vier Blöcke hoch, sein Rücken liegt also vier über seinen
@@ -385,6 +411,16 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   von der Wand nichts weiß. Der Grenztest läuft deshalb mit `walk`: Vorwärts
   mit der Physik von mineflayer, die an jedem Block anstößt, den der Server
   dem Bot geschickt hat. Zu Fuß schafft er gut vier Blöcke in der Sekunde.
+* **Die Physik von mineflayer lief an manchen Stellen durch Blöcke.**
+  prismarine-physics setzt nach dem Anstoßen die Position aus der Kante der
+  Box zusammen; an manchen Koordinaten ragt die Box danach um einen
+  Rundungsfehler in den Block, und ihr Vergleich ohne Toleranz lässt den Bot
+  im nächsten Tick hindurch - etwa an einer Wand bei x=-2. Der Grenztest fiel
+  deshalb je nach Startplatz durch: vom Platz bei x=-8 aus lief der Bot durch
+  die Wand und wurde zurückgesetzt, einen Block weiter westlich nicht. Der
+  echte Client rechnet mit 1e-7 Toleranz (`VoxelShape.collideX/Y/Z`) und
+  bleibt stehen; der Schritt `bot` flickt `prismarine-physics/lib/aabb.js`
+  genauso.
 * **barrier und push-back unterscheiden sich am Zurücksetzen.** Stehen bleibt
   die Kamera in beiden Fällen an der Grenze; push-back setzt sie dabei aber
   immer wieder auf die letzte Position zurück. `walk` zählt diese
@@ -457,6 +493,18 @@ im Rahmen drehen, kein Fenster einer Kistenlore öffnen und kein Boot
 besteigen · Gegenprobe: ohne Cam-Modus geht
 jedes davon sehr wohl · das Inventar ist im Cam-Modus leer und danach wieder
 da · die Rüstung ist im Cam-Modus abgelegt und danach wieder angezogen · der
+Name steht als TextDisplay genau dort über dem Körper, wo sonst sein
+Namensschild hinge, trägt den Text aus `armorstand.name-format`, folgt dem
+Körper und wird mit ihm eingesammelt · der Körper selbst trägt keinen Namen
+mehr · unsichtbar ist der Körper bei beiden Typen ein einziges unsichtbares
+Mannequin, ohne Rüstungsständer, mit dem Namen darüber · voreingestellt ist
+der Name gelb, nicht durch Wände zu sehen, hat den Hintergrund eines
+Namensschilds, keinen Schatten, Größe 1 und 64 Blöcke Sichtweite · jeder
+Schalter unter `body.name` ändert genau das, und fest hell ist der Name
+dabei immer · eine unbekannte Farbe wird gemeldet und fällt auf gelb zurück ·
+`color` ersetzt einen Farbcode vorn in `name-format`, ein Farbcode weiter
+hinten gilt weiter · `\n` beginnt eine neue Zeile · `name-visible: false`
+setzt keinen Namen · der
 eigene Körper bleibt anklickbar und beendet damit den Cam-Modus · einen
 Sulfur Cube mit einem Block darin kann die Kamera weder wegschieben noch
 wegschlagen · Gegenprobe: ohne Cam-Modus geht beides · er steht nur fest,

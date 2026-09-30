@@ -13,6 +13,7 @@ import org.bukkit.Material;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.TextDisplay;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -114,6 +115,7 @@ public final class CameraMode {
         }
         // The mannequin is the entity that takes the hits.
         LivingEntity damageTarget = hitbox != null ? hitbox : body;
+        TextDisplay nameDisplay = bodies.spawnNameDisplay(player, body);
 
         GameMode originalGameMode = player.getGameMode();
         boolean originalAllowFlight = player.getAllowFlight();
@@ -150,7 +152,7 @@ public final class CameraMode {
         plugin.getMobTargeting().turnMobsFromPlayer(player, damageTarget);
 
         // *** Gespeichertes Inventar an CameraData übergeben ***
-        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects, originalRemainingAir));
+        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, nameDisplay, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects, originalRemainingAir));
         cameraPlayers.addBody(body.getUniqueId(), player.getUniqueId());
         if (hitbox != null) {
             cameraPlayers.addHitbox(hitbox.getUniqueId(), player.getUniqueId());
@@ -170,6 +172,9 @@ public final class CameraMode {
         // level and only one of them does anything.
         plugin.getBodyWatch().startBodyMovementCheck(player, damageTarget);
         plugin.getBodyWatch().startBodyPin(player, body, hitbox);
+        // After the pin: in the same tick the name then finds the body back in
+        // its spot already, instead of following it away for that one tick.
+        plugin.getBodyWatch().keepNameOverBody(player, body, nameDisplay);
         plugin.getMobTargeting().startMobTargeting(player, damageTarget);
         // Legt das Team bei Bedarf an und setzt alle Mitglieder neu - der
         // Spieler steht schon in cameraPlayers und kommt damit selbst hinein.
@@ -282,6 +287,10 @@ public final class CameraMode {
                 hitboxEquipment.setArmorContents(new ItemStack[4]);
             }
             hitbox.remove();
+        }
+        TextDisplay nameDisplay = cameraData.getNameDisplay();
+        if (nameDisplay != null) {
+            nameDisplay.remove();
         }
 
         for (Player other : Bukkit.getOnlinePlayers()) {

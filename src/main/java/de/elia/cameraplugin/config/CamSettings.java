@@ -79,6 +79,18 @@ public final class CamSettings {
      */
     private boolean bordersHold;
     private boolean bodyNameVisible;
+    /** Whether the name over the body shows through blocks, {@code body.name.through-walls}. */
+    private boolean nameThroughWalls;
+    /** How far away the name over the body is seen, in blocks, {@code body.name.view-distance}. */
+    private double nameViewDistance;
+    /** The colour of the name over the body, {@code body.name.color}. */
+    private ChatColor nameColor;
+    /** Whether the name over the body has the dark background of a name tag, {@code body.name.background}. */
+    private boolean nameBackground;
+    /** Whether the name over the body casts a shadow, {@code body.name.shadow}. */
+    private boolean nameShadowed;
+    /** The size of the name over the body, 1 being a name tag, {@code body.name.scale}. */
+    private double nameScale;
     private boolean bodyVisible;
     /** Whether the armour the body wears is drawn, {@code body.armor-visible}. */
     private boolean bodyArmorVisible;
@@ -221,6 +233,12 @@ public final class CamSettings {
         cameraHeadEnabled = config.getBoolean("camera-head.enabled", false);
         bodyType = resolveBodyType(config, config.getInt("body.type", BodyType.ARMOR_STAND.getId()));
         bodyNameVisible = config.getBoolean("body.name-visible", true);
+        nameThroughWalls = config.getBoolean("body.name.through-walls", false);
+        nameViewDistance = config.getDouble("body.name.view-distance", 64.0, 1.0);
+        nameColor = resolveNameColor(config);
+        nameBackground = config.getBoolean("body.name.background", true);
+        nameShadowed = config.getBoolean("body.name.shadow", false);
+        nameScale = config.getDouble("body.name.scale", 1.0, 0.1, 10.0);
         bodyVisible = config.getBoolean("body.visible", true);
         bodyArmorVisible = config.getBoolean("body.armor-visible", true);
         movementSensitivity = resolveMovementSensitivity(config,
@@ -454,6 +472,30 @@ public final class CamSettings {
     }
 
     /**
+     * Reads {@code body.name.color}: one of the sixteen colours of the chat,
+     * by the name the game gives it, e.g. {@code yellow} or
+     * {@code dark_green}. Capitals and spaces do not count. Formatting such
+     * as bold is no colour and is turned away with the rest.
+     */
+    private static ChatColor resolveNameColor(ConfigReader config) {
+        String raw = config.getString("body.name.color", "yellow");
+        String name = raw.trim().toUpperCase(Locale.ROOT).replace(' ', '_');
+        for (ChatColor color : ChatColor.values()) {
+            if (color.isColor() && color.name().equals(name)) {
+                return color;
+            }
+        }
+        StringBuilder allowed = new StringBuilder();
+        for (ChatColor color : ChatColor.values()) {
+            if (color.isColor()) {
+                allowed.append(allowed.length() == 0 ? "" : ", ").append(color.name().toLowerCase(Locale.ROOT));
+            }
+        }
+        config.warnUnknownValue("body.name.color", raw, allowed.toString(), "yellow");
+        return ChatColor.YELLOW;
+    }
+
+    /**
      * Turns the number configured in {@code body.type} into a body type and
      * falls back to the armour stand when the value is unknown.
      */
@@ -471,9 +513,9 @@ public final class CamSettings {
      * Turns the number configured in {@code body.movement-sensitivity} into a
      * level and falls back to 1 when the value is unknown.
      *
-     * <p>Level 2 is cut back to level 1 for an armour stand body. That is a
-     * valid setting in the wrong combination and not a mistake, so it is
-     * described in the config file instead of being logged.</p>
+     * <p>Level 2 is cut back to level 1 for the visible armour stand of type 1.
+     * That is a valid setting in the wrong combination and not a mistake, so
+     * it is described in the config file instead of being logged.</p>
      */
     private MovementSensitivity resolveMovementSensitivity(ConfigReader config, int configuredId) {
         MovementSensitivity requested = MovementSensitivity.fromId(configuredId);
@@ -482,7 +524,7 @@ public final class CamSettings {
                     String.valueOf(MovementSensitivity.NORMAL.getId()));
             requested = MovementSensitivity.NORMAL;
         }
-        return requested.forBodyType(bodyType);
+        return requested.forBody(bodyType.isMannequinBody(bodyVisible));
     }
 
     // ------------------------------------------------------------ camera-mode
@@ -575,6 +617,31 @@ public final class CamSettings {
 
     public boolean isBodyNameVisible() {
         return bodyNameVisible;
+    }
+
+    public boolean isNameThroughWalls() {
+        return nameThroughWalls;
+    }
+
+    /** How far away the name over the body is seen, in blocks. */
+    public double getNameViewDistance() {
+        return nameViewDistance;
+    }
+
+    public ChatColor getNameColor() {
+        return nameColor;
+    }
+
+    public boolean hasNameBackground() {
+        return nameBackground;
+    }
+
+    public boolean isNameShadowed() {
+        return nameShadowed;
+    }
+
+    public double getNameScale() {
+        return nameScale;
     }
 
     public boolean isBodyVisible() {

@@ -9,7 +9,8 @@ Das Skript macht alles, was sonst von Hand gemacht wurde:
   3. Zusaetzlich gegen paper-api uebersetzen (die APIs sind nicht deckungsgleich)
   4. ApiCheck: jeden Bukkit-Aufruf im fertigen Jar gegen paper-api aufloesen
   5. Paper-Testserver holen, einrichten und starten (mit FIFO fuer die Konsole)
-  6. mineflayer holen, auf Protokoll 26.2 flicken, Bot verbinden
+  6. mineflayer holen, auf Protokoll 26.2 flicken, seine Kollision wie im
+     echten Client rechnen lassen, Bot verbinden
   7. Tests im laufenden Spiel fahren
   8. Aufraeumen: Server und Bot beenden
 
@@ -73,7 +74,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 523 Methoden- und Feldzugriffe. Alle 523 gibt
+# Dieser Pruefer zaehlt zurzeit 547 Methoden- und Feldzugriffe. Alle 547 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -1226,6 +1227,44 @@ def patch_mineflayer(env):
     return True
 
 
+# Um wie viel eine Box in einen Block ragen darf und trotzdem noch davor
+# steht, in Bloecken. So rechnet der echte Client (VoxelShape.collideX/Y/Z).
+KOLLISIONS_TOLERANZ = "1e-7"
+
+
+def patch_physics(env):
+    """Die Kollision von prismarine-physics so rechnen lassen wie der Client.
+
+    Nach dem Anstossen setzt die Bibliothek die Position aus der Kante der
+    Box zusammen, und an manchen Koordinaten ragt die Box danach um einen
+    Rundungsfehler in den Block, etwa an einer Wand bei x=-2. Ihr Vergleich
+    kennt keine Toleranz, haelt den Block damit fuer schon betreten und
+    laesst den Bot im naechsten Tick hindurch. Der echte Client zieht 1e-7 ab
+    und bleibt stehen - so auch der Bot nach diesem Flicken.
+    """
+    aabb_js = env.bot / "node_modules" / "prismarine-physics" / "lib" / "aabb.js"
+    if not aabb_js.exists():
+        FIND.problem("prismarine-physics/lib/aabb.js nicht gefunden - der Bot "
+                     "laeuft womoeglich durch Bloecke")
+        return False
+    text = aabb_js.read_text(encoding="utf-8")
+    if KOLLISIONS_TOLERANZ in text:
+        return True
+    patched = text
+    for achse in "XYZ":
+        patched = patched.replace(f"other.max{achse} <= this.min{achse}",
+                                  f"other.max{achse} - {KOLLISIONS_TOLERANZ} <= this.min{achse}")
+        patched = patched.replace(f"other.min{achse} >= this.max{achse}",
+                                  f"other.min{achse} + {KOLLISIONS_TOLERANZ} >= this.max{achse}")
+    if patched.count(KOLLISIONS_TOLERANZ) != 6:
+        FIND.problem("prismarine-physics/lib/aabb.js hat nicht die erwarteten sechs "
+                     "Vergleiche - der Bot laeuft womoeglich durch Bloecke")
+        return False
+    aabb_js.write_text(patched, encoding="utf-8")
+    Log.detail(f"prismarine-physics rechnet die Kollision mit {KOLLISIONS_TOLERANZ} Toleranz")
+    return True
+
+
 def step_bot(env):
     Log.step("7. Bot (mineflayer)")
     env.bot.mkdir(parents=True, exist_ok=True)
@@ -1238,7 +1277,7 @@ def step_bot(env):
             cwd=env.bot, timeout=1200)
     else:
         Log.detail("mineflayer liegt schon im Arbeitsordner")
-    ok = patch_mineflayer(env)
+    ok = patch_mineflayer(env) and patch_physics(env)
     (env.bot / "bot.js").write_text(BOT_JS, encoding="utf-8")
     FIND.test("mineflayer bereit", ok, f"{MC_VERSION} / Protokoll {PROTOCOL_VERSION}")
     return ok
@@ -2475,6 +2514,256 @@ def armor_checks(env, bot):
             time.sleep(0.5)
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Ruestungstest: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Der Name ueber dem Koerper
+# ---------------------------------------------------------------------------
+
+# Das TextDisplay, das den Namen traegt. Es steht gut zwei Bloecke ueber den
+# Fuessen des Koerpers, und der Bot steht zu Beginn des Cam-Modus genau dort.
+NAME = "@e[type=minecraft:text_display,distance=..4,limit=1,sort=nearest]"
+
+# Wie hoch der Name ueber den Fuessen steht: Hoehe des Koerpers plus 0,275 -
+# da beginnt das Namensschild, das das Spiel selbst ueber ihn setzen wuerde.
+NAME_UEBER_STAENDER = 1.975 + 0.275
+NAME_UEBER_MANNEQUIN = 1.8 + 0.275
+
+# Die Voreinstellungen unter body, auf die der Abschnitt am Ende zurueckstellt.
+NAME_VOREINSTELLUNG = [
+    ("type", "1"), ("visible", "true"), ("name-visible", "true"),
+    ("color", "yellow"), ("through-walls", "false"), ("view-distance", "64"),
+    ("background", "true"), ("shadow", "false"), ("scale", "1.0"),
+    ("armorstand.name-format", '"{player}\'s Body"'),
+]
+
+
+def name_ueber(bot, art, hoehe):
+    """Ob der Name genau ueber der naechsten Entitaet dieser Art steht.
+
+    Gefragt wird von ihren Fuessen aus, um `hoehe` hinauf: Dort muss das
+    TextDisplay stehen, auf ein paar Hundertstel genau.
+    """
+    return server_says(bot, f"/execute as @e[type=minecraft:{art},distance=..3,limit=1,"
+                            f"sort=nearest] at @s positioned ~ ~{hoehe} ~ if entity "
+                            f"@e[type=minecraft:text_display,distance=..0.05] "
+                            f"run say {{marke}}")
+
+
+def anzahl(bot, auswahl):
+    """Wie viele Entitaeten auf diese Auswahl passen, vom Server gezaehlt.
+
+    Jede von ihnen sagt dieselbe Marke einmal, und gezaehlt wird, wie oft sie
+    im Chat steht - derselbe Weg wie bei server_says. Die Antwort von
+    /execute if entity ohne run ("Test passed, count: N") kommt beim Bot
+    nicht mit der Zahl an.
+    """
+    _server_yes_zaehler[0] += 1
+    marke = f"{SERVER_YES}-{_server_yes_zaehler[0]}"
+    since = bot.mark()
+    bot.chat(f"/execute as {auswahl} run say {marke}")
+    time.sleep(1.5)
+    gesagt = bot.call("messages", since=since).get("messages", [])
+    return sum(1 for m in gesagt if marke in (m.get("text") or ""))
+
+
+def daten_von(bot, auswahl, pfad):
+    """Was /data get ueber einen Wert einer Entitaet sagt, als Text."""
+    since = bot.mark()
+    bot.chat(f"/data get entity {auswahl} {pfad}")
+    hit = bot.expect("entity data", since, 4000)
+    return strip_colors(hit["text"]) if hit else None
+
+
+def name_da(bot):
+    """Ob ueberhaupt ein Name in der Naehe steht."""
+    return server_says(bot, "/execute if entity @e[type=minecraft:text_display,"
+                            "distance=..6] run say {marke}")
+
+
+def name_checks(env, bot):
+    """Der Name ueber dem Koerper: ein TextDisplay fuer sich.
+
+    Er ist nicht mehr das Namensschild des Koerpers, sondern eine eigene
+    Entitaet ohne Hitbox, die ueber ihm steht. Nur so lassen sich die
+    Schalter unter body.name umsetzen - Farbe, durch Waende, Sichtweite,
+    Hintergrund, Schatten, Groesse -, und nur so behaelt ein unsichtbarer
+    Koerper seinen Namen, ohne dass ein Ruestungsstaender ihn tragen muss:
+    Unsichtbar ist der Koerper bei beiden Typen ein einziges Mannequin.
+
+    Geprueft wird am Server, mit /execute und /data: wo der Name steht, was
+    er traegt und welche Entitaeten den Koerper bilden. Was der Client daraus
+    zeichnet, sieht der Bot nicht.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Namenstest aus", cam_off(bot), ""):
+        return
+    pos = bot.server_pos()
+    if not FIND.test("Standort fuer den Namenstest lesbar", pos is not None, str(pos)):
+        return
+    bx, by, bz = (_floor(pos[0]), _floor(pos[1] + 0.5), _floor(pos[2]))
+    Log.detail(f"Testplatz fuer den Namen bei {(bx, by, bz)}")
+    # Der Abschnitt zaehlt die Ruestungsstaender und Mannequins um den Koerper
+    # herum. Der Cam-Modus ist aus, einen Koerper gibt es also gerade nicht:
+    # Was hier steht, ist aus einem frueheren, abgebrochenen Lauf uebrig.
+    for art in ("armor_stand", "mannequin", "text_display"):
+        bot.chat(f"/kill @e[type=minecraft:{art},distance=..8]")
+    time.sleep(0.5)
+
+    def start():
+        hinstellen(bot, bx + 0.5, by, bz + 0.5)
+        return cam_on(bot)
+
+    try:
+        # --- Voreingestellt: Typ 1, sichtbar ---
+        if not FIND.test("/cam startet fuer den Namenstest", start(), ""):
+            return
+        FIND.test("Der Name steht als TextDisplay ueber dem Ruestungsstaender, "
+                  "wo sonst sein Namensschild hinge",
+                  name_ueber(bot, "armor_stand", NAME_UEBER_STAENDER), "")
+        text = daten_von(bot, NAME, "text")
+        FIND.test("Der Name traegt den Text aus armorstand.name-format",
+                  bool(text) and f"{BOT_NAME}'s Body" in text, text or "keine Antwort")
+        FIND.test("Voreingestellt ist der Name gelb",
+                  bool(text) and 'color: "yellow"' in text, text or "keine Antwort")
+        eigener = server_says(bot, "/execute if data entity @e[type=minecraft:armor_stand,"
+                                   "distance=..3,limit=1,sort=nearest] CustomName "
+                                   "run say {marke}")
+        FIND.test("Der Ruestungsstaender selbst traegt keinen Namen mehr", not eigener,
+                  "" if not eigener else "er hat noch einen CustomName")
+        # Die Voreinstellung wird nachgesehen und nicht gesetzt: So faellt
+        # auf, wenn in der ausgelieferten Datei etwas anderes steht. Jede
+        # Eigenschaft wird fuer sich gefragt - ein Kommando ueber 256 Zeichen
+        # nimmt der Server nicht an und wirft den Bot hinaus.
+        for name, nbt in (("Voreingestellt ist der Name nicht durch Waende zu sehen",
+                           "{see_through:0b}"),
+                          ("Voreingestellt hat er den Hintergrund eines Namensschilds",
+                           "{default_background:1b}"),
+                          ("Voreingestellt hat er keinen Schatten", "{shadow:0b}"),
+                          ("Voreingestellt hat er die Groesse 1",
+                           "{transformation:{scale:[1.0f,1.0f,1.0f]}}"),
+                          ("Voreingestellt ist er 64 Bloecke weit zu sehen", "{view_range:1.0f}"),
+                          ("Voreingestellt ist er immer hell", "{brightness:{block:15,sky:15}}"),
+                          ("Er dreht sich wie ein Namensschild zum Betrachter",
+                           '{billboard:"center"}')):
+            FIND.test(name, nbt_frage(bot, NAME, nbt), "")
+
+        # Der Ruestungsstaender wird von Hand versetzt. Der Cam-Modus laeuft
+        # dabei weiter: Auf Bewegung prueft er das Mannequin, das in ihm steht.
+        bot.chat("/execute as @e[type=minecraft:armor_stand,distance=..3,limit=1,"
+                 "sort=nearest] at @s run tp @s ~1 ~ ~")
+        time.sleep(1.0)
+        FIND.test("Der Name folgt dem Koerper an seine neue Stelle",
+                  name_ueber(bot, "armor_stand", NAME_UEBER_STAENDER), "")
+        cam_off(bot)
+        time.sleep(1.0)
+        FIND.test("Der Name wird mit dem Koerper eingesammelt", not name_da(bot), "")
+
+        # --- Unsichtbar: bei beiden Typen ein einziges Mannequin ---
+        for typ in ("1", "2"):
+            set_options(env, [("type", typ), ("visible", "false")])
+            if not FIND.test(f"/cam startet mit type: {typ}, visible: false", start(), ""):
+                continue
+            staender = anzahl(bot, "@e[type=minecraft:armor_stand,distance=..3]")
+            puppen = anzahl(bot, "@e[type=minecraft:mannequin,distance=..3]")
+            FIND.test(f"Unsichtbar ist der Koerper von type: {typ} ein einziges Mannequin",
+                      staender == 0 and puppen == 1,
+                      f"{staender} Ruestungsstaender, {puppen} Mannequins")
+            unsichtbar = nbt_frage(bot, "@e[type=minecraft:mannequin,distance=..3,limit=1,"
+                                        "sort=nearest]",
+                                   '{active_effects:[{id:"minecraft:invisibility"}]}')
+            FIND.test(f"Das Mannequin von type: {typ} ist unsichtbar", unsichtbar, "")
+            FIND.test(f"Unsichtbar steht der Name von type: {typ} ueber dem Mannequin",
+                      name_ueber(bot, "mannequin", NAME_UEBER_MANNEQUIN), "")
+            cam_off(bot)
+            time.sleep(1.0)
+            FIND.test(f"Unsichtbar wird bei type: {typ} alles eingesammelt",
+                      not name_da(bot) and anzahl(bot, "@e[type=minecraft:mannequin,"
+                                                       "distance=..6]") == 0, "")
+
+        # --- Sichtbares Mannequin: der Name ueber ihm, nicht an ihm ---
+        set_options(env, [("type", "2"), ("visible", "true")])
+        if FIND.test("/cam startet mit type: 2", start(), ""):
+            FIND.test("Ueber dem sichtbaren Mannequin steht der Name als TextDisplay",
+                      name_ueber(bot, "mannequin", NAME_UEBER_MANNEQUIN), "")
+            eigener = server_says(bot, "/execute if data entity @e[type=minecraft:mannequin,"
+                                       "distance=..3,limit=1,sort=nearest] CustomName "
+                                       "run say {marke}")
+            FIND.test("Das Mannequin selbst traegt keinen Namen", not eigener,
+                      "" if not eigener else "es hat einen CustomName")
+            cam_off(bot)
+            time.sleep(1.0)
+
+        # --- Die Schalter unter body.name ---
+        set_options(env, [("type", "1"), ("color", "red"), ("through-walls", "true"),
+                          ("view-distance", "32"), ("background", "false"), ("shadow", "true"),
+                          ("scale", "2.0")])
+        if FIND.test("/cam startet mit geaenderten Schaltern fuer den Namen", start(), ""):
+            text = daten_von(bot, NAME, "text")
+            FIND.test("color: red faerbt den Namen rot",
+                      bool(text) and 'color: "red"' in text and '"yellow"' not in text,
+                      text or "keine Antwort")
+            for name, nbt in (("through-walls: true zeigt ihn durch Waende", "{see_through:1b}"),
+                              ("view-distance: 32 halbiert die Sichtweite", "{view_range:0.5f}"),
+                              ("background: false nimmt den Hintergrund weg",
+                               "{default_background:0b,background:0}"),
+                              ("shadow: true gibt ihm einen Schatten", "{shadow:1b}"),
+                              ("scale: 2.0 macht ihn doppelt so gross",
+                               "{transformation:{scale:[2.0f,2.0f,2.0f]}}"),
+                              # Durch Waende zeichnet der Client ihn ohnehin voll hell;
+                              # fest hell ist er deshalb auch ohne.
+                              ("Er bleibt auch dabei fest hell", "{brightness:{block:15,sky:15}}")):
+                FIND.test(name, nbt_frage(bot, NAME, nbt), "")
+            FIND.test("Auch doppelt so gross steht er auf derselben Hoehe",
+                      name_ueber(bot, "armor_stand", NAME_UEBER_STAENDER), "")
+            cam_off(bot)
+            time.sleep(1.0)
+
+        # Etwas, das keine Farbe ist, wird gemeldet und faellt auf gelb zurueck.
+        set_option(env, "color", "blau")
+        meldung = any("Unbekannter Wert" in zeile and "body.name.color" in zeile
+                      for zeile in server_log(env).splitlines())
+        FIND.test("Eine unbekannte Farbe wird gemeldet", meldung,
+                  "" if meldung else "keine Meldung im Server-Log")
+        if start():
+            text = daten_von(bot, NAME, "text")
+            FIND.test("Eine unbekannte Farbe faellt auf gelb zurueck",
+                      bool(text) and 'color: "yellow"' in text, text or "keine Antwort")
+            cam_off(bot)
+            time.sleep(1.0)
+
+        # --- Mehrere Zeilen, und ein Farbcode vorn im Text ---
+        # So stand der Name frueher in der Datei: &e vorn. color ersetzt ihn,
+        # der Farbcode der zweiten Zeile bleibt.
+        # Doppelt geschuetzt: replace_option reicht den Wert durch re.subn,
+        # das aus \\ einen einzelnen Rueckstrich macht. In der Datei steht
+        # danach \n in Anfuehrungszeichen, und YAML macht daraus die neue Zeile.
+        set_options(env, [("color", "red"),
+                          ("armorstand.name-format", '"&e{player}\'s Body\\\\n&7Kamera"')])
+        if FIND.test("/cam startet mit einem Namen ueber zwei Zeilen", start(), ""):
+            # /data zeigt den Zeilenumbruch als \n, oder er steht selbst da.
+            text = daten_von(bot, NAME, "text")
+            FIND.test("\\n im Namen beginnt eine neue Zeile",
+                      bool(text) and ("\\n" in text or "\n" in text) and "Kamera" in text,
+                      text or "keine Antwort")
+            FIND.test("color ersetzt den Farbcode vorn im Text, weiter hinten gilt der eigene",
+                      bool(text) and 'color: "red"' in text and 'color: "gray"' in text
+                      and '"yellow"' not in text, text or "keine Antwort")
+            cam_off(bot)
+            time.sleep(1.0)
+
+        # --- name-visible: false ---
+        set_option(env, "name-visible", "false")
+        if FIND.test("/cam startet ohne Namen", start(), ""):
+            FIND.test("name-visible: false setzt keinen Namen", not name_da(bot), "")
+            cam_off(bot)
+            time.sleep(1.0)
+    finally:
+        try:
+            cam_off(bot)
+            set_options(env, NAME_VOREINSTELLUNG)
+            hinstellen(bot, bx + 0.5, by, bz + 0.5)
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Namenstest: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -3983,6 +4272,9 @@ def step_tests(env):
 
         # --- Die Ruestung im Cam-Modus ---
         armor_checks(env, bot)
+
+        # --- Der Name ueber dem Koerper ---
+        name_checks(env, bot)
 
         # --- Der Spielmodus, in dem der Cam-Modus laeuft ---
         gamemode_checks(env, bot)

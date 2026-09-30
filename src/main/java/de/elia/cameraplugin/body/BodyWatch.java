@@ -8,13 +8,15 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.TextDisplay;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
 /**
  * Watches the body while camera mode runs, after
  * {@code body.movement-sensitivity}: on level 0 it is held in its spot, on the
- * levels above that camera mode ends as soon as it leaves it.
+ * levels above that camera mode ends as soon as it leaves it. Its name is kept
+ * standing over it either way.
  */
 public final class BodyWatch {
 
@@ -30,11 +32,11 @@ public final class BodyWatch {
 
     /**
      * Watches the mannequin while camera mode is running and ends the mode as
-     * soon as it leaves its spot. Both body types run through this one check,
-     * because both have a mannequin: with body type 1 it is the invisible one
-     * standing in the armour stand, with type 2 the visible body itself. It is
-     * the entity that takes the hits in either case, so gravity, water and
-     * pistons are noticed on the same entity for both types.
+     * soon as it leaves its spot. Every body runs through this one check,
+     * because every body has a mannequin: behind the visible armour stand of
+     * type 1 it is the invisible one standing in it, otherwise it is the body
+     * itself. It is the entity that takes the hits in either case, so gravity,
+     * water and pistons are noticed on the same entity for both types.
      *
      * <p>Deliberately checked by the scheduler and not through an event: the
      * mannequin has no AI, so {@code EntityMoveEvent} does not fire for it, and
@@ -103,6 +105,41 @@ public final class BodyWatch {
                 pinToSpot(body, anchor);
                 if (hitbox != null && !hitbox.isDead()) {
                     pinToSpot(hitbox, anchor);
+                }
+            }
+        }.runTaskTimer(plugin, 1L, 1L);
+    }
+
+    /**
+     * Keeps the name standing over the body for as long as camera mode runs.
+     *
+     * <p>A text display does not move by itself: gravity, water and pistons all
+     * pass it by. Whatever carries the body off - falling into place right
+     * after the start, or being moved less than {@code body.move-threshold}
+     * and so without ending camera mode - would leave the name hanging where
+     * the body used to be. It is therefore put back over the body whenever the
+     * two have come apart.</p>
+     *
+     * @param name the name over the body, {@code null} when it carries none
+     */
+    public void keepNameOverBody(Player player, LivingEntity body, TextDisplay name) {
+        if (name == null) {
+            return;
+        }
+        BodySpawner bodies = plugin.getBodySpawner();
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (!cameraPlayers.contains(player.getUniqueId()) || !player.isOnline() || body.isDead()
+                        || !name.isValid()) {
+                    this.cancel();
+                    return;
+                }
+                Location target = bodies.nameLocation(body);
+                Location current = name.getLocation();
+                if (!current.getWorld().equals(target.getWorld())
+                        || current.distanceSquared(target) > CamSettings.MIN_MOVE_THRESHOLD * CamSettings.MIN_MOVE_THRESHOLD) {
+                    name.teleport(target);
                 }
             }
         }.runTaskTimer(plugin, 1L, 1L);
