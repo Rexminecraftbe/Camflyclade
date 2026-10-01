@@ -319,6 +319,36 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   Datei: `replace_option` reicht den Wert durch `re.subn`, das aus `\\`
   einen einzelnen Rückstrich macht. In der Datei steht danach `\n` in
   Anführungszeichen, und YAML macht daraus die neue Zeile.
+* **Die Schalter des Namens gibt es zweimal**, unter `body.name` und unter
+  `camera-mode.name`. Der Namenstest und der Test des Spielernamens setzen sie
+  deshalb mit Abschnitt, wie `nether`. Der Namenstest schaltet den Namen über
+  dem Kamera-Spieler für sich ab: Zu Beginn des Cam-Modus steht der Bot genau
+  über seinem Körper, und `NAME` nimmt das nächste TextDisplay.
+* **Den Namen über dem Kamera-Spieler sucht der Test an der Stelle**, nicht an
+  der Art: 2,075 über den Füßen des Bots, die Höhe eines Spielers plus 0,275.
+  Am Server mit `/execute at`, in den Clients über die Position der Entitäten
+  - der Bot liest die Entitätsarten mit den Daten von 26.1, und das
+  TextDisplay liegt hinter dem Sulfur Cube, also um eins verrutscht.
+* **Ob jemand den Spielernamen sieht, fragt der Test die Clients.** Der Bot
+  selbst darf ihn nicht kennen, `CamFlyZuschauer` ohne Cam-Modus schon; geht
+  der Zuschauer selbst in den Cam-Modus, verschwindet er bei ihm wieder - er
+  sieht dann das Namensschild durch die Unsichtbarkeit.
+* **Die Reise mit dem Spielernamen geht durch ein eigenes Portal**, sechs
+  Blöcke neben dem Testplatz. Dafür müssen beide `nether` auf `true`, unter
+  `portals` und unter `cam-area.dimensions` - mit nur einem meldet das Plugin
+  „cam mode is not allowed in nether“, und der Bot bleibt im Portal stehen.
+  Hinterher räumt der Abschnitt beide Seiten wieder ab: Drüben bliebe sonst
+  das Portal stehen, das der Server gebaut oder genommen hat, und der
+  Portaltest hielte es für seines.
+* **Ein Passagier verträgt sich nicht mit dem Cam-Modus.** Ausprobiert, bevor
+  der Spielername ein TextDisplay wurde, das jeden Tick nachgesetzt wird: Saß
+  es als Passagier auf dem Spieler, lehnte Spigot 26.2 jeden
+  `player.teleport()` ab - nach `/cam` blieb der Spieler in der Luft hängen
+  statt an seinem Körper, und aus dem Nether kam er gar nicht mehr zurück.
+  Paper nahm den Passagier in derselben Welt mit, warf ihn aber am Portal und
+  bei `/tp` in eine andere Welt ab; der Name blieb am Portal in der Overworld
+  stehen. Der Test fragt deshalb mit `/execute on passengers`, dass er nicht
+  aufsitzt.
 * **Der Happy Ghast steht mit `NoAI` und `NoGravity` still.** Sonst zöge er
   davon, und die Stelle, an der der Bot aufgesetzt wird, wäre jedes Mal eine
   andere. Er ist vier Blöcke hoch, sein Rücken liegt also vier über seinen
@@ -504,7 +534,17 @@ Schalter unter `body.name` ändert genau das, und fest hell ist der Name
 dabei immer · eine unbekannte Farbe wird gemeldet und fällt auf gelb zurück ·
 `color` ersetzt einen Farbcode vorn in `name-format`, ein Farbcode weiter
 hinten gilt weiter · `\n` beginnt eine neue Zeile · `name-visible: false`
-setzt keinen Namen · der
+setzt keinen Namen · über dem unsichtbaren Kamera-Spieler steht sein Name als
+TextDisplay, wo sonst sein Namensschild hinge, trägt den Text aus
+`player.name-format`, sitzt nicht als Passagier auf ihm und folgt ihm im Flug ·
+ein Spieler ohne Cam-Modus sieht ihn, der Kamera-Spieler selbst und andere
+Kamera-Spieler nicht · voreingestellt ist er weiß, sonst wie der Name über dem
+Körper · jeder Schalter unter `camera-mode.name` ändert genau das, ohne den
+Namen über dem Körper anzufassen · eine unbekannte Farbe wird gemeldet und
+fällt auf weiß zurück · mit `name-visible: false`, `allow_invisibility_potion:
+false` und `player_visibility_mode: cam` oder `false` gibt es keinen · durch
+das Netherportal steht er drüben wieder über ihm, und das Beenden bringt ihn
+aus dem Nether zurück zu seinem Körper · der
 eigene Körper bleibt anklickbar und beendet damit den Cam-Modus · einen
 Sulfur Cube mit einem Block darin kann die Kamera weder wegschieben noch
 wegschlagen · Gegenprobe: ohne Cam-Modus geht beides · er steht nur fest,

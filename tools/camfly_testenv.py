@@ -2530,10 +2530,13 @@ NAME_UEBER_STAENDER = 1.975 + 0.275
 NAME_UEBER_MANNEQUIN = 1.8 + 0.275
 
 # Die Voreinstellungen unter body, auf die der Abschnitt am Ende zurueckstellt.
+# Die Schalter des Namens stehen mit demselben Namen auch unter camera-mode,
+# fuer den Namen ueber dem Kamera-Spieler - deshalb mit Abschnitt.
 NAME_VOREINSTELLUNG = [
-    ("type", "1"), ("visible", "true"), ("name-visible", "true"),
-    ("color", "yellow"), ("through-walls", "false"), ("view-distance", "64"),
-    ("background", "true"), ("shadow", "false"), ("scale", "1.0"),
+    ("type", "1"), ("visible", "true"), ("name-visible", "true", "body"),
+    ("color", "yellow", "body"), ("through-walls", "false", "body"),
+    ("view-distance", "64", "body"), ("background", "true", "body"),
+    ("shadow", "false", "body"), ("scale", "1.0", "body"),
     ("armorstand.name-format", '"{player}\'s Body"'),
 ]
 
@@ -2608,6 +2611,11 @@ def name_checks(env, bot):
     for art in ("armor_stand", "mannequin", "text_display"):
         bot.chat(f"/kill @e[type=minecraft:{art},distance=..8]")
     time.sleep(0.5)
+    # Der Name ueber dem Kamera-Spieler bleibt hier aus. Zu Beginn des
+    # Cam-Modus steht der Bot genau ueber seinem Koerper, sein eigener Name
+    # stuende also gleich neben dem des Koerpers - und NAME nimmt das naechste
+    # TextDisplay. Er hat einen Abschnitt fuer sich, spielername_checks.
+    set_option(env, "name-visible", "false", "camera-mode")
 
     def start():
         hinstellen(bot, bx + 0.5, by, bz + 0.5)
@@ -2694,9 +2702,9 @@ def name_checks(env, bot):
             time.sleep(1.0)
 
         # --- Die Schalter unter body.name ---
-        set_options(env, [("type", "1"), ("color", "red"), ("through-walls", "true"),
-                          ("view-distance", "32"), ("background", "false"), ("shadow", "true"),
-                          ("scale", "2.0")])
+        set_options(env, [("type", "1"), ("color", "red", "body"), ("through-walls", "true", "body"),
+                          ("view-distance", "32", "body"), ("background", "false", "body"),
+                          ("shadow", "true", "body"), ("scale", "2.0", "body")])
         if FIND.test("/cam startet mit geaenderten Schaltern fuer den Namen", start(), ""):
             text = daten_von(bot, NAME, "text")
             FIND.test("color: red faerbt den Namen rot",
@@ -2719,7 +2727,7 @@ def name_checks(env, bot):
             time.sleep(1.0)
 
         # Etwas, das keine Farbe ist, wird gemeldet und faellt auf gelb zurueck.
-        set_option(env, "color", "blau")
+        set_option(env, "color", "blau", "body")
         meldung = any("Unbekannter Wert" in zeile and "body.name.color" in zeile
                       for zeile in server_log(env).splitlines())
         FIND.test("Eine unbekannte Farbe wird gemeldet", meldung,
@@ -2737,7 +2745,7 @@ def name_checks(env, bot):
         # Doppelt geschuetzt: replace_option reicht den Wert durch re.subn,
         # das aus \\ einen einzelnen Rueckstrich macht. In der Datei steht
         # danach \n in Anfuehrungszeichen, und YAML macht daraus die neue Zeile.
-        set_options(env, [("color", "red"),
+        set_options(env, [("color", "red", "body"),
                           ("armorstand.name-format", '"&e{player}\'s Body\\\\n&7Kamera"')])
         if FIND.test("/cam startet mit einem Namen ueber zwei Zeilen", start(), ""):
             # /data zeigt den Zeilenumbruch als \n, oder er steht selbst da.
@@ -2752,7 +2760,7 @@ def name_checks(env, bot):
             time.sleep(1.0)
 
         # --- name-visible: false ---
-        set_option(env, "name-visible", "false")
+        set_option(env, "name-visible", "false", "body")
         if FIND.test("/cam startet ohne Namen", start(), ""):
             FIND.test("name-visible: false setzt keinen Namen", not name_da(bot), "")
             cam_off(bot)
@@ -2760,10 +2768,278 @@ def name_checks(env, bot):
     finally:
         try:
             cam_off(bot)
-            set_options(env, NAME_VOREINSTELLUNG)
+            set_options(env, NAME_VOREINSTELLUNG + [("name-visible", "true", "camera-mode")])
             hinstellen(bot, bx + 0.5, by, bz + 0.5)
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Namenstest: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Der Name ueber dem Kamera-Spieler
+# ---------------------------------------------------------------------------
+
+# Wie hoch sein Name ueber seinen Fuessen steht: die Hoehe eines Spielers plus
+# 0,275, wie beim Koerper. Dort beginnt das Namensschild, das das Spiel ueber
+# ihn setzen wuerde, waere er nicht unsichtbar.
+NAME_UEBER_SPIELER = "2.075"
+
+# Die Voreinstellungen, auf die der Abschnitt am Ende zurueckstellt. Die
+# Schalter des Namens heissen unter body genauso, deshalb mit Abschnitt.
+SPIELERNAME_VOREINSTELLUNG = [
+    ("name-visible", "true", "camera-mode"), ("color", "white", "camera-mode"),
+    ("through-walls", "false", "camera-mode"), ("view-distance", "64", "camera-mode"),
+    ("background", "true", "camera-mode"), ("shadow", "false", "camera-mode"),
+    ("scale", "1.0", "camera-mode"), ("player_visibility_mode", "true"),
+    ("allow_invisibility_potion", "true"), ("nether", "false", "portals"),
+    ("nether", "false", "cam-area"), ("player.name-format", '"{player}"'),
+]
+
+
+def spielername_frage(bot, nbt=""):
+    """Ob genau ueber dem Kopf des Bots ein TextDisplay steht, auf ein paar
+    Hundertstel genau - mit nbt auch, ob seine Daten diesen Ausschnitt
+    enthalten. Gefragt wird am Server; die Klammern des NBT werden fuer
+    server_says verdoppelt."""
+    auswahl = "@e[type=minecraft:text_display,distance=..0.05"
+    if nbt:
+        auswahl += ",nbt=" + nbt.replace("{", "{{").replace("}", "}}")
+    return server_says(bot, f"/execute at {BOT_NAME} positioned ~ ~{NAME_UEBER_SPIELER} ~ "
+                            f"if entity {auswahl}] run say {{marke}}")
+
+
+def spielername_daten(bot, pfad):
+    """Was /data get ueber einen Wert des Namens ueber dem Bot sagt, als Text."""
+    since = bot.mark()
+    bot.chat(f"/execute at {BOT_NAME} positioned ~ ~{NAME_UEBER_SPIELER} ~ run data get "
+             f"entity @e[type=minecraft:text_display,distance=..0.05,limit=1] {pfad}")
+    hit = bot.expect("entity data", since, 4000)
+    return strip_colors(hit["text"]) if hit else None
+
+
+def sieht_ueber(client, pos):
+    """Ob dieser Client eine Entitaet dort kennt, wo der Name ueber pos steht.
+
+    Gefragt wird nach der Stelle, nicht nach der Art: Der Bot liest die
+    Entitaetsarten mit den Daten von 26.1, und dort ist hinter dem Sulfur Cube
+    alles um eins verrutscht - das TextDisplay auch.
+    """
+    ziel = (pos[0], pos[1] + float(NAME_UEBER_SPIELER), pos[2])
+    for e in client.call("entities", radius=16).get("entities", []):
+        if max(abs(a - b) for a, b in zip(e["pos"], ziel)) < 0.3:
+            return True
+    return False
+
+
+def spielername_checks(env, bot):
+    """Der Name ueber dem Kamera-Spieler: ein TextDisplay fuer sich.
+
+    Ueber einem unsichtbaren Spieler zeichnet der Client kein Namensschild;
+    wer ihn nur am Umriss sieht, wuesste nicht, wer das ist. Der Name steht
+    deshalb als eigenes TextDisplay ueber ihm, mit denselben Schaltern wie der
+    Name ueber dem Koerper, nur unter camera-mode.name.
+
+    Er sitzt nicht als Passagier auf ihm, er wird jeden Tick nachgesetzt. Mit
+    einem Passagier nimmt Spigot keinen player.teleport() an und Paper keinen
+    in eine andere Welt - so aber endet der Cam-Modus, zurueck zum Koerper.
+    Die Reise durch das Netherportal und zurueck prueft das mit.
+
+    Wo der Name steht und was er traegt, fragt der Abschnitt am Server. Wer
+    ihn sieht, fragt er die Clients: den Bot selbst und einen zweiten Spieler.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test des Spielernamens aus", cam_off(bot), ""):
+        return
+    pos = bot.server_pos()
+    if not FIND.test("Standort fuer den Test des Spielernamens lesbar", pos is not None, str(pos)):
+        return
+    bx, by, bz = (_floor(pos[0]), _floor(pos[1] + 0.5), _floor(pos[2]))
+    Log.detail(f"Testplatz fuer den Spielernamen bei {(bx, by, bz)}")
+    for art in ("armor_stand", "mannequin", "text_display"):
+        bot.chat(f"/kill @e[type=minecraft:{art},distance=..8]")
+    time.sleep(0.5)
+    px, py, pz = bx + 6, by, bz
+    ankunft = None
+
+    def start():
+        """Den Cam-Modus am Testplatz starten und drei Bloecke hochfliegen,
+        weg vom Namen ueber dem Koerper. Gibt zurueck, wo er dann ist."""
+        hinstellen(bot, bx + 0.5, by, bz + 0.5)
+        if not cam_on(bot):
+            return None
+        bot.call("fly", wait=30, dy=3, timeout=15000)
+        time.sleep(1.0)
+        return bot.server_pos()
+
+    def ohne_namen(was):
+        if FIND.test(f"/cam startet mit {was}", start() is not None, ""):
+            FIND.test(f"{was}: kein Name ueber dem Spieler", not spielername_frage(bot), "")
+            cam_off(bot)
+            time.sleep(1.0)
+
+    try:
+        # --- Voreingestellt: der Name ueber ihm ---
+        oben = start()
+        if not FIND.test("/cam startet fuer den Test des Spielernamens", oben is not None, ""):
+            return
+        FIND.test("Ueber dem unsichtbaren Kamera-Spieler steht sein Name als TextDisplay, "
+                  "wo sonst sein Namensschild hinge", spielername_frage(bot), "")
+        text = spielername_daten(bot, "text")
+        FIND.test("Der Name traegt den Text aus player.name-format",
+                  bool(text) and BOT_NAME in text and "Body" not in text, text or "keine Antwort")
+        FIND.test("Voreingestellt ist der Spielername weiss",
+                  bool(text) and 'color: "white"' in text, text or "keine Antwort")
+        # Nachgesehen und nicht gesetzt, wie beim Namen ueber dem Koerper.
+        for name, nbt in (("Voreingestellt ist der Spielername nicht durch Waende zu sehen",
+                           "{see_through:0b}"),
+                          ("Voreingestellt hat er den Hintergrund eines Namensschilds",
+                           "{default_background:1b}"),
+                          ("Voreingestellt hat er keinen Schatten", "{shadow:0b}"),
+                          ("Voreingestellt hat er die Groesse 1",
+                           "{transformation:{scale:[1.0f,1.0f,1.0f]}}"),
+                          ("Voreingestellt ist er 64 Bloecke weit zu sehen", "{view_range:1.0f}"),
+                          ("Der Spielername ist immer hell", "{brightness:{block:15,sky:15}}"),
+                          ("Er dreht sich wie ein Namensschild zum Betrachter",
+                           '{billboard:"center"}')):
+            FIND.test(name, spielername_frage(bot, nbt), "")
+        passagier = server_says(bot, f"/execute as {BOT_NAME} on passengers run say {{marke}}")
+        FIND.test("Der Name sitzt nicht als Passagier auf ihm", not passagier, "")
+
+        bot.call("fly", wait=30, dx=3, timeout=15000)
+        time.sleep(1.0)
+        FIND.test("Der Name folgt ihm im Flug", spielername_frage(bot), "")
+        oben = bot.server_pos()
+
+        # --- Wer ihn sieht ---
+        # Ein zweiter Spieler ohne Cam-Modus, unten neben dem Koerper. Danach
+        # geht er selbst in den Cam-Modus: Dann ist er im Team des ersten und
+        # sieht dessen Namensschild durch die Unsichtbarkeit - der Name kaeme
+        # doppelt.
+        zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+        try:
+            zuschauer.start()
+            da = zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned")
+            if FIND.test("Ein zweiter Spieler kommt fuer den Spielernamen herein", da, ZUSCHAUER_NAME):
+                time.sleep(1.5)
+                console(env, f"tp {ZUSCHAUER_NAME} {bx + 0.5} {by} {bz + 4.5}", pause=2.0)
+                FIND.test("Ein Spieler ohne Cam-Modus sieht den Namen ueber dem Kamera-Spieler",
+                          sieht_ueber(zuschauer, oben), "")
+                FIND.test("Der Kamera-Spieler selbst sieht keinen Namen ueber sich",
+                          not sieht_ueber(bot, oben), "")
+                if FIND.test("Der zweite Spieler startet selbst den Cam-Modus", cam_on(zuschauer), ""):
+                    time.sleep(1.0)
+                    FIND.test("Ein anderer Kamera-Spieler sieht den Namen nicht, er hat das "
+                              "Namensschild", not sieht_ueber(zuschauer, oben), "")
+                    cam_off(zuschauer)
+                    time.sleep(1.5)
+                    FIND.test("Nach seinem Cam-Modus sieht er den Namen wieder",
+                              sieht_ueber(zuschauer, oben), "")
+        finally:
+            zuschauer.stop()
+
+        cam_off(bot)
+        time.sleep(1.0)
+        FIND.test("Mit dem Cam-Modus geht auch der Name",
+                  anzahl(bot, "@e[type=minecraft:text_display,distance=..10]") == 0, "")
+
+        # --- Die Schalter unter camera-mode.name ---
+        set_options(env, [("color", "red", "camera-mode"), ("through-walls", "true", "camera-mode"),
+                          ("view-distance", "32", "camera-mode"),
+                          ("background", "false", "camera-mode"), ("shadow", "true", "camera-mode"),
+                          ("scale", "2.0", "camera-mode"),
+                          ("player.name-format", '"&e{player}\\\\n&7Kamera"')])
+        if FIND.test("/cam startet mit geaenderten Schaltern fuer den Spielernamen",
+                     start() is not None, ""):
+            text = spielername_daten(bot, "text")
+            FIND.test("color: red faerbt den Spielernamen rot, statt des Farbcodes vorn",
+                      bool(text) and 'color: "red"' in text and '"yellow"' not in text,
+                      text or "keine Antwort")
+            FIND.test("\\n im Spielernamen beginnt eine neue Zeile, ihr Farbcode gilt",
+                      bool(text) and ("\\n" in text or "\n" in text) and "Kamera" in text
+                      and 'color: "gray"' in text, text or "keine Antwort")
+            for name, nbt in (("through-walls: true zeigt den Spielernamen durch Waende",
+                               "{see_through:1b}"),
+                              ("view-distance: 32 halbiert seine Sichtweite", "{view_range:0.5f}"),
+                              ("background: false nimmt ihm den Hintergrund",
+                               "{default_background:0b,background:0}"),
+                              ("shadow: true gibt ihm einen Schatten", "{shadow:1b}"),
+                              ("scale: 2.0 macht ihn doppelt so gross, auf derselben Hoehe",
+                               "{transformation:{scale:[2.0f,2.0f,2.0f]}}")):
+                FIND.test(name, spielername_frage(bot, nbt), "")
+            koerper = server_says(
+                bot, f"/execute as @e[type=minecraft:armor_stand,distance=..8,limit=1] at @s "
+                     f"positioned ~ ~{NAME_UEBER_STAENDER:.3f} ~ if entity @e[type=minecraft:"
+                     f"text_display,distance=..0.05,nbt={{{{see_through:0b}}}}] run say {{marke}}")
+            FIND.test("Der Name ueber dem Koerper bleibt bei seinen eigenen Schaltern", koerper, "")
+            cam_off(bot)
+            time.sleep(1.0)
+
+        # Etwas, das keine Farbe ist, wird gemeldet und faellt auf weiss zurueck.
+        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("color", "blau", "camera-mode")])
+        meldung = any("Unbekannter Wert" in zeile and "camera-mode.name.color" in zeile
+                      for zeile in server_log(env).splitlines())
+        FIND.test("Eine unbekannte Farbe fuer den Spielernamen wird gemeldet", meldung,
+                  "" if meldung else "keine Meldung im Server-Log")
+        if start() is not None:
+            text = spielername_daten(bot, "text")
+            FIND.test("Sie faellt auf weiss zurueck",
+                      bool(text) and 'color: "white"' in text, text or "keine Antwort")
+            cam_off(bot)
+            time.sleep(1.0)
+
+        # --- Wann es keinen Namen gibt ---
+        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("name-visible", "false", "camera-mode")])
+        ohne_namen("name-visible: false")
+        # Sichtbar traegt er sein eigenes Namensschild.
+        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("allow_invisibility_potion", "false")])
+        ohne_namen("allow_invisibility_potion: false")
+        # Nur Kamera-Spieler sehen ihn, und die sehen sein Namensschild.
+        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("player_visibility_mode", "cam")])
+        ohne_namen("player_visibility_mode: cam")
+        # Niemand soll ihn sehen.
+        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("player_visibility_mode", "false")])
+        ohne_namen("player_visibility_mode: false")
+
+        # --- Durch das Netherportal und zurueck ---
+        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("nether", "true", "portals"),
+                                                       ("nether", "true", "cam-area")])
+        if FIND.test("Portal fuer die Reise mit dem Spielernamen steht",
+                     build_portal(bot, "minecraft:overworld", px, py, pz), ""):
+            hinstellen(bot, bx + 0.5, by, bz + 0.5)
+            if FIND.test("/cam startet vor der Reise", cam_on(bot), ""):
+                bot.chat(f"/execute in minecraft:overworld run tp @s {px + 0.5} {py} {pz + 0.5}")
+                time.sleep(PORTAL_TRAVEL_WAIT)
+                drueben = in_nether(bot)
+                if FIND.test("Der Kamera-Spieler reist durch das Portal in den Nether", drueben, ""):
+                    ankunft = bot.server_pos()
+                    FIND.test("Im Nether steht sein Name wieder ueber ihm", spielername_frage(bot), "")
+                cam_off(bot)
+                time.sleep(1.5)
+                zurueck = bot.server_pos()
+                daheim = (not in_nether(bot) and zurueck is not None
+                          and abs(zurueck[0] - (bx + 0.5)) < 1.5 and abs(zurueck[2] - (bz + 0.5)) < 1.5)
+                FIND.test("Aus dem Nether bringt das Beenden ihn zurueck zu seinem Koerper", daheim,
+                          str(zurueck))
+                if ankunft:
+                    rest = server_says(bot, "/execute in minecraft:the_nether positioned "
+                                            f"{ankunft[0]:.1f} {ankunft[1]:.1f} {ankunft[2]:.1f} if entity "
+                                            "@e[type=minecraft:text_display,distance=..16] run say {marke}")
+                    FIND.test("Im Nether bleibt kein Name zurueck", not rest, "")
+    finally:
+        try:
+            cam_off(bot)
+            bot.chat(f"/execute in minecraft:overworld run tp @s {bx + 0.5} {by} {bz + 0.5}")
+            time.sleep(1.0)
+            bot.chat(f"/execute in minecraft:overworld run fill {px - 1} {py - 1} {pz} "
+                     f"{px + 2} {py + 3} {pz} minecraft:air")
+            if ankunft:
+                # Das Portal, das der Server drueben gebaut oder genommen hat:
+                # Die Testwelt bleibt stehen, und der Portaltest soll es nicht
+                # fuer seines halten.
+                ax, ay, az = (_floor(ankunft[0]), _floor(ankunft[1]), _floor(ankunft[2]))
+                bot.chat(f"/execute in minecraft:the_nether run fill {ax - 4} {ay - 4} {az - 4} "
+                         f"{ax + 4} {ay + 4} {az + 4} minecraft:air replace minecraft:nether_portal")
+            set_options(env, SPIELERNAME_VOREINSTELLUNG)
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test des Spielernamens: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -4275,6 +4551,9 @@ def step_tests(env):
 
         # --- Der Name ueber dem Koerper ---
         name_checks(env, bot)
+
+        # --- Der Name ueber dem Kamera-Spieler ---
+        spielername_checks(env, bot)
 
         # --- Der Spielmodus, in dem der Cam-Modus laeuft ---
         gamemode_checks(env, bot)

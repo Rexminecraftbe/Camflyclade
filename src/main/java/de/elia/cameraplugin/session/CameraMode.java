@@ -160,6 +160,7 @@ public final class CameraMode {
 
         plugin.getParticles().startCameraParticles(player);
         plugin.getSightGlow().startSightGlow(player);
+        plugin.getNameTag().startFor(player);
         plugin.getActionBar().startActionBar(player);
         plugin.getFireGuard().startFor(player);
         plugin.getHungerGuard().startFor(player);
@@ -220,6 +221,7 @@ public final class CameraMode {
         player.teleport(body.getLocation());
         plugin.getParticles().stopCameraParticles(player);
         plugin.getSightGlow().stopSightGlow(player);
+        plugin.getNameTag().stopFor(player);
         plugin.getActionBar().showActionBarOffMessage(player);
         boolean standingInFire = plugin.getFireGuard().stopFor(player);
         plugin.getGhastGuard().stopFor(player);

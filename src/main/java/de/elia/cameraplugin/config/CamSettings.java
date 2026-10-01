@@ -79,18 +79,8 @@ public final class CamSettings {
      */
     private boolean bordersHold;
     private boolean bodyNameVisible;
-    /** Whether the name over the body shows through blocks, {@code body.name.through-walls}. */
-    private boolean nameThroughWalls;
-    /** How far away the name over the body is seen, in blocks, {@code body.name.view-distance}. */
-    private double nameViewDistance;
-    /** The colour of the name over the body, {@code body.name.color}. */
-    private ChatColor nameColor;
-    /** Whether the name over the body has the dark background of a name tag, {@code body.name.background}. */
-    private boolean nameBackground;
-    /** Whether the name over the body casts a shadow, {@code body.name.shadow}. */
-    private boolean nameShadowed;
-    /** The size of the name over the body, 1 being a name tag, {@code body.name.scale}. */
-    private double nameScale;
+    /** How the name over the body looks, the section {@code body.name}. */
+    private NameStyle bodyNameStyle;
     private boolean bodyVisible;
     /** Whether the armour the body wears is drawn, {@code body.armor-visible}. */
     private boolean bodyArmorVisible;
@@ -111,6 +101,10 @@ public final class CamSettings {
     private VisibilityMode playerVisibilityMode;
     private boolean allowInvisibilityPotion;
     private GlowMode glowMode;
+    /** Whether the invisible camera player carries a name, {@code camera-mode.name-visible}. */
+    private boolean playerNameVisible;
+    /** How the name over the camera player looks, the section {@code camera-mode.name}. */
+    private NameStyle playerNameStyle;
     /** Whether the camera may fly into lava, {@code camera-mode.allow_lava_flight}. */
     private boolean allowLavaFlight;
     /** Whether the camera may fly into water, {@code camera-mode.allow_water_flight}. */
@@ -212,6 +206,8 @@ public final class CamSettings {
             case "sight" -> GlowMode.SIGHT;
             default -> GlowMode.ALWAYS;
         };
+        playerNameVisible = config.getBoolean("camera-mode.name-visible", true);
+        playerNameStyle = NameStyle.read(config, "camera-mode.name", ChatColor.WHITE);
         allowLavaFlight = config.getBoolean("camera-mode.allow_lava_flight", true);
         allowWaterFlight = config.getBoolean("camera-mode.allow_water_flight", true);
         allowPowderSnowFlight = config.getBoolean("camera-mode.allow_powder_snow_flight", true);
@@ -233,12 +229,7 @@ public final class CamSettings {
         cameraHeadEnabled = config.getBoolean("camera-head.enabled", false);
         bodyType = resolveBodyType(config, config.getInt("body.type", BodyType.ARMOR_STAND.getId()));
         bodyNameVisible = config.getBoolean("body.name-visible", true);
-        nameThroughWalls = config.getBoolean("body.name.through-walls", false);
-        nameViewDistance = config.getDouble("body.name.view-distance", 64.0, 1.0);
-        nameColor = resolveNameColor(config);
-        nameBackground = config.getBoolean("body.name.background", true);
-        nameShadowed = config.getBoolean("body.name.shadow", false);
-        nameScale = config.getDouble("body.name.scale", 1.0, 0.1, 10.0);
+        bodyNameStyle = NameStyle.read(config, "body.name", ChatColor.YELLOW);
         bodyVisible = config.getBoolean("body.visible", true);
         bodyArmorVisible = config.getBoolean("body.armor-visible", true);
         movementSensitivity = resolveMovementSensitivity(config,
@@ -472,30 +463,6 @@ public final class CamSettings {
     }
 
     /**
-     * Reads {@code body.name.color}: one of the sixteen colours of the chat,
-     * by the name the game gives it, e.g. {@code yellow} or
-     * {@code dark_green}. Capitals and spaces do not count. Formatting such
-     * as bold is no colour and is turned away with the rest.
-     */
-    private static ChatColor resolveNameColor(ConfigReader config) {
-        String raw = config.getString("body.name.color", "yellow");
-        String name = raw.trim().toUpperCase(Locale.ROOT).replace(' ', '_');
-        for (ChatColor color : ChatColor.values()) {
-            if (color.isColor() && color.name().equals(name)) {
-                return color;
-            }
-        }
-        StringBuilder allowed = new StringBuilder();
-        for (ChatColor color : ChatColor.values()) {
-            if (color.isColor()) {
-                allowed.append(allowed.length() == 0 ? "" : ", ").append(color.name().toLowerCase(Locale.ROOT));
-            }
-        }
-        config.warnUnknownValue("body.name.color", raw, allowed.toString(), "yellow");
-        return ChatColor.YELLOW;
-    }
-
-    /**
      * Turns the number configured in {@code body.type} into a body type and
      * falls back to the armour stand when the value is unknown.
      */
@@ -585,6 +552,14 @@ public final class CamSettings {
         return glowMode;
     }
 
+    public boolean isPlayerNameVisible() {
+        return playerNameVisible;
+    }
+
+    public NameStyle getPlayerNameStyle() {
+        return playerNameStyle;
+    }
+
     public boolean allowsLavaFlight() {
         return allowLavaFlight;
     }
@@ -619,29 +594,8 @@ public final class CamSettings {
         return bodyNameVisible;
     }
 
-    public boolean isNameThroughWalls() {
-        return nameThroughWalls;
-    }
-
-    /** How far away the name over the body is seen, in blocks. */
-    public double getNameViewDistance() {
-        return nameViewDistance;
-    }
-
-    public ChatColor getNameColor() {
-        return nameColor;
-    }
-
-    public boolean hasNameBackground() {
-        return nameBackground;
-    }
-
-    public boolean isNameShadowed() {
-        return nameShadowed;
-    }
-
-    public double getNameScale() {
-        return nameScale;
+    public NameStyle getBodyNameStyle() {
+        return bodyNameStyle;
     }
 
     public boolean isBodyVisible() {
