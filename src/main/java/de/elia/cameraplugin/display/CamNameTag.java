@@ -3,38 +3,48 @@ package de.elia.cameraplugin.display;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraPlayers;
-import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerPortalEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.util.Transformation;
+import org.joml.Vector3f;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * The name over the invisible camera player, {@code camera-mode.name-visible}
- * and {@code camera-mode.name}.
+ * The name over the camera player, {@code camera-mode.name-visible},
+ * {@code camera-mode.name-mode} and {@code camera-mode.name}.
  *
- * <p>The client draws no name tag over an invisible player, so whoever sees
- * the camera player only by his outline would not know who he is. The name is
- * a text display of its own, see {@link NameDisplay}, put back over his head
- * every tick.</p>
+ * <p>It takes the place of his own name tag, which the team
+ * {@code cam_no_push} switches off, see
+ * {@link de.elia.cameraplugin.scoreboard.NoCollisionTeam}. Over an invisible
+ * player the client draws a name tag only for his own team, and a name tag can
+ * say nothing but his name. This name is a text display of its own, see
+ * {@link NameDisplay}: everybody who sees him sees it, and it says what
+ * {@code messages.player.name-format} says - "Cam von {player}", say.</p>
  *
- * <p>It does not ride on him as a passenger, although that would carry it
- * along without any work. Spigot turns down every {@code player.teleport()}
- * of a player who carries a passenger, and camera mode ends with exactly such
- * a teleport, back to the body - he would stay where he is. The border, the
- * happy ghast and the way back from a forbidden world move the camera the
- * same way. Paper does take a passenger along within one world, but drops it
- * at a portal: the name would be left standing there.</p>
+ * <p>How it keeps to him is the {@link NameMode}: put back over his head every
+ * tick, or sitting on him as a passenger. A passenger has to come off before a
+ * teleport. Spigot turns down every {@code player.teleport()} of a player who
+ * carries one, Paper those into another world, and a portal throws it off -
+ * on Paper it was left standing at the portal. The plugin takes it off before
+ * its own teleports, see {@link #takeOffForTeleport(Player)}, the teleport
+ * events do so before a change of worlds, and the next tick puts it back
+ * on.</p>
  */
-public final class CamNameTag {
+public final class CamNameTag implements Listener {
 
     private final JavaPlugin plugin;
     private final CamSettings settings;
@@ -57,27 +67,12 @@ public final class CamNameTag {
         this.nameKey = new NamespacedKey(plugin, "cam_name");
     }
 
-    /**
-     * Whether a camera player gets a name at all.
-     *
-     * <p>Only in mode ALL and only while he is made invisible. Without the
-     * invisibility his own name tag is there. Mode NONE hides him from
-     * everybody, and in mode CAM the only ones who see him are camera players
-     * themselves - they share the team {@code cam_no_push} with him and see
-     * him through the invisibility, name tag included.</p>
-     */
-    private boolean carriesName() {
-        return settings.isPlayerNameVisible()
-                && settings.getPlayerVisibilityMode() == VisibilityMode.ALL
-                && settings.allowsInvisibilityPotion();
-    }
-
     public void startFor(Player player) {
         stopFor(player);
-        if (!carriesName()) {
+        if (!settings.showsPlayerName()) {
             return;
         }
-        TextDisplay name = spawnName(player);
+        TextDisplay name = putUp(player);
         if (name == null) {
             return;
         }
@@ -89,7 +84,7 @@ public final class CamNameTag {
                     stopFor(player);
                     return;
                 }
-                TextDisplay current = followPlayer(player);
+                TextDisplay current = keepToPlayer(player);
                 if (current == null) {
                     stopFor(player);
                     return;
@@ -103,12 +98,29 @@ public final class CamNameTag {
 
     /**
      * Puts up the name, hidden from everybody: {@link #showToViewers} lets the
-     * right ones see it, starting with the next tick.
+     * right ones see it, starting with the next tick. In mode RIDE it is put
+     * onto him straight away.
+     *
+     * @return the name, or {@code null} when the text says nothing
      */
-    private TextDisplay spawnName(Player player) {
+    private TextDisplay putUp(Player player) {
         String format = messages.getMessage("player.name-format").replace("{player}", player.getName());
-        return NameDisplay.spawn(nameLocation(player), format, settings.getPlayerNameStyle(), nameKey,
-                display -> display.setVisibleByDefault(false));
+        boolean rides = rides();
+        TextDisplay name = NameDisplay.spawn(nameLocation(player), format, settings.getPlayerNameStyle(), nameKey,
+                display -> {
+                    display.setVisibleByDefault(false);
+                    if (rides) {
+                        liftOverHead(display);
+                    }
+                });
+        if (name != null && rides) {
+            player.addPassenger(name);
+        }
+        return name;
+    }
+
+    private boolean rides() {
+        return settings.getPlayerNameMode() == NameMode.RIDE;
     }
 
     /**
@@ -121,21 +133,33 @@ public final class CamNameTag {
     }
 
     /**
-     * Puts the name back over the player whenever the two have come apart.
+     * A passenger sits where the game seats one, on top of the head. The text
+     * is lifted from there to where a name tag starts, the same spot mode
+     * FOLLOW puts the whole name at.
+     */
+    private static void liftOverHead(TextDisplay display) {
+        Transformation shape = display.getTransformation();
+        display.setTransformation(new Transformation(new Vector3f(0f, (float) NameDisplay.ABOVE_HEAD, 0f),
+                shape.getLeftRotation(), shape.getScale(), shape.getRightRotation()));
+    }
+
+    /**
+     * Keeps the name on the player: puts it back over him whenever the two
+     * have come apart, or back onto him when it no longer sits there.
      *
-     * <p>Into another world it is not carried but put up anew: the player went
-     * through a portal, and the name is simply set down where he came out.</p>
+     * <p>Into another world it is not carried but put up anew where he came
+     * out. Taken off for a teleport, it is put up anew wherever he
+     * landed.</p>
      *
      * @return the name over him, or {@code null} when it could not be put up
      */
-    private TextDisplay followPlayer(Player player) {
+    private TextDisplay keepToPlayer(Player player) {
         TextDisplay name = names.get(player.getUniqueId());
-        Location target = nameLocation(player);
-        if (name == null || !name.isValid() || !name.getWorld().equals(target.getWorld())) {
+        if (name == null || !name.isValid() || !name.getWorld().equals(player.getWorld())) {
             if (name != null) {
-                name.remove();
+                takeDown(name);
             }
-            name = spawnName(player);
+            name = putUp(player);
             if (name == null) {
                 names.remove(player.getUniqueId());
                 return null;
@@ -143,8 +167,17 @@ public final class CamNameTag {
             names.put(player.getUniqueId(), name);
             return name;
         }
-        if (name.getLocation().distanceSquared(target) > CamSettings.MIN_MOVE_THRESHOLD * CamSettings.MIN_MOVE_THRESHOLD) {
-            name.teleport(target);
+        if (rides()) {
+            if (!player.getPassengers().contains(name)) {
+                name.teleport(nameLocation(player));
+                player.addPassenger(name);
+            }
+        } else {
+            Location target = nameLocation(player);
+            if (name.getLocation().distanceSquared(target)
+                    > CamSettings.MIN_MOVE_THRESHOLD * CamSettings.MIN_MOVE_THRESHOLD) {
+                name.teleport(target);
+            }
         }
         return name;
     }
@@ -165,17 +198,51 @@ public final class CamNameTag {
     }
 
     /**
-     * Whether this viewer is shown the name. Not the camera player himself,
-     * who has no name tag over his own head either. Not the other camera
-     * players: they are in his team and see his own name tag. Not spectators,
-     * who see through every invisibility and get the name tag as well. And
-     * nobody he is hidden from.
+     * Whether this viewer is shown the name: everybody the camera player is
+     * shown to, which {@code player_visibility_mode} decides, but not he
+     * himself - nobody has a name tag over his own head either.
      */
     private boolean showsNameTo(Player owner, Player viewer) {
-        return !viewer.equals(owner)
-                && !cameraPlayers.contains(viewer.getUniqueId())
-                && viewer.getGameMode() != GameMode.SPECTATOR
-                && viewer.canSee(owner);
+        return !viewer.equals(owner) && viewer.canSee(owner);
+    }
+
+    /**
+     * Takes the name off a camera player who is about to be teleported, in
+     * mode RIDE. The next tick puts it back on, wherever he landed.
+     *
+     * <p>Called by the plugin before each teleport of its own: Spigot turns
+     * that teleport down as long as he carries a passenger, before any event
+     * is fired.</p>
+     */
+    public void takeOffForTeleport(Player player) {
+        if (!rides()) {
+            return;
+        }
+        TextDisplay name = names.get(player.getUniqueId());
+        if (name != null && name.isValid()) {
+            takeDown(name);
+        }
+    }
+
+    /**
+     * Before a teleport into another world, by a command or another plugin: a
+     * passenger does not come along there. Within one world it stays on - the
+     * server takes it along, except for {@code player.teleport()} on Spigot,
+     * which never gets as far as this event.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCameraTeleport(PlayerTeleportEvent event) {
+        Location to = event.getTo();
+        World target = to == null ? null : to.getWorld();
+        if (target == null || !target.equals(event.getFrom().getWorld())) {
+            takeOffForTeleport(event.getPlayer());
+        }
+    }
+
+    /** Before a trip through a portal, which always leads into another world. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCameraPortal(PlayerPortalEvent event) {
+        takeOffForTeleport(event.getPlayer());
     }
 
     /** Takes the name away, at the end of camera mode. */
@@ -186,8 +253,17 @@ public final class CamNameTag {
         }
         TextDisplay name = names.remove(player.getUniqueId());
         if (name != null) {
-            name.remove();
+            takeDown(name);
         }
+    }
+
+    /**
+     * Gets it off the player first and only then out of the world: a removed
+     * entity still sitting on him would keep Spigot turning his teleport down.
+     */
+    private static void takeDown(TextDisplay name) {
+        name.leaveVehicle();
+        name.remove();
     }
 
     public void onDisable() {
@@ -196,7 +272,7 @@ public final class CamNameTag {
         }
         tasks.clear();
         for (TextDisplay name : names.values()) {
-            name.remove();
+            takeDown(name);
         }
         names.clear();
     }

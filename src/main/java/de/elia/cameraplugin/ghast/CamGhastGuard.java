@@ -156,6 +156,8 @@ public class CamGhastGuard {
     private void liftOff(Player player, HappyGhast ghast) {
         Location to = player.getLocation();
         to.setY(ghast.getBoundingBox().getMaxY() + STILL_REACH + CLEARANCE);
+        // A name sitting on him would turn the teleport down.
+        plugin.getNameTag().takeOffForTeleport(player);
         player.teleport(to);
         plugin.getMovementGuard().keepFlying(player);
     }

@@ -5,6 +5,7 @@ import de.elia.cameraplugin.body.BodyType;
 import de.elia.cameraplugin.body.MobTargetMode;
 import de.elia.cameraplugin.body.MovementSensitivity;
 import de.elia.cameraplugin.display.GlowMode;
+import de.elia.cameraplugin.display.NameMode;
 import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.mirrordamage.ArmorDamageMode;
 import de.elia.cameraplugin.mirrordamage.DamageMode;
@@ -101,8 +102,10 @@ public final class CamSettings {
     private VisibilityMode playerVisibilityMode;
     private boolean allowInvisibilityPotion;
     private GlowMode glowMode;
-    /** Whether the invisible camera player carries a name, {@code camera-mode.name-visible}. */
+    /** Whether the camera player carries a name of the plugin, {@code camera-mode.name-visible}. */
     private boolean playerNameVisible;
+    /** How that name keeps to him, {@code camera-mode.name-mode}. */
+    private NameMode playerNameMode;
     /** How the name over the camera player looks, the section {@code camera-mode.name}. */
     private NameStyle playerNameStyle;
     /** Whether the camera may fly into lava, {@code camera-mode.allow_lava_flight}. */
@@ -207,6 +210,7 @@ public final class CamSettings {
             default -> GlowMode.ALWAYS;
         };
         playerNameVisible = config.getBoolean("camera-mode.name-visible", true);
+        playerNameMode = resolveNameMode(config, config.getInt("camera-mode.name-mode", NameMode.FOLLOW.getId()));
         playerNameStyle = NameStyle.read(config, "camera-mode.name", ChatColor.WHITE);
         allowLavaFlight = config.getBoolean("camera-mode.allow_lava_flight", true);
         allowWaterFlight = config.getBoolean("camera-mode.allow_water_flight", true);
@@ -463,6 +467,20 @@ public final class CamSettings {
     }
 
     /**
+     * Turns the number configured in {@code camera-mode.name-mode} into a mode
+     * and falls back to 1 when the value is unknown.
+     */
+    private NameMode resolveNameMode(ConfigReader config, int configuredId) {
+        NameMode requested = NameMode.fromId(configuredId);
+        if (requested == null) {
+            config.warnUnknownValue("camera-mode.name-mode", configuredId, "1, 2",
+                    String.valueOf(NameMode.FOLLOW.getId()));
+            return NameMode.FOLLOW;
+        }
+        return requested;
+    }
+
+    /**
      * Turns the number configured in {@code body.type} into a body type and
      * falls back to the armour stand when the value is unknown.
      */
@@ -552,8 +570,17 @@ public final class CamSettings {
         return glowMode;
     }
 
-    public boolean isPlayerNameVisible() {
-        return playerNameVisible;
+    /**
+     * Whether a camera player carries the name of {@code camera-mode.name} in
+     * place of his own name tag. Not in mode NONE: nobody is meant to see him
+     * there, and a name would give away where he is.
+     */
+    public boolean showsPlayerName() {
+        return playerNameVisible && playerVisibilityMode != VisibilityMode.NONE;
+    }
+
+    public NameMode getPlayerNameMode() {
+        return playerNameMode;
     }
 
     public NameStyle getPlayerNameStyle() {

@@ -144,6 +144,7 @@ public final class CameraPlugin extends JavaPlugin {
                 new SessionListener(this),
                 movementGuard,
                 borderWall,
+                nameTag,
                 camSulfurCubeGuard,
                 new CamInventoryLock(cameraPlayers),
                 new CamPotionGuard(this),

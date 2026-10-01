@@ -325,30 +325,57 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   dem Kamera-Spieler für sich ab: Zu Beginn des Cam-Modus steht der Bot genau
   über seinem Körper, und `NAME` nimmt das nächste TextDisplay.
 * **Den Namen über dem Kamera-Spieler sucht der Test an der Stelle**, nicht an
-  der Art: 2,075 über den Füßen des Bots, die Höhe eines Spielers plus 0,275.
-  Am Server mit `/execute at`, in den Clients über die Position der Entitäten
-  - der Bot liest die Entitätsarten mit den Daten von 26.1, und das
-  TextDisplay liegt hinter dem Sulfur Cube, also um eins verrutscht.
+  der Art: im Modus 1 2,075 über den Füßen des Bots, die Höhe eines Spielers
+  plus 0,275, im Modus 2 1,8 - dort sitzt ein Passagier, die Schrift ist um
+  0,275 hinaufgeschoben. Am Server mit `/execute at`, in den Clients über die
+  Position der Entitäten - der Bot liest die Entitätsarten mit den Daten von
+  26.1, und das TextDisplay liegt hinter dem Sulfur Cube, also um eins
+  verrutscht.
+* **Im Modus 2 fragt der Test den Client nach dem Fahrzeug**, nicht nach der
+  Stelle. Einem Passagier schickt der Server keine eigenen Positionen, der
+  Client setzt ihn auf sein Fahrzeug - mineflayer nur nicht, bei ihm bleibt
+  er stehen, wo er ihn zuerst sah. `entities` gibt deshalb zu jeder Entität
+  `vehicle` mit, die Nummer der Entität, auf der sie sitzt.
 * **Ob jemand den Spielernamen sieht, fragt der Test die Clients.** Der Bot
-  selbst darf ihn nicht kennen, `CamFlyZuschauer` ohne Cam-Modus schon; geht
-  der Zuschauer selbst in den Cam-Modus, verschwindet er bei ihm wieder - er
-  sieht dann das Namensschild durch die Unsichtbarkeit.
+  selbst darf ihn nicht kennen, `CamFlyZuschauer` schon - ohne Cam-Modus und
+  im Cam-Modus, denn das Namensschild der Kamera-Spieler ist abgeschaltet.
+  Der Zuschauer bleibt den ganzen Abschnitt über dabei, `cam reload` wirft
+  nur Kamera-Spieler hinaus.
+* **Das abgeschaltete Namensschild liest der Test aus `scoreboard.dat`**,
+  nach einem `save-all flush`: `NameTagVisibility` des Teams `cam_no_push`
+  muss `never` sein, mit `camera-mode.name-visible: false` dagegen `always`.
+  Den Client zu fragen geht nicht. mineflayer liest das Team-Paket von 26.2
+  mit den Daten von 26.1 falsch - Optionen und Mitglieder kommen verdreht an,
+  selbst die Kollisionsregel, die das Plugin seit jeher auf `never` setzt,
+  steht bei ihm auf `always`. `nbt_lesen` liest die Datei ohne fremde
+  Bibliothek.
 * **Die Reise mit dem Spielernamen geht durch ein eigenes Portal**, sechs
-  Blöcke neben dem Testplatz. Dafür müssen beide `nether` auf `true`, unter
-  `portals` und unter `cam-area.dimensions` - mit nur einem meldet das Plugin
-  „cam mode is not allowed in nether“, und der Bot bleibt im Portal stehen.
-  Hinterher räumt der Abschnitt beide Seiten wieder ab: Drüben bliebe sonst
-  das Portal stehen, das der Server gebaut oder genommen hat, und der
-  Portaltest hielte es für seines.
-* **Ein Passagier verträgt sich nicht mit dem Cam-Modus.** Ausprobiert, bevor
-  der Spielername ein TextDisplay wurde, das jeden Tick nachgesetzt wird: Saß
-  es als Passagier auf dem Spieler, lehnte Spigot 26.2 jeden
-  `player.teleport()` ab - nach `/cam` blieb der Spieler in der Luft hängen
-  statt an seinem Körper, und aus dem Nether kam er gar nicht mehr zurück.
-  Paper nahm den Passagier in derselben Welt mit, warf ihn aber am Portal und
-  bei `/tp` in eine andere Welt ab; der Name blieb am Portal in der Overworld
-  stehen. Der Test fragt deshalb mit `/execute on passengers`, dass er nicht
-  aufsitzt.
+  Blöcke neben dem Testplatz und einen über dem Boden, einmal in jedem Modus.
+  Auf dem Boden stünde die unterste Reihe des Rahmens in der Grasschicht, und
+  das Aufräumen mit `/fill ... air` ließe dort ein Loch - in der Testwelt, die
+  stehen bleibt, fiel beim nächsten Lauf der Sulfur Cube hinein und ließ sich
+  nicht mehr schieben. Dafür müssen beide
+  `nether` auf `true`, unter `portals` und unter `cam-area.dimensions` - mit
+  nur einem meldet das Plugin „cam mode is not allowed in nether“, und der Bot
+  bleibt im Portal stehen. Hinterher räumt der Abschnitt beide Seiten wieder
+  ab: Drüben bliebe sonst das Portal stehen, das der Server gebaut oder
+  genommen hat, und der Portaltest hielte es für seines.
+* **`/tp` in den Nether schickt der Test über das Netherdach**, auf y=130.
+  Darunter stäke der Bot im Netherrack und nähme Schaden; die
+  `cam-safety`-Sperre läge dann auf allen weiteren Proben. Zurück geht es mit
+  `/cam`. Ohne Portal hat er drüben zwar keinen Anker, und CamFly holt ihn beim
+  ersten Schritt zurück - aber nach einem Weltwechsel stimmt bei mineflayer die
+  eigene Position nicht mehr, und der Schritt landete einmal mitten im Nether.
+* **Ein Passagier verträgt sich nicht mit einem Teleport.** So wurde es
+  ausprobiert, bevor es Modus 2 gab: Saß der Name als Passagier auf dem
+  Spieler, lehnte Spigot 26.2 jeden `player.teleport()` ab - nach `/cam` blieb
+  der Spieler in der Luft hängen statt an seinem Körper, und aus dem Nether
+  kam er gar nicht mehr zurück. Paper nahm den Passagier in derselben Welt
+  mit, warf ihn aber am Portal und bei `/tp` in eine andere Welt ab; der Name
+  blieb am Portal in der Overworld stehen. Modus 2 nimmt ihn deshalb vor jedem
+  Teleport von CamFly selbst und vor jedem Wechsel der Welt ab, und genau das
+  prüft der Test: Beenden, `/tp` in derselben und in eine andere Welt, die
+  Reise durch das Portal und dass am Portal nichts zurückbleibt.
 * **Der Happy Ghast steht mit `NoAI` und `NoGravity` still.** Sonst zöge er
   davon, und die Stelle, an der der Bot aufgesetzt wird, wäre jedes Mal eine
   andere. Er ist vier Blöcke hoch, sein Rücken liegt also vier über seinen
@@ -536,15 +563,24 @@ dabei immer · eine unbekannte Farbe wird gemeldet und fällt auf gelb zurück �
 hinten gilt weiter · `\n` beginnt eine neue Zeile · `name-visible: false`
 setzt keinen Namen · über dem unsichtbaren Kamera-Spieler steht sein Name als
 TextDisplay, wo sonst sein Namensschild hinge, trägt den Text aus
-`player.name-format`, sitzt nicht als Passagier auf ihm und folgt ihm im Flug ·
-ein Spieler ohne Cam-Modus sieht ihn, der Kamera-Spieler selbst und andere
-Kamera-Spieler nicht · voreingestellt ist er weiß, sonst wie der Name über dem
-Körper · jeder Schalter unter `camera-mode.name` ändert genau das, ohne den
-Namen über dem Körper anzufassen · eine unbekannte Farbe wird gemeldet und
-fällt auf weiß zurück · mit `name-visible: false`, `allow_invisibility_potion:
-false` und `player_visibility_mode: cam` oder `false` gibt es keinen · durch
-das Netherportal steht er drüben wieder über ihm, und das Beenden bringt ihn
-aus dem Nether zurück zu seinem Körper · der
+`player.name-format` und folgt ihm im Flug · im Modus 1 sitzt er nicht auf
+ihm, im Modus 2 sitzt er als Passagier auf seinem Kopf, die Schrift auf der
+Höhe des Namensschilds · sein Namensschild ist abgeschaltet, mit
+`name-visible: false` wieder da · ein Spieler ohne Cam-Modus sieht den Namen,
+ein anderer Kamera-Spieler auch, der Kamera-Spieler selbst nicht ·
+voreingestellt ist er weiß, sonst wie der Name über dem Körper · jeder
+Schalter unter `camera-mode.name` ändert genau das, ohne den Namen über dem
+Körper anzufassen, und der Text ist frei, etwa „Cam von {player}“ · eine
+unbekannte Farbe und ein unbekannter `name-mode` werden gemeldet und fallen
+auf weiß und Modus 1 zurück · mit `allow_invisibility_potion: false` trägt er
+den Namen ebenso · mit `player_visibility_mode: cam` sieht ihn nur, wer selbst
+im Cam-Modus ist · mit `player_visibility_mode: false` und `name-visible:
+false` gibt es keinen · in beiden Modi steht er nach der Reise durch das
+Netherportal drüben wieder über ihm, am Portal bleibt nichts zurück, und das
+Beenden bringt ihn aus dem Nether zurück zu seinem Körper · im Modus 2 nimmt
+`/tp` in derselben Welt den Namen mit, nach `/tp` in den Nether sitzt er dort
+wieder auf ihm, und `/cam` bringt ihn aus derselben wie aus der anderen Welt
+zu seinem Körper, ohne dass ein Name zurückbleibt · der
 eigene Körper bleibt anklickbar und beendet damit den Cam-Modus · einen
 Sulfur Cube mit einem Block darin kann die Kamera weder wegschieben noch
 wegschlagen · Gegenprobe: ohne Cam-Modus geht beides · er steht nur fest,

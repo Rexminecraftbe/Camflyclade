@@ -158,10 +158,18 @@ camera-mode:
   # Bei player_visibility_mode: false gibt es keinen Umriss.
   glowing-outline: true
 
-  # Name über dem unsichtbaren Spieler, für alle ohne Cam-Modus
-  # (nur bei player_visibility_mode: true und allow_invisibility_potion: true - sonst trägt er sein Namensschild oder niemand sieht ihn;
-  # Spieler im Cam-Modus sehen sich gegenseitig ohnehin samt Namensschild)
+  # Name über dem Spieler im Cam-Modus, an Stelle seines Namensschilds - so steht er auch über dem unsichtbaren Spieler,
+  # und der Text ist frei wählbar: messages.player.name-format, z. B. "Cam von {player}" (leer = gar kein Name).
+  # Zu sehen für jeden, der den Spieler sieht (player_visibility_mode), auch für andere im Cam-Modus, nur nicht für ihn selbst.
+  # false = sein normales Namensschild (unsichtbar sehen es nur andere im Cam-Modus)
   name-visible: true
+
+  # Wie der Name am Spieler hängt:
+  #   1 = wird jeden Tick über ihn gesetzt: immer zu sehen, kann beim schnellen Fliegen aber etwas hinterherhängen
+  #   2 = sitzt fest auf ihm (als Passagier): hängt nie hinterher, wird beim Teleportieren aber kurz ausgeblendet.
+  #       Andere Plugins können den Spieler dann nicht teleportieren (Spigot gar nicht, Paper nicht in eine andere Welt),
+  #       Befehle wie /tp, Portale und CamFly selbst schon.
+  name-mode: 1
 
   # Aussehen des Namens (der Text steht in messages.player.name-format, \n beginnt eine neue Zeile)
   name:
