@@ -160,6 +160,7 @@ public final class CameraMode {
 
         plugin.getParticles().startCameraParticles(player);
         plugin.getSightGlow().startSightGlow(player);
+        plugin.getNameTag().startFor(player);
         plugin.getActionBar().startActionBar(player);
         plugin.getFireGuard().startFor(player);
         plugin.getHungerGuard().startFor(player);
@@ -216,6 +217,9 @@ public final class CameraMode {
         LivingEntity body = cameraData.getBody();
         Mannequin hitbox = cameraData.getHitbox();
 
+        // Der Name kommt vor dem Teleport weg: Sitzt er als Passagier auf dem
+        // Spieler, lehnt Spigot den Teleport ab.
+        plugin.getNameTag().stopFor(player);
         // Zuerst zum Körper teleportieren
         player.teleport(body.getLocation());
         plugin.getParticles().stopCameraParticles(player);

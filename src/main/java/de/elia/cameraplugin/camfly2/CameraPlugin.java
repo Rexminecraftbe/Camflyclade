@@ -8,6 +8,7 @@ import de.elia.cameraplugin.config.ConfigIssue;
 import de.elia.cameraplugin.config.ConfigReader;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.display.CamActionBar;
+import de.elia.cameraplugin.display.CamNameTag;
 import de.elia.cameraplugin.display.CamParticles;
 import de.elia.cameraplugin.display.SightGlow;
 import de.elia.cameraplugin.feuer.CamFireGuard;
@@ -69,6 +70,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamVisibility visibility = new CamVisibility(this, settings, cameraPlayers);
     private final CamParticles particles = new CamParticles(this, settings, cameraPlayers);
     private final SightGlow sightGlow = new SightGlow(this, settings, cameraPlayers);
+    private final CamNameTag nameTag = new CamNameTag(this, settings, messages, cameraPlayers);
     private final CamActionBar actionBar = new CamActionBar(this);
     private final MobTargeting mobTargeting = new MobTargeting(this, settings, cameraPlayers);
     private final BodyWatch bodyWatch = new BodyWatch(this);
@@ -142,6 +144,7 @@ public final class CameraPlugin extends JavaPlugin {
                 new SessionListener(this),
                 movementGuard,
                 borderWall,
+                nameTag,
                 camSulfurCubeGuard,
                 new CamInventoryLock(cameraPlayers),
                 new CamPotionGuard(this),
@@ -232,6 +235,7 @@ public final class CameraPlugin extends JavaPlugin {
         borderWall.onDisable();
         particles.onDisable();
         sightGlow.onDisable();
+        nameTag.onDisable();
         actionBar.onDisable();
         timeLimit.onDisable();
         // Kein Spieler mehr im Cam-Modus -> Team entfernen.
@@ -394,6 +398,10 @@ public final class CameraPlugin extends JavaPlugin {
 
     public SightGlow getSightGlow() {
         return sightGlow;
+    }
+
+    public CamNameTag getNameTag() {
+        return nameTag;
     }
 
     public CamActionBar getActionBar() {

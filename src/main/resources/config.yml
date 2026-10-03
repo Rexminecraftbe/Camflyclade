@@ -52,6 +52,7 @@ messages:
   no-permission: "&cYou don't have permission to use this command."
   no-player: "&cThis command can only be used by players."
   no-projectiles: "&cYou cannot shoot projectiles in camera mode."
+  player.name-format: "{player}'s Cam"
   portal-blocked: "&cYou cannot go through {portal} portals in camera mode."
   portal-return-area: "&cCam mode is not allowed in {area}, you were brought back."
   portal-return-distance: "&cYou ended up more than {distance} blocks away from {from} and were brought back."
@@ -156,6 +157,36 @@ camera-mode:
   #   sight = nur, solange ihn ein anderer Spieler nicht von blöcken vertägt wird dann sehen den Umriss alle, auch durch Wände
   # Bei player_visibility_mode: false gibt es keinen Umriss.
   glowing-outline: true
+
+  # Name über dem Spieler im Cam-Modus, an Stelle seines Namensschilds - so steht er auch über dem unsichtbaren Spieler,
+  # und der Text ist frei wählbar: messages.player.name-format, z. B. "Cam von {player}" (leer = gar kein Name).
+  # Zu sehen für jeden, der den Spieler sieht (player_visibility_mode), auch für andere im Cam-Modus, nur nicht für ihn selbst.
+  # false = sein normales Namensschild (unsichtbar sehen es nur andere im Cam-Modus)
+  name-visible: true
+
+  # Wie der Name am Spieler hängt:
+  #   1 = wird jeden Tick über ihn gesetzt: immer zu sehen, kann beim schnellen Fliegen aber etwas hinterherhängen
+  #   2 = sitzt fest auf ihm (als Passagier): hängt nie hinterher, wird beim Teleportieren aber kurz ausgeblendet.
+  #       Andere Plugins können den Spieler dann nicht teleportieren (Spigot gar nicht, Paper nicht in eine andere Welt),
+  #       Befehle wie /tp, Portale und CamFly selbst schon.
+  name-mode: 1
+
+  # Aussehen des Namens (der Text steht in messages.player.name-format, \n beginnt eine neue Zeile)
+  name:
+    # Farbe der Schrift (ersetzt einen Farbcode am Anfang von name-format):
+    #   white, yellow, gold, red, dark_red, light_purple, dark_purple, blue,
+    #   dark_blue, aqua, dark_aqua, green, dark_green, gray, dark_gray, black
+    color: white
+    # Durch Wände sichtbar (false = nur bei freier Sicht, der Name verrät nicht, wo der Spieler ist)
+    through-walls: false
+    # Sichtweite in Blöcken (64 = wie ein Namensschild; mehr als entity-tracking-range: display in der spigot.yml geht nicht)
+    view-distance: 64
+    # Dunkler Hintergrund wie bei einem Namensschild (false = keiner)
+    background: true
+    # Schatten unter der Schrift
+    shadow: false
+    # Größe (1 = wie ein Namensschild, 0.1 bis 10)
+    scale: 1.0
 
   # Flug durch Lava (false = an der Lava geht es nicht weiter, bei border-mode: barrier wird sie zur Wand aus border-block-lava; in Lava startet der Cam-Modus nicht)
   allow_lava_flight: true
