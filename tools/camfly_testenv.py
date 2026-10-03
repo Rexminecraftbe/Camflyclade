@@ -2801,7 +2801,7 @@ SPIELERNAME_VOREINSTELLUNG = [
     ("shadow", "false", "camera-mode"), ("scale", "1.0", "camera-mode"),
     ("player_visibility_mode", "true"), ("allow_invisibility_potion", "true"),
     ("nether", "false", "portals"), ("nether", "false", "cam-area"),
-    ("player.name-format", '"{player}"'),
+    ("player.name-format", '"{player}\'s Cam"'),
 ]
 
 
@@ -3042,7 +3042,7 @@ def spielername_checks(env, bot):
                   "wo sonst sein Namensschild hinge", spielername_frage(bot), "")
         text = spielername_daten(bot, "text")
         FIND.test("Der Name traegt den Text aus player.name-format",
-                  bool(text) and BOT_NAME in text and "Body" not in text, text or "keine Antwort")
+                  bool(text) and f"{BOT_NAME}'s Cam" in text, text or "keine Antwort")
         FIND.test("Voreingestellt ist der Spielername weiss",
                   bool(text) and 'color: "white"' in text, text or "keine Antwort")
         # Nachgesehen und nicht gesetzt, wie beim Namen ueber dem Koerper.
