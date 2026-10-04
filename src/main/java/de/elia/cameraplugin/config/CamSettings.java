@@ -51,6 +51,7 @@ public final class CamSettings {
 
     private final JavaPlugin plugin;
     private final ConsoleLog log;
+    private final Messages messages;
 
     // Configurable values
     private boolean maxDistanceEnabled;
@@ -124,8 +125,6 @@ public final class CamSettings {
     private boolean showOwnParticles;
 
     private boolean actionBarEnabled;
-    private String actionBarOnMessage;
-    private String actionBarOffMessage;
     private int actionBarOffDuration;
 
     // Damage transfer settings
@@ -152,17 +151,15 @@ public final class CamSettings {
     private int cooldownSeconds;
     private boolean showBossbar;
     private BarColor bossbarColor;
-    private String bossbarText;
-    private String cooldownAvailableText;
 
     // Camera safety settings
     private boolean camSafetyEnabled;
     private int camSafetyDelay;
-    private String camSafetyMessage;
 
-    public CamSettings(JavaPlugin plugin, ConsoleLog log) {
+    public CamSettings(JavaPlugin plugin, ConsoleLog log, Messages messages) {
         this.plugin = plugin;
         this.log = log;
+        this.messages = messages;
     }
 
     /**
@@ -248,20 +245,14 @@ public final class CamSettings {
         showOwnParticles = config.getBoolean("camera-particles.show-own-particles", false);
         actionBarEnabled = config.getBoolean("action-bar.enabled", true);
         actionBarOffDuration = config.getInt("action-bar.off-duration", 10, 0);
-        actionBarOnMessage = ChatColor.translateAlternateColorCodes('&', config.getString("messages.actionbar-on", "&aCam-Modus aktiviert"));
-        actionBarOffMessage = ChatColor.translateAlternateColorCodes('&', config.getString("messages.actionbar-off", "&cCam-Modus beendet"));
         timeLimitEnabled = config.getBoolean("time-limit.enabled", false);
         cooldownsEnabled = config.getBoolean("time-limit.cooldowns-enabled", false);
         durationSeconds = config.getInt("time-limit.duration-seconds", 300, 1);
         cooldownSeconds = config.getInt("time-limit.cooldown-seconds", 120, 0);
         showBossbar = config.getBoolean("time-limit.show-bossbar", true);
         bossbarColor = config.getEnum("time-limit.bossbar-color", BarColor.class, BarColor.BLUE);
-        bossbarText = ChatColor.translateAlternateColorCodes('&', config.getString("messages.bossbar-text", "Cam-Modus endet in: %time%"));
-        cooldownAvailableText = ChatColor.translateAlternateColorCodes('&', config.getString("messages.cooldown-available", "&aCam-Modus wieder verf\u00fcgbar"));
         camSafetyEnabled = config.getBoolean("cam-safety.enabled", true);
         camSafetyDelay = config.getInt("cam-safety.delay", 5, 0);
-        camSafetyMessage = config.getString("messages.cam-safety",
-                "§cDu kannst den Cam-Modus nicht starten! Du musst noch %seconds% Sekunden in Sicherheit bleiben.");
         camAreaRules.load(config);
         portalRules.load(config);
 
@@ -300,12 +291,27 @@ public final class CamSettings {
         }
         customArmorDamage = config.getInt("mirror-damage.custom-armor-damage", 1, 0);
         respectUnbreaking = config.getBoolean("mirror-damage.respect-unbreaking", true);
-        // Read one by one while the server runs, so a wrong value would show up
-        // again and again instead of once. Checked here in one go instead.
-        config.checkBooleanSection("message-settings");
+        warnAboutOldMessageSections();
         warnAboutOldArmorStandSection();
         warnAboutOldDamageArmorKey();
         warnAboutOldStructureKey();
+    }
+
+    /**
+     * Says once that the texts are not read from the config file any more.
+     * They stand in a language file of their own now, picked with
+     * {@code language} - without this note the texts and switches of a config
+     * file from an older version would quietly give way to the ones of the
+     * language file.
+     */
+    private void warnAboutOldMessageSections() {
+        if (!plugin.getConfig().isConfigurationSection("messages")
+                && !plugin.getConfig().isConfigurationSection("message-settings")) {
+            return;
+        }
+        log.log(Level.WARNING, "Die Abschnitte \"messages\" und \"message-settings\" in der config.yml werden"
+                + " nicht mehr gelesen: Texte und Schalter stehen jetzt in der Sprachdatei im Ordner lang,"
+                + " welche gilt, sagt language in der config.yml.");
     }
 
     /**
@@ -402,7 +408,7 @@ public final class CamSettings {
         String raw = config.getString(path, def);
         BlockData block = parseBlock(raw);
         if (block == null) {
-            config.warnUnknownValue(path, raw, "jeder Block, z. B. barrier oder glass", def);
+            config.warnUnknownValue(path, raw, messages.configMessage("config-allowed-blocks"), def);
             return parseBlock(def);
         }
         return block;
@@ -671,14 +677,6 @@ public final class CamSettings {
         return actionBarEnabled;
     }
 
-    public String getActionBarOnMessage() {
-        return actionBarOnMessage;
-    }
-
-    public String getActionBarOffMessage() {
-        return actionBarOffMessage;
-    }
-
     public int getActionBarOffDuration() {
         return actionBarOffDuration;
     }
@@ -709,14 +707,6 @@ public final class CamSettings {
         return bossbarColor;
     }
 
-    public String getBossbarText() {
-        return bossbarText;
-    }
-
-    public String getCooldownAvailableText() {
-        return cooldownAvailableText;
-    }
-
     // --------------------------------------------------------------- cam-safety
 
     public boolean isCamSafetyEnabled() {
@@ -725,10 +715,6 @@ public final class CamSettings {
 
     public int getCamSafetyDelay() {
         return camSafetyDelay;
-    }
-
-    public String getCamSafetyMessage() {
-        return camSafetyMessage;
     }
 
     // --------------------------------------------------------- cam-area, portals

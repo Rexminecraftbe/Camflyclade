@@ -738,6 +738,11 @@ def prepare_server_files(env):
     data_dir = plugins / "CamFly"
     data_dir.mkdir(exist_ok=True)
     (data_dir / "config.yml").write_text(text, encoding="utf-8")
+    # Die Sprachdatei ebenso, aus demselben Grund. Das Plugin legt sie zwar
+    # selbst an, aber nur, wenn sie fehlt - was ein abgebrochener Lauf an
+    # ihren Schaltern gedreht hat, bliebe sonst fuer den naechsten stehen.
+    (data_dir / "lang").mkdir(exist_ok=True)
+    shutil.copy2(env.repo / "src" / "main" / "resources" / SPRACHDATEI, data_dir / SPRACHDATEI)
     return text
 
 
@@ -1616,20 +1621,35 @@ def replace_option(text, key, value, section=None):
     return text[:head.end()] + block + rest[cut:], n
 
 
+# Die Sprachdatei, die das Plugin mitbringt und der Testserver benutzt, unter
+# src/main/resources wie unter plugins/CamFly.
+SPRACHDATEI = "lang/en.yml"
+
+# Die Abschnitte, die nicht in der config.yml stehen, sondern in der
+# Sprachdatei: die Texte und ihre Schalter.
+SPRACH_ABSCHNITTE = ("messages", "message-settings")
+
+
 def set_options(env, changes):
     """Mehrere Werte in der Konfiguration des Testservers setzen und einmal
     neu laden. Jede Aenderung ist (Schluessel, Wert) oder, wo der Name
-    mehrdeutig ist, (Schluessel, Wert, Abschnitt)."""
-    path = env.server / "plugins" / "CamFly" / "config.yml"
-    text = path.read_text(encoding="utf-8")
+    mehrdeutig ist, (Schluessel, Wert, Abschnitt). Was unter messages oder
+    message-settings steht, kommt in die Sprachdatei, alles andere in die
+    config.yml - fuer einen Text braucht es deshalb immer den Abschnitt."""
+    data_dir = env.server / "plugins" / "CamFly"
+    texte = {}
     for change in changes:
         key, value = change[0], change[1]
         section = change[2] if len(change) > 2 else None
-        text, n = replace_option(text, key, value, section)
+        datei = SPRACHDATEI if section in SPRACH_ABSCHNITTE else "config.yml"
+        if datei not in texte:
+            texte[datei] = (data_dir / datei).read_text(encoding="utf-8")
+        texte[datei], n = replace_option(texte[datei], key, value, section)
         if n != 1:
             where = f" unter {section}" if section else ""
-            FIND.problem(f"{key} steht {n} Mal in der Testkonfiguration{where}")
-    path.write_text(text, encoding="utf-8")
+            FIND.problem(f"{key} steht {n} Mal in {datei} auf dem Testserver{where}")
+    for datei, text in texte.items():
+        (data_dir / datei).write_text(text, encoding="utf-8")
     console(env, "cam reload", pause=2)
 
 
@@ -1827,7 +1847,8 @@ def effect_start_checks(env, bot):
 # ---------------------------------------------------------------------------
 
 def message_switch_checks(env, bot):
-    """Die Schalter der Action-Bar und der Startzeilen unter message-settings.
+    """Die Schalter der Action-Bar und der Startzeilen unter message-settings,
+    in der Sprachdatei.
 
     actionbar-on und actionbar-off schalten die beiden Zeilen der Action-Bar
     einzeln ab, der Hauptschalter enabled nimmt beide mit. Ob der Cam-Modus
@@ -1843,7 +1864,8 @@ def message_switch_checks(env, bot):
     muesste der Server neu starten.
 
     Beide Schalter der Action-Bar heissen wie ihre Texte unter messages,
-    gesetzt wird deshalb immer mit dem Abschnitt.
+    die in derselben Datei stehen - gesetzt wird deshalb immer mit dem
+    Abschnitt.
     """
     def cam():
         """Einmal /cam, und alles, was danach ankommt, ohne Farbcodes."""
@@ -1861,9 +1883,9 @@ def message_switch_checks(env, bot):
 
     log = strip_colors(server_log(env))
     FIND.test("Voreingestellt stehen die Startzeilen im Log",
-              "Skins werden geladen" in log
-              and ("Skins wurden erfolgreich geladen" in log
-                   or "Skins konnten beim Start nicht vorgeladen werden" in log),
+              "Loading skins..." in log
+              and ("Skins loaded successfully." in log
+                   or "Skins could not be preloaded at startup" in log),
               "")
 
     try:
@@ -1912,6 +1934,121 @@ def message_switch_checks(env, bot):
         set_options(env, [("actionbar-on", "true", "message-settings"),
                           ("actionbar-off", "true", "message-settings"),
                           ("enabled", "true", "message-settings")])
+
+
+# ---------------------------------------------------------------------------
+# Die Sprache der Texte
+# ---------------------------------------------------------------------------
+
+# Die Sprache, die der Test neben der mitgelieferten anlegt. Ein Code, den es
+# als echte Sprache nicht gibt - so steht er keiner Datei im Weg, die jemand
+# auf dem Testserver von Hand angelegt hat.
+TESTSPRACHE = "xx"
+
+
+def language_checks(env, bot):
+    """Die Sprachdatei, die language in der config.yml waehlt.
+
+    Mitgeliefert wird nur lang/en.yml. Der Test legt daneben eine eigene
+    Sprache an, mit einem einzigen Text: Alles andere muss aus der englischen
+    Datei im Plugin kommen. Geprueft wird an den Zeilen der Action-Bar, die
+    voreingestellt bei jedem /cam kommen - camera-on und camera-off sind in
+    der ausgelieferten Datei aus.
+
+    Dazu: Eine kaputte Sprachdatei laesst beim Reload alles, wie es war, auch
+    die config.yml, die mit ihr zusammen gelesen wird. Eine Sprache ohne
+    Datei wird gemeldet und faellt auf Englisch zurueck. Und stehen die alten
+    Abschnitte noch in der config.yml, sagt das Plugin, dass es sie nicht mehr
+    liest.
+
+    Was set_options nicht kann, schreibt der Test selbst: die Sprachdatei,
+    die es vorher nicht gibt, einen ganzen Abschnitt in der config.yml, und
+    eine Aenderung, die der Bot neu laden soll statt der Konsole - nur dann
+    kommt die Meldung ueber die kaputte Datei bei ihm im Chat an.
+    """
+    data_dir = env.server / "plugins" / "CamFly"
+    sprachdatei = data_dir / "lang" / f"{TESTSPRACHE}.yml"
+    config = data_dir / "config.yml"
+
+    def cam():
+        """Einmal /cam, und alles, was danach ankommt, ohne Farbcodes."""
+        since = bot.mark()
+        bot.chat("/cam")
+        time.sleep(2.5)
+        return [strip_colors(m["text"])
+                for m in bot.call("messages", since=since).get("messages", [])]
+
+    def said(lines, text):
+        return any(text in line for line in lines)
+
+    def shown(lines):
+        return "; ".join(line for line in lines if line) or "nichts"
+
+    config_vorher = config.read_text(encoding="utf-8")
+    FIND.test("Voreingestellt steht language: en in der config.yml",
+              re.search(r"(?m)^language:\s*en\s*$", config_vorher) is not None, "")
+    FIND.test("Die englische Sprachdatei liegt auf dem Server",
+              (data_dir / SPRACHDATEI).is_file(), "")
+
+    try:
+        # --- Eine eigene Sprache mit nur einem Text ---
+        sprachdatei.write_text('messages:\n  actionbar-on: "&aKamera an"\n', encoding="utf-8")
+        set_option(env, "language", TESTSPRACHE)
+        start = cam()
+        FIND.test(f"language: {TESTSPRACHE} - der Text kommt aus lang/{TESTSPRACHE}.yml",
+                  said(start, "Kamera an") and not said(start, "Cam mode activated"), shown(start))
+        ende = cam()
+        FIND.test(f"language: {TESTSPRACHE} - was dort fehlt, kommt aus der englischen Datei",
+                  said(ende, "Cam mode ended"), shown(ende))
+
+        # --- Eine kaputte Sprachdatei: der Reload laesst alles, wie es war ---
+        # In derselben Runde geht der Spielmodus auf creative. Bleibt er bei
+        # adventure, ist auch die config.yml nicht uebernommen worden.
+        sprachdatei.write_text('messages:\n  actionbar-on: "&aKamera kaputt\n', encoding="utf-8")
+        config.write_text(re.sub(r"(?m)^(\s*gamemode:\s*).*$", r"\g<1>creative",
+                                 config.read_text(encoding="utf-8")), encoding="utf-8")
+        since = bot.mark()
+        bot.chat("/cam reload")
+        time.sleep(2.5)
+        antwort = [strip_colors(m["text"])
+                   for m in bot.call("messages", since=since).get("messages", [])]
+        FIND.test("Eine kaputte Sprachdatei wird beim Reload gemeldet, mit Datei und Zeile",
+                  said(antwort, f"has an error in lang/{TESTSPRACHE}.yml") and said(antwort, "line 2"),
+                  shown(antwort))
+        FIND.test("Der Reload meldet dann keinen Erfolg",
+                  not said(antwort, "reload successful"), shown(antwort))
+        start = cam()
+        adventure = spielmodus_ist(bot, "adventure")
+        FIND.test("Die bisherigen Texte gelten weiter", said(start, "Kamera an"), shown(start))
+        FIND.test("Die config.yml aus derselben Runde wird auch nicht uebernommen", adventure,
+                  "" if adventure else "der Cam-Modus laeuft schon in creative")
+        cam()
+
+        # --- Eine Sprache ohne Datei ---
+        sprachdatei.unlink()
+        config.write_text(config_vorher, encoding="utf-8")
+        vorher = len(server_log(env))
+        set_option(env, "language", "fr")
+        neu = strip_colors(server_log(env)[vorher:])
+        FIND.test("Eine Sprache ohne Datei wird gemeldet",
+                  "Unknown value for language: 'fr'" in neu, "")
+        start = cam()
+        FIND.test("Sie faellt auf Englisch zurueck", said(start, "Cam mode activated"), shown(start))
+        cam()
+
+        # --- Die alten Abschnitte in der config.yml ---
+        config.write_text(config_vorher + '\nmessages:\n  camera-on: "alt"\n', encoding="utf-8")
+        vorher = len(server_log(env))
+        console(env, "cam reload", pause=2)
+        FIND.test("Texte, die noch in der config.yml stehen, werden als nicht mehr gelesen gemeldet",
+                  '"messages" und "message-settings" in der config.yml werden'
+                  in strip_colors(server_log(env)[vorher:]), "")
+    finally:
+        # Der Reload holt ihn auch aus dem Cam-Modus, falls eine Probe
+        # mittendrin abgebrochen ist.
+        sprachdatei.unlink(missing_ok=True)
+        config.write_text(config_vorher, encoding="utf-8")
+        console(env, "cam reload", pause=2)
 
 
 # ---------------------------------------------------------------------------
@@ -2541,7 +2678,7 @@ NAME_VOREINSTELLUNG = [
     ("color", "yellow", "body"), ("through-walls", "false", "body"),
     ("view-distance", "64", "body"), ("background", "true", "body"),
     ("shadow", "false", "body"), ("scale", "1.0", "body"),
-    ("armorstand.name-format", '"{player}\'s Body"'),
+    ("armorstand.name-format", '"{player}\'s Body"', "messages"),
 ]
 
 
@@ -2732,7 +2869,7 @@ def name_checks(env, bot):
 
         # Etwas, das keine Farbe ist, wird gemeldet und faellt auf gelb zurueck.
         set_option(env, "color", "blau", "body")
-        meldung = any("Unbekannter Wert" in zeile and "body.name.color" in zeile
+        meldung = any("Unknown value" in zeile and "body.name.color" in zeile
                       for zeile in server_log(env).splitlines())
         FIND.test("Eine unbekannte Farbe wird gemeldet", meldung,
                   "" if meldung else "keine Meldung im Server-Log")
@@ -2750,7 +2887,7 @@ def name_checks(env, bot):
         # das aus \\ einen einzelnen Rueckstrich macht. In der Datei steht
         # danach \n in Anfuehrungszeichen, und YAML macht daraus die neue Zeile.
         set_options(env, [("color", "red", "body"),
-                          ("armorstand.name-format", '"&e{player}\'s Body\\\\n&7Kamera"')])
+                          ("armorstand.name-format", '"&e{player}\'s Body\\\\n&7Kamera"', "messages")])
         if FIND.test("/cam startet mit einem Namen ueber zwei Zeilen", start(), ""):
             # /data zeigt den Zeilenumbruch als \n, oder er steht selbst da.
             text = daten_von(bot, NAME, "text")
@@ -2801,7 +2938,7 @@ SPIELERNAME_VOREINSTELLUNG = [
     ("shadow", "false", "camera-mode"), ("scale", "1.0", "camera-mode"),
     ("player_visibility_mode", "true"), ("allow_invisibility_potion", "true"),
     ("nether", "false", "portals"), ("nether", "false", "cam-area"),
-    ("player.name-format", '"{player}\'s Cam"'),
+    ("player.name-format", '"{player}\'s Cam"', "messages"),
 ]
 
 
@@ -3088,7 +3225,7 @@ def spielername_checks(env, bot):
                           ("view-distance", "32", "camera-mode"),
                           ("background", "false", "camera-mode"), ("shadow", "true", "camera-mode"),
                           ("scale", "2.0", "camera-mode"),
-                          ("player.name-format", '"&eCam von {player}\\\\n&7Kamera"')])
+                          ("player.name-format", '"&eCam von {player}\\\\n&7Kamera"', "messages")])
         if FIND.test("/cam startet mit geaenderten Schaltern fuer den Spielernamen",
                      start() is not None, ""):
             text = spielername_daten(bot, "text")
@@ -3119,7 +3256,7 @@ def spielername_checks(env, bot):
 
         # Etwas, das keine Farbe ist, wird gemeldet und faellt auf weiss zurueck.
         set_options(env, SPIELERNAME_VOREINSTELLUNG + [("color", "blau", "camera-mode")])
-        meldung = any("Unbekannter Wert" in zeile and "camera-mode.name.color" in zeile
+        meldung = any("Unknown value" in zeile and "camera-mode.name.color" in zeile
                       for zeile in server_log(env).splitlines())
         FIND.test("Eine unbekannte Farbe fuer den Spielernamen wird gemeldet", meldung,
                   "" if meldung else "keine Meldung im Server-Log")
@@ -3132,7 +3269,7 @@ def spielername_checks(env, bot):
 
         # Ein Modus, den es nicht gibt, ebenso - auf Modus 1.
         set_options(env, SPIELERNAME_VOREINSTELLUNG + [("name-mode", "3")])
-        meldung = any("Unbekannter Wert" in zeile and "camera-mode.name-mode" in zeile
+        meldung = any("Unknown value" in zeile and "camera-mode.name-mode" in zeile
                       for zeile in server_log(env).splitlines())
         FIND.test("Ein unbekannter name-mode wird gemeldet", meldung,
                   "" if meldung else "keine Meldung im Server-Log")
@@ -3478,10 +3615,9 @@ def gamemode_checks(env, bot):
         # hier am ehesten eintraegt, und genau der steht nicht zur Wahl.
         set_option(env, "gamemode", "zuschauer")
         # Beides in derselben Zeile: Das Log waechst ueber den ganzen Lauf,
-        # und "Unbekannter Wert" allein traefe auch auf eine Meldung von
-        # irgendwoher zu. Der Umlaut in der Meldung bleibt aussen vor - das
-        # Log wird mit errors="replace" gelesen.
-        meldung = any("Unbekannter Wert" in zeile and "camera-mode.gamemode" in zeile
+        # und "Unknown value" allein traefe auch auf eine Meldung von
+        # irgendwoher zu.
+        meldung = any("Unknown value" in zeile and "camera-mode.gamemode" in zeile
                       for zeile in server_log(env).splitlines())
         FIND.test("Ein unbekannter Wert fuer gamemode wird gemeldet", meldung,
                   "" if meldung else "keine Meldung im Server-Log")
@@ -4096,7 +4232,7 @@ def border_checks(env, bot):
         FIND.test("Ein unbekannter border-block wird gemeldet",
                   "camera-mode.border-block: 'diamond'" in neu, "")
         FIND.test("Ein zu grosser border-radius wird gemeldet",
-                  "camera-mode.border-radius ist zu gro" in neu, "")
+                  "camera-mode.border-radius is too large" in neu, "")
         ergebnis = grenz_lauf(bot, heim)
         FIND.test("Mit dem Ersatz fuer beides steht die Wand trotzdem",
                   drin(ergebnis) and ergebnis[1] == 0, grenz_zeige(ergebnis, heim))
@@ -4757,6 +4893,9 @@ def step_tests(env):
 
         # --- Meldungen einzeln abschalten ---
         message_switch_checks(env, bot)
+
+        # --- Die Sprache der Texte ---
+        language_checks(env, bot)
 
         # --- Geworfene Traenke im Cam-Modus ---
         potion_checks(env, bot)

@@ -1,0 +1,118 @@
+# CamFly - Sprachdatei: Englisch
+# Welche Sprachdatei gilt, steht in der config.yml unter language.
+# Für eine andere Sprache diese Datei kopieren, z. B. als de.yml, übersetzen und dort language: de eintragen.
+# Was in einer Sprachdatei fehlt, kommt aus der englischen im Plugin.
+# Neu laden mit /cam reload.
+
+# Texte, die das Plugin ausgibt (Farbcodes mit &)
+messages:
+  actionbar-off: "&cCam mode ended"
+  actionbar-on: "&aCam mode activated"
+  armorstand.name-format: "{player}'s Body"
+  body-attacked: "&cYour body was attacked by {damager}! Camera mode ended."
+  body-drowning: "&cYour body is drowning! Camera mode ended."
+  body-env-damage: "&cYour body was damaged by {cause}! Camera mode ended."
+  body-got-effect: "&cYour body was hit by the effect {effect}! Camera mode ended."
+  body-moved: "&cYour body was moved! Camera mode ended."
+  body-suffocating: "&cYour body is stuck and suffocating! Camera mode ended."
+  bossbar-text: "Cam mode ends in: %time%"
+  cam-area-limit: "&cYou cannot go any further, cam mode is not allowed in {area}."
+  cam-area-start: "&cYou cannot start cam mode in {area}."
+  cam-effect-start: "&cYou cannot start cam mode with {effect} on you."
+  cam-lava-start: "&cYou cannot start cam mode in lava."
+  cam-powder-snow-start: "&cYou cannot start cam mode in powder snow."
+  cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
+  cam-spectator-start: "&cYou cannot start cam mode in spectator mode."
+  cam-water-start: "&cYou cannot start cam mode in water."
+  camera-off: "&aCamera mode ended."
+  camera-on: "&aCamera mode activated! Use /cam again to exit."
+  cant-attack-other-body: "&cYou cannot attack other bodies in camera mode."
+  cant-fly-in-lava: "&cYou cannot fly into lava in camera mode."
+  cant-fly-in-powder-snow: "&cYou cannot fly into powder snow in camera mode."
+  cant-fly-in-water: "&cYou cannot fly into water in camera mode."
+  config-allowed-blocks: "any block, e.g. barrier or glass"
+  config-broken: "&cThe configuration has an error in {file} and was not applied, the previous settings stay in effect: {error}"
+  config-broken-startup: "&cThe configuration has an error in {file}: {error}"
+  config-start-failed: "&cStartup failed. To enable the plugin, fix the error in the configuration and restart the server."
+  config-entry-in-both-lists: "&cThe entry '{value}' is in {path} and in {other}. It is ignored in both."
+  config-error-header: "&cThe configuration has {count} invalid entries:"
+  config-error-header-single: "&cThe configuration has one invalid entry:"
+  config-error-more: "&c... and {count} more. All of them are in the server console."
+  config-expected-boolean: "&cWrong value for {path}: '{value}'. Expected true or false. Using {used} instead."
+  config-expected-list: "&cWrong value for {path}: '{value}'. Expected a list. Using {used} instead."
+  config-expected-number: "&cWrong value for {path}: '{value}'. Expected a number. Using {used} instead."
+  config-expected-text: "&cWrong value for {path}: '{value}'. Expected text. Using {used} instead."
+  config-syntax-extra-colon: 'there is one ":" too many here, or the value belongs in quotes'
+  config-syntax-indentation: "the indentation here does not match the lines above"
+  config-syntax-missing-colon: 'a "-" at the start of the line or a ":" after the name is missing here'
+  config-syntax-missing-quote: "the closing quote is missing here"
+  config-syntax-spot: "line {line}, column {column}"
+  config-syntax-tab: "there is a tab here, indent with spaces only"
+  config-syntax-unreadable: "unreadable"
+  config-too-large: "&cValue for {path} is too large: {value}. Using {max} instead."
+  config-too-small: "&cValue for {path} is too small: {value}. Using {min} instead."
+  config-unknown-entry: "&cUnknown entry in {path}: '{value}'. It is ignored."
+  config-unknown-value: "&cUnknown value for {path}: '{value}'. Allowed: {allowed}. Using {used} instead."
+  cooldown-available: "&aCam mode available again"
+  cooldown-text: "You can start cam mode again in %time%."
+  distance-from-body: "your body"
+  distance-from-portal: "the portal you came out of"
+  distance-limit: "&cYou cannot move further than {distance} blocks from {from}!"
+  hitbox.name-format: "&c[HITBOX] {player}"
+  no-permission: "&cYou don't have permission to use this command."
+  no-player: "&cThis command can only be used by players."
+  no-projectiles: "&cYou cannot shoot projectiles in camera mode."
+  player.name-format: "{player}'s Cam"
+  portal-blocked: "&cYou cannot go through {portal} portals in camera mode."
+  portal-return-area: "&cCam mode is not allowed in {area}, you were brought back."
+  portal-return-distance: "&cYou ended up more than {distance} blocks away from {from} and were brought back."
+  reload-exit: "&cCamera mode ended due to plugin restart."
+  reload-start: "&ePlugin is restarting..."
+  reload-success: "&aPlugin reload successful."
+  startup-skins-failed: "Skins could not be preloaded at startup: {error}"
+  startup-skins-loaded: "Skins loaded successfully."
+  startup-skins-loading: "Loading skins..."
+  time-limit-expired: "&cCam mode ended: Time limit expired."
+
+# Nachrichten einzeln an- und abschalten
+message-settings:
+  actionbar-off: true
+  actionbar-on: true
+  body-attacked: true
+  body-drowning: true
+  body-env-damage: true
+  body-got-effect: true
+  body-moved: true
+  body-suffocating: true
+  bossbar-text: true
+  cam-area-limit: true
+  cam-area-start: true
+  cam-effect-start: true
+  cam-lava-start: true
+  cam-powder-snow-start: true
+  cam-safety: true
+  cam-spectator-start: true
+  cam-water-start: true
+  camera-off: false
+  camera-on: false
+  cant-attack-other-body: true
+  cant-fly-in-lava: true
+  cant-fly-in-powder-snow: true
+  cant-fly-in-water: true
+  config-errors: true
+  cooldown-available: true
+  cooldown-text: true
+  distance-limit: true
+  enabled: true
+  no-permission: true
+  no-projectiles: true
+  portal-blocked: true
+  portal-return-area: true
+  portal-return-distance: true
+  reload-exit: true
+  reload-start: true
+  reload-success: true
+  startup-skins-failed: true
+  startup-skins-loaded: true
+  startup-skins-loading: true
+  time-limit-expired: true

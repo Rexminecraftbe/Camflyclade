@@ -187,8 +187,8 @@ public final class CamMovementGuard implements Listener {
         boolean fromPortal = !data.getBody().getWorld().equals(where.getWorld())
                 && data.getPortalAnchor() != null;
         String text = messages.getMessage(fromPortal ? "distance-from-portal" : "distance-from-body");
-        // Ein Satzteil, kein ganzer Satz: Fehlt er in einer Konfiguration aus
-        // einer aelteren Version, stuende sonst "... blocks from !" im Chat.
+        // Ein Satzteil, kein ganzer Satz: Steht er leer in der Sprachdatei,
+        // stuende sonst "... blocks from !" im Chat.
         if (!text.isEmpty()) {
             return text;
         }
