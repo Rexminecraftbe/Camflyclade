@@ -75,15 +75,15 @@ public final class DamageMirror implements Listener {
     public void onBodyDamage(EntityDamageEvent event) {
         Entity damagedEntity = event.getEntity();
 
-        // Prüfe, ob es sich um unseren Körper oder die zugehörige Hitbox handelt
+        // Checks whether this is one of our bodies or the hitbox belonging to it
         boolean damagedBody = cameraPlayers.isCameraBody(damagedEntity);
         UUID ownerUUID = cameraPlayers.getBodyOrHitboxOwner(damagedEntity);
 
-        if (ownerUUID == null) return; // Nicht von uns verwaltet
+        if (ownerUUID == null) return; // Not managed by this plugin
 
         Player owner = Bukkit.getPlayer(ownerUUID);
         if (owner == null || !owner.isOnline()) {
-            // Spieler offline -> Aufräumen
+            // Player offline -> clean up
             if (damagedBody) {
                 cameraPlayers.removeBody(damagedEntity.getUniqueId());
             } else {
@@ -105,7 +105,7 @@ public final class DamageMirror implements Listener {
             return;
         }
 
-        // Der Körper selbst soll keinen Schaden nehmen, jeder Treffer beendet den Cam-Modus.
+        // The body itself takes no damage, every hit ends camera mode.
         event.setCancelled(true);
 
         if (event instanceof EntityDamageByEntityEvent selfHit &&
@@ -117,7 +117,7 @@ public final class DamageMirror implements Listener {
 
         DamageCause cause = event.getCause();
 
-        String damagerName = "Umgebung";
+        String damagerName = "environment";
         Entity damagerEntity = null;
         if (event instanceof EntityDamageByEntityEvent entityEvent) {
             damagerEntity = entityEvent.getDamager();
@@ -170,7 +170,7 @@ public final class DamageMirror implements Listener {
 
         if (settings.isMirrorDebug()) {
             sendMirrorDebug(owner, String.format(Locale.ROOT,
-                    "Koerper getroffen: roh %.3f | nach Koerper-Ruestung %.3f | %s",
+                    "body hit: raw %.3f | after body armour %.3f | %s",
                     event.getDamage(), event.getFinalDamage(), event.getCause()));
         }
 
@@ -432,11 +432,11 @@ public final class DamageMirror implements Listener {
     /** How the wear on the armour reads in the measuring line. */
     private String armorNote(boolean serverWears, int points) {
         if (serverWears) {
-            return "mirror, vom Server";
+            return "mirror, by the server";
         }
         return switch (settings.getArmorDamageMode()) {
-            case MIRROR -> "mirror, " + points + " Punkte";
-            case CUSTOM -> "custom, " + points + " Punkte";
+            case MIRROR -> "mirror, " + points + " points";
+            case CUSTOM -> "custom, " + points + " points";
             case OFF -> "false";
         };
     }
@@ -484,14 +484,14 @@ public final class DamageMirror implements Listener {
             return;
         }
         sendMirrorDebug(owner, String.format(Locale.ROOT,
-                "uebertragen: roh %.3f (%s) | Ruestung %.1f (zaehlt %s), Haerte %.1f, KB-Schutz %.2f"
-                        + " | Leben %.2f -> %.2f (-%.3f) | Tempo %.3f | Wartezeit %d Ticks"
-                        + " | Unverwundbar %d, letzter Treffer %.2f, Feuer %d | Rueckstoss %s"
-                        + " | Abnutzung %s",
-                amount, damageTypeName(source), armor, settings.damageCountsArmor() ? "an" : "aus",
+                "mirrored: raw %.3f (%s) | armour %.1f (counts %s), toughness %.1f, KB resistance %.2f"
+                        + " | health %.2f -> %.2f (-%.3f) | speed %.3f | waited %d ticks"
+                        + " | invulnerable %d, last hit %.2f, fire %d | knockback %s"
+                        + " | wear %s",
+                amount, damageTypeName(source), armor, settings.damageCountsArmor() ? "on" : "off",
                 toughness, knockbackResistance,
                 healthBefore, owner.getHealth(), healthBefore - owner.getHealth(), speed, waitedTicks,
-                framesBefore, lastBefore, fireBefore, settings.isMirrorKnockback() ? "an" : "aus", armorNote));
+                framesBefore, lastBefore, fireBefore, settings.isMirrorKnockback() ? "on" : "off", armorNote));
     }
 
     /**
@@ -545,7 +545,7 @@ public final class DamageMirror implements Listener {
 
     /** The name of the damage type a hit carries, for the measuring output. */
     private String damageTypeName(org.bukkit.damage.DamageSource source) {
-        return source == null ? "ohne Quelle" : source.getDamageType().getKey().toString();
+        return source == null ? "no source" : source.getDamageType().getKey().toString();
     }
 
     /**
@@ -553,7 +553,7 @@ public final class DamageMirror implements Listener {
      * Only ever reached while {@code mirror-damage.debug} is switched on.
      */
     private void sendMirrorDebug(Player owner, String line) {
-        plugin.getLogger().info("[Schadensuebertragung] " + owner.getName() + ": " + line);
+        plugin.getLogger().info("[Damage mirror] " + owner.getName() + ": " + line);
         owner.sendMessage("§e[CamFly] §7" + line);
     }
 }

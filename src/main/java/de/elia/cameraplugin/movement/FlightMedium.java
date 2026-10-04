@@ -90,8 +90,8 @@ public enum FlightMedium {
         Material type = block.getType();
         return switch (this) {
             case LAVA -> type == Material.LAVA;
-            // Luft zuerst aussortiert: Um eine Kamera herum ist fast alles
-            // Luft, und getBlockData legt fuer jeden Block ein neues Objekt an.
+            // Air is sorted out first: around a camera almost everything is
+            // air, and getBlockData creates a new object for every block.
             case WATER -> ALWAYS_IN_WATER.contains(type) || (!type.isAir()
                     && block.getBlockData() instanceof Waterlogged waterlogged && waterlogged.isWaterlogged());
             case POWDER_SNOW -> type == Material.POWDER_SNOW;

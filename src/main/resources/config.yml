@@ -2,110 +2,10 @@
 # Neu laden mit /cam reload.
 # Ungültige Werte werden in der Konsole gemeldet und ersetzt.
 
-# Texte, die das Plugin ausgibt (Farbcodes mit &)
-messages:
-  actionbar-off: "&cCam mode ended"
-  actionbar-on: "&aCam mode activated"
-  armorstand.name-format: "{player}'s Body"
-  body-attacked: "&cYour body was attacked by {damager}! Camera mode ended."
-  body-drowning: "&cYour body is drowning! Camera mode ended."
-  body-env-damage: "&cYour body was damaged by {cause}! Camera mode ended."
-  body-got-effect: "&cYour body was hit by the effect {effect}! Camera mode ended."
-  body-moved: "&cYour body was moved! Camera mode ended."
-  body-suffocating: "&cYour body is stuck and suffocating! Camera mode ended."
-  bossbar-text: "Cam mode ends in: %time%"
-  cam-area-limit: "&cYou cannot go any further, cam mode is not allowed in {area}."
-  cam-area-start: "&cYou cannot start cam mode in {area}."
-  cam-effect-start: "&cYou cannot start cam mode with {effect} on you."
-  cam-lava-start: "&cYou cannot start cam mode in lava."
-  cam-powder-snow-start: "&cYou cannot start cam mode in powder snow."
-  cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
-  cam-spectator-start: "&cYou cannot start cam mode in spectator mode."
-  cam-water-start: "&cYou cannot start cam mode in water."
-  camera-off: "&aCamera mode ended."
-  camera-on: "&aCamera mode activated! Use /cam again to exit."
-  cant-attack-other-body: "&cYou cannot attack other bodies in camera mode."
-  cant-fly-in-lava: "&cYou cannot fly into lava in camera mode."
-  cant-fly-in-powder-snow: "&cYou cannot fly into powder snow in camera mode."
-  cant-fly-in-water: "&cYou cannot fly into water in camera mode."
-  config-broken: "&cDie Konfiguration hat einen Fehler und wurde nicht übernommen, es gelten weiter die bisherigen Einstellungen: {error}"
-  config-broken-startup: "&cDie Konfiguration hat einen Fehler: {error}"
-  config-start-failed: "&cStart fehlgeschlagen. Zum Aktivieren den Fehler in der Konfiguration beheben und den Server neu starten."
-  config-entry-in-both-lists: "&cDer Eintrag '{value}' steht in {path} und in {other}. Er wird in keiner der beiden beachtet."
-  config-error-header: "&cDie Konfiguration hat {count} ungültige Stellen:"
-  config-error-header-single: "&cDie Konfiguration hat eine ungültige Stelle:"
-  config-error-more: "&c... und {count} weitere. Alle stehen in der Server-Konsole."
-  config-expected-boolean: "&cFalscher Wert für {path}: '{value}'. Erwartet wird true oder false. Es wird {used} verwendet."
-  config-expected-list: "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Liste. Es wird {used} verwendet."
-  config-expected-number: "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Zahl. Es wird {used} verwendet."
-  config-expected-text: "&cFalscher Wert für {path}: '{value}'. Erwartet wird Text. Es wird {used} verwendet."
-  config-too-large: "&cWert für {path} ist zu groß: {value}. Es wird {max} verwendet."
-  config-too-small: "&cWert für {path} ist zu klein: {value}. Es wird {min} verwendet."
-  config-unknown-entry: "&cUnbekannter Eintrag in {path}: '{value}'. Er wird nicht beachtet."
-  config-unknown-value: "&cUnbekannter Wert für {path}: '{value}'. Erlaubt sind: {allowed}. Es wird {used} verwendet."
-  cooldown-available: "&aCam mode available again"
-  cooldown-text: "You can start cam mode again in %time%."
-  distance-from-body: "your body"
-  distance-from-portal: "the portal you came out of"
-  distance-limit: "&cYou cannot move further than {distance} blocks from {from}!"
-  hitbox.name-format: "&c[HITBOX] {player}"
-  no-permission: "&cYou don't have permission to use this command."
-  no-player: "&cThis command can only be used by players."
-  no-projectiles: "&cYou cannot shoot projectiles in camera mode."
-  player.name-format: "{player}'s Cam"
-  portal-blocked: "&cYou cannot go through {portal} portals in camera mode."
-  portal-return-area: "&cCam mode is not allowed in {area}, you were brought back."
-  portal-return-distance: "&cYou ended up more than {distance} blocks away from {from} and were brought back."
-  reload-exit: "&cCamera mode ended due to plugin restart."
-  reload-start: "&ePlugin is restarting..."
-  reload-success: "&aPlugin reload successful."
-  startup-skins-failed: "Skins konnten beim Start nicht vorgeladen werden: {error}"
-  startup-skins-loaded: "Skins wurden erfolgreich geladen."
-  startup-skins-loading: "Skins werden geladen..."
-  time-limit-expired: "&cCam mode ended: Time limit expired."
-
-# Nachrichten einzeln an- und abschalten
-message-settings:
-  actionbar-off: true
-  actionbar-on: true
-  body-attacked: true
-  body-drowning: true
-  body-env-damage: true
-  body-got-effect: true
-  body-moved: true
-  body-suffocating: true
-  bossbar-text: true
-  cam-area-limit: true
-  cam-area-start: true
-  cam-effect-start: true
-  cam-lava-start: true
-  cam-powder-snow-start: true
-  cam-safety: true
-  cam-spectator-start: true
-  cam-water-start: true
-  camera-off: false
-  camera-on: false
-  cant-attack-other-body: true
-  cant-fly-in-lava: true
-  cant-fly-in-powder-snow: true
-  cant-fly-in-water: true
-  config-errors: true
-  cooldown-available: true
-  cooldown-text: true
-  distance-limit: true
-  enabled: true
-  no-permission: true
-  no-projectiles: true
-  portal-blocked: true
-  portal-return-area: true
-  portal-return-distance: true
-  reload-exit: true
-  reload-start: true
-  reload-success: true
-  startup-skins-failed: true
-  startup-skins-loaded: true
-  startup-skins-loading: true
-  time-limit-expired: true
+# Sprache der Texte, die das Plugin ausgibt: der Name einer Datei im Ordner lang, ohne .yml.
+# Mitgeliefert wird nur en (lang/en.yml). Für eine andere Sprache lang/en.yml kopieren,
+# z. B. als lang/de.yml, die Texte darin übersetzen und hier de eintragen.
+language: en
 
 # Anzeige in der Action-Bar
 action-bar:
@@ -159,7 +59,7 @@ camera-mode:
   glowing-outline: true
 
   # Name über dem Spieler im Cam-Modus, an Stelle seines Namensschilds - so steht er auch über dem unsichtbaren Spieler,
-  # und der Text ist frei wählbar: messages.player.name-format, z. B. "Cam von {player}" (leer = gar kein Name).
+  # und der Text ist frei wählbar: messages.player.name-format in der Sprachdatei, z. B. "Cam von {player}" (leer = gar kein Name).
   # Zu sehen für jeden, der den Spieler sieht (player_visibility_mode), auch für andere im Cam-Modus, nur nicht für ihn selbst.
   # false = sein normales Namensschild (unsichtbar sehen es nur andere im Cam-Modus)
   name-visible: true
@@ -171,7 +71,7 @@ camera-mode:
   #       Befehle wie /tp, Portale und CamFly selbst schon.
   name-mode: 1
 
-  # Aussehen des Namens (der Text steht in messages.player.name-format, \n beginnt eine neue Zeile)
+  # Aussehen des Namens (der Text steht in der Sprachdatei unter messages.player.name-format, \n beginnt eine neue Zeile)
   name:
     # Farbe der Schrift (ersetzt einen Farbcode am Anfang von name-format):
     #   white, yellow, gold, red, dark_red, light_purple, dark_purple, blue,
@@ -221,7 +121,7 @@ body:
   # Name über dem Körper
   name-visible: true
 
-  # Aussehen des Namens (der Text steht in messages.armorstand.name-format, \n beginnt eine neue Zeile)
+  # Aussehen des Namens (der Text steht in der Sprachdatei unter messages.armorstand.name-format, \n beginnt eine neue Zeile)
   name:
     # Farbe der Schrift (ersetzt einen Farbcode am Anfang von name-format):
     #   white, yellow, gold, red, dark_red, light_purple, dark_purple, blue,

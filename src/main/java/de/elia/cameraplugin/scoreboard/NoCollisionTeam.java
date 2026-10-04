@@ -27,7 +27,7 @@ public final class NoCollisionTeam {
     }
 
     /**
-     * Erstellt das Team, sobald mindestens ein Spieler es braucht, und gibt es zurueck.
+     * Creates the team as soon as at least one player needs it, and returns it.
      */
     private Team ensureNoCollisionTeam() {
         Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
@@ -47,7 +47,7 @@ public final class NoCollisionTeam {
         return team;
     }
 
-    /** Loescht das Team samt aller Eintraege, falls es existiert. */
+    /** Deletes the team with all its entries, if it exists. */
     public void deleteNoCollisionTeam() {
         Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
         Team team = scoreboard.getTeam(NO_COLLISION_TEAM);
@@ -58,7 +58,7 @@ public final class NoCollisionTeam {
         team.unregister();
     }
 
-    /** Loescht das Team, sobald kein Spieler mehr im Cam-Modus ist. */
+    /** Deletes the team as soon as no player is in camera mode any more. */
     public void deleteNoCollisionTeamIfUnused() {
         if (cameraPlayers.isEmpty()) {
             deleteNoCollisionTeam();
@@ -66,8 +66,8 @@ public final class NoCollisionTeam {
     }
 
     /**
-     * Haelt das Team genau so lange am Leben, wie mindestens ein Spieler im
-     * Cam-Modus ist, und synchronisiert die Mitgliedschaft aller Online-Spieler.
+     * Keeps the team alive exactly as long as at least one player is in
+     * camera mode, and brings the membership of every online player up to date.
      */
     public void refreshNoCollisionTeam() {
         if (cameraPlayers.isEmpty()) {
@@ -101,7 +101,7 @@ public final class NoCollisionTeam {
      */
     public void updateViewerTeam(Player player) {
         if (cameraPlayers.isEmpty()) {
-            // Niemand im Cam-Modus -> das Team wird nicht gebraucht.
+            // Nobody in camera mode -> the team is not needed.
             deleteNoCollisionTeam();
             return;
         }

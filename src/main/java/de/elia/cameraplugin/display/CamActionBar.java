@@ -43,7 +43,7 @@ public final class CamActionBar {
                     this.cancel();
                     return;
                 }
-                player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(settings.getActionBarOnMessage()));
+                player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(messages.getMessage("actionbar-on")));
             }
         };
         task.runTaskTimer(plugin, 0L, 40L);
@@ -96,7 +96,7 @@ public final class CamActionBar {
                     return;
                 }
 
-                player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(settings.getActionBarOffMessage()));
+                player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(messages.getMessage("actionbar-off")));
                 ticks++;
             }
         };

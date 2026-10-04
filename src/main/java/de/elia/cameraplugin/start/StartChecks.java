@@ -56,9 +56,9 @@ public final class StartChecks implements Listener {
         long delayMillis = settings.getCamSafetyDelay() * 1000L;
         if (elapsed >= delayMillis) return true;
         long remaining = (delayMillis - elapsed + 999) / 1000;
-        String msg = settings.getCamSafetyMessage().replace("%seconds%", String.valueOf(remaining));
+        String msg = messages.getMessage("cam-safety").replace("%seconds%", String.valueOf(remaining));
         if (messages.isMessageEnabled("cam-safety")) {
-            player.sendMessage(ChatColor.RED + ChatColor.translateAlternateColorCodes('&', msg));
+            player.sendMessage(ChatColor.RED + msg);
         }
         return false;
     }

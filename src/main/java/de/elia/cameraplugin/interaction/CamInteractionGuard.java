@@ -86,7 +86,7 @@ public final class CamInteractionGuard implements Listener {
         }
         event.setCancelled(true);
         if (!cameraPlayers.contains(ownerUUID)) {
-            // Beide Event-Varianten können für denselben Klick ausgelöst werden.
+            // Both kinds of event can be fired for the same click.
             return;
         }
         // Only his own body is his to click, and that ends camera mode.
@@ -132,7 +132,7 @@ public final class CamInteractionGuard implements Listener {
 
         Action action = event.getAction();
 
-        // Verhindert jegliche Interaktionen im Kamera-Modus
+        // Blocks every interaction in camera mode
         if (action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK ||
                 action == Action.LEFT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK ||
                 action == Action.PHYSICAL) {

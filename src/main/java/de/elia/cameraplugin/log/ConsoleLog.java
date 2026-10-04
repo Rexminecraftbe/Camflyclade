@@ -58,7 +58,7 @@ public final class ConsoleLog {
      * The same sentence, written so that the server console can print it.
      *
      * <p>A console that cannot write umlauts turns every one of them into a
-     * question mark - "Falscher Wert f?r ..." instead of "für". Which
+     * question mark - "f?r" instead of "für" in a German language file. Which
      * characters it can write is decided by how the server was started and not
      * by this plugin, so the sentence is rewritten only when it really would
      * not survive: ä becomes ae, ß becomes ss, and whatever is left over loses
@@ -76,8 +76,8 @@ public final class ConsoleLog {
         if (CONSOLE_CHARSET.newEncoder().canEncode(plain)) {
             return plain;
         }
-        // Alles Übrige verliert seine Zeichen: é wird e, ein Zeichen ohne
-        // Entsprechung bleibt und wird zum Fragezeichen wie bisher.
+        // Everything else loses its marks: é becomes e, a character without
+        // a counterpart stays and turns into a question mark as before.
         return Normalizer.normalize(plain, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
     }
 }

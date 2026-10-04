@@ -25,9 +25,9 @@ public class CamCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        // Vor der Spieler-Pruefung: Der Reload geht auch von der Server-Konsole
-        // aus. Wer die Datei auf dem Server aendert, hat nicht immer einen
-        // Operator im Spiel, der den Befehl fuer ihn tippen koennte.
+        // Before the player check: the reload also works from the server
+        // console. Whoever changes the file on the server does not always have
+        // an operator in the game to type the command.
         if (args.length > 0 && args[0].equalsIgnoreCase("reload")) {
             return reload(sender);
         }
@@ -46,8 +46,8 @@ public class CamCommand implements CommandExecutor {
             plugin.exitCameraMode(player);
             messages.sendConfiguredMessage(player, "camera-off");
         } else {
-            // Vor der Abklingzeit: Einem Zuschauer sagt "warte noch zehn
-            // Sekunden" das Falsche - danach darf er genauso wenig.
+            // Before the cooldown: "wait ten more seconds" tells a spectator
+            // the wrong thing - waiting does not let a spectator start either.
             if (!startChecks.checkCamSpectator(player)) {
                 return true;
             }
@@ -65,9 +65,9 @@ public class CamCommand implements CommandExecutor {
             if (!startChecks.checkCamMedium(player)) {
                 return true;
             }
-            // Vor der Sicherheitspruefung: Ein schaedlicher Effekt tut meist
-            // auch weh, und dann stuende erst "warte noch fuenf Sekunden" da
-            // und danach erst der Grund, an dem es wirklich liegt.
+            // Before the safety check: a harmful effect usually hurts as
+            // well, and then "wait five more seconds" would come first and
+            // the reason that really stands in the way only after it.
             if (!startChecks.checkCamEffects(player)) {
                 return true;
             }

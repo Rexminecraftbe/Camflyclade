@@ -2,30 +2,91 @@ package de.elia.cameraplugin.config;
 
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+
 /**
  * The texts of the {@code messages} section and the switches of
- * {@code message-settings} that turn them off.
+ * {@code message-settings} that turn them off. Both stand in the language file
+ * the config file names under {@code language}, see
+ * {@link ConfigFile#readConfigInto}.
+ *
+ * <p>Whatever that file leaves out, the English file built into the jar says:
+ * a language file from an older version does not have the newer keys in it,
+ * and a translation keeps working while it lacks a few.</p>
  */
 public final class Messages {
 
-    private final JavaPlugin plugin;
+    /** The English language file built into the jar. */
+    private final FileConfiguration builtIn;
+
+    /**
+     * The language file in use. Until a file has been read, and while there is
+     * none for the language, that is the built-in one.
+     */
+    private FileConfiguration language;
 
     public Messages(JavaPlugin plugin) {
-        this.plugin = plugin;
+        InputStream stream = plugin.getResource(ConfigFile.languagePath(ConfigFile.DEFAULT_LANGUAGE));
+        builtIn = stream == null
+                ? new YamlConfiguration()
+                : YamlConfiguration.loadConfiguration(new InputStreamReader(stream, StandardCharsets.UTF_8));
+        language = builtIn;
+    }
+
+    /**
+     * Puts a language file in place, once {@link ConfigFile} has read it.
+     *
+     * @param file the file as it was read, or {@code null} when there is no
+     *             file for the language and the built-in one is used
+     */
+    void use(FileConfiguration file) {
+        if (file == null) {
+            language = builtIn;
+            return;
+        }
+        file.setDefaults(builtIn);
+        language = file;
     }
 
     public String getMessage(String path) {
-        return ChatColor.translateAlternateColorCodes('&', plugin.getConfig().getString("messages." + path, ""));
+        String text = language.getString("messages." + path);
+        return text == null ? "" : ChatColor.translateAlternateColorCodes('&', text);
     }
 
     public boolean isMessageEnabled(String path) {
-        if (!plugin.getConfig().getBoolean("message-settings.enabled", true)) {
-            return false;
-        }
-        return plugin.getConfig().getBoolean("message-settings." + path, true);
+        return isSwitchedOn("enabled") && isSwitchedOn(path);
+    }
+
+    /**
+     * Whether a switch of {@code message-settings} is on. One that is no truth
+     * value counts as on and is reported, see {@link #check()}; so does one
+     * that is in neither file, as a message without a switch of its own is
+     * always sent.
+     */
+    private boolean isSwitchedOn(String key) {
+        Object value = language.get("message-settings." + key);
+        return !(value instanceof Boolean on) || on;
+    }
+
+    /**
+     * Checks the switches of the language file in one go. They are read one by
+     * one while the server runs, so a wrong value would show up again and
+     * again instead of once.
+     *
+     * @return a note for each switch that is no truth value
+     */
+    public List<ConfigIssue> check() {
+        ConfigReader reader = new ConfigReader(language);
+        reader.checkBooleanSection("message-settings");
+        return reader.getWarnings();
     }
 
     /**
@@ -42,8 +103,7 @@ public final class Messages {
 
     /**
      * Sends a message with its placeholders filled in, unless it is switched
-     * off or carries no text at all - a config file from an older version does
-     * not have the newer keys in it, and a blank line in the chat says nothing.
+     * off or its text is empty - a blank line in the chat says nothing.
      *
      * @param fills placeholder and value, one pair after the other
      */
@@ -68,10 +128,10 @@ public final class Messages {
      * it is about. Use {@code message-settings.config-errors} to switch the
      * notes in the chat off instead.
      */
-    public String configMessage(String key, String fallback) {
-        String raw = plugin.getConfig().getString("messages." + key, fallback);
+    public String configMessage(String key) {
+        String raw = language.getString("messages." + key);
         if (raw == null || raw.isEmpty()) {
-            raw = fallback;
+            raw = builtIn.getString("messages." + key, "");
         }
         return ChatColor.translateAlternateColorCodes('&', raw);
     }

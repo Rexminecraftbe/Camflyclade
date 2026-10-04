@@ -82,7 +82,7 @@ public final class EquipmentVisibility {
             available.append(method.getName()).append('(')
                     .append(method.getParameterTypes()[0].getSimpleName()).append(')');
         }
-        return "keiner - vorhanden sind: " + available;
+        return "none - available are: " + available;
     }
 
     /**

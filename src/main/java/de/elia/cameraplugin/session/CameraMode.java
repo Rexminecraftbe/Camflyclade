@@ -68,9 +68,9 @@ public final class CameraMode {
     }
 
     public void enterCameraMode(Player player) {
-        // *** Inventar und Rüstung speichern ***
-        // getContents() hält jeden Slot, Rüstung und Zweithand eingeschlossen.
-        // Die Rüstung wird für den Körper noch einmal einzeln gebraucht.
+        // *** Save inventory and armour ***
+        // getContents() holds every slot, armour and off hand included.
+        // The armour is needed once more on its own for the body.
         PlayerInventory playerInventory = player.getInventory();
         ItemStack[] originalInventory = playerInventory.getContents();
         ItemStack[] originalArmor = playerInventory.getArmorContents();
@@ -82,7 +82,7 @@ public final class CameraMode {
         boolean originalGlowing = player.isGlowing();
         int originalRemainingAir = player.getRemainingAir();
 
-        // *** Inventar und Rüstung leeren ***
+        // *** Empty inventory and armour ***
         playerInventory.clear();
         player.updateInventory();
 
@@ -151,7 +151,7 @@ public final class CameraMode {
 
         plugin.getMobTargeting().turnMobsFromPlayer(player, damageTarget);
 
-        // *** Gespeichertes Inventar an CameraData übergeben ***
+        // *** Hand the saved inventory to CameraData ***
         cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, nameDisplay, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects, originalRemainingAir));
         cameraPlayers.addBody(body.getUniqueId(), player.getUniqueId());
         if (hitbox != null) {
@@ -177,8 +177,8 @@ public final class CameraMode {
         // its spot already, instead of following it away for that one tick.
         plugin.getBodyWatch().keepNameOverBody(player, body, nameDisplay);
         plugin.getMobTargeting().startMobTargeting(player, damageTarget);
-        // Legt das Team bei Bedarf an und setzt alle Mitglieder neu - der
-        // Spieler steht schon in cameraPlayers und kommt damit selbst hinein.
+        // Creates the team when needed and sets all members anew - the
+        // player is in cameraPlayers already and so joins it as well.
         plugin.getNoCollisionTeam().refreshNoCollisionTeam();
         plugin.getVisibility().updateVisibilityForAll();
         plugin.getCamModeObjective().setScore(player, 1);
@@ -217,10 +217,10 @@ public final class CameraMode {
         LivingEntity body = cameraData.getBody();
         Mannequin hitbox = cameraData.getHitbox();
 
-        // Der Name kommt vor dem Teleport weg: Sitzt er als Passagier auf dem
-        // Spieler, lehnt Spigot den Teleport ab.
+        // The name comes off before the teleport: while it sits on the
+        // player as a passenger, Spigot turns the teleport down.
         plugin.getNameTag().stopFor(player);
-        // Zuerst zum Körper teleportieren
+        // Teleport to the body first
         player.teleport(body.getLocation());
         plugin.getParticles().stopCameraParticles(player);
         plugin.getSightGlow().stopSightGlow(player);
@@ -228,17 +228,18 @@ public final class CameraMode {
         boolean standingInFire = plugin.getFireGuard().stopFor(player);
         plugin.getGhastGuard().stopFor(player);
         plugin.getSulfurCubeGuard().stopFor(player);
-        // Nach dem Teleport zum Koerper: Die Wand stand womoeglich in einer
-        // anderen Welt, dann ist dort nichts mehr zurueckzugeben.
+        // After the teleport to the body: the wall may have stood in another
+        // world, and then there is nothing left to give back there.
         plugin.getBorderWall().stopFor(player);
-        // Vor der Rückgabe: Der Sweep räumt die Taschen des Kamera-Spielers
-        // leer und nähme dem Spieler sonst sein eigenes Inventar wieder ab.
+        // Before the inventory is given back: the sweep empties the pockets
+        // of the camera player and would otherwise take the player's own
+        // inventory away again.
         plugin.getInventoryGuard().stopFor(player);
 
-        // *** Inventar und Rüstung wiederherstellen ***
-        // setContents() schreibt jeden Slot zurück, die Rüstung eingeschlossen.
+        // *** Restore inventory and armour ***
+        // setContents() writes every slot back, armour included.
         PlayerInventory playerInventory = player.getInventory();
-        playerInventory.clear(); // Sicherheitshalber leeren, falls Items hinzugefügt wurden
+        playerInventory.clear(); // Emptied to be safe, in case items were added
         playerInventory.setContents(cameraData.getOriginalInventoryContents());
         player.updateInventory();
 
@@ -271,7 +272,7 @@ public final class CameraMode {
         // them straight back to the body that is removed a moment later.
         plugin.getMobTargeting().turnMobsBackToPlayer(player, body, hitbox);
 
-        // Aufräumen
+        // Clean up
         cameraPlayers.removeBody(body.getUniqueId());
         if (hitbox != null) {
             cameraPlayers.removeHitbox(hitbox.getUniqueId());

@@ -159,7 +159,10 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   eine alte, und ein Lauf ohne den Schritt `build` prüfte das Plugin dann
   gegen eine Konfiguration, in der die neuen Schlüssel fehlen. Das sieht nach
   kaputtem Plugin aus und ist keines. Maven kopiert die Datei ohnehin nur,
-  ersetzt wird darin nichts.
+  ersetzt wird darin nichts. Die Sprachdatei `lang/en.yml` kommt genauso aus
+  `src/main/resources` und wird bei jedem Lauf neu hingelegt: Das Plugin legt
+  sie selbst nur an, wenn sie fehlt, und was ein abgebrochener Lauf an ihren
+  Schaltern gedreht hat, bliebe sonst stehen.
 * **Der Cam-Modus läuft voreingestellt im Abenteuermodus**, nicht in Kreativ -
   Kreativ steht nur einen einzigen Tick lang da. Der Portalvorgang dauert dort
   deshalb die vollen 80 Ticks; die Abkürzung auf einen Tick gilt nur für Unverwundbare,
@@ -208,9 +211,20 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
 * **`nether` steht zweimal in der Konfiguration**, unter `portals` und unter
   `cam-area.dimensions`. `set_option` nimmt dafür einen Abschnitt entgegen,
   sonst träfe das Muster beide Zeilen auf einmal. Genauso bei `actionbar-on`
-  und `actionbar-off`, die auch unter `messages` stehen, und bei `enabled`,
-  das es in mehreren Abschnitten gibt: Die Schalter setzt der Test mit dem
-  Abschnitt `message-settings`.
+  und `actionbar-off`, die in der Sprachdatei unter `messages` und unter
+  `message-settings` stehen: Die Schalter setzt der Test mit dem Abschnitt
+  `message-settings`.
+* **Texte und ihre Schalter stehen in der Sprachdatei `lang/en.yml`**, nicht
+  in der `config.yml`. `set_options` schreibt alles mit dem Abschnitt
+  `messages` oder `message-settings` dorthin und alles andere in die
+  `config.yml`, beides in einer Runde mit nur einem `cam reload`. Ein Text wie
+  `player.name-format` braucht deshalb immer den Abschnitt `messages`.
+* **`cam_on` und `cam_off` richten sich nach der letzten Zeile im Chat.** Die
+  Action-Bar wiederholt „Cam mode activated" alle zwei Sekunden. Kommt eine
+  Wiederholung kurz vor dem Ausschalten an, steht sie neben „Cam mode ended"
+  im selben Fenster. Zählte jede Zeile, hielte der Test das Ausschalten für
+  missglückt, und ein zweites `/cam` schaltete den Cam-Modus wieder ein - die
+  Probe danach fand ihn dann noch laufend vor.
 * **Die Schalter der Action-Bar prüft der Test am Spielmodus.** `camera-on`
   und `camera-off` sind in der ausgelieferten Datei aus; ohne Action-Bar sagt
   das Plugin zu `/cam` also gar nichts. Ob der Cam-Modus trotzdem läuft,
@@ -538,8 +552,15 @@ schädlichen Effekt und nur die · `actionbar-on` und `actionbar-off` schalten
 jeweils nur ihre eigene Zeile ab · ohne `actionbar-off` wird die Zeile zum
 Start beim Ende geleert, voreingestellt nicht ·
 `message-settings.enabled: false` nimmt die Action-Bar mit · die Startzeilen
-stehen voreingestellt im Log · ein offenes Portal trägt den Kamera-Spieler in
-den Nether · ein verbotenes Biom dahinter holt ihn zurück · danach lässt
+stehen voreingestellt im Log · voreingestellt gilt `language: en` mit der
+mitgelieferten `lang/en.yml` · eine eigene Sprachdatei liefert ihre Texte,
+und was ihr fehlt, kommt aus der englischen · ist sie kaputt, meldet der
+Reload das mit Datei und Zeile, meldet keinen Erfolg und lässt die bisherigen
+Texte stehen - und auch die `config.yml` aus derselben Runde · eine Sprache
+ohne Datei wird gemeldet und fällt auf Englisch zurück · Texte, die noch in
+der `config.yml` stehen, werden als nicht mehr gelesen gemeldet · ein offenes
+Portal trägt den Kamera-Spieler in den Nether · ein verbotenes Biom dahinter
+holt ihn zurück · danach lässt
 dasselbe Portal ihn gar nicht mehr durch · ein drüben neu gebautes Portal gibt
 das gemerkte wieder frei · ein drüben abgebautes ebenso · auf
 `border-mode: false` holt ihn auch das verbotene Biom nicht zurück · mit
