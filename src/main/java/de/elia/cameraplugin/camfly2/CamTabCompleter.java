@@ -13,8 +13,8 @@ public class CamTabCompleter implements TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        // Die Konsole ist kein Spieler und auch kein Operator, darf den Reload
-        // aber trotzdem - sie bekommt ihn deshalb auch vorgeschlagen.
+        // The console is neither a player nor an operator, but may reload all
+        // the same - so it is offered the reload as well.
         if (args.length == 1 && (!(sender instanceof Player) || sender.isOp())) {
             String partial = args[0].toLowerCase();
             if ("reload".startsWith(partial)) {

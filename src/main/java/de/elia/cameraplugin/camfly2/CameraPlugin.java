@@ -11,7 +11,7 @@ import de.elia.cameraplugin.display.CamActionBar;
 import de.elia.cameraplugin.display.CamNameTag;
 import de.elia.cameraplugin.display.CamParticles;
 import de.elia.cameraplugin.display.SightGlow;
-import de.elia.cameraplugin.feuer.CamFireGuard;
+import de.elia.cameraplugin.fire.CamFireGuard;
 import de.elia.cameraplugin.ghast.CamGhastGuard;
 import de.elia.cameraplugin.hunger.CamHungerGuard;
 import de.elia.cameraplugin.hunger.CamRegenGuard;
@@ -45,6 +45,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -62,7 +63,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final ConsoleLog log = new ConsoleLog(this);
     private final Messages messages = new Messages(this);
     private final ConfigFile configFile = new ConfigFile(this, log, messages);
-    private final CamSettings settings = new CamSettings(this, log);
+    private final CamSettings settings = new CamSettings(this, log, messages);
     private final CameraPlayers cameraPlayers = new CameraPlayers();
 
     private final NoCollisionTeam noCollisionTeam = new NoCollisionTeam(settings, cameraPlayers);
@@ -94,6 +95,7 @@ public final class CameraPlugin extends JavaPlugin {
     public void onEnable() {
         shuttingDown = false;
         saveDefaultConfig();
+        configFile.saveDefaultLanguage();
         // Read before anything is set up, and not left to the first getConfig():
         // Bukkit would answer a file it cannot parse with a stack trace and an
         // empty configuration. A file that cannot be read at all stops the
@@ -102,9 +104,7 @@ public final class CameraPlugin extends JavaPlugin {
         // values that do not fit are a different matter: they fall back one by
         // one, are listed below, and the plugin starts.
         if (!configFile.readConfigInto(null)) {
-            log.log(Level.SEVERE, ChatColor.stripColor(messages.configMessage("config-start-failed",
-                    "&cStart fehlgeschlagen. Zum Aktivieren den Fehler in der Konfiguration"
-                            + " beheben und den Server neu starten.")));
+            log.log(Level.SEVERE, ChatColor.stripColor(messages.configMessage("config-start-failed")));
             unregisterCommands();
             getServer().getPluginManager().disablePlugin(this);
             return;
@@ -122,14 +122,14 @@ public final class CameraPlugin extends JavaPlugin {
         bodySpawner.removeLeftoverEntities();
         camSulfurCubeGuard.releaseLeftovers();
         warmUpProfileService();
-        // Beim Start ist niemand im Cam-Modus -> ein uebrig gebliebenes Team entfernen.
+        // Nobody is in camera mode at startup -> remove a team left over.
         noCollisionTeam.deleteNoCollisionTeam();
         this.getCommand("cam").setExecutor(new CamCommand(this));
         this.getCommand("cam").setTabCompleter(new CamTabCompleter());
         registerListeners();
         noCollisionTeam.refreshNoCollisionTeam();
         startedUp = true;
-        getLogger().info("CameraPlugin wurde aktiviert!");
+        getLogger().info("CameraPlugin has been enabled!");
     }
 
     /** Hands every event handler of camera mode to the server. */
@@ -176,29 +176,27 @@ public final class CameraPlugin extends JavaPlugin {
      * at worst the line appears later, as it did before.</p>
      */
     private void warmUpProfileService() {
-        logStartupMessage(Level.INFO, "startup-skins-loading", "Skins werden geladen...", null);
+        logStartupMessage(Level.INFO, "startup-skins-loading", null);
         try {
             CameraHead.create(getLogger());
         } catch (RuntimeException ex) {
             // Purely cosmetic, the log line is not worth a failed start.
-            logStartupMessage(Level.WARNING, "startup-skins-failed",
-                    "Skins konnten beim Start nicht vorgeladen werden: {error}", ex.toString());
+            logStartupMessage(Level.WARNING, "startup-skins-failed", ex.toString());
             return;
         }
-        logStartupMessage(Level.INFO, "startup-skins-loaded", "Skins wurden erfolgreich geladen.", null);
+        logStartupMessage(Level.INFO, "startup-skins-loaded", null);
     }
 
     /**
-     * Writes a startup line from the config file into the console. Its switch
-     * in {@code message-settings} or an empty entry switches the line off;
-     * {@code {error}} is replaced when a reason is given.
+     * Writes a startup line from the language file into the console. Its
+     * switch in {@code message-settings} or an empty entry switches the line
+     * off; {@code {error}} is replaced when a reason is given.
      */
-    private void logStartupMessage(Level level, String key, String fallback, String error) {
+    private void logStartupMessage(Level level, String key, String error) {
         if (!messages.isMessageEnabled(key)) {
             return;
         }
-        String text = ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&',
-                getConfig().getString("messages." + key, fallback)));
+        String text = ChatColor.stripColor(messages.getMessage(key));
         if (text.isEmpty()) {
             return;
         }
@@ -213,7 +211,7 @@ public final class CameraPlugin extends JavaPlugin {
             // that would have to be taken down.
             return;
         }
-        // Erstellt eine Kopie der Keys, um ConcurrentModificationException zu vermeiden
+        // Iterates over a copy of the keys to avoid a ConcurrentModificationException
         for (UUID playerId : new HashSet<>(cameraPlayers.ids())) {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) {
@@ -238,10 +236,10 @@ public final class CameraPlugin extends JavaPlugin {
         nameTag.onDisable();
         actionBar.onDisable();
         timeLimit.onDisable();
-        // Kein Spieler mehr im Cam-Modus -> Team entfernen.
+        // No player left in camera mode -> remove the team.
         noCollisionTeam.deleteNoCollisionTeam();
         bodySpawner.removeLeftoverEntities();
-        getLogger().info("CameraPlugin wurde deaktiviert!");
+        getLogger().info("CameraPlugin has been disabled!");
     }
 
     /** The config file as it was last read, see {@link ConfigFile#readConfigInto}. */
@@ -265,17 +263,21 @@ public final class CameraPlugin extends JavaPlugin {
     }
 
     /**
-     * Reads every value out of the config file.
+     * Reads every value out of the config file and checks the switches of the
+     * language file.
      *
      * @return a note for each value that did not fit and was replaced
      */
     private List<ConfigIssue> loadConfigValues() {
         ConfigReader config = new ConfigReader(getConfig());
+        configFile.checkLanguage(config);
         settings.load(config);
         if (camFireGuard != null) {
             camFireGuard.loadConfig(config);
         }
-        return config.getWarnings();
+        List<ConfigIssue> warnings = new ArrayList<>(config.getWarnings());
+        warnings.addAll(messages.check());
+        return warnings;
     }
 
     /**
@@ -338,8 +340,8 @@ public final class CameraPlugin extends JavaPlugin {
                 command.unregister(commandMap);
             }
         } catch (ReflectiveOperationException | RuntimeException ex) {
-            log.log(Level.WARNING, "Der Befehl /cam konnte nicht abgemeldet werden, er antwortet"
-                    + " deshalb mit einem Fehler des Servers: " + ex);
+            log.log(Level.WARNING, "The command /cam could not be unregistered, so it answers"
+                    + " with an error of the server: " + ex);
         }
     }
 

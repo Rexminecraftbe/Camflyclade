@@ -187,8 +187,8 @@ public final class CamMovementGuard implements Listener {
         boolean fromPortal = !data.getBody().getWorld().equals(where.getWorld())
                 && data.getPortalAnchor() != null;
         String text = messages.getMessage(fromPortal ? "distance-from-portal" : "distance-from-body");
-        // Ein Satzteil, kein ganzer Satz: Fehlt er in einer Konfiguration aus
-        // einer aelteren Version, stuende sonst "... blocks from !" im Chat.
+        // Part of a sentence, not a whole one: left empty in the language
+        // file, the chat would otherwise read "... blocks from !".
         if (!text.isEmpty()) {
             return text;
         }
@@ -231,9 +231,9 @@ public final class CamMovementGuard implements Listener {
         boolean open = portalRules.letsThrough(kind);
         String area = null;
         if (open) {
-            // Die Dimension hinter dem Portal steht schon vor der Reise fest.
-            // Ein verbotenes Biom oder eine verbotene Struktur erst danach -
-            // deshalb zaehlt hier, was eine fruehere Reise ergeben hat.
+            // The dimension behind the portal is known before the trip. A
+            // forbidden biome or structure only after it - so what counts here
+            // is what an earlier trip turned up.
             area = forbiddenPortalDimension(event.getTo());
             if (area == null) {
                 area = portalRules.forbiddenAreaBehind(event.getFrom(),
@@ -263,9 +263,9 @@ public final class CamMovementGuard implements Listener {
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPortalCreated(PortalCreateEvent event) {
-        // Die Endplattform zaehlt nicht dazu: Sie wird jedes Mal neu gesetzt,
-        // wenn jemand im End ankommt, und wuerde das Gemerkte dort bei jedem
-        // fremden Besuch wegwerfen.
+        // The end platform does not count: it is set anew every time
+        // somebody arrives in the End, and would throw away what was
+        // remembered there on every other visit.
         if (event.getReason() == PortalCreateEvent.CreateReason.END_PLATFORM) {
             return;
         }
@@ -362,9 +362,9 @@ public final class CamMovementGuard implements Listener {
         }
         String area = forbiddenCamArea(arrival);
         if (area != null) {
-            // Jetzt ist bekannt, wo dieses Portal herauskommt. Ohne das wuerde
-            // es ihn bei jedem Durchgang aufs Neue hinueber und gleich wieder
-            // zurueck schicken.
+            // Now it is known where this portal comes out. Without this the
+            // player would be sent over and straight back again on every
+            // trip through it.
             settings.getPortalRules().rememberForbiddenArea(entry, area, arrival);
             messages.sendMessage(player, "portal-return-area", "{area}", area);
             bringBack(player, data);

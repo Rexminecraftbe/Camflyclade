@@ -345,8 +345,8 @@ public final class CamBorderWall implements Listener {
             return;
         }
         if (!world.getUID().equals(wall.world)) {
-            // Der Client hat die alte Welt samt allen Bloecken darin
-            // weggeworfen, dort ist nichts mehr zurueckzugeben.
+            // The client has thrown the old world away with all its blocks,
+            // there is nothing left to give back there.
             wall.world = world.getUID();
             wall.bricks = new HashMap<>();
         }
@@ -584,7 +584,7 @@ public final class CamBorderWall implements Listener {
      *
      * <p>Two kinds stay nevertheless and leave a gap, which the checks of
      * {@link CamMovementGuard} close instead: fire, which
-     * {@link de.elia.cameraplugin.feuer.CamFireGuard} hides from the camera
+     * {@link de.elia.cameraplugin.fire.CamFireGuard} hides from the camera
      * already, and every block that keeps data of its own - a sign keeps its
      * text, a banner its pattern, a head its skin. The client forgets all of
      * that as soon as another block has stood in the place. A gap of a single

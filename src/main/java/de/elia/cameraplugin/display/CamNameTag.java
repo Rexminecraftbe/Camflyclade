@@ -33,7 +33,7 @@ import java.util.UUID;
  * player the client draws a name tag only for his own team, and a name tag can
  * say nothing but his name. This name is a text display of its own, see
  * {@link NameDisplay}: everybody who sees him sees it, and it says what
- * {@code messages.player.name-format} says - "Cam von {player}", say.</p>
+ * {@code messages.player.name-format} says - "Camera of {player}", say.</p>
  *
  * <p>How it keeps to him is the {@link NameMode}: put back over his head every
  * tick, or sitting on him as a passenger. A passenger has to come off before a

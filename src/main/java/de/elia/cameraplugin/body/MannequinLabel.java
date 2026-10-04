@@ -59,7 +59,7 @@ public final class MannequinLabel {
             }
             available.append(describe(method));
         }
-        return available.length() == 0 ? "keiner - die API kennt keine Beschreibung" : "keiner - vorhanden sind: " + available;
+        return available.length() == 0 ? "none - the API knows no description" : "none - available are: " + available;
     }
 
     /** The switch that hides the description outright, where the API has one. */

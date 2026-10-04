@@ -46,19 +46,19 @@ public final class SessionListener implements Listener {
 
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
-        // Der Spieler soll sterben, aber vorher den Kamera-Modus korrekt beenden.
-        // Die XP werden vom Tod selbst gehandhabt.
+        // The player is meant to die, but camera mode has to end properly
+        // first. The XP is handled by the death itself.
         Player player = event.getEntity();
         CameraData data = cameraPlayers.get(player.getUniqueId());
         if (data == null) {
             return;
         }
-        // Der Server hat seine Drops aus dem leeren Inventar des Kamera-Spielers
-        // gesammelt. Fallen sollen stattdessen seine eigenen Sachen aus dem
-        // CameraData - getContents() hält alle Slots, Rüstung und Zweithand
-        // eingeschlossen, eine eigene Schleife für die Rüstung ließe sie
-        // doppelt fallen. Mit keepInventory fällt gar nichts: exitCameraMode
-        // gibt ihm sein Inventar zurück, und der Server lässt es ihm.
+        // The server has collected the drops from the empty inventory of the
+        // camera player. The player's own things from CameraData are to drop
+        // instead - getContents() holds every slot, armour and off hand
+        // included, so a separate loop over the armour would drop it twice.
+        // With keepInventory nothing drops at all: exitCameraMode gives the
+        // inventory back, and the server leaves it with the player.
         if (!event.getKeepInventory()) {
             event.getDrops().clear();
             for (ItemStack item : data.getOriginalInventoryContents()) {

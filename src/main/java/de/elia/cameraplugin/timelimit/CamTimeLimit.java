@@ -75,7 +75,7 @@ public final class CamTimeLimit {
                 if (finalBar != null) {
                     finalBar.setProgress(Math.max(0.0, remaining / (double) total));
                     if (messages.isMessageEnabled("bossbar-text")) {
-                        finalBar.setTitle(settings.getBossbarText().replace("%time%", formatDuration(remaining)));
+                        finalBar.setTitle(messages.getMessage("bossbar-text").replace("%time%", formatDuration(remaining)));
                     }
                 }
                 if (remaining <= 0) {
@@ -108,7 +108,7 @@ public final class CamTimeLimit {
                 if (remaining <= 0) {
                     Player p = Bukkit.getPlayer(player.getUniqueId());
                     if (p != null && messages.isMessageEnabled("cooldown-available")) {
-                        p.sendMessage(settings.getCooldownAvailableText());
+                        p.sendMessage(messages.getMessage("cooldown-available"));
                     }
                     camCooldowns.remove(player.getUniqueId());
                     cooldownTasks.remove(player.getUniqueId());

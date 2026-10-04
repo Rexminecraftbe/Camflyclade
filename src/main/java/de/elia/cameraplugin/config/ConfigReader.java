@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 /**
  * Reads the config file and writes down every value that does not fit.
@@ -28,7 +27,7 @@ import java.util.Map;
  */
 public final class ConfigReader {
 
-    /** Message keys of the notes, matching the {@code messages} block. */
+    /** Message keys of the notes, matching the {@code messages} block of the language file. */
     private static final String EXPECTED_BOOLEAN = "config-expected-boolean";
     private static final String EXPECTED_NUMBER = "config-expected-number";
     private static final String EXPECTED_TEXT = "config-expected-text";
@@ -38,24 +37,6 @@ public final class ConfigReader {
     private static final String ENTRY_IN_BOTH_LISTS = "config-entry-in-both-lists";
     private static final String TOO_SMALL = "config-too-small";
     private static final String TOO_LARGE = "config-too-large";
-
-    /** Wording used when a key is missing from the config file. */
-    private static final Map<String, String> FALLBACKS = Map.of(
-            EXPECTED_BOOLEAN, "&cFalscher Wert für {path}: '{value}'. Erwartet wird true oder false."
-                    + " Es wird {used} verwendet.",
-            EXPECTED_NUMBER, "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Zahl."
-                    + " Es wird {used} verwendet.",
-            EXPECTED_TEXT, "&cFalscher Wert für {path}: '{value}'. Erwartet wird Text."
-                    + " Es wird {used} verwendet.",
-            EXPECTED_LIST, "&cFalscher Wert für {path}: '{value}'. Erwartet wird eine Liste."
-                    + " Es wird {used} verwendet.",
-            UNKNOWN_VALUE, "&cUnbekannter Wert für {path}: '{value}'. Erlaubt sind: {allowed}."
-                    + " Es wird {used} verwendet.",
-            UNKNOWN_ENTRY, "&cUnbekannter Eintrag in {path}: '{value}'. Er wird nicht beachtet.",
-            ENTRY_IN_BOTH_LISTS, "&cDer Eintrag '{value}' steht in {path} und in {other}."
-                    + " Er wird in keiner der beiden beachtet.",
-            TOO_SMALL, "&cWert für {path} ist zu klein: {value}. Es wird {min} verwendet.",
-            TOO_LARGE, "&cWert für {path} ist zu groß: {value}. Es wird {max} verwendet.");
 
     private final FileConfiguration config;
     private final List<ConfigIssue> warnings = new ArrayList<>();
@@ -69,7 +50,7 @@ public final class ConfigReader {
         return warnings;
     }
 
-    // ------------------------------------------------------------- Wahrheitswerte
+    // ------------------------------------------------------------ truth values
 
     public boolean getBoolean(String path, boolean def) {
         Object raw = config.get(path);
@@ -102,7 +83,7 @@ public final class ConfigReader {
         }
     }
 
-    // -------------------------------------------------------------------- Zahlen
+    // ----------------------------------------------------------------- numbers
 
     public int getInt(String path, int def) {
         Number value = readNumber(path, def);
@@ -170,7 +151,7 @@ public final class ConfigReader {
         return null;
     }
 
-    // --------------------------------------------------------------------- Text
+    // -------------------------------------------------------------------- text
 
     /**
      * Reads a piece of text. Truth values and numbers are accepted and turned
@@ -244,10 +225,10 @@ public final class ConfigReader {
         }
     }
 
-    // ------------------------------------------------------------------ Notizen
+    // ------------------------------------------------------------------- notes
 
     private void warnWrongType(String path, Object raw, String messageKey, String used) {
-        warnings.add(ConfigIssue.of(messageKey, FALLBACKS.get(messageKey))
+        warnings.add(ConfigIssue.of(messageKey)
                 .with("path", path)
                 .with("value", raw)
                 .with("used", used));
@@ -261,7 +242,7 @@ public final class ConfigReader {
      * @param used    what is used instead
      */
     public void warnUnknownValue(String path, Object value, String allowed, String used) {
-        warnings.add(ConfigIssue.of(UNKNOWN_VALUE, FALLBACKS.get(UNKNOWN_VALUE))
+        warnings.add(ConfigIssue.of(UNKNOWN_VALUE)
                 .with("path", path)
                 .with("value", value)
                 .with("allowed", allowed)
@@ -274,7 +255,7 @@ public final class ConfigReader {
      * checks the plugin does on its own read the same as these here.
      */
     public void warnUnknownEntry(String path, Object value) {
-        warnings.add(ConfigIssue.of(UNKNOWN_ENTRY, FALLBACKS.get(UNKNOWN_ENTRY))
+        warnings.add(ConfigIssue.of(UNKNOWN_ENTRY)
                 .with("path", path)
                 .with("value", value));
     }
@@ -287,21 +268,21 @@ public final class ConfigReader {
      * @param other the other list the entry stands in
      */
     public void warnEntryInBothLists(String path, String other, Object value) {
-        warnings.add(ConfigIssue.of(ENTRY_IN_BOTH_LISTS, FALLBACKS.get(ENTRY_IN_BOTH_LISTS))
+        warnings.add(ConfigIssue.of(ENTRY_IN_BOTH_LISTS)
                 .with("path", path)
                 .with("value", value)
                 .with("other", other));
     }
 
     private void warnTooSmall(String path, String value, String min) {
-        warnings.add(ConfigIssue.of(TOO_SMALL, FALLBACKS.get(TOO_SMALL))
+        warnings.add(ConfigIssue.of(TOO_SMALL)
                 .with("path", path)
                 .with("value", value)
                 .with("min", min));
     }
 
     private void warnTooLarge(String path, String value, String max) {
-        warnings.add(ConfigIssue.of(TOO_LARGE, FALLBACKS.get(TOO_LARGE))
+        warnings.add(ConfigIssue.of(TOO_LARGE)
                 .with("path", path)
                 .with("value", value)
                 .with("max", max));

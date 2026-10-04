@@ -9,26 +9,22 @@ import java.util.Map;
  *
  * <p>The text itself is not part of this: the reader only says which kind of
  * problem it found and which pieces belong into the sentence, the plugin looks
- * the wording up in {@code messages} and fills the placeholders. That way the
- * notes can be translated like every other message the plugin sends.</p>
+ * the wording up in {@code messages} of the language file and fills the
+ * placeholders. That way the notes can be translated like every other message
+ * the plugin sends.</p>
  */
 public final class ConfigIssue {
 
     private final String messageKey;
-    private final String fallback;
     private final Map<String, String> placeholders = new LinkedHashMap<>();
 
-    private ConfigIssue(String messageKey, String fallback) {
+    private ConfigIssue(String messageKey) {
         this.messageKey = messageKey;
-        this.fallback = fallback;
     }
 
-    /**
-     * @param messageKey key below {@code messages} in the config file
-     * @param fallback   wording used when that key is missing or empty
-     */
-    public static ConfigIssue of(String messageKey, String fallback) {
-        return new ConfigIssue(messageKey, fallback);
+    /** @param messageKey key below {@code messages} in the language file */
+    public static ConfigIssue of(String messageKey) {
+        return new ConfigIssue(messageKey);
     }
 
     /** Adds a placeholder, written as <code>{name}</code> in the message. */
@@ -39,10 +35,6 @@ public final class ConfigIssue {
 
     public String getMessageKey() {
         return messageKey;
-    }
-
-    public String getFallback() {
-        return fallback;
     }
 
     /** Puts the collected values into an already looked up message. */
