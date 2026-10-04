@@ -4340,6 +4340,19 @@ def cam_schalten(bot, an):
     Paketdaten -, und eine falsche Auskunft schaltet genau verkehrt herum.
     Gefragt wird deshalb, was das Plugin auf /cam antwortet; hat es das
     Gegenteil getan, geht noch ein /cam hinterher.
+
+    Es zaehlt die letzte der beiden Zeilen, nicht irgendeine. Solange der
+    Cam-Modus laeuft, wiederholt die Action-Bar "Cam mode activated" alle 40
+    Ticks, und eine Wiederholung kann noch vor der Antwort auf das /cam
+    ankommen, das ihn beenden soll. Wer dann beide Zeilen sieht und das fuer
+    die verkehrte Richtung haelt, schickt ein zweites /cam hinterher und
+    schaltet ihn wieder ein. Nach der Antwort kommt keine Wiederholung mehr:
+    Das Plugin bricht die eine Zeile ab, sobald es die andere schickt.
+
+    Den Server statt der Action-Bar zu fragen geht hier nicht: Am Spielmodus
+    ist der Cam-Modus nicht zu erkennen, sobald camera-mode.gamemode etwas
+    anderes als adventure sagt, und der zweite Bot, den der Test des
+    Spielernamens damit schaltet, hat kein op fuer /execute.
     """
     for _ in range(2):
         since = bot.mark()
@@ -4347,12 +4360,16 @@ def cam_schalten(bot, an):
         time.sleep(1.5)
         gesagt = [strip_colors(m["text"])
                   for m in bot.call("messages", since=since).get("messages", [])]
-        ein = any(re.search(r"[Cc]am mode activated", t) for t in gesagt)
-        aus = any(re.search(r"[Cc]am mode ended", t) for t in gesagt)
-        if ein == an and aus != an:
-            return True
-        if not ein and not aus:
+        zuletzt = None
+        for t in gesagt:
+            if re.search(r"[Cc]am mode activated", t):
+                zuletzt = True
+            elif re.search(r"[Cc]am mode ended", t):
+                zuletzt = False
+        if zuletzt is None:
             return False    # /cam hat gar nicht geantwortet, etwa abgelehnt
+        if zuletzt == an:
+            return True
     return False
 
 

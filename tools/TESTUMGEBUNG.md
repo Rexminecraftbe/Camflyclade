@@ -244,6 +244,19 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   und `camera-off` sind in der ausgelieferten Datei aus; ohne Action-Bar sagt
   das Plugin zu `/cam` also gar nichts. Ob der Cam-Modus trotzdem läuft,
   fragt der Test mit `/execute if entity @s[gamemode=adventure]`.
+* **`cam_on` und `cam_off` richten sich nach der letzten Zeile der
+  Action-Bar**, nicht nach irgendeiner. Solange der Cam-Modus läuft,
+  wiederholt sie „Cam mode activated" alle 40 Ticks, und eine Wiederholung
+  kann noch vor der Antwort auf das `/cam` ankommen, das ihn beenden soll.
+  Wer dann beide Zeilen sieht und das für die verkehrte Richtung hält,
+  schickt ein zweites `/cam` hinterher und schaltet ihn wieder ein. So fiel
+  einmal die Probe im Pulverschnee durch: Nach der Probe an der Decke lief
+  der Cam-Modus noch, und `medium_start` bekam „Cam mode ended" statt der
+  Ablehnung. Nach der Antwort kommt keine Wiederholung mehr - das Plugin
+  bricht die eine Zeile ab, sobald es die andere schickt. Den Server zu
+  fragen geht hier nicht: Am Spielmodus ist der Cam-Modus nur bei
+  `camera-mode.gamemode: adventure` zu erkennen, und der zweite Bot, den der
+  Test des Spielernamens damit schaltet, hat kein op für `/execute`.
 * **Das Testportal entsteht aus `/fill` und einem `/setblock ... fire`** im
   ausgehöhlten Rahmen. Ob daraus wirklich ein Portal geworden ist, sieht der
   Test mit `/execute if block ... run say` nach - so beantwortet der Server
