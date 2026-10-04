@@ -4467,12 +4467,20 @@ def cam_schalten(bot, an):
         time.sleep(1.5)
         gesagt = [strip_colors(m["text"])
                   for m in bot.call("messages", since=since).get("messages", [])]
-        ein = any(re.search(r"[Cc]am mode activated", t) for t in gesagt)
-        aus = any(re.search(r"[Cc]am mode ended", t) for t in gesagt)
-        if ein == an and aus != an:
-            return True
-        if not ein and not aus:
+        # Die letzte der beiden Zeilen sagt, wie es jetzt steht. Die
+        # Action-Bar wiederholt "Cam mode activated" alle zwei Sekunden:
+        # Kommt eine Wiederholung kurz vor dem Ausschalten an, steht sie mit
+        # im Chat, und ein zweites /cam schaltete den Cam-Modus wieder ein.
+        jetzt = None
+        for t in gesagt:
+            if re.search(r"[Cc]am mode activated", t):
+                jetzt = True
+            elif re.search(r"[Cc]am mode ended", t):
+                jetzt = False
+        if jetzt is None:
             return False    # /cam hat gar nicht geantwortet, etwa abgelehnt
+        if jetzt == an:
+            return True
     return False
 
 

@@ -219,6 +219,12 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   `messages` oder `message-settings` dorthin und alles andere in die
   `config.yml`, beides in einer Runde mit nur einem `cam reload`. Ein Text wie
   `player.name-format` braucht deshalb immer den Abschnitt `messages`.
+* **`cam_on` und `cam_off` richten sich nach der letzten Zeile im Chat.** Die
+  Action-Bar wiederholt „Cam mode activated" alle zwei Sekunden. Kommt eine
+  Wiederholung kurz vor dem Ausschalten an, steht sie neben „Cam mode ended"
+  im selben Fenster. Zählte jede Zeile, hielte der Test das Ausschalten für
+  missglückt, und ein zweites `/cam` schaltete den Cam-Modus wieder ein - die
+  Probe danach fand ihn dann noch laufend vor.
 * **Die Schalter der Action-Bar prüft der Test am Spielmodus.** `camera-on`
   und `camera-off` sind in der ausgelieferten Datei aus; ohne Action-Bar sagt
   das Plugin zu `/cam` also gar nichts. Ob der Cam-Modus trotzdem läuft,
