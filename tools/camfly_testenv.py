@@ -1700,6 +1700,10 @@ def potion_probe(env, bot, kind, label):
     clear()
 
     body = bot.server_pos()
+    if body is None:
+        FIND.test(f"Koerperstelle bekannt ({label})", False,
+                  "keine serverseitige Position")
+        return
     since = bot.mark()
     bot.chat("/cam")
     started = bot.expect("Camera mode activated|Cam mode activated", since, 8000)
@@ -1711,9 +1715,26 @@ def potion_probe(env, bot, kind, label):
     # Weg vom Koerper, sonst erwischt ein Trank beide auf einmal und die Probe
     # sagt nicht mehr, wen von beiden er getroffen hat. Vier Bloecke reicht er
     # weit, zwoelf sind Abstand genug.
-    fly = bot.call("fly", wait=30, dx=12, timeout=15000)
-    Log.detail(f"Flug vom Koerper weg: {fly.get('result')}")
-    time.sleep(1)
+    #
+    # Hingestellt und nicht hingeflogen: Ein Flug bleibt an allem haengen,
+    # was ihm im Weg steht - schon an der Grasschicht, wenn er auf einem
+    # Trampelpfad losging, der 1/16 tiefer liegt. Dann stand der Bot noch
+    # neben seinem Koerper, und jeder Trank traf beide. Gestellt wird er auf
+    # die Hoehe eines ganzen Blocks, auch wenn er tiefer losging: Die Wolke
+    # eines verweilenden Tranks liegt nur einen halben Block hoch ueber dem
+    # Boden, und schwebte er darueber, ginge sie auch ohne das Plugin an ihm
+    # vorbei. hinstellen und cam_off stehen weiter unten - gesucht werden sie
+    # erst beim Aufruf.
+    hinstellen(bot, body[0] + 12, _floor(body[1] + 0.5), body[2])
+    weg = bot.server_pos()
+    abstand = None if weg is None else math.dist(weg, body)
+    # Doppelt so weit, wie ein Trank reicht.
+    if not FIND.test(f"Der Bot steht zum Trankstest weit genug vom Koerper weg ({label})",
+                     abstand is not None and abstand > 8,
+                     f"{abstand:.1f} Bloecke" if abstand is not None
+                     else "keine serverseitige Position"):
+        cam_off(bot)
+        return
     throw("~ ~1 ~")
     FIND.test(f"Im Cam-Modus geht der Trank am Spieler vorbei ({label})",
               bot.server_data(SLOWNESS) is None,
@@ -1725,11 +1746,6 @@ def potion_probe(env, bot, kind, label):
     # Und nun auf den Koerper: den trifft der Trank weiterhin. Dass der
     # Cam-Modus endet, wird am Spielmodus gemessen; dass der Spieler auch
     # erfaehrt, warum, steht im Chat und nennt den Effekt beim Namen.
-    if body is None:
-        FIND.test(f"Koerperstelle bekannt ({label})", False,
-                  "keine serverseitige Position")
-        bot.chat("/cam")
-        return
     clear()
     since = bot.mark()
     throw(f"{body[0]} {body[1] + 1} {body[2]}")
@@ -2123,13 +2139,17 @@ def interact_aufraeumen(bot, base):
     bx, by, bz = base
     bot.chat(f"/kill @e[tag={INTERACT_TAG}]")
     time.sleep(0.4)
-    # Auch, was herumliegt: Der Abbau im Durchgang ohne Cam-Modus laesst eine
-    # Blume fallen, und die zaehlte beim Klick auf den eigenen Koerper als
-    # naechste Entitaet mit.
-    bot.chat("/kill @e[type=minecraft:item]")
-    time.sleep(0.4)
     bot.chat(f"/fill {bx + 1} {by} {bz - 1} {bx + 11} {by + 8} {bz + 8} minecraft:air")
     time.sleep(0.8)
+    # Auch, was herumliegt: Der Abbau im Durchgang ohne Cam-Modus laesst eine
+    # Blume fallen, und die zaehlte beim Klick auf den eigenen Koerper als
+    # naechste Entitaet mit. Erst nach dem /fill: Der nimmt dem Hebel den
+    # Stein unter ihm weg, und der Hebel faellt dabei als Item ab. Liegen
+    # blieb er, wo der Sulfur-Cube-Test danach zuschlaegt - und ein Schlag auf
+    # ein Item wirft den Bot vom Server ("Attempting to attack an invalid
+    # entity").
+    bot.chat("/kill @e[type=minecraft:item]")
+    time.sleep(0.4)
 
 
 def interact_proben(bot, base):
@@ -4460,6 +4480,15 @@ def cam_schalten(bot, an):
     Paketdaten -, und eine falsche Auskunft schaltet genau verkehrt herum.
     Gefragt wird deshalb, was das Plugin auf /cam antwortet; hat es das
     Gegenteil getan, geht noch ein /cam hinterher.
+
+    Auf die letzte der beiden Zeilen ist Verlass: Nach der Antwort auf /cam
+    kommt keine Wiederholung der anderen mehr - das Plugin bricht die eine
+    Zeile ab, sobald es die andere schickt.
+
+    Den Server statt der Action-Bar zu fragen geht hier nicht: Am Spielmodus
+    ist der Cam-Modus nicht zu erkennen, sobald camera-mode.gamemode etwas
+    anderes als adventure sagt, und der zweite Bot, den der Test des
+    Spielernamens damit schaltet, hat kein op fuer /execute.
     """
     for _ in range(2):
         since = bot.mark()
@@ -4641,7 +4670,12 @@ def portal_checks(env, bot):
     pos = bot.server_pos()
     if not FIND.test("Position fuer den Portaltest lesbar", pos is not None, str(pos)):
         return
-    bx, by, bz = int(pos[0]), int(pos[1]), int(pos[2])
+    # Abgerundet wie in den anderen Abschnitten, nicht mit int(): Das schnitte
+    # unter null zur falschen Seite ab, und heim laege dort einen Block
+    # oestlich oder suedlich neben dem Bot. Dorthin stellt ihn der Test am
+    # Ende, und der naechste Lauf finge dann dort an - jeder einen Block
+    # weiter.
+    bx, by, bz = _floor(pos[0]), _floor(pos[1] + 0.5), _floor(pos[2])
     # Weit genug vom Koerper, dass der Rahmen ihn nicht einmauert, und nah
     # genug, dass max-distance nicht dazwischenfunkt.
     portal = (bx + 5, by, bz + 6)
@@ -4761,6 +4795,52 @@ def portal_checks(env, bot):
                           ("border-mode", "barrier")])
 
 
+# ---------------------------------------------------------------------------
+# Der Boden unter dem Testplatz
+# ---------------------------------------------------------------------------
+
+# Die oberste Lage der Flachwelt: Gras bei y=-61, darunter zwei Lagen Erde und
+# bei -64 Grundgestein. Wer darauf steht, steht bei -60.
+BODEN_Y = -61
+
+# Wie weit die Grasschicht um den Startplatz herum neu gelegt wird, in Bloecken:
+# nach Westen und Norden, nach Osten und Sueden. Die Abschnitte bauen von dort
+# aus bis zu zehn Bloecke nach Westen und Norden und bis zu 26 nach Osten und
+# Sueden. Weiter als zwei Chunks haelt der Server bei view-distance=2 nicht
+# sicher geladen, und /fill braucht die Chunks.
+BODEN_WEIT = (16, 32)
+
+
+def boden_ebnen(bot):
+    """Die Grasschicht um den Startplatz herum neu legen und den Bot mitten
+    auf einen Block stellen.
+
+    Die Testwelt bleibt zwischen zwei Laeufen stehen, und ein Lauf faengt dort
+    an, wo der letzte aufgehoert hat. Was dort im Boden steckt, bleibt also
+    liegen: ein Loch, wie es das Abraeumen eines Portalrahmens hinterlaesst,
+    oder ein Trampelpfad - die Flachwelt erzeugt Doerfer, und deren Wege sind
+    Trampelpfade. Ein Trampelpfad ist 1/16 niedriger als das Gras daneben;
+    wer von ihm aus waagerecht losfliegt, stoesst mit den Fuessen an jeden
+    Grasblock, und der Server setzt ihn bei jedem Schritt zurueck ("moved
+    wrongly").
+
+    Gesetzt wird ausdruecklich in der Overworld: Ein abgebrochener Lauf kann
+    den Bot im Nether zurueckgelassen haben, und dort laege y=-60 unter der
+    Welt.
+    """
+    pos = bot.server_pos()
+    if pos is None:
+        return
+    x, z = _floor(pos[0]), _floor(pos[2])
+    west, ost = BODEN_WEIT
+    Log.detail(f"Grasschicht um {(x, z)} wird neu gelegt")
+    bot.chat(f"/execute in minecraft:overworld run fill {x - west} {BODEN_Y} {z - west} "
+             f"{x + ost} {BODEN_Y} {z + ost} minecraft:grass_block")
+    time.sleep(1.0)
+    bot.chat(f"/execute in minecraft:overworld run tp @s {x + 0.5} {BODEN_Y + 1} {z + 0.5}")
+    time.sleep(1.0)
+
+
 def step_tests(env):
     Log.step("8. Tests im laufenden Spiel")
     if server_running(env) is None:
@@ -4820,6 +4900,8 @@ def step_tests(env):
         # --- ab hier mit op: /data und /fillbiome brauchen es ---
         console(env, f"op {BOT_NAME}")
         time.sleep(1.5)
+        # Erst den Boden: Alles Weitere baut vom Startplatz aus.
+        boden_ebnen(bot)
         start_pos = bot.server_pos()
         if not FIND.test("Serverseitige Position lesbar", start_pos is not None,
                          str(start_pos)):

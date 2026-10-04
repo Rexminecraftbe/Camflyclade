@@ -132,9 +132,18 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
 * **Der Rüstungsständer nimmt von Tränken nichts an**, das Mannequin in ihm
   sehr wohl. Über das läuft der Treffer auf den Körper, bei beiden
   Körpertypen.
-* **Zum Trankstest fliegt der Bot zwölf Blöcke weg.** Steht er bei seinem
-  Körper, benetzt ein Trank beide auf einmal, und die Probe sagt nicht mehr,
-  wen von beiden er getroffen hat.
+* **Zum Trankstest stellt der Test den Bot zwölf Blöcke weg**, per `/tp` und
+  nicht im Flug. Steht er bei seinem Körper, benetzt ein Trank beide auf
+  einmal, und die Probe sagt nicht mehr, wen von beiden er getroffen hat. Ein
+  Flug blieb dabei schon am Boden hängen: Der Bot stand auf einem
+  Trampelpfad, 1/16 tiefer als das Gras daneben, stieß beim waagerechten Flug
+  mit den Füßen an den ersten Grasblock, und der Server setzte ihn bei jedem
+  Schritt zurück („moved wrongly"). Er blieb neben seinem Körper stehen, und
+  sechs Proben fielen durch, ohne dass das Plugin etwas falsch gemacht hätte.
+  Ob er weit genug weg steht, prüft der Test deshalb, bevor er wirft.
+  Gestellt wird er auf die Höhe eines ganzen Blocks, nicht höher: Die Wolke
+  eines verweilenden Tranks liegt nur einen halben Block hoch über dem Boden,
+  und einen Block darüber geht sie auch ohne das Plugin an ihm vorbei.
 * **Den Treffer auf den Körper prüft der Test am Spielmodus**, nicht an der
   Meldung: `adventure` heißt im Cam-Modus, alles andere heißt beendet. Die
   Meldung `body-got-effect` wird zusätzlich geprüft, samt dem Effekt, den sie
@@ -197,6 +206,26 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   deshalb vor der ersten Reise selbst, holt den Bot nötigenfalls heim und
   räumt am Ende wieder auf. Wer ganz von vorn anfangen will, löscht
   `~/camfly-testenv/server/world`; der Server legt sie neu an.
+* **Die Grasschicht um den Startplatz legt der Test zu Beginn neu.** Ein Lauf
+  fängt dort an, wo der letzte aufgehört hat, und findet vor, was dort im
+  Boden steckt. Die Flachwelt erzeugt Dörfer, und deren Wege sind
+  Trampelpfade (`minecraft:dirt_path`), genau in der Grasschicht bei y=-61
+  und 1/16 niedriger als das Gras. Kein Abschnitt setzt welche - nachgesehen
+  nach einem ganzen Lauf -, aber führt ein Dorfweg am Startplatz vorbei,
+  steht der Bot auf ihm bei y=-60,0625, und ein waagerechter Flug von dort
+  stößt an jeden Grasblock. Dazu kommt das Loch, das das Abräumen des
+  Portalrahmens aus dem Portaltest in der Grasschicht hinterlässt.
+  `boden_ebnen` füllt deshalb die Lage bei y=-61 von 16 Blöcken westlich und
+  nördlich bis 32 östlich und südlich des Startplatzes mit Gras und stellt
+  den Bot mitten auf einen Block. Weiter geht es nicht: Bei
+  `view-distance=2` hält der Server nur zwei Chunks um den Bot sicher
+  geladen, ohne Spieler gar keinen, und `/fill` braucht sie geladen.
+* **Der Portaltest rundet die Startstelle ab, wie alle anderen Abschnitte.**
+  Mit `int()` schnitt er unter null zur falschen Seite ab: Sein `heim` lag
+  einen Block östlich oder südlich neben dem Bot, und dorthin stellt er ihn
+  am Ende. Der nächste Lauf fing dann dort an, jeder einen Block weiter - so
+  kann ein Lauf auf einem Dorfweg beginnen, neben dem der vorige noch auf
+  Gras stand.
 * **`allow-flight=true` steht in den Server-Einstellungen.** Sonst wirft der
   Anticheat den Bot mit „kicked for floating too long" hinaus, sobald er
   zwischen zwei Anläufen ein paar Sekunden ohne Cam-Modus in der Luft steht.
@@ -224,7 +253,12 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   Wiederholung kurz vor dem Ausschalten an, steht sie neben „Cam mode ended"
   im selben Fenster. Zählte jede Zeile, hielte der Test das Ausschalten für
   missglückt, und ein zweites `/cam` schaltete den Cam-Modus wieder ein - die
-  Probe danach fand ihn dann noch laufend vor.
+  Probe danach fand ihn dann noch laufend vor. Auf die letzte Zeile ist
+  Verlass: Nach der Antwort kommt keine Wiederholung der anderen mehr, das
+  Plugin bricht die eine Zeile ab, sobald es die andere schickt. Den Server
+  zu fragen geht hier nicht: Am Spielmodus ist der Cam-Modus nur bei
+  `camera-mode.gamemode: adventure` zu erkennen, und der zweite Bot, den der
+  Test des Spielernamens damit schaltet, hat kein op für `/execute`.
 * **Die Schalter der Action-Bar prüft der Test am Spielmodus.** `camera-on`
   und `camera-off` sind in der ausgelieferten Datei aus; ohne Action-Bar sagt
   das Plugin zu `/cam` also gar nichts. Ob der Cam-Modus trotzdem läuft,
@@ -285,9 +319,14 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   Rüstungsständer und kann dieselbe Art haben wie das Testobjekt. Der Bot
   stellt sich deshalb direkt neben sein Ziel, und der Suchradius bleibt
   klein genug, dass der eigene Körper nicht hineinfällt.
-* **Was herumliegt, wird mit weggeräumt.** Der Abbau im Durchgang ohne
-  Cam-Modus lässt eine Blume fallen, und die zählte beim Klick auf den
-  eigenen Körper als nächste Entität mit.
+* **Was herumliegt, wird mit weggeräumt, und zwar nach dem `/fill`.** Der
+  Abbau im Durchgang ohne Cam-Modus lässt eine Blume fallen, und die zählte
+  beim Klick auf den eigenen Körper als nächste Entität mit. Das `/fill ...
+  air` beim Aufräumen nimmt dem Hebel den Stein unter ihm weg, und der Hebel
+  fällt dabei selbst als Item ab. Wurden die Items vorher weggeräumt, blieb
+  er liegen, genau dort, wo der Sulfur-Cube-Test danach zuschlägt - und ein
+  Schlag auf ein Item wirft den Bot vom Server („Attempting to attack an
+  invalid entity"). Jeder Abschnitt danach fiel durch.
 * **Alles Gesetzte trägt die Marke `camflytest`** und wird am Ende wieder
   weggenommen, Blöcke mit `/fill ... air`. Die Testwelt bleibt zwischen zwei
   Läufen stehen; ohne die Marke fände der nächste Lauf die Entitäten eines
