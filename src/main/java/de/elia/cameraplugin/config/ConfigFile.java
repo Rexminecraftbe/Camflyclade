@@ -66,7 +66,7 @@ public final class ConfigFile {
             {"could not find expected ':'", "config-syntax-missing-colon"},
             {"mapping values are not allowed", "config-syntax-extra-colon"},
             {"cannot start any token", "config-syntax-tab"},
-            {"expected <block end>", "config-syntax-indentation", "zweite"},
+            {"expected <block end>", "config-syntax-indentation", "second"},
             {"found unexpected end of stream", "config-syntax-missing-quote"},
     };
 

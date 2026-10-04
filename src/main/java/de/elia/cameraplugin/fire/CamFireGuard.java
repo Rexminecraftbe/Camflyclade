@@ -1,4 +1,4 @@
-package de.elia.cameraplugin.feuer;
+package de.elia.cameraplugin.fire;
 
 import org.bukkit.*;
 import org.bukkit.block.Block;

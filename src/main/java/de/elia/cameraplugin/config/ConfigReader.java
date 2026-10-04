@@ -50,7 +50,7 @@ public final class ConfigReader {
         return warnings;
     }
 
-    // ------------------------------------------------------------- Wahrheitswerte
+    // ------------------------------------------------------------ truth values
 
     public boolean getBoolean(String path, boolean def) {
         Object raw = config.get(path);
@@ -83,7 +83,7 @@ public final class ConfigReader {
         }
     }
 
-    // -------------------------------------------------------------------- Zahlen
+    // ----------------------------------------------------------------- numbers
 
     public int getInt(String path, int def) {
         Number value = readNumber(path, def);
@@ -151,7 +151,7 @@ public final class ConfigReader {
         return null;
     }
 
-    // --------------------------------------------------------------------- Text
+    // -------------------------------------------------------------------- text
 
     /**
      * Reads a piece of text. Truth values and numbers are accepted and turned
@@ -225,7 +225,7 @@ public final class ConfigReader {
         }
     }
 
-    // ------------------------------------------------------------------ Notizen
+    // ------------------------------------------------------------------- notes
 
     private void warnWrongType(String path, Object raw, String messageKey, String used) {
         warnings.add(ConfigIssue.of(messageKey)

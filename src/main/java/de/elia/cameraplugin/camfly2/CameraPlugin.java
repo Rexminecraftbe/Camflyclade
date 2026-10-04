@@ -11,7 +11,7 @@ import de.elia.cameraplugin.display.CamActionBar;
 import de.elia.cameraplugin.display.CamNameTag;
 import de.elia.cameraplugin.display.CamParticles;
 import de.elia.cameraplugin.display.SightGlow;
-import de.elia.cameraplugin.feuer.CamFireGuard;
+import de.elia.cameraplugin.fire.CamFireGuard;
 import de.elia.cameraplugin.ghast.CamGhastGuard;
 import de.elia.cameraplugin.hunger.CamHungerGuard;
 import de.elia.cameraplugin.hunger.CamRegenGuard;
@@ -122,14 +122,14 @@ public final class CameraPlugin extends JavaPlugin {
         bodySpawner.removeLeftoverEntities();
         camSulfurCubeGuard.releaseLeftovers();
         warmUpProfileService();
-        // Beim Start ist niemand im Cam-Modus -> ein uebrig gebliebenes Team entfernen.
+        // Nobody is in camera mode at startup -> remove a team left over.
         noCollisionTeam.deleteNoCollisionTeam();
         this.getCommand("cam").setExecutor(new CamCommand(this));
         this.getCommand("cam").setTabCompleter(new CamTabCompleter());
         registerListeners();
         noCollisionTeam.refreshNoCollisionTeam();
         startedUp = true;
-        getLogger().info("CameraPlugin wurde aktiviert!");
+        getLogger().info("CameraPlugin has been enabled!");
     }
 
     /** Hands every event handler of camera mode to the server. */
@@ -211,7 +211,7 @@ public final class CameraPlugin extends JavaPlugin {
             // that would have to be taken down.
             return;
         }
-        // Erstellt eine Kopie der Keys, um ConcurrentModificationException zu vermeiden
+        // Iterates over a copy of the keys to avoid a ConcurrentModificationException
         for (UUID playerId : new HashSet<>(cameraPlayers.ids())) {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) {
@@ -236,10 +236,10 @@ public final class CameraPlugin extends JavaPlugin {
         nameTag.onDisable();
         actionBar.onDisable();
         timeLimit.onDisable();
-        // Kein Spieler mehr im Cam-Modus -> Team entfernen.
+        // No player left in camera mode -> remove the team.
         noCollisionTeam.deleteNoCollisionTeam();
         bodySpawner.removeLeftoverEntities();
-        getLogger().info("CameraPlugin wurde deaktiviert!");
+        getLogger().info("CameraPlugin has been disabled!");
     }
 
     /** The config file as it was last read, see {@link ConfigFile#readConfigInto}. */
@@ -340,8 +340,8 @@ public final class CameraPlugin extends JavaPlugin {
                 command.unregister(commandMap);
             }
         } catch (ReflectiveOperationException | RuntimeException ex) {
-            log.log(Level.WARNING, "Der Befehl /cam konnte nicht abgemeldet werden, er antwortet"
-                    + " deshalb mit einem Fehler des Servers: " + ex);
+            log.log(Level.WARNING, "The command /cam could not be unregistered, so it answers"
+                    + " with an error of the server: " + ex);
         }
     }
 

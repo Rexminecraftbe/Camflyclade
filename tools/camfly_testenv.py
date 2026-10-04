@@ -2041,7 +2041,7 @@ def language_checks(env, bot):
         vorher = len(server_log(env))
         console(env, "cam reload", pause=2)
         FIND.test("Texte, die noch in der config.yml stehen, werden als nicht mehr gelesen gemeldet",
-                  '"messages" und "message-settings" in der config.yml werden'
+                  'The sections "messages" and "message-settings" in config.yml are not read any more'
                   in strip_colors(server_log(env)[vorher:]), "")
     finally:
         # Der Reload holt ihn auch aus dem Cam-Modus, falls eine Probe

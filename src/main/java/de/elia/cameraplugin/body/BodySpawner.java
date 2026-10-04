@@ -124,8 +124,8 @@ public final class BodySpawner {
             hiddenArmor[i] = copy;
         }
         if (stillVisible) {
-            log.log(Level.WARNING, "Die Rüstung des Mannequins konnte nicht ausgeblendet werden, "
-                    + "sie bleibt am Körper sichtbar. Setter: " + EquipmentVisibility.describeAssetSetter());
+            log.log(Level.WARNING, "The armour of the mannequin could not be hidden,"
+                    + " it stays visible on the body. Setter: " + EquipmentVisibility.describeAssetSetter());
         }
         return hiddenArmor;
     }
@@ -204,8 +204,8 @@ public final class BodySpawner {
             hideMannequin(mannequin);
             mannequin.setSilent(true);
         } else if (!MannequinSkin.apply(mannequin, player)) {
-            log.log(Level.WARNING, "Der Skin von " + player.getName()
-                    + " konnte nicht auf das Mannequin übertragen werden, es benutzt den Standard-Skin.");
+            log.log(Level.WARNING, "The skin of " + player.getName()
+                    + " could not be put on the mannequin, it uses the default skin.");
         }
         applyMovementSensitivity(mannequin);
         hideMannequinDescription(mannequin);
@@ -226,7 +226,7 @@ public final class BodySpawner {
             return;
         }
         mannequinLabelReported = true;
-        log.log(Level.WARNING, "Die Zeile \"NPC\" unter dem Namen des Mannequins konnte nicht abgeschaltet werden."
+        log.log(Level.WARNING, "The \"NPC\" line under the name of the mannequin could not be switched off."
                 + " Setter: " + MannequinLabel.describeSetter());
     }
 

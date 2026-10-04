@@ -260,7 +260,7 @@ public final class CamSettings {
         // Only for measuring, so left out of config.yml on purpose: whoever
         // needs it adds "debug: true" under mirror-damage by hand.
         mirrorDebug = config.getBoolean("mirror-damage.debug", false);
-        // "off" war frueher die Schreibweise fuer aus und wird weiter gelesen.
+        // "off" used to be the spelling for off and is still read.
         String modeRaw = readMode(config, "mirror-damage.damage-mode", "mirror",
                 List.of("mirror", "custom", "false"), List.of("off"));
         if ("custom".equalsIgnoreCase(modeRaw)) {
@@ -309,9 +309,9 @@ public final class CamSettings {
                 && !plugin.getConfig().isConfigurationSection("message-settings")) {
             return;
         }
-        log.log(Level.WARNING, "Die Abschnitte \"messages\" und \"message-settings\" in der config.yml werden"
-                + " nicht mehr gelesen: Texte und Schalter stehen jetzt in der Sprachdatei im Ordner lang,"
-                + " welche gilt, sagt language in der config.yml.");
+        log.log(Level.WARNING, "The sections \"messages\" and \"message-settings\" in config.yml are not"
+                + " read any more: texts and switches now stand in the language file in the folder lang,"
+                + " and language in config.yml says which one is used.");
     }
 
     /**
@@ -324,8 +324,8 @@ public final class CamSettings {
         if (!plugin.getConfig().isConfigurationSection("armorstand")) {
             return;
         }
-        plugin.getLogger().warning("Der Abschnitt \"armorstand\" wird nicht mehr gelesen: name-visible und visible"
-                + " stehen jetzt unter \"body\", gravity ist durch body.movement-sensitivity ersetzt.");
+        plugin.getLogger().warning("The section \"armorstand\" is not read any more: name-visible and visible"
+                + " now stand under \"body\", gravity has been replaced by body.movement-sensitivity.");
     }
 
     /**
@@ -338,8 +338,8 @@ public final class CamSettings {
         if (!plugin.getConfig().isSet("mirror-damage.damage-armor")) {
             return;
         }
-        log.log(Level.WARNING, "mirror-damage.damage-armor heisst jetzt damage-armor-mode und kennt drei Werte:"
-                + " mirror, custom und false. true wird als mirror gelesen, false bleibt false.");
+        log.log(Level.WARNING, "mirror-damage.damage-armor is now called damage-armor-mode and knows three values:"
+                + " mirror, custom and false. true is read as mirror, false stays false.");
     }
 
     /**
@@ -352,10 +352,10 @@ public final class CamSettings {
         if (!plugin.getConfig().isSet("cam-area.forbidden-structures")) {
             return;
         }
-        plugin.getLogger().warning("cam-area.forbidden-structures ist in zwei Listen aufgeteilt:"
-                + " forbidden-structures-box misst den ganzen Kasten einer Struktur,"
-                + " forbidden-structures-components nur ihre einzelnen Bauteile."
-                + " Die alten Eintraege werden als Kasten-Liste gelesen.");
+        plugin.getLogger().warning("cam-area.forbidden-structures has been split into two lists:"
+                + " forbidden-structures-box measures the whole box of a structure,"
+                + " forbidden-structures-components only its single pieces."
+                + " The old entries are read as the box list.");
     }
 
     /**

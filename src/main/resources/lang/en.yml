@@ -1,10 +1,10 @@
-# CamFly - Sprachdatei: Englisch
-# Welche Sprachdatei gilt, steht in der config.yml unter language.
-# Für eine andere Sprache diese Datei kopieren, z. B. als de.yml, übersetzen und dort language: de eintragen.
-# Was in einer Sprachdatei fehlt, kommt aus der englischen im Plugin.
-# Neu laden mit /cam reload.
+# CamFly - language file: English
+# Which language file is used is set in config.yml under language.
+# For another language copy this file, e.g. as de.yml, translate it and set language: de there.
+# Whatever a language file leaves out comes from the English one built into the plugin.
+# Reload with /cam reload.
 
-# Texte, die das Plugin ausgibt (Farbcodes mit &)
+# Texts the plugin sends (colour codes with &)
 messages:
   actionbar-off: "&cCam mode ended"
   actionbar-on: "&aCam mode activated"
@@ -74,7 +74,7 @@ messages:
   startup-skins-loading: "Loading skins..."
   time-limit-expired: "&cCam mode ended: Time limit expired."
 
-# Nachrichten einzeln an- und abschalten
+# Switch single messages on and off
 message-settings:
   actionbar-off: true
   actionbar-on: true

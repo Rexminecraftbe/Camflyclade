@@ -200,8 +200,8 @@ public final class PortalRules {
         if (area == null) {
             blockedPortals.remove(spot);
         } else if (!area.equals(blocked.area())) {
-            // Drueben gilt jetzt etwas anderes als beim letzten Mal. Der Name
-            // steht in der Meldung an den Spieler, also wird er nachgefuehrt.
+            // Something else applies over there than last time. The name
+            // stands in the message to the player, so it is kept up to date.
             blockedPortals.put(spot, new BlockedPortal(area, blocked.arrival()));
         }
         return area;
@@ -217,15 +217,15 @@ public final class PortalRules {
         Arrival arrival = blocked.arrival();
         Location where = arrival.location();
         if (where == null) {
-            // Die Welt von drueben ist nicht geladen. Was dort gilt, laesst sich
-            // nicht sagen, und eine Probereise kostet weniger als ein Portal,
-            // das aus einem nicht mehr pruefbaren Grund gesperrt bleibt.
+            // The world over there is not loaded. What applies there cannot
+            // be told, and a trial trip costs less than a portal that stays
+            // shut for a reason nobody can check any more.
             return null;
         }
         if (arrival.inPortal() && !portalStandsAt(where)) {
-            // Das Portal drueben ist abgebaut oder versetzt worden. Die Reise
-            // kommt jetzt an einem anderen heraus - an dem naechstgelegenen,
-            // oder an einem, das der Server neu setzt.
+            // The portal over there has been taken down or moved. The trip
+            // now comes out at another one - the nearest, or one the server
+            // builds anew.
             return null;
         }
         return check.areaAt(where);
