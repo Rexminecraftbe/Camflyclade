@@ -80,7 +80,8 @@ public final class CameraMode {
             player.removePotionEffect(effect.getType());
         }
         boolean originalGlowing = player.isGlowing();
-        int originalRemainingAir = player.getRemainingAir();
+        int remainingAir = player.getRemainingAir();
+        int freezeTicks = player.getFreezeTicks();
 
         // *** Empty inventory and armour ***
         playerInventory.clear();
@@ -89,7 +90,7 @@ public final class CameraMode {
         Location playerLocation = player.getLocation();
 
         BodySpawner bodies = plugin.getBodySpawner();
-        LivingEntity body = bodies.spawnCameraBody(player, playerLocation, originalRemainingAir, originalArmor);
+        LivingEntity body = bodies.spawnCameraBody(player, playerLocation, originalArmor);
 
         // A mannequin takes the hits for both body types and is the entity the
         // movement check watches. It carries the player's armour so the body
@@ -115,6 +116,13 @@ public final class CameraMode {
         }
         // The mannequin is the entity that takes the hits.
         LivingEntity damageTarget = hitbox != null ? hitbox : body;
+        // It breathes and freezes in his place from where he left off, and he
+        // takes both back from it when he leaves. The mannequin and not the
+        // armour stand of type 1: it has his eye height, so it goes under
+        // water when he would, and it wears the copies of his armour, so
+        // leather keeps the frost off it as it keeps it off him.
+        damageTarget.setRemainingAir(remainingAir);
+        damageTarget.setFreezeTicks(freezeTicks);
         TextDisplay nameDisplay = bodies.spawnNameDisplay(player, body);
 
         GameMode originalGameMode = player.getGameMode();
@@ -152,7 +160,7 @@ public final class CameraMode {
         plugin.getMobTargeting().turnMobsFromPlayer(player, damageTarget);
 
         // *** Hand the saved inventory to CameraData ***
-        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, nameDisplay, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects, originalRemainingAir));
+        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, nameDisplay, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects));
         cameraPlayers.addBody(body.getUniqueId(), player.getUniqueId());
         if (hitbox != null) {
             cameraPlayers.addHitbox(hitbox.getUniqueId(), player.getUniqueId());
@@ -257,7 +265,11 @@ public final class CameraMode {
         player.setAllowFlight(cameraData.getOriginalAllowFlight());
         player.setFlying(cameraData.getOriginalFlying());
         player.setGlowing(cameraData.getOriginalGlowing());
-        player.setRemainingAir(cameraData.getOriginalRemainingAir());
+        // He stands where the mannequin stood, in the same water or powder
+        // snow: what air it has left and how frozen it got is his now.
+        LivingEntity standIn = cameraData.getDamageTarget();
+        player.setRemainingAir(standIn.getRemainingAir());
+        player.setFreezeTicks(standIn.getFreezeTicks());
         plugin.getHungerGuard().stopFor(player);
 
         cameraPlayers.remove(player.getUniqueId());

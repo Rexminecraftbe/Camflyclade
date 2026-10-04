@@ -77,7 +77,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 547 Methoden- und Feldzugriffe. Alle 547 gibt
+# Dieser Pruefer zaehlt zurzeit 578 Methoden- und Feldzugriffe. Alle 578 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -4020,6 +4020,217 @@ def medium_checks(env, bot):
 
 
 # ---------------------------------------------------------------------------
+# Start mitten im Fall
+# ---------------------------------------------------------------------------
+
+# Wie hoch ueber dem Becken der Bot fuer die Fallproben losgelassen wird.
+FALL_HOEHE = 24
+
+# Das unsichtbare Mannequin im Koerper, das die Treffer nimmt - bei
+# Koerpertyp 1, der Voreinstellung, steht es im Ruestungsstaender.
+MANNEQUIN = "@e[type=minecraft:mannequin,distance=..12,sort=nearest,limit=1]"
+
+
+def becken_bauen(bot, bx, by, bz):
+    """Ein Becken aus Glas, drei Bloecke tief voll Wasser, oben offen. Gibt
+    den Bereich zum Aufraeumen und die Stelle auf seinem Grund zurueck."""
+    becken = f"{bx - 2} {by} {bz - 2} {bx + 2} {by + 2} {bz + 2}"
+    bot.chat(f"/fill {becken} minecraft:glass")
+    time.sleep(0.5)
+    bot.chat(f"/fill {bx - 1} {by} {bz - 1} {bx + 1} {by + 2} {bz + 1} minecraft:water")
+    time.sleep(0.5)
+    return becken, (bx + 0.5, by, bz + 0.5)
+
+
+def zahl_aus(text):
+    """Die Zahl aus einer Antwort von /data get, oder None. Ein Wert, den
+    das Spiel nicht speichert - TicksFrozen bei null -, kommt gar nicht erst
+    als Zahl zurueck."""
+    m = re.search(r"entity data:\s*(-?[\d.]+)", text or "")
+    return float(m.group(1)) if m else None
+
+
+def fall_checks(env, bot):
+    """Kein Start des Cam-Modus mitten in einem Fall, der noch weh tun kann.
+
+    Der Cam-Modus nahm den Fall sonst ab: Der Spieler fliegt ab dem Start,
+    und sein Koerper faellt von der Startstelle aus neu, aus dem Stand. Wer
+    nach einem langen Fall knapp ueber dem Boden /cam tippte, kam ohne
+    Schaden davon.
+
+    Dreierlei wird probiert:
+      * ein echter Fall, FALL_HOEHE Bloecke ueber einem Becken losgelassen,
+      * hoch in der Luft mit Sanftem Fall: Die Fallstrecke waechst dabei kaum,
+        unter ihm liegen aber viele Bloecke, und sein Koerper faellt ohne
+        den Effekt,
+      * die Gegenprobe, mit Sanftem Fall anderthalb Bloecke ueber dem Boden,
+        so hoch wie ein Sprung: Das tut niemandem weh, /cam muss gehen.
+
+    Nach jeder Probe in der Luft kommt der Bot per /tp ins Wasser des
+    Beckens: Es nimmt ihm die Fallstrecke, und kein Aufprall legt die
+    cam-safety-Sperre auf die naechsten Proben.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test des Starts im Fall aus",
+                     cam_off(bot), ""):
+        return
+    pos = bot.server_pos()
+    if not FIND.test("Standort fuer den Test des Starts im Fall lesbar",
+                     pos is not None, str(pos)):
+        return
+    bx, by, bz = _floor(pos[0]), _floor(pos[1] + 0.5), _floor(pos[2])
+    heim = (bx + 0.5, by, bz + 0.5)
+    becken, im_becken = becken_bauen(bot, bx + 14, by, bz)
+    hoch_ueber_becken = (im_becken[0], by + FALL_HOEHE, im_becken[2])
+    knapp_ueber_boden = (bx + 0.5, by + 1.5, bz + 0.5)
+
+    def probe(name, wo, warten, darf):
+        """Den Bot nach `wo` setzen, `warten` Sekunden fallen lassen, /cam."""
+        bot.chat(f"/tp {BOT_NAME} {wo[0]} {wo[1]} {wo[2]}")
+        time.sleep(warten)
+        since = bot.mark()
+        bot.chat("/cam")
+        if darf:
+            hit = bot.expect("Camera mode activated|Cam mode activated", since, 6000)
+            FIND.test(name, bool(hit), "" if hit else "der Start wurde abgelehnt")
+        else:
+            hit = bot.expect("cannot start cam mode while falling", since, 6000)
+            time.sleep(0.5)
+            lief = spielmodus_ist(bot, "adventure")
+            FIND.test(name, bool(hit) and not lief,
+                      "Cam-Modus laeuft" if lief else
+                      strip_colors(hit["text"]) if hit else "keine Ablehnung im Chat")
+        if spielmodus_ist(bot, "adventure"):
+            cam_off(bot)
+        hinstellen(bot, *im_becken)
+        hinstellen(bot, *heim)
+
+    try:
+        probe("Mitten im Fall startet /cam nicht", hoch_ueber_becken, 0.8, False)
+
+        bot.chat("/effect give @s minecraft:slow_falling 60 0")
+        time.sleep(0.5)
+        probe("Mit Sanftem Fall hoch in der Luft startet /cam nicht",
+              hoch_ueber_becken, 0.8, False)
+        # Kurz nach dem /tp, damit er noch in der Luft ist - aber erst nach
+        # der ersten Bewegung, die sein Client meldet: Bis dahin steht er fuer
+        # den Server noch, und die Probe sagte nichts.
+        probe("Anderthalb Bloecke ueber dem Boden startet /cam wie nach einem "
+              "Sprung", knapp_ueber_boden, 0.3, True)
+    finally:
+        bot.chat("/effect clear @s")
+        time.sleep(0.4)
+        if spielmodus_ist(bot, "adventure"):
+            cam_off(bot)
+        hinstellen(bot, *heim)
+        bot.chat(f"/fill {becken} minecraft:air")
+        time.sleep(0.5)
+
+
+# ---------------------------------------------------------------------------
+# Luft und Frost gehen auf den Koerper ueber
+# ---------------------------------------------------------------------------
+
+def zustand_checks(env, bot):
+    """Die Luft unter Wasser und der Frost im Pulverschnee gehen beim Start
+    auf das Mannequin ueber und beim Aussteigen von ihm zurueck.
+
+    Der Koerper steht fuer den Spieler da: Er atmet und friert von dem Stand
+    an weiter, den der Spieler beim Start hatte, und was er dabei verliert,
+    hat der Spieler beim Aussteigen verloren. Vorher begann das Mannequin
+    mit voller Luft und ohne Frost, und der Spieler bekam beim Aussteigen
+    seine Luft vom Start zurueck.
+
+    Gelesen wird am Mannequin, nicht am Ruestungsstaender: Es nimmt die
+    Treffer, auch das Ertrinken und das Erfrieren.
+
+    Beide Proben gehen knapp: Der Frost erreicht nach 140 Ticks den vollen
+    Wert, und von da an tut er weh - am Bot und am Koerper. Gelesen wird
+    deshalb gleich nach dem /cam, ohne die Pause von cam_on und cam_off, und
+    der Bot kommt gleich danach wieder heraus.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test von Luft und Frost aus",
+                     cam_off(bot), ""):
+        return
+    pos = bot.server_pos()
+    if not FIND.test("Standort fuer den Test von Luft und Frost lesbar",
+                     pos is not None, str(pos)):
+        return
+    bx, by, bz = _floor(pos[0]), _floor(pos[1] + 0.5), _floor(pos[2])
+    heim = (bx + 0.5, by, bz + 0.5)
+    becken, im_becken = becken_bauen(bot, bx + 14, by, bz)
+    schnee = f"{bx - 15} {by} {bz - 1} {bx - 13} {by + 2} {bz + 1}"
+    im_schnee = (bx - 13.5, by, bz + 0.5)
+
+    def schalten(an, wert):
+        """/cam und gleich danach einen Wert lesen. Gewartet wird auf die eine
+        Zeile, die zum Schalten gehoert: Die Action-Bar wiederholt "Cam mode
+        activated" alle zwei Sekunden, und eine Wiederholung kurz nach dem
+        /cam zum Aussteigen liesse den Wert zu frueh lesen."""
+        since = bot.mark()
+        bot.chat("/cam")
+        bot.expect("Cam mode activated" if an else "Cam mode ended", since, 4000)
+        return wert()
+
+    def am_mannequin(pfad):
+        return zahl_aus(daten_von(bot, MANNEQUIN, pfad))
+
+    try:
+        # --- Luft ---
+        hinstellen(bot, *im_becken)
+        time.sleep(1.5)
+        luft_vorher = bot.server_data("Air")
+        im_cam = schalten(True, lambda: am_mannequin("Air"))
+        FIND.test("Das Mannequin atmet mit der Luft weiter, die der Spieler "
+                  "beim Start hatte",
+                  luft_vorher is not None and im_cam is not None
+                  and luft_vorher - 60 <= im_cam <= luft_vorher,
+                  f"Spieler vorher {luft_vorher}, Mannequin {im_cam}")
+        # Hinaus aus dem Wasser, damit die eigene Luft der Kamera wieder
+        # aufgeht und nicht mit der des Mannequins verwechselt wird.
+        medium_fliegen(bot, (im_becken[0], by + 6, im_becken[2]))
+        luft_mannequin = am_mannequin("Air")
+        luft_nachher = schalten(False, lambda: bot.server_data("Air"))
+        FIND.test("Nach dem Aussteigen hat der Spieler die Luft des Mannequins",
+                  luft_mannequin is not None and luft_nachher is not None
+                  and luft_mannequin - 60 <= luft_nachher <= luft_mannequin
+                  and luft_nachher < luft_vorher - 20,
+                  f"Spieler vorher {luft_vorher}, Mannequin am Ende {luft_mannequin}, "
+                  f"Spieler danach {luft_nachher}")
+        hinstellen(bot, *heim)
+
+        # --- Frost ---
+        bot.chat(f"/fill {schnee} minecraft:powder_snow")
+        time.sleep(0.5)
+        hinstellen(bot, *im_schnee)
+        time.sleep(1.5)
+        frost_vorher = bot.server_data("TicksFrozen")
+        im_cam = schalten(True, lambda: am_mannequin("TicksFrozen"))
+        FIND.test("Das Mannequin friert von dem Frost an weiter, den der "
+                  "Spieler beim Start hatte",
+                  frost_vorher is not None and im_cam is not None
+                  and frost_vorher <= im_cam <= frost_vorher + 60,
+                  f"Spieler vorher {frost_vorher}, Mannequin {im_cam}")
+        medium_fliegen(bot, (im_schnee[0], by + 6, im_schnee[2]))
+        frost_mannequin = am_mannequin("TicksFrozen")
+        frost_nachher = schalten(False, lambda: bot.server_data("TicksFrozen"))
+        hinstellen(bot, *heim)
+        # Im Schnee steigt sein Frost nach dem Aussteigen weiter, um einen
+        # Tick je Tick; draussen haette die Kamera ihren laengst verloren.
+        FIND.test("Nach dem Aussteigen hat der Spieler den Frost des Mannequins",
+                  frost_mannequin is not None and frost_nachher is not None
+                  and frost_mannequin <= frost_nachher <= frost_mannequin + 60,
+                  f"Spieler vorher {frost_vorher}, Mannequin am Ende {frost_mannequin}, "
+                  f"Spieler danach {frost_nachher}")
+    finally:
+        if spielmodus_ist(bot, "adventure"):
+            cam_off(bot)
+        hinstellen(bot, *heim)
+        for bereich in (becken, schnee):
+            bot.chat(f"/fill {bereich} minecraft:air")
+            time.sleep(0.5)
+
+
+# ---------------------------------------------------------------------------
 # Die Grenze: border-mode, border-block, border-radius
 # ---------------------------------------------------------------------------
 
@@ -5010,6 +5221,12 @@ def step_tests(env):
 
         # --- Lava, Wasser und Pulverschnee ---
         medium_checks(env, bot)
+
+        # --- Start mitten im Fall ---
+        fall_checks(env, bot)
+
+        # --- Luft und Frost gehen auf den Koerper ueber ---
+        zustand_checks(env, bot)
 
         # --- Die Grenze: barrier, push-back und keine ---
         border_checks(env, bot)

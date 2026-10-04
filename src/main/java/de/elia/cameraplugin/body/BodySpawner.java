@@ -171,15 +171,15 @@ public final class BodySpawner {
      *
      * <p>The armour stand puts the armour on right here, the mannequin gets it
      * from the caller: it is the entity taking the hits as well and therefore
-     * wears the pieces even when they are not meant to be seen.</p>
+     * wears the pieces even when they are not meant to be seen. The same goes
+     * for the air and the frost of the player, which the caller hands to
+     * whichever mannequin takes the hits.</p>
      */
-    public LivingEntity spawnCameraBody(Player player, Location location, int remainingAir,
-                                        ItemStack[] originalArmor) {
+    public LivingEntity spawnCameraBody(Player player, Location location, ItemStack[] originalArmor) {
         LivingEntity body = usesMannequinBody()
                 ? spawnMannequinBody(player, location)
                 : spawnArmorStandBody(player, location, originalArmor);
 
-        body.setRemainingAir(remainingAir);
         body.getPersistentDataContainer().set(bodyKey, PersistentDataType.INTEGER, 1);
         body.setGravity(useBodyGravity());
         body.setCanPickupItems(false);
