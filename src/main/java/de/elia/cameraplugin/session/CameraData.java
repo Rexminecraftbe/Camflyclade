@@ -23,7 +23,6 @@ public class CameraData {
     private final boolean originalAllowFlight;
     private final boolean originalFlying;
     private final boolean originalGlowing;
-    private final int originalRemainingAir;
     /** Every slot of his inventory, the armour and the off hand included. */
     private final ItemStack[] originalInventoryContents;
     private final Collection<PotionEffect> pausedEffects;
@@ -41,7 +40,7 @@ public class CameraData {
      */
     private Location portalEntry;
 
-    public CameraData(LivingEntity body, Mannequin hitbox, TextDisplay nameDisplay, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, Collection<PotionEffect> pausedEffects, int originalRemainingAir) {
+    public CameraData(LivingEntity body, Mannequin hitbox, TextDisplay nameDisplay, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, Collection<PotionEffect> pausedEffects) {
         this.body = body;
         this.hitbox = hitbox;
         this.nameDisplay = nameDisplay;
@@ -51,7 +50,6 @@ public class CameraData {
         this.originalGlowing = originalGlowing;
         this.originalInventoryContents = originalInventoryContents;
         this.pausedEffects = pausedEffects;
-        this.originalRemainingAir = originalRemainingAir;
     }
 
     public LivingEntity getBody() { return body; }
@@ -68,7 +66,6 @@ public class CameraData {
     public boolean getOriginalGlowing() { return originalGlowing; }
     public ItemStack[] getOriginalInventoryContents() { return originalInventoryContents; }
     public Collection<PotionEffect> getPausedEffects() { return pausedEffects; }
-    public int getOriginalRemainingAir() { return originalRemainingAir; }
     /** The portal the distance is measured from, or {@code null} for the body. */
     public Location getPortalAnchor() { return portalAnchor; }
     public void setPortalAnchor(Location portalAnchor) { this.portalAnchor = portalAnchor; }

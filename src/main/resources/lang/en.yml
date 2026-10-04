@@ -19,6 +19,7 @@ messages:
   cam-area-limit: "&cYou cannot go any further, cam mode is not allowed in {area}."
   cam-area-start: "&cYou cannot start cam mode in {area}."
   cam-effect-start: "&cYou cannot start cam mode with {effect} on you."
+  cam-falling-start: "&cYou cannot start cam mode while falling."
   cam-lava-start: "&cYou cannot start cam mode in lava."
   cam-powder-snow-start: "&cYou cannot start cam mode in powder snow."
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
@@ -88,6 +89,7 @@ message-settings:
   cam-area-limit: true
   cam-area-start: true
   cam-effect-start: true
+  cam-falling-start: true
   cam-lava-start: true
   cam-powder-snow-start: true
   cam-safety: true

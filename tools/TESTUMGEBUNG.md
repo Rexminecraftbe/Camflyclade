@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **547** - alle 547 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **578** - alle 578 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -460,6 +460,22 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   Server dem Plugin aber erst ab 1/16 Block. Nach der Probe „nicht tiefer“
   steht er deshalb bis zu 1/16 Block unter der Stelle, an die er gesetzt
   wurde, und die Probe lässt dafür Luft.
+* **Die Proben in der Luft enden im Wasser.** Für den Start im Fall lässt der
+  Test den Bot 24 Blöcke über einem Becken los und setzt ihn nach jeder Probe
+  per `/tp` hinein. Das Wasser nimmt ihm die Fallstrecke, und kein Aufprall
+  legt die `cam-safety`-Sperre auf die nächsten Proben.
+* **Die Gegenprobe knapp über dem Boden läuft mit Sanftem Fall** und wartet
+  nach dem `/tp` nur 0,3 Sekunden. Gleich nach dem `/tp` steht der Bot für den
+  Server noch auf dem Boden, bis sein Client die erste Bewegung meldet - dann
+  sagte die Probe nichts. Ohne den Effekt wäre er aber nach einer halben
+  Sekunde schon gelandet.
+* **Luft und Frost liest der Test am Mannequin**, mit `/data get entity`, bei
+  Körpertyp 1 also am unsichtbaren im Rüstungsständer. `TicksFrozen`
+  speichert das Spiel nur, solange der Wert über null liegt.
+* **Der Frost lässt wenig Zeit.** Nach 140 Ticks ist er voll, und von da an
+  tut er weh, am Bot wie am Körper. Der Test liest deshalb gleich nach dem
+  `/cam`, ohne die Pause von `cam_on` und `cam_off`, und holt den Bot sofort
+  wieder aus dem Pulverschnee.
 * **Die Gegenprobe am Happy Ghast wird nach beiden Seiten eingegrenzt.** Nur
   „nicht abgehoben" hieße sie auch dann gut, wenn der Bot glatt durch den
   Ghast hindurchgefallen wäre - und dann sagte die Probe darunter nichts mehr
@@ -667,7 +683,11 @@ dicht vor der Kamera Lava · gesperrt und mit `border-mode: barrier` landet die
 Kamera auf der Lava wie auf einem Block, ohne zurückgesetzt zu werden, und die
 Wand zeigt Lava als Magma, Wasser als blaues Glas und Pulverschnee als Schnee
 · mit `push-back` bleibt die Lava Lava, und wer hineinfällt, wird
-zurückgesetzt · voreingestellt steht
+zurückgesetzt · mitten im Fall startet `/cam` nicht, auch nicht mit Sanftem
+Fall hoch in der Luft, und die Ablehnung sagt warum · Gegenprobe: so hoch wie
+ein Sprung über dem Boden geht es · das Mannequin atmet und friert mit der
+Luft und dem Frost weiter, die der Spieler beim Start hatte, und nach dem
+Aussteigen hat der Spieler die des Mannequins · voreingestellt steht
 `border-mode: barrier` mit `border-block: barrier`, `border-block-water:
 blue_stained_glass`, `border-block-lava: magma_block`,
 `border-block-powder-snow: snow_block` und `border-radius: 5` da · die Kamera

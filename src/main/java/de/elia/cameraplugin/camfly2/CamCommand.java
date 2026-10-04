@@ -65,6 +65,9 @@ public class CamCommand implements CommandExecutor {
             if (!startChecks.checkCamMedium(player)) {
                 return true;
             }
+            if (!startChecks.checkCamFalling(player)) {
+                return true;
+            }
             // Before the safety check: a harmful effect usually hurts as
             // well, and then "wait five more seconds" would come first and
             // the reason that really stands in the way only after it.
