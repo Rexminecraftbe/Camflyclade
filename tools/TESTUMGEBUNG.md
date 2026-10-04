@@ -313,9 +313,14 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   Rüstungsständer und kann dieselbe Art haben wie das Testobjekt. Der Bot
   stellt sich deshalb direkt neben sein Ziel, und der Suchradius bleibt
   klein genug, dass der eigene Körper nicht hineinfällt.
-* **Was herumliegt, wird mit weggeräumt.** Der Abbau im Durchgang ohne
-  Cam-Modus lässt eine Blume fallen, und die zählte beim Klick auf den
-  eigenen Körper als nächste Entität mit.
+* **Was herumliegt, wird mit weggeräumt, und zwar nach dem `/fill`.** Der
+  Abbau im Durchgang ohne Cam-Modus lässt eine Blume fallen, und die zählte
+  beim Klick auf den eigenen Körper als nächste Entität mit. Das `/fill ...
+  air` beim Aufräumen nimmt dem Hebel den Stein unter ihm weg, und der Hebel
+  fällt dabei selbst als Item ab. Wurden die Items vorher weggeräumt, blieb
+  er liegen, genau dort, wo der Sulfur-Cube-Test danach zuschlägt - und ein
+  Schlag auf ein Item wirft den Bot vom Server („Attempting to attack an
+  invalid entity"). Jeder Abschnitt danach fiel durch.
 * **Alles Gesetzte trägt die Marke `camflytest`** und wird am Ende wieder
   weggenommen, Blöcke mit `/fill ... air`. Die Testwelt bleibt zwischen zwei
   Läufen stehen; ohne die Marke fände der nächste Lauf die Entitäten eines

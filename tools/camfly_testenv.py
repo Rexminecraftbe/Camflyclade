@@ -2002,13 +2002,17 @@ def interact_aufraeumen(bot, base):
     bx, by, bz = base
     bot.chat(f"/kill @e[tag={INTERACT_TAG}]")
     time.sleep(0.4)
-    # Auch, was herumliegt: Der Abbau im Durchgang ohne Cam-Modus laesst eine
-    # Blume fallen, und die zaehlte beim Klick auf den eigenen Koerper als
-    # naechste Entitaet mit.
-    bot.chat("/kill @e[type=minecraft:item]")
-    time.sleep(0.4)
     bot.chat(f"/fill {bx + 1} {by} {bz - 1} {bx + 11} {by + 8} {bz + 8} minecraft:air")
     time.sleep(0.8)
+    # Auch, was herumliegt: Der Abbau im Durchgang ohne Cam-Modus laesst eine
+    # Blume fallen, und die zaehlte beim Klick auf den eigenen Koerper als
+    # naechste Entitaet mit. Erst nach dem /fill: Der nimmt dem Hebel den
+    # Stein unter ihm weg, und der Hebel faellt dabei als Item ab. Liegen
+    # blieb er, wo der Sulfur-Cube-Test danach zuschlaegt - und ein Schlag auf
+    # ein Item wirft den Bot vom Server ("Attempting to attack an invalid
+    # entity").
+    bot.chat("/kill @e[type=minecraft:item]")
+    time.sleep(0.4)
 
 
 def interact_proben(bot, base):
