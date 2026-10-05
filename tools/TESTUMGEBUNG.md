@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **613** - alle 613 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **629** - alle 629 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -382,9 +382,34 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   Cam-Modus kommt der Stoß dann allein mit dem Explosionspaket. Im Cam-Modus
   lehnt der Server den weitergegebenen Schaden sofort ab, und das Plugin gibt
   den Stoß trotzdem weiter - wie die Explosion selbst.
-* **Den Schlag führt ein zweiter Spieler**, `CamFlyZuschauer`, zwei Blöcke
-  östlich des Ziels. Er schlägt die nächste Entität; liegengebliebene Pfeile
-  und Dreizacke räumt der Test vorher weg, sie tragen die Marke `camflytest`.
+* **Die Schläge führt ein zweiter Spieler**, `CamFlyZuschauer`, östlich des
+  Ziels. Er schlägt, was dem Ziel am nächsten steht: ohne Cam-Modus den Bot,
+  im Cam-Modus den Körper. Liegengebliebene Pfeile und Dreizacke räumt der
+  Test vorher weg, sie tragen die Marke `camflytest`.
+* **Die Waffe kommt mit `item replace` ins erste Fach, nicht mit `/give`.**
+  Das Schwein für den Schwungschlag lässt beim `kill` Fleisch fallen, und
+  hob der Schläger es zwischen `clear` und `/give` auf, lag es im ersten
+  Fach: Er schlug mit dem Fleisch, ohne Schwung, und stach ohne Speer ins
+  Leere. Das Schwein hat dazu eine leere Beutetabelle.
+* **Den Sprint meldet der Test selbst.** mineflayer schickt für 26.x die
+  Nummer der Aktion aus alten Versionen, und die heißt dort etwas anderes:
+  Der Server hielt den Schläger nie für sprintend. `sprint` schreibt das
+  Paket `entity_action` deshalb mit dem Namen der Aktion.
+* **Ein voller Sprintschlag beendet den Sprint auf dem Server.** Für den halb
+  ausgeholten Sprintschlag geht deshalb erst ein voller Schlag auf einen
+  Rüstungsständer daneben, dann wird neu gesprintet und gleich hinterher
+  geschlagen - mit dem Schwert ist der Schlag dann erst halb ausgeholt, und
+  nur so prüft die Probe, dass der Sprint dann nichts dazugibt.
+* **Ein Speer sticht nicht über das Paket für den Schlag.** Das nimmt der
+  Server mit einem Speer in der Hand gar nicht an. Der Client meldet einen
+  Stich als Aktion Nummer 7 (STAB) im Paket `block_dig`, und der Server sucht
+  selbst entlang des Blicks, was er trifft. `stab` sieht deshalb erst hart
+  zum Ziel und sticht einen Moment später. Der Speer sticht zudem nur voll
+  ausgeholt, der Test wartet nach dem Wechsel der Waffe zwei Sekunden.
+* **Ein Speer mit Rückstoß II stößt einen Spieler nicht weiter als ohne.**
+  Der Server schickt den ersten Stoß des Stichs sofort und setzt die
+  Geschwindigkeit danach zurück; den zweiten, den der Verzauberung, schickt
+  ihm niemand. Die Probe hält fest, dass der Körper das genauso weitergibt.
 * **Der Name über dem Körper ist ein TextDisplay und wird am Server
   geprüft.** Was der Client daraus zeichnet, sieht der Bot nicht. Gefragt
   wird mit `/execute as <Körper> at @s positioned ~ ~2.25 ~ if entity
@@ -665,10 +690,13 @@ im Rahmen drehen, kein Fenster einer Kistenlore öffnen und kein Boot
 besteigen · Gegenprobe: ohne Cam-Modus geht
 jedes davon sehr wohl · das Inventar ist im Cam-Modus leer und danach wieder
 da · die Rüstung ist im Cam-Modus abgelegt und danach wieder angezogen · ein
-Pfeil, ein Pfeil mit Schlag II, ein geworfener Dreizack, TNT und der Schlag
-eines Spielers auf den Körper stoßen den Spieler genau dorthin, wo derselbe
-Treffer ihn ohne Cam-Modus hinstößt - vom Schützen weg und nicht zu ihm
-hin -, Pfeil und TNT auch mit `damage-mode: false` · der
+Pfeil, ein Pfeil mit Schlag II, ein geworfener Dreizack, TNT und die
+Schläge eines Spielers auf den Körper stoßen den Spieler genau dorthin, wo
+derselbe Treffer ihn ohne Cam-Modus hinstößt - vom Schützen weg und nicht
+zu ihm hin -: ein Schlag, ein Sprintschlag voll und halb ausgeholt, ein
+Schwert mit Rückstoß II, ein Schwungschlag, der den Körper neben seinem Ziel
+trifft, ein Speerstich und ein Speerstich mit Rückstoß II · Pfeil, TNT,
+Sprintschlag und Speerstich auch mit `damage-mode: false` · der
 Name steht als TextDisplay genau dort über dem Körper, wo sonst sein
 Namensschild hinge, trägt den Text aus `armorstand.name-format`, folgt dem
 Körper und wird mit ihm eingesammelt · der Körper selbst trägt keinen Namen

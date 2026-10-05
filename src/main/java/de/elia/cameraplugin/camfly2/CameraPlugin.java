@@ -21,6 +21,7 @@ import de.elia.cameraplugin.inventory.CamInventoryGuard;
 import de.elia.cameraplugin.inventory.CamInventoryLock;
 import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.mirrordamage.DamageMirror;
+import de.elia.cameraplugin.mirrordamage.SwingStrength;
 import de.elia.cameraplugin.mob.MobTargeting;
 import de.elia.cameraplugin.movement.CamBorderWall;
 import de.elia.cameraplugin.movement.CamMovementGuard;
@@ -135,8 +136,9 @@ public final class CameraPlugin extends JavaPlugin {
     /** Hands every event handler of camera mode to the server. */
     private void registerListeners() {
         PluginManager pluginManager = this.getServer().getPluginManager();
+        SwingStrength swingStrength = new SwingStrength(this, cameraPlayers);
         List<Listener> listeners = List.of(
-                new DamageMirror(this),
+                new DamageMirror(this, swingStrength),
                 new CamInteractionGuard(this),
                 mobTargeting,
                 new CamRegenGuard(cameraPlayers),
@@ -152,8 +154,10 @@ public final class CameraPlugin extends JavaPlugin {
         for (Listener listener : listeners) {
             pluginManager.registerEvents(listener, this);
         }
-        // Registers itself: which event it listens to depends on the server.
+        // These register themselves: which event they listen to depends on
+        // the server.
         new CamKnockbackGuard(this, cameraPlayers).register();
+        swingStrength.register();
     }
 
     /**

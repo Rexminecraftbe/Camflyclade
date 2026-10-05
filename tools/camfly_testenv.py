@@ -77,7 +77,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 613 Methoden- und Feldzugriffe. Alle 613 gibt
+# Dieser Pruefer zaehlt zurzeit 629 Methoden- und Feldzugriffe. Alle 629 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -891,7 +891,11 @@ function waitFor(check, timeout) {
 // Entitaet und kann dieselbe Art haben wie das Testobjekt - genommen wird
 // deshalb die naechste, und der Test stellt den Bot direkt neben sein Ziel.
 function pickEntity(cmd) {
-  const me = bot.entity && bot.entity.position;
+  const Vec3 = require('vec3');
+  // Mit 'at' die Entitaet, die einer Stelle am naechsten steht, sonst die
+  // naechste am Bot.
+  const me = cmd.at ? new Vec3(cmd.at[0], cmd.at[1], cmd.at[2])
+                    : bot.entity && bot.entity.position;
   let best = null;
   for (const id of Object.keys(bot.entities)) {
     const e = bot.entities[id];
@@ -1256,6 +1260,45 @@ async function handle(cmd) {
                  reason: String(err && err.message || err) };
       }
     }
+    case 'stab': {
+      // Ein Stich mit dem Speer. Der Speer schlaegt nicht ueber das Paket
+      // fuer den Schlag, das nimmt der Server mit einem Speer in der Hand
+      // gar nicht an: Der Client meldet einen Stich als Aktion Nummer 7
+      // (STAB), und der Server sucht selbst entlang des Blicks, was er
+      // trifft. Deshalb erst hart hinsehen und den Blick einen Tick lang
+      // hinausgehen lassen.
+      const e = pickEntity(cmd);
+      if (!e) return { done: false, reason: 'keine solche Entitaet in der Naehe' };
+      try {
+        await Promise.race([
+          bot.lookAt(e.position.offset(0, cmd.aim === undefined ? 1.0 : cmd.aim, 0), true),
+          new Promise((r) => setTimeout(r, 2000))
+        ]);
+        await new Promise((r) => setTimeout(r, 150));
+        bot._client.write('block_dig', {
+          status: 7, location: { x: 0, y: 0, z: 0 }, face: 0, sequence: 0
+        });
+        bot.swingArm();
+        await new Promise((r) => setTimeout(r, 100));
+        return { done: true, id: e.id, type: e.name };
+      } catch (err) {
+        return { done: false, id: e.id, type: e.name,
+                 reason: String(err && err.message || err) };
+      }
+    }
+    case 'sprint':
+      // Sprinten meldet der Client dem Server mit einem eigenen Paket. Das
+      // Paket schreibt der Abschnitt selbst: mineflayer schickt fuer 26.x
+      // die Nummer aus alten Versionen, und die heisst dort etwas anderes.
+      bot._client.write('entity_action', {
+        entityId: bot.entity.id,
+        actionId: cmd.on === false ? 'stop_sprinting' : 'start_sprinting',
+        jumpBoost: 0
+      });
+      return { sprint: cmd.on !== false };
+    case 'hotbar':
+      bot.setQuickBarSlot(cmd.slot || 0);
+      return { slot: bot.quickBarSlot };
     case 'window':
       return { open: !!bot.currentWindow,
                title: bot.currentWindow ? String(bot.currentWindow.title || '') : null };
@@ -2797,6 +2840,76 @@ def rueckstoss_proben(x, y, z):
     ]
 
 
+def rueckstoss_schlaege(env, schlaeger, x, y, z):
+    """Was der zweite Spieler mit der Hand, dem Schwert und dem Speer
+    austeilt, alles von Osten her: Er steht oestlich des Ziels und sieht nach
+    Westen, der Stoss geht nach Westen.
+
+    Jeder Eintrag ist ein Name, die Vorbereitung - Waffe in die Hand, an
+    seinen Platz und warten, bis er wieder voll ausgeholt hat - und der Schlag
+    selbst. Geschlagen wird, was dem Ziel am naechsten steht: ohne Cam-Modus
+    der Bot, im Cam-Modus sein Koerper.
+    """
+    marke = f'Tags:["{INTERACT_TAG}"]'
+
+    def bereit(waffe, abstand, warten, hilfe=None):
+        def vorbereiten():
+            console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+            # Gleich in das erste Fach und nicht mit give: Was er zwischen
+            # clear und give aufhebt, laege sonst dort, und er schluege damit.
+            console(env, f"clear {ZUSCHAUER_NAME}", pause=0.3)
+            if waffe:
+                console(env, f"item replace entity {ZUSCHAUER_NAME} hotbar.0 with {waffe}", pause=0.5)
+            schlaeger.call("hotbar", slot=0)
+            console(env, f"tp {ZUSCHAUER_NAME} {x + abstand} {y} {z} 90 0", pause=0.3)
+            if hilfe:
+                console(env, hilfe, pause=0.3)
+            # Ein Wechsel der Waffe faengt das Ausholen von vorn an.
+            time.sleep(warten)
+        return vorbereiten
+
+    def aufs_ziel(art="attack_entity"):
+        return schlaeger.call(art, wait=20, radius=1.5, at=[x, y, z])
+
+    def sprinten():
+        schlaeger.call("sprint", on=True)
+
+    def sprintschlag():
+        sprinten()
+        return aufs_ziel()
+
+    def halber_sprintschlag():
+        # Der erste Schlag geht voll ausgeholt auf einen Ruestungsstaender
+        # daneben, der zweite gleich hinterher - mit dem Schwert ist der
+        # dann erst halb ausgeholt. Ein voller Sprintschlag stoppt den Sprint
+        # auf dem Server, deshalb wird vor dem zweiten neu gesprintet.
+        sprinten()
+        schlaeger.call("attack_entity", wait=20, radius=0.8, at=[x + 2, y, z + 1.5])
+        sprinten()
+        return aufs_ziel()
+
+    def schwungschlag():
+        return schlaeger.call("attack_entity", wait=20, radius=0.8, at=[x + 1.2, y, z])
+
+    # Ohne Beute: Ein getoetetes Schwein liesse sonst Fleisch fallen.
+    schwein = (f"summon minecraft:pig {x + 1.2} {y} {z} {{NoAI:1b,{marke},Health:1000.0f,"
+               f'DeathLootTable:"minecraft:empty",'
+               f'attributes:[{{id:"minecraft:max_health",base:1000.0}}]}}')
+    staender = f"summon minecraft:armor_stand {x + 2} {y} {z + 1.5} {{{marke}}}"
+    return [
+        ("Schlag eines Spielers", bereit(None, 2, 1.0), aufs_ziel),
+        ("Sprintschlag", bereit(None, 2, 1.0), sprintschlag),
+        ("Halb ausgeholter Sprintschlag",
+         bereit("minecraft:iron_sword", 2, 1.0, staender), halber_sprintschlag),
+        ("Schwert mit Rueckstoss II",
+         bereit("minecraft:iron_sword[enchantments={knockback:2}]", 2, 1.0), aufs_ziel),
+        ("Schwungschlag", bereit("minecraft:iron_sword", 2.8, 1.0, schwein), schwungschlag),
+        ("Speerstich", bereit("minecraft:iron_spear", 3, 2.0), lambda: aufs_ziel("stab")),
+        ("Speerstich mit Rueckstoss II",
+         bereit("minecraft:iron_spear[enchantments={knockback:2}]", 3, 2.0), lambda: aufs_ziel("stab")),
+    ]
+
+
 def rueckstoss_lauf(env, bot, ziel, cam, treffen):
     """Einmal treffen lassen und zusehen, wohin es den Bot traegt.
 
@@ -2869,9 +2982,12 @@ def rueckstoss_checks(env, bot):
     seinen Koerper, und am Ende muss er beide Male an derselben Stelle liegen.
 
     Geprueft werden ein Pfeil, ein Pfeil aus einem Bogen mit Schlag II, ein
-    geworfener Dreizack, TNT und ein Schlag eines zweiten Spielers, alle von
-    Osten her. Dazu Pfeil und TNT noch einmal mit damage-mode: false - dort
-    gibt das Plugin den Stoss ganz von Hand weiter.
+    geworfener Dreizack, TNT und was ein zweiter Spieler austeilt: ein
+    Schlag, ein Sprintschlag voll und halb ausgeholt, ein Schwert mit
+    Rueckstoss II, ein Schwungschlag, der den Koerper neben seinem Ziel
+    trifft, und ein Speerstich, auch mit Rueckstoss II - alles von Osten her.
+    Dazu Pfeil, TNT, Sprintschlag und Speerstich noch einmal mit damage-mode:
+    false - dort gibt das Plugin den Stoss ganz von Hand weiter.
 
     Der Bot traegt Resistenz 255: Jeder Treffer landet und stoesst, aber
     keiner verletzt ihn. cam-safety ist fuer die Dauer des Abschnitts aus,
@@ -2902,34 +3018,48 @@ def rueckstoss_checks(env, bot):
             mit = rueckstoss_lauf(env, bot, ziel, True, treffen)
             rueckstoss_vergleich(name, ohne_cam[name], mit)
 
-        # Der Schlag eines zweiten Spielers, von Osten her. Liegengebliebene
-        # Geschosse raeumt der Test vorher weg: Der Schlag trifft die naechste
+        # Die Schlaege eines zweiten Spielers, von Osten her. Liegengebliebene
+        # Geschosse raeumt der Test vorher weg: Ein Schlag trifft die naechste
         # Entitaet, und das waere sonst womoeglich ein Pfeil im Boden.
         console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.5)
         schlaeger = BotClient(env, name=ZUSCHAUER_NAME)
         try:
             schlaeger.start()
-            if FIND.test("Zweiter Spieler fuer den Schlag kommt herein",
+            if FIND.test("Zweiter Spieler fuer die Schlaege kommt herein",
                          schlaeger.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
                 time.sleep(1.5)
+                console(env, f"gamemode survival {ZUSCHAUER_NAME}", pause=0.3)
+                schlaege = rueckstoss_schlaege(env, schlaeger, x, y, z)
+                for name, vorbereiten, schlagen in schlaege:
+                    for cam in (False, True):
+                        vorbereiten()
+                        lauf = rueckstoss_lauf(env, bot, ziel, cam, schlagen)
+                        schlaeger.call("sprint", on=False)
+                        if cam:
+                            rueckstoss_vergleich(name, ohne_cam[name], lauf)
+                        else:
+                            ohne_cam[name] = lauf
 
-                def schlagen():
-                    schlaeger.call("attack_entity", wait=20, radius=3)
-
-                def bereit_zum_schlag():
-                    console(env, f"tp {ZUSCHAUER_NAME} {x + 2} {y} {z} 90 0", pause=1.0)
-
-                bereit_zum_schlag()
-                ohne = rueckstoss_lauf(env, bot, ziel, False, schlagen)
-                bereit_zum_schlag()
-                mit = rueckstoss_lauf(env, bot, ziel, True, schlagen)
-                rueckstoss_vergleich("Schlag eines Spielers", ohne, mit)
+                # Ohne Schaden gibt das Plugin den Stoss ganz von Hand weiter -
+                # den eines Sprints und den eines Stichs, der mit seinem
+                # Schaden gar keinen traegt, eingeschlossen.
+                set_option(env, "damage-mode", "false")
+                damage_mode_umgestellt = True
+                for name, vorbereiten, schlagen in schlaege:
+                    if name not in ("Sprintschlag", "Speerstich"):
+                        continue
+                    vorbereiten()
+                    mit = rueckstoss_lauf(env, bot, ziel, True, schlagen)
+                    schlaeger.call("sprint", on=False)
+                    rueckstoss_vergleich(name, ohne_cam[name], mit, "auf den Koerper mit damage-mode: false",
+                                         gegenprobe=False)
         finally:
             schlaeger.stop()
 
         # Ohne Schaden gibt das Plugin den Stoss ganz von Hand weiter.
-        set_option(env, "damage-mode", "false")
-        damage_mode_umgestellt = True
+        if not damage_mode_umgestellt:
+            set_option(env, "damage-mode", "false")
+            damage_mode_umgestellt = True
         for name, kommando in rueckstoss_proben(x, y, z):
             if name not in ("Pfeil", "TNT"):
                 continue

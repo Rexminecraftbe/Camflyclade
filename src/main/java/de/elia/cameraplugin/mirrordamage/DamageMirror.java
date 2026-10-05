@@ -52,6 +52,8 @@ public final class DamageMirror implements Listener {
     private final CamSettings settings;
     private final Messages messages;
     private final CameraPlayers cameraPlayers;
+    /** How strong the swings are that land on a body, see {@link HitPush}. */
+    private final SwingStrength swingStrength;
     /** The player who is taking the hit his body took right now. */
     private final Set<UUID> damageImmunityBypass = new HashSet<>();
     /** Players whose body was hit and whose hit has not reached them yet. */
@@ -64,11 +66,12 @@ public final class DamageMirror implements Listener {
      */
     private final Map<UUID, Float> explosionRadius = new HashMap<>();
 
-    public DamageMirror(CameraPlugin plugin) {
+    public DamageMirror(CameraPlugin plugin, SwingStrength swingStrength) {
         this.plugin = plugin;
         this.settings = plugin.getSettings();
         this.messages = plugin.getMessages();
         this.cameraPlayers = plugin.getCameraPlayers();
+        this.swingStrength = swingStrength;
     }
 
     /**
@@ -177,10 +180,10 @@ public final class DamageMirror implements Listener {
         }
 
         // Written down now, while the hit is still exactly what it was when it
-        // landed: a moment later the arrow has bounced off the body and the
-        // explosion is over.
+        // landed: a moment later the arrow has bounced off the body, the
+        // explosion is over and the attacker has turned away.
         HitPush push = HitPush.of(event, standIn(ownerUUID, damagedEntity),
-                announcedRadius(event.getDamageSource()));
+                announcedRadius(event.getDamageSource()), swingStrength);
 
         plugin.exitCameraMode(owner);
 
@@ -321,6 +324,7 @@ public final class DamageMirror implements Listener {
         int framesBefore = owner.getNoDamageTicks();
         double lastBefore = owner.getLastDamage();
         int fireBefore = owner.getFireTicks();
+        EntityDamageEvent causeBefore = owner.getLastDamageCause();
         UUID ownerId = owner.getUniqueId();
         pendingMirrorHit.remove(ownerId);
 
@@ -337,7 +341,7 @@ public final class DamageMirror implements Listener {
             if (settings.isMirrorKnockback()) {
                 pushed = push.standstill(owner);
                 if (HitPush.takesHits(owner)) {
-                    pushed = push.knock(owner, pushed);
+                    pushed = push.knock(owner, pushed, true, true);
                 }
                 pushed = push.blast(owner, pushed);
                 owner.setVelocity(pushed);
@@ -396,6 +400,7 @@ public final class DamageMirror implements Listener {
         // damage of a fall, of fire or of an explosion.
         boolean knocked = !owner.getVelocity().equals(standstill);
         boolean turnedAway = mirroredHitTurnedAway.remove(ownerId);
+        boolean landed = landedInFull(owner, framesBefore, causeBefore);
         if (!settings.damageCountsArmor()) {
             takeWhatTheArmorKeptAway(owner, amount, healthBefore + absorptionBefore, framesBefore);
         }
@@ -406,7 +411,7 @@ public final class DamageMirror implements Listener {
             // The push of an explosion comes on top - its damage carries none,
             // the explosion hands it out by itself to everything it did not
             // have turned away.
-            pushed = knocked ? push.knock(owner, standstill) : standstill;
+            pushed = push.knock(owner, standstill, knocked, landed);
             if (!turnedAway) {
                 pushed = push.blast(owner, pushed);
             }
@@ -444,6 +449,20 @@ public final class DamageMirror implements Listener {
         // Died from the hit: the copies are what he dropped, and they carry the
         // same pieces. Handing the originals back into an inventory the server
         // has just emptied would only put them into the world twice.
+    }
+
+    /**
+     * Whether the hit passed on landed in full: it got through - nothing
+     * turned it away, so it is the player's last damage now -, and not into
+     * the invulnerability an earlier hit left behind. Such a later hit only
+     * takes what it has beyond the earlier one, starts no new invulnerability
+     * of its own, and the server pushes nobody for it. The hits that carry no
+     * push of their own, a stab, can only be told apart by that.
+     */
+    private static boolean landedInFull(Player owner, int framesBefore, EntityDamageEvent causeBefore) {
+        int span = owner.getMaximumNoDamageTicks();
+        return owner.getLastDamageCause() != causeBefore
+                && framesBefore * 2 <= span && owner.getNoDamageTicks() == span;
     }
 
     /**
