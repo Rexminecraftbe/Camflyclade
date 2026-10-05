@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **629** - alle 629 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **646** - alle 646 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -410,6 +410,38 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   Der Server schickt den ersten Stoß des Stichs sofort und setzt die
   Geschwindigkeit danach zurück; den zweiten, den der Verzauberung, schickt
   ihm niemand. Die Probe hält fest, dass der Körper das genauso weitergibt.
+* **Eine Windkugel fliegt langsam.** Mit der Geschwindigkeit, die ein Breeze
+  ihr mitgibt, fliegt sie zwischen zwei Ticks durch einen Spieler hindurch,
+  ohne ihn zu treffen. Die Probe schickt sie deshalb mit 0,3 Blöcken je Tick
+  und ohne Beschleunigung los.
+* **Die Windkugel trifft im Cam-Modus den Rüstungsständer.** Das unsichtbare
+  Mannequin im Körper lässt Geschosse auf Bewegungsstufe 0 und 1 durch -
+  `setCollidable(false)` nimmt es ihnen als Ziel. Der Rüstungsständer ist
+  0,5 Blöcke breit statt 0,6 wie ein Spieler, die Kugel explodiert also 0,05
+  Blöcke näher, und ihr Stoß geht ein wenig steiler: Gemessen landet der
+  Spieler bis zu 0,09 Blöcke anders, die Probe lässt 0,15 zu. Pfeil und
+  Dreizack stoßen entlang ihres Flugs, bei ihnen spielt die Breite keine
+  Rolle.
+* **Der Streitkolben schlägt aus 3,4 Blöcken Höhe, 0,3 Sekunden nach dem
+  Teleport.** Erst nach gut 1,5 Blöcken Fall ist es ein Schlag mit Wucht, der
+  alles drumherum wegstößt. Früher fehlt der Fall, später ist der Schläger
+  schon gelandet oder nicht mehr in Reichweite.
+* **Die Spielregeln heißen seit 26.x anders.** `doMobSpawning` ist
+  `spawn_mobs`, `doDaylightCycle` ist `advance_time`. Mit den alten Namen
+  lehnte der Server beide ab - es spawnten Tiere, und auf `easy` griff ein
+  Zombie den Körper an, ehe die Probe anfing.
+* **Mobs reizt der Test mit `/damage`.** Den Kamera-Spieler sehen sie nicht,
+  und den Körper nehmen sie nur mit `body.mob-target` - und auch dann nicht
+  jeder: Ein Eisengolem denkt gar nicht an ihn. Ohne Cam-Modus geht der Reiz
+  vom Bot aus, im Cam-Modus vom Körper. Den Wüstenzombie reizt Schaden ohne
+  Stoß (`minecraft:generic`), damit er sofort zuschlägt, noch mit dem Körper
+  nach Süden - einen Schritt später hätte er sich umgedreht.
+* **Bei Mobs zählt die erste Geschwindigkeit.** Sie schlagen nach dem ersten
+  Treffer weiter zu, der Landeplatz sagt dann nichts mehr. Beim Golem zählen
+  nur Höhe und Weite: Wohin er stößt, hängt davon ab, wo er beim Schlag steht.
+* **Die Ziege steht nicht in der Testumgebung.** Gemessen rammt sie den Körper
+  genau wie den Bot (Landeplatz −6,967 ohne, −6,958 mit Cam-Modus), aber sie
+  sucht sich ihr Ziel selbst und nahm den Körper nicht in jedem Lauf.
 * **Der Name über dem Körper ist ein TextDisplay und wird am Server
   geprüft.** Was der Client daraus zeichnet, sieht der Bot nicht. Gefragt
   wird mit `/execute as <Körper> at @s positioned ~ ~2.25 ~ if entity
@@ -695,8 +727,12 @@ Schläge eines Spielers auf den Körper stoßen den Spieler genau dorthin, wo
 derselbe Treffer ihn ohne Cam-Modus hinstößt - vom Schützen weg und nicht
 zu ihm hin -: ein Schlag, ein Sprintschlag voll und halb ausgeholt, ein
 Schwert mit Rückstoß II, ein Schwungschlag, der den Körper neben seinem Ziel
-trifft, ein Speerstich und ein Speerstich mit Rückstoß II · Pfeil, TNT,
-Sprintschlag und Speerstich auch mit `damage-mode: false` · der
+trifft, ein Speerstich und ein Speerstich mit Rückstoß II, ein Streitkolben,
+der neben dem Körper aufschlägt, und zwei Windkugeln, die mit ihrem Treffer
+explodieren · ein Wüstenzombie, der mit dem Körper anders steht als mit dem
+Kopf, stößt entlang des Körpers, und ein Eisengolem wirft hoch, beides wie
+ohne Cam-Modus · Pfeil, TNT, Windkugel, Sprintschlag und Speerstich auch mit
+`damage-mode: false` · der
 Name steht als TextDisplay genau dort über dem Körper, wo sonst sein
 Namensschild hinge, trägt den Text aus `armorstand.name-format`, folgt dem
 Körper und wird mit ihm eingesammelt · der Körper selbst trägt keinen Namen

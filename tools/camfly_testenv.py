@@ -77,7 +77,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 629 Methoden- und Feldzugriffe. Alle 629 gibt
+# Dieser Pruefer zaehlt zurzeit 646 Methoden- und Feldzugriffe. Alle 646 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -791,8 +791,11 @@ def step_server(env):
     # Ohne "peaceful" erschlaegt ein Zombie den Bot, und danach verweigert das
     # Plugin /cam wegen der cam-safety-Sperre.
     console(env, "difficulty peaceful")
-    console(env, "gamerule doMobSpawning false")
-    console(env, "gamerule doDaylightCycle false")
+    # Die Spielregeln heissen seit 26.x anders: doMobSpawning ist spawn_mobs,
+    # doDaylightCycle ist advance_time. Mit den alten Namen lehnte der Server
+    # beide ab, und Tiere wie Nacht kamen trotzdem.
+    console(env, "gamerule spawn_mobs false")
+    console(env, "gamerule advance_time false")
     console(env, "time set day")
     return True
 
@@ -2816,6 +2819,12 @@ RUECKSTOSS_HOEHE = 10
 # der Stoss einer Explosion ohne Cam-Modus nicht.
 RUECKSTOSS_TOLERANZ = 0.05
 
+# Fuer eine Windkugel mehr: Sie explodiert, wo sie den Koerper trifft, und
+# trifft im Cam-Modus den Ruestungsstaender - 0,5 Bloecke breit statt 0,6 wie
+# ein Spieler. Die Explosion sitzt damit 0,05 Bloecke naeher, ihr Stoss geht
+# ein wenig steiler: Gemessen landet der Spieler bis zu 0,09 Bloecke anders.
+RUECKSTOSS_TOLERANZ_WINDKUGEL = 0.15
+
 # Wie weit die Platte aus Obsidian um das Ziel herum reicht. TNT risse die
 # Grasschicht sonst auf, und in der Grube stuende der Bot bei der naechsten
 # Probe tiefer.
@@ -2831,24 +2840,36 @@ def rueckstoss_proben(x, y, z):
     flug = "Motion:[-2.0d,0.0d,0.0d]"
     bogen = ('weapon:{id:"minecraft:bow",count:1,components:'
              '{"minecraft:enchantments":{"minecraft:punch":2}}}')
+    # Langsam und ohne Beschleunigung: Schneller fliegt eine Windkugel durch
+    # einen Spieler hindurch, ohne ihn zu treffen.
+    wind = "Motion:[-0.3d,0.0d,0.0d],acceleration_power:0.0d"
     return [
         ("Pfeil", f"summon minecraft:arrow {x + 4} {y + 1} {z} {{{flug},{marke}}}"),
         ("Pfeil mit Schlag II",
          f"summon minecraft:arrow {x + 4} {y + 1} {z} {{{flug},{bogen},{marke}}}"),
         ("Dreizack", f"summon minecraft:trident {x + 4} {y + 1} {z} {{{flug},{marke}}}"),
         ("TNT", f"summon minecraft:tnt {x + 2.5} {y} {z} {{fuse:1,{marke}}}"),
+        ("Windkugel", f"summon minecraft:wind_charge {x + 4} {y + 1} {z} {{{wind},{marke}}}"),
+        ("Windkugel eines Breeze",
+         f"summon minecraft:breeze_wind_charge {x + 4} {y + 1} {z} {{{wind},{marke}}}"),
     ]
 
 
+def rueckstoss_toleranz(name):
+    """Wie weit die beiden Landeplaetze dieser Probe auseinander liegen duerfen."""
+    return RUECKSTOSS_TOLERANZ_WINDKUGEL if name.startswith("Windkugel") else RUECKSTOSS_TOLERANZ
+
+
 def rueckstoss_schlaege(env, schlaeger, x, y, z):
-    """Was der zweite Spieler mit der Hand, dem Schwert und dem Speer
-    austeilt, alles von Osten her: Er steht oestlich des Ziels und sieht nach
-    Westen, der Stoss geht nach Westen.
+    """Was der zweite Spieler mit der Hand, dem Schwert, dem Speer und dem
+    Streitkolben austeilt, alles von Osten her: Er steht oestlich des Ziels
+    und sieht nach Westen, der Stoss geht nach Westen.
 
     Jeder Eintrag ist ein Name, die Vorbereitung - Waffe in die Hand, an
     seinen Platz und warten, bis er wieder voll ausgeholt hat - und der Schlag
     selbst. Geschlagen wird, was dem Ziel am naechsten steht: ohne Cam-Modus
-    der Bot, im Cam-Modus sein Koerper.
+    der Bot, im Cam-Modus sein Koerper. Der Streitkolben schlaegt ein Schwein
+    daneben und stoesst das Ziel nur weg.
     """
     marke = f'Tags:["{INTERACT_TAG}"]'
 
@@ -2891,10 +2912,20 @@ def rueckstoss_schlaege(env, schlaeger, x, y, z):
     def schwungschlag():
         return schlaeger.call("attack_entity", wait=20, radius=0.8, at=[x + 1.2, y, z])
 
+    def streitkolben():
+        # Von oben auf das Schwein neben dem Ziel: Nach gut 1,5 Bloecken Fall
+        # schlaegt der Streitkolben auf und stoesst alles drumherum weg - ohne
+        # es zu verletzen. Frueher kaeme der Schlag ohne Fall, spaeter erst
+        # nach der Landung oder ausser Reichweite.
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 2.4} {y + 3.4} {z} 90 70", pause=0)
+        time.sleep(0.3)
+        return schlaeger.call("attack_entity", wait=20, radius=1.0, at=[x + 2, y, z], aim=0.4)
+
     # Ohne Beute: Ein getoetetes Schwein liesse sonst Fleisch fallen.
     schwein = (f"summon minecraft:pig {x + 1.2} {y} {z} {{NoAI:1b,{marke},Health:1000.0f,"
                f'DeathLootTable:"minecraft:empty",'
                f'attributes:[{{id:"minecraft:max_health",base:1000.0}}]}}')
+    schwein_daneben = schwein.replace(f"{x + 1.2} {y} {z}", f"{x + 2} {y} {z}")
     staender = f"summon minecraft:armor_stand {x + 2} {y} {z + 1.5} {{{marke}}}"
     return [
         ("Schlag eines Spielers", bereit(None, 2, 1.0), aufs_ziel),
@@ -2907,7 +2938,13 @@ def rueckstoss_schlaege(env, schlaeger, x, y, z):
         ("Speerstich", bereit("minecraft:iron_spear", 3, 2.0), lambda: aufs_ziel("stab")),
         ("Speerstich mit Rueckstoss II",
          bereit("minecraft:iron_spear[enchantments={knockback:2}]", 3, 2.0), lambda: aufs_ziel("stab")),
+        ("Streitkolben", bereit("minecraft:mace", 4, 2.0, schwein_daneben), streitkolben),
     ]
+
+
+def rueckstoss_wie(name):
+    """Wie der Schlag den Koerper trifft, fuer die Pruefzeile."""
+    return "neben dem Koerper" if name == "Streitkolben" else "auf den Koerper"
 
 
 def rueckstoss_lauf(env, bot, ziel, cam, treffen):
@@ -2948,7 +2985,7 @@ def _zahlen(werte):
     return "-" if werte is None else "(" + ", ".join(f"{w:.4f}" for w in werte) + ")"
 
 
-def rueckstoss_vergleich(name, ohne, mit, wie="auf den Koerper", gegenprobe=True):
+def rueckstoss_vergleich(name, ohne, mit, wie="auf den Koerper", gegenprobe=True, toleranz=RUECKSTOSS_TOLERANZ):
     """Ob der Treffer auf den Koerper den Spieler dorthin stoesst, wo derselbe
     Treffer ihn ohne Cam-Modus hinstoesst.
 
@@ -2968,7 +3005,7 @@ def rueckstoss_vergleich(name, ohne, mit, wie="auf den Koerper", gegenprobe=True
         return
     abstand = max(abs(a - b) for a, b in zip(ohne["weg"], mit["weg"]))
     FIND.test(f"{name} {wie} stoesst den Spieler wie ohne Cam-Modus",
-              abstand <= RUECKSTOSS_TOLERANZ,
+              abstand <= toleranz,
               f"Weg ohne {_zahlen(ohne['weg'])}, mit {_zahlen(mit['weg'])}; "
               f"erste Geschwindigkeit ohne {_zahlen(ohne['erste'])}, mit {_zahlen(mit['erste'])}")
 
@@ -2985,9 +3022,11 @@ def rueckstoss_checks(env, bot):
     geworfener Dreizack, TNT und was ein zweiter Spieler austeilt: ein
     Schlag, ein Sprintschlag voll und halb ausgeholt, ein Schwert mit
     Rueckstoss II, ein Schwungschlag, der den Koerper neben seinem Ziel
-    trifft, und ein Speerstich, auch mit Rueckstoss II - alles von Osten her.
-    Dazu Pfeil, TNT, Sprintschlag und Speerstich noch einmal mit damage-mode:
-    false - dort gibt das Plugin den Stoss ganz von Hand weiter.
+    trifft, ein Speerstich, auch mit Rueckstoss II, und ein Streitkolben, der
+    neben dem Koerper aufschlaegt und ihn ohne Schaden wegstoesst - alles von
+    Osten her. Dazu zwei Windkugeln, die mit ihrem Treffer explodieren, und
+    Pfeil, TNT, Windkugel, Sprintschlag und Speerstich noch einmal mit
+    damage-mode: false - dort gibt das Plugin den Stoss ganz von Hand weiter.
 
     Der Bot traegt Resistenz 255: Jeder Treffer landet und stoesst, aber
     keiner verletzt ihn. cam-safety ist fuer die Dauer des Abschnitts aus,
@@ -3016,7 +3055,7 @@ def rueckstoss_checks(env, bot):
                 console(env, k, pause=0)
             ohne_cam[name] = rueckstoss_lauf(env, bot, ziel, False, treffen)
             mit = rueckstoss_lauf(env, bot, ziel, True, treffen)
-            rueckstoss_vergleich(name, ohne_cam[name], mit)
+            rueckstoss_vergleich(name, ohne_cam[name], mit, toleranz=rueckstoss_toleranz(name))
 
         # Die Schlaege eines zweiten Spielers, von Osten her. Liegengebliebene
         # Geschosse raeumt der Test vorher weg: Ein Schlag trifft die naechste
@@ -3036,7 +3075,7 @@ def rueckstoss_checks(env, bot):
                         lauf = rueckstoss_lauf(env, bot, ziel, cam, schlagen)
                         schlaeger.call("sprint", on=False)
                         if cam:
-                            rueckstoss_vergleich(name, ohne_cam[name], lauf)
+                            rueckstoss_vergleich(name, ohne_cam[name], lauf, rueckstoss_wie(name))
                         else:
                             ohne_cam[name] = lauf
 
@@ -3061,13 +3100,13 @@ def rueckstoss_checks(env, bot):
             set_option(env, "damage-mode", "false")
             damage_mode_umgestellt = True
         for name, kommando in rueckstoss_proben(x, y, z):
-            if name not in ("Pfeil", "TNT"):
+            if name not in ("Pfeil", "TNT", "Windkugel"):
                 continue
             def treffen(k=kommando):
                 console(env, k, pause=0)
             mit = rueckstoss_lauf(env, bot, ziel, True, treffen)
             rueckstoss_vergleich(name, ohne_cam[name], mit, "auf den Koerper mit damage-mode: false",
-                                 gegenprobe=False)
+                                 gegenprobe=False, toleranz=rueckstoss_toleranz(name))
     finally:
         try:
             if damage_mode_umgestellt:
@@ -3079,6 +3118,139 @@ def rueckstoss_checks(env, bot):
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Rueckstosstest: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Was Mobs beim Zuschlagen selbst stossen
+# ---------------------------------------------------------------------------
+
+def rueckstoss_erste_vergleich(name, ohne, mit, nur_hoehe_und_weite=False):
+    """Ob die erste Geschwindigkeit nach dem Treffer auf den Koerper die ist,
+    die derselbe Treffer ohne Cam-Modus bringt. Fuer Mobs, die danach weiter
+    zuschlagen: Wo der Bot liegen bleibt, sagt dort nichts mehr.
+
+    Mit nur_hoehe_und_weite zaehlen nur die Hoehe und die Weite zur Seite,
+    nicht die Richtung - die haengt dann davon ab, wo der Mob gerade steht.
+    """
+    erste_ohne = ohne and ohne["erste"]
+    if not FIND.test(f"{name} ohne Cam-Modus stoesst den Bot (Gegenprobe)", bool(erste_ohne),
+                     "" if ohne is None else f"erste Geschwindigkeit {_zahlen(erste_ohne)}"):
+        return
+    if not FIND.test(f"{name} auf den Koerper beendet den Cam-Modus",
+                     mit is not None and mit["beendet"] and bool(mit["erste"]), ""):
+        return
+    erste_mit = mit["erste"]
+    if nur_hoehe_und_weite:
+        weite = [math.hypot(v[0], v[2]) for v in (erste_ohne, erste_mit)]
+        abstand = max(abs(erste_ohne[1] - erste_mit[1]), abs(weite[0] - weite[1]))
+    else:
+        abstand = max(abs(a - b) for a, b in zip(erste_ohne, erste_mit))
+    FIND.test(f"{name} auf den Koerper stoesst den Spieler wie ohne Cam-Modus",
+              abstand <= RUECKSTOSS_TOLERANZ_ERSTE,
+              f"erste Geschwindigkeit ohne {_zahlen(erste_ohne)}, mit {_zahlen(erste_mit)}")
+
+
+# Wie weit die erste Geschwindigkeit nach einem Mob-Treffer abweichen darf.
+# Gemessen stimmen beide auf ein Zehntausendstel.
+RUECKSTOSS_TOLERANZ_ERSTE = 0.01
+
+
+def mob_lauf(env, bot, ziel, cam, vorbereiten, treffen):
+    """Ein Lauf von rueckstoss_lauf mit einem frischen Mob - und noch einer,
+    wenn er im ganzen Zeitfenster nicht zugeschlagen hat. Wann ein Mob
+    zuschlaegt, entscheidet er am Ende selbst."""
+    lauf = None
+    for _ in range(2):
+        vorbereiten()
+        lauf = rueckstoss_lauf(env, bot, ziel, cam, treffen)
+        if lauf is not None and lauf["erste"]:
+            break
+    return lauf
+
+
+def rueckstoss_mob_checks(env, bot):
+    """Was ein Mob beim Zuschlagen selbst stoesst, auf den Koerper wie ohne
+    Cam-Modus.
+
+    Geprueft werden ein Wuestenzombie mit einem Schwert mit Rueckstoss II, der
+    mit dem Koerper nach Sueden steht und mit dem Kopf zum Ziel sieht - der
+    Server stoesst entlang des Koerpers, Bukkit zeigt nur den Kopf -, und ein
+    Eisengolem, der hochwirft. Beide schlagen nach dem ersten Treffer weiter
+    zu, verglichen wird deshalb die erste Geschwindigkeit; beim Golem nur, wie
+    hoch und wie weit sie geht, denn wohin, haengt davon ab, wo er beim Schlag
+    gerade steht. Eine rammende Ziege fehlt: Sie sucht sich ihr Ziel selbst
+    und nahm den Koerper im Cam-Modus nicht immer, siehe TESTUMGEBUNG.md.
+
+    Feindliche Mobs gibt es erst ab easy, und den Koerper nehmen sie nur mit
+    body.mob-target ins Ziel. Zombie und Golem reizt ein /damage: ohne
+    Cam-Modus vom Bot aus, im Cam-Modus vom Koerper aus. Der Golem daechte
+    sonst gar nicht an den Koerper und saehe den Kamera-Spieler nicht, und der
+    Zombie suchte sich sein Ziel erst irgendwann - womoeglich nachdem er sich
+    schon umgedreht hat.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Mob-Rueckstosstest aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    bx, bz = _floor(heim[0]), _floor(heim[2])
+    ziel = (bx + 0.5, BODEN_Y + 1, bz + 0.5)
+    x, y, z = ziel
+    weit = RUECKSTOSS_PLATTE
+    marke = f'Tags:["{INTERACT_TAG}"]'
+    mob = f"@e[tag={INTERACT_TAG},limit=1]"
+    bot.chat(f"/fill {bx - weit} {BODEN_Y} {bz - weit} {bx + weit} {BODEN_Y} {bz + weit} "
+             f"minecraft:obsidian")
+    bot.chat("/gamemode survival")
+    bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
+    time.sleep(0.5)
+    set_options(env, [("enabled", "false", "cam-safety"), ("mob-target", "vanilla", "body")])
+    console(env, "difficulty easy", pause=0.5)
+
+    def mob_hin(befehl):
+        def vorbereiten():
+            console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+            console(env, befehl, pause=0.5)
+        return vorbereiten
+
+    def loslassen(sekunden, reizen=None, schaden="minecraft:mob_attack"):
+        def treffen():
+            console(env, f"data merge entity {mob} {{NoAI:0b}}", pause=0)
+            if reizen:
+                console(env, f"damage {mob} 0.5 {schaden} by {reizen}", pause=0)
+            time.sleep(sekunden)
+            console(env, f"data merge entity {mob} {{NoAI:1b}}", pause=0)
+        return treffen
+
+    zombie = mob_hin(f"summon minecraft:husk {x + 1.1} {y} {z} {{NoAI:1b,Rotation:[0f,0f],{marke},"
+                     f"PersistenceRequired:1b,Silent:1b,drop_chances:{{mainhand:0.0f}},"
+                     f'equipment:{{mainhand:{{id:"minecraft:iron_sword",components:'
+                     f'{{"minecraft:enchantments":{{"minecraft:knockback":2}}}}}}}}}}')
+    golem = mob_hin(f"summon minecraft:iron_golem {x + 2.2} {y} {z} {{NoAI:1b,Rotation:[90f,0f],{marke},"
+                    f"PersistenceRequired:1b,Silent:1b}}")
+    koerper = "@e[type=minecraft:mannequin,sort=nearest,limit=1]"
+    # Den Zombie reizt ein Schaden ohne Stoss: So schlaegt er sofort zu, noch
+    # ehe er einen Schritt tut und sich mit dem Koerper zum Ziel dreht.
+    try:
+        for name, vorbereiten, ohne_treffen, mit_treffen, vergleich in (
+                ("Wuestenzombie mit Rueckstoss II, nach Sueden gedreht", zombie,
+                 loslassen(1.5, BOT_NAME, "minecraft:generic"), loslassen(1.5, koerper, "minecraft:generic"),
+                 rueckstoss_erste_vergleich),
+                ("Eisengolem", golem, loslassen(4.0, BOT_NAME), loslassen(4.0, koerper),
+                 lambda n, o, m: rueckstoss_erste_vergleich(n, o, m, nur_hoehe_und_weite=True))):
+            ohne = mob_lauf(env, bot, ziel, False, vorbereiten, ohne_treffen)
+            mit = mob_lauf(env, bot, ziel, True, vorbereiten, mit_treffen)
+            vergleich(name, ohne, mit)
+    finally:
+        try:
+            console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.5)
+            console(env, "difficulty peaceful", pause=0.3)
+            set_options(env, [("enabled", "true", "cam-safety"), ("mob-target", "false", "body")])
+            bot.chat(f"/effect clear {BOT_NAME}")
+            boden_ebnen(bot)
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Mob-Rueckstosstest: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -5616,6 +5788,7 @@ def step_tests(env):
 
         # --- Der Rueckstoss eines Treffers auf den Koerper ---
         rueckstoss_checks(env, bot)
+        rueckstoss_mob_checks(env, bot)
 
         # --- Der Name ueber dem Koerper ---
         name_checks(env, bot)

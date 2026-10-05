@@ -137,8 +137,9 @@ public final class CameraPlugin extends JavaPlugin {
     private void registerListeners() {
         PluginManager pluginManager = this.getServer().getPluginManager();
         SwingStrength swingStrength = new SwingStrength(this, cameraPlayers);
+        DamageMirror damageMirror = new DamageMirror(this, swingStrength);
         List<Listener> listeners = List.of(
-                new DamageMirror(this, swingStrength),
+                damageMirror,
                 new CamInteractionGuard(this),
                 mobTargeting,
                 new CamRegenGuard(cameraPlayers),
@@ -158,6 +159,7 @@ public final class CameraPlugin extends JavaPlugin {
         // the server.
         new CamKnockbackGuard(this, cameraPlayers).register();
         swingStrength.register();
+        damageMirror.watchBursts();
     }
 
     /**
