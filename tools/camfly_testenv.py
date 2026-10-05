@@ -77,7 +77,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 578 Methoden- und Feldzugriffe. Alle 578 gibt
+# Dieser Pruefer zaehlt zurzeit 613 Methoden- und Feldzugriffe. Alle 613 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -826,6 +826,22 @@ const protoVersion = require('minecraft-protocol/src/version.js');
 if (protoVersion.supportedVersions && !protoVersion.supportedVersions.includes(MC)) {
   protoVersion.supportedVersions.push(MC);
 }
+// Das Explosionspaket von 26.2 traegt Partikel mit Nummern, die 26.1 anders
+// vergibt. mineflayer verschluckt sich daran und wirft das ganze Paket weg,
+// samt dem Rueckstoss darin. Gelesen wird deshalb nur bis zum Rueckstoss, der
+// Rest bleibt ein ungelesener Puffer.
+{
+  const play = idx && idx.protocol && idx.protocol.play && idx.protocol.play.toClient
+    && idx.protocol.play.toClient.types;
+  const explosion = play && play.packet_explosion;
+  if (explosion && explosion[0] === 'container') {
+    const cut = explosion[1].findIndex((f) => f.name === 'explosionParticle');
+    if (cut > 0) {
+      play.packet_explosion = ['container',
+        explosion[1].slice(0, cut).concat([{ name: 'rest', type: 'restBuffer' }])];
+    }
+  }
+}
 // mineflayer/lib/version.js ist schon auf der Platte geflickt - loader.js
 // liest den Wert genau einmal beim Laden.
 const mineflayer = require('mineflayer');
@@ -835,6 +851,8 @@ function out(obj) { process.stdout.write(JSON.stringify(obj) + '\n'); }
 const messages = [];
 let spawned = false;
 let dead = false;
+// Was knock_start gerade mitschreibt, bis knock_stop es abholt.
+let knock = null;
 
 const bot = mineflayer.createBot({
   host: process.env.CAMFLY_HOST || '127.0.0.1',
@@ -1067,6 +1085,69 @@ async function handle(cmd) {
       await new Promise((r) => setTimeout(r, 500));
       const now = bot.entity.position;
       return { forced, pos: [now.x, now.y, now.z] };
+    }
+    case 'knock_start': {
+      // Schreibt mit, was den Bot nach einem Treffer bewegt: jedes Paket mit
+      // seiner Geschwindigkeit, jede Explosion und Tick fuer Tick, wo er
+      // steht. Dabei faellt er mit der Schwerkraft wie ein echter Client -
+      // mit 'nachTeleport' erst, sobald der Server ihn versetzt hat: Im
+      // Cam-Modus wartet er in der Luft, und erst das Ende des Cam-Modus
+      // setzt ihn an seinen Koerper.
+      //
+      // Die Geschwindigkeit aus dem Paket setzt der Abschnitt selbst.
+      // mineflayer teilt das lpVec3 von 26.x noch durch 8000, als kaeme es im
+      // alten Format, und der Bot ruehrte sich nach einem Treffer kaum. Im
+      // Paket steht sie schon in Bloecken je Tick.
+      if (knock) knock.stop();
+      const log = { velocity: [], explosion: [], teleport: [], path: [] };
+      const start = Date.now();
+      const where = () => {
+        const p = bot.entity.position;
+        return [p.x, p.y, p.z];
+      };
+      const gravity = bot.physics.gravity;
+      const fallen = () => { bot.physics.gravity = 0.08; };
+      const onVelocity = (packet) => {
+        if (!bot.entity || packet.entityId !== bot.entity.id) return;
+        const v = packet.velocity;
+        bot.entity.velocity.set(v.x, v.y, v.z);
+        log.velocity.push({ t: Date.now() - start, v: [v.x, v.y, v.z], pos: where() });
+      };
+      const onExplosion = (packet) => {
+        const k = packet.playerKnockback;
+        log.explosion.push({ t: Date.now() - start, knockback: k ? [k.x, k.y, k.z] : null });
+      };
+      const onTeleport = () => {
+        log.teleport.push({ t: Date.now() - start, pos: where() });
+        fallen();
+      };
+      const onTick = () => { log.path.push(where()); };
+      if (!cmd.nachTeleport) fallen();
+      bot._client.on('entity_velocity', onVelocity);
+      bot._client.on('explosion', onExplosion);
+      bot.on('forcedMove', onTeleport);
+      bot.on('physicsTick', onTick);
+      knock = {
+        log,
+        stop: () => {
+          bot._client.removeListener('entity_velocity', onVelocity);
+          bot._client.removeListener('explosion', onExplosion);
+          bot.removeListener('forcedMove', onTeleport);
+          bot.removeListener('physicsTick', onTick);
+          bot.physics.gravity = gravity;
+          bot.entity.velocity.set(0, 0, 0);
+        }
+      };
+      return { pos: where() };
+    }
+    case 'knock_stop': {
+      if (!knock) return { log: null };
+      const p = bot.entity.position;
+      const pos = [p.x, p.y, p.z];
+      knock.stop();
+      const log = knock.log;
+      knock = null;
+      return { log, pos };
     }
     case 'block_at': {
       // Was der CLIENT an dieser Stelle sieht, samt allem, was der Server
@@ -2675,6 +2756,199 @@ def armor_checks(env, bot):
             time.sleep(0.5)
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Ruestungstest: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Der Rueckstoss eines Treffers auf den Koerper
+# ---------------------------------------------------------------------------
+
+# Wie hoch der Bot im Cam-Modus ueber seinem Koerper wartet. TNT reicht acht
+# Bloecke weit; zehn Bloecke darueber erreicht ihn weder die Explosion noch
+# ein Geschoss, getroffen wird allein der Koerper.
+RUECKSTOSS_HOEHE = 10
+
+# Wie weit der Landeplatz im Cam-Modus von dem ohne Cam-Modus abweichen darf,
+# in Bloecken. Gemessen liegen beide auf ein Zehntausendstel beieinander: Die
+# Geschwindigkeit kommt in 26.x als lpVec3 und ist damit ein wenig gerundet,
+# der Stoss einer Explosion ohne Cam-Modus nicht.
+RUECKSTOSS_TOLERANZ = 0.05
+
+# Wie weit die Platte aus Obsidian um das Ziel herum reicht. TNT risse die
+# Grasschicht sonst auf, und in der Grube stuende der Bot bei der naechsten
+# Probe tiefer.
+RUECKSTOSS_PLATTE = 10
+
+
+def rueckstoss_proben(x, y, z):
+    """Was den Bot oder seinen Koerper trifft, alles von Osten her: Die Fuesse
+    des Ziels stehen bei x, y, z, der Stoss geht nach Westen. Jede Probe traegt
+    die Marke, ein liegengebliebener Pfeil oder Dreizack wird damit am Ende
+    weggeraeumt."""
+    marke = f'Tags:["{INTERACT_TAG}"]'
+    flug = "Motion:[-2.0d,0.0d,0.0d]"
+    bogen = ('weapon:{id:"minecraft:bow",count:1,components:'
+             '{"minecraft:enchantments":{"minecraft:punch":2}}}')
+    return [
+        ("Pfeil", f"summon minecraft:arrow {x + 4} {y + 1} {z} {{{flug},{marke}}}"),
+        ("Pfeil mit Schlag II",
+         f"summon minecraft:arrow {x + 4} {y + 1} {z} {{{flug},{bogen},{marke}}}"),
+        ("Dreizack", f"summon minecraft:trident {x + 4} {y + 1} {z} {{{flug},{marke}}}"),
+        ("TNT", f"summon minecraft:tnt {x + 2.5} {y} {z} {{fuse:1,{marke}}}"),
+    ]
+
+
+def rueckstoss_lauf(env, bot, ziel, cam, treffen):
+    """Einmal treffen lassen und zusehen, wohin es den Bot traegt.
+
+    Ohne Cam-Modus steht er selbst am Ziel. Im Cam-Modus steht dort sein
+    Koerper, und er wartet hoch darueber: Der Treffer beendet den Cam-Modus,
+    setzt ihn an den Koerper und gibt ihm den Stoss mit. `treffen` loest den
+    Treffer aus.
+
+    Gibt zurueck, wo er liegen bleibt, vom Ziel aus gerechnet, und die erste
+    Geschwindigkeit, die er bekommt - oder None, wenn der Cam-Modus gar nicht
+    erst startete.
+    """
+    x, y, z = ziel
+    hinstellen(bot, x, y, z)
+    if cam:
+        if not cam_on(bot):
+            return None
+        bot.call("fly", wait=30, dy=RUECKSTOSS_HOEHE, timeout=15000)
+        time.sleep(1.0)
+    bot.call("knock_start", nachTeleport=cam)
+    treffen()
+    time.sleep(3.0)
+    antwort = bot.call("knock_stop")
+    log = antwort["log"]
+    ende = antwort["pos"]
+    erste = log["velocity"][0]["v"] if log["velocity"] else None
+    explosion = next((e["knockback"] for e in log["explosion"] if e["knockback"]), None)
+    beendet = not cam or not spielmodus_ist(bot, "adventure")
+    if not beendet:
+        cam_off(bot)
+    return {"weg": [ende[0] - x, ende[1] - y, ende[2] - z],
+            "erste": erste or explosion, "beendet": beendet}
+
+
+def _zahlen(werte):
+    return "-" if werte is None else "(" + ", ".join(f"{w:.4f}" for w in werte) + ")"
+
+
+def rueckstoss_vergleich(name, ohne, mit, wie="auf den Koerper", gegenprobe=True):
+    """Ob der Treffer auf den Koerper den Spieler dorthin stoesst, wo derselbe
+    Treffer ihn ohne Cam-Modus hinstoesst.
+
+    Verglichen wird, wo er liegen bleibt: Darin steckt alles - wohin der Stoss
+    geht, wie weit er traegt und wie hoch er hebt. Die erste Geschwindigkeit
+    steht zum Nachlesen dabei. Die Gegenprobe ohne Cam-Modus steht nur beim
+    ersten Vergleich mit ihr als eigene Probe da.
+    """
+    weg_ohne = ohne is not None and ohne["weg"][0] < -0.3
+    if gegenprobe:
+        FIND.test(f"{name} ohne Cam-Modus stoesst den Bot weg (Gegenprobe)", weg_ohne,
+                  "" if ohne is None else f"Weg {_zahlen(ohne['weg'])}")
+    if not weg_ohne:
+        return
+    if not FIND.test(f"{name} {wie} beendet den Cam-Modus",
+                     mit is not None and mit["beendet"], ""):
+        return
+    abstand = max(abs(a - b) for a, b in zip(ohne["weg"], mit["weg"]))
+    FIND.test(f"{name} {wie} stoesst den Spieler wie ohne Cam-Modus",
+              abstand <= RUECKSTOSS_TOLERANZ,
+              f"Weg ohne {_zahlen(ohne['weg'])}, mit {_zahlen(mit['weg'])}; "
+              f"erste Geschwindigkeit ohne {_zahlen(ohne['erste'])}, mit {_zahlen(mit['erste'])}")
+
+
+def rueckstoss_checks(env, bot):
+    """Der Rueckstoss eines Treffers auf den Koerper.
+
+    Jeder Treffer auf den Koerper geht an den Spieler weiter, und mit ihm der
+    Stoss - so, wie derselbe Treffer ihn ohne Cam-Modus gestossen haette. Jede
+    Probe steht deshalb zweimal da: einmal trifft es den Bot selbst, einmal
+    seinen Koerper, und am Ende muss er beide Male an derselben Stelle liegen.
+
+    Geprueft werden ein Pfeil, ein Pfeil aus einem Bogen mit Schlag II, ein
+    geworfener Dreizack, TNT und ein Schlag eines zweiten Spielers, alle von
+    Osten her. Dazu Pfeil und TNT noch einmal mit damage-mode: false - dort
+    gibt das Plugin den Stoss ganz von Hand weiter.
+
+    Der Bot traegt Resistenz 255: Jeder Treffer landet und stoesst, aber
+    keiner verletzt ihn. cam-safety ist fuer die Dauer des Abschnitts aus,
+    sonst ginge nach jedem Treffer fuenf Sekunden lang kein /cam.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Rueckstosstest aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    bx, bz = _floor(heim[0]), _floor(heim[2])
+    ziel = (bx + 0.5, BODEN_Y + 1, bz + 0.5)
+    x, y, z = ziel
+    weit = RUECKSTOSS_PLATTE
+    bot.chat(f"/fill {bx - weit} {BODEN_Y} {bz - weit} {bx + weit} {BODEN_Y} {bz + weit} "
+             f"minecraft:obsidian")
+    bot.chat("/gamemode survival")
+    bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
+    time.sleep(0.5)
+    set_option(env, "enabled", "false", "cam-safety")
+    damage_mode_umgestellt = False
+    try:
+        ohne_cam = {}
+        for name, kommando in rueckstoss_proben(x, y, z):
+            def treffen(k=kommando):
+                console(env, k, pause=0)
+            ohne_cam[name] = rueckstoss_lauf(env, bot, ziel, False, treffen)
+            mit = rueckstoss_lauf(env, bot, ziel, True, treffen)
+            rueckstoss_vergleich(name, ohne_cam[name], mit)
+
+        # Der Schlag eines zweiten Spielers, von Osten her. Liegengebliebene
+        # Geschosse raeumt der Test vorher weg: Der Schlag trifft die naechste
+        # Entitaet, und das waere sonst womoeglich ein Pfeil im Boden.
+        console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.5)
+        schlaeger = BotClient(env, name=ZUSCHAUER_NAME)
+        try:
+            schlaeger.start()
+            if FIND.test("Zweiter Spieler fuer den Schlag kommt herein",
+                         schlaeger.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+                time.sleep(1.5)
+
+                def schlagen():
+                    schlaeger.call("attack_entity", wait=20, radius=3)
+
+                def bereit_zum_schlag():
+                    console(env, f"tp {ZUSCHAUER_NAME} {x + 2} {y} {z} 90 0", pause=1.0)
+
+                bereit_zum_schlag()
+                ohne = rueckstoss_lauf(env, bot, ziel, False, schlagen)
+                bereit_zum_schlag()
+                mit = rueckstoss_lauf(env, bot, ziel, True, schlagen)
+                rueckstoss_vergleich("Schlag eines Spielers", ohne, mit)
+        finally:
+            schlaeger.stop()
+
+        # Ohne Schaden gibt das Plugin den Stoss ganz von Hand weiter.
+        set_option(env, "damage-mode", "false")
+        damage_mode_umgestellt = True
+        for name, kommando in rueckstoss_proben(x, y, z):
+            if name not in ("Pfeil", "TNT"):
+                continue
+            def treffen(k=kommando):
+                console(env, k, pause=0)
+            mit = rueckstoss_lauf(env, bot, ziel, True, treffen)
+            rueckstoss_vergleich(name, ohne_cam[name], mit, "auf den Koerper mit damage-mode: false",
+                                 gegenprobe=False)
+    finally:
+        try:
+            if damage_mode_umgestellt:
+                set_option(env, "damage-mode", "mirror")
+            set_option(env, "enabled", "true", "cam-safety")
+            console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.5)
+            bot.chat(f"/effect clear {BOT_NAME}")
+            boden_ebnen(bot)
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Rueckstosstest: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -5209,6 +5483,9 @@ def step_tests(env):
 
         # --- Die Ruestung im Cam-Modus ---
         armor_checks(env, bot)
+
+        # --- Der Rueckstoss eines Treffers auf den Koerper ---
+        rueckstoss_checks(env, bot)
 
         # --- Der Name ueber dem Koerper ---
         name_checks(env, bot)

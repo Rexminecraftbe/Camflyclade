@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **578** - alle 578 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **613** - alle 613 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -346,6 +346,45 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   `/execute if items entity @s armor.chest`. Das Plugin gibt sie über
   denselben Weg zurück wie das übrige Inventar - `getContents()` hält auch
   die Rüstungsslots -, und diese Probe hält fest, dass das so bleibt.
+* **Den Rückstoß misst der Test am Landeplatz.** Jede Probe läuft
+  zweimal: einmal trifft es den Bot selbst, einmal seinen Körper, während er
+  zehn Blöcke darüber im Cam-Modus wartet. Verglichen wird, wo er liegen
+  bleibt - darin stecken Richtung, Weite und Höhe des Stoßes. Die erste
+  Geschwindigkeit steht zum Nachlesen dabei.
+* **mineflayer rechnet die Geschwindigkeit von 26.x falsch um.** Das Paket
+  trägt sie als lpVec3, schon in Blöcken je Tick; mineflayer teilt sie noch
+  einmal durch 8000 wie im alten Format, und der Bot rührte sich nach einem
+  Treffer kaum. `knock_start` setzt sie deshalb selbst - nur solange es
+  mitschreibt, die übrigen Abschnitte laufen weiter wie bisher.
+* **Das Explosionspaket von 26.2 liest der Bot nur bis zum Rückstoß.**
+  Dahinter stehen Partikel, deren Nummern 26.1 anders vergibt; mineflayer
+  warf sonst das ganze Paket weg, samt dem Stoß darin, und TNT schob den Bot
+  ohne Cam-Modus keinen Millimeter.
+* **Ein Pfeil stößt weniger weit als ein Schlag.** Ein Geschoss trifft,
+  während der Server die Entitäten bewegt, und danach bewegt er den Spieler
+  erst einen Tick lang selbst, ehe er ihm den Stoß schickt: Statt
+  (-0,4 | 0,3608) kommt (-0,2184 | 0,2752) an. Der Schlag eines Spielers
+  kommt zwischen zwei Ticks herein und geht ungebremst hinaus. Das Plugin
+  macht beides genauso nach, deshalb steht jede Art Treffer für sich da.
+* **Gleich nach einem Teleport hält der Client den Spieler noch in der
+  Luft.** Der echte Client setzt beim Teleport nur Position und
+  Geschwindigkeit, meldet dem Server „nicht am Boden" und setzt ihn erst mit
+  seinem nächsten Tick ab. Ein Stoß, der davor ankommt, rutscht im ersten
+  Tick ohne Bodenhaftung weiter - bei TNT einmal 4,25 statt 2,78 Blöcke. Der
+  weitergegebene Treffer wartet deshalb zwei Ticks des Spielers ab.
+* **Für TNT liegt eine Platte aus Obsidian unter dem Ziel**, 21 × 21 Blöcke.
+  Sonst risse die Explosion die Grasschicht auf, und der Bot stünde bei der
+  nächsten Probe in der Grube. Am Ende legt `boden_ebnen` wieder Gras.
+* **Der Bot trägt im Rückstoßtest Resistenz 255.** Jeder Treffer landet und
+  stößt, verletzt ihn aber nicht. `cam-safety` ist solange aus, sonst ginge
+  nach jedem Treffer fünf Sekunden lang kein `/cam`.
+* **In `peaceful` verletzt TNT keinen Spieler, stößt ihn aber.** Ohne
+  Cam-Modus kommt der Stoß dann allein mit dem Explosionspaket. Im Cam-Modus
+  lehnt der Server den weitergegebenen Schaden sofort ab, und das Plugin gibt
+  den Stoß trotzdem weiter - wie die Explosion selbst.
+* **Den Schlag führt ein zweiter Spieler**, `CamFlyZuschauer`, zwei Blöcke
+  östlich des Ziels. Er schlägt die nächste Entität; liegengebliebene Pfeile
+  und Dreizacke räumt der Test vorher weg, sie tragen die Marke `camflytest`.
 * **Der Name über dem Körper ist ein TextDisplay und wird am Server
   geprüft.** Was der Client daraus zeichnet, sieht der Bot nicht. Gefragt
   wird mit `/execute as <Körper> at @s positioned ~ ~2.25 ~ if entity
@@ -625,7 +664,11 @@ Hebel umlegen, kein Block abbauen und keine Druckplatte auslösen · kein Bild
 im Rahmen drehen, kein Fenster einer Kistenlore öffnen und kein Boot
 besteigen · Gegenprobe: ohne Cam-Modus geht
 jedes davon sehr wohl · das Inventar ist im Cam-Modus leer und danach wieder
-da · die Rüstung ist im Cam-Modus abgelegt und danach wieder angezogen · der
+da · die Rüstung ist im Cam-Modus abgelegt und danach wieder angezogen · ein
+Pfeil, ein Pfeil mit Schlag II, ein geworfener Dreizack, TNT und der Schlag
+eines Spielers auf den Körper stoßen den Spieler genau dorthin, wo derselbe
+Treffer ihn ohne Cam-Modus hinstößt - vom Schützen weg und nicht zu ihm
+hin -, Pfeil und TNT auch mit `damage-mode: false` · der
 Name steht als TextDisplay genau dort über dem Körper, wo sonst sein
 Namensschild hinge, trägt den Text aus `armorstand.name-format`, folgt dem
 Körper und wird mit ihm eingesammelt · der Körper selbst trägt keinen Namen
