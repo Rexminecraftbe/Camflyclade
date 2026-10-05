@@ -350,7 +350,10 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   zweimal: einmal trifft es den Bot selbst, einmal seinen Körper, während er
   zehn Blöcke darüber im Cam-Modus wartet. Verglichen wird, wo er liegen
   bleibt - darin stecken Richtung, Weite und Höhe des Stoßes. Die erste
-  Geschwindigkeit steht zum Nachlesen dabei.
+  Geschwindigkeit steht zum Nachlesen dabei. Fällt eine Probe durch, steht
+  auch da, wo der Flug anfing, wie hoch er ging und wie viele Pakete mit
+  einer Geschwindigkeit kamen - ob er also woanders losging, oben anstieß
+  oder noch einen Stoß hinterher bekam.
 * **mineflayer rechnet die Geschwindigkeit von 26.x falsch um.** Das Paket
   trägt sie als lpVec3, schon in Blöcken je Tick; mineflayer teilt sie noch
   einmal durch 8000 wie im alten Format, und der Bot rührte sich nach einem
@@ -437,8 +440,12 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   Stoß (`minecraft:generic`), damit er sofort zuschlägt, noch mit dem Körper
   nach Süden - einen Schritt später hätte er sich umgedreht.
 * **Bei Mobs zählt die erste Geschwindigkeit.** Sie schlagen nach dem ersten
-  Treffer weiter zu, der Landeplatz sagt dann nichts mehr. Beim Golem zählen
-  nur Höhe und Weite: Wohin er stößt, hängt davon ab, wo er beim Schlag steht.
+  Treffer weiter zu, der Landeplatz sagt dann nichts mehr. Beim Golem zählt
+  nur die Höhe - dort steckt sein eigener Stoß. Zur Seite hängt sie davon ab,
+  wo er beim Schlag steht und ob er den Bot vorher schon angerempelt hat; den
+  Körper rempelt auf Bewegungsstufe 1 niemand an. Gemessen kam der Bot zur
+  Seite mit 0,270 statt 0,218 davon, in der Höhe stimmten beide auf
+  0,6672.
 * **Die Ziege steht nicht in der Testumgebung.** Gemessen rammt sie den Körper
   genau wie den Bot (Landeplatz −6,967 ohne, −6,958 mit Cam-Modus), aber sie
   sucht sich ihr Ziel selbst und nahm den Körper nicht in jedem Lauf.

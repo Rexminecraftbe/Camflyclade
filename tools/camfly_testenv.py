@@ -1125,7 +1125,7 @@ async function handle(cmd) {
         log.explosion.push({ t: Date.now() - start, knockback: k ? [k.x, k.y, k.z] : null });
       };
       const onTeleport = () => {
-        log.teleport.push({ t: Date.now() - start, pos: where() });
+        log.teleport.push({ t: Date.now() - start, pos: where(), schritt: log.path.length });
         fallen();
       };
       const onTick = () => { log.path.push(where()); };
@@ -2957,7 +2957,9 @@ def rueckstoss_lauf(env, bot, ziel, cam, treffen):
 
     Gibt zurueck, wo er liegen bleibt, vom Ziel aus gerechnet, und die erste
     Geschwindigkeit, die er bekommt - oder None, wenn der Cam-Modus gar nicht
-    erst startete.
+    erst startete. Dazu, fuer eine Probe, die durchfaellt: wo sein Flug
+    anfing und wie hoch er ging, beides vom Ziel aus, und wie viele Pakete
+    mit einer Geschwindigkeit kamen.
     """
     x, y, z = ziel
     hinstellen(bot, x, y, z)
@@ -2966,7 +2968,7 @@ def rueckstoss_lauf(env, bot, ziel, cam, treffen):
             return None
         bot.call("fly", wait=30, dy=RUECKSTOSS_HOEHE, timeout=15000)
         time.sleep(1.0)
-    bot.call("knock_start", nachTeleport=cam)
+    anfang = bot.call("knock_start", nachTeleport=cam).get("pos")
     treffen()
     time.sleep(3.0)
     antwort = bot.call("knock_stop")
@@ -2977,8 +2979,18 @@ def rueckstoss_lauf(env, bot, ziel, cam, treffen):
     beendet = not cam or not spielmodus_ist(bot, "adventure")
     if not beendet:
         cam_off(bot)
+    # Im Cam-Modus faengt der Flug erst dort an, wo das Ende des Cam-Modus
+    # ihn hinsetzt - davor wartet er hoch ueber dem Koerper.
+    pfad = log["path"]
+    if cam:
+        versetzt = log["teleport"][0] if log["teleport"] else None
+        anfang = versetzt and versetzt["pos"]
+        pfad = pfad[versetzt["schritt"]:] if versetzt else []
     return {"weg": [ende[0] - x, ende[1] - y, ende[2] - z],
-            "erste": erste or explosion, "beendet": beendet}
+            "erste": erste or explosion, "beendet": beendet,
+            "anfang": None if anfang is None else [anfang[0] - x, anfang[1] - y, anfang[2] - z],
+            "hoehe": max((p[1] for p in pfad), default=y) - y,
+            "pakete": len(log["velocity"])}
 
 
 def _zahlen(werte):
@@ -3003,11 +3015,16 @@ def rueckstoss_vergleich(name, ohne, mit, wie="auf den Koerper", gegenprobe=True
     if not FIND.test(f"{name} {wie} beendet den Cam-Modus",
                      mit is not None and mit["beendet"], ""):
         return
-    abstand = max(abs(a - b) for a, b in zip(ohne["weg"], mit["weg"]))
-    FIND.test(f"{name} {wie} stoesst den Spieler wie ohne Cam-Modus",
-              abstand <= toleranz,
-              f"Weg ohne {_zahlen(ohne['weg'])}, mit {_zahlen(mit['weg'])}; "
-              f"erste Geschwindigkeit ohne {_zahlen(ohne['erste'])}, mit {_zahlen(mit['erste'])}")
+    gleich = max(abs(a - b) for a, b in zip(ohne["weg"], mit["weg"])) <= toleranz
+    erklaerung = (f"Weg ohne {_zahlen(ohne['weg'])}, mit {_zahlen(mit['weg'])}; "
+                  f"erste Geschwindigkeit ohne {_zahlen(ohne['erste'])}, mit {_zahlen(mit['erste'])}")
+    if not gleich:
+        # Woran es lag: Fing der Flug woanders an, stiess er oben an, kam noch
+        # ein Stoss hinterher?
+        erklaerung += (f"; Anfang ohne {_zahlen(ohne['anfang'])}, mit {_zahlen(mit['anfang'])}; "
+                       f"hoechster Punkt ohne {ohne['hoehe']:.4f}, mit {mit['hoehe']:.4f}; "
+                       f"Pakete mit Geschwindigkeit ohne {ohne['pakete']}, mit {mit['pakete']}")
+    FIND.test(f"{name} {wie} stoesst den Spieler wie ohne Cam-Modus", gleich, erklaerung)
 
 
 def rueckstoss_checks(env, bot):
@@ -3124,13 +3141,14 @@ def rueckstoss_checks(env, bot):
 # Was Mobs beim Zuschlagen selbst stossen
 # ---------------------------------------------------------------------------
 
-def rueckstoss_erste_vergleich(name, ohne, mit, nur_hoehe_und_weite=False):
+def rueckstoss_erste_vergleich(name, ohne, mit, nur_hoehe=False):
     """Ob die erste Geschwindigkeit nach dem Treffer auf den Koerper die ist,
     die derselbe Treffer ohne Cam-Modus bringt. Fuer Mobs, die danach weiter
     zuschlagen: Wo der Bot liegen bleibt, sagt dort nichts mehr.
 
-    Mit nur_hoehe_und_weite zaehlen nur die Hoehe und die Weite zur Seite,
-    nicht die Richtung - die haengt dann davon ab, wo der Mob gerade steht.
+    Mit nur_hoehe zaehlt allein, wie hoch sie geht. Zur Seite haengt sie dann
+    davon ab, wo der Mob beim Schlag steht und ob er den Bot vorher schon
+    angerempelt hat - den Koerper rempelt auf Stufe 1 niemand an.
     """
     erste_ohne = ohne and ohne["erste"]
     if not FIND.test(f"{name} ohne Cam-Modus stoesst den Bot (Gegenprobe)", bool(erste_ohne),
@@ -3140,9 +3158,8 @@ def rueckstoss_erste_vergleich(name, ohne, mit, nur_hoehe_und_weite=False):
                      mit is not None and mit["beendet"] and bool(mit["erste"]), ""):
         return
     erste_mit = mit["erste"]
-    if nur_hoehe_und_weite:
-        weite = [math.hypot(v[0], v[2]) for v in (erste_ohne, erste_mit)]
-        abstand = max(abs(erste_ohne[1] - erste_mit[1]), abs(weite[0] - weite[1]))
+    if nur_hoehe:
+        abstand = abs(erste_ohne[1] - erste_mit[1])
     else:
         abstand = max(abs(a - b) for a, b in zip(erste_ohne, erste_mit))
     FIND.test(f"{name} auf den Koerper stoesst den Spieler wie ohne Cam-Modus",
@@ -3177,8 +3194,8 @@ def rueckstoss_mob_checks(env, bot):
     Server stoesst entlang des Koerpers, Bukkit zeigt nur den Kopf -, und ein
     Eisengolem, der hochwirft. Beide schlagen nach dem ersten Treffer weiter
     zu, verglichen wird deshalb die erste Geschwindigkeit; beim Golem nur, wie
-    hoch und wie weit sie geht, denn wohin, haengt davon ab, wo er beim Schlag
-    gerade steht. Eine rammende Ziege fehlt: Sie sucht sich ihr Ziel selbst
+    hoch sie geht - zur Seite haengt sie davon ab, wo er beim Schlag steht und
+    ob er den Bot vorher angerempelt hat. Eine rammende Ziege fehlt: Sie sucht sich ihr Ziel selbst
     und nahm den Koerper im Cam-Modus nicht immer, siehe TESTUMGEBUNG.md.
 
     Feindliche Mobs gibt es erst ab easy, und den Koerper nehmen sie nur mit
@@ -3237,7 +3254,7 @@ def rueckstoss_mob_checks(env, bot):
                  loslassen(1.5, BOT_NAME, "minecraft:generic"), loslassen(1.5, koerper, "minecraft:generic"),
                  rueckstoss_erste_vergleich),
                 ("Eisengolem", golem, loslassen(4.0, BOT_NAME), loslassen(4.0, koerper),
-                 lambda n, o, m: rueckstoss_erste_vergleich(n, o, m, nur_hoehe_und_weite=True))):
+                 lambda n, o, m: rueckstoss_erste_vergleich(n, o, m, nur_hoehe=True))):
             ohne = mob_lauf(env, bot, ziel, False, vorbereiten, ohne_treffen)
             mit = mob_lauf(env, bot, ziel, True, vorbereiten, mit_treffen)
             vergleich(name, ohne, mit)
