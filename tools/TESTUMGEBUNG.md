@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **578** - alle 578 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **655** - alle 655 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -173,7 +173,7 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   sie selbst nur an, wenn sie fehlt, und was ein abgebrochener Lauf an ihren
   Schaltern gedreht hat, bliebe sonst stehen.
 * **Der Cam-Modus läuft voreingestellt im Abenteuermodus**, nicht in Kreativ -
-  Kreativ steht nur einen einzigen Tick lang da. Der Portalvorgang dauert dort
+  Kreativ steht nur zwei Ticks lang da, eine Runde der Welt. Der Portalvorgang dauert dort
   deshalb die vollen 80 Ticks; die Abkürzung auf einen Tick gilt nur für Unverwundbare,
   also Kreativ und Zuschauer. Der Portaltest wartet auf jede Reise sechs
   Sekunden. Umstellen lässt sich der Modus mit `camera-mode.gamemode`.
@@ -346,6 +346,146 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   `/execute if items entity @s armor.chest`. Das Plugin gibt sie über
   denselben Weg zurück wie das übrige Inventar - `getContents()` hält auch
   die Rüstungsslots -, und diese Probe hält fest, dass das so bleibt.
+* **Den Rückstoß misst der Test am Landeplatz.** Jede Probe läuft
+  zweimal: einmal trifft es den Bot selbst, einmal seinen Körper, während er
+  zehn Blöcke darüber im Cam-Modus wartet. Verglichen wird, wo er liegen
+  bleibt - darin stecken Richtung, Weite und Höhe des Stoßes. Die erste
+  Geschwindigkeit steht zum Nachlesen dabei. Fällt eine Probe durch, steht
+  auch da, wo der Flug anfing, wie hoch er ging und wie viele Pakete mit
+  einer Geschwindigkeit kamen - ob er also woanders losging, oben anstieß
+  oder noch einen Stoß hinterher bekam.
+* **mineflayer rechnet die Geschwindigkeit von 26.x falsch um.** Das Paket
+  trägt sie als lpVec3, schon in Blöcken je Tick; mineflayer teilt sie noch
+  einmal durch 8000 wie im alten Format, und der Bot rührte sich nach einem
+  Treffer kaum. `knock_start` setzt sie deshalb selbst - nur solange es
+  mitschreibt, die übrigen Abschnitte laufen weiter wie bisher.
+* **Das Explosionspaket von 26.2 liest der Bot nur bis zum Rückstoß.**
+  Dahinter stehen Partikel, deren Nummern 26.1 anders vergibt; mineflayer
+  warf sonst das ganze Paket weg, samt dem Stoß darin, und TNT schob den Bot
+  ohne Cam-Modus keinen Millimeter.
+* **Ein Pfeil stößt weniger weit als ein Schlag.** Ein Geschoss trifft,
+  während der Server die Entitäten bewegt, und danach bewegt er den Spieler
+  erst einen Tick lang selbst, ehe er ihm den Stoß schickt: Statt
+  (-0,4 | 0,3608) kommt (-0,2184 | 0,2752) an. Der Schlag eines Spielers
+  kommt zwischen zwei Ticks herein und geht ungebremst hinaus. Das Plugin
+  macht beides genauso nach, deshalb steht jede Art Treffer für sich da.
+* **Gleich nach einem Teleport hält der Client den Spieler noch in der
+  Luft.** Der echte Client setzt beim Teleport nur Position und
+  Geschwindigkeit, meldet dem Server „nicht am Boden" und setzt ihn erst mit
+  seinem nächsten Tick ab. Ein Stoß, der davor ankommt, rutscht im ersten
+  Tick ohne Bodenhaftung weiter - bei TNT einmal 4,25 statt 2,78 Blöcke. Der
+  weitergegebene Treffer wartet deshalb zwei Ticks des Spielers ab.
+* **Für TNT liegt eine Platte aus Obsidian unter dem Ziel**, 21 × 21 Blöcke.
+  Sonst risse die Explosion die Grasschicht auf, und der Bot stünde bei der
+  nächsten Probe in der Grube. Am Ende legt `boden_ebnen` wieder Gras.
+* **Der Bot trägt im Rückstoßtest Resistenz 255.** Jeder Treffer landet und
+  stößt, verletzt ihn aber nicht. `cam-safety` ist solange aus, sonst ginge
+  nach jedem Treffer fünf Sekunden lang kein `/cam`.
+* **In `peaceful` verletzt TNT keinen Spieler, stößt ihn aber.** Ohne
+  Cam-Modus kommt der Stoß dann allein mit dem Explosionspaket. Im Cam-Modus
+  lehnt der Server den weitergegebenen Schaden sofort ab, und das Plugin gibt
+  den Stoß trotzdem weiter - wie die Explosion selbst.
+* **Die Schläge führt ein zweiter Spieler**, `CamFlyZuschauer`, östlich des
+  Ziels. Er schlägt, was dem Ziel am nächsten steht: ohne Cam-Modus den Bot,
+  im Cam-Modus den Körper. Liegengebliebene Pfeile und Dreizacke räumt der
+  Test vorher weg, sie tragen die Marke `camflytest`.
+* **Die Waffe kommt mit `item replace` ins erste Fach, nicht mit `/give`.**
+  Das Schwein für den Schwungschlag lässt beim `kill` Fleisch fallen, und
+  hob der Schläger es zwischen `clear` und `/give` auf, lag es im ersten
+  Fach: Er schlug mit dem Fleisch, ohne Schwung, und stach ohne Speer ins
+  Leere. Das Schwein hat dazu eine leere Beutetabelle.
+* **Den Sprint meldet der Test selbst.** mineflayer schickt für 26.x die
+  Nummer der Aktion aus alten Versionen, und die heißt dort etwas anderes:
+  Der Server hielt den Schläger nie für sprintend. `sprint` schreibt das
+  Paket `entity_action` deshalb mit dem Namen der Aktion.
+* **Ein voller Sprintschlag beendet den Sprint auf dem Server.** Für den halb
+  ausgeholten Sprintschlag geht deshalb erst ein voller Schlag auf einen
+  Rüstungsständer daneben, dann wird neu gesprintet und gleich hinterher
+  geschlagen - mit dem Schwert ist der Schlag dann erst halb ausgeholt, und
+  nur so prüft die Probe, dass der Sprint dann nichts dazugibt.
+* **Ein Speer sticht nicht über das Paket für den Schlag.** Das nimmt der
+  Server mit einem Speer in der Hand gar nicht an. Der Client meldet einen
+  Stich als Aktion Nummer 7 (STAB) im Paket `block_dig`, und der Server sucht
+  selbst entlang des Blicks, was er trifft. `stab` sieht deshalb erst hart
+  zum Ziel und sticht einen Moment später. Der Speer sticht zudem nur voll
+  ausgeholt, der Test wartet nach dem Wechsel der Waffe zwei Sekunden.
+* **Ein Speer mit Rückstoß II stößt einen Spieler nicht weiter als ohne.**
+  Der Server schickt den ersten Stoß des Stichs sofort und setzt die
+  Geschwindigkeit danach zurück; den zweiten, den der Verzauberung, schickt
+  ihm niemand. Die Probe hält fest, dass der Körper das genauso weitergibt.
+* **Eine Windkugel fliegt langsam.** Mit der Geschwindigkeit, die ein Breeze
+  ihr mitgibt, fliegt sie zwischen zwei Ticks durch einen Spieler hindurch,
+  ohne ihn zu treffen. Die Probe schickt sie deshalb mit 0,3 Blöcken je Tick
+  und ohne Beschleunigung los.
+* **Die Windkugel trifft im Cam-Modus den Rüstungsständer.** Das unsichtbare
+  Mannequin im Körper lässt Geschosse auf Bewegungsstufe 0 und 1 durch -
+  `setCollidable(false)` nimmt es ihnen als Ziel. Der Rüstungsständer ist
+  0,5 Blöcke breit statt 0,6 wie ein Spieler, die Kugel explodiert also 0,05
+  Blöcke näher, und ihr Stoß geht ein wenig steiler: Gemessen landet der
+  Spieler bis zu 0,09 Blöcke anders, die Probe lässt 0,15 zu. Pfeil und
+  Dreizack stoßen entlang ihres Flugs, bei ihnen spielt die Breite keine
+  Rolle.
+* **Der Streitkolben schlägt aus 3,4 Blöcken Höhe, 0,3 Sekunden nach dem
+  Teleport.** Erst nach gut 1,5 Blöcken Fall ist es ein Schlag mit Wucht, der
+  alles drumherum wegstößt. Früher fehlt der Fall, später ist der Schläger
+  schon gelandet oder nicht mehr in Reichweite.
+* **Die Spielregeln heißen seit 26.x anders.** `doMobSpawning` ist
+  `spawn_mobs`, `doDaylightCycle` ist `advance_time`. Mit den alten Namen
+  lehnte der Server beide ab - es spawnten Tiere, und auf `easy` griff ein
+  Zombie den Körper an, ehe die Probe anfing.
+* **Mobs reizt der Test mit `/damage`.** Den Kamera-Spieler sehen sie nicht,
+  und den Körper nehmen sie nur mit `body.mob-target` - und auch dann nicht
+  jeder: Ein Eisengolem denkt gar nicht an ihn. Ohne Cam-Modus geht der Reiz
+  vom Bot aus, im Cam-Modus vom Körper. Den Wüstenzombie reizt Schaden ohne
+  Stoß (`minecraft:generic`), damit er sofort zuschlägt, noch mit dem Körper
+  nach Süden - einen Schritt später hätte er sich umgedreht.
+* **Bei Mobs zählt die erste Geschwindigkeit.** Sie schlagen nach dem ersten
+  Treffer weiter zu, der Landeplatz sagt dann nichts mehr. Beim Golem zählt
+  nur die Höhe - dort steckt sein eigener Stoß. Zur Seite hängt sie davon ab,
+  wo er beim Schlag steht und ob er den Bot vorher schon angerempelt hat; den
+  Körper rempelt auf Bewegungsstufe 1 niemand an. Gemessen kam der Bot zur
+  Seite mit 0,270 statt 0,218 davon, in der Höhe stimmten beide auf
+  0,6672.
+* **Die Ziege steht nicht in der Testumgebung.** Gemessen rammt sie den Körper
+  genau wie den Bot (Landeplatz −6,967 ohne, −6,958 mit Cam-Modus), aber sie
+  sucht sich ihr Ziel selbst und nahm den Körper nicht in jedem Lauf.
+* **Der Wärter steht in einem Käfig aus Barrieren.** Acht Blöcke vom Ziel
+  kommt er nicht heran, ihm bleibt nur der Schallstoß, und der geht durch
+  Wände. Gereizt hält er ihn zehn Sekunden zurück und lädt dann 1,7 Sekunden
+  auf, die Probe wartet 13,5. Zwei Fallen dabei: Einem Wärter, den `/summon`
+  mit Daten setzt, fehlt `dig_cooldown` im Gedächtnis - er gräbt sich sofort
+  ein, ist dabei unverwundbar, und das `/damage` zum Reizen prallt ab
+  („Target is invulnerable to the given damage type“). Und seine Dunkelheit
+  ist eine schädliche Wirkung: Mit `start-with-effects: positive` ließe sie
+  `/cam` nicht starten, deshalb kommt er erst nach dem Start dazu.
+* **Ob der Wärter angreift, entscheidet seine Wut, nicht sein Ziel.** Er geht
+  auf den los, über den er am wütendsten ist, und kein Ereignis für ein Ziel
+  kommt dabei vorbei - `setTarget` ändert bei ihm nichts. Der Test reizt ihn
+  deshalb mit `/damage` und sieht nach, ob der Cam-Modus endet. Vom
+  Kamera-Spieler aus gereizt brüllt er erst gut vier Sekunden, ehe er den
+  Körper angreift; die Probe wartet zehn.
+* **Hoglin und Piglin steuert ihr Gehirn.** `setTarget` erreicht sie nicht,
+  ihr Ziel wechselt nur, wenn sie es selbst loslassen - beim Start im
+  Kreativ-Tick, am Ende, wenn der Körper verschwindet. Ohne
+  `IsImmuneToZombification:1b` würden beide in der Oberwelt nach 15 Sekunden
+  zu Zombies. Ob die Übergabe saß, fragt die Probe eine Sekunde nach dem
+  Start: Ein Hoglin, den sie verfehlt, gibt den Kamera-Spieler nach gut zehn
+  Sekunden von selbst auf und ginge dann doch noch rechtzeitig auf den Körper
+  los - mit dem alten Stand bestand er so jede spätere Frage.
+* **Breeze und Knarz stehen nicht in der Probe.** Der Breeze greift nach den
+  Regeln des Spiels nur Spieler und Eisengolems an und behält auf Paper den
+  Körper keinen Tick lang. Spigot lässt ihn jedes Ziel angreifen, das sein
+  Gehirn hat (SPIGOT-7957), auch einen Spieler im Kreativmodus - dort lässt
+  er den Bot beim Start gar nicht los. Seine Windkugeln, schon vor dem Start
+  auf den Bot abgefeuert, treffen ohnehin oft den Körper, der an dessen
+  Stelle steht. Den Knarz weckt der Blick eines Spielers, und das Spiel setzt
+  ihm dabei sein Ziel selbst, ohne ein Ereignis, das ein Plugin umlenken
+  könnte.
+* **Ob ein Mob ein Ziel hat, sagt `/execute as <Mob> on target run say`.**
+  Hat er eines, sagt es die Marke. Ein Golem, der beim Start schon neben dem
+  Bot steht, schlägt den Körper oft im selben Augenblick: Der Cam-Modus ist
+  dann schon vorbei, ehe ein `cam_on` nachsehen kann, ob er läuft. Die Probe
+  wartet deshalb nur auf die Bestätigung des Starts.
 * **Der Name über dem Körper ist ein TextDisplay und wird am Server
   geprüft.** Was der Client daraus zeichnet, sieht der Bot nicht. Gefragt
   wird mit `/execute as <Körper> at @s positioned ~ ~2.25 ~ if entity
@@ -625,7 +765,25 @@ Hebel umlegen, kein Block abbauen und keine Druckplatte auslösen · kein Bild
 im Rahmen drehen, kein Fenster einer Kistenlore öffnen und kein Boot
 besteigen · Gegenprobe: ohne Cam-Modus geht
 jedes davon sehr wohl · das Inventar ist im Cam-Modus leer und danach wieder
-da · die Rüstung ist im Cam-Modus abgelegt und danach wieder angezogen · der
+da · die Rüstung ist im Cam-Modus abgelegt und danach wieder angezogen · ein
+Pfeil, ein Pfeil mit Schlag II, ein geworfener Dreizack, TNT und die
+Schläge eines Spielers auf den Körper stoßen den Spieler genau dorthin, wo
+derselbe Treffer ihn ohne Cam-Modus hinstößt - vom Schützen weg und nicht
+zu ihm hin -: ein Schlag, ein Sprintschlag voll und halb ausgeholt, ein
+Schwert mit Rückstoß II, ein Schwungschlag, der den Körper neben seinem Ziel
+trifft, ein Speerstich und ein Speerstich mit Rückstoß II, ein Streitkolben,
+der neben dem Körper aufschlägt, und zwei Windkugeln, die mit ihrem Treffer
+explodieren · ein Wüstenzombie, der mit dem Körper anders steht als mit dem
+Kopf, stößt entlang des Körpers, ein Eisengolem wirft hoch, und der
+Schallstoß eines Wärters schleudert weit weg, alles wie ohne Cam-Modus ·
+Pfeil, TNT, Windkugel, Sprintschlag und Speerstich auch mit
+`damage-mode: false` · ein Wärter greift den Körper mit
+`mob-target: vanilla` an und mit `false` nicht, auch wenn ihn der
+Kamera-Spieler reizt · ein Eisengolem, der beim Start hinter dem Spieler her
+ist, geht mit `mob-target: vanilla` auf den Körper los, und er wie ein
+Zombie verliert mit `false` sein Ziel · ebenso ein Hoglin und ein Piglin,
+die ihr Gehirn steuert, und wen der Körper angezogen hat, der ist nach dem
+Ende wieder hinter dem Spieler her · der
 Name steht als TextDisplay genau dort über dem Körper, wo sonst sein
 Namensschild hinge, trägt den Text aus `armorstand.name-format`, folgt dem
 Körper und wird mit ihm eingesammelt · der Körper selbst trägt keinen Namen

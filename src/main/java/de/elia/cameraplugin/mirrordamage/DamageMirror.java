@@ -3,9 +3,9 @@ package de.elia.cameraplugin.mirrordamage;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.enchantments.Enchantment;
@@ -13,19 +13,28 @@ import org.bukkit.entity.AbstractArrow;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Cancellable;
+import org.bukkit.event.Event;
+import org.bukkit.event.EventException;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
+import org.bukkit.event.entity.EntityEvent;
+import org.bukkit.event.entity.EntityKnockbackEvent;
+import org.bukkit.event.entity.ExplosionPrimeEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
+import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -37,25 +46,42 @@ import java.util.UUID;
 public final class DamageMirror implements Listener {
 
     /**
-     * How long a mirrored hit waits at most for the player to live through a
-     * tick, so that it never hangs should he stop ticking altogether.
+     * How long a mirrored hit waits at most for the player to live through
+     * those ticks, so that it never hangs should the player stop ticking
+     * altogether.
      */
     private static final int MAX_ARMOR_WAIT_TICKS = 10;
+    /** How many ticks of their own the player lives through before the hit reaches them. */
+    private static final int TICKS_BEFORE_HIT = 2;
+    /** Paper's event for every push an entity is given, an explosion's among them. */
+    private static final String PAPER_PUSH_EVENT = "io.papermc.paper.event.entity.EntityKnockbackEvent";
+    /** The cause Paper's event gives the push of an explosion. */
+    private static final String EXPLOSION_PUSH = "EXPLOSION";
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
     private final Messages messages;
     private final CameraPlayers cameraPlayers;
+    /** How strong the swings are that land on a body, see {@link HitPush}. */
+    private final SwingStrength swingStrength;
     /** The player who is taking the hit his body took right now. */
     private final Set<UUID> damageImmunityBypass = new HashSet<>();
-    /** Players whose body was hit and whose hit has not reached them yet. */
-    private final Set<UUID> pendingMirrorHit = new HashSet<>();
+    /** Players whose body was hit and whose hit has not reached them yet, with the push of that hit. */
+    private final Map<UUID, HitPush> pendingMirrorHit = new HashMap<>();
+    /** Players whose passed-on hit something else turned away, see onMirroredHitTurnedAway. */
+    private final Set<UUID> mirroredHitTurnedAway = new HashSet<>();
+    /**
+     * How far the explosions announced in this tick reach, by the entity going
+     * off. The damage of an explosion does not say, see onExplosionPrime.
+     */
+    private final Map<UUID, Float> explosionRadius = new HashMap<>();
 
-    public DamageMirror(CameraPlugin plugin) {
+    public DamageMirror(CameraPlugin plugin, SwingStrength swingStrength) {
         this.plugin = plugin;
         this.settings = plugin.getSettings();
         this.messages = plugin.getMessages();
         this.cameraPlayers = plugin.getCameraPlayers();
+        this.swingStrength = swingStrength;
     }
 
     /**
@@ -163,6 +189,12 @@ public final class DamageMirror implements Listener {
             default -> applyDamage = 0.0;
         }
 
+        // Written down now, while the hit is still exactly what it was when it
+        // landed: a moment later the arrow has bounced off the body, the
+        // explosion is over and the attacker has turned away.
+        HitPush push = HitPush.of(event, standIn(ownerUUID, damagedEntity),
+                announcedRadius(event.getDamageSource()), swingStrength);
+
         plugin.exitCameraMode(owner);
 
         messages.sendMessage(owner, resolveDamageMessageKey(event, cause),
@@ -180,7 +212,46 @@ public final class DamageMirror implements Listener {
         // it as the fall, the drowning or the arrow it really was, and the
         // source decides whether armour counts at all, which protection
         // enchantment counts, and who gets the kill.
-        mirrorHitToPlayer(owner, applyDamage, event.getDamage(), event.getDamageSource(), damagerEntity);
+        mirrorHitToPlayer(owner, applyDamage, event.getDamage(), event.getDamageSource(), damagerEntity, push);
+    }
+
+    /**
+     * The mannequin taking the hits for this player: the one standing in the
+     * armour stand of body type 1, otherwise the body itself. It has the
+     * player's shape and stands where the player will stand once camera mode
+     * is over, so a push worked out on it is the push the player would get.
+     */
+    private LivingEntity standIn(UUID ownerId, Entity damaged) {
+        CameraData data = cameraPlayers.get(ownerId);
+        if (data != null) {
+            return data.getDamageTarget();
+        }
+        return (LivingEntity) damaged;
+    }
+
+    /** How far the explosion behind this damage reaches, when it was announced. */
+    private Float announcedRadius(org.bukkit.damage.DamageSource source) {
+        Entity direct = source.getDirectEntity();
+        return direct == null ? null : explosionRadius.get(direct.getUniqueId());
+    }
+
+    /**
+     * Notes down how far an explosion is going to reach. The damage it deals
+     * does not say, and the push of an explosion depends on it, see
+     * {@link HitPush}.
+     *
+     * <p>TNT, creepers, fireballs, wither skulls, end crystals, TNT minecarts
+     * and the birth of a wither all announce themselves here and go off right
+     * after, within the same tick - so what is written down here is cleared
+     * again with the next one. Beds and respawn anchors announce nothing, but
+     * they always reach just as far.</p>
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onExplosionPrime(ExplosionPrimeEvent event) {
+        if (explosionRadius.isEmpty()) {
+            plugin.getServer().getScheduler().runTask(plugin, explosionRadius::clear);
+        }
+        explosionRadius.put(event.getEntity().getUniqueId(), event.getRadius());
     }
 
     /**
@@ -198,12 +269,19 @@ public final class DamageMirror implements Listener {
      * player: as soon as he has lived through one tick since the armour came
      * back, that tick has applied it, and the hit lands with the protection he
      * really has.</p>
+     *
+     * <p>It waits for one tick more, for the push. The player has just been put
+     * back where the body stood, and the client takes them for standing on the
+     * ground only once it has moved them there - until then it still has them
+     * in the air, where the camera was. A push arriving before that sets out
+     * from the air, slides on without the grip of the ground and carries the
+     * player further than the same hit does outside camera mode.</p>
      */
     private void mirrorHitToPlayer(Player owner, double amount, double rawDamage,
-                                   org.bukkit.damage.DamageSource source, Entity attacker) {
+                                   org.bukkit.damage.DamageSource source, Entity attacker, HitPush push) {
         int restoredAt = owner.getTicksLived();
         // Nothing else may reach him until this hit has landed, see onPlayerDamage.
-        pendingMirrorHit.add(owner.getUniqueId());
+        pendingMirrorHit.put(owner.getUniqueId(), push);
         new BukkitRunnable() {
             private int waited = 0;
 
@@ -214,11 +292,11 @@ public final class DamageMirror implements Listener {
                     cancel();
                     return;
                 }
-                if (owner.getTicksLived() <= restoredAt && ++waited < MAX_ARMOR_WAIT_TICKS) {
-                    return; // his tick is still to come, his armour is not on yet
+                if (owner.getTicksLived() - restoredAt < TICKS_BEFORE_HIT && ++waited < MAX_ARMOR_WAIT_TICKS) {
+                    return; // his ticks are still to come: the armour, then the ground
                 }
                 cancel();
-                applyMirroredHit(owner, amount, rawDamage, source, attacker, waited);
+                applyMirroredHit(owner, amount, rawDamage, source, attacker, push, waited);
             }
         }.runTaskTimer(plugin, 1L, 1L);
     }
@@ -239,9 +317,14 @@ public final class DamageMirror implements Listener {
      * the push, if the push is switched on, and as the pause it leaves behind
      * either way - and as the wear on the armour, which follows a mode of its
      * own.</p>
+     *
+     * <p>The push itself is the one written down when the body was hit, see
+     * {@link HitPush}: the server would take its direction from what the
+     * world looks like now.</p>
      */
     private void applyMirroredHit(Player owner, double amount, double rawDamage,
-                                  org.bukkit.damage.DamageSource source, Entity attacker, int waitedTicks) {
+                                  org.bukkit.damage.DamageSource source, Entity attacker, HitPush push,
+                                  int waitedTicks) {
         double speed = owner.getVelocity().length();
         double armor = attributeValue(owner, Attribute.ARMOR);
         double toughness = attributeValue(owner, Attribute.ARMOR_TOUGHNESS);
@@ -251,6 +334,7 @@ public final class DamageMirror implements Listener {
         int framesBefore = owner.getNoDamageTicks();
         double lastBefore = owner.getLastDamage();
         int fireBefore = owner.getFireTicks();
+        EntityDamageEvent causeBefore = owner.getLastDamageCause();
         UUID ownerId = owner.getUniqueId();
         pendingMirrorHit.remove(ownerId);
 
@@ -262,10 +346,15 @@ public final class DamageMirror implements Listener {
             // take exactly the hearts this mode is meant to save him. The
             // push is his too, as long as it is switched on - the server hands
             // it out only together with damage, so here it has to be handed
-            // out by hand.
+            // out by hand, by the same rules.
+            Vector pushed = null;
             if (settings.isMirrorKnockback()) {
-                owner.setVelocity(new Vector(0, 0, 0));
-                pushAwayFrom(owner, attacker, knockbackResistance);
+                pushed = push.standstill(owner);
+                if (HitPush.takesHits(owner)) {
+                    pushed = push.knock(owner, pushed, true, true);
+                }
+                pushed = push.blast(owner, pushed);
+                handOut(owner, pushed, push.standstill(owner), push);
             }
             owner.setNoDamageTicks(20);
             owner.setLastDamage(rawDamage);
@@ -274,7 +363,7 @@ public final class DamageMirror implements Listener {
             int wornPoints = wearWornArmor(owner, rawDamage, source);
             reportMirroredHit(owner, amount, source, armor, toughness, knockbackResistance,
                     healthBefore, speed, waitedTicks, framesBefore, lastBefore, fireBefore,
-                    armorNote(false, wornPoints));
+                    pushed, armorNote(false, wornPoints));
             return;
         }
 
@@ -301,9 +390,12 @@ public final class DamageMirror implements Listener {
         // A moment ago the player was flying. That speed must not ride along
         // into the knockback of this hit: outside camera mode he would have
         // been standing where his body stood, and the hit would push him from
-        // a standstill.
-        owner.setVelocity(new Vector(0, 0, 0));
+        // a standstill - the speed of standing on the ground, which is not
+        // quite none.
+        Vector standstill = push.standstill(owner);
+        owner.setVelocity(standstill);
         damageImmunityBypass.add(ownerId);
+        mirroredHitTurnedAway.remove(ownerId);
         try {
             if (source != null) {
                 owner.damage(amount, source);
@@ -313,14 +405,32 @@ public final class DamageMirror implements Listener {
         } finally {
             damageImmunityBypass.remove(ownerId);
         }
+        // Whether the hit carries a push the server answers by itself: it only
+        // moves the player for a hit that really landed, and never for the
+        // damage of a fall, of fire or of an explosion.
+        boolean knocked = !owner.getVelocity().equals(standstill);
+        boolean turnedAway = mirroredHitTurnedAway.remove(ownerId);
+        boolean landed = landedInFull(owner, framesBefore, causeBefore);
         if (!settings.damageCountsArmor()) {
             takeWhatTheArmorKeptAway(owner, amount, healthBefore + absorptionBefore, framesBefore);
         }
-        if (!settings.isMirrorKnockback()) {
+        Vector pushed = null;
+        if (settings.isMirrorKnockback()) {
+            // Which way and how hard is taken from the moment the body was hit,
+            // not from the server: it would push along the bounce of an arrow.
+            // The push of an explosion comes on top - its damage carries none,
+            // the explosion hands it out by itself to everything it did not
+            // have turned away.
+            pushed = push.knock(owner, standstill, knocked, landed);
+            if (!turnedAway) {
+                pushed = push.blast(owner, pushed);
+            }
+            handOut(owner, pushed, standstill, push);
+        } else {
             // The hit is passed on, the push behind it is not: the server has
             // just turned it into movement, and that movement is taken back
             // before anyone sees it.
-            owner.setVelocity(new Vector(0, 0, 0));
+            owner.setVelocity(standstill);
         }
         // A dead player keeps nothing of this: what he dropped are the copies,
         // so wearing the originals down would only be heard and seen for a set
@@ -328,7 +438,7 @@ public final class DamageMirror implements Listener {
         int wornPoints = saved == null || owner.isDead() ? 0 : wearArmor(owner, saved, rawDamage, source);
         reportMirroredHit(owner, amount, source, armor, toughness, knockbackResistance,
                 healthBefore, speed, waitedTicks, framesBefore, lastBefore, fireBefore,
-                armorNote(serverWearsArmor, wornPoints));
+                pushed, armorNote(serverWearsArmor, wornPoints));
         if (attacker instanceof LivingEntity living) {
             ItemStack weapon = living.getEquipment().getItemInMainHand();
             int fireLevel = weapon.getEnchantmentLevel(Enchantment.FIRE_ASPECT);
@@ -349,6 +459,44 @@ public final class DamageMirror implements Listener {
         // Died from the hit: the copies are what he dropped, and they carry the
         // same pieces. Handing the originals back into an inventory the server
         // has just emptied would only put them into the world twice.
+    }
+
+    /**
+     * Hands the push to the player - in one go, unless the burst of a wind
+     * charge comes with the hit. The server sends that burst on its own the
+     * moment it goes off, and a tick later, once the hit has pushed as well,
+     * the speed of both together; it is sent the same way here. A hit that
+     * pushed nothing leaves the burst alone.
+     */
+    private void handOut(Player owner, Vector pushed, Vector standstill, HitPush push) {
+        Vector burst = push.caughtBurst();
+        if (burst == null) {
+            owner.setVelocity(pushed);
+            return;
+        }
+        owner.setVelocity(standstill.clone().add(burst));
+        if (pushed.equals(standstill)) {
+            return;
+        }
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            if (owner.isOnline() && !owner.isDead()) {
+                owner.setVelocity(pushed);
+            }
+        }, 1L);
+    }
+
+    /**
+     * Whether the hit passed on landed in full: it got through - nothing
+     * turned it away, so it is the player's last damage now -, and not into
+     * the invulnerability an earlier hit left behind. Such a later hit only
+     * takes what it has beyond the earlier one, starts no new invulnerability
+     * of its own, and the server pushes nobody for it. The hits that carry no
+     * push of their own, a stab, can only be told apart by that.
+     */
+    private static boolean landedInFull(Player owner, int framesBefore, EntityDamageEvent causeBefore) {
+        int span = owner.getMaximumNoDamageTicks();
+        return owner.getLastDamageCause() != causeBefore
+                && framesBefore * 2 <= span && owner.getNoDamageTicks() == span;
     }
 
     /**
@@ -442,47 +590,21 @@ public final class DamageMirror implements Listener {
     }
 
     /**
-     * Pushes the player away from whoever hit his body, the way the server
-     * pushes anyone it hits: with the same strength, against his knockback
-     * resistance, and from a standstill.
+     * One line of the measurement, whenever {@code mirror-damage.debug} is on.
      *
-     * <p>Needed because the server only ever hands out that push together with
-     * damage. Where no damage is passed on, the push would be lost with it -
-     * and whether the player is pushed is not meant to depend on how much of
-     * the hit the mode passes on.</p>
+     * @param pushed the speed the push left the player with, {@code null}
+     *               when the push is switched off
      */
-    private void pushAwayFrom(Player owner, Entity attacker, double knockbackResistance) {
-        if (attacker == null) {
-            return;
-        }
-        double strength = 0.4 * (1.0 - knockbackResistance);
-        if (strength <= 0.0) {
-            return;
-        }
-        Location from = attacker.getLocation();
-        Location to = owner.getLocation();
-        Vector direction = new Vector(from.getX() - to.getX(), 0.0, from.getZ() - to.getZ());
-        if (direction.lengthSquared() < 1.0E-7) {
-            return; // standing in the same spot, there is no direction to push in
-        }
-        Vector push = direction.normalize().multiply(strength);
-        Vector velocity = owner.getVelocity();
-        double lift = owner.isOnGround() ? Math.min(0.4, velocity.getY() / 2.0 + strength) : velocity.getY();
-        owner.setVelocity(new Vector(
-                velocity.getX() / 2.0 - push.getX(),
-                lift,
-                velocity.getZ() / 2.0 - push.getZ()));
-    }
-
-    /** One line of the measurement, whenever {@code mirror-damage.debug} is on. */
     private void reportMirroredHit(Player owner, double amount, org.bukkit.damage.DamageSource source,
                                    double armor, double toughness, double knockbackResistance,
                                    double healthBefore, double speed, int waitedTicks,
                                    int framesBefore, double lastBefore, int fireBefore,
-                                   String armorNote) {
+                                   Vector pushed, String armorNote) {
         if (!settings.isMirrorDebug()) {
             return;
         }
+        String knockback = pushed == null ? "off" : String.format(Locale.ROOT, "%.4f %.4f %.4f",
+                pushed.getX(), pushed.getY(), pushed.getZ());
         sendMirrorDebug(owner, String.format(Locale.ROOT,
                 "mirrored: raw %.3f (%s) | armour %.1f (counts %s), toughness %.1f, KB resistance %.2f"
                         + " | health %.2f -> %.2f (-%.3f) | speed %.3f | waited %d ticks"
@@ -491,7 +613,7 @@ public final class DamageMirror implements Listener {
                 amount, damageTypeName(source), armor, settings.damageCountsArmor() ? "on" : "off",
                 toughness, knockbackResistance,
                 healthBefore, owner.getHealth(), healthBefore - owner.getHealth(), speed, waitedTicks,
-                framesBefore, lastBefore, fireBefore, settings.isMirrorKnockback() ? "on" : "off", armorNote));
+                framesBefore, lastBefore, fireBefore, knockback, armorNote));
     }
 
     /**
@@ -508,6 +630,84 @@ public final class DamageMirror implements Listener {
             case SUFFOCATION -> "body-suffocating";
             default -> "body-env-damage";
         };
+    }
+
+    /**
+     * Watches for the burst of a wind charge that struck a body, on the event
+     * the server offers - Paper's own where there is one, the way
+     * {@link de.elia.cameraplugin.interaction.CamKnockbackGuard} picks it,
+     * and Bukkit's otherwise. See {@link HitPush#awaitsBurst}.
+     */
+    public void watchBursts() {
+        if (!watchPaperBursts()) {
+            plugin.getServer().getPluginManager().registerEvents(new BukkitBursts(), plugin);
+        }
+    }
+
+    /**
+     * Listens to Paper's event for pushes, where the server has it.
+     *
+     * @return whether it is there
+     */
+    private boolean watchPaperBursts() {
+        Class<? extends Event> pushEvent;
+        Method cause;
+        Method knockback;
+        try {
+            pushEvent = Class.forName(PAPER_PUSH_EVENT).asSubclass(Event.class);
+            cause = pushEvent.getMethod("getCause");
+            knockback = pushEvent.getMethod("getKnockback");
+        } catch (ClassNotFoundException | NoSuchMethodException | ClassCastException ex) {
+            return false;
+        }
+        plugin.getServer().getPluginManager().registerEvent(pushEvent, new Listener() {
+        }, EventPriority.HIGHEST, (listener, event) -> {
+            if (!pushEvent.isInstance(event)) {
+                return;
+            }
+            try {
+                if (EXPLOSION_PUSH.equals(String.valueOf(cause.invoke(event)))
+                        && holdBackBurst(((EntityEvent) event).getEntity(), (Vector) knockback.invoke(event))) {
+                    ((Cancellable) event).setCancelled(true);
+                }
+            } catch (ReflectiveOperationException ex) {
+                throw new EventException(ex);
+            }
+        }, plugin, true);
+        return true;
+    }
+
+    /**
+     * Holds the burst of a wind charge back from the player whose body it
+     * struck: it reaches them with the hit, see {@link #handOut}.
+     *
+     * @return whether it was held back
+     */
+    private boolean holdBackBurst(Entity entity, Vector burst) {
+        if (!(entity instanceof Player player)) {
+            return false;
+        }
+        HitPush pending = pendingMirrorHit.get(player.getUniqueId());
+        if (pending == null || !pending.awaitsBurst()) {
+            return false;
+        }
+        pending.catchBurst(burst);
+        return true;
+    }
+
+    /**
+     * Bukkit's event for pushes, for a server without Paper's. A class of its
+     * own, so a Paper server never loads it.
+     */
+    private final class BukkitBursts implements Listener {
+
+        @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+        public void onPush(EntityKnockbackEvent event) {
+            if (event.getCause() == EntityKnockbackEvent.KnockbackCause.EXPLOSION
+                    && holdBackBurst(event.getEntity(), event.getKnockback())) {
+                event.setCancelled(true);
+            }
+        }
     }
 
     /**
@@ -532,8 +732,22 @@ public final class DamageMirror implements Listener {
         if (damageImmunityBypass.contains(playerId)) {
             return; // his own hit, on its way through
         }
-        if (cameraPlayers.contains(playerId) || pendingMirrorHit.contains(playerId)) {
+        if (cameraPlayers.contains(playerId) || pendingMirrorHit.containsKey(playerId)) {
             event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Notes down when something else - a protected region, a god mode - turned
+     * away the hit passed on to the player. An explosion pushes nobody whose
+     * damage was turned away, and the push of an explosion is handed out by
+     * hand here, so it has to ask.
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onMirroredHitTurnedAway(EntityDamageEvent event) {
+        if (event.isCancelled() && event.getEntity() instanceof Player player
+                && damageImmunityBypass.contains(player.getUniqueId())) {
+            mirroredHitTurnedAway.add(player.getUniqueId());
         }
     }
 

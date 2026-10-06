@@ -46,6 +46,13 @@ public final class BodyWatch {
      * mannequin takes that damage itself and
      * {@link de.elia.cameraplugin.mirrordamage.DamageMirror#onBodyDamage} ends
      * camera mode.</p>
+     *
+     * <p>Whatever moved the body moves the player on: they take over where it
+     * is and how fast it goes. Outside camera mode the same push, current or
+     * fall would have carried them along - the push of a mace slamming down
+     * next to them, the burst of a wind charge, the wing of the ender dragon,
+     * none of which hurts. Put down with nothing of it, they would stop dead
+     * in the middle of the flight.</p>
      */
     public void startBodyMovementCheck(Player player, LivingEntity mannequin) {
         if (settings.getMovementSensitivity().isFixed()) {
@@ -73,8 +80,10 @@ public final class BodyWatch {
                     return;
                 }
                 if (hasMoved(reference, current)) {
+                    Vector motion = mannequin.getVelocity();
                     plugin.getMessages().sendConfiguredMessage(player, "body-moved");
                     plugin.exitCameraMode(player);
+                    player.setVelocity(motion);
                     this.cancel();
                 }
             }

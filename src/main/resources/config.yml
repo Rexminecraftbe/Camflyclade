@@ -157,6 +157,7 @@ body:
   #   vanilla = mit ihrer normalen Sichtweite (Zombie: 16 Blöcke)
   #   custom  = mit mob-target-radius, für alle gleich
   #   false   = nie
+  # Der Wärter hält sich nur auf Paper daran, auf Spigot greift er den Körper an, wenn er ihn riecht.
   mob-target: false
 
   # Reichweite in Blöcken für mob-target: custom (0 = kein Mob)

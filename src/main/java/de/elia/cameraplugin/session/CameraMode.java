@@ -133,6 +133,12 @@ public final class CameraMode {
         // "which mode was he in" from then on.
         GameMode flyingGameMode = cameraGameMode(originalGameMode);
 
+        // Before the creative mode below, too: the game names a player in
+        // creative mode as no mob's target, so the mobs after him would not be
+        // found and would keep him as their target. The ones steered by their
+        // brain are only noted down here and handed over in the creative tick.
+        plugin.getMobTargeting().turnMobsFromPlayer(player, damageTarget);
+
         player.setGameMode(GameMode.CREATIVE);
         player.setAllowFlight(true);
         player.setFlying(true);
@@ -145,9 +151,19 @@ public final class CameraMode {
             player.setGlowing(true);
         }
 
+        // Two ticks and not one: the world has to tick once with him in
+        // creative mode. A mob steered by its brain takes no setTarget, but it
+        // lets go of a player in creative mode by itself - in that tick, and
+        // that is when turnMobsFromPlayer hands it over. The command that
+        // starts camera mode runs between two ticks, so a task one tick later
+        // would come before the world had ticked at all.
         new BukkitRunnable() {
             @Override
             public void run() {
+                if (!player.isOnline() || !cameraPlayers.contains(player.getUniqueId())) {
+                    // Camera mode is over already, and his own game mode is back.
+                    return;
+                }
                 player.setGameMode(flyingGameMode);
                 player.setAllowFlight(true); // ensure flight remains enabled
                 player.setFlying(true);       // keep player flying
@@ -155,9 +171,7 @@ public final class CameraMode {
                     player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
                 }
             }
-        }.runTaskLater(plugin, 1L);
-
-        plugin.getMobTargeting().turnMobsFromPlayer(player, damageTarget);
+        }.runTaskLater(plugin, 2L);
 
         // *** Hand the saved inventory to CameraData ***
         cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, nameDisplay, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects));
