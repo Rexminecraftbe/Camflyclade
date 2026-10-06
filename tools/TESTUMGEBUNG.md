@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **649** - alle 649 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **650** - alle 650 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -458,6 +458,12 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   („Target is invulnerable to the given damage type“). Und seine Dunkelheit
   ist eine schädliche Wirkung: Mit `start-with-effects: positive` ließe sie
   `/cam` nicht starten, deshalb kommt er erst nach dem Start dazu.
+* **Ob der Wärter angreift, entscheidet seine Wut, nicht sein Ziel.** Er geht
+  auf den los, über den er am wütendsten ist, und kein Ereignis für ein Ziel
+  kommt dabei vorbei - `setTarget` ändert bei ihm nichts. Der Test reizt ihn
+  deshalb mit `/damage` und sieht nach, ob der Cam-Modus endet. Vom
+  Kamera-Spieler aus gereizt brüllt er erst gut vier Sekunden, ehe er den
+  Körper angreift; die Probe wartet zehn.
 * **Der Name über dem Körper ist ein TextDisplay und wird am Server
   geprüft.** Was der Client daraus zeichnet, sieht der Bot nicht. Gefragt
   wird mit `/execute as <Körper> at @s positioned ~ ~2.25 ~ if entity
@@ -749,7 +755,9 @@ explodieren · ein Wüstenzombie, der mit dem Körper anders steht als mit dem
 Kopf, stößt entlang des Körpers, ein Eisengolem wirft hoch, und der
 Schallstoß eines Wärters schleudert weit weg, alles wie ohne Cam-Modus ·
 Pfeil, TNT, Windkugel, Sprintschlag und Speerstich auch mit
-`damage-mode: false` · der
+`damage-mode: false` · ein Wärter greift den Körper mit
+`mob-target: vanilla` an und mit `false` nicht, auch wenn ihn der
+Kamera-Spieler reizt · der
 Name steht als TextDisplay genau dort über dem Körper, wo sonst sein
 Namensschild hinge, trägt den Text aus `armorstand.name-format`, folgt dem
 Körper und wird mit ihm eingesammelt · der Körper selbst trägt keinen Namen

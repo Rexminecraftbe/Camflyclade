@@ -77,7 +77,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 649 Methoden- und Feldzugriffe. Alle 649 gibt
+# Dieser Pruefer zaehlt zurzeit 650 Methoden- und Feldzugriffe. Alle 650 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -3271,17 +3271,13 @@ def rueckstoss_mob_checks(env, bot):
         console(env, f"fill {kaefig} minecraft:barrier", pause=0.3)
         console(env, f"fill {wx} {y} {bz} {wx} {y + 2} {bz} minecraft:air", pause=0.3)
 
-    # Mit dig_cooldown im Gedaechtnis: Einem Waerter, den /summon mit Daten
-    # setzt, fehlt es, und er graebt sich sofort ein - dabei ist er
-    # unverwundbar, und das /damage, das ihn reizen soll, prallt ab.
     def waerter_reizen(reizen):
         def treffen():
-            console(env, f"summon minecraft:warden {wx + 0.5} {y} {bz + 0.5} {{Rotation:[90f,0f],{marke},"
-                         f"PersistenceRequired:1b,Silent:1b,"
-                         f'Brain:{{memories:{{"minecraft:dig_cooldown":{{value:{{}},ttl:6000L}}}}}}}}', pause=1.0)
+            waerter_hin(env, wx + 0.5, y, bz + 0.5)
             console(env, f"damage {mob} 0.5 minecraft:mob_attack by {reizen}", pause=0)
             time.sleep(WAERTER_WARTEN)
         return treffen
+
     # Den Zombie reizt ein Schaden ohne Stoss: So schlaegt er sofort zu, noch
     # ehe er einen Schritt tut und sich mit dem Koerper zum Ziel dreht.
     try:
@@ -3307,6 +3303,104 @@ def rueckstoss_mob_checks(env, bot):
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Mob-Rueckstosstest: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Der Waerter und body.mob-target
+# ---------------------------------------------------------------------------
+
+# Wie lange nach dem Reiz auf den Angriff eines freien Waerters gewartet wird,
+# in Sekunden. Ist er ueber den Koerper wuetend, bruellt er erst gut vier
+# Sekunden lang und schlaegt dann zu.
+WAERTER_ZIEL_WARTEN = 10.0
+
+
+def waerter_hin(env, x, y, z):
+    """Einen Waerter mit der Marke hinsetzen, das Gesicht nach Westen.
+
+    Mit dig_cooldown im Gedaechtnis: Einem Waerter, den /summon mit Daten
+    setzt, fehlt es, und er graebt sich sofort ein - dabei ist er
+    unverwundbar, und das /damage, das ihn reizen soll, prallt ab.
+    """
+    console(env, f'summon minecraft:warden {x} {y} {z} {{Rotation:[90f,0f],Tags:["{INTERACT_TAG}"],'
+                 f"PersistenceRequired:1b,Silent:1b,"
+                 f'Brain:{{memories:{{"minecraft:dig_cooldown":{{value:{{}},ttl:6000L}}}}}}}}', pause=1.0)
+
+
+def waerter_ziel_checks(env, bot):
+    """Ob sich der Waerter an body.mob-target haelt.
+
+    Ein Waerter geht auf den los, ueber den er am wuetendsten ist, und keines
+    der Ereignisse fuer ein Ziel kommt dabei vorbei. Wuetend machen ihn, was
+    er riecht und hoert - und den Koerper riecht er wie jeden anderen. Das
+    Plugin lenkt deshalb seine Wut: Der Kamera-Spieler macht ihn nie wuetend,
+    der Koerper nur mit vanilla oder custom, und dort geht die Wut, die dem
+    Kamera-Spieler gegolten haette, auf seinen Koerper ueber.
+
+    Gereizt wird der Waerter mit /damage, einmal vom Koerper aus und einmal
+    vom Kamera-Spieler aus, je mit mob-target vanilla und false. Mit vanilla
+    greift er beide Male den Koerper an, mit false keinen. Er steht frei zwei
+    Bloecke neben dem Koerper und kommt erst nach dem Start des Cam-Modus
+    dazu, siehe rueckstoss_mob_checks.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Waerter-Test aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    waerter = f"@e[type=minecraft:warden,tag={INTERACT_TAG},limit=1]"
+    koerper = "@e[type=minecraft:mannequin,sort=nearest,limit=1]"
+    bot.chat("/gamemode survival")
+    bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
+    time.sleep(0.5)
+    set_option(env, "enabled", "false", "cam-safety")
+    console(env, "difficulty easy", pause=0.5)
+
+    def lauf(modus, reizen):
+        """Den Waerter reizen und sagen, ob er den Koerper angegriffen hat:
+        (angegriffen, Meldung dazu) - oder None, wenn der Cam-Modus gar nicht
+        erst startete."""
+        # Vor dem Start: Ein cam reload wirft jeden Kamera-Spieler hinaus.
+        set_option(env, "mob-target", modus, "body")
+        console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+        console(env, f"effect clear {BOT_NAME} minecraft:darkness", pause=0.3)
+        hinstellen(bot, x, y, z)
+        if not cam_on(bot):
+            return None
+        bot.call("fly", wait=30, dy=RUECKSTOSS_HOEHE, timeout=15000)
+        time.sleep(1.0)
+        since = bot.mark()
+        waerter_hin(env, x + 2, y, z)
+        console(env, f"damage {waerter} 0.5 minecraft:mob_attack by {reizen}", pause=0)
+        time.sleep(WAERTER_ZIEL_WARTEN)
+        laeuft = spielmodus_ist(bot, "adventure")
+        if laeuft:
+            cam_off(bot)
+        meldung = next((strip_colors(m["text"]) for m in bot.call("messages", since=since).get("messages", [])
+                        if "WARDEN" in strip_colors(m["text"])), "")
+        return not laeuft and bool(meldung), meldung
+
+    try:
+        for wer, reizen in (("vom Koerper", koerper), ("vom Kamera-Spieler", BOT_NAME)):
+            mit = lauf("vanilla", reizen)
+            ohne = lauf("false", reizen)
+            FIND.test(f"Waerter, {wer} aus gereizt, greift mit mob-target: vanilla den Koerper an",
+                      mit is not None and mit[0],
+                      "der Cam-Modus startete nicht" if mit is None else mit[1] or "kein Angriff")
+            FIND.test(f"Waerter, {wer} aus gereizt, laesst mit mob-target: false den Koerper in Ruhe",
+                      ohne is not None and not ohne[0],
+                      "der Cam-Modus startete nicht" if ohne is None else ohne[1])
+    finally:
+        try:
+            console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.5)
+            console(env, "difficulty peaceful", pause=0.3)
+            set_options(env, [("enabled", "true", "cam-safety"), ("mob-target", "false", "body")])
+            bot.chat(f"/effect clear {BOT_NAME}")
+            boden_ebnen(bot)
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Waerter-Test: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -5845,6 +5939,9 @@ def step_tests(env):
         # --- Der Rueckstoss eines Treffers auf den Koerper ---
         rueckstoss_checks(env, bot)
         rueckstoss_mob_checks(env, bot)
+
+        # --- Der Waerter haelt sich an body.mob-target ---
+        waerter_ziel_checks(env, bot)
 
         # --- Der Name ueber dem Koerper ---
         name_checks(env, bot)

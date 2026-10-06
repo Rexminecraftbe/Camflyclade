@@ -14,13 +14,18 @@ import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Warden;
+import org.bukkit.event.Cancellable;
+import org.bukkit.event.Event;
+import org.bukkit.event.EventException;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityEvent;
 import org.bukkit.event.entity.EntityTargetEvent;
-import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -55,6 +60,9 @@ public final class MobTargeting implements Listener {
     /** What a mob head on the body leaves of the range of that kind of mob. */
     private static final double MOB_HEAD_SIGHT_FACTOR = 0.5;
 
+    /** Paper's event for a warden getting angrier at somebody. */
+    private static final String PAPER_WARDEN_ANGER = "io.papermc.paper.event.entity.WardenAngerChangeEvent";
+
     private final JavaPlugin plugin;
     private final CamSettings settings;
     private final CameraPlayers cameraPlayers;
@@ -70,31 +78,58 @@ public final class MobTargeting implements Listener {
      * Takes the aggro away from a player who has just started camera mode:
      * onto his body, or nowhere at all.
      *
+     * <p>A warden is not steered by its target but by its anger - it goes for
+     * whoever it is angriest at. Its anger at the player takes the same way,
+     * see {@link #watchWardenAnger()}.</p>
+     *
      * @param damageTarget the mannequin that takes the hits, see
      *                     {@link CameraData#getDamageTarget()}
      */
     public void turnMobsFromPlayer(Player player, LivingEntity damageTarget) {
+        boolean attracts = settings.getMobTargetMode().attractsMobs();
         for (Entity entity : player.getNearbyEntities(MAX_MOB_TARGET_RANGE, MAX_MOB_TARGET_RANGE, MAX_MOB_TARGET_RANGE)) {
-            if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
-                // Aggro away from the player: onto his body, or nowhere at all -
-                // when the body is out of the reach of that mob, and in the mode
-                // off, where nobody is handed the body at all.
-                boolean toBody = settings.getMobTargetMode().attractsMobs() && noticesBody(mob, damageTarget);
-                mob.setTarget(toBody ? damageTarget : null);
+            // Aggro away from the player: onto his body, or nowhere at all -
+            // when the body is out of the reach of that mob, and in the mode
+            // off, where nobody is handed the body at all.
+            if (entity instanceof Warden warden) {
+                handAnger(warden, player, attracts && noticesBody(warden, damageTarget) ? damageTarget : null);
+            } else if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
+                mob.setTarget(attracts && noticesBody(mob, damageTarget) ? damageTarget : null);
             }
         }
     }
 
     /**
      * Hands the aggro back to the player when camera mode has ended: every mob
-     * that was after his body or his hitbox goes for him again.
+     * that was after his body or his hitbox goes for him again, and a warden
+     * that was angry at them is angry at him.
      */
     public void turnMobsBackToPlayer(Player player, LivingEntity body, Mannequin hitbox) {
         for (Entity entity : body.getNearbyEntities(MAX_MOB_TARGET_RANGE, MAX_MOB_TARGET_RANGE, MAX_MOB_TARGET_RANGE)) {
-            if (entity instanceof Mob mob
+            if (entity instanceof Warden warden) {
+                handAnger(warden, body, player);
+                if (hitbox != null) {
+                    handAnger(warden, hitbox, player);
+                }
+            } else if (entity instanceof Mob mob
                     && (body.equals(mob.getTarget()) || (hitbox != null && hitbox.equals(mob.getTarget())))) {
                 mob.setTarget(player);
             }
+        }
+    }
+
+    /**
+     * Moves a warden's anger at one entity over to another, or lets it go
+     * when there is nobody to take it.
+     */
+    private static void handAnger(Warden warden, Entity from, LivingEntity to) {
+        int anger = warden.getAnger(from);
+        if (anger <= 0) {
+            return;
+        }
+        warden.clearAnger(from);
+        if (to != null) {
+            warden.increaseAnger(to, anger);
         }
     }
 
@@ -157,9 +192,9 @@ public final class MobTargeting implements Listener {
      * fight is not ours to take away. One that is already after the body is
      * left alone too: it is on its way, and losing sight of it on that way is
      * its own business, exactly as it would be while chasing a player. Left out
-     * on purpose: the warden, which
-     * {@link #onWardenTarget(EntityTargetLivingEntityEvent)} keeps off the body
-     * and off the camera player alike, and a mob whose AI is switched off.</p>
+     * on purpose: the warden, which is blind - it smells and hears the body or
+     * the camera player by itself, and {@link #watchWardenAnger()} decides
+     * what comes of it -, and a mob whose AI is switched off.</p>
      */
     private void sendMobsAfterBody(Player player, LivingEntity damageTarget) {
         double radius = searchRadius();
@@ -283,16 +318,78 @@ public final class MobTargeting implements Listener {
         refuse(event);
     }
 
-    @EventHandler
-    public void onWardenTarget(EntityTargetLivingEntityEvent event) {
-        if (!(event.getEntity() instanceof Warden)) return;
-        LivingEntity target = event.getTarget();
-        boolean camera = target instanceof Player player
-                ? cameraPlayers.contains(player.getUniqueId())
-                : isActiveBody(target);
-        if (camera) {
-            refuse(event);
+    /**
+     * Keeps wardens to {@code body.mob-target} as well.
+     *
+     * <p>A warden is not steered by a target: it goes for whoever it is
+     * angriest at, and no target event comes along while it picks. What makes
+     * it angry is what it smells and hears, and it smells the body like
+     * anybody else - left to itself it would go for it in every mode.
+     * Paper announces every rise of that anger, and that is where it is
+     * steered, after the same rules as {@link #onMobTarget(EntityTargetEvent)}:
+     * the camera player makes no warden angry, the body only in the modes
+     * that hand it over, and there what the warden noticed of the camera
+     * player goes to his body, as far as its range reaches.</p>
+     *
+     * <p>Looked up at runtime, like the other events only Paper has. Spigot
+     * announces nothing of the kind, there a warden keeps to its own rules
+     * while camera mode runs. Its anger is moved over when camera mode starts
+     * and ends all the same, see {@link #turnMobsFromPlayer}.</p>
+     */
+    public void watchWardenAnger() {
+        Class<? extends Event> angerEvent;
+        Method target;
+        Method oldAnger;
+        Method newAnger;
+        try {
+            angerEvent = Class.forName(PAPER_WARDEN_ANGER).asSubclass(Event.class);
+            target = angerEvent.getMethod("getTarget");
+            oldAnger = angerEvent.getMethod("getOldAnger");
+            newAnger = angerEvent.getMethod("getNewAnger");
+        } catch (ClassNotFoundException | NoSuchMethodException | ClassCastException ex) {
+            return;
         }
+        plugin.getServer().getPluginManager().registerEvent(angerEvent, new Listener() {
+        }, EventPriority.NORMAL, (listener, event) -> {
+            if (!angerEvent.isInstance(event)) {
+                return;
+            }
+            try {
+                if (((EntityEvent) event).getEntity() instanceof Warden warden
+                        && keepsAngerOff(warden, (Entity) target.invoke(event),
+                        (Integer) newAnger.invoke(event) - (Integer) oldAnger.invoke(event))) {
+                    ((Cancellable) event).setCancelled(true);
+                }
+            } catch (ReflectiveOperationException ex) {
+                throw new EventException(ex);
+            }
+        }, plugin, true);
+    }
+
+    /**
+     * Whether a warden must not get angrier at this entity. When it is a
+     * camera player whose body the warden would notice, the anger goes to the
+     * body instead.
+     *
+     * @param increase how much angrier the warden is about to get
+     */
+    private boolean keepsAngerOff(Warden warden, Entity target, int increase) {
+        boolean attracts = settings.getMobTargetMode().attractsMobs();
+        if (isActiveBody(target)) {
+            return !attracts;
+        }
+        if (!(target instanceof Player player)) {
+            return false;
+        }
+        CameraData data = cameraPlayers.get(player.getUniqueId());
+        if (data == null) {
+            return false;
+        }
+        LivingEntity body = data.getDamageTarget();
+        if (attracts && increase > 0 && noticesBody(warden, body)) {
+            warden.increaseAnger(body, increase);
+        }
+        return true;
     }
 
     /** Whether the entity is the body or the hitbox of a player in camera mode right now. */

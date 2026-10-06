@@ -160,6 +160,7 @@ public final class CameraPlugin extends JavaPlugin {
         new CamKnockbackGuard(this, cameraPlayers).register();
         swingStrength.register();
         damageMirror.watchBursts();
+        mobTargeting.watchWardenAnger();
     }
 
     /**
