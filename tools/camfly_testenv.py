@@ -77,7 +77,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 646 Methoden- und Feldzugriffe. Alle 646 gibt
+# Dieser Pruefer zaehlt zurzeit 649 Methoden- und Feldzugriffe. Alle 649 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -3171,6 +3171,14 @@ def rueckstoss_erste_vergleich(name, ohne, mit, nur_hoehe=False):
 # Gemessen stimmen beide auf ein Zehntausendstel.
 RUECKSTOSS_TOLERANZ_ERSTE = 0.01
 
+# Wie weit oestlich des Ziels der Waerter in seinem Kaefig steht, in Bloecken:
+# zu weit, um zuzuschlagen, nah genug fuer den Schallstoss, der 15 weit reicht.
+WAERTER_ABSTAND = 8
+
+# Wie lange auf den Schallstoss gewartet wird, in Sekunden. Gereizt haelt der
+# Waerter ihn zehn Sekunden zurueck und laedt dann noch 1,7 Sekunden auf.
+WAERTER_WARTEN = 13.5
+
 
 def mob_lauf(env, bot, ziel, cam, vorbereiten, treffen):
     """Ein Lauf von rueckstoss_lauf mit einem frischen Mob - und noch einer,
@@ -3191,19 +3199,26 @@ def rueckstoss_mob_checks(env, bot):
 
     Geprueft werden ein Wuestenzombie mit einem Schwert mit Rueckstoss II, der
     mit dem Koerper nach Sueden steht und mit dem Kopf zum Ziel sieht - der
-    Server stoesst entlang des Koerpers, Bukkit zeigt nur den Kopf -, und ein
-    Eisengolem, der hochwirft. Beide schlagen nach dem ersten Treffer weiter
-    zu, verglichen wird deshalb die erste Geschwindigkeit; beim Golem nur, wie
-    hoch sie geht - zur Seite haengt sie davon ab, wo er beim Schlag steht und
-    ob er den Bot vorher angerempelt hat. Eine rammende Ziege fehlt: Sie sucht sich ihr Ziel selbst
-    und nahm den Koerper im Cam-Modus nicht immer, siehe TESTUMGEBUNG.md.
+    Server stoesst entlang des Koerpers, Bukkit zeigt nur den Kopf -, ein
+    Eisengolem, der hochwirft, und der Schallstoss eines Waerters, der den
+    Spieler weit wegschleudert. Alle drei schlagen nach dem ersten Treffer
+    weiter zu, verglichen wird deshalb die erste Geschwindigkeit; beim Golem
+    nur, wie hoch sie geht - zur Seite haengt sie davon ab, wo er beim Schlag
+    steht und ob er den Bot vorher angerempelt hat. Eine rammende Ziege fehlt:
+    Sie sucht sich ihr Ziel selbst und nahm den Koerper im Cam-Modus nicht
+    immer, siehe TESTUMGEBUNG.md.
 
     Feindliche Mobs gibt es erst ab easy, und den Koerper nehmen sie nur mit
-    body.mob-target ins Ziel. Zombie und Golem reizt ein /damage: ohne
-    Cam-Modus vom Bot aus, im Cam-Modus vom Koerper aus. Der Golem daechte
+    body.mob-target ins Ziel. Zombie, Golem und Waerter reizt ein /damage:
+    ohne Cam-Modus vom Bot aus, im Cam-Modus vom Koerper aus. Der Golem daechte
     sonst gar nicht an den Koerper und saehe den Kamera-Spieler nicht, und der
     Zombie suchte sich sein Ziel erst irgendwann - womoeglich nachdem er sich
     schon umgedreht hat.
+
+    Der Waerter steht in einem Kaefig aus Barrieren, weiter weg, als er
+    zuschlagen kann: So bleibt ihm nur der Schallstoss, und der geht durch
+    Waende. Er kommt erst nach dem Start des Cam-Modus dazu - seine Dunkelheit
+    liesse /cam sonst nicht starten, start-with-effects steht auf positive.
     """
     if not FIND.test("Cam-Modus ist vor dem Mob-Rueckstosstest aus", cam_off(bot), ""):
         return
@@ -3246,6 +3261,27 @@ def rueckstoss_mob_checks(env, bot):
     golem = mob_hin(f"summon minecraft:iron_golem {x + 2.2} {y} {z} {{NoAI:1b,Rotation:[90f,0f],{marke},"
                     f"PersistenceRequired:1b,Silent:1b}}")
     koerper = "@e[type=minecraft:mannequin,sort=nearest,limit=1]"
+
+    wx = bx + WAERTER_ABSTAND
+    kaefig = f"{wx - 1} {y} {bz - 1} {wx + 1} {y + 3} {bz + 1}"
+
+    def waerter_kaefig():
+        console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+        console(env, f"effect clear {BOT_NAME} minecraft:darkness", pause=0.3)
+        console(env, f"fill {kaefig} minecraft:barrier", pause=0.3)
+        console(env, f"fill {wx} {y} {bz} {wx} {y + 2} {bz} minecraft:air", pause=0.3)
+
+    # Mit dig_cooldown im Gedaechtnis: Einem Waerter, den /summon mit Daten
+    # setzt, fehlt es, und er graebt sich sofort ein - dabei ist er
+    # unverwundbar, und das /damage, das ihn reizen soll, prallt ab.
+    def waerter_reizen(reizen):
+        def treffen():
+            console(env, f"summon minecraft:warden {wx + 0.5} {y} {bz + 0.5} {{Rotation:[90f,0f],{marke},"
+                         f"PersistenceRequired:1b,Silent:1b,"
+                         f'Brain:{{memories:{{"minecraft:dig_cooldown":{{value:{{}},ttl:6000L}}}}}}}}', pause=1.0)
+            console(env, f"damage {mob} 0.5 minecraft:mob_attack by {reizen}", pause=0)
+            time.sleep(WAERTER_WARTEN)
+        return treffen
     # Den Zombie reizt ein Schaden ohne Stoss: So schlaegt er sofort zu, noch
     # ehe er einen Schritt tut und sich mit dem Koerper zum Ziel dreht.
     try:
@@ -3254,13 +3290,16 @@ def rueckstoss_mob_checks(env, bot):
                  loslassen(1.5, BOT_NAME, "minecraft:generic"), loslassen(1.5, koerper, "minecraft:generic"),
                  rueckstoss_erste_vergleich),
                 ("Eisengolem", golem, loslassen(4.0, BOT_NAME), loslassen(4.0, koerper),
-                 lambda n, o, m: rueckstoss_erste_vergleich(n, o, m, nur_hoehe=True))):
+                 lambda n, o, m: rueckstoss_erste_vergleich(n, o, m, nur_hoehe=True)),
+                ("Schallstoss eines Waerters", waerter_kaefig, waerter_reizen(BOT_NAME), waerter_reizen(koerper),
+                 rueckstoss_erste_vergleich)):
             ohne = mob_lauf(env, bot, ziel, False, vorbereiten, ohne_treffen)
             mit = mob_lauf(env, bot, ziel, True, vorbereiten, mit_treffen)
             vergleich(name, ohne, mit)
     finally:
         try:
             console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.5)
+            console(env, f"fill {kaefig} minecraft:air", pause=0.3)
             console(env, "difficulty peaceful", pause=0.3)
             set_options(env, [("enabled", "true", "cam-safety"), ("mob-target", "false", "body")])
             bot.chat(f"/effect clear {BOT_NAME}")

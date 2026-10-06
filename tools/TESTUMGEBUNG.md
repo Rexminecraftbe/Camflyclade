@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **646** - alle 646 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **649** - alle 649 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -449,6 +449,15 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
 * **Die Ziege steht nicht in der Testumgebung.** Gemessen rammt sie den Körper
   genau wie den Bot (Landeplatz −6,967 ohne, −6,958 mit Cam-Modus), aber sie
   sucht sich ihr Ziel selbst und nahm den Körper nicht in jedem Lauf.
+* **Der Wärter steht in einem Käfig aus Barrieren.** Acht Blöcke vom Ziel
+  kommt er nicht heran, ihm bleibt nur der Schallstoß, und der geht durch
+  Wände. Gereizt hält er ihn zehn Sekunden zurück und lädt dann 1,7 Sekunden
+  auf, die Probe wartet 13,5. Zwei Fallen dabei: Einem Wärter, den `/summon`
+  mit Daten setzt, fehlt `dig_cooldown` im Gedächtnis - er gräbt sich sofort
+  ein, ist dabei unverwundbar, und das `/damage` zum Reizen prallt ab
+  („Target is invulnerable to the given damage type“). Und seine Dunkelheit
+  ist eine schädliche Wirkung: Mit `start-with-effects: positive` ließe sie
+  `/cam` nicht starten, deshalb kommt er erst nach dem Start dazu.
 * **Der Name über dem Körper ist ein TextDisplay und wird am Server
   geprüft.** Was der Client daraus zeichnet, sieht der Bot nicht. Gefragt
   wird mit `/execute as <Körper> at @s positioned ~ ~2.25 ~ if entity
@@ -737,8 +746,9 @@ Schwert mit Rückstoß II, ein Schwungschlag, der den Körper neben seinem Ziel
 trifft, ein Speerstich und ein Speerstich mit Rückstoß II, ein Streitkolben,
 der neben dem Körper aufschlägt, und zwei Windkugeln, die mit ihrem Treffer
 explodieren · ein Wüstenzombie, der mit dem Körper anders steht als mit dem
-Kopf, stößt entlang des Körpers, und ein Eisengolem wirft hoch, beides wie
-ohne Cam-Modus · Pfeil, TNT, Windkugel, Sprintschlag und Speerstich auch mit
+Kopf, stößt entlang des Körpers, ein Eisengolem wirft hoch, und der
+Schallstoß eines Wärters schleudert weit weg, alles wie ohne Cam-Modus ·
+Pfeil, TNT, Windkugel, Sprintschlag und Speerstich auch mit
 `damage-mode: false` · der
 Name steht als TextDisplay genau dort über dem Körper, wo sonst sein
 Namensschild hinge, trägt den Text aus `armorstand.name-format`, folgt dem

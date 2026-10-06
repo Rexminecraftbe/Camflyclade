@@ -19,6 +19,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.PufferFish;
 import org.bukkit.entity.Ravager;
+import org.bukkit.entity.Warden;
 import org.bukkit.entity.Zoglin;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
@@ -45,6 +46,7 @@ import java.util.concurrent.ThreadLocalRandom;
  *     <li>the pushes of a spear's stab, which carries none with its damage,</li>
  *     <li>the ram of a goat and of a nautilus,</li>
  *     <li>the toss of an iron golem,</li>
+ *     <li>the sonic boom of a warden, which pushes along its way,</li>
  *     <li>the throw of a hoglin and a zoglin, different every time,</li>
  *     <li>and the wing of the ender dragon, which pushes before it hits.</li>
  * </ul>
@@ -56,7 +58,7 @@ import java.util.concurrent.ThreadLocalRandom;
 final class AttackerPush {
 
     /** An attacker that pushes nothing by itself. */
-    static final AttackerPush NONE = new AttackerPush(null, null, new float[0], null, false, 0.0F, 0.0, null);
+    static final AttackerPush NONE = new AttackerPush(null, null, new float[0], null, false, null, 0.0, null);
 
     /** The push of a sweep on everything it reaches besides what it was aimed at. */
     private static final float SWEEP_STRENGTH = 0.4F;
@@ -66,6 +68,16 @@ final class AttackerPush {
     private static final float SPRINT_BONUS = 0.5F;
     /** How far an iron golem tosses what it hits upwards, before knockback resistance. */
     private static final float GOLEM_TOSS = 0.4F;
+    /** How hard a warden's sonic boom pushes along its way, sideways and up, before knockback resistance. */
+    private static final double SONIC_BOOM_SIDEWAYS = 2.5;
+    private static final double SONIC_BOOM_UPWARDS = 0.5;
+    /**
+     * Where the sonic boom sets out from: the warden's chest, this high on a
+     * warden this tall. On a warden of another size it sits as much higher or
+     * lower.
+     */
+    private static final double WARDEN_CHEST = 1.6F;
+    private static final double WARDEN_HEIGHT = 2.9F;
     /** A hoglin turns its throw by a whole number of radians, this many at most either way. */
     private static final int THROW_TURN = 10;
     /** The least share of its strength a hoglin throws sideways with. */
@@ -118,22 +130,25 @@ final class AttackerPush {
     private final Vector struckSpeed;
     /** Whether the push is read back off what was struck: the ram of a goat or a nautilus. */
     private final boolean ram;
-    /** The toss of an iron golem, upwards, before knockback resistance. */
-    private final float toss;
+    /**
+     * What the attacker adds onto the speed after the damage, before knockback
+     * resistance: the toss of an iron golem, the sonic boom of a warden.
+     */
+    private final Vector added;
     /** The attack knockback a hoglin or a zoglin throws with, 0 for any other attacker. */
     private final double throwStrength;
     /** Where it throws to: from the thrower to the body, flat. */
     private final Vector throwTowards;
 
     private AttackerPush(Vector before, Vector along, float[] knocks, LivingEntity struck, boolean ram,
-                         float toss, double throwStrength, Vector throwTowards) {
+                         Vector added, double throwStrength, Vector throwTowards) {
         this.before = before;
         this.along = along;
         this.knocks = knocks;
         this.struck = struck;
         this.struckSpeed = struck == null ? null : struck.getVelocity();
         this.ram = ram;
-        this.toss = toss;
+        this.added = added;
         this.throwStrength = throwStrength;
         this.throwTowards = throwTowards;
     }
@@ -153,6 +168,9 @@ final class AttackerPush {
         if (DamageType.SPEAR.equals(source.getDamageType())) {
             return knocking(attacker, stabKnocks(attacker), hit);
         }
+        if (DamageType.SONIC_BOOM.equals(source.getDamageType()) && attacker instanceof Warden warden) {
+            return adding(sonicBoom(warden, hit));
+        }
         DamageCause cause = event.getCause();
         if (cause == DamageCause.ENTITY_SWEEP_ATTACK) {
             return knocking(attacker, new float[]{SWEEP_STRENGTH}, null);
@@ -161,17 +179,17 @@ final class AttackerPush {
             return NONE;
         }
         if (attacker instanceof Goat || attacker instanceof AbstractNautilus) {
-            return new AttackerPush(null, null, new float[0], hit, true, 0.0F, 0.0, null);
+            return new AttackerPush(null, null, new float[0], hit, true, null, 0.0, null);
         }
         if (attacker instanceof IronGolem) {
-            return new AttackerPush(null, null, new float[0], null, false, GOLEM_TOSS, 0.0, null);
+            return adding(new Vector(0.0, GOLEM_TOSS, 0.0));
         }
         if (attacker instanceof Hoglin || attacker instanceof Zoglin) {
             return throwing(attacker, hit);
         }
         if (attacker instanceof EnderDragon dragon) {
             Vector wing = wingPush(dragon, hit);
-            return wing == null ? NONE : new AttackerPush(wing, null, new float[0], null, false, 0.0F, 0.0, null);
+            return wing == null ? NONE : new AttackerPush(wing, null, new float[0], null, false, null, 0.0, null);
         }
         if (bitesByItsOwnRule(attacker)) {
             return NONE;
@@ -181,7 +199,11 @@ final class AttackerPush {
     }
 
     private static AttackerPush knocking(LivingEntity attacker, float[] knocks, LivingEntity struck) {
-        return new AttackerPush(null, facing(attacker), knocks, struck, false, 0.0F, 0.0, null);
+        return new AttackerPush(null, facing(attacker), knocks, struck, false, null, 0.0, null);
+    }
+
+    private static AttackerPush adding(Vector added) {
+        return new AttackerPush(null, null, new float[0], null, false, added, 0.0, null);
     }
 
     /**
@@ -222,8 +244,8 @@ final class AttackerPush {
             double power = rammed.length();
             return HitPush.step(velocity, rammed.multiply(1.0 / power), power * kept, grounded);
         }
-        if (toss > 0.0F) {
-            return velocity.clone().add(new Vector(0.0, toss * Math.max(0.0, kept), 0.0));
+        if (added != null) {
+            return velocity.clone().add(added.clone().multiply(Math.max(0.0, kept)));
         }
         if (throwStrength > 0.0) {
             Vector thrown = thrown(resistance);
@@ -296,7 +318,28 @@ final class AttackerPush {
         }
         double strength = attributeValue(thrower, Attribute.ATTACK_KNOCKBACK, 0.0);
         Vector towards = hit.getLocation().toVector().subtract(thrower.getLocation().toVector()).setY(0.0);
-        return new AttackerPush(null, null, new float[0], null, false, 0.0F, strength, towards);
+        return new AttackerPush(null, null, new float[0], null, false, null, strength, towards);
+    }
+
+    /**
+     * The push of a warden's sonic boom: along its way, from the warden's
+     * chest to the eyes of what it hit, hard sideways and a little up. The
+     * server adds it once the damage has landed - on the body it never does,
+     * the body's damage is cancelled.
+     *
+     * @return no push at all when the boom has no way to go, the warden's
+     *         chest right at the eyes of what it hit
+     */
+    private static Vector sonicBoom(Warden warden, LivingEntity hit) {
+        Vector chest = warden.getLocation().toVector()
+                .add(new Vector(0.0, warden.getHeight() / WARDEN_HEIGHT * WARDEN_CHEST, 0.0));
+        Vector way = hit.getEyeLocation().toVector().subtract(chest);
+        double length = way.length();
+        if (length < NO_DIRECTION) {
+            return new Vector();
+        }
+        return new Vector(way.getX() / length * SONIC_BOOM_SIDEWAYS, way.getY() / length * SONIC_BOOM_UPWARDS,
+                way.getZ() / length * SONIC_BOOM_SIDEWAYS);
     }
 
     /**
