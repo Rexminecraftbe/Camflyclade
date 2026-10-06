@@ -3404,6 +3404,110 @@ def waerter_ziel_checks(env, bot):
 
 
 # ---------------------------------------------------------------------------
+# Mobs, die beim Start hinter dem Spieler her sind
+# ---------------------------------------------------------------------------
+
+# Wie lange nach dem Start auf den Angriff eines Golems gewartet wird, der den
+# Koerper uebernommen hat, in Sekunden. Er steht fuenf Bloecke entfernt.
+UEBERGABE_WARTEN = 8.0
+
+
+def uebergabe_checks(env, bot):
+    """Was aus einem Mob wird, der hinter dem Spieler her ist, wenn der
+    Cam-Modus startet: Mit body.mob-target vanilla geht er auf den Koerper
+    los, mit false verliert er sein Ziel.
+
+    Geprueft an einem Eisengolem und an einem Zombie, beide vom Bot mit
+    /damage gereizt. Den Golem erfasst nur die Uebergabe beim Start - er ist
+    kein feindlicher Mob, und die Suche nach solchen um den Koerper laesst ihn
+    aus. Den Zombie faende sie mit vanilla, mit false sucht sie nicht. Ob ein
+    Mob ein Ziel hat, sagt /execute on target: Hat er eines, sagt es die Marke.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Uebergabe-Test aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    mob = f"@e[tag={INTERACT_TAG},limit=1]"
+    hat_ziel = f"/execute as {mob} on target run say {{marke}}"
+    mobs = {
+        "Eisengolem": f'summon minecraft:iron_golem {x + 5} {y} {z} {{Tags:["{INTERACT_TAG}"],'
+                      f"PersistenceRequired:1b,Silent:1b}}",
+        "Zombie": f'summon minecraft:zombie {x + 5} {y} {z} {{Tags:["{INTERACT_TAG}"],'
+                  f"PersistenceRequired:1b,Silent:1b,IsBaby:0b}}",
+    }
+    # Wie die Meldung des Plugins den Angreifer nennt.
+    name_der_art = {"Eisengolem": "IRON_GOLEM", "Zombie": "ZOMBIE"}
+    bot.chat("/gamemode survival")
+    bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
+    time.sleep(0.5)
+    set_option(env, "enabled", "false", "cam-safety")
+    console(env, "difficulty easy", pause=0.5)
+
+    def lauf(name, modus):
+        """Den Mob reizen und den Cam-Modus starten. Gibt zurueck: (war er
+        vorher hinter dem Bot her, hat er den Koerper angegriffen, hat er
+        danach noch ein Ziel) - oder None, wenn der Cam-Modus nicht startete."""
+        # Vor dem Start: Ein cam reload wirft jeden Kamera-Spieler hinaus.
+        set_option(env, "mob-target", modus, "body")
+        console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+        hinstellen(bot, x, y, z)
+        console(env, mobs[name], pause=1.0)
+        console(env, f"damage {mob} 0.5 minecraft:mob_attack by {BOT_NAME}", pause=1.0)
+        vorher = server_says(bot, hat_ziel)
+        since = bot.mark()
+        bot.chat("/cam")
+        if not bot.expect("Camera mode activated|Cam mode activated", since, 8000):
+            return None
+        # Steht der Mob schon neben dem Bot, schlaegt er den Koerper womoeglich
+        # gleich, und der Cam-Modus ist schon wieder vorbei.
+        laeuft = spielmodus_ist(bot, "adventure")
+        if laeuft:
+            bot.call("fly", wait=30, dy=RUECKSTOSS_HOEHE, timeout=15000)
+        ende = time.time() + UEBERGABE_WARTEN
+        while laeuft and time.time() < ende:
+            time.sleep(1.0)
+            laeuft = spielmodus_ist(bot, "adventure")
+        # Angegriffen hat er, wenn die Meldung des Plugins ihn nennt - und nicht
+        # irgendetwas anderes den Cam-Modus beendet hat.
+        art = name_der_art[name]
+        angegriffen = not laeuft and any(
+            art in strip_colors(m["text"]) for m in bot.call("messages", since=since).get("messages", []))
+        nachher = None if not laeuft else server_says(bot, hat_ziel)
+        if laeuft:
+            cam_off(bot)
+        return vorher, angegriffen, nachher
+
+    try:
+        for name, modus in (("Eisengolem", "vanilla"), ("Eisengolem", "false"), ("Zombie", "false")):
+            ergebnis = lauf(name, modus)
+            if not FIND.test(f"{name}, vom Spieler gereizt, ist vor dem Start hinter ihm her (mob-target: {modus})",
+                             ergebnis is not None and ergebnis[0],
+                             "der Cam-Modus startete nicht" if ergebnis is None else ""):
+                continue
+            _, angegriffen, nachher = ergebnis
+            if modus == "vanilla":
+                FIND.test(f"{name}, beim Start hinter dem Spieler her, geht mit mob-target: vanilla auf den Koerper los",
+                          angegriffen, "" if angegriffen else "kein Angriff auf den Koerper")
+            else:
+                FIND.test(f"{name}, beim Start hinter dem Spieler her, verliert mit mob-target: false sein Ziel",
+                          nachher is False,
+                          "der Cam-Modus endete" if nachher is None else
+                          ("er hat noch ein Ziel" if nachher else ""))
+    finally:
+        try:
+            console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.5)
+            console(env, "difficulty peaceful", pause=0.3)
+            set_options(env, [("enabled", "true", "cam-safety"), ("mob-target", "false", "body")])
+            bot.chat(f"/effect clear {BOT_NAME}")
+            boden_ebnen(bot)
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Uebergabe-Test: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # Der Name ueber dem Koerper
 # ---------------------------------------------------------------------------
 
@@ -5942,6 +6046,9 @@ def step_tests(env):
 
         # --- Der Waerter haelt sich an body.mob-target ---
         waerter_ziel_checks(env, bot)
+
+        # --- Mobs, die beim Start hinter dem Spieler her sind ---
+        uebergabe_checks(env, bot)
 
         # --- Der Name ueber dem Koerper ---
         name_checks(env, bot)

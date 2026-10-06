@@ -464,6 +464,11 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   deshalb mit `/damage` und sieht nach, ob der Cam-Modus endet. Vom
   Kamera-Spieler aus gereizt brüllt er erst gut vier Sekunden, ehe er den
   Körper angreift; die Probe wartet zehn.
+* **Ob ein Mob ein Ziel hat, sagt `/execute as <Mob> on target run say`.**
+  Hat er eines, sagt es die Marke. Ein Golem, der beim Start schon neben dem
+  Bot steht, schlägt den Körper oft im selben Augenblick: Der Cam-Modus ist
+  dann schon vorbei, ehe ein `cam_on` nachsehen kann, ob er läuft. Die Probe
+  wartet deshalb nur auf die Bestätigung des Starts.
 * **Der Name über dem Körper ist ein TextDisplay und wird am Server
   geprüft.** Was der Client daraus zeichnet, sieht der Bot nicht. Gefragt
   wird mit `/execute as <Körper> at @s positioned ~ ~2.25 ~ if entity
@@ -757,7 +762,9 @@ Schallstoß eines Wärters schleudert weit weg, alles wie ohne Cam-Modus ·
 Pfeil, TNT, Windkugel, Sprintschlag und Speerstich auch mit
 `damage-mode: false` · ein Wärter greift den Körper mit
 `mob-target: vanilla` an und mit `false` nicht, auch wenn ihn der
-Kamera-Spieler reizt · der
+Kamera-Spieler reizt · ein Eisengolem, der beim Start hinter dem Spieler her
+ist, geht mit `mob-target: vanilla` auf den Körper los, und er wie ein
+Zombie verliert mit `false` sein Ziel · der
 Name steht als TextDisplay genau dort über dem Körper, wo sonst sein
 Namensschild hinge, trägt den Text aus `armorstand.name-format`, folgt dem
 Körper und wird mit ihm eingesammelt · der Körper selbst trägt keinen Namen

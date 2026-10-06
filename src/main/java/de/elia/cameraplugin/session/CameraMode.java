@@ -133,6 +133,11 @@ public final class CameraMode {
         // "which mode was he in" from then on.
         GameMode flyingGameMode = cameraGameMode(originalGameMode);
 
+        // Before the creative mode below, too: the game names a player in
+        // creative mode as no mob's target, so the mobs after him would not be
+        // found and would keep him as their target.
+        plugin.getMobTargeting().turnMobsFromPlayer(player, damageTarget);
+
         player.setGameMode(GameMode.CREATIVE);
         player.setAllowFlight(true);
         player.setFlying(true);
@@ -156,8 +161,6 @@ public final class CameraMode {
                 }
             }
         }.runTaskLater(plugin, 1L);
-
-        plugin.getMobTargeting().turnMobsFromPlayer(player, damageTarget);
 
         // *** Hand the saved inventory to CameraData ***
         cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, nameDisplay, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects));
