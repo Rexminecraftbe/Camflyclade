@@ -77,7 +77,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 650 Methoden- und Feldzugriffe. Alle 650 gibt
+# Dieser Pruefer zaehlt zurzeit 655 Methoden- und Feldzugriffe. Alle 655 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -3407,21 +3407,33 @@ def waerter_ziel_checks(env, bot):
 # Mobs, die beim Start hinter dem Spieler her sind
 # ---------------------------------------------------------------------------
 
-# Wie lange nach dem Start auf den Angriff eines Golems gewartet wird, der den
+# Wie lange nach dem Start auf den Angriff eines Mobs gewartet wird, der den
 # Koerper uebernommen hat, in Sekunden. Er steht fuenf Bloecke entfernt.
 UEBERGABE_WARTEN = 8.0
+
+# Wann nach dem Start nachgesehen wird, ob ein Mob den Kamera-Spieler noch als
+# Ziel hat, in Sekunden. Die Uebergabe ist nach einem Tick durch; ein Hoglin,
+# den sie verfehlt, gibt den Kamera-Spieler erst nach gut zehn Sekunden auf -
+# so lange, dass das Warten auf den Angriff ihn sonst mitnaehme.
+UEBERGABE_FRUEH = 1.0
 
 
 def uebergabe_checks(env, bot):
     """Was aus einem Mob wird, der hinter dem Spieler her ist, wenn der
     Cam-Modus startet: Mit body.mob-target vanilla geht er auf den Koerper
-    los, mit false verliert er sein Ziel.
+    los, mit false verliert er sein Ziel. Und wenn der Koerper ihn mit vanilla
+    angezogen hat, ist er nach dem Ende wieder hinter dem Spieler her.
 
-    Geprueft an einem Eisengolem und an einem Zombie, beide vom Bot mit
-    /damage gereizt. Den Golem erfasst nur die Uebergabe beim Start - er ist
-    kein feindlicher Mob, und die Suche nach solchen um den Koerper laesst ihn
-    aus. Den Zombie faende sie mit vanilla, mit false sucht sie nicht. Ob ein
-    Mob ein Ziel hat, sagt /execute on target: Hat er eines, sagt es die Marke.
+    Geprueft an einem Eisengolem, einem Zombie, einem Hoglin und einem Piglin,
+    alle vom Bot mit /damage gereizt. Den Golem erfasst nur die Uebergabe beim
+    Start - er ist kein feindlicher Mob, und die Suche nach solchen um den
+    Koerper laesst ihn aus. Den Zombie faende sie mit vanilla, mit false sucht
+    sie nicht. Hoglin und Piglin steuert ihr Gehirn, setTarget erreicht sie
+    nicht: Sie lassen den Spieler im Kreativ-Tick beim Start selbst los und
+    bekommen dabei den Koerper. Der Piglin ginge nach seinen eigenen Regeln nur
+    auf Spieler los und liesse den Koerper gleich wieder fallen, das Plugin
+    haelt ihn dort. Ob ein Mob ein Ziel hat, sagt /execute on target: Hat er
+    eines, sagt es die Marke.
     """
     if not FIND.test("Cam-Modus ist vor dem Uebergabe-Test aus", cam_off(bot), ""):
         return
@@ -3431,14 +3443,20 @@ def uebergabe_checks(env, bot):
     x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
     mob = f"@e[tag={INTERACT_TAG},limit=1]"
     hat_ziel = f"/execute as {mob} on target run say {{marke}}"
+    zielt_auf_spieler = f"/execute as {mob} on target if entity @s[type=minecraft:player] run say {{marke}}"
     mobs = {
         "Eisengolem": f'summon minecraft:iron_golem {x + 5} {y} {z} {{Tags:["{INTERACT_TAG}"],'
                       f"PersistenceRequired:1b,Silent:1b}}",
         "Zombie": f'summon minecraft:zombie {x + 5} {y} {z} {{Tags:["{INTERACT_TAG}"],'
                   f"PersistenceRequired:1b,Silent:1b,IsBaby:0b}}",
+        # In der Oberwelt wuerden beide ohne den Schutz zu Zombies.
+        "Hoglin": f'summon minecraft:hoglin {x + 5} {y} {z} {{Tags:["{INTERACT_TAG}"],'
+                  f"PersistenceRequired:1b,Silent:1b,IsImmuneToZombification:1b}}",
+        "Piglin": f'summon minecraft:piglin {x + 5} {y} {z} {{Tags:["{INTERACT_TAG}"],'
+                  f"PersistenceRequired:1b,Silent:1b,IsImmuneToZombification:1b,IsBaby:0b}}",
     }
     # Wie die Meldung des Plugins den Angreifer nennt.
-    name_der_art = {"Eisengolem": "IRON_GOLEM", "Zombie": "ZOMBIE"}
+    name_der_art = {"Eisengolem": "IRON_GOLEM", "Zombie": "ZOMBIE", "Hoglin": "HOGLIN", "Piglin": "PIGLIN"}
     bot.chat("/gamemode survival")
     bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
     time.sleep(0.5)
@@ -3447,8 +3465,10 @@ def uebergabe_checks(env, bot):
 
     def lauf(name, modus):
         """Den Mob reizen und den Cam-Modus starten. Gibt zurueck: (war er
-        vorher hinter dem Bot her, hat er den Koerper angegriffen, hat er
-        danach noch ein Ziel) - oder None, wenn der Cam-Modus nicht startete."""
+        vorher hinter dem Bot her, hat er ihn kurz nach dem Start noch als
+        Ziel, hat er den Koerper angegriffen, hat er danach noch ein Ziel, ist
+        er nach dem Ende wieder hinter dem Bot her) - oder None, wenn der
+        Cam-Modus nicht startete."""
         # Vor dem Start: Ein cam reload wirft jeden Kamera-Spieler hinaus.
         set_option(env, "mob-target", modus, "body")
         console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
@@ -3461,8 +3481,11 @@ def uebergabe_checks(env, bot):
         if not bot.expect("Camera mode activated|Cam mode activated", since, 8000):
             return None
         # Steht der Mob schon neben dem Bot, schlaegt er den Koerper womoeglich
-        # gleich, und der Cam-Modus ist schon wieder vorbei.
+        # gleich, und der Cam-Modus ist schon wieder vorbei - dann ist auch
+        # nicht mehr zu fragen, wen er beim Start uebernommen hat.
+        time.sleep(UEBERGABE_FRUEH)
         laeuft = spielmodus_ist(bot, "adventure")
+        noch_beim_spieler = laeuft and server_says(bot, zielt_auf_spieler)
         if laeuft:
             bot.call("fly", wait=30, dy=RUECKSTOSS_HOEHE, timeout=15000)
         ende = time.time() + UEBERGABE_WARTEN
@@ -3473,23 +3496,32 @@ def uebergabe_checks(env, bot):
         # irgendetwas anderes den Cam-Modus beendet hat.
         art = name_der_art[name]
         angegriffen = not laeuft and any(
-            art in strip_colors(m["text"]) for m in bot.call("messages", since=since).get("messages", []))
+            f"by {art}!" in strip_colors(m["text"]) for m in bot.call("messages", since=since).get("messages", []))
         nachher = None if not laeuft else server_says(bot, hat_ziel)
+        # Mit dem Ende verschwindet der Koerper, und wer hinter ihm her war,
+        # ist wieder hinter dem Spieler her.
+        wieder_beim_spieler = angegriffen and server_says(bot, zielt_auf_spieler)
         if laeuft:
             cam_off(bot)
-        return vorher, angegriffen, nachher
+        return vorher, noch_beim_spieler, angegriffen, nachher, wieder_beim_spieler
 
     try:
-        for name, modus in (("Eisengolem", "vanilla"), ("Eisengolem", "false"), ("Zombie", "false")):
+        for name, modus in (("Eisengolem", "vanilla"), ("Eisengolem", "false"), ("Zombie", "false"),
+                            ("Hoglin", "vanilla"), ("Hoglin", "false"), ("Piglin", "vanilla"), ("Piglin", "false")):
             ergebnis = lauf(name, modus)
             if not FIND.test(f"{name}, vom Spieler gereizt, ist vor dem Start hinter ihm her (mob-target: {modus})",
                              ergebnis is not None and ergebnis[0],
                              "der Cam-Modus startete nicht" if ergebnis is None else ""):
                 continue
-            _, angegriffen, nachher = ergebnis
+            _, noch_beim_spieler, angegriffen, nachher, wieder_beim_spieler = ergebnis
+            FIND.test(f"{name}, beim Start hinter dem Spieler her, hat ihn eine Sekunde danach nicht mehr "
+                      f"als Ziel (mob-target: {modus})",
+                      not noch_beim_spieler, "er ist noch hinter dem Kamera-Spieler her" if noch_beim_spieler else "")
             if modus == "vanilla":
-                FIND.test(f"{name}, beim Start hinter dem Spieler her, geht mit mob-target: vanilla auf den Koerper los",
-                          angegriffen, "" if angegriffen else "kein Angriff auf den Koerper")
+                if FIND.test(f"{name}, beim Start hinter dem Spieler her, geht mit mob-target: vanilla auf den Koerper los",
+                             angegriffen, "" if angegriffen else "kein Angriff auf den Koerper"):
+                    FIND.test(f"{name}, vom Koerper angezogen, ist nach dem Ende wieder hinter dem Spieler her",
+                              wieder_beim_spieler, "" if wieder_beim_spieler else "er hat den Spieler nicht als Ziel")
             else:
                 FIND.test(f"{name}, beim Start hinter dem Spieler her, verliert mit mob-target: false sein Ziel",
                           nachher is False,

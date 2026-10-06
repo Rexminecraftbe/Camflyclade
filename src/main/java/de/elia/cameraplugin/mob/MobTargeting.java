@@ -7,13 +7,18 @@ import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.entity.Creaking;
 import org.bukkit.entity.Enemy;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Mob;
+import org.bukkit.entity.PigZombie;
+import org.bukkit.entity.Piglin;
+import org.bukkit.entity.PiglinAbstract;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Warden;
+import org.bukkit.entity.Zoglin;
 import org.bukkit.event.Cancellable;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventException;
@@ -63,10 +68,29 @@ public final class MobTargeting implements Listener {
     /** Paper's event for a warden getting angrier at somebody. */
     private static final String PAPER_WARDEN_ANGER = "io.papermc.paper.event.entity.WardenAngerChangeEvent";
 
+    /**
+     * How long a hand-over waits for a mob steered by its brain to let go of
+     * its target, in ticks, see {@link #handOverOnLettingGo(Mob, LivingEntity)}.
+     * The mob lets go in the next tick the world ticks, and two ticks reach past
+     * that one wherever in a tick the hand-over was made.
+     */
+    private static final long HAND_OVER_TICKS = 2L;
+
+    /**
+     * How close a zombified piglin or a zoglin has to come before a piglin
+     * runs from it, in blocks - the game's own distance.
+     */
+    private static final double PIGLIN_FLEE_DISTANCE = 6.0;
+
     private final JavaPlugin plugin;
     private final CamSettings settings;
     private final CameraPlayers cameraPlayers;
     private final Map<UUID, BukkitRunnable> mobTargetTasks = new HashMap<>();
+    /**
+     * The mobs steered by their brain that are about to let go of their
+     * target, by mob id, with whom they are handed when they do.
+     */
+    private final Map<UUID, LivingEntity> handOvers = new HashMap<>();
 
     public MobTargeting(JavaPlugin plugin, CamSettings settings, CameraPlayers cameraPlayers) {
         this.plugin = plugin;
@@ -82,6 +106,16 @@ public final class MobTargeting implements Listener {
      * whoever it is angriest at. Its anger at the player takes the same way,
      * see {@link #watchWardenAnger()}.</p>
      *
+     * <p>A mob steered by its brain - a hoglin, a piglin, a breeze - takes no
+     * {@code setTarget} at all: its target is a memory of its brain, and the
+     * API does not reach that. What does reach it is the moment it lets go of
+     * the player by itself, see {@link #onMobLettingGo(EntityTargetEvent)},
+     * and camera mode makes that moment come at once: the player stands in
+     * creative mode for one tick of the world, and no mob keeps a player in
+     * creative mode as its target. Such a mob is noted down here and handed
+     * the body in that tick; in the mode {@code false} letting go is all there
+     * is to it.</p>
+     *
      * @param damageTarget the mannequin that takes the hits, see
      *                     {@link CameraData#getDamageTarget()}
      */
@@ -94,7 +128,12 @@ public final class MobTargeting implements Listener {
             if (entity instanceof Warden warden) {
                 handAnger(warden, player, attracts && noticesBody(warden, damageTarget) ? damageTarget : null);
             } else if (entity instanceof Mob mob && player.equals(mob.getTarget())) {
-                mob.setTarget(attracts && noticesBody(mob, damageTarget) ? damageTarget : null);
+                LivingEntity body = attracts && noticesBody(mob, damageTarget) ? damageTarget : null;
+                mob.setTarget(body);
+                if (body != null && player.equals(mob.getTarget())) {
+                    // Steered by its brain, see above.
+                    handOverOnLettingGo(mob, body);
+                }
             }
         }
     }
@@ -103,6 +142,10 @@ public final class MobTargeting implements Listener {
      * Hands the aggro back to the player when camera mode has ended: every mob
      * that was after his body or his hitbox goes for him again, and a warden
      * that was angry at them is angry at him.
+     *
+     * <p>A mob steered by its brain takes no {@code setTarget} here either. It
+     * lets go of the body when the body is removed, a moment after this, and
+     * is handed the player then, see {@link #onMobLettingGo(EntityTargetEvent)}.</p>
      */
     public void turnMobsBackToPlayer(Player player, LivingEntity body, Mannequin hitbox) {
         for (Entity entity : body.getNearbyEntities(MAX_MOB_TARGET_RANGE, MAX_MOB_TARGET_RANGE, MAX_MOB_TARGET_RANGE)) {
@@ -113,9 +156,26 @@ public final class MobTargeting implements Listener {
                 }
             } else if (entity instanceof Mob mob
                     && (body.equals(mob.getTarget()) || (hitbox != null && hitbox.equals(mob.getTarget())))) {
+                LivingEntity before = mob.getTarget();
                 mob.setTarget(player);
+                if (before.equals(mob.getTarget())) {
+                    handOverOnLettingGo(mob, player);
+                }
             }
         }
+    }
+
+    /**
+     * Notes down a mob steered by its brain, to be handed that entity as its
+     * target the moment it lets go of the one it has, see
+     * {@link #onMobLettingGo(EntityTargetEvent)}. Only until the world has
+     * ticked: a mob that has not let go by then keeps what it has, and when it
+     * lets go of it later, that is none of this hand-over's business.
+     */
+    private void handOverOnLettingGo(Mob mob, LivingEntity to) {
+        UUID id = mob.getUniqueId();
+        handOvers.put(id, to);
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> handOvers.remove(id, to), HAND_OVER_TICKS);
     }
 
     /**
@@ -195,6 +255,12 @@ public final class MobTargeting implements Listener {
      * on purpose: the warden, which is blind - it smells and hears the body or
      * the camera player by itself, and {@link #watchWardenAnger()} decides
      * what comes of it -, and a mob whose AI is switched off.</p>
+     *
+     * <p>Not reached at all: a mob steered by its brain, a hoglin or a piglin.
+     * It takes no {@code setTarget}, and a mob without a target has nothing to
+     * let go of, see {@link #onMobLettingGo(EntityTargetEvent)}. Such a mob
+     * comes to the body only when it picks the camera player by itself, see
+     * {@link #onMobTarget(EntityTargetEvent)}.</p>
      */
     private void sendMobsAfterBody(Player player, LivingEntity damageTarget) {
         double radius = searchRadius();
@@ -293,9 +359,16 @@ public final class MobTargeting implements Listener {
      * exactly what that mode is meant to prevent. The body itself is refused
      * there as well, so that mode holds even where a mob would pick a mannequin
      * on its own.</p>
+     *
+     * <p>A mob letting go of its target comes this way too, with no target at
+     * all, see {@link #onMobLettingGo(EntityTargetEvent)}.</p>
      */
     @EventHandler
     public void onMobTarget(EntityTargetEvent event) {
+        if (event.getTarget() == null) {
+            onMobLettingGo(event);
+            return;
+        }
         if (!(event.getTarget() instanceof Player player)) {
             // In the mode false the body is nobody's target either, not even of
             // a mob that would go for a mannequin by itself.
@@ -316,6 +389,86 @@ public final class MobTargeting implements Listener {
         // Cancelled rather than handed an empty target: a mob that is already
         // after the body keeps it that way, only the camera player is refused.
         refuse(event);
+    }
+
+    /**
+     * A mob letting go of its target: whom it is handed instead, or whether it
+     * keeps the one it has.
+     *
+     * <p>That is the one way the API leaves to steer a mob that is steered by
+     * its brain. It lets go of a target in its own tick, and the server asks
+     * the plugins first: a target set on the event goes straight into the
+     * mob's memory, a cancelled event leaves it the target it has.</p>
+     *
+     * <ul>
+     * <li>A mob noted down by {@link #handOverOnLettingGo(Mob, LivingEntity)}
+     * is handed whom it was noted down for.</li>
+     * <li>A mob letting go of a camera player is handed his body, in the modes
+     * that hand it over and as far as it notices it. That is a mob that did
+     * not let go of him in the creative tick at the start, or a creaking: his
+     * gaze wakes it up, and the game makes him its target by itself, without
+     * an event to turn that.</li>
+     * <li>Piglins, piglin brutes and creakings go for players only, by their
+     * own rules, and would let go of a body handed to them in the very next
+     * tick. They keep it here as long as they notice it and see it - the body
+     * stands in for the player, and they would have kept him. A piglin still
+     * runs from a zombified piglin or a zoglin close by, as it would while
+     * after him.</li>
+     * </ul>
+     *
+     * <p>The warden is left out: what it goes for follows its anger, see
+     * {@link #watchWardenAnger()}.</p>
+     */
+    private void onMobLettingGo(EntityTargetEvent event) {
+        LivingEntity next = handOvers.remove(event.getEntity().getUniqueId());
+        if (next != null) {
+            if (next.isValid()) {
+                event.setTarget(next);
+            }
+            return;
+        }
+        if (!(event.getEntity() instanceof Mob mob) || mob instanceof Warden
+                || !settings.getMobTargetMode().attractsMobs()) {
+            return;
+        }
+        LivingEntity current = mob.getTarget();
+        if (current instanceof Player player) {
+            CameraData data = cameraPlayers.get(player.getUniqueId());
+            if (data != null && noticesBody(mob, data.getDamageTarget())) {
+                event.setTarget(data.getDamageTarget());
+            }
+        } else if (keepsBody(mob, current)) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Whether a mob letting go of this target keeps it after all, see
+     * {@link #onMobLettingGo(EntityTargetEvent)}: a piglin, a piglin brute or
+     * a creaking, and the target a body it notices and sees.
+     */
+    private boolean keepsBody(Mob mob, LivingEntity target) {
+        if (!(mob instanceof PiglinAbstract || mob instanceof Creaking) || target == null || !isActiveBody(target)
+                || !noticesBody(mob, target) || !mob.hasLineOfSight(target)) {
+            return false;
+        }
+        return !(mob instanceof Piglin piglin) || !nearZombified(piglin);
+    }
+
+    /**
+     * Whether a zombified piglin or a zoglin stands close enough to make this
+     * piglin run from it - one it can see, as with the game's own check.
+     */
+    private static boolean nearZombified(Piglin piglin) {
+        double distance = PIGLIN_FLEE_DISTANCE;
+        for (Entity entity : piglin.getNearbyEntities(distance, distance, distance)) {
+            if ((entity instanceof PigZombie || entity instanceof Zoglin)
+                    && piglin.getLocation().distanceSquared(entity.getLocation()) < distance * distance
+                    && piglin.hasLineOfSight(entity)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

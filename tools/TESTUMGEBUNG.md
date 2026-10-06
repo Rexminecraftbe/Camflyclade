@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **650** - alle 650 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **655** - alle 655 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -173,7 +173,7 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   sie selbst nur an, wenn sie fehlt, und was ein abgebrochener Lauf an ihren
   Schaltern gedreht hat, bliebe sonst stehen.
 * **Der Cam-Modus läuft voreingestellt im Abenteuermodus**, nicht in Kreativ -
-  Kreativ steht nur einen einzigen Tick lang da. Der Portalvorgang dauert dort
+  Kreativ steht nur zwei Ticks lang da, eine Runde der Welt. Der Portalvorgang dauert dort
   deshalb die vollen 80 Ticks; die Abkürzung auf einen Tick gilt nur für Unverwundbare,
   also Kreativ und Zuschauer. Der Portaltest wartet auf jede Reise sechs
   Sekunden. Umstellen lässt sich der Modus mit `camera-mode.gamemode`.
@@ -464,6 +464,23 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   deshalb mit `/damage` und sieht nach, ob der Cam-Modus endet. Vom
   Kamera-Spieler aus gereizt brüllt er erst gut vier Sekunden, ehe er den
   Körper angreift; die Probe wartet zehn.
+* **Hoglin und Piglin steuert ihr Gehirn.** `setTarget` erreicht sie nicht,
+  ihr Ziel wechselt nur, wenn sie es selbst loslassen - beim Start im
+  Kreativ-Tick, am Ende, wenn der Körper verschwindet. Ohne
+  `IsImmuneToZombification:1b` würden beide in der Oberwelt nach 15 Sekunden
+  zu Zombies. Ob die Übergabe saß, fragt die Probe eine Sekunde nach dem
+  Start: Ein Hoglin, den sie verfehlt, gibt den Kamera-Spieler nach gut zehn
+  Sekunden von selbst auf und ginge dann doch noch rechtzeitig auf den Körper
+  los - mit dem alten Stand bestand er so jede spätere Frage.
+* **Breeze und Knarz stehen nicht in der Probe.** Der Breeze greift nach den
+  Regeln des Spiels nur Spieler und Eisengolems an und behält auf Paper den
+  Körper keinen Tick lang. Spigot lässt ihn jedes Ziel angreifen, das sein
+  Gehirn hat (SPIGOT-7957), auch einen Spieler im Kreativmodus - dort lässt
+  er den Bot beim Start gar nicht los. Seine Windkugeln, schon vor dem Start
+  auf den Bot abgefeuert, treffen ohnehin oft den Körper, der an dessen
+  Stelle steht. Den Knarz weckt der Blick eines Spielers, und das Spiel setzt
+  ihm dabei sein Ziel selbst, ohne ein Ereignis, das ein Plugin umlenken
+  könnte.
 * **Ob ein Mob ein Ziel hat, sagt `/execute as <Mob> on target run say`.**
   Hat er eines, sagt es die Marke. Ein Golem, der beim Start schon neben dem
   Bot steht, schlägt den Körper oft im selben Augenblick: Der Cam-Modus ist
@@ -764,7 +781,9 @@ Pfeil, TNT, Windkugel, Sprintschlag und Speerstich auch mit
 `mob-target: vanilla` an und mit `false` nicht, auch wenn ihn der
 Kamera-Spieler reizt · ein Eisengolem, der beim Start hinter dem Spieler her
 ist, geht mit `mob-target: vanilla` auf den Körper los, und er wie ein
-Zombie verliert mit `false` sein Ziel · der
+Zombie verliert mit `false` sein Ziel · ebenso ein Hoglin und ein Piglin,
+die ihr Gehirn steuert, und wen der Körper angezogen hat, der ist nach dem
+Ende wieder hinter dem Spieler her · der
 Name steht als TextDisplay genau dort über dem Körper, wo sonst sein
 Namensschild hinge, trägt den Text aus `armorstand.name-format`, folgt dem
 Körper und wird mit ihm eingesammelt · der Körper selbst trägt keinen Namen
