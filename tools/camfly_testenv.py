@@ -646,8 +646,11 @@ MOBS_OHNE_ANGRIFF = (
     "tropical_fish", "turtle", "villager", "wandering_trader", "zombie_horse",
 )
 
-# Wo im Jar des Servers die Schadensarten liegen, eine Datei je Art.
+# Wo im Jar des Servers die Schadensarten, Biome und Strukturen liegen, eine
+# Datei je Eintrag.
 SCHADENSARTEN_ORDNER = "data/minecraft/damage_type/"
+BIOME_ORDNER = "data/minecraft/worldgen/biome/"
+STRUKTUREN_ORDNER = "data/minecraft/worldgen/structure/"
 
 
 def spiel_jar(env):
@@ -685,15 +688,18 @@ def namen_in(text, abschnitt):
 def step_names(env):
     """Ob die Namenslisten der Sprachdatei zum Spiel passen.
 
-    Jede Schadensart des Spiels braucht einen Namen unter damage-names, und
-    jeder Mob mit Spawn-Ei steht unter mob-names oder in MOBS_OHNE_ANGRIFF.
-    Umgekehrt muss es alles, was in den Listen steht, im Spiel auch geben.
-    So faellt nach einem Update auf, was eine neue Version dazugebracht,
-    umbenannt oder entfernt hat - das Plugin selbst sagt dazu nichts, es
-    nennt eine Schadensart ohne Namen nur bei ihrem Schluessel und einen Mob
+    Jede Schadensart, jeder Effekt, jedes Biom und jede Struktur des Spiels
+    braucht einen Namen unter damage-names, effect-names, biome-names und
+    structure-names, und jeder Mob mit Spawn-Ei steht unter mob-names oder in
+    MOBS_OHNE_ANGRIFF. Umgekehrt muss es alles, was in den Listen steht, im
+    Spiel auch geben. So faellt nach einem Update auf, was eine neue Version
+    dazugebracht, umbenannt oder entfernt hat - das Plugin selbst sagt dazu
+    nichts, es nennt etwas ohne Namen nur bei seinem Schluessel und einen Mob
     so, wie das Spiel ihn nennt.
 
     Mobs ohne Spawn-Ei, etwa den Illusioner, sieht diese Pruefung nicht.
+    dimension-names und portal-names auch nicht: Ihre Schluessel gibt das
+    Plugin vor, nicht das Spiel.
     """
     Log.step("6. Namen der Sprachdatei gegen die Daten des Spiels")
     jar = spiel_jar(env)
@@ -701,33 +707,48 @@ def step_names(env):
         return False
     with zipfile.ZipFile(jar) as z:
         lang = json.loads(z.read("assets/minecraft/lang/en_us.json"))
-        schadensarten = {n[len(SCHADENSARTEN_ORDNER):-len(".json")] for n in z.namelist()
-                         if n.startswith(SCHADENSARTEN_ORDNER) and n.endswith(".json")}
-    entitaeten = {k[len("entity.minecraft."):] for k in lang
-                  if k.startswith("entity.minecraft.") and k.count(".") == 2}
-    mit_ei = {k[len("item.minecraft."):-len("_spawn_egg")] for k in lang
-              if k.startswith("item.minecraft.") and k.endswith("_spawn_egg")}
+        dateien = z.namelist()
+
+    def im_ordner(ordner):
+        return {n[len(ordner):-len(".json")] for n in dateien
+                if n.startswith(ordner) and n.endswith(".json") and "/" not in n[len(ordner):]}
+
+    def aus_sprache(vorn, hinten=""):
+        return {k[len(vorn):len(k) - len(hinten)] for k in lang
+                if k.startswith(vorn) and k.endswith(hinten) and k.count(".") == 2}
+
+    entitaeten = aus_sprache("entity.minecraft.")
+    mit_ei = aus_sprache("item.minecraft.", "_spawn_egg")
     text = (env.repo / "src" / "main" / "resources" / SPRACHDATEI).read_text(encoding="utf-8")
-    damage_names = namen_in(text, "damage-names")
     mob_names = namen_in(text, "mob-names")
 
     def liste(namen):
         return ", ".join(sorted(namen))
 
-    fehlen = schadensarten - damage_names
-    veraltet = damage_names - schadensarten
+    ergebnisse = []
+    for abschnitt, im_spiel, jede, zu_einer, mehrzahl in (
+            ("damage-names", im_ordner(SCHADENSARTEN_ORDNER), "Jede Schadensart", "einer Schadensart",
+             "Schadensarten"),
+            ("effect-names", aus_sprache("effect.minecraft."), "Jeder Effekt", "einem Effekt", "Effekte"),
+            ("biome-names", im_ordner(BIOME_ORDNER), "Jedes Biom", "einem Biom", "Biome"),
+            ("structure-names", im_ordner(STRUKTUREN_ORDNER), "Jede Struktur", "einer Struktur",
+             "Strukturen")):
+        namen = namen_in(text, abschnitt)
+        fehlen = im_spiel - namen
+        veraltet = namen - im_spiel
+        ergebnisse.append(FIND.test(
+            f"{jede} des Spiels hat einen Namen in {abschnitt}", bool(im_spiel) and not fehlen,
+            f"{len(im_spiel)} {mehrzahl}" if not fehlen else f"es fehlen: {liste(fehlen)}"))
+        ergebnisse.append(FIND.test(
+            f"Jeder Name in {abschnitt} gehoert zu {zu_einer} des Spiels", not veraltet,
+            "" if not veraltet else f"gibt es nicht: {liste(veraltet)}"))
+
     neu = mit_ei - mob_names - set(MOBS_OHNE_ANGRIFF)
     unbekannt = (mob_names | set(MOBS_OHNE_ANGRIFF)) - entitaeten
-    ergebnisse = [
-        FIND.test("Jede Schadensart des Spiels hat einen Namen in damage-names", not fehlen,
-                  f"{len(schadensarten)} Schadensarten" if not fehlen else f"es fehlen: {liste(fehlen)}"),
-        FIND.test("Jeder Name in damage-names gehoert zu einer Schadensart des Spiels", not veraltet,
-                  "" if not veraltet else f"gibt es nicht: {liste(veraltet)}"),
-        FIND.test("Jeder Mob mit Spawn-Ei steht in mob-names oder in MOBS_OHNE_ANGRIFF", not neu,
-                  f"{len(mit_ei)} Mobs" if not neu else f"neu: {liste(neu)}"),
-        FIND.test("Jeden Mob aus mob-names und MOBS_OHNE_ANGRIFF gibt es im Spiel", not unbekannt,
-                  "" if not unbekannt else f"gibt es nicht: {liste(unbekannt)}"),
-    ]
+    ergebnisse.append(FIND.test("Jeder Mob mit Spawn-Ei steht in mob-names oder in MOBS_OHNE_ANGRIFF", not neu,
+                                f"{len(mit_ei)} Mobs" if not neu else f"neu: {liste(neu)}"))
+    ergebnisse.append(FIND.test("Jeden Mob aus mob-names und MOBS_OHNE_ANGRIFF gibt es im Spiel", not unbekannt,
+                                "" if not unbekannt else f"gibt es nicht: {liste(unbekannt)}"))
     return all(ergebnisse)
 
 
@@ -2034,7 +2055,8 @@ def grund_checks(env, bot):
     und nicht mehr "attacked by FALLING_BLOCK". Ein Kaktus heisst Kaktus statt
     CONTACT. Ein Mob heisst, wie mob-names ihn nennt, und ein Mob mit eigenem
     Namen so, wie er heisst. Eine eigene Sprachdatei liefert die Namen, die
-    sie hat; was ihr fehlt, kommt aus der englischen.
+    sie hat; was ihr fehlt, kommt aus der englischen. Das gilt fuer einen
+    Effekt genauso, geprueft an der Ablehnung beim Start, die ihn nennt.
 
     Der Amboss faellt wirklich auf den Koerper. Kaktus und Golem kommen ueber
     /damage: Ob ein echter Kaktus den Koerper piekst, haengt daran, wo der
@@ -2105,15 +2127,29 @@ def grund_checks(env, bot):
         console(env, f'data merge entity {golem} {{CustomName:"Bob"}}', pause=0.3)
         probe("den Mob mit eigenem Namen", schaden("minecraft:mob_attack", golem), "attacked by Bob")
 
-        # Eine eigene Sprache, mit nur einem Namen darin.
+        # Eine eigene Sprache, mit nur zwei Namen darin.
         sprachdatei.write_text(
             'messages:\n  body-env-damage: "&cDer Koerper wurde durch {cause} verletzt."\n'
-            'damage-names:\n  cactus: "einen Kaktus"\n', encoding="utf-8")
+            'damage-names:\n  cactus: "einen Kaktus"\n'
+            'effect-names:\n  slowness: "Langsamkeit"\n', encoding="utf-8")
         set_option(env, "language", TESTSPRACHE)
         probe(f"den Kaktus aus lang/{TESTSPRACHE}.yml", schaden("minecraft:cactus"),
               "durch einen Kaktus verletzt")
         probe("den Amboss aus der englischen Datei, wo die eigene keinen Namen hat", amboss,
               "durch a falling anvil verletzt")
+
+        # Langsamkeit sperrt den Start und tut niemandem weh.
+        bot.chat(f"/effect give {BOT_NAME} minecraft:slowness 30 0 true")
+        time.sleep(0.5)
+        since = bot.mark()
+        bot.chat("/cam")
+        hit = bot.expect("cannot start cam mode with", since, 8000)
+        FIND.test(f"Ein Effekt heisst, wie lang/{TESTSPRACHE}.yml ihn nennt",
+                  bool(hit) and "with Langsamkeit on you" in strip_colors(hit["text"]),
+                  strip_colors(hit["text"]) if hit else "keine Ablehnung im Chat")
+        if not hit:
+            cam_off(bot)
+        bot.chat(f"/effect clear {BOT_NAME} minecraft:slowness")
     finally:
         try:
             console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
@@ -5573,7 +5609,7 @@ def border_checks(env, bot):
         FIND.test("border-mode: barrier - die Kamera bleibt am verbotenen Biom "
                   "stehen, ohne zurueckgesetzt zu werden, und die Meldung nennt es",
                   stand is not None and biom_x - 1.5 <= stand[0] + 0.3 <= biom_x + 0.01
-                  and ergebnis[1] == 0 and gewarnt(ergebnis, "not allowed in lush_caves"),
+                  and ergebnis[1] == 0 and gewarnt(ergebnis, "not allowed in Lush Caves"),
                   grenz_zeige(ergebnis, heim))
         # Einmal auffrischen lassen: Die Wand wird um die Stelle gebaut, an
         # der der Bot zuletzt stand, und die Proben liegen bis zu vier Bloecke

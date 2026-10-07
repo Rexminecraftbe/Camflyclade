@@ -324,7 +324,8 @@ public final class CamMovementGuard implements Listener {
         if (area != null) {
             messages.sendMessage(player, "cam-area-limit", "{area}", area);
         } else {
-            messages.sendMessage(player, "portal-blocked", "{portal}", kind.getConfigName());
+            messages.sendMessage(player, "portal-blocked", "{portal}",
+                    messages.getName("portal-names", kind.getConfigName(), kind.getConfigName()));
         }
     }
 

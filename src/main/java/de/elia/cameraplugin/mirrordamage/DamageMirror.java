@@ -644,8 +644,7 @@ public final class DamageMirror implements Listener {
 
     /** What the language file calls a damage type, see {@code damage-names}. */
     private String damageName(DamageType type) {
-        String key = type.getKey().getKey();
-        return messages.getName("damage-names", key, key.replace('_', ' '));
+        return messages.getName("damage-names", type.getKey());
     }
 
     /**

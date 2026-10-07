@@ -133,7 +133,7 @@ public final class StartChecks implements Listener {
                     && type.getCategory() != PotionEffectTypeCategory.HARMFUL) {
                 continue;
             }
-            blocking.add(type.getKey().getKey());
+            blocking.add(messages.getName("effect-names", type.getKey()));
         }
         if (blocking.isEmpty()) {
             return true;

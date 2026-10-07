@@ -97,7 +97,7 @@ public final class CamSettings {
     /** Whether a mob head on the body halves the range of that kind of mob. */
     private boolean mobTargetHeads;
     /** Where camera mode may be started and flown, the section {@code cam-area}. */
-    private final CamAreaRules camAreaRules = new CamAreaRules();
+    private final CamAreaRules camAreaRules;
     /** Whether a portal lets a camera player through, the section {@code portals}. */
     private final PortalRules portalRules = new PortalRules();
     private VisibilityMode playerVisibilityMode;
@@ -160,6 +160,7 @@ public final class CamSettings {
         this.plugin = plugin;
         this.log = log;
         this.messages = messages;
+        this.camAreaRules = new CamAreaRules(messages);
     }
 
     /**

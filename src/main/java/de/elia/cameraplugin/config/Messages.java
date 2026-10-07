@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.config;
 
 import org.bukkit.ChatColor;
+import org.bukkit.NamespacedKey;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -124,16 +125,18 @@ public final class Messages {
     /**
      * A name from one of the lists in the language file that fill in a text:
      * {@code damage-names} for what hurt a body, {@code mob-names} for the mob
-     * that attacked it.
+     * that attacked it, {@code effect-names}, {@code biome-names},
+     * {@code structure-names}, {@code dimension-names} and
+     * {@code portal-names}.
      *
      * <p>A name the language file leaves out comes from the English one, like
-     * every text. One that neither of them has - a damage type a data pack
-     * adds, a mob of a newer version of the game - is the fallback, and so is
-     * an empty one: a text with a gap where the name belongs says less than a
-     * name that is not translated.</p>
+     * every text. One that neither of them has - something a data pack or
+     * another plugin adds, or a newer version of the game - is the fallback,
+     * and so is an empty one: a text with a gap where the name belongs says
+     * less than a name that is not translated.</p>
      *
-     * @param list     {@code damage-names} or {@code mob-names}
-     * @param key      the key of the damage type or the mob, without its namespace
+     * @param list     the list, {@code damage-names} for instance
+     * @param key      the key of the thing, without its namespace
      * @param fallback what stands in for a name the list does not have
      */
     public String getName(String list, String key, String fallback) {
@@ -142,6 +145,16 @@ public final class Messages {
             return fallback;
         }
         return ChatColor.translateAlternateColorCodes('&', name);
+    }
+
+    /**
+     * {@link #getName(String, String, String)} for a thing of the game, looked
+     * up by its key without the namespace. Without a name it goes by that key,
+     * with spaces for the underscores: {@code jump boost} reads better than
+     * {@code jump_boost}, and still tells which line the list is missing.
+     */
+    public String getName(String list, NamespacedKey key) {
+        return getName(list, key.getKey(), key.getKey().replace('_', ' '));
     }
 
     /**

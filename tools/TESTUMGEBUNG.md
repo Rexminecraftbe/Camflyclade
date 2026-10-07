@@ -64,15 +64,17 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
 ## Die Namen nach einem Update
 
-Die Meldung, mit der ein Treffer auf den Körper den Cam-Modus beendet, nennt
-die Schadensart und den Mob mit den Namen aus `lang/en.yml`: `damage-names`
-und `mob-names`. Bringt eine neue Version etwas dazu, sagt das Plugin selbst
-nichts - es nennt eine Schadensart ohne Namen bei ihrem Schlüssel und einen
-Mob so, wie das Spiel ihn nennt. Der Schritt `names` gleicht die beiden
-Listen deshalb mit den Daten des Spiels ab: jede Schadensart unter
-`data/minecraft/damage_type` im Jar des Servers und jeden Mob mit Spawn-Ei aus
-seiner `en_us.json`. Er braucht keinen laufenden Server und ist in ein paar
-Sekunden durch:
+Was die Meldungen an Dingen des Spiels nennen, nennen sie mit den Namen aus
+`lang/en.yml`: Schadensarten, Mobs, Effekte, Biome, Strukturen, Dimensionen
+und Portale, in den Listen `damage-names`, `mob-names`, `effect-names`,
+`biome-names`, `structure-names`, `dimension-names` und `portal-names`.
+Bringt eine neue Version etwas dazu, sagt das Plugin selbst nichts - es nennt
+etwas ohne Namen bei seinem Schlüssel und einen Mob so, wie das Spiel ihn
+nennt. Der Schritt `names` gleicht die Listen deshalb mit den Daten des
+Spiels ab, aus dem Jar des Servers: Schadensarten, Biome und Strukturen aus
+`data/minecraft`, Effekte und die Mobs mit Spawn-Ei aus seiner `en_us.json`.
+Dimensionen und Portale prüft er nicht, deren Schlüssel gibt das Plugin vor.
+Er braucht keinen laufenden Server und ist in ein paar Sekunden durch:
 
 ```bash
 python3 tools/camfly_testenv.py --steps names
@@ -80,14 +82,14 @@ python3 tools/camfly_testenv.py --steps names
 
 Fällt er durch, steht dabei, worum es geht:
 
-* **„es fehlen“**: eine Schadensart ohne Namen. Sie gehört mit einem Namen
-  unter `damage-names`.
+* **„es fehlen“**: eine Schadensart, ein Effekt, ein Biom oder eine Struktur
+  ohne Namen. Sie gehören mit einem Namen in die Liste, die dabeisteht.
 * **„neu“**: ein Mob mit Spawn-Ei, der in keiner Liste steht. Greift er an,
   gehört er mit einem Namen unter `mob-names`, sonst in `MOBS_OHNE_ANGRIFF`
   im Skript.
-* **„gibt es nicht“**: ein Eintrag in `damage-names`, `mob-names` oder
-  `MOBS_OHNE_ANGRIFF`, den es im Spiel nicht mehr gibt - umbenannt,
-  entfernt oder vertippt.
+* **„gibt es nicht“**: ein Eintrag in einer der Listen oder in
+  `MOBS_OHNE_ANGRIFF`, den es im Spiel nicht mehr gibt - umbenannt, entfernt
+  oder vertippt.
 
 Mobs ohne Spawn-Ei, etwa den Illusioner, sieht die Prüfung nicht. Eine eigene
 Übersetzung wie `lang/de.yml` prüft sie auch nicht, sie liegt nicht im
@@ -596,7 +598,7 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   stehen bleibt, fiel beim nächsten Lauf der Sulfur Cube hinein und ließ sich
   nicht mehr schieben. Dafür müssen beide
   `nether` auf `true`, unter `portals` und unter `cam-area.dimensions` - mit
-  nur einem meldet das Plugin „cam mode is not allowed in nether“, und der Bot
+  nur einem meldet das Plugin „cam mode is not allowed in the Nether“, und der Bot
   bleibt im Portal stehen. Hinterher räumt der Abschnitt beide Seiten wieder
   ab: Drüben bliebe sonst das Portal stehen, das der Server gebaut oder
   genommen hat, und der Portaltest hielte es für seines.
@@ -792,7 +794,8 @@ einem Treffer auf den Körper nennt, was ihn getroffen hat: ein fallender Amboss
 ist kein Angriff, sondern „a falling anvil“, ein Kaktus heißt „a cactus“ statt
 CONTACT, ein Mob heißt wie in `mob-names` und einer mit eigenem Namen so, wie
 er heißt · eine eigene Sprachdatei liefert auch die Namen, und was ihr fehlt,
-kommt aus der englischen · `/cam` startet
+kommt aus der englischen · ebenso den Namen eines Effekts, den die Ablehnung
+beim Start nennt · `/cam` startet
 mit einem positiven und einem neutralen Effekt, mit einem schädlichen nicht ·
 auf `false` sperrt jeder Effekt, auf `true` keiner · die Ablehnung nennt jeden
 schädlichen Effekt und nur die · `actionbar-on` und `actionbar-off` schalten

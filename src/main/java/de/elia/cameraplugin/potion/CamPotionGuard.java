@@ -63,7 +63,7 @@ public final class CamPotionGuard implements Listener {
             // After the exit, like the message about a hit on the body: first
             // he is back in his body, then he reads why.
             messages.sendMessage(owner, "body-got-effect", "{effect}",
-                    event.getModifiedType().getKey().getKey());
+                    messages.getName("effect-names", event.getModifiedType().getKey()));
         }
 
         event.setCancelled(true);

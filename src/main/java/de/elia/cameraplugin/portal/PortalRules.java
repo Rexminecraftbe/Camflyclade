@@ -141,9 +141,9 @@ public final class PortalRules {
 
         /**
          * @param where the spot to look at
-         * @return the name of the biome or structure that forbids it, written
-         *         the way the config file writes it, or {@code null} when
-         *         camera mode is allowed there
+         * @return the name of the biome or structure that forbids it, the way
+         *         the messages call it, or {@code null} when camera mode is
+         *         allowed there
          */
         String areaAt(Location where);
     }
@@ -181,8 +181,8 @@ public final class PortalRules {
      * @param portal the spot the player is stepping into the portal at
      * @param check  what forbids camera mode at a spot, asked again at the spot
      *               the earlier trip came out at
-     * @return the name of that area, written the way the config file writes it,
-     *         or {@code null} when nothing is known about this portal
+     * @return the name of that area, the way the messages call it, or
+     *         {@code null} when nothing is known about this portal
      */
     public String forbiddenAreaBehind(Location portal, AreaCheck check) {
         if (!rememberBlocked || blockedPortals.isEmpty()) {
