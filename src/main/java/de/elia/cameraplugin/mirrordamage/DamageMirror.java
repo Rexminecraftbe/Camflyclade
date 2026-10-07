@@ -8,9 +8,11 @@ import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.Bukkit;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.damage.DamageType;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.AbstractArrow;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Cancellable;
@@ -21,7 +23,6 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.event.entity.EntityEvent;
 import org.bukkit.event.entity.EntityKnockbackEvent;
 import org.bukkit.event.entity.ExplosionPrimeEvent;
@@ -141,13 +142,9 @@ public final class DamageMirror implements Listener {
             return;
         }
 
-        DamageCause cause = event.getCause();
-
-        String damagerName = "environment";
         Entity damagerEntity = null;
         if (event instanceof EntityDamageByEntityEvent entityEvent) {
             damagerEntity = entityEvent.getDamager();
-            damagerName = damagerEntity instanceof Player ? damagerEntity.getName() : damagerEntity.getType().toString();
             // The effects of a tipped arrow have reached the player already:
             // CamPotionGuard passes them on when the arrow hits, which comes
             // before this damage.
@@ -197,8 +194,7 @@ public final class DamageMirror implements Listener {
 
         plugin.exitCameraMode(owner);
 
-        messages.sendMessage(owner, resolveDamageMessageKey(event, cause),
-                "{damager}", damagerName, "{cause}", cause.toString());
+        sendDamageMessage(owner, event);
 
         if (settings.isMirrorDebug()) {
             sendMirrorDebug(owner, String.format(Locale.ROOT,
@@ -617,19 +613,52 @@ public final class DamageMirror implements Listener {
     }
 
     /**
-     * Picks the message for the hit that ended camera mode. Drowning and
-     * suffocation keep their own text, everything else is reported as an attack
-     * or as generic environmental damage.
+     * Tells the player why camera mode ended. A hit that a mob or a player is
+     * behind is an attack, also from afar - the skeleton that shot the arrow,
+     * the creeper that blew up - and the message names the attacker. For any
+     * other hit it names what hurt the body; drowning and suffocation keep
+     * their own text.
+     *
+     * <p>What hurt it is told by the damage type, not by the cause Bukkit sorts
+     * the hit under: {@code CONTACT} is a cactus as much as a sweet berry bush,
+     * and {@code FALLING_BLOCK} does not say that it was an anvil. Nor does an
+     * entity behind a hit make it an attack - a falling anvil comes as the
+     * falling block that carries it.</p>
      */
-    private String resolveDamageMessageKey(EntityDamageEvent event, DamageCause cause) {
-        if (event instanceof EntityDamageByEntityEvent) {
-            return "body-attacked";
+    private void sendDamageMessage(Player owner, EntityDamageEvent event) {
+        org.bukkit.damage.DamageSource source = event.getDamageSource();
+        String cause = damageName(source.getDamageType());
+        if (source.getCausingEntity() instanceof LivingEntity attacker) {
+            messages.sendMessage(owner, "body-attacked",
+                    "{damager}", attackerName(attacker), "{cause}", cause);
+            return;
         }
-        return switch (cause) {
+        String key = switch (event.getCause()) {
             case DROWNING -> "body-drowning";
             case SUFFOCATION -> "body-suffocating";
             default -> "body-env-damage";
         };
+        // Without an attacker, what hurt the body is the closest thing to one.
+        messages.sendMessage(owner, key, "{damager}", cause, "{cause}", cause);
+    }
+
+    /** What the language file calls a damage type, see {@code damage-names}. */
+    private String damageName(DamageType type) {
+        return messages.getName("damage-names", type.getKey());
+    }
+
+    /**
+     * What the language file calls the mob that attacked, see
+     * {@code mob-names}. Players and mobs with a name of their own go by that
+     * name, the way the game names them in a death message.
+     */
+    private String attackerName(LivingEntity attacker) {
+        EntityType type = attacker.getType();
+        // A mob a mod adds has no key to look it up by.
+        if (attacker instanceof Player || attacker.getCustomName() != null || type == EntityType.UNKNOWN) {
+            return attacker.getName();
+        }
+        return messages.getName("mob-names", type.getKey().getKey(), attacker.getName());
     }
 
     /**

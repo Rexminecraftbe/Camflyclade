@@ -15,6 +15,7 @@ danach wiederverwendet.
 
 ```bash
 python3 tools/camfly_testenv.py --steps build,crosscheck,apicheck  # nur bauen und prüfen
+python3 tools/camfly_testenv.py --steps names                      # nach einem Update: fehlen Namen?
 python3 tools/camfly_testenv.py --skip jdk,paperapi                # Schritte auslassen
 python3 tools/camfly_testenv.py --keep-running                     # Server bleibt oben
 python3 tools/camfly_testenv.py --stop                             # laufenden Server beenden
@@ -27,7 +28,7 @@ Läuft der Server weiter, gehen Konsolenbefehle über die FIFO:
 echo "say hallo" > ~/camfly-testenv/server/console.fifo
 ```
 
-## Die acht Schritte
+## Die neun Schritte
 
 | Schritt      | Was passiert |
 |--------------|--------------|
@@ -36,6 +37,7 @@ echo "say hallo" > ~/camfly-testenv/server/console.fifo
 | `paperapi`   | `paper-api` und die zwölf Abhängigkeiten, die zum Übersetzen nötig sind. |
 | `crosscheck` | Denselben Quelltext noch einmal mit `javac` gegen `paper-api` übersetzen. |
 | `apicheck`   | Jeden Aufruf auf `org/bukkit`, `net/md_5`, `io/papermc` aus `target/classes` gegen `paper-api` auflösen. |
+| `names`      | Die Namenslisten der Sprachdatei gegen die Daten des Spiels prüfen, siehe unten. |
 | `server`     | Paper-Server holen, einrichten, starten, Konsole an eine FIFO hängen. |
 | `bot`        | `mineflayer` holen, auf Protokoll 26.2 flicken und seine Kollision wie im echten Client rechnen lassen. |
 | `tests`      | Der Bot spielt die Testfälle im laufenden Server durch. |
@@ -56,12 +58,50 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **655** - alle 655 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **656** - alle 656 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
+## Die Namen nach einem Update
+
+Was die Meldungen an Dingen des Spiels nennen, nennen sie mit den Namen aus
+`lang/en.yml`: Schadensarten, Mobs, Effekte, Biome, Strukturen, Dimensionen
+und Portale, in den Listen `damage-names`, `mob-names`, `effect-names`,
+`biome-names`, `structure-names`, `dimension-names` und `portal-names`.
+Bringt eine neue Version etwas dazu, sagt das Plugin selbst nichts - es nennt
+etwas ohne Namen bei seinem Schlüssel und einen Mob so, wie das Spiel ihn
+nennt. Der Schritt `names` gleicht die Listen deshalb mit den Daten des
+Spiels ab, aus dem Jar des Servers: Schadensarten, Biome und Strukturen aus
+`data/minecraft`, Effekte und die Mobs mit Spawn-Ei aus seiner `en_us.json`.
+Dimensionen und Portale prüft er nicht, deren Schlüssel gibt das Plugin vor.
+Er braucht keinen laufenden Server und ist in ein paar Sekunden durch:
+
+```bash
+python3 tools/camfly_testenv.py --steps names
+```
+
+Fällt er durch, steht dabei, worum es geht:
+
+* **„es fehlen“**: eine Schadensart, ein Effekt, ein Biom oder eine Struktur
+  ohne Namen. Sie gehören mit einem Namen in die Liste, die dabeisteht.
+* **„neu“**: ein Mob mit Spawn-Ei, der in keiner Liste steht. Greift er an,
+  gehört er mit einem Namen unter `mob-names`, sonst in `MOBS_OHNE_ANGRIFF`
+  im Skript.
+* **„gibt es nicht“**: ein Eintrag in einer der Listen oder in
+  `MOBS_OHNE_ANGRIFF`, den es im Spiel nicht mehr gibt - umbenannt, entfernt
+  oder vertippt.
+
+Mobs ohne Spawn-Ei, etwa den Illusioner, sieht die Prüfung nicht. Eine eigene
+Übersetzung wie `lang/de.yml` prüft sie auch nicht, sie liegt nicht im
+Repository: Was ihr fehlt, kommt aus der englischen Datei.
+
 ## Fallen, die das Skript schon kennt
 
+* **Die Daten des Spiels stecken im Download von Paper nur als Patch.**
+  Lesbar sind sie erst im Jar, das Paperclip beim ersten Start daraus
+  zusammensetzt, `server/versions/26.2/paper-26.2.jar`. Fehlt es, setzt der
+  Schritt `names` es mit `-Dpaperclip.patchonly=true` zusammen, ohne einen
+  Server zu starten; der Server findet es danach fertig vor.
 * **`difficulty peaceful`** wird gesetzt, sonst erschlägt ein Zombie den Bot und
   das Plugin verweigert danach `/cam` wegen der `cam-safety`-Sperre.
 * **`camera-particles.particles-per-tick: 0`** wird in die Testkonfiguration
@@ -148,6 +188,15 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   Meldung: `adventure` heißt im Cam-Modus, alles andere heißt beendet. Die
   Meldung `body-got-effect` wird zusätzlich geprüft, samt dem Effekt, den sie
   benennen soll.
+* **Was den Körper getroffen hat, prüft der Test an der Meldung.** Sie kommt
+  erst, wenn der Cam-Modus schon vorbei ist, und sagt damit beides. Der Amboss
+  fällt dabei wirklich auf den Körper, Kaktus und Golem kommen über `/damage`:
+  Ob ein echter Kaktus den Körper piekst, hängt daran, wo er auf den Bruchteil
+  eines Blocks genau steht. Das Plugin liest ohnehin nur die Schadensart und
+  wer hinter dem Treffer steht, und beides setzt `/damage` genauso.
+* **Der Amboss fällt mit `CancelDrop:1b`.** Sonst bliebe er als Block dort
+  liegen, wo der Körper stand - genau dort, wohin der Bot zurückkommt, sobald
+  der Cam-Modus endet.
 * **`start-with-effects` stellt der Test selbst um**, in der
   Konfigurationsdatei des Servers und mit `cam reload` von der Konsole; am
   Ende steht wieder `positive` da. Die Voreinstellung wird nicht gesetzt,
@@ -549,7 +598,7 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   stehen bleibt, fiel beim nächsten Lauf der Sulfur Cube hinein und ließ sich
   nicht mehr schieben. Dafür müssen beide
   `nether` auf `true`, unter `portals` und unter `cam-area.dimensions` - mit
-  nur einem meldet das Plugin „cam mode is not allowed in nether“, und der Bot
+  nur einem meldet das Plugin „cam mode is not allowed in the Nether“, und der Bot
   bleibt im Portal stehen. Hinterher räumt der Abschnitt beide Seiten wieder
   ab: Drüben bliebe sonst das Portal stehen, das der Server gebaut oder
   genommen hat, und der Portaltest hielte es für seines.
@@ -740,7 +789,13 @@ aus der Sättigung heraus · Gegenprobe: ohne Cam-Modus heilt er in beiden Fäll
 sehr wohl · ein geworfener Trank geht im Cam-Modus am Spieler vorbei, der
 Splash-Trank wie der verweilende · Gegenprobe: ohne Cam-Modus wirken beide auf
 ihn · der Körper wird von beiden weiterhin getroffen und beendet damit den
-Cam-Modus · die Meldung dazu nennt den Effekt, an dem es lag · `/cam` startet
+Cam-Modus · die Meldung dazu nennt den Effekt, an dem es lag · die Meldung zu
+einem Treffer auf den Körper nennt, was ihn getroffen hat: ein fallender Amboss
+ist kein Angriff, sondern „a falling anvil“, ein Kaktus heißt „a cactus“ statt
+CONTACT, ein Mob heißt wie in `mob-names` und einer mit eigenem Namen so, wie
+er heißt · eine eigene Sprachdatei liefert auch die Namen, und was ihr fehlt,
+kommt aus der englischen · ebenso den Namen eines Effekts, den die Ablehnung
+beim Start nennt · `/cam` startet
 mit einem positiven und einem neutralen Effekt, mit einem schädlichen nicht ·
 auf `false` sperrt jeder Effekt, auf `true` keiner · die Ablehnung nennt jeden
 schädlichen Effekt und nur die · `actionbar-on` und `actionbar-off` schalten

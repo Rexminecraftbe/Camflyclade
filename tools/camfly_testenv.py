@@ -8,15 +8,17 @@ Das Skript macht alles, was sonst von Hand gemacht wurde:
   2. Plugin bauen (mvn -B clean package gegen spigot-api)
   3. Zusaetzlich gegen paper-api uebersetzen (die APIs sind nicht deckungsgleich)
   4. ApiCheck: jeden Bukkit-Aufruf im fertigen Jar gegen paper-api aufloesen
-  5. Paper-Testserver holen, einrichten und starten (mit FIFO fuer die Konsole)
-  6. mineflayer holen, auf Protokoll 26.2 flicken, seine Kollision wie im
+  5. Namen: die Namenslisten der Sprachdatei gegen die Daten des Spiels
+  6. Paper-Testserver holen, einrichten und starten (mit FIFO fuer die Konsole)
+  7. mineflayer holen, auf Protokoll 26.2 flicken, seine Kollision wie im
      echten Client rechnen lassen, Bot verbinden
-  7. Tests im laufenden Spiel fahren
-  8. Aufraeumen: Server und Bot beenden
+  8. Tests im laufenden Spiel fahren
+  9. Aufraeumen: Server und Bot beenden
 
 Aufruf:
     python3 tools/camfly_testenv.py                  # alles
     python3 tools/camfly_testenv.py --steps build,apicheck
+    python3 tools/camfly_testenv.py --steps names    # nach einem Update: fehlen Namen?
     python3 tools/camfly_testenv.py --keep-running   # Server laeuft weiter
     python3 tools/camfly_testenv.py --stop           # laufenden Server beenden
 
@@ -38,6 +40,7 @@ import struct
 import subprocess
 import sys
 import time
+import zipfile
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -77,7 +80,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 655 Methoden- und Feldzugriffe. Alle 655 gibt
+# Dieser Pruefer zaehlt zurzeit 656 Methoden- und Feldzugriffe. Alle 656 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -89,7 +92,7 @@ BOT_NAME = "CamFlyTester"
 SERVER_HOST = "127.0.0.1"
 SERVER_PORT = 25565
 
-STEPS = ["jdk", "build", "paperapi", "crosscheck", "apicheck",
+STEPS = ["jdk", "build", "paperapi", "crosscheck", "apicheck", "names",
          "server", "bot", "tests"]
 
 # ---------------------------------------------------------------------------
@@ -628,7 +631,129 @@ def step_apicheck(env):
 
 
 # ---------------------------------------------------------------------------
-# 6. Paper-Testserver
+# 6. Namen: die Listen der Sprachdatei gegen die Daten des Spiels
+# ---------------------------------------------------------------------------
+
+# Die Mobs mit Spawn-Ei, die nichts angreifen und deshalb keinen Namen in
+# mob-names brauchen. Ein Mob mit Spawn-Ei, der weder dort noch hier steht,
+# ist mit einer neuen Version dazugekommen: Greift er an, gehoert er mit
+# einem Namen in mob-names, sonst hierher.
+MOBS_OHNE_ANGRIFF = (
+    "allay", "armadillo", "axolotl", "bat", "camel", "camel_husk", "cat", "chicken",
+    "cod", "copper_golem", "cow", "donkey", "fox", "frog", "glow_squid", "happy_ghast",
+    "horse", "mooshroom", "mule", "ocelot", "parrot", "pig", "pufferfish", "rabbit",
+    "salmon", "sheep", "skeleton_horse", "sniffer", "squid", "strider", "tadpole",
+    "tropical_fish", "turtle", "villager", "wandering_trader", "zombie_horse",
+)
+
+# Wo im Jar des Servers die Schadensarten, Biome und Strukturen liegen, eine
+# Datei je Eintrag.
+SCHADENSARTEN_ORDNER = "data/minecraft/damage_type/"
+BIOME_ORDNER = "data/minecraft/worldgen/biome/"
+STRUKTUREN_ORDNER = "data/minecraft/worldgen/structure/"
+
+
+def spiel_jar(env):
+    """Das Jar des Servers, in dem die Daten des Spiels lesbar liegen.
+
+    Der Download von Paper traegt sie nur als Patch auf das Jar von Mojang.
+    Zusammengesetzt werden sie beim ersten Start des Servers - oder hier,
+    mit paperclip.patchonly, ohne dass ein Server startet. Der Server findet
+    das Jar danach fertig vor und setzt es nicht noch einmal zusammen.
+    """
+    jar = env.server / "versions" / MC_VERSION / f"paper-{MC_VERSION}.jar"
+    if not jar.exists():
+        if not env.java.exists():
+            raise RuntimeError("Erst Schritt 'jdk' laufen lassen")
+        url, name = paper_jar_url()
+        paperclip = download(url, env.cache / name, f"Paper {MC_VERSION} Build {PAPER_BUILD}")
+        env.server.mkdir(parents=True, exist_ok=True)
+        Log.info("Paperclip setzt das Jar des Servers zusammen ...")
+        run([str(env.java), "-Dpaperclip.patchonly=true", "-jar", str(paperclip)],
+            cwd=env.server, timeout=900)
+    return jar
+
+
+def namen_in(text, abschnitt):
+    """Die Schluessel eines Abschnitts der Sprachdatei. Er reicht bis zur
+    naechsten Zeile, die ganz links anfaengt, wie in replace_option."""
+    head = re.search(rf"(?m)^{re.escape(abschnitt)}:\s*$", text)
+    if head is None:
+        return set()
+    rest = text[head.end():]
+    nxt = re.search(r"(?m)^\S", rest)
+    return set(re.findall(r"(?m)^\s+([a-z0-9_]+):", rest[:nxt.start() if nxt else len(rest)]))
+
+
+def step_names(env):
+    """Ob die Namenslisten der Sprachdatei zum Spiel passen.
+
+    Jede Schadensart, jeder Effekt, jedes Biom und jede Struktur des Spiels
+    braucht einen Namen unter damage-names, effect-names, biome-names und
+    structure-names, und jeder Mob mit Spawn-Ei steht unter mob-names oder in
+    MOBS_OHNE_ANGRIFF. Umgekehrt muss es alles, was in den Listen steht, im
+    Spiel auch geben. So faellt nach einem Update auf, was eine neue Version
+    dazugebracht, umbenannt oder entfernt hat - das Plugin selbst sagt dazu
+    nichts, es nennt etwas ohne Namen nur bei seinem Schluessel und einen Mob
+    so, wie das Spiel ihn nennt.
+
+    Mobs ohne Spawn-Ei, etwa den Illusioner, sieht diese Pruefung nicht.
+    dimension-names und portal-names auch nicht: Ihre Schluessel gibt das
+    Plugin vor, nicht das Spiel.
+    """
+    Log.step("6. Namen der Sprachdatei gegen die Daten des Spiels")
+    jar = spiel_jar(env)
+    if not FIND.test("Daten des Spiels lesbar", jar.exists(), str(jar)):
+        return False
+    with zipfile.ZipFile(jar) as z:
+        lang = json.loads(z.read("assets/minecraft/lang/en_us.json"))
+        dateien = z.namelist()
+
+    def im_ordner(ordner):
+        return {n[len(ordner):-len(".json")] for n in dateien
+                if n.startswith(ordner) and n.endswith(".json") and "/" not in n[len(ordner):]}
+
+    def aus_sprache(vorn, hinten=""):
+        return {k[len(vorn):len(k) - len(hinten)] for k in lang
+                if k.startswith(vorn) and k.endswith(hinten) and k.count(".") == 2}
+
+    entitaeten = aus_sprache("entity.minecraft.")
+    mit_ei = aus_sprache("item.minecraft.", "_spawn_egg")
+    text = (env.repo / "src" / "main" / "resources" / SPRACHDATEI).read_text(encoding="utf-8")
+    mob_names = namen_in(text, "mob-names")
+
+    def liste(namen):
+        return ", ".join(sorted(namen))
+
+    ergebnisse = []
+    for abschnitt, im_spiel, jede, zu_einer, mehrzahl in (
+            ("damage-names", im_ordner(SCHADENSARTEN_ORDNER), "Jede Schadensart", "einer Schadensart",
+             "Schadensarten"),
+            ("effect-names", aus_sprache("effect.minecraft."), "Jeder Effekt", "einem Effekt", "Effekte"),
+            ("biome-names", im_ordner(BIOME_ORDNER), "Jedes Biom", "einem Biom", "Biome"),
+            ("structure-names", im_ordner(STRUKTUREN_ORDNER), "Jede Struktur", "einer Struktur",
+             "Strukturen")):
+        namen = namen_in(text, abschnitt)
+        fehlen = im_spiel - namen
+        veraltet = namen - im_spiel
+        ergebnisse.append(FIND.test(
+            f"{jede} des Spiels hat einen Namen in {abschnitt}", bool(im_spiel) and not fehlen,
+            f"{len(im_spiel)} {mehrzahl}" if not fehlen else f"es fehlen: {liste(fehlen)}"))
+        ergebnisse.append(FIND.test(
+            f"Jeder Name in {abschnitt} gehoert zu {zu_einer} des Spiels", not veraltet,
+            "" if not veraltet else f"gibt es nicht: {liste(veraltet)}"))
+
+    neu = mit_ei - mob_names - set(MOBS_OHNE_ANGRIFF)
+    unbekannt = (mob_names | set(MOBS_OHNE_ANGRIFF)) - entitaeten
+    ergebnisse.append(FIND.test("Jeder Mob mit Spawn-Ei steht in mob-names oder in MOBS_OHNE_ANGRIFF", not neu,
+                                f"{len(mit_ei)} Mobs" if not neu else f"neu: {liste(neu)}"))
+    ergebnisse.append(FIND.test("Jeden Mob aus mob-names und MOBS_OHNE_ANGRIFF gibt es im Spiel", not unbekannt,
+                                "" if not unbekannt else f"gibt es nicht: {liste(unbekannt)}"))
+    return all(ergebnisse)
+
+
+# ---------------------------------------------------------------------------
+# 7. Paper-Testserver
 # ---------------------------------------------------------------------------
 
 SERVER_PROPERTIES = f"""\
@@ -747,7 +872,7 @@ def prepare_server_files(env):
 
 
 def step_server(env):
-    Log.step("6. Paper-Testserver")
+    Log.step("7. Paper-Testserver")
     stop_server(env, quiet=True)
 
     url, name = paper_jar_url()
@@ -801,7 +926,7 @@ def step_server(env):
 
 
 # ---------------------------------------------------------------------------
-# 7. Bot (mineflayer)
+# 8. Bot (mineflayer)
 # ---------------------------------------------------------------------------
 
 BOT_JS = r'''
@@ -1402,7 +1527,7 @@ def patch_physics(env):
 
 
 def step_bot(env):
-    Log.step("7. Bot (mineflayer)")
+    Log.step("8. Bot (mineflayer)")
     env.bot.mkdir(parents=True, exist_ok=True)
     if not (env.bot / "node_modules" / "mineflayer").exists():
         (env.bot / "package.json").write_text(
@@ -1420,7 +1545,7 @@ def step_bot(env):
 
 
 # ---------------------------------------------------------------------------
-# 8. Tests im laufenden Spiel
+# 9. Tests im laufenden Spiel
 # ---------------------------------------------------------------------------
 
 class BotClient:
@@ -1906,6 +2031,139 @@ def potion_checks(env, bot):
     als Wolke liegen und fragt immer wieder nach."""
     potion_probe(env, bot, "splash_potion", "Splash")
     potion_probe(env, bot, "lingering_potion", "verweilend")
+
+
+# ---------------------------------------------------------------------------
+# Was den Koerper getroffen hat
+# ---------------------------------------------------------------------------
+
+# Wie hoch ueber dem Koerper der Amboss losfaellt, in Bloecken. Vier Bloecke
+# Fall machen sechs Schaden, und ein Amboss trifft erst, wenn er aufschlaegt.
+AMBOSS_HOEHE = 4
+
+# Wie lange nach einem Schaden kein /cam geht, in Sekunden: cam-safety.delay
+# in der ausgelieferten config.yml.
+CAM_SAFETY_SEKUNDEN = 5
+
+
+def grund_checks(env, bot):
+    """Die Meldung, mit der ein Treffer auf den Koerper den Cam-Modus beendet,
+    sagt, was ihn getroffen hat.
+
+    Ein fallender Amboss ist dabei kein Angriff, auch wenn er als fallender
+    Block eine Entitaet ist: Die Meldung heisst "damaged by a falling anvil"
+    und nicht mehr "attacked by FALLING_BLOCK". Ein Kaktus heisst Kaktus statt
+    CONTACT. Ein Mob heisst, wie mob-names ihn nennt, und ein Mob mit eigenem
+    Namen so, wie er heisst. Eine eigene Sprachdatei liefert die Namen, die
+    sie hat; was ihr fehlt, kommt aus der englischen. Das gilt fuer einen
+    Effekt genauso, geprueft an der Ablehnung beim Start, die ihn nennt.
+
+    Der Amboss faellt wirklich auf den Koerper. Kaktus und Golem kommen ueber
+    /damage: Ob ein echter Kaktus den Koerper piekst, haengt daran, wo der
+    Koerper auf den Bruchteil eines Blocks genau steht, und einen Golem dann
+    zuschlagen zu lassen, wann er soll, braucht einen ganzen Abschnitt, siehe
+    rueckstoss_mob_checks. Das Plugin liest ohnehin nur die Schadensart des
+    Treffers und wer hinter ihm steht, und beides setzt /damage genauso.
+
+    Jeder Treffer geht an den Bot weiter. Resistenz 255 haelt ihn heil, und
+    cam-safety ist solange aus - sonst ginge nach jedem Treffer fuenf Sekunden
+    lang kein /cam.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test der Meldungen aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    golem = f"@e[tag={INTERACT_TAG},type=minecraft:iron_golem,limit=1]"
+    sprachdatei = env.server / "plugins" / "CamFly" / "lang" / f"{TESTSPRACHE}.yml"
+
+    def probe(name, treffen, erwartet):
+        """Einmal /cam, den Bot vom Koerper wegstellen, den Koerper treffen und
+        nachsehen, was im Chat steht. treffen bekommt die Stelle des Koerpers
+        und einen Selektor fuer das Mannequin, das die Treffer nimmt."""
+        if not FIND.test(f"/cam startet fuer die Meldung ({name})", cam_on(bot), ""):
+            return
+        koerper = bot.server_pos()
+        if koerper is None:
+            FIND.test(f"Koerperstelle bekannt ({name})", False, "keine serverseitige Position")
+            cam_off(bot)
+            return
+        x, y, z = koerper
+        # Weg vom Koerper, wie beim Trankstest: Der Amboss traefe sonst beide.
+        hinstellen(bot, x - 6, _floor(y + 0.5), z)
+        mannequin = f"@e[type=minecraft:mannequin,x={x},y={y},z={z},distance=..1,limit=1]"
+        since = bot.mark()
+        treffen(x, y, z, mannequin)
+        told = bot.expect(erwartet, since, 8000)
+        FIND.test(f"Die Meldung nennt {name}", bool(told),
+                  strip_colors(told["text"]) if told else "keine Meldung im Chat")
+        if not told:
+            # Endete der Cam-Modus gar nicht, raeumt das hier ab.
+            cam_off(bot)
+
+    def amboss(x, y, z, mannequin):
+        # CancelDrop: Er bleibt nicht als Block liegen, genau dort, wohin der
+        # Bot beim Ende des Cam-Modus zurueckkommt.
+        console(env, f"summon minecraft:falling_block {x} {y + AMBOSS_HOEHE} {z} "
+                     '{BlockState:{Name:"minecraft:anvil"},CancelDrop:1b,'
+                     "HurtEntities:1b,FallHurtAmount:2.0f,FallHurtMax:40}", pause=0)
+
+    def schaden(art, von=None):
+        def treffen(x, y, z, mannequin):
+            console(env, f"damage {mannequin} 1 {art}" + (f" by {von}" if von else ""), pause=0)
+        return treffen
+
+    bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
+    time.sleep(0.5)
+    set_option(env, "enabled", "false", "cam-safety")
+    try:
+        probe("den fallenden Amboss", amboss, "damaged by a falling anvil")
+        probe("den Kaktus", schaden("minecraft:cactus"), "damaged by a cactus")
+
+        console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+        console(env, f"summon minecraft:iron_golem {heim[0] + 4} {heim[1]} {heim[2]} "
+                     f'{{NoAI:1b,Silent:1b,PersistenceRequired:1b,Tags:["{INTERACT_TAG}"]}}', pause=0.5)
+        probe("den Mob", schaden("minecraft:mob_attack", golem), "attacked by an iron golem")
+        console(env, f'data merge entity {golem} {{CustomName:"Bob"}}', pause=0.3)
+        probe("den Mob mit eigenem Namen", schaden("minecraft:mob_attack", golem), "attacked by Bob")
+
+        # Eine eigene Sprache, mit nur zwei Namen darin.
+        sprachdatei.write_text(
+            'messages:\n  body-env-damage: "&cDer Koerper wurde durch {cause} verletzt."\n'
+            'damage-names:\n  cactus: "einen Kaktus"\n'
+            'effect-names:\n  slowness: "Langsamkeit"\n', encoding="utf-8")
+        set_option(env, "language", TESTSPRACHE)
+        probe(f"den Kaktus aus lang/{TESTSPRACHE}.yml", schaden("minecraft:cactus"),
+              "durch einen Kaktus verletzt")
+        probe("den Amboss aus der englischen Datei, wo die eigene keinen Namen hat", amboss,
+              "durch a falling anvil verletzt")
+
+        # Langsamkeit sperrt den Start und tut niemandem weh.
+        bot.chat(f"/effect give {BOT_NAME} minecraft:slowness 30 0 true")
+        time.sleep(0.5)
+        since = bot.mark()
+        bot.chat("/cam")
+        hit = bot.expect("cannot start cam mode with", since, 8000)
+        FIND.test(f"Ein Effekt heisst, wie lang/{TESTSPRACHE}.yml ihn nennt",
+                  bool(hit) and "with Langsamkeit on you" in strip_colors(hit["text"]),
+                  strip_colors(hit["text"]) if hit else "keine Ablehnung im Chat")
+        if not hit:
+            cam_off(bot)
+        bot.chat(f"/effect clear {BOT_NAME} minecraft:slowness")
+    finally:
+        try:
+            console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+            sprachdatei.unlink(missing_ok=True)
+            set_options(env, [("language", "en"), ("enabled", "true", "cam-safety")])
+            bot.chat(f"/effect clear {BOT_NAME}")
+            hinstellen(bot, heim[0], heim[1], heim[2])
+            # Der letzte Treffer hat die cam-safety-Sperre angeworfen, auch
+            # waehrend sie aus war: Das Plugin merkt sich jeden Schaden. Sie
+            # laeuft fuenf Sekunden, und der naechste Abschnitt faengt mit
+            # /cam an - bis hierher sind erst gut drei vergangen.
+            time.sleep(CAM_SAFETY_SEKUNDEN)
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Meldungen: {exc}")
 
 
 def effect_start_checks(env, bot):
@@ -3378,7 +3636,7 @@ def waerter_ziel_checks(env, bot):
         if laeuft:
             cam_off(bot)
         meldung = next((strip_colors(m["text"]) for m in bot.call("messages", since=since).get("messages", [])
-                        if "WARDEN" in strip_colors(m["text"])), "")
+                        if "by a warden!" in strip_colors(m["text"])), "")
         return not laeuft and bool(meldung), meldung
 
     try:
@@ -3455,8 +3713,8 @@ def uebergabe_checks(env, bot):
         "Piglin": f'summon minecraft:piglin {x + 5} {y} {z} {{Tags:["{INTERACT_TAG}"],'
                   f"PersistenceRequired:1b,Silent:1b,IsImmuneToZombification:1b,IsBaby:0b}}",
     }
-    # Wie die Meldung des Plugins den Angreifer nennt.
-    name_der_art = {"Eisengolem": "IRON_GOLEM", "Zombie": "ZOMBIE", "Hoglin": "HOGLIN", "Piglin": "PIGLIN"}
+    # Wie die Meldung des Plugins den Angreifer nennt, aus mob-names.
+    name_der_art = {"Eisengolem": "an iron golem", "Zombie": "a zombie", "Hoglin": "a hoglin", "Piglin": "a piglin"}
     bot.chat("/gamemode survival")
     bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
     time.sleep(0.5)
@@ -5351,7 +5609,7 @@ def border_checks(env, bot):
         FIND.test("border-mode: barrier - die Kamera bleibt am verbotenen Biom "
                   "stehen, ohne zurueckgesetzt zu werden, und die Meldung nennt es",
                   stand is not None and biom_x - 1.5 <= stand[0] + 0.3 <= biom_x + 0.01
-                  and ergebnis[1] == 0 and gewarnt(ergebnis, "not allowed in lush_caves"),
+                  and ergebnis[1] == 0 and gewarnt(ergebnis, "not allowed in lush caves"),
                   grenz_zeige(ergebnis, heim))
         # Einmal auffrischen lassen: Die Wand wird um die Stelle gebaut, an
         # der der Bot zuletzt stand, und die Proben liegen bis zu vier Bloecke
@@ -5915,7 +6173,7 @@ def boden_ebnen(bot):
 
 
 def step_tests(env):
-    Log.step("8. Tests im laufenden Spiel")
+    Log.step("9. Tests im laufenden Spiel")
     if server_running(env) is None:
         FIND.test("Tests", False, "Der Server laeuft nicht")
         return False
@@ -6063,6 +6321,9 @@ def step_tests(env):
         # --- Geworfene Traenke im Cam-Modus ---
         potion_checks(env, bot)
 
+        # --- Was den Koerper getroffen hat ---
+        grund_checks(env, bot)
+
         # --- Bloecke und Entitaeten im Cam-Modus ---
         interact_checks(env, bot)
 
@@ -6125,7 +6386,7 @@ def step_tests(env):
 
 
 # ---------------------------------------------------------------------------
-# 9. Zusammenfassung
+# 10. Zusammenfassung
 # ---------------------------------------------------------------------------
 
 def summary(env, results):

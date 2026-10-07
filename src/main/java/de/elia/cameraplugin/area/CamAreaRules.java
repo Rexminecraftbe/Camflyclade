@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.area;
 
 import de.elia.cameraplugin.config.ConfigReader;
+import de.elia.cameraplugin.config.Messages;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
@@ -114,7 +115,17 @@ public final class CamAreaRules {
     }
 
     /** A forbidden structure reaching into a chunk, with the boxes to test against. */
-    private record ForbiddenStructure(String name, List<BoundingBox> boxes) {
+    private record ForbiddenStructure(NamespacedKey key, List<BoundingBox> boxes) {
+    }
+
+    /**
+     * Where an area gets the name it goes by in the messages to the player,
+     * see {@link #forbiddenArea}.
+     */
+    private final Messages messages;
+
+    public CamAreaRules(Messages messages) {
+        this.messages = messages;
     }
 
     /** Reads the whole section out of the config file. */
@@ -167,9 +178,10 @@ public final class CamAreaRules {
      * hear which of its biomes or structures he is standing in. Of the other
      * two the biome comes first, as it does in the config file.
      *
-     * @return the name of the dimension, biome or structure, written the way it
-     *         is written in the config file, or {@code null} when camera mode is
-     *         allowed there
+     * @return the name of the dimension, biome or structure, the way the
+     *         language file calls it under {@code dimension-names},
+     *         {@code biome-names} and {@code structure-names}, or {@code null}
+     *         when camera mode is allowed there
      */
     public String forbiddenArea(Location location) {
         World world = location == null ? null : location.getWorld();
@@ -208,8 +220,9 @@ public final class CamAreaRules {
      * does not let a camera player through in the first place, while a portal
      * standing in a forbidden biome or structure does and brings him back.
      *
-     * @return the name of the dimension, written the way it is written in the
-     *         config file, or {@code null} when camera mode is allowed in it
+     * @return the name of the dimension, the way the language file calls it
+     *         under {@code dimension-names}, or {@code null} when camera mode is
+     *         allowed in it
      */
     public String forbiddenDimension(Location location) {
         World world = location == null ? null : location.getWorld();
@@ -220,7 +233,7 @@ public final class CamAreaRules {
         // A world carrying a dimension of its own belongs to none of the three
         // and is therefore forbidden by none of them.
         return dimension != null && !allowedDimensions.contains(world.getEnvironment())
-                ? dimension
+                ? messages.getName("dimension-names", dimension, dimension)
                 : null;
     }
 
@@ -236,7 +249,7 @@ public final class CamAreaRules {
         // would fail there. getKey sits on Keyed, which both of them have, and
         // a biome read out of a world is registered and therefore has a key.
         NamespacedKey key = biome == null ? null : biome.getKey();
-        return key != null && forbiddenBiomes.contains(key) ? displayName(key) : null;
+        return key != null && forbiddenBiomes.contains(key) ? messages.getName("biome-names", key) : null;
     }
 
     /**
@@ -257,7 +270,7 @@ public final class CamAreaRules {
                 location.getBlockX() >> 4, location.getBlockZ() >> 4)) {
             for (BoundingBox box : structure.boxes()) {
                 if (box.contains(location.getX(), location.getY(), location.getZ())) {
-                    return structure.name();
+                    return messages.getName("structure-names", structure.key());
                 }
             }
         }
@@ -308,7 +321,7 @@ public final class CamAreaRules {
                     ? pieceBoxesIn(generated, chunkBox)
                     : List.of(generated.getBoundingBox());
             if (!boxes.isEmpty()) {
-                found.add(new ForbiddenStructure(displayName(structure), boxes));
+                found.add(new ForbiddenStructure(structure, boxes));
             }
         }
         return List.copyOf(found);
@@ -484,7 +497,7 @@ public final class CamAreaRules {
             for (ForbiddenStructure structure : around) {
                 for (BoundingBox box : structure.boxes()) {
                     if (box.contains(x + 0.5, y + 0.5, z + 0.5)) {
-                        return structure.name();
+                        return messages.getName("structure-names", structure.key());
                     }
                 }
             }
