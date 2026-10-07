@@ -3496,7 +3496,7 @@ def waerter_ziel_checks(env, bot):
         if laeuft:
             cam_off(bot)
         meldung = next((strip_colors(m["text"]) for m in bot.call("messages", since=since).get("messages", [])
-                        if "WARDEN" in strip_colors(m["text"])), "")
+                        if "by a warden!" in strip_colors(m["text"])), "")
         return not laeuft and bool(meldung), meldung
 
     try:
@@ -3573,8 +3573,8 @@ def uebergabe_checks(env, bot):
         "Piglin": f'summon minecraft:piglin {x + 5} {y} {z} {{Tags:["{INTERACT_TAG}"],'
                   f"PersistenceRequired:1b,Silent:1b,IsImmuneToZombification:1b,IsBaby:0b}}",
     }
-    # Wie die Meldung des Plugins den Angreifer nennt.
-    name_der_art = {"Eisengolem": "IRON_GOLEM", "Zombie": "ZOMBIE", "Hoglin": "HOGLIN", "Piglin": "PIGLIN"}
+    # Wie die Meldung des Plugins den Angreifer nennt, aus mob-names.
+    name_der_art = {"Eisengolem": "an iron golem", "Zombie": "a zombie", "Hoglin": "a hoglin", "Piglin": "a piglin"}
     bot.chat("/gamemode survival")
     bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
     time.sleep(0.5)
