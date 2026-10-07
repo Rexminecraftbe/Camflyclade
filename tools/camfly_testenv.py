@@ -77,7 +77,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 655 Methoden- und Feldzugriffe. Alle 655 gibt
+# Dieser Pruefer zaehlt zurzeit 656 Methoden- und Feldzugriffe. Alle 656 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -1906,6 +1906,115 @@ def potion_checks(env, bot):
     als Wolke liegen und fragt immer wieder nach."""
     potion_probe(env, bot, "splash_potion", "Splash")
     potion_probe(env, bot, "lingering_potion", "verweilend")
+
+
+# ---------------------------------------------------------------------------
+# Was den Koerper getroffen hat
+# ---------------------------------------------------------------------------
+
+# Wie hoch ueber dem Koerper der Amboss losfaellt, in Bloecken. Vier Bloecke
+# Fall machen sechs Schaden, und ein Amboss trifft erst, wenn er aufschlaegt.
+AMBOSS_HOEHE = 4
+
+
+def grund_checks(env, bot):
+    """Die Meldung, mit der ein Treffer auf den Koerper den Cam-Modus beendet,
+    sagt, was ihn getroffen hat.
+
+    Ein fallender Amboss ist dabei kein Angriff, auch wenn er als fallender
+    Block eine Entitaet ist: Die Meldung heisst "damaged by a falling anvil"
+    und nicht mehr "attacked by FALLING_BLOCK". Ein Kaktus heisst Kaktus statt
+    CONTACT. Ein Mob heisst, wie mob-names ihn nennt, und ein Mob mit eigenem
+    Namen so, wie er heisst. Eine eigene Sprachdatei liefert die Namen, die
+    sie hat; was ihr fehlt, kommt aus der englischen.
+
+    Der Amboss faellt wirklich auf den Koerper. Kaktus und Golem kommen ueber
+    /damage: Ob ein echter Kaktus den Koerper piekst, haengt daran, wo der
+    Koerper auf den Bruchteil eines Blocks genau steht, und einen Golem dann
+    zuschlagen zu lassen, wann er soll, braucht einen ganzen Abschnitt, siehe
+    rueckstoss_mob_checks. Das Plugin liest ohnehin nur die Schadensart des
+    Treffers und wer hinter ihm steht, und beides setzt /damage genauso.
+
+    Jeder Treffer geht an den Bot weiter. Resistenz 255 haelt ihn heil, und
+    cam-safety ist solange aus - sonst ginge nach jedem Treffer fuenf Sekunden
+    lang kein /cam.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test der Meldungen aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    golem = f"@e[tag={INTERACT_TAG},type=minecraft:iron_golem,limit=1]"
+    sprachdatei = env.server / "plugins" / "CamFly" / "lang" / f"{TESTSPRACHE}.yml"
+
+    def probe(name, treffen, erwartet):
+        """Einmal /cam, den Bot vom Koerper wegstellen, den Koerper treffen und
+        nachsehen, was im Chat steht. treffen bekommt die Stelle des Koerpers
+        und einen Selektor fuer das Mannequin, das die Treffer nimmt."""
+        if not FIND.test(f"/cam startet fuer die Meldung ({name})", cam_on(bot), ""):
+            return
+        koerper = bot.server_pos()
+        if koerper is None:
+            FIND.test(f"Koerperstelle bekannt ({name})", False, "keine serverseitige Position")
+            cam_off(bot)
+            return
+        x, y, z = koerper
+        # Weg vom Koerper, wie beim Trankstest: Der Amboss traefe sonst beide.
+        hinstellen(bot, x - 6, _floor(y + 0.5), z)
+        mannequin = f"@e[type=minecraft:mannequin,x={x},y={y},z={z},distance=..1,limit=1]"
+        since = bot.mark()
+        treffen(x, y, z, mannequin)
+        told = bot.expect(erwartet, since, 8000)
+        FIND.test(f"Die Meldung nennt {name}", bool(told),
+                  strip_colors(told["text"]) if told else "keine Meldung im Chat")
+        if not told:
+            # Endete der Cam-Modus gar nicht, raeumt das hier ab.
+            cam_off(bot)
+
+    def amboss(x, y, z, mannequin):
+        # CancelDrop: Er bleibt nicht als Block liegen, genau dort, wohin der
+        # Bot beim Ende des Cam-Modus zurueckkommt.
+        console(env, f"summon minecraft:falling_block {x} {y + AMBOSS_HOEHE} {z} "
+                     '{BlockState:{Name:"minecraft:anvil"},CancelDrop:1b,'
+                     "HurtEntities:1b,FallHurtAmount:2.0f,FallHurtMax:40}", pause=0)
+
+    def schaden(art, von=None):
+        def treffen(x, y, z, mannequin):
+            console(env, f"damage {mannequin} 1 {art}" + (f" by {von}" if von else ""), pause=0)
+        return treffen
+
+    bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
+    time.sleep(0.5)
+    set_option(env, "enabled", "false", "cam-safety")
+    try:
+        probe("den fallenden Amboss", amboss, "damaged by a falling anvil")
+        probe("den Kaktus", schaden("minecraft:cactus"), "damaged by a cactus")
+
+        console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+        console(env, f"summon minecraft:iron_golem {heim[0] + 4} {heim[1]} {heim[2]} "
+                     f'{{NoAI:1b,Silent:1b,PersistenceRequired:1b,Tags:["{INTERACT_TAG}"]}}', pause=0.5)
+        probe("den Mob", schaden("minecraft:mob_attack", golem), "attacked by an iron golem")
+        console(env, f'data merge entity {golem} {{CustomName:"Bob"}}', pause=0.3)
+        probe("den Mob mit eigenem Namen", schaden("minecraft:mob_attack", golem), "attacked by Bob")
+
+        # Eine eigene Sprache, mit nur einem Namen darin.
+        sprachdatei.write_text(
+            'messages:\n  body-env-damage: "&cDer Koerper wurde durch {cause} verletzt."\n'
+            'damage-names:\n  cactus: "einen Kaktus"\n', encoding="utf-8")
+        set_option(env, "language", TESTSPRACHE)
+        probe(f"den Kaktus aus lang/{TESTSPRACHE}.yml", schaden("minecraft:cactus"),
+              "durch einen Kaktus verletzt")
+        probe("den Amboss aus der englischen Datei, wo die eigene keinen Namen hat", amboss,
+              "durch a falling anvil verletzt")
+    finally:
+        try:
+            console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+            sprachdatei.unlink(missing_ok=True)
+            set_options(env, [("language", "en"), ("enabled", "true", "cam-safety")])
+            bot.chat(f"/effect clear {BOT_NAME}")
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Meldungen: {exc}")
 
 
 def effect_start_checks(env, bot):
@@ -6062,6 +6171,9 @@ def step_tests(env):
 
         # --- Geworfene Traenke im Cam-Modus ---
         potion_checks(env, bot)
+
+        # --- Was den Koerper getroffen hat ---
+        grund_checks(env, bot)
 
         # --- Bloecke und Entitaeten im Cam-Modus ---
         interact_checks(env, bot)

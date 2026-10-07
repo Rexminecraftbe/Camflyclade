@@ -56,7 +56,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **655** - alle 655 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **656** - alle 656 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -148,6 +148,15 @@ Was zählt, ist die Zeile darunter: **fehlen: 0**.
   Meldung: `adventure` heißt im Cam-Modus, alles andere heißt beendet. Die
   Meldung `body-got-effect` wird zusätzlich geprüft, samt dem Effekt, den sie
   benennen soll.
+* **Was den Körper getroffen hat, prüft der Test an der Meldung.** Sie kommt
+  erst, wenn der Cam-Modus schon vorbei ist, und sagt damit beides. Der Amboss
+  fällt dabei wirklich auf den Körper, Kaktus und Golem kommen über `/damage`:
+  Ob ein echter Kaktus den Körper piekst, hängt daran, wo er auf den Bruchteil
+  eines Blocks genau steht. Das Plugin liest ohnehin nur die Schadensart und
+  wer hinter dem Treffer steht, und beides setzt `/damage` genauso.
+* **Der Amboss fällt mit `CancelDrop:1b`.** Sonst bliebe er als Block dort
+  liegen, wo der Körper stand - genau dort, wohin der Bot zurückkommt, sobald
+  der Cam-Modus endet.
 * **`start-with-effects` stellt der Test selbst um**, in der
   Konfigurationsdatei des Servers und mit `cam reload` von der Konsole; am
   Ende steht wieder `positive` da. Die Voreinstellung wird nicht gesetzt,
@@ -740,7 +749,12 @@ aus der Sättigung heraus · Gegenprobe: ohne Cam-Modus heilt er in beiden Fäll
 sehr wohl · ein geworfener Trank geht im Cam-Modus am Spieler vorbei, der
 Splash-Trank wie der verweilende · Gegenprobe: ohne Cam-Modus wirken beide auf
 ihn · der Körper wird von beiden weiterhin getroffen und beendet damit den
-Cam-Modus · die Meldung dazu nennt den Effekt, an dem es lag · `/cam` startet
+Cam-Modus · die Meldung dazu nennt den Effekt, an dem es lag · die Meldung zu
+einem Treffer auf den Körper nennt, was ihn getroffen hat: ein fallender Amboss
+ist kein Angriff, sondern „a falling anvil“, ein Kaktus heißt „a cactus“ statt
+CONTACT, ein Mob heißt wie in `mob-names` und einer mit eigenem Namen so, wie
+er heißt · eine eigene Sprachdatei liefert auch die Namen, und was ihr fehlt,
+kommt aus der englischen · `/cam` startet
 mit einem positiven und einem neutralen Effekt, mit einem schädlichen nicht ·
 auf `false` sperrt jeder Effekt, auf `true` keiner · die Ablehnung nennt jeden
 schädlichen Effekt und nur die · `actionbar-on` und `actionbar-off` schalten

@@ -122,6 +122,29 @@ public final class Messages {
     }
 
     /**
+     * A name from one of the lists in the language file that fill in a text:
+     * {@code damage-names} for what hurt a body, {@code mob-names} for the mob
+     * that attacked it.
+     *
+     * <p>A name the language file leaves out comes from the English one, like
+     * every text. One that neither of them has - a damage type a data pack
+     * adds, a mob of a newer version of the game - is the fallback, and so is
+     * an empty one: a text with a gap where the name belongs says less than a
+     * name that is not translated.</p>
+     *
+     * @param list     {@code damage-names} or {@code mob-names}
+     * @param key      the key of the damage type or the mob, without its namespace
+     * @param fallback what stands in for a name the list does not have
+     */
+    public String getName(String list, String key, String fallback) {
+        String name = language.getString(list + "." + key);
+        if (name == null || name.isEmpty()) {
+            return fallback;
+        }
+        return ChatColor.translateAlternateColorCodes('&', name);
+    }
+
+    /**
      * Looks up the wording of a config note. Unlike {@link #getMessage(String)}
      * an empty entry falls back to the built-in text: a note that lost its
      * wording would be an empty line in the log and would hide the very problem
