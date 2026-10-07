@@ -1916,6 +1916,10 @@ def potion_checks(env, bot):
 # Fall machen sechs Schaden, und ein Amboss trifft erst, wenn er aufschlaegt.
 AMBOSS_HOEHE = 4
 
+# Wie lange nach einem Schaden kein /cam geht, in Sekunden: cam-safety.delay
+# in der ausgelieferten config.yml.
+CAM_SAFETY_SEKUNDEN = 5
+
 
 def grund_checks(env, bot):
     """Die Meldung, mit der ein Treffer auf den Koerper den Cam-Modus beendet,
@@ -2013,6 +2017,11 @@ def grund_checks(env, bot):
             set_options(env, [("language", "en"), ("enabled", "true", "cam-safety")])
             bot.chat(f"/effect clear {BOT_NAME}")
             hinstellen(bot, heim[0], heim[1], heim[2])
+            # Der letzte Treffer hat die cam-safety-Sperre angeworfen, auch
+            # waehrend sie aus war: Das Plugin merkt sich jeden Schaden. Sie
+            # laeuft fuenf Sekunden, und der naechste Abschnitt faengt mit
+            # /cam an - bis hierher sind erst gut drei vergangen.
+            time.sleep(CAM_SAFETY_SEKUNDEN)
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test der Meldungen: {exc}")
 
