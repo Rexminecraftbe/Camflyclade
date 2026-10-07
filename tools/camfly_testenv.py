@@ -5609,7 +5609,7 @@ def border_checks(env, bot):
         FIND.test("border-mode: barrier - die Kamera bleibt am verbotenen Biom "
                   "stehen, ohne zurueckgesetzt zu werden, und die Meldung nennt es",
                   stand is not None and biom_x - 1.5 <= stand[0] + 0.3 <= biom_x + 0.01
-                  and ergebnis[1] == 0 and gewarnt(ergebnis, "not allowed in Lush Caves"),
+                  and ergebnis[1] == 0 and gewarnt(ergebnis, "not allowed in lush caves"),
                   grenz_zeige(ergebnis, heim))
         # Einmal auffrischen lassen: Die Wand wird um die Stelle gebaut, an
         # der der Bot zuletzt stand, und die Proben liegen bis zu vier Bloecke
