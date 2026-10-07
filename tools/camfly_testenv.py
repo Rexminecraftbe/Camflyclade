@@ -8,15 +8,17 @@ Das Skript macht alles, was sonst von Hand gemacht wurde:
   2. Plugin bauen (mvn -B clean package gegen spigot-api)
   3. Zusaetzlich gegen paper-api uebersetzen (die APIs sind nicht deckungsgleich)
   4. ApiCheck: jeden Bukkit-Aufruf im fertigen Jar gegen paper-api aufloesen
-  5. Paper-Testserver holen, einrichten und starten (mit FIFO fuer die Konsole)
-  6. mineflayer holen, auf Protokoll 26.2 flicken, seine Kollision wie im
+  5. Namen: die Namenslisten der Sprachdatei gegen die Daten des Spiels
+  6. Paper-Testserver holen, einrichten und starten (mit FIFO fuer die Konsole)
+  7. mineflayer holen, auf Protokoll 26.2 flicken, seine Kollision wie im
      echten Client rechnen lassen, Bot verbinden
-  7. Tests im laufenden Spiel fahren
-  8. Aufraeumen: Server und Bot beenden
+  8. Tests im laufenden Spiel fahren
+  9. Aufraeumen: Server und Bot beenden
 
 Aufruf:
     python3 tools/camfly_testenv.py                  # alles
     python3 tools/camfly_testenv.py --steps build,apicheck
+    python3 tools/camfly_testenv.py --steps names    # nach einem Update: fehlen Namen?
     python3 tools/camfly_testenv.py --keep-running   # Server laeuft weiter
     python3 tools/camfly_testenv.py --stop           # laufenden Server beenden
 
@@ -38,6 +40,7 @@ import struct
 import subprocess
 import sys
 import time
+import zipfile
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -89,7 +92,7 @@ BOT_NAME = "CamFlyTester"
 SERVER_HOST = "127.0.0.1"
 SERVER_PORT = 25565
 
-STEPS = ["jdk", "build", "paperapi", "crosscheck", "apicheck",
+STEPS = ["jdk", "build", "paperapi", "crosscheck", "apicheck", "names",
          "server", "bot", "tests"]
 
 # ---------------------------------------------------------------------------
@@ -628,7 +631,108 @@ def step_apicheck(env):
 
 
 # ---------------------------------------------------------------------------
-# 6. Paper-Testserver
+# 6. Namen: die Listen der Sprachdatei gegen die Daten des Spiels
+# ---------------------------------------------------------------------------
+
+# Die Mobs mit Spawn-Ei, die nichts angreifen und deshalb keinen Namen in
+# mob-names brauchen. Ein Mob mit Spawn-Ei, der weder dort noch hier steht,
+# ist mit einer neuen Version dazugekommen: Greift er an, gehoert er mit
+# einem Namen in mob-names, sonst hierher.
+MOBS_OHNE_ANGRIFF = (
+    "allay", "armadillo", "axolotl", "bat", "camel", "camel_husk", "cat", "chicken",
+    "cod", "copper_golem", "cow", "donkey", "fox", "frog", "glow_squid", "happy_ghast",
+    "horse", "mooshroom", "mule", "ocelot", "parrot", "pig", "pufferfish", "rabbit",
+    "salmon", "sheep", "skeleton_horse", "sniffer", "squid", "strider", "tadpole",
+    "tropical_fish", "turtle", "villager", "wandering_trader", "zombie_horse",
+)
+
+# Wo im Jar des Servers die Schadensarten liegen, eine Datei je Art.
+SCHADENSARTEN_ORDNER = "data/minecraft/damage_type/"
+
+
+def spiel_jar(env):
+    """Das Jar des Servers, in dem die Daten des Spiels lesbar liegen.
+
+    Der Download von Paper traegt sie nur als Patch auf das Jar von Mojang.
+    Zusammengesetzt werden sie beim ersten Start des Servers - oder hier,
+    mit paperclip.patchonly, ohne dass ein Server startet. Der Server findet
+    das Jar danach fertig vor und setzt es nicht noch einmal zusammen.
+    """
+    jar = env.server / "versions" / MC_VERSION / f"paper-{MC_VERSION}.jar"
+    if not jar.exists():
+        if not env.java.exists():
+            raise RuntimeError("Erst Schritt 'jdk' laufen lassen")
+        url, name = paper_jar_url()
+        paperclip = download(url, env.cache / name, f"Paper {MC_VERSION} Build {PAPER_BUILD}")
+        env.server.mkdir(parents=True, exist_ok=True)
+        Log.info("Paperclip setzt das Jar des Servers zusammen ...")
+        run([str(env.java), "-Dpaperclip.patchonly=true", "-jar", str(paperclip)],
+            cwd=env.server, timeout=900)
+    return jar
+
+
+def namen_in(text, abschnitt):
+    """Die Schluessel eines Abschnitts der Sprachdatei. Er reicht bis zur
+    naechsten Zeile, die ganz links anfaengt, wie in replace_option."""
+    head = re.search(rf"(?m)^{re.escape(abschnitt)}:\s*$", text)
+    if head is None:
+        return set()
+    rest = text[head.end():]
+    nxt = re.search(r"(?m)^\S", rest)
+    return set(re.findall(r"(?m)^\s+([a-z0-9_]+):", rest[:nxt.start() if nxt else len(rest)]))
+
+
+def step_names(env):
+    """Ob die Namenslisten der Sprachdatei zum Spiel passen.
+
+    Jede Schadensart des Spiels braucht einen Namen unter damage-names, und
+    jeder Mob mit Spawn-Ei steht unter mob-names oder in MOBS_OHNE_ANGRIFF.
+    Umgekehrt muss es alles, was in den Listen steht, im Spiel auch geben.
+    So faellt nach einem Update auf, was eine neue Version dazugebracht,
+    umbenannt oder entfernt hat - das Plugin selbst sagt dazu nichts, es
+    nennt eine Schadensart ohne Namen nur bei ihrem Schluessel und einen Mob
+    so, wie das Spiel ihn nennt.
+
+    Mobs ohne Spawn-Ei, etwa den Illusioner, sieht diese Pruefung nicht.
+    """
+    Log.step("6. Namen der Sprachdatei gegen die Daten des Spiels")
+    jar = spiel_jar(env)
+    if not FIND.test("Daten des Spiels lesbar", jar.exists(), str(jar)):
+        return False
+    with zipfile.ZipFile(jar) as z:
+        lang = json.loads(z.read("assets/minecraft/lang/en_us.json"))
+        schadensarten = {n[len(SCHADENSARTEN_ORDNER):-len(".json")] for n in z.namelist()
+                         if n.startswith(SCHADENSARTEN_ORDNER) and n.endswith(".json")}
+    entitaeten = {k[len("entity.minecraft."):] for k in lang
+                  if k.startswith("entity.minecraft.") and k.count(".") == 2}
+    mit_ei = {k[len("item.minecraft."):-len("_spawn_egg")] for k in lang
+              if k.startswith("item.minecraft.") and k.endswith("_spawn_egg")}
+    text = (env.repo / "src" / "main" / "resources" / SPRACHDATEI).read_text(encoding="utf-8")
+    damage_names = namen_in(text, "damage-names")
+    mob_names = namen_in(text, "mob-names")
+
+    def liste(namen):
+        return ", ".join(sorted(namen))
+
+    fehlen = schadensarten - damage_names
+    veraltet = damage_names - schadensarten
+    neu = mit_ei - mob_names - set(MOBS_OHNE_ANGRIFF)
+    unbekannt = (mob_names | set(MOBS_OHNE_ANGRIFF)) - entitaeten
+    ergebnisse = [
+        FIND.test("Jede Schadensart des Spiels hat einen Namen in damage-names", not fehlen,
+                  f"{len(schadensarten)} Schadensarten" if not fehlen else f"es fehlen: {liste(fehlen)}"),
+        FIND.test("Jeder Name in damage-names gehoert zu einer Schadensart des Spiels", not veraltet,
+                  "" if not veraltet else f"gibt es nicht: {liste(veraltet)}"),
+        FIND.test("Jeder Mob mit Spawn-Ei steht in mob-names oder in MOBS_OHNE_ANGRIFF", not neu,
+                  f"{len(mit_ei)} Mobs" if not neu else f"neu: {liste(neu)}"),
+        FIND.test("Jeden Mob aus mob-names und MOBS_OHNE_ANGRIFF gibt es im Spiel", not unbekannt,
+                  "" if not unbekannt else f"gibt es nicht: {liste(unbekannt)}"),
+    ]
+    return all(ergebnisse)
+
+
+# ---------------------------------------------------------------------------
+# 7. Paper-Testserver
 # ---------------------------------------------------------------------------
 
 SERVER_PROPERTIES = f"""\
@@ -747,7 +851,7 @@ def prepare_server_files(env):
 
 
 def step_server(env):
-    Log.step("6. Paper-Testserver")
+    Log.step("7. Paper-Testserver")
     stop_server(env, quiet=True)
 
     url, name = paper_jar_url()
@@ -801,7 +905,7 @@ def step_server(env):
 
 
 # ---------------------------------------------------------------------------
-# 7. Bot (mineflayer)
+# 8. Bot (mineflayer)
 # ---------------------------------------------------------------------------
 
 BOT_JS = r'''
@@ -1402,7 +1506,7 @@ def patch_physics(env):
 
 
 def step_bot(env):
-    Log.step("7. Bot (mineflayer)")
+    Log.step("8. Bot (mineflayer)")
     env.bot.mkdir(parents=True, exist_ok=True)
     if not (env.bot / "node_modules" / "mineflayer").exists():
         (env.bot / "package.json").write_text(
@@ -1420,7 +1524,7 @@ def step_bot(env):
 
 
 # ---------------------------------------------------------------------------
-# 8. Tests im laufenden Spiel
+# 9. Tests im laufenden Spiel
 # ---------------------------------------------------------------------------
 
 class BotClient:
@@ -6033,7 +6137,7 @@ def boden_ebnen(bot):
 
 
 def step_tests(env):
-    Log.step("8. Tests im laufenden Spiel")
+    Log.step("9. Tests im laufenden Spiel")
     if server_running(env) is None:
         FIND.test("Tests", False, "Der Server laeuft nicht")
         return False
@@ -6246,7 +6350,7 @@ def step_tests(env):
 
 
 # ---------------------------------------------------------------------------
-# 9. Zusammenfassung
+# 10. Zusammenfassung
 # ---------------------------------------------------------------------------
 
 def summary(env, results):

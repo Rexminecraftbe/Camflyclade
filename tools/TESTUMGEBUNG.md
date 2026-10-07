@@ -15,6 +15,7 @@ danach wiederverwendet.
 
 ```bash
 python3 tools/camfly_testenv.py --steps build,crosscheck,apicheck  # nur bauen und prüfen
+python3 tools/camfly_testenv.py --steps names                      # nach einem Update: fehlen Namen?
 python3 tools/camfly_testenv.py --skip jdk,paperapi                # Schritte auslassen
 python3 tools/camfly_testenv.py --keep-running                     # Server bleibt oben
 python3 tools/camfly_testenv.py --stop                             # laufenden Server beenden
@@ -27,7 +28,7 @@ Läuft der Server weiter, gehen Konsolenbefehle über die FIFO:
 echo "say hallo" > ~/camfly-testenv/server/console.fifo
 ```
 
-## Die acht Schritte
+## Die neun Schritte
 
 | Schritt      | Was passiert |
 |--------------|--------------|
@@ -36,6 +37,7 @@ echo "say hallo" > ~/camfly-testenv/server/console.fifo
 | `paperapi`   | `paper-api` und die zwölf Abhängigkeiten, die zum Übersetzen nötig sind. |
 | `crosscheck` | Denselben Quelltext noch einmal mit `javac` gegen `paper-api` übersetzen. |
 | `apicheck`   | Jeden Aufruf auf `org/bukkit`, `net/md_5`, `io/papermc` aus `target/classes` gegen `paper-api` auflösen. |
+| `names`      | Die Namenslisten der Sprachdatei gegen die Daten des Spiels prüfen, siehe unten. |
 | `server`     | Paper-Server holen, einrichten, starten, Konsole an eine FIFO hängen. |
 | `bot`        | `mineflayer` holen, auf Protokoll 26.2 flicken und seine Kollision wie im echten Client rechnen lassen. |
 | `tests`      | Der Bot spielt die Testfälle im laufenden Server durch. |
@@ -60,8 +62,44 @@ zählt zurzeit **656** - alle 656 gibt es auch in paper-api. Der Hinweis auf die
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
+## Die Namen nach einem Update
+
+Die Meldung, mit der ein Treffer auf den Körper den Cam-Modus beendet, nennt
+die Schadensart und den Mob mit den Namen aus `lang/en.yml`: `damage-names`
+und `mob-names`. Bringt eine neue Version etwas dazu, sagt das Plugin selbst
+nichts - es nennt eine Schadensart ohne Namen bei ihrem Schlüssel und einen
+Mob so, wie das Spiel ihn nennt. Der Schritt `names` gleicht die beiden
+Listen deshalb mit den Daten des Spiels ab: jede Schadensart unter
+`data/minecraft/damage_type` im Jar des Servers und jeden Mob mit Spawn-Ei aus
+seiner `en_us.json`. Er braucht keinen laufenden Server und ist in ein paar
+Sekunden durch:
+
+```bash
+python3 tools/camfly_testenv.py --steps names
+```
+
+Fällt er durch, steht dabei, worum es geht:
+
+* **„es fehlen“**: eine Schadensart ohne Namen. Sie gehört mit einem Namen
+  unter `damage-names`.
+* **„neu“**: ein Mob mit Spawn-Ei, der in keiner Liste steht. Greift er an,
+  gehört er mit einem Namen unter `mob-names`, sonst in `MOBS_OHNE_ANGRIFF`
+  im Skript.
+* **„gibt es nicht“**: ein Eintrag in `damage-names`, `mob-names` oder
+  `MOBS_OHNE_ANGRIFF`, den es im Spiel nicht mehr gibt - umbenannt,
+  entfernt oder vertippt.
+
+Mobs ohne Spawn-Ei, etwa den Illusioner, sieht die Prüfung nicht. Eine eigene
+Übersetzung wie `lang/de.yml` prüft sie auch nicht, sie liegt nicht im
+Repository: Was ihr fehlt, kommt aus der englischen Datei.
+
 ## Fallen, die das Skript schon kennt
 
+* **Die Daten des Spiels stecken im Download von Paper nur als Patch.**
+  Lesbar sind sie erst im Jar, das Paperclip beim ersten Start daraus
+  zusammensetzt, `server/versions/26.2/paper-26.2.jar`. Fehlt es, setzt der
+  Schritt `names` es mit `-Dpaperclip.patchonly=true` zusammen, ohne einen
+  Server zu starten; der Server findet es danach fertig vor.
 * **`difficulty peaceful`** wird gesetzt, sonst erschlägt ein Zombie den Bot und
   das Plugin verweigert danach `/cam` wegen der `cam-safety`-Sperre.
 * **`camera-particles.particles-per-tick: 0`** wird in die Testkonfiguration
