@@ -80,7 +80,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 656 Methoden- und Feldzugriffe. Alle 656 gibt
+# Dieser Pruefer zaehlt zurzeit 665 Methoden- und Feldzugriffe. Alle 665 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -3884,9 +3884,15 @@ def blick_checks(env, bot):
     zelle = [(hx, hz - 1), (hx + 1, hz), (hx - 1, hz), (hx, hz + 1)]
 
     def schweben(wo):
-        """Im Cam-Modus an die Stelle fliegen und nachsehen, ob er dort ist."""
+        """Im Cam-Modus an die Stelle fliegen und nachsehen, ob er dort ist.
+
+        Erst drei Bloecke darueber und dann senkrecht hinab: Schraeg von unten
+        her streifte er die Zelle des Haendlers, und der Server setzte ihn
+        zurueck.
+        """
         if not cam_on(bot):
             return False
+        bot.call("fly", wait=30, x=wo[0], y=wo[1] + 3, z=wo[2], timeout=15000)
         bot.call("fly", wait=30, x=wo[0], y=wo[1], z=wo[2], timeout=15000)
         time.sleep(1.0)
         pos = bot.server_pos()
