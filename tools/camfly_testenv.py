@@ -3798,6 +3798,145 @@ def uebergabe_checks(env, bot):
 
 
 # ---------------------------------------------------------------------------
+# Mobs, die den Kamera-Spieler anschauen
+# ---------------------------------------------------------------------------
+
+# Wie steil ein Mob mindestens nach oben sehen muss, um den Bot ueber sich
+# anzusehen, in Grad (nach oben ist negativ). Wer sich nur umsieht, sieht auf
+# Augenhoehe, also mit 0. Wer jemanden ansieht, hebt den Kopf in jedem Tick
+# neu von 0 aus, um hoechstens 40 Grad - steiler als -40 kommt keiner.
+BLICK_NACH_OBEN = -30
+
+# Wie lange jede Probe hinsieht, in Sekunden. Eine Kuh sucht sich jede zweite
+# Runde ihrer Ziele mit 2 % Wahrscheinlichkeit jemanden zum Ansehen, also im
+# Schnitt alle fuenf Sekunden, und sieht dann zwei bis vier Sekunden hin. Drei
+# Kuehe zusammen tun es im Schnitt nach knapp zwei Sekunden; der Haendler, der
+# jede Runde sucht, sofort.
+BLICK_DAUER = 8.0
+
+# Die Mobs der Probe, nach dem Namen, mit dem sie im Chat sprechen.
+BLICK_KUH = "BlickKuh"
+BLICK_HAENDLER = "BlickHaendler"
+
+
+def blick_runde(bot, dauer=BLICK_DAUER):
+    """Wer von den Mobs der Probe in `dauer` Sekunden mindestens einmal steil
+    nach oben sieht. Gibt die Namen zurueck, mit denen sie gesprochen haben.
+
+    Jeder Mob, dessen Kopf gerade steiler als BLICK_NACH_OBEN steht, sagt die
+    Marke der Runde; im Chat steht davor sein Name.
+    """
+    gesehen = set()
+    ende = time.time() + dauer
+    while time.time() < ende:
+        _server_yes_zaehler[0] += 1
+        marke = f"{SERVER_YES}-{_server_yes_zaehler[0]}"
+        since = bot.mark()
+        bot.chat(f"/execute as @e[tag={INTERACT_TAG},x_rotation=-90..{BLICK_NACH_OBEN}] run say {marke}")
+        time.sleep(0.4)
+        for m in bot.call("messages", since=since).get("messages", []):
+            text = strip_colors(m["text"])
+            if marke in text:
+                gesehen.update(n for n in (BLICK_KUH, BLICK_HAENDLER) if n in text)
+    return gesehen
+
+
+def blick_checks(env, bot):
+    """camera-mode.mobs-look-at-player: ob Mobs den Kamera-Spieler ansehen.
+
+    Drei Kuehe und ein fahrender Haendler stehen um eine Stelle herum, je einen
+    Block von ihr weg, und laufen nicht davon (Bewegungstempo 0). Der Bot
+    schwebt im Cam-Modus anderthalb Bloecke ueber dieser Stelle - nah genug,
+    dass sie ihn auch unsichtbar bemerken: zwei Bloecke weit, wie in Vanilla.
+    Ob einer ihn ansieht, sagt sein Kopf, der dann steil nach oben zeigt. Die
+    Kuehe sehen mit dem Ziel LOOK_AT_PLAYER hin, der Haendler mit INTERACT.
+
+    Mit der Voreinstellung false darf keiner hinaufsehen. Mit true sehen sie
+    ihn an - die Gegenprobe, ohne die die erste nichts saehe. Und einen
+    Spieler ohne Cam-Modus sehen sie auch mit false weiter an: den Zuschauer,
+    auf einer Barriere mitten zwischen ihnen, waehrend der Bot im Cam-Modus
+    fuenf Bloecke daneben schwebt - nah genug, dass die Mobs das Ziel des
+    Plugins tragen, zu weit, um ihn unsichtbar zu bemerken.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Blicktest aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    # Sechs Bloecke suedoestlich des Startplatzes: Der Koerper bleibt dort
+    # stehen, wo der Cam-Modus startet, und gehoert nicht in die Runde.
+    cx, cz = _floor(heim[0]) + 6.5, _floor(heim[2]) + 6.5
+    y = BODEN_Y + 1
+    ueber = (cx, y + 1.5, cz)
+    daneben = (cx + 5, y + 1.5, cz)
+    mobs = [("cow", BLICK_KUH, cx + 1, cz), ("cow", BLICK_KUH, cx - 1, cz),
+            ("cow", BLICK_KUH, cx, cz + 1), ("wandering_trader", BLICK_HAENDLER, cx, cz - 1)]
+
+    def schweben(wo):
+        """Im Cam-Modus an die Stelle fliegen und nachsehen, ob er dort ist."""
+        if not cam_on(bot):
+            return False
+        bot.call("fly", wait=30, x=wo[0], y=wo[1], z=wo[2], timeout=15000)
+        time.sleep(1.0)
+        pos = bot.server_pos()
+        return pos is not None and max(abs(a - b) for a, b in zip(pos, wo)) < 0.5
+
+    def probe(name, wo, erwartet):
+        """Eine Runde: an die Stelle schweben und zusehen. erwartet sagt, ob
+        Kuh und Haendler hinaufsehen sollen."""
+        if not FIND.test(f"Der Bot schwebt fuer den Blicktest an seiner Stelle ({name})", schweben(wo), ""):
+            return
+        gesehen = blick_runde(bot)
+        for art, wer in (("eine Kuh", BLICK_KUH), ("der Haendler", BLICK_HAENDLER)):
+            FIND.test(f"{name}: {art} sieht {'hin' if erwartet else 'nicht hin'}",
+                      (wer in gesehen) == erwartet,
+                      "" if (wer in gesehen) == erwartet else
+                      ("sah den Kamera-Spieler an" if not erwartet else "sah nicht hinauf"))
+
+    try:
+        console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.5)
+        console(env, f"setblock {_floor(cx)} {y} {_floor(cz)} minecraft:barrier", pause=0.3)
+        for art, name, mx, mz in mobs:
+            console(env, f'summon minecraft:{art} {mx} {y} {mz} {{Tags:["{INTERACT_TAG}"],'
+                         f'CustomName:"{name}",PersistenceRequired:1b,Silent:1b}}', pause=0.3)
+        console(env, f"execute as @e[tag={INTERACT_TAG}] run attribute @s minecraft:movement_speed base set 0",
+                pause=0.3)
+        for art, name in (("cow", BLICK_KUH), ("wandering_trader", BLICK_HAENDLER)):
+            if not FIND.test(f"Fuer den Blicktest steht {name} da", entity_da(bot, f"minecraft:{art}"), ""):
+                return
+
+        # Die Voreinstellung wird nachgesehen und nicht gesetzt: So faellt auf,
+        # wenn in der ausgelieferten Datei etwas anderes steht.
+        probe("mobs-look-at-player: false (Voreinstellung), Kamera-Spieler ueber ihnen", ueber, False)
+
+        # Ein Spieler ohne Cam-Modus mitten zwischen ihnen, auf der Barriere.
+        zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+        try:
+            zuschauer.start()
+            if FIND.test("Ein zweiter Spieler kommt fuer den Blicktest herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ZUSCHAUER_NAME):
+                time.sleep(1.5)
+                console(env, f"tp {ZUSCHAUER_NAME} {cx} {y + 1} {cz}", pause=1.0)
+                probe("mobs-look-at-player: false, Spieler ohne Cam-Modus zwischen ihnen", daneben, True)
+        finally:
+            zuschauer.stop()
+
+        # Die Gegenprobe. cam reload wirft den Bot aus dem Cam-Modus,
+        # schweben bringt ihn wieder hinein.
+        set_option(env, "mobs-look-at-player", "true")
+        probe("mobs-look-at-player: true, Kamera-Spieler ueber ihnen", ueber, True)
+    finally:
+        try:
+            set_option(env, "mobs-look-at-player", "false")
+            cam_off(bot)
+            console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.5)
+            console(env, f"setblock {_floor(cx)} {y} {_floor(cz)} minecraft:air", pause=0.3)
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Blicktest: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # Der Name ueber dem Koerper
 # ---------------------------------------------------------------------------
 
@@ -6342,6 +6481,9 @@ def step_tests(env):
 
         # --- Mobs, die beim Start hinter dem Spieler her sind ---
         uebergabe_checks(env, bot)
+
+        # --- Mobs, die den Kamera-Spieler ansehen ---
+        blick_checks(env, bot)
 
         # --- Der Name ueber dem Koerper ---
         name_checks(env, bot)

@@ -22,6 +22,7 @@ import de.elia.cameraplugin.inventory.CamInventoryLock;
 import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.mirrordamage.DamageMirror;
 import de.elia.cameraplugin.mirrordamage.SwingStrength;
+import de.elia.cameraplugin.mob.MobGaze;
 import de.elia.cameraplugin.mob.MobTargeting;
 import de.elia.cameraplugin.movement.CamBorderWall;
 import de.elia.cameraplugin.movement.CamMovementGuard;
@@ -75,6 +76,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamNameTag nameTag = new CamNameTag(this, settings, messages, cameraPlayers);
     private final CamActionBar actionBar = new CamActionBar(this);
     private final MobTargeting mobTargeting = new MobTargeting(this, settings, cameraPlayers);
+    private final MobGaze mobGaze = new MobGaze(this, settings, cameraPlayers);
     private final BodyWatch bodyWatch = new BodyWatch(this);
     private final CamTimeLimit timeLimit = new CamTimeLimit(this);
     private final StartChecks startChecks = new StartChecks(settings, messages);
@@ -155,12 +157,13 @@ public final class CameraPlugin extends JavaPlugin {
         for (Listener listener : listeners) {
             pluginManager.registerEvents(listener, this);
         }
-        // These register themselves: which event they listen to depends on
-        // the server.
+        // These register themselves: what they hook into depends on the
+        // server.
         new CamKnockbackGuard(this, cameraPlayers).register();
         swingStrength.register();
         damageMirror.watchBursts();
         mobTargeting.watchWardenAnger();
+        mobGaze.start();
     }
 
     /**
@@ -238,6 +241,7 @@ public final class CameraPlugin extends JavaPlugin {
             camSulfurCubeGuard.onDisable();
         }
         borderWall.onDisable();
+        mobGaze.onDisable();
         particles.onDisable();
         sightGlow.onDisable();
         nameTag.onDisable();

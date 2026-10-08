@@ -535,6 +535,31 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   Bot steht, schlägt den Körper oft im selben Augenblick: Der Cam-Modus ist
   dann schon vorbei, ehe ein `cam_on` nachsehen kann, ob er läuft. Die Probe
   wartet deshalb nur auf die Bestätigung des Starts.
+* **Ob ein Mob den Bot ansieht, sagt sein Kopf.** Der Blicktest stellt drei
+  Kühe und einen fahrenden Händler im Kreuz um eine Stelle, je einen Block
+  von ihr weg, und lässt den Bot im Cam-Modus anderthalb Blöcke darüber
+  schweben: Wer ihn ansieht, sieht steil nach oben. Gefragt wird mit
+  `/execute as @e[...,x_rotation=-90..-30] run say`, und vor der Marke steht
+  im Chat der Name des Mobs. Wer sich nur umsieht, sieht auf Augenhöhe, also
+  mit 0. Steiler als -40 sieht keiner: Der Kopf hebt sich in jedem Tick neu
+  von 0 aus, um höchstens 40 Grad.
+* **Unsichtbar bemerkt ein Mob den Bot nur aus zwei Blöcken.** So weit lässt
+  das Spiel jeden Mob einen unsichtbaren Spieler sehen, egal wie kurz seine
+  Reichweite sonst wäre. Die Füße des Bots stehen deshalb höchstens 1,8
+  Blöcke von denen der Mobs - weiter weg sähe ihn auch ohne das Plugin
+  keiner an, und die Gegenprobe mit `mobs-look-at-player: true` fiele.
+* **Die Mobs der Probe laufen nicht davon.** Ihr Bewegungstempo steht auf 0,
+  gesetzt mit `/attribute`; ihre Ziele laufen sonst ganz normal, auch das
+  Umsehen. Eine Kuh sucht sich jede zweite Runde ihrer Ziele mit 2 %
+  Wahrscheinlichkeit jemanden zum Ansehen, im Schnitt also alle fünf
+  Sekunden; deshalb drei Kühe und acht Sekunden je Probe. Der Händler sieht
+  über `INTERACT` jeden an, der drei Blöcke an ihn herankommt, und zwar
+  sofort - an ihm hängt die Gegenprobe nicht am Zufall.
+* **Der Zuschauer im Blicktest steht auf einer Barriere** mitten zwischen
+  den Mobs, damit auch er höher steht als ihre Augen. Der Bot schwebt dabei
+  im Cam-Modus fünf Blöcke daneben: nah genug, dass die Mobs das Ziel des
+  Plugins tragen, zu weit, als dass sie ihn unsichtbar bemerkten. So prüft
+  die Probe, dass das Ziel einen Spieler ohne Cam-Modus nicht verdeckt.
 * **Der Name über dem Körper ist ein TextDisplay und wird am Server
   geprüft.** Was der Client daraus zeichnet, sieht der Bot nicht. Gefragt
   wird mit `/execute as <Körper> at @s positioned ~ ~2.25 ~ if entity
@@ -838,7 +863,10 @@ Kamera-Spieler reizt · ein Eisengolem, der beim Start hinter dem Spieler her
 ist, geht mit `mob-target: vanilla` auf den Körper los, und er wie ein
 Zombie verliert mit `false` sein Ziel · ebenso ein Hoglin und ein Piglin,
 die ihr Gehirn steuert, und wen der Körper angezogen hat, der ist nach dem
-Ende wieder hinter dem Spieler her · der
+Ende wieder hinter dem Spieler her · mit `mobs-look-at-player: false` sieht
+weder eine Kuh noch ein fahrender Händler den Kamera-Spieler an, auch nicht
+aus nächster Nähe, einen Spieler ohne Cam-Modus daneben aber sehr wohl ·
+Gegenprobe: mit `true` sehen beide den Kamera-Spieler an · der
 Name steht als TextDisplay genau dort über dem Körper, wo sonst sein
 Namensschild hinge, trägt den Text aus `armorstand.name-format`, folgt dem
 Körper und wird mit ihm eingesammelt · der Körper selbst trägt keinen Namen
