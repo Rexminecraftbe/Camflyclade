@@ -536,25 +536,34 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   dann schon vorbei, ehe ein `cam_on` nachsehen kann, ob er läuft. Die Probe
   wartet deshalb nur auf die Bestätigung des Starts.
 * **Ob ein Mob den Bot ansieht, sagt sein Kopf.** Der Blicktest stellt drei
-  Kühe und einen fahrenden Händler im Kreuz um eine Stelle, je einen Block
-  von ihr weg, und lässt den Bot im Cam-Modus anderthalb Blöcke darüber
-  schweben: Wer ihn ansieht, sieht steil nach oben. Gefragt wird mit
+  Kühe und einen fahrenden Händler um eine Stelle herum, die Kühe im Westen,
+  Süden und Südwesten, den Händler im Nordosten, und lässt den Bot im
+  Cam-Modus 1,2 Blöcke darüber schweben: Wer ihn ansieht, sieht steil nach
+  oben. Gefragt wird mit
   `/execute as @e[...,x_rotation=-90..-30] run say`, und vor der Marke steht
   im Chat der Name des Mobs. Wer sich nur umsieht, sieht auf Augenhöhe, also
   mit 0. Steiler als -40 sieht keiner: Der Kopf hebt sich in jedem Tick neu
   von 0 aus, um höchstens 40 Grad.
 * **Unsichtbar bemerkt ein Mob den Bot nur aus zwei Blöcken.** So weit lässt
   das Spiel jeden Mob einen unsichtbaren Spieler sehen, egal wie kurz seine
-  Reichweite sonst wäre. Die Füße des Bots stehen deshalb höchstens 1,8
+  Reichweite sonst wäre. Die Füße des Bots stehen deshalb höchstens 1,85
   Blöcke von denen der Mobs - weiter weg sähe ihn auch ohne das Plugin
   keiner an, und die Gegenprobe mit `mobs-look-at-player: true` fiele.
-* **Die Mobs der Probe laufen nicht davon.** Ihr Bewegungstempo steht auf 0,
-  gesetzt mit `/attribute`; ihre Ziele laufen sonst ganz normal, auch das
-  Umsehen. Eine Kuh sucht sich jede zweite Runde ihrer Ziele mit 2 %
+* **Die Kühe laufen nicht davon.** Ihr Bewegungstempo steht auf 0, gesetzt
+  mit `/attribute`; ihre Ziele laufen sonst ganz normal, auch das Umsehen.
+  Eine Kuh sucht sich jede zweite Runde ihrer Ziele mit 2 %
   Wahrscheinlichkeit jemanden zum Ansehen, im Schnitt also alle fünf
-  Sekunden; deshalb drei Kühe und acht Sekunden je Probe. Der Händler sieht
-  über `INTERACT` jeden an, der drei Blöcke an ihn herankommt, und zwar
-  sofort - an ihm hängt die Gegenprobe nicht am Zufall.
+  Sekunden; deshalb drei Kühe und acht Sekunden je Probe.
+* **Der Händler steht in einer Zelle aus Barrieren**, zwei Blöcke hoch, und
+  behält sein Tempo. Er sieht über `INTERACT` jeden an, der drei Blöcke an
+  ihn herankommt, und zwar sofort - an ihm hängt die Gegenprobe nicht am
+  Zufall. `INTERACT` hält aber neben dem Blick auch die Bewegung, und mit
+  Tempo 0 käme sein Spaziergang nie an und hielte sie ihm für immer weg: So
+  stand er im ersten Lauf da und sah niemanden an, auch mit
+  `mobs-look-at-player: true` nicht. Die Zelle steht über Eck, im Nordosten,
+  damit ihre Wände seinen Blick nicht verdecken - er geht über die Kante
+  zweier Wände hinweg, gut zwei Zehntel Blöcke über ihnen, zum Zuschauer
+  gut ein Zehntel.
 * **Der Zuschauer im Blicktest steht auf einer Barriere** mitten zwischen
   den Mobs, damit auch er höher steht als ihre Augen. Der Bot schwebt dabei
   im Cam-Modus fünf Blöcke daneben: nah genug, dass die Mobs das Ziel des

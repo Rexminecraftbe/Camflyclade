@@ -3844,12 +3844,20 @@ def blick_runde(bot, dauer=BLICK_DAUER):
 def blick_checks(env, bot):
     """camera-mode.mobs-look-at-player: ob Mobs den Kamera-Spieler ansehen.
 
-    Drei Kuehe und ein fahrender Haendler stehen um eine Stelle herum, je einen
-    Block von ihr weg, und laufen nicht davon (Bewegungstempo 0). Der Bot
-    schwebt im Cam-Modus anderthalb Bloecke ueber dieser Stelle - nah genug,
-    dass sie ihn auch unsichtbar bemerken: zwei Bloecke weit, wie in Vanilla.
-    Ob einer ihn ansieht, sagt sein Kopf, der dann steil nach oben zeigt. Die
-    Kuehe sehen mit dem Ziel LOOK_AT_PLAYER hin, der Haendler mit INTERACT.
+    Drei Kuehe und ein fahrender Haendler stehen um eine Stelle herum: die
+    Kuehe im Westen, Sueden und Suedwesten, mit Bewegungstempo 0, der Haendler
+    ueber Eck im Nordosten, in einer Zelle aus Barrieren. Der Bot schwebt im
+    Cam-Modus 1,2 Bloecke ueber dieser Stelle - nah genug, dass alle ihn auch
+    unsichtbar bemerken: zwei Bloecke weit, wie in Vanilla. Ob einer ihn
+    ansieht, sagt sein Kopf, der dann steil nach oben zeigt. Die Kuehe sehen
+    mit dem Ziel LOOK_AT_PLAYER hin, der Haendler mit INTERACT.
+
+    Der Haendler braucht die Zelle statt des Tempos 0: INTERACT haelt neben
+    dem Blick auch die Bewegung, und mit Tempo 0 kaeme sein Spaziergang nie an
+    und hielte sie ihm fuer immer weg - er saehe niemanden an, auch ohne das
+    Plugin. Die Zelle steht ueber Eck, damit sie seinen Blick nicht verdeckt:
+    Er geht ueber die Kante zweier Waende hinweg, gut zwei Zehntel Bloecke
+    ueber ihnen.
 
     Mit der Voreinstellung false darf keiner hinaufsehen. Mit true sehen sie
     ihn an - die Gegenprobe, ohne die die erste nichts saehe. Und einen
@@ -3867,10 +3875,13 @@ def blick_checks(env, bot):
     # stehen, wo der Cam-Modus startet, und gehoert nicht in die Runde.
     cx, cz = _floor(heim[0]) + 6.5, _floor(heim[2]) + 6.5
     y = BODEN_Y + 1
-    ueber = (cx, y + 1.5, cz)
-    daneben = (cx + 5, y + 1.5, cz)
-    mobs = [("cow", BLICK_KUH, cx + 1, cz), ("cow", BLICK_KUH, cx - 1, cz),
-            ("cow", BLICK_KUH, cx, cz + 1), ("wandering_trader", BLICK_HAENDLER, cx, cz - 1)]
+    ueber = (cx, y + 1.2, cz)
+    daneben = (cx + 5, y + 1.2, cz)
+    mobs = [("cow", BLICK_KUH, cx - 1, cz), ("cow", BLICK_KUH, cx, cz + 1),
+            ("cow", BLICK_KUH, cx - 1, cz + 1), ("wandering_trader", BLICK_HAENDLER, cx + 1, cz - 1)]
+    # Die Waende der Zelle des Haendlers, zwei Bloecke hoch.
+    hx, hz = _floor(cx) + 1, _floor(cz) - 1
+    zelle = [(hx, hz - 1), (hx + 1, hz), (hx - 1, hz), (hx, hz + 1)]
 
     def schweben(wo):
         """Im Cam-Modus an die Stelle fliegen und nachsehen, ob er dort ist."""
@@ -3896,11 +3907,13 @@ def blick_checks(env, bot):
     try:
         console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.5)
         console(env, f"setblock {_floor(cx)} {y} {_floor(cz)} minecraft:barrier", pause=0.3)
+        for wx, wz in zelle:
+            console(env, f"fill {wx} {y} {wz} {wx} {y + 1} {wz} minecraft:barrier", pause=0.2)
         for art, name, mx, mz in mobs:
             console(env, f'summon minecraft:{art} {mx} {y} {mz} {{Tags:["{INTERACT_TAG}"],'
                          f'CustomName:"{name}",PersistenceRequired:1b,Silent:1b}}', pause=0.3)
-        console(env, f"execute as @e[tag={INTERACT_TAG}] run attribute @s minecraft:movement_speed base set 0",
-                pause=0.3)
+        console(env, f"execute as @e[tag={INTERACT_TAG},type=minecraft:cow] run attribute @s "
+                     f"minecraft:movement_speed base set 0", pause=0.3)
         for art, name in (("cow", BLICK_KUH), ("wandering_trader", BLICK_HAENDLER)):
             if not FIND.test(f"Fuer den Blicktest steht {name} da", entity_da(bot, f"minecraft:{art}"), ""):
                 return
@@ -3931,6 +3944,8 @@ def blick_checks(env, bot):
             cam_off(bot)
             console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.5)
             console(env, f"setblock {_floor(cx)} {y} {_floor(cz)} minecraft:air", pause=0.3)
+            for wx, wz in zelle:
+                console(env, f"fill {wx} {y} {wz} {wx} {y + 1} {wz} minecraft:air", pause=0.2)
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Blicktest: {exc}")
