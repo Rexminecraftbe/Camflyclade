@@ -105,6 +105,11 @@ camera-mode:
   # Aus dem Zuschauermodus startet der Cam-Modus nie.
   gamemode: adventure
 
+  # Ob Mobs den Spieler im Cam-Modus anschauen (false = sie schauen an ihm vorbei, als wäre er nicht da).
+  # Wirkt nur auf Paper. Mobs, die ihr Gehirn steuert (Dorfbewohner, Piglins, Ziegen, Axolotl ...), schauen ihn weiter an,
+  # unsichtbar aber nur aus höchstens 2 Blöcken (wie in Vanilla).
+  mobs-look-at-player: false
+
   # Start mit Trankeffekten (sie pausieren im Cam-Modus):
   #   true     = mit allen
   #   false    = mit keinem

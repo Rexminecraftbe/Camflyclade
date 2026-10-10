@@ -117,6 +117,8 @@ public final class CamSettings {
     private boolean allowPowderSnowFlight;
     /** The mode the camera player flies in, {@code camera-mode.gamemode}. */
     private CamGameMode camGameMode;
+    /** Whether mobs look at a camera player, {@code camera-mode.mobs-look-at-player}. */
+    private boolean mobsLookAtPlayer;
     /** What {@code camera-mode.start-with-effects} allows him to start with. */
     private EffectStart startWithEffects;
 
@@ -221,6 +223,7 @@ public final class CamSettings {
             case "keep" -> CamGameMode.KEEP;
             default -> CamGameMode.ADVENTURE;
         };
+        mobsLookAtPlayer = config.getBoolean("camera-mode.mobs-look-at-player", false);
         String effects = config.getChoice("camera-mode.start-with-effects",
                 "positive", "true", "false", "positive").toLowerCase();
         startWithEffects = switch (effects) {
@@ -608,6 +611,10 @@ public final class CamSettings {
 
     public CamGameMode getCamGameMode() {
         return camGameMode;
+    }
+
+    public boolean mobsLookAtPlayer() {
+        return mobsLookAtPlayer;
     }
 
     public EffectStart getStartWithEffects() {
