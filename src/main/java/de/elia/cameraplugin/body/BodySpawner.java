@@ -302,14 +302,20 @@ public final class BodySpawner {
      * gravity, water and pistons, because that movement is what ends camera
      * mode. Only level 2 also lets players and mobs push it.</p>
      *
+     * <p>That they do not push it below level 2 is the business of a team,
+     * see {@link de.elia.cameraplugin.scoreboard.NoCollisionTeam}. The
+     * mannequin itself stays collidable on every level: switched off, it
+     * would let every arrow, trident and wind charge and the stab of a spear
+     * pass through it, since the server asks the same switch whether they can
+     * hit it.</p>
+     *
      * <p>The same call fits the hitbox and the body, because the mannequin is
      * the entity that gets pushed in either case. Behind the armour stand of
-     * body type 1 level 2 has already fallen back to level 1, so the hitbox
-     * standing in that body never becomes collidable.</p>
+     * body type 1 level 2 has already fallen back to level 1, so nobody ever
+     * pushes the hitbox standing in that body.</p>
      */
     private void applyMovementSensitivity(Mannequin mannequin) {
         mannequin.setImmovable(settings.getMovementSensitivity().isFixed());
-        mannequin.setCollidable(settings.getMovementSensitivity().allowsEntityPush());
     }
 
     /**
