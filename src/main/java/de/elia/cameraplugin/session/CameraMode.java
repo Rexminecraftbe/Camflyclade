@@ -199,8 +199,9 @@ public final class CameraMode {
         // its spot already, instead of following it away for that one tick.
         plugin.getBodyWatch().keepNameOverBody(player, body, nameDisplay);
         plugin.getMobTargeting().startMobTargeting(player, damageTarget);
-        // Creates the team when needed and sets all members anew - the
-        // player is in cameraPlayers already and so joins it as well.
+        // Creates the teams when needed and sets all members anew - the
+        // player is in cameraPlayers already and so joins it as well, and
+        // his body joins the one that keeps players and mobs from pushing it.
         plugin.getNoCollisionTeam().refreshNoCollisionTeam();
         plugin.getVisibility().updateVisibilityForAll();
         plugin.getCamModeObjective().setScore(player, 1);

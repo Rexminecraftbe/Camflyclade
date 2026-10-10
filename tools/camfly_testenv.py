@@ -28,6 +28,7 @@ Alles, was es herunterlaedt, liegt unter --workdir (Standard:
 """
 
 import argparse
+import contextlib
 import gzip
 import io
 import json
@@ -80,7 +81,7 @@ PAPER_API_DEPS = [
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
 # ein Hinweis, dass sich am Plugin etwas geaendert hat.
-# Dieser Pruefer zaehlt zurzeit 665 Methoden- und Feldzugriffe. Alle 665 gibt
+# Dieser Pruefer zaehlt zurzeit 664 Methoden- und Feldzugriffe. Alle 664 gibt
 # es auch in paper-api. Der Hinweis steht also bei jedem Lauf da.
 EXPECTED_API_CALLS = 348
 
@@ -134,8 +135,12 @@ class Findings:
     def __init__(self):
         self.tests = []     # (name, ok, detail)
         self.problems = []  # Texte, die der Mensch lesen muss
+        # Haengt an jedem Namen, solange ein Abschnitt mit einem bestimmten
+        # Koerpertyp laeuft, siehe mit_koerpertyp.
+        self.zusatz = ""
 
     def test(self, name, passed, detail=""):
+        name += self.zusatz
         self.tests.append({"name": name, "ok": bool(passed), "detail": detail})
         (Log.ok if passed else Log.fail)(f"{name}{(' - ' + detail) if detail else ''}")
         if not passed:
@@ -1910,6 +1915,40 @@ def set_option(env, key, value, section=None):
     set_options(env, [(key, value, section)])
 
 
+# Die beiden Koerpertypen, body.type: 1 ist ein Ruestungsstaender mit einem
+# unsichtbaren Mannequin darin, 2 ein Mannequin allein.
+KOERPERTYPEN = (1, 2)
+
+
+@contextlib.contextmanager
+def mit_koerpertyp(env, typ):
+    """Fuer die Dauer des Blocks mit diesem body.type, danach wieder mit der
+    Voreinstellung 1. Jede Probe darin traegt den Typ in ihrem Namen, sonst
+    stuende in der Zusammenfassung zweimal dasselbe da."""
+    set_option(env, "type", str(typ))
+    FIND.zusatz = f" (Koerpertyp {typ})"
+    try:
+        yield
+    finally:
+        FIND.zusatz = ""
+        set_option(env, "type", "1")
+
+
+def fuer_beide_koerpertypen(env, bot, *abschnitte):
+    """Dieselben Abschnitte einmal mit jedem Koerpertyp.
+
+    Was den Koerper trifft, trifft bei Typ 1 den Ruestungsstaender oder das
+    Mannequin darin, bei Typ 2 das Mannequin allein. Dass ein Treffer bei
+    beiden ankommt und bei beiden gleich weitergeht, sagt die Probe mit nur
+    einem von ihnen nicht: Bei Typ 2 flogen Pfeil, Dreizack, Windkugel und
+    Speerstich durch den Koerper hindurch, waehrend Typ 1 bestand.
+    """
+    for typ in KOERPERTYPEN:
+        with mit_koerpertyp(env, typ):
+            for abschnitt in abschnitte:
+                abschnitt(env, bot)
+
+
 def potion_item(kind):
     """Die Gegenstandsdaten fuer /summon minecraft:<kind>."""
     return ('{Item:{id:"minecraft:' + kind + '",count:1,'
@@ -3077,12 +3116,6 @@ RUECKSTOSS_HOEHE = 10
 # der Stoss einer Explosion ohne Cam-Modus nicht.
 RUECKSTOSS_TOLERANZ = 0.05
 
-# Fuer eine Windkugel mehr: Sie explodiert, wo sie den Koerper trifft, und
-# trifft im Cam-Modus den Ruestungsstaender - 0,5 Bloecke breit statt 0,6 wie
-# ein Spieler. Die Explosion sitzt damit 0,05 Bloecke naeher, ihr Stoss geht
-# ein wenig steiler: Gemessen landet der Spieler bis zu 0,09 Bloecke anders.
-RUECKSTOSS_TOLERANZ_WINDKUGEL = 0.15
-
 # Wie weit die Platte aus Obsidian um das Ziel herum reicht. TNT risse die
 # Grasschicht sonst auf, und in der Grube stuende der Bot bei der naechsten
 # Probe tiefer.
@@ -3111,11 +3144,6 @@ def rueckstoss_proben(x, y, z):
         ("Windkugel eines Breeze",
          f"summon minecraft:breeze_wind_charge {x + 4} {y + 1} {z} {{{wind},{marke}}}"),
     ]
-
-
-def rueckstoss_toleranz(name):
-    """Wie weit die beiden Landeplaetze dieser Probe auseinander liegen duerfen."""
-    return RUECKSTOSS_TOLERANZ_WINDKUGEL if name.startswith("Windkugel") else RUECKSTOSS_TOLERANZ
 
 
 def rueckstoss_schlaege(env, schlaeger, x, y, z):
@@ -3255,7 +3283,7 @@ def _zahlen(werte):
     return "-" if werte is None else "(" + ", ".join(f"{w:.4f}" for w in werte) + ")"
 
 
-def rueckstoss_vergleich(name, ohne, mit, wie="auf den Koerper", gegenprobe=True, toleranz=RUECKSTOSS_TOLERANZ):
+def rueckstoss_vergleich(name, ohne, mit, wie="auf den Koerper", gegenprobe=True):
     """Ob der Treffer auf den Koerper den Spieler dorthin stoesst, wo derselbe
     Treffer ihn ohne Cam-Modus hinstoesst.
 
@@ -3273,7 +3301,7 @@ def rueckstoss_vergleich(name, ohne, mit, wie="auf den Koerper", gegenprobe=True
     if not FIND.test(f"{name} {wie} beendet den Cam-Modus",
                      mit is not None and mit["beendet"], ""):
         return
-    gleich = max(abs(a - b) for a, b in zip(ohne["weg"], mit["weg"])) <= toleranz
+    gleich = max(abs(a - b) for a, b in zip(ohne["weg"], mit["weg"])) <= RUECKSTOSS_TOLERANZ
     erklaerung = (f"Weg ohne {_zahlen(ohne['weg'])}, mit {_zahlen(mit['weg'])}; "
                   f"erste Geschwindigkeit ohne {_zahlen(ohne['erste'])}, mit {_zahlen(mit['erste'])}")
     if not gleich:
@@ -3330,7 +3358,7 @@ def rueckstoss_checks(env, bot):
                 console(env, k, pause=0)
             ohne_cam[name] = rueckstoss_lauf(env, bot, ziel, False, treffen)
             mit = rueckstoss_lauf(env, bot, ziel, True, treffen)
-            rueckstoss_vergleich(name, ohne_cam[name], mit, toleranz=rueckstoss_toleranz(name))
+            rueckstoss_vergleich(name, ohne_cam[name], mit)
 
         # Die Schlaege eines zweiten Spielers, von Osten her. Liegengebliebene
         # Geschosse raeumt der Test vorher weg: Ein Schlag trifft die naechste
@@ -3381,7 +3409,7 @@ def rueckstoss_checks(env, bot):
                 console(env, k, pause=0)
             mit = rueckstoss_lauf(env, bot, ziel, True, treffen)
             rueckstoss_vergleich(name, ohne_cam[name], mit, "auf den Koerper mit damage-mode: false",
-                                 gegenprobe=False, toleranz=rueckstoss_toleranz(name))
+                                 gegenprobe=False)
     finally:
         try:
             if damage_mode_umgestellt:
@@ -3561,6 +3589,94 @@ def rueckstoss_mob_checks(env, bot):
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Mob-Rueckstosstest: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Wer den Koerper schieben darf
+# ---------------------------------------------------------------------------
+
+# Wie lange das Schwein im Koerper steht, in Sekunden. Es schiebt jeden Tick,
+# und schon ein Zwanzigstel Block beendet den Cam-Modus.
+SCHIEBEN_WARTEN = 2.0
+
+# Wie weit oestlich der Mitte des Koerpers das Schwein steht, in Bloecken.
+# Genau in der Mitte haette sein Stoss keine Richtung, und das Spiel stiesse
+# gar nicht.
+SCHIEBEN_ABSTAND = 0.3
+
+
+def koerpertyp_jetzt(env):
+    """Der body.type, der gerade in der Konfiguration des Testservers steht."""
+    text = (env.server / "plugins" / "CamFly" / "config.yml").read_text(encoding="utf-8")
+    treffer = re.search(r"(?m)^\s*type:\s*(\d+)", text)
+    return int(treffer.group(1)) if treffer else None
+
+
+def schieben_checks(env, bot):
+    """Ob ein Mob den Koerper schiebt, nach body.movement-sensitivity.
+
+    Auf Stufe 1 schiebt ihn niemand, auf Stufe 2 schieben ihn Spieler und
+    Mobs - aber nur, wo das Mannequin selbst der Koerper ist, bei Typ 2. Beim
+    Ruestungsstaender von Typ 1 faellt Stufe 2 auf Stufe 1 zurueck.
+
+    Vom Schieben haelt das Plugin das Mannequin mit dem Team cam_body ab und
+    nicht mehr damit, dass es nicht kollidiert: Daran liess der Server auch
+    Pfeil, Dreizack, Windkugel und Speerstich vorbeigehen. Diese Probe haelt
+    fest, dass das Team das Schieben genauso abhaelt. Ihre Gegenprobe ist
+    Stufe 2 mit Typ 2 - schiebt das Schwein dort nicht, sagt "schiebt nicht"
+    auch sonst nichts.
+
+    Geschoben wird mit einem Schwein, das sich nicht von der Stelle ruehrt:
+    Tempo 0, aber mit KI - ohne schiebt ein Mob gar nichts. Es steht knapp
+    neben der Mitte des Koerpers; genau in ihr fehlte dem Stoss die Richtung,
+    und das Spiel schoebe gar nicht. Gesetzt wird es erst ein paar Sekunden
+    nach dem Start - eine Sekunde lang sieht die Bewegungspruefung des
+    Plugins noch gar nicht hin, und was den Koerper bis dahin verschiebt,
+    faellt ihr nicht auf.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Schiebetest aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    typ = koerpertyp_jetzt(env)
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    schwein = (f"summon minecraft:pig {x + SCHIEBEN_ABSTAND} {y} {z} {{Silent:1b,"
+               f'DeathLootTable:"minecraft:empty",Tags:["{INTERACT_TAG}"],'
+               f'attributes:[{{id:"minecraft:movement_speed",base:0.0}}]}}')
+
+    def probe(stufe, geschoben):
+        console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+        hinstellen(bot, x, y, z)
+        if not FIND.test(f"/cam startet fuer den Schiebetest (Stufe {stufe})", cam_on(bot), ""):
+            return
+        # Hoch ueber den Koerper: Das Schwein soll allein ihn finden.
+        bot.call("fly", wait=30, dy=RUECKSTOSS_HOEHE, timeout=15000)
+        time.sleep(1.0)
+        console(env, schwein, pause=0)
+        time.sleep(SCHIEBEN_WARTEN)
+        laeuft = spielmodus_ist(bot, "adventure")
+        console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+        if geschoben:
+            FIND.test(f"Auf Stufe {stufe} schiebt ein Mob den Koerper und beendet den Cam-Modus",
+                      not laeuft, "" if not laeuft else "der Cam-Modus laeuft weiter")
+        else:
+            FIND.test(f"Auf Stufe {stufe} schiebt ein Mob den Koerper nicht", laeuft,
+                      "" if laeuft else "der Cam-Modus endete")
+        if laeuft:
+            cam_off(bot)
+
+    try:
+        probe(1, False)
+        set_option(env, "movement-sensitivity", "2")
+        probe(2, typ == 2)
+    finally:
+        try:
+            console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+            set_option(env, "movement-sensitivity", "1")
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Schiebetest: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -6478,11 +6594,8 @@ def step_tests(env):
         # --- Die Sprache der Texte ---
         language_checks(env, bot)
 
-        # --- Geworfene Traenke im Cam-Modus ---
-        potion_checks(env, bot)
-
-        # --- Was den Koerper getroffen hat ---
-        grund_checks(env, bot)
+        # --- Geworfene Traenke und was den Koerper getroffen hat, mit beiden Koerpertypen ---
+        fuer_beide_koerpertypen(env, bot, potion_checks, grund_checks)
 
         # --- Bloecke und Entitaeten im Cam-Modus ---
         interact_checks(env, bot)
@@ -6493,9 +6606,9 @@ def step_tests(env):
         # --- Die Ruestung im Cam-Modus ---
         armor_checks(env, bot)
 
-        # --- Der Rueckstoss eines Treffers auf den Koerper ---
-        rueckstoss_checks(env, bot)
-        rueckstoss_mob_checks(env, bot)
+        # --- Der Rueckstoss eines Treffers auf den Koerper, und wer ihn schieben darf,
+        # --- mit beiden Koerpertypen ---
+        fuer_beide_koerpertypen(env, bot, rueckstoss_checks, rueckstoss_mob_checks, schieben_checks)
 
         # --- Der Waerter haelt sich an body.mob-target ---
         waerter_ziel_checks(env, bot)

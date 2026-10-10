@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **665** - alle 665 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **664** - alle 664 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -403,6 +403,30 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   auch da, wo der Flug anfing, wie hoch er ging und wie viele Pakete mit
   einer Geschwindigkeit kamen - ob er also woanders losging, oben anstieß
   oder noch einen Stoß hinterher bekam.
+* **Tränke, Meldungen und Rückstoß laufen mit beiden Körpertypen.** Bei
+  Typ 1 trifft es den Rüstungsständer oder das unsichtbare Mannequin darin,
+  bei Typ 2 das Mannequin allein - und dort flogen Pfeil, Dreizack,
+  Windkugel und Speerstich durch den Körper hindurch, während jede Probe mit
+  Typ 1 bestand. `fuer_beide_koerpertypen` fährt diese Abschnitte deshalb
+  einmal mit `type: 1` und einmal mit `type: 2`, und jede Probe darin trägt
+  den Typ in Klammern hinter ihrem Namen. Am Ende steht wieder `type: 1` da.
+* **Geschosse und Speer fragen den Server, ob sie ein Ziel treffen dürfen,
+  und der fragt dasselbe Feld wie das Schieben.** `setCollidable(false)`
+  setzt in Paper und Spigot `collides`, und `isPickable()` gibt genau das
+  zurück; `canBeHitByProjectile()` und der Stich des Speers
+  (`PiercingWeapon.canHitEntity`) fragen danach. Damit Spieler und Mobs den
+  Körper trotzdem nicht schieben, steht sein Mannequin auf Stufe 0 und 1 im
+  Team `cam_body` mit der Kollisionsregel `never`.
+* **Den Schiebetest macht ein Schwein mit Tempo 0**, 0,3 Blöcke neben der
+  Mitte des Körpers: Es schiebt, was in ihm steht, und läuft selbst nicht
+  davon. Ohne KI schiebt ein Mob gar nichts, und genau in der Mitte fehlte
+  dem Stoß die Richtung - beides nachgemessen an einem freien Mannequin, das
+  sich dann nicht rührte. Auf Stufe 1 muss der Cam-Modus weiterlaufen, auf
+  Stufe 2 muss er mit Typ 2 enden - das ist die Gegenprobe. Mit Typ 1 fällt
+  Stufe 2 auf 1 zurück, der Körper bleibt stehen. Das Schwein kommt erst ein
+  paar Sekunden nach dem Start: Eine Sekunde lang merkt sich die
+  Bewegungsprüfung des Plugins noch keine Stelle, und was den Körper bis
+  dahin verschiebt, fiele ihr nicht auf.
 * **mineflayer rechnet die Geschwindigkeit von 26.x falsch um.** Das Paket
   trägt sie als lpVec3, schon in Blöcken je Tick; mineflayer teilt sie noch
   einmal durch 8000 wie im alten Format, und der Bot rührte sich nach einem
@@ -466,14 +490,13 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   ihr mitgibt, fliegt sie zwischen zwei Ticks durch einen Spieler hindurch,
   ohne ihn zu treffen. Die Probe schickt sie deshalb mit 0,3 Blöcken je Tick
   und ohne Beschleunigung los.
-* **Die Windkugel trifft im Cam-Modus den Rüstungsständer.** Das unsichtbare
-  Mannequin im Körper lässt Geschosse auf Bewegungsstufe 0 und 1 durch -
-  `setCollidable(false)` nimmt es ihnen als Ziel. Der Rüstungsständer ist
-  0,5 Blöcke breit statt 0,6 wie ein Spieler, die Kugel explodiert also 0,05
-  Blöcke näher, und ihr Stoß geht ein wenig steiler: Gemessen landet der
-  Spieler bis zu 0,09 Blöcke anders, die Probe lässt 0,15 zu. Pfeil und
-  Dreizack stoßen entlang ihres Flugs, bei ihnen spielt die Breite keine
-  Rolle.
+* **Die Windkugel trifft im Cam-Modus das Mannequin, bei beiden Typen.** Es
+  ist so breit wie ein Spieler, die Kugel explodiert also genau dort, wo sie
+  ihn ohne Cam-Modus träfe. Gemessen landet er auf ein Zehntausendstel am
+  selben Fleck. Solange das Mannequin Geschosse durchließ, traf sie bei Typ 1
+  den Rüstungsständer, 0,5 Blöcke breit statt 0,6: Ihr Stoß ging ein wenig
+  steiler, der Spieler landete bis zu 0,09 Blöcke anders, und die Probe
+  brauchte eine eigene Toleranz.
 * **Der Streitkolben schlägt aus 3,4 Blöcken Höhe, 0,3 Sekunden nach dem
   Teleport.** Erst nach gut 1,5 Blöcken Fall ist es ein Schlag mit Wucht, der
   alles drumherum wegstößt. Früher fehlt der Fall, später ist der Schläger
@@ -866,8 +889,11 @@ explodieren · ein Wüstenzombie, der mit dem Körper anders steht als mit dem
 Kopf, stößt entlang des Körpers, ein Eisengolem wirft hoch, und der
 Schallstoß eines Wärters schleudert weit weg, alles wie ohne Cam-Modus ·
 Pfeil, TNT, Windkugel, Sprintschlag und Speerstich auch mit
-`damage-mode: false` · ein Wärter greift den Körper mit
-`mob-target: vanilla` an und mit `false` nicht, auch wenn ihn der
+`damage-mode: false` · die Tränke, die Meldungen zu einem Treffer und jede
+Probe zum Rückstoß mit Körpertyp 1 und mit Körpertyp 2 · auf
+Bewegungsstufe 1 schiebt ein Mob den Körper nicht, auf Stufe 2 bei Typ 2
+schon und beendet damit den Cam-Modus, bei Typ 1 nicht · ein Wärter greift
+den Körper mit `mob-target: vanilla` an und mit `false` nicht, auch wenn ihn der
 Kamera-Spieler reizt · ein Eisengolem, der beim Start hinter dem Spieler her
 ist, geht mit `mob-target: vanilla` auf den Körper los, und er wie ein
 Zombie verliert mit `false` sein Ziel · ebenso ein Hoglin und ein Piglin,
