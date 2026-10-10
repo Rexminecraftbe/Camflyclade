@@ -417,14 +417,16 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   (`PiercingWeapon.canHitEntity`) fragen danach. Damit Spieler und Mobs den
   Körper trotzdem nicht schieben, steht sein Mannequin auf Stufe 0 und 1 im
   Team `cam_body` mit der Kollisionsregel `never`.
-* **Den Schiebetest macht ein Schwein ohne KI**, mitten in den Körper
-  gesetzt: Es schiebt, was in ihm steht, und bleibt selbst stehen. Auf
-  Stufe 1 muss der Cam-Modus weiterlaufen, auf Stufe 2 muss er mit Typ 2
-  enden - das ist die Gegenprobe. Mit Typ 1 fällt Stufe 2 auf 1 zurück, der
-  Körper bleibt stehen. Das Schwein kommt erst ein paar Sekunden nach dem
-  Start: Eine Sekunde lang merkt sich die Bewegungsprüfung des Plugins noch
-  keine Stelle, und was den Körper bis dahin verschiebt, fiele ihr nicht
-  auf.
+* **Den Schiebetest macht ein Schwein mit Tempo 0**, 0,3 Blöcke neben der
+  Mitte des Körpers: Es schiebt, was in ihm steht, und läuft selbst nicht
+  davon. Ohne KI schiebt ein Mob gar nichts, und genau in der Mitte fehlte
+  dem Stoß die Richtung - beides nachgemessen an einem freien Mannequin, das
+  sich dann nicht rührte. Auf Stufe 1 muss der Cam-Modus weiterlaufen, auf
+  Stufe 2 muss er mit Typ 2 enden - das ist die Gegenprobe. Mit Typ 1 fällt
+  Stufe 2 auf 1 zurück, der Körper bleibt stehen. Das Schwein kommt erst ein
+  paar Sekunden nach dem Start: Eine Sekunde lang merkt sich die
+  Bewegungsprüfung des Plugins noch keine Stelle, und was den Körper bis
+  dahin verschiebt, fiele ihr nicht auf.
 * **mineflayer rechnet die Geschwindigkeit von 26.x falsch um.** Das Paket
   trägt sie als lpVec3, schon in Blöcken je Tick; mineflayer teilt sie noch
   einmal durch 8000 wie im alten Format, und der Bot rührte sich nach einem
@@ -488,14 +490,13 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   ihr mitgibt, fliegt sie zwischen zwei Ticks durch einen Spieler hindurch,
   ohne ihn zu treffen. Die Probe schickt sie deshalb mit 0,3 Blöcken je Tick
   und ohne Beschleunigung los.
-* **Die Windkugel trifft im Cam-Modus den Rüstungsständer.** Das unsichtbare
-  Mannequin im Körper lässt Geschosse auf Bewegungsstufe 0 und 1 durch -
-  `setCollidable(false)` nimmt es ihnen als Ziel. Der Rüstungsständer ist
-  0,5 Blöcke breit statt 0,6 wie ein Spieler, die Kugel explodiert also 0,05
-  Blöcke näher, und ihr Stoß geht ein wenig steiler: Gemessen landet der
-  Spieler bis zu 0,09 Blöcke anders, die Probe lässt 0,15 zu. Pfeil und
-  Dreizack stoßen entlang ihres Flugs, bei ihnen spielt die Breite keine
-  Rolle.
+* **Die Windkugel trifft im Cam-Modus das Mannequin, bei beiden Typen.** Es
+  ist so breit wie ein Spieler, die Kugel explodiert also genau dort, wo sie
+  ihn ohne Cam-Modus träfe. Gemessen landet er auf ein Zehntausendstel am
+  selben Fleck. Solange das Mannequin Geschosse durchließ, traf sie bei Typ 1
+  den Rüstungsständer, 0,5 Blöcke breit statt 0,6: Ihr Stoß ging ein wenig
+  steiler, der Spieler landete bis zu 0,09 Blöcke anders, und die Probe
+  brauchte eine eigene Toleranz.
 * **Der Streitkolben schlägt aus 3,4 Blöcken Höhe, 0,3 Sekunden nach dem
   Teleport.** Erst nach gut 1,5 Blöcken Fall ist es ein Schlag mit Wucht, der
   alles drumherum wegstößt. Früher fehlt der Fall, später ist der Schläger

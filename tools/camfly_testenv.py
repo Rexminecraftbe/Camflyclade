@@ -3116,12 +3116,6 @@ RUECKSTOSS_HOEHE = 10
 # der Stoss einer Explosion ohne Cam-Modus nicht.
 RUECKSTOSS_TOLERANZ = 0.05
 
-# Fuer eine Windkugel mehr: Sie explodiert, wo sie den Koerper trifft, und
-# trifft im Cam-Modus den Ruestungsstaender - 0,5 Bloecke breit statt 0,6 wie
-# ein Spieler. Die Explosion sitzt damit 0,05 Bloecke naeher, ihr Stoss geht
-# ein wenig steiler: Gemessen landet der Spieler bis zu 0,09 Bloecke anders.
-RUECKSTOSS_TOLERANZ_WINDKUGEL = 0.15
-
 # Wie weit die Platte aus Obsidian um das Ziel herum reicht. TNT risse die
 # Grasschicht sonst auf, und in der Grube stuende der Bot bei der naechsten
 # Probe tiefer.
@@ -3150,11 +3144,6 @@ def rueckstoss_proben(x, y, z):
         ("Windkugel eines Breeze",
          f"summon minecraft:breeze_wind_charge {x + 4} {y + 1} {z} {{{wind},{marke}}}"),
     ]
-
-
-def rueckstoss_toleranz(name):
-    """Wie weit die beiden Landeplaetze dieser Probe auseinander liegen duerfen."""
-    return RUECKSTOSS_TOLERANZ_WINDKUGEL if name.startswith("Windkugel") else RUECKSTOSS_TOLERANZ
 
 
 def rueckstoss_schlaege(env, schlaeger, x, y, z):
@@ -3294,7 +3283,7 @@ def _zahlen(werte):
     return "-" if werte is None else "(" + ", ".join(f"{w:.4f}" for w in werte) + ")"
 
 
-def rueckstoss_vergleich(name, ohne, mit, wie="auf den Koerper", gegenprobe=True, toleranz=RUECKSTOSS_TOLERANZ):
+def rueckstoss_vergleich(name, ohne, mit, wie="auf den Koerper", gegenprobe=True):
     """Ob der Treffer auf den Koerper den Spieler dorthin stoesst, wo derselbe
     Treffer ihn ohne Cam-Modus hinstoesst.
 
@@ -3312,7 +3301,7 @@ def rueckstoss_vergleich(name, ohne, mit, wie="auf den Koerper", gegenprobe=True
     if not FIND.test(f"{name} {wie} beendet den Cam-Modus",
                      mit is not None and mit["beendet"], ""):
         return
-    gleich = max(abs(a - b) for a, b in zip(ohne["weg"], mit["weg"])) <= toleranz
+    gleich = max(abs(a - b) for a, b in zip(ohne["weg"], mit["weg"])) <= RUECKSTOSS_TOLERANZ
     erklaerung = (f"Weg ohne {_zahlen(ohne['weg'])}, mit {_zahlen(mit['weg'])}; "
                   f"erste Geschwindigkeit ohne {_zahlen(ohne['erste'])}, mit {_zahlen(mit['erste'])}")
     if not gleich:
@@ -3369,7 +3358,7 @@ def rueckstoss_checks(env, bot):
                 console(env, k, pause=0)
             ohne_cam[name] = rueckstoss_lauf(env, bot, ziel, False, treffen)
             mit = rueckstoss_lauf(env, bot, ziel, True, treffen)
-            rueckstoss_vergleich(name, ohne_cam[name], mit, toleranz=rueckstoss_toleranz(name))
+            rueckstoss_vergleich(name, ohne_cam[name], mit)
 
         # Die Schlaege eines zweiten Spielers, von Osten her. Liegengebliebene
         # Geschosse raeumt der Test vorher weg: Ein Schlag trifft die naechste
@@ -3420,7 +3409,7 @@ def rueckstoss_checks(env, bot):
                 console(env, k, pause=0)
             mit = rueckstoss_lauf(env, bot, ziel, True, treffen)
             rueckstoss_vergleich(name, ohne_cam[name], mit, "auf den Koerper mit damage-mode: false",
-                                 gegenprobe=False, toleranz=rueckstoss_toleranz(name))
+                                 gegenprobe=False)
     finally:
         try:
             if damage_mode_umgestellt:
@@ -3610,6 +3599,11 @@ def rueckstoss_mob_checks(env, bot):
 # und schon ein Zwanzigstel Block beendet den Cam-Modus.
 SCHIEBEN_WARTEN = 2.0
 
+# Wie weit oestlich der Mitte des Koerpers das Schwein steht, in Bloecken.
+# Genau in der Mitte haette sein Stoss keine Richtung, und das Spiel stiesse
+# gar nicht.
+SCHIEBEN_ABSTAND = 0.3
+
 
 def koerpertyp_jetzt(env):
     """Der body.type, der gerade in der Konfiguration des Testservers steht."""
@@ -3632,11 +3626,13 @@ def schieben_checks(env, bot):
     Stufe 2 mit Typ 2 - schiebt das Schwein dort nicht, sagt "schiebt nicht"
     auch sonst nichts.
 
-    Geschoben wird mit einem Schwein ohne KI, mitten in den Koerper gesetzt:
-    Es schiebt, was in ihm steht, und bleibt selbst stehen. Gesetzt wird es
-    erst ein paar Sekunden nach dem Start - eine Sekunde lang sieht die
-    Bewegungspruefung des Plugins noch gar nicht hin, und was den Koerper bis
-    dahin verschiebt, faellt ihr nicht auf.
+    Geschoben wird mit einem Schwein, das sich nicht von der Stelle ruehrt:
+    Tempo 0, aber mit KI - ohne schiebt ein Mob gar nichts. Es steht knapp
+    neben der Mitte des Koerpers; genau in ihr fehlte dem Stoss die Richtung,
+    und das Spiel schoebe gar nicht. Gesetzt wird es erst ein paar Sekunden
+    nach dem Start - eine Sekunde lang sieht die Bewegungspruefung des
+    Plugins noch gar nicht hin, und was den Koerper bis dahin verschiebt,
+    faellt ihr nicht auf.
     """
     if not FIND.test("Cam-Modus ist vor dem Schiebetest aus", cam_off(bot), ""):
         return
@@ -3645,8 +3641,9 @@ def schieben_checks(env, bot):
         return
     typ = koerpertyp_jetzt(env)
     x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
-    schwein = (f"summon minecraft:pig {x} {y} {z} {{NoAI:1b,Silent:1b,"
-               f'DeathLootTable:"minecraft:empty",Tags:["{INTERACT_TAG}"]}}')
+    schwein = (f"summon minecraft:pig {x + SCHIEBEN_ABSTAND} {y} {z} {{Silent:1b,"
+               f'DeathLootTable:"minecraft:empty",Tags:["{INTERACT_TAG}"],'
+               f'attributes:[{{id:"minecraft:movement_speed",base:0.0}}]}}')
 
     def probe(stufe, geschoben):
         console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
