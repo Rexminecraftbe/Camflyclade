@@ -305,7 +305,7 @@ public final class CamBorderWall implements Listener {
         double step = Math.min(REBUILD_MAX, Math.max(REBUILD_MIN, reachIn(to.getWorld()) * REBUILD_SHARE));
         if (last == null || !to.getWorld().equals(last.getWorld())
                 || to.distanceSquared(last) >= step * step) {
-            build(player, to, false);
+            build(player, to, false, false);
         }
     }
 
@@ -357,7 +357,7 @@ public final class CamBorderWall implements Listener {
         // been given yet are thrown away.
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (player.isOnline()) {
-                build(player, player.getLocation(), true);
+                build(player, player.getLocation(), true, false);
             }
         });
     }
@@ -371,12 +371,12 @@ public final class CamBorderWall implements Listener {
         long tick = wall.ticks++;
         if (tick % REFRESH_TICKS == 0) {
             long look = tick / REFRESH_TICKS;
-            build(player, player.getLocation(), false);
+            build(player, player.getLocation(), false, true);
             wall.toCheck = dueForCheck(wall, player.getLocation(), look);
             wall.checked = 0;
             wall.resending = look > 0 && look % FULL_RESEND_LOOKS == 0;
         } else if (wall.sections.hasWork()) {
-            build(player, player.getLocation(), false);
+            build(player, player.getLocation(), false, false);
         }
         check(player, wall);
     }
@@ -410,6 +410,9 @@ public final class CamBorderWall implements Listener {
      * the blocks checked are sent again in any case.
      */
     private void check(Player player, Wall wall) {
+        if (wall.checked >= wall.toCheck.size()) {
+            return;
+        }
         World world = player.getWorld();
         if (!world.getUID().equals(wall.world)) {
             return;
@@ -452,8 +455,10 @@ public final class CamBorderWall implements Listener {
      *
      * @param resend whether the blocks that stand already are sent again as
      *               well, because the client may have lost them
+     * @param look   whether this is one of the full looks every
+     *               {@link #REFRESH_TICKS}, see {@link WallSections#update}
      */
-    private void build(Player player, Location at, boolean resend) {
+    private void build(Player player, Location at, boolean resend, boolean look) {
         Wall wall = walls.get(player.getUniqueId());
         CameraData data = cameraPlayers.get(player.getUniqueId());
         World world = at.getWorld();
@@ -492,7 +497,7 @@ public final class CamBorderWall implements Listener {
                     at.getX() + half, at.getY() + player.getHeight(), at.getZ() + half);
             double reach = reachIn(world);
             wall.sections.prepare(anchor, settings.getMaxDistance(), wall.areasCounted);
-            wall.sections.update(body, reach, wall.ticks, READ_BUDGET_NANOS);
+            wall.sections.update(body, reach, wall.ticks, READ_BUDGET_NANOS, look);
             CamAreaRules.BlockLookup names = wall.areasCounted ? rules.blockLookup(world) : null;
             wall.sections.forEachChange(reach, new WallSections.Changes() {
                 @Override

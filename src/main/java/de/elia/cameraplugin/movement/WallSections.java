@@ -61,17 +61,43 @@ final class WallSections {
     /**
      * How long a section is kept before it is read out of the world again,
      * in ticks, at the least - for the sections right around the player, so
-     * that water flowing in counts as soon as it used to.
+     * that water flowing in counts as soon as it used to. Further out it is
+     * kept longer, see {@link #maxAge(double)}.
      */
     private static final long MIN_AGE = 20L;
 
     /**
-     * How far a section has to lie from the body before it is worked out
+     * How many times longer the forbidden areas of a section are kept than
+     * its media. Water flows, lava spreads - a biome changes only by a
+     * command, and a structure never: it is placed once, when its chunk is
+     * made.
+     */
+    private static final long AREA_AGE_FACTOR = 10L;
+
+    /**
+     * How the time a section is kept grows past {@link #ALWAYS_REACH}: by
+     * one tick for every so many blocks of the distance squared. A minute at
+     * 160 blocks, about ten seconds at 64, three at 40.
+     */
+    private static final double AGE_SPREAD = 16.0;
+
+    /**
+     * How close a section has to lie to the body to be read out of the world
      * whatever the time it takes, in blocks. The wall right in front of the
      * player has to stand; the far parts of a large wall are only there to be
      * seen and may follow a few ticks later.
      */
     private static final double ALWAYS_REACH = 12.0;
+
+    /**
+     * How far the body may move before the sections around it are looked
+     * over again, in blocks, at the most: a quarter of the reach below that,
+     * so that a small wall does not read sections it will never get to.
+     * Until then those up to that much past the reach count as within it:
+     * what lies beyond the reach is sorted out block by block anyway, see
+     * {@link #withinReach}.
+     */
+    private static final double SCAN_MARGIN = 4.0;
 
     /** How far past what is needed a section stays kept before it is let go, in blocks. */
     private static final double KEEP_MARGIN = 16.0;
@@ -109,7 +135,8 @@ final class WallSections {
         /** The blocks of shut lava, water and powder snow. */
         private char[] medium;
         /** When those two were read out of the world, see {@link #update}. */
-        private long readAt;
+        private long areaReadAt;
+        private long mediumReadAt;
         /** The blocks beyond {@code max-distance}, once worked out. */
         private char[] distance;
         private boolean distanceKnown;
@@ -118,8 +145,11 @@ final class WallSections {
         private boolean frontKnown;
     }
 
-    /** A section to be read out of the world, and how far it lies from the body. */
-    private record Pending(Pos pos, double gap) {
+    /**
+     * A section to be read out of the world, how far it lies from the body,
+     * and which of its parts: all of it when it is new.
+     */
+    private record Pending(Pos pos, double gap, boolean area, boolean medium) {
     }
 
     /** Receives what has changed in the wall, see {@link #forEachChange}. */
@@ -147,8 +177,9 @@ final class WallSections {
 
     /** The sections still to be read out of the world, the nearest first. */
     private List<Pending> pending = new ArrayList<>();
-    /** The sections that may hold blocks within reach of the last look, see {@link #update}. */
+    /** The sections that may hold blocks within reach, see {@link #scan}. */
     private final List<Pos> inReach = new ArrayList<>();
+    private final Set<Pos> inReachSet = new HashSet<>();
     /**
      * The blocks of the wall handed out so far, for each section: what
      * {@link #forEachChange} compares against. Kept apart from the sections,
@@ -160,9 +191,12 @@ final class WallSections {
     /** Whether everything is to be handed out as renewed, see {@link #prepare}. */
     private boolean allRenewed = true;
 
-    /** The body at the last look, and how far the sections were needed around it. */
+    /** The body at the last look, and how far the sections are needed around it. */
     private BoundingBox body;
     private double needed;
+    /** Where the body stood at the last {@link #scan}, and the reach then. */
+    private BoundingBox scannedAt;
+    private double scannedReach;
 
     /** The spot the distance is measured from, or {@code null}, and how far it reaches. */
     private Location anchor;
@@ -218,57 +252,95 @@ final class WallSections {
     }
 
     /**
-     * Looks at the sections around the body: lets go of those far out,
-     * notes the ones missing or grown old, and reads out of the world as
-     * many of those as the time allows, the nearest first.
+     * Brings the sections around the body up to date: looks them over when
+     * this is a full look or the body has moved {@link #margin} since the
+     * last time, and reads out of the world as many of those missing or
+     * grown old as the time allows, the nearest first.
      *
      * @param reach  how far around the body the wall stands, in blocks
      * @param now    the tick counter of the wall, see {@link #maxAge(double)}
      * @param budget how long reading may take, in nanoseconds; the sections
      *               within {@link #ALWAYS_REACH} are read whatever it takes
+     * @param look   whether this is a full look, which also notes the
+     *               sections grown old and lets go of those far out
      */
-    void update(BoundingBox body, double reach, long now, long budget) {
+    void update(BoundingBox body, double reach, long now, long budget, boolean look) {
         this.body = body.clone();
         this.needed = reach + NEIGHBOUR_REACH;
-        inReach.clear();
-        List<Pending> missing = new ArrayList<>();
+        if (look || scannedAt == null || scannedReach != reach
+                || Math.abs(body.getMinX() - scannedAt.getMinX()) + Math.abs(body.getMinY() - scannedAt.getMinY())
+                + Math.abs(body.getMinZ() - scannedAt.getMinZ()) >= margin(reach)) {
+            scan(reach, now, look);
+        }
+        work(now, budget);
+    }
 
-        Iterator<Map.Entry<Pos, Section>> kept = sections.entrySet().iterator();
-        while (kept.hasNext()) {
-            Map.Entry<Pos, Section> entry = kept.next();
-            if (gap(entry.getKey()) > needed + KEEP_MARGIN) {
-                kept.remove();
-                forgetFrontsAround(entry.getKey());
+    /**
+     * Looks over the sections around the body: notes the ones within reach,
+     * the ones missing, and on a full look the ones grown old - and lets go
+     * of those far out.
+     */
+    private void scan(double reach, long now, boolean look) {
+        scannedAt = body.clone();
+        scannedReach = reach;
+        double margin = margin(reach);
+        double range = needed + margin;
+        if (look) {
+            Iterator<Map.Entry<Pos, Section>> kept = sections.entrySet().iterator();
+            while (kept.hasNext()) {
+                Map.Entry<Pos, Section> entry = kept.next();
+                if (gap(entry.getKey()) > range + KEEP_MARGIN) {
+                    kept.remove();
+                    forgetFrontsAround(entry.getKey());
+                }
             }
         }
-
-        int x0 = Math.floorDiv((int) Math.floor(body.getMinX() - needed), 16);
-        int x1 = Math.floorDiv((int) Math.floor(body.getMaxX() + needed), 16);
-        int y0 = Math.floorDiv((int) Math.floor(body.getMinY() - needed), 16);
-        int y1 = Math.floorDiv((int) Math.floor(body.getMaxY() + needed), 16);
-        int z0 = Math.floorDiv((int) Math.floor(body.getMinZ() - needed), 16);
-        int z1 = Math.floorDiv((int) Math.floor(body.getMaxZ() + needed), 16);
+        inReach.clear();
+        inReachSet.clear();
+        List<Pending> missing = new ArrayList<>();
+        int x0 = Math.floorDiv((int) Math.floor(body.getMinX() - range), 16);
+        int x1 = Math.floorDiv((int) Math.floor(body.getMaxX() + range), 16);
+        int y0 = Math.floorDiv((int) Math.floor(body.getMinY() - range), 16);
+        int y1 = Math.floorDiv((int) Math.floor(body.getMaxY() + range), 16);
+        int z0 = Math.floorDiv((int) Math.floor(body.getMinZ() - range), 16);
+        int z1 = Math.floorDiv((int) Math.floor(body.getMaxZ() + range), 16);
         for (int x = x0; x <= x1; x++) {
             for (int z = z0; z <= z1; z++) {
                 for (int y = y0; y <= y1; y++) {
                     Pos pos = new Pos(x, y, z);
                     double gap = gap(pos);
-                    if (gap > needed) {
+                    if (gap > range) {
                         continue;
                     }
-                    if (gap <= reach) {
+                    if (gap <= reach + margin) {
                         inReach.add(pos);
+                        inReachSet.add(pos);
                     }
                     Section section = sections.get(pos);
-                    if (section == null || now - section.readAt >= maxAge(gap)) {
-                        missing.add(new Pending(pos, gap));
+                    if (section == null) {
+                        missing.add(new Pending(pos, gap, true, true));
+                    } else if (look) {
+                        boolean area = areasRead && now - section.areaReadAt >= maxAge(gap) * AREA_AGE_FACTOR;
+                        boolean medium = !media.isEmpty() && now - section.mediumReadAt >= maxAge(gap);
+                        if (area || medium) {
+                            missing.add(new Pending(pos, gap, area, medium));
+                        }
                     }
+                }
+            }
+        }
+        if (!look) {
+            // What the last full look found grown old and could not read
+            // yet stays in line - a player who keeps moving would otherwise
+            // never let it come up.
+            for (Pending old : pending) {
+                if (sections.containsKey(old.pos())) {
+                    missing.add(old);
                 }
             }
         }
         missing.sort(Comparator.comparingDouble(Pending::gap));
         pending = missing;
-        work(now, budget);
     }
 
     /**
@@ -285,7 +357,7 @@ final class WallSections {
                 break;
             }
             done++;
-            read(next.pos(), lookup, now);
+            read(next, lookup, now);
         }
         pending = new ArrayList<>(pending.subList(done, pending.size()));
     }
@@ -296,20 +368,25 @@ final class WallSections {
     }
 
     /**
-     * How long a section is kept before it is read again, in ticks: about as
-     * many as it lies blocks away from the body, and never less than
-     * {@link #MIN_AGE}. The player cannot get there any sooner.
+     * How long a section is kept before it is read again, in ticks:
+     * {@link #MIN_AGE} within {@link #ALWAYS_REACH}, and growing with the
+     * square of the distance past it, see {@link #AGE_SPREAD}. A far section
+     * only shows the wall, and the player needs a while to get there - by
+     * then it has come closer and grown old sooner.
      */
     private static long maxAge(double gap) {
-        return Math.max(MIN_AGE, (long) gap);
+        double beyond = Math.max(0.0, gap - ALWAYS_REACH);
+        return MIN_AGE + (long) (beyond * beyond / AGE_SPREAD);
     }
 
     /**
-     * Reads one section out of the world and keeps it. When that changes what
-     * is known about it, the front around it is worked out anew, and its
-     * blocks of the wall are made anew, see {@link Changes#renewed}.
+     * Reads one section out of the world, or the parts of it grown old, and
+     * keeps it. When that changes what is known about it, the front around
+     * it is worked out anew, and its blocks of the wall are made anew, see
+     * {@link Changes#renewed}.
      */
-    private void read(Pos pos, CamAreaRules.BlockLookup lookup, long now) {
+    private void read(Pending next, CamAreaRules.BlockLookup lookup, long now) {
+        Pos pos = next.pos();
         boolean inWorld = (pos.y() << 4) + 15 >= world.getMinHeight() && (pos.y() << 4) < world.getMaxHeight();
         if (inWorld && !world.isChunkLoaded(pos.x(), pos.z())) {
             // Not now: nobody can be there without the chunk, and reading
@@ -317,29 +394,40 @@ final class WallSections {
             // build no wall, see front().
             return;
         }
-        char[] area = null;
-        if (inWorld && lookup != null) {
-            char[] marked = new char[256];
-            if (lookup.markSection(pos.x(), pos.y(), pos.z(), marked)) {
-                area = compact(marked);
+        Section section = sections.get(pos);
+        boolean added = section == null;
+        if (added) {
+            section = new Section();
+            sections.put(pos, section);
+        }
+        char[] area = section.area;
+        if (added || next.area()) {
+            section.areaReadAt = now;
+            area = null;
+            if (inWorld && lookup != null) {
+                char[] marked = new char[256];
+                if (lookup.markSection(pos.x(), pos.y(), pos.z(), marked)) {
+                    area = compact(marked);
+                }
             }
         }
-        char[] medium = inWorld && !media.isEmpty() ? readMedia(pos) : null;
-        Section section = sections.get(pos);
-        if (section != null) {
-            section.readAt = now;
-            if (Arrays.equals(section.area, area) && Arrays.equals(section.medium, medium)) {
-                return;
-            }
-        } else {
-            section = new Section();
-            section.readAt = now;
-            sections.put(pos, section);
+        char[] medium = section.medium;
+        if (added || next.medium()) {
+            section.mediumReadAt = now;
+            medium = inWorld && !media.isEmpty() ? readMedia(pos) : null;
+        }
+        if (!added && Arrays.equals(section.area, area) && Arrays.equals(section.medium, medium)) {
+            return;
         }
         section.area = area;
         section.medium = medium;
         renewed.add(pos);
         forgetFrontsAround(pos);
+    }
+
+    /** How far the body may move before the sections are looked over again, see {@link #SCAN_MARGIN}. */
+    private static double margin(double reach) {
+        return Math.max(1.0, Math.min(SCAN_MARGIN, reach / 4.0));
     }
 
     /**
@@ -409,11 +497,10 @@ final class WallSections {
      * been.</p>
      */
     void forEachChange(double reach, Changes changes) {
-        Set<Pos> reachable = new HashSet<>(inReach);
         Iterator<Map.Entry<Pos, char[]>> out = handed.entrySet().iterator();
         while (out.hasNext()) {
             Map.Entry<Pos, char[]> entry = out.next();
-            if (!reachable.contains(entry.getKey())) {
+            if (!inReachSet.contains(entry.getKey())) {
                 report(entry.getKey(), entry.getValue(), null, false, changes);
                 out.remove();
             }

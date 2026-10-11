@@ -526,7 +526,9 @@ public final class CamAreaRules {
                     int bits = layers(Math.max(y, bottom) - y0, Math.min((y & ~3) + 3, top) - y0);
                     for (int x = 0; x < 16; x += 4) {
                         for (int z = 0; z < 16; z += 4) {
-                            if (forbiddenCube(x0 + x, y, z0 + z) == null) {
+                            // Straight to the world: every cube is asked once
+                            // here, keeping it would only cost.
+                            if (CamAreaRules.this.forbiddenBiome(world, x0 + x, y, z0 + z) == null) {
                                 continue;
                             }
                             any = true;
