@@ -10,6 +10,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
 import org.bukkit.block.TileState;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Waterlogged;
@@ -25,10 +26,12 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.BoundingBox;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -67,12 +70,19 @@ import java.util.UUID;
 public final class CamBorderWall implements Listener {
 
     /**
-     * Ticks between two full looks at the wall, which also send every block of
-     * it again. The server overwrites a block of the wall in the client
-     * whenever the real block there changes - water flowing in, grass growing
-     * - and this puts it back.
+     * Ticks between two full looks at the wall. The server overwrites a block
+     * of the wall in the client whenever the real block there changes - water
+     * flowing in, grass growing - and such a look puts it back: every block of
+     * the wall whose real block is no longer the one it stood on is sent
+     * again.
      */
     private static final long REFRESH_TICKS = 20L;
+
+    /**
+     * Every how many looks the whole wall is sent again, block for block, in
+     * case the client has lost one of them some other way.
+     */
+    private static final int FULL_RESEND_LOOKS = 10;
 
     /**
      * How far the body may move before the wall is looked at again, as a
@@ -140,12 +150,15 @@ public final class CamBorderWall implements Listener {
      * camera out of it. With neither an area nor a medium it is the
      * distance.
      *
+     * @param real   the real block that stood there when the wall was put
+     *               up: once it is another, the server has sent that one to
+     *               the client and the wall has to be sent again
      * @param area   the forbidden biome or structure behind the wall, or
      *               {@code null}
      * @param medium the shut lava, water or powder snow in the block, or
      *               {@code null}
      */
-    private record Brick(BlockData shown, String area, FlightMedium medium) {
+    private record Brick(BlockData shown, BlockData real, String area, FlightMedium medium) {
 
         /** Which reason the message names when several walls meet, the highest first. */
         int rank() {
@@ -165,6 +178,8 @@ public final class CamBorderWall implements Listener {
         /** What it shows in place of water, lava and powder snow. */
         private final Map<FlightMedium, BlockData> media;
         private BukkitRunnable task;
+        /** How many looks the task has taken so far, see {@link #FULL_RESEND_LOOKS}. */
+        private int looks;
 
         Wall(UUID world, BlockData block, Map<FlightMedium, BlockData> media) {
             this.world = world;
@@ -210,7 +225,7 @@ public final class CamBorderWall implements Listener {
                     stopFor(player);
                     return;
                 }
-                build(player, player.getLocation(), true);
+                build(player, player.getLocation(), wall.looks++ % FULL_RESEND_LOOKS == 0);
             }
         };
         walls.put(id, wall);
@@ -231,9 +246,11 @@ public final class CamBorderWall implements Listener {
         // In another world the client has let go of those blocks already,
         // and the same coordinates there belong to somewhere else.
         if (world.getUID().equals(wall.world)) {
+            List<BlockState> real = new ArrayList<>(wall.bricks.size());
             for (Cell cell : wall.bricks.keySet()) {
-                restore(player, world, cell);
+                real.add(stateAt(world, cell, null));
             }
+            send(player, real);
         }
     }
 
@@ -332,7 +349,10 @@ public final class CamBorderWall implements Listener {
 
     /**
      * Builds the wall around this spot: gives back what is no longer part of
-     * it and sends what is new.
+     * it and sends what is new, along with every block whose real block has
+     * changed since - the server has sent that one to the client in its
+     * place. All of it goes out at once, which the server packs into one
+     * packet for each section of sixteen by sixteen by sixteen blocks.
      *
      * @param resend whether the blocks that stand already are sent again as
      *               well, in case the client has lost them
@@ -351,17 +371,21 @@ public final class CamBorderWall implements Listener {
             wall.bricks = new HashMap<>();
         }
         Map<Cell, Brick> wanted = plan(player, wall, data, at);
+        List<BlockState> changes = new ArrayList<>();
         for (Cell cell : wall.bricks.keySet()) {
             if (!wanted.containsKey(cell)) {
-                restore(player, world, cell);
+                changes.add(stateAt(world, cell, null));
             }
         }
-        for (Map.Entry<Cell, Brick> brick : wanted.entrySet()) {
-            Brick before = wall.bricks.get(brick.getKey());
-            if (resend || before == null || !before.shown().equals(brick.getValue().shown())) {
-                show(player, world, brick.getKey(), brick.getValue().shown());
+        for (Map.Entry<Cell, Brick> entry : wanted.entrySet()) {
+            Brick brick = entry.getValue();
+            Brick before = wall.bricks.get(entry.getKey());
+            if (resend || before == null || !before.shown().equals(brick.shown())
+                    || !before.real().equals(brick.real())) {
+                changes.add(stateAt(world, entry.getKey(), brick.shown()));
             }
         }
+        send(player, changes);
         wall.bricks = wanted;
         wall.builtAt = at.clone();
     }
@@ -469,9 +493,11 @@ public final class CamBorderWall implements Listener {
                     if (!touchesOpen(shut, sizeY, sizeZ, gx, gy, gz)) {
                         continue;
                     }
-                    BlockData shown = shownFor(wall, world.getBlockAt(x, y, z));
+                    Block block = world.getBlockAt(x, y, z);
+                    BlockData shown = shownFor(wall, block);
                     if (shown != null) {
-                        wanted.put(new Cell(x, y, z), new Brick(shown, areaOf[i], mediumOf[i]));
+                        wanted.put(new Cell(x, y, z),
+                                new Brick(shown, block.getBlockData(), areaOf[i], mediumOf[i]));
                     }
                 }
             }
@@ -682,26 +708,38 @@ public final class CamBorderWall implements Listener {
         if (wall == null || !player.isOnline() || !world.getUID().equals(wall.world)) {
             return;
         }
+        List<BlockState> again = new ArrayList<>();
         for (int dx = -1; dx <= 1; dx++) {
             for (int dy = -1; dy <= 1; dy++) {
                 for (int dz = -1; dz <= 1; dz++) {
                     Cell cell = new Cell(clicked.getX() + dx, clicked.getY() + dy, clicked.getZ() + dz);
                     Brick brick = wall.bricks.get(cell);
                     if (brick != null) {
-                        show(player, world, cell, brick.shown());
+                        again.add(stateAt(world, cell, brick.shown()));
                     }
                 }
             }
         }
+        send(player, again);
     }
 
-    private static void show(Player player, World world, Cell cell, BlockData shown) {
-        player.sendBlockChange(new Location(world, cell.x(), cell.y(), cell.z()), shown);
+    /**
+     * The block at this cell the way the player is to see it: with
+     * {@code shown} in its place, or as it really is when that is
+     * {@code null}.
+     */
+    private static BlockState stateAt(World world, Cell cell, BlockData shown) {
+        BlockState state = world.getBlockAt(cell.x(), cell.y(), cell.z()).getState();
+        if (shown != null) {
+            state.setBlockData(shown);
+        }
+        return state;
     }
 
-    /** Gives the player the real block back. */
-    private static void restore(Player player, World world, Cell cell) {
-        Block real = world.getBlockAt(cell.x(), cell.y(), cell.z());
-        player.sendBlockChange(real.getLocation(), real.getBlockData());
+    /** Sends these blocks to the player alone, all in one go. */
+    private static void send(Player player, Collection<BlockState> blocks) {
+        if (!blocks.isEmpty()) {
+            player.sendBlockChanges(blocks);
+        }
     }
 }
