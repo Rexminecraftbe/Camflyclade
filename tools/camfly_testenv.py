@@ -5639,6 +5639,10 @@ GRENZ_LAUF_MS = 3500
 # in einer Probe hinkommt; die Voreinstellung 100 steht danach wieder da.
 GRENZ_ABSTAND = 6
 
+# Der groesste border-radius, den der Testserver annimmt: so weit, wie er bei
+# view-distance=2 die Welt schickt, zwei Chunks zu 16 Bloecken.
+GROSSER_RADIUS = 32
+
 # Der zweite Spieler, der nachsieht, ob die Wand nur beim Kamera-Spieler
 # steht. Hoechstens 16 Zeichen, und nicht der Name des ersten Bots - sonst
 # kickt der eine den anderen mit duplicate_login.
@@ -5719,6 +5723,10 @@ def border_checks(env, bot):
       * false, Luft als border-block und border-radius 0: keine Grenze.
       * ein unbekannter Block und ein zu grosser Radius werden gemeldet, und
         die Wand steht mit dem, was dafuer genommen wird.
+      * ein grosser Radius, so weit wie der Server die Welt schickt: die
+        Wand steht vom Koerper aus rundum, wo sie mit 5 noch nicht steht,
+        ein geaenderter Block in ihr wird gleich wieder zur Wand, der Bot
+        bleibt an ihr stehen, und danach ist sie ganz weg.
       * an der Wand des Bioms, die eben ist und deshalb Platz fuer Proben
         hat: Wasser, Lava und Pulverschnee zeigt sie voreingestellt als
         blaues Glas, Magma und Schnee, halbe Bloecke ersetzt sie, ganze
@@ -5854,7 +5862,7 @@ def border_checks(env, bot):
 
         # --- was nicht passt, wird gemeldet ---
         vorher = len(server_log(env))
-        set_options(env, [("border-block", "diamond"), ("border-radius", "99")])
+        set_options(env, [("border-block", "diamond"), ("border-radius", "999")])
         neu = strip_colors(server_log(env)[vorher:])
         FIND.test("Ein unbekannter border-block wird gemeldet",
                   "camera-mode.border-block: 'diamond'" in neu, "")
@@ -5864,6 +5872,64 @@ def border_checks(env, bot):
         FIND.test("Mit dem Ersatz fuer beides steht die Wand trotzdem",
                   drin(ergebnis) and ergebnis[1] == 0, grenz_zeige(ergebnis, heim))
         cam_off(bot)
+
+        # --- ein grosser border-radius ---
+        # Die Wand auf max-distance liegt vom Koerper aus rundum sechs Bloecke
+        # weit, nach oben fuenf: Die Ecke des Blocks, die am weitesten weg
+        # liegt, zaehlt. Ein Radius von 5 reicht vom Koerper aus nicht hin,
+        # GROSSER_RADIUS schon - in jede Richtung, ohne dass der Bot hinlaeuft.
+        bot.chat(f"/fill {bx - 7} {by} {bz - 7} {bx + 7} {by + 6} {bz + 7} minecraft:air")
+        time.sleep(0.5)
+        rundum = (("Osten", (bx + GRENZ_ABSTAND, by, bz)),
+                  ("Westen", (bx - GRENZ_ABSTAND, by, bz)),
+                  ("oben", (bx, by + GRENZ_ABSTAND - 1, bz)))
+        westen = rundum[1][1]
+        set_options(env, [("border-block", "barrier"), ("border-radius", "5")])
+        hinstellen(bot, *heim)
+        if cam_on(bot):
+            time.sleep(1.5)
+            gesehen = sieht(westen)
+            FIND.test("border-radius: 5 - am Koerper sieht der Bot die Wand auf "
+                      "max-distance noch nicht", gesehen != "barrier", f"sieht: {gesehen}")
+        cam_off(bot)
+        vorher = len(server_log(env))
+        set_option(env, "border-radius", str(GROSSER_RADIUS))
+        neu = strip_colors(server_log(env)[vorher:])
+        FIND.test(f"border-radius: {GROSSER_RADIUS} - so weit, wie der Server die Welt "
+                  f"schickt, wird nicht gemeldet", "border-radius" not in neu, "")
+        hinstellen(bot, *heim)
+        if FIND.test(f"/cam startet mit border-radius: {GROSSER_RADIUS}", cam_on(bot), ""):
+            time.sleep(1.5)
+            gesehen = {name: sieht(zelle) for name, zelle in rundum}
+            FIND.test(f"border-radius: {GROSSER_RADIUS} - die Wand steht rundum auf "
+                      f"max-distance, ohne dass der Bot hinlaeuft",
+                      all(g == "barrier" for g in gesehen.values()),
+                      "; ".join(f"{name}: {g}" for name, g in gesehen.items()))
+            # Aendert sich der echte Block, schickt der Server ihn dem Client
+            # und ueberschreibt damit die Wand. Das Auffrischen stellt sie
+            # wieder hin - ausser auf einem ganzen Block, der bleibt stehen.
+            x, y, z = westen
+            nacheinander = {}
+            for setzen, name in (("stone_slab", "Stufe"), ("stone", "Stein"), ("air", "Luft")):
+                bot.chat(f"/setblock {x} {y} {z} minecraft:{setzen}")
+                time.sleep(2.5)
+                nacheinander[name] = sieht(westen)
+            FIND.test("Aendert sich ein Block der Wand in der Welt, steht sie dort gleich "
+                      "wieder: auf einer Stufe die Wand, ein ganzer Block bleibt stehen, "
+                      "und ist er weg, steht dort wieder die Wand",
+                      nacheinander == {"Stufe": "barrier", "Stein": "stone", "Luft": "barrier"},
+                      "; ".join(f"{name}: {g}" for name, g in nacheinander.items()))
+        cam_off(bot)
+        ergebnis = grenz_lauf(bot, heim)
+        FIND.test(f"border-radius: {GROSSER_RADIUS} - die Kamera bleibt an max-distance "
+                  f"stehen, ohne zurueckgesetzt zu werden",
+                  drin(ergebnis) and ergebnis[1] == 0, grenz_zeige(ergebnis, heim))
+        cam_off(bot)
+        time.sleep(1.0)
+        nachher = {name: sieht(zelle) for name, zelle in rundum}
+        FIND.test(f"border-radius: {GROSSER_RADIUS} - nach dem Cam-Modus ist die ganze "
+                  f"Wand beim Spieler wieder weg", all(g == "air" for g in nachher.values()),
+                  "; ".join(f"{name}: {g}" for name, g in nachher.items()))
 
         # --- ein verbotenes Biom, und was die Wand dort ersetzt ---
         set_options(env, [("max-distance", "100.0"), ("border-block", "barrier"),

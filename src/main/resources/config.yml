@@ -39,7 +39,9 @@ camera-mode:
   border-block-lava: magma_block
   border-block-powder-snow: snow_block
 
-  # Wie weit um den Spieler die Wand erscheint, in Blöcken (0 = keine Grenze, höchstens 16)
+  # Wie weit um den Spieler die Wand erscheint, in Blöcken (0 = keine Grenze)
+  # Höchstens so weit, wie der Server die Welt schickt: view-distance aus server.properties mal 16.
+  # Ein großer Radius kostet mehr: Die Wand wächst mit der Fläche der Grenze im Umkreis.
   border-radius: 5
 
   # Wer den Spieler im Cam-Modus sehen darf:

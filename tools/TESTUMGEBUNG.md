@@ -979,7 +979,14 @@ dort `border-block` · auf
 `push-back` kommt die Kamera auch nicht weiter, wird dabei aber zurückgesetzt ·
 auf `false`, mit `border-block: air` und mit `border-radius: 0` gibt es keine
 Grenze · ein unbekannter Block und ein zu großer Radius werden gemeldet, und
-die Wand steht mit dem Ersatz · Server-Log ohne Fehler des Plugins.
+die Wand steht mit dem Ersatz · `border-radius: 32`, so weit, wie der
+Testserver die Welt schickt, wird nicht gemeldet · damit steht die Wand vom
+Körper aus rundum auf `max-distance`, wo sie mit 5 noch nicht steht · wird
+ein Block in ihr zur Stufe, steht dort gleich wieder die Wand, ein ganzer
+Steinblock bleibt stehen, und ist er weg, steht dort wieder die Wand · die
+Kamera bleibt auch damit an `max-distance` stehen, ohne zurückgesetzt zu
+werden, und nach dem Cam-Modus ist die ganze Wand weg · Server-Log ohne
+Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
 Arbeitsordner.

@@ -41,14 +41,6 @@ public final class CamSettings {
      */
     public static final double MIN_MOVE_THRESHOLD = 0.01;
 
-    /**
-     * Largest value accepted for {@code camera-mode.border-radius}, in blocks.
-     * The wall looks at every block that far around the player each time the
-     * player crosses into the next one, and that work grows with the cube of
-     * the radius.
-     */
-    public static final double MAX_BORDER_RADIUS = 16.0;
-
     private final JavaPlugin plugin;
     private final ConsoleLog log;
     private final Messages messages;
@@ -186,7 +178,12 @@ public final class CamSettings {
         readMediumBorderBlock(config, FlightMedium.LAVA, "camera-mode.border-block-lava", "magma_block");
         readMediumBorderBlock(config, FlightMedium.POWDER_SNOW, "camera-mode.border-block-powder-snow",
                 "snow_block");
-        borderRadius = config.getDouble("camera-mode.border-radius", 5.0, 0.0, MAX_BORDER_RADIUS);
+        // No further than the server sends the world to a client, sixteen
+        // blocks for each chunk of its view-distance: the client throws away
+        // every block beyond that. A world with a smaller view-distance of
+        // its own cuts it back further, see CamBorderWall.
+        borderRadius = config.getDouble("camera-mode.border-radius", 5.0, 0.0,
+                plugin.getServer().getViewDistance() * 16.0);
         // A wall that nobody runs into holds nobody back: made of something
         // that can be walked through, or not built anywhere around the player.
         // Stopping the camera some other way would say the opposite of what
