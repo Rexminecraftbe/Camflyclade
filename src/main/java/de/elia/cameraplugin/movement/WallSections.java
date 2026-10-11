@@ -79,12 +79,27 @@ final class WallSections {
     /** A section made of nothing but such blocks. Never written to. */
     private static final char[] FULL = new char[256];
 
+    /** The front of a section that cannot be worked out yet, see {@link #front(Pos, Section)}. */
+    private static final char[] UNKNOWN = new char[0];
+
     static {
         Arrays.fill(FULL, (char) 0xFFFF);
     }
 
     /** One section, counted in sections. */
     private record Pos(int x, int y, int z) {
+
+        // Written out: the ones a record brings along go through a general
+        // lookup, and every look asks the maps thousands of times.
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Pos pos && pos.x == x && pos.y == y && pos.z == z;
+        }
+
+        @Override
+        public int hashCode() {
+            return (x * 31 + y) * 31 + z;
+        }
     }
 
     /** One section and what has been worked out about it. */
@@ -93,7 +108,7 @@ final class WallSections {
         private char[] area;
         /** The blocks of shut lava, water and powder snow. */
         private char[] medium;
-        /** When those two were read out of the world, see {@link #now}. */
+        /** When those two were read out of the world, see {@link #update}. */
         private long readAt;
         /** The blocks beyond {@code max-distance}, once worked out. */
         private char[] distance;
@@ -107,14 +122,20 @@ final class WallSections {
     private record Pending(Pos pos, double gap) {
     }
 
-    /** Receives one block of the wall, see {@link #forEachFrontCell}. */
-    interface CellVisitor {
+    /** Receives what has changed in the wall, see {@link #forEachChange}. */
+    interface Changes {
+        /** A block that has joined the wall. */
+        void entered(int x, int y, int z);
+
         /**
-         * @param renewed whether what is known about the block has changed
-         *                since the last time it was handed out, so that a
-         *                block of the wall kept for it has to be made anew
+         * A block that stays in the wall, but whose section has been read
+         * anew with another result: what was made for it has to be made
+         * anew.
          */
-        void visit(int x, int y, int z, boolean renewed);
+        void renewed(int x, int y, int z);
+
+        /** A block that is no longer part of the wall. */
+        void left(int x, int y, int z);
     }
 
     private final World world;
@@ -128,6 +149,12 @@ final class WallSections {
     private List<Pending> pending = new ArrayList<>();
     /** The sections that may hold blocks within reach of the last look, see {@link #update}. */
     private final List<Pos> inReach = new ArrayList<>();
+    /**
+     * The blocks of the wall handed out so far, for each section: what
+     * {@link #forEachChange} compares against. Kept apart from the sections,
+     * which may be let go before their blocks have left the wall.
+     */
+    private final Map<Pos, char[]> handed = new HashMap<>();
     /** The sections read out anew with another result since they were last handed out. */
     private final Set<Pos> renewed = new HashSet<>();
     /** Whether everything is to be handed out as renewed, see {@link #prepare}. */
@@ -280,7 +307,7 @@ final class WallSections {
     /**
      * Reads one section out of the world and keeps it. When that changes what
      * is known about it, the front around it is worked out anew, and its
-     * blocks of the wall are made anew, see {@link CellVisitor}.
+     * blocks of the wall are made anew, see {@link Changes#renewed}.
      */
     private void read(Pos pos, CamAreaRules.BlockLookup lookup, long now) {
         boolean inWorld = (pos.y() << 4) + 15 >= world.getMinHeight() && (pos.y() << 4) < world.getMaxHeight();
@@ -369,61 +396,48 @@ final class WallSections {
     }
 
     /**
-     * Hands out every block of the wall within reach of the body of the last
-     * {@link #update}, inside the height of the world and not in the body
-     * itself. A section next to one that has not been read yet builds no wall
-     * until it has been.
+     * Hands out what has changed in the wall within reach of the body of the
+     * last {@link #update}: the blocks that have joined it, those that have
+     * left it, and those whose section has been read anew. The wall is the
+     * front of the shut blocks, inside the height of the world and not in
+     * the body itself.
+     *
+     * <p>A section that lies within reach as a whole, as most of a large wall
+     * does, is passed over as long as its front stays as it was: a step of
+     * the player costs what it changes, not what the wall holds. A section
+     * next to one that has not been read yet keeps what it had until it has
+     * been.</p>
      */
-    void forEachFrontCell(double reach, CellVisitor visitor) {
-        double reachSquared = reach * reach;
-        int bottom = world.getMinHeight();
-        int top = world.getMaxHeight() - 1;
+    void forEachChange(double reach, Changes changes) {
+        Set<Pos> reachable = new HashSet<>(inReach);
+        Iterator<Map.Entry<Pos, char[]>> out = handed.entrySet().iterator();
+        while (out.hasNext()) {
+            Map.Entry<Pos, char[]> entry = out.next();
+            if (!reachable.contains(entry.getKey())) {
+                report(entry.getKey(), entry.getValue(), null, false, changes);
+                out.remove();
+            }
+        }
         for (Pos pos : inReach) {
             Section section = sections.get(pos);
-            char[] front = section == null ? null : front(pos, section);
-            if (front == null) {
+            char[] front = section == null ? UNKNOWN : front(pos, section);
+            if (front == UNKNOWN) {
                 continue;
             }
+            char[] before = handed.get(pos);
+            char[] now = front == null ? null : withinReach(pos, front, reach);
             boolean fresh = allRenewed || renewed.contains(pos);
-            int x0 = pos.x() << 4;
-            int y0 = pos.y() << 4;
-            int z0 = pos.z() << 4;
-            for (int lx = 0; lx < 16; lx++) {
-                int x = x0 + lx;
-                double gapX = gap(x, body.getMinX(), body.getMaxX());
-                for (int lz = 0; lz < 16; lz++) {
-                    int column = front[lx * 16 + lz];
-                    if (column == 0) {
-                        continue;
-                    }
-                    int z = z0 + lz;
-                    double gapZ = gap(z, body.getMinZ(), body.getMaxZ());
-                    if (gapX * gapX + gapZ * gapZ > reachSquared) {
-                        continue;
-                    }
-                    for (int ly = 0; ly < 16; ly++) {
-                        if ((column & (1 << ly)) == 0) {
-                            continue;
-                        }
-                        int y = y0 + ly;
-                        if (y < bottom || y > top) {
-                            continue;
-                        }
-                        double gapY = gap(y, body.getMinY(), body.getMaxY());
-                        if (gapX * gapX + gapY * gapY + gapZ * gapZ > reachSquared) {
-                            continue;
-                        }
-                        if (inBody(x, body.getMinX(), body.getMaxX()) && inBody(y, body.getMinY(), body.getMaxY())
-                                && inBody(z, body.getMinZ(), body.getMaxZ())) {
-                            // The body is in this block already, which a
-                            // teleport, a client that ignored the wall or
-                            // water flowing over the camera can have done. A
-                            // block around it would lock it in.
-                            continue;
-                        }
-                        visitor.visit(x, y, z, fresh);
-                    }
+            if (!fresh && (now == before || (now != null && before != null && Arrays.equals(now, before)))) {
+                if (now != null) {
+                    handed.put(pos, now);
                 }
+                continue;
+            }
+            report(pos, before, now, fresh, changes);
+            if (now == null) {
+                handed.remove(pos);
+            } else {
+                handed.put(pos, now);
             }
         }
         renewed.clear();
@@ -431,9 +445,109 @@ final class WallSections {
     }
 
     /**
+     * Hands out the difference between what a section had in the wall and
+     * what it has now, and with {@code fresh} every block it keeps as well.
+     */
+    private static void report(Pos pos, char[] before, char[] now, boolean fresh, Changes changes) {
+        int x0 = pos.x() << 4;
+        int y0 = pos.y() << 4;
+        int z0 = pos.z() << 4;
+        for (int i = 0; i < 256; i++) {
+            int was = bits(before, i);
+            int is = bits(now, i);
+            int left = was & ~is;
+            int entered = is & ~was;
+            int kept = fresh ? is & was : 0;
+            if ((left | entered | kept) == 0) {
+                continue;
+            }
+            int x = x0 + (i >> 4);
+            int z = z0 + (i & 15);
+            for (int y = 0; y < 16; y++) {
+                int bit = 1 << y;
+                if ((left & bit) != 0) {
+                    changes.left(x, y0 + y, z);
+                } else if ((entered & bit) != 0) {
+                    changes.entered(x, y0 + y, z);
+                } else if ((kept & bit) != 0) {
+                    changes.renewed(x, y0 + y, z);
+                }
+            }
+        }
+    }
+
+    /**
+     * The part of a front within reach of the body of the last look, inside
+     * the height of the world and not in the body itself - {@code null} when
+     * nothing is left of it. When all of the section lies that way, which
+     * is what makes an unchanged one cheap, it is the front itself.
+     */
+    private char[] withinReach(Pos pos, char[] front, double reach) {
+        int x0 = pos.x() << 4;
+        int y0 = pos.y() << 4;
+        int z0 = pos.z() << 4;
+        int bottom = world.getMinHeight();
+        int top = world.getMaxHeight() - 1;
+        double reachSquared = reach * reach;
+        double fx = Math.max(gap(x0, body.getMinX(), body.getMaxX()), gap(x0 + 15, body.getMinX(), body.getMaxX()));
+        double fy = Math.max(gap(y0, body.getMinY(), body.getMaxY()), gap(y0 + 15, body.getMinY(), body.getMaxY()));
+        double fz = Math.max(gap(z0, body.getMinZ(), body.getMaxZ()), gap(z0 + 15, body.getMinZ(), body.getMaxZ()));
+        boolean touchesBody = x0 < body.getMaxX() - OVERLAP_MARGIN && x0 + 16 > body.getMinX() + OVERLAP_MARGIN
+                && y0 < body.getMaxY() - OVERLAP_MARGIN && y0 + 16 > body.getMinY() + OVERLAP_MARGIN
+                && z0 < body.getMaxZ() - OVERLAP_MARGIN && z0 + 16 > body.getMinZ() + OVERLAP_MARGIN;
+        if (y0 >= bottom && y0 + 15 <= top && !touchesBody && fx * fx + fy * fy + fz * fz <= reachSquared) {
+            return front;
+        }
+        char[] kept = null;
+        for (int lx = 0; lx < 16; lx++) {
+            int x = x0 + lx;
+            double gapX = gap(x, body.getMinX(), body.getMaxX());
+            for (int lz = 0; lz < 16; lz++) {
+                int column = front[lx * 16 + lz];
+                if (column == 0) {
+                    continue;
+                }
+                int z = z0 + lz;
+                double gapZ = gap(z, body.getMinZ(), body.getMaxZ());
+                if (gapX * gapX + gapZ * gapZ > reachSquared) {
+                    continue;
+                }
+                int within = 0;
+                for (int ly = 0; ly < 16; ly++) {
+                    int y = y0 + ly;
+                    if ((column & (1 << ly)) == 0 || y < bottom || y > top) {
+                        continue;
+                    }
+                    double gapY = gap(y, body.getMinY(), body.getMaxY());
+                    if (gapX * gapX + gapY * gapY + gapZ * gapZ > reachSquared) {
+                        continue;
+                    }
+                    if (inBody(x, body.getMinX(), body.getMaxX()) && inBody(y, body.getMinY(), body.getMaxY())
+                            && inBody(z, body.getMinZ(), body.getMaxZ())) {
+                        // The body is in this block already, which a
+                        // teleport, a client that ignored the wall or water
+                        // flowing over the camera can have done. A block
+                        // around it would lock it in.
+                        continue;
+                    }
+                    within |= 1 << ly;
+                }
+                if (within != 0) {
+                    if (kept == null) {
+                        kept = new char[256];
+                    }
+                    kept[lx * 16 + lz] = (char) within;
+                }
+            }
+        }
+        return kept;
+    }
+
+    /**
      * The front of the shut blocks in this section: each shut block with an
-     * open one among the 26 around it. {@code null} when there is none, or
-     * when a section next to it is needed but has not been read yet.
+     * open one among the 26 around it. {@code null} when there is none, and
+     * {@link #UNKNOWN} when a section next to it is needed but has not been
+     * read yet.
      */
     private char[] front(Pos pos, Section section) {
         if (section.frontKnown) {
@@ -452,11 +566,13 @@ final class WallSections {
                         bits = shut(around, other);
                     } else if (gap(around) <= needed) {
                         // Needed, but not read yet.
-                        return null;
+                        return UNKNOWN;
                     } else {
-                        // Too far out to touch anything within reach: open,
-                        // as nothing out there is looked at.
-                        bits = null;
+                        // Too far out to touch any block within reach, so
+                        // what it holds does not matter. Counted as shut:
+                        // open, it would give the blocks next to it a front
+                        // that is only sorted out again further on.
+                        bits = FULL;
                     }
                     int i = ((dx + 1) * 3 + dy + 1) * 3 + dz + 1;
                     shut[i] = bits;

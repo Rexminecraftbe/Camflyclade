@@ -73,19 +73,27 @@ public final class CamBorderWall implements Listener {
 
     /**
      * Ticks between two full looks at the wall. A look reads again what has
-     * grown old around the player, and every block of the wall is checked
-     * once until the next one, a share of them each tick: the server
-     * overwrites a block of the wall in the client whenever the real block
-     * there changes - water flowing in, grass growing - and every block whose
-     * real block is no longer the one it stood on is sent again.
+     * grown old around the player, and the blocks of the wall are checked
+     * against the world until the next one, a share of them each tick, see
+     * {@link #dueForCheck}: the server overwrites a block of the wall in the
+     * client whenever the real block there changes - water flowing in, grass
+     * growing - and every block whose real block is no longer the one it
+     * stood on is sent again.
      */
     private static final long REFRESH_TICKS = 20L;
 
     /**
-     * Every how many looks the whole wall is sent again, block for block, in
-     * case the client has lost one of them some other way.
+     * Every how many looks the blocks checked are sent again whether they
+     * have changed or not, in case the client has lost one of them some
+     * other way.
      */
     private static final long FULL_RESEND_LOOKS = 10L;
+
+    /**
+     * How much further out a block of the wall has to lie for it to be
+     * checked at one look fewer, in blocks, see {@link #dueForCheck}.
+     */
+    private static final double CHECK_SPREAD = 32.0;
 
     /**
      * How long the sections around the player may be read out of the world
@@ -182,6 +190,8 @@ public final class CamBorderWall implements Listener {
         /** The blocks to be checked until the next look, and how many of them are done. */
         private List<Cell> toCheck = List.of();
         private int checked;
+        /** Whether the blocks checked until the next look are sent again in any case. */
+        private boolean resending;
 
         Wall(World world, BlockData block, Map<FlightMedium, BlockData> media, WallSections sections) {
             this.world = world.getUID();
@@ -360,9 +370,11 @@ public final class CamBorderWall implements Listener {
     private void tick(Player player, Wall wall) {
         long tick = wall.ticks++;
         if (tick % REFRESH_TICKS == 0) {
-            build(player, player.getLocation(), tick / REFRESH_TICKS % FULL_RESEND_LOOKS == 0);
-            wall.toCheck = new ArrayList<>(wall.bricks.keySet());
+            long look = tick / REFRESH_TICKS;
+            build(player, player.getLocation(), false);
+            wall.toCheck = dueForCheck(wall, player.getLocation(), look);
             wall.checked = 0;
+            wall.resending = look > 0 && look % FULL_RESEND_LOOKS == 0;
         } else if (wall.sections.hasWork()) {
             build(player, player.getLocation(), false);
         }
@@ -370,11 +382,32 @@ public final class CamBorderWall implements Listener {
     }
 
     /**
+     * The blocks of the wall to be checked until the next look: those near
+     * the player at every look, those further out at every few, about one
+     * more look for each {@link #CHECK_SPREAD} blocks. A block far out only
+     * matters to the eye, and the player needs a while to get there.
+     */
+    private static List<Cell> dueForCheck(Wall wall, Location at, long look) {
+        List<Cell> due = new ArrayList<>();
+        for (Cell cell : wall.bricks.keySet()) {
+            double dx = cell.x() + 0.5 - at.getX();
+            double dy = cell.y() + 0.5 - at.getY();
+            double dz = cell.z() + 0.5 - at.getZ();
+            long every = 1 + (long) (Math.sqrt(dx * dx + dy * dy + dz * dz) / CHECK_SPREAD);
+            if (Math.floorMod(look + cell.hashCode(), every) == 0) {
+                due.add(cell);
+            }
+        }
+        return due;
+    }
+
+    /**
      * Checks the next share of the wall against the world and sends again
      * every block whose real block has changed since it was put up: the
      * server has sent that one to the client in its place. A block whose
      * real one keeps its place is checked as well, so that the wall takes
-     * that place once it is gone.
+     * that place once it is gone. Every {@link #FULL_RESEND_LOOKS} looks
+     * the blocks checked are sent again in any case.
      */
     private void check(Player player, Wall wall) {
         World world = player.getWorld();
@@ -394,6 +427,9 @@ public final class CamBorderWall implements Listener {
             Block block = world.getBlockAt(cell.x(), cell.y(), cell.z());
             BlockData real = block.getBlockData();
             if (real.equals(brick.real())) {
+                if (wall.resending && brick.shown() != null) {
+                    again.add(stateAt(world, cell, brick.shown()));
+                }
                 continue;
             }
             if (names == null && wall.areasCounted) {
@@ -410,12 +446,12 @@ public final class CamBorderWall implements Listener {
 
     /**
      * Builds the wall around this spot: gives back what is no longer part of
-     * it and sends what is new. All of it goes out at once, which the server
-     * packs into one packet for each section of sixteen by sixteen by sixteen
-     * blocks.
+     * it and sends what is new, see {@link WallSections#forEachChange}. All
+     * of it goes out at once, which the server packs into one packet for
+     * each section of sixteen by sixteen by sixteen blocks.
      *
      * @param resend whether the blocks that stand already are sent again as
-     *               well, in case the client has lost them
+     *               well, because the client may have lost them
      */
     private void build(Player player, Location at, boolean resend) {
         Wall wall = walls.get(player.getUniqueId());
@@ -432,36 +468,9 @@ public final class CamBorderWall implements Listener {
             wall.sections = sectionsIn(world);
             wall.toCheck = List.of();
         }
-        Map<Cell, Brick> wanted = plan(player, wall, data, at);
-        List<BlockState> changes = new ArrayList<>();
-        for (Map.Entry<Cell, Brick> before : wall.bricks.entrySet()) {
-            Brick now = wanted.get(before.getKey());
-            if (before.getValue().shown() != null && (now == null || now.shown() == null)) {
-                changes.add(stateAt(world, before.getKey(), null));
-            }
-        }
-        for (Map.Entry<Cell, Brick> entry : wanted.entrySet()) {
-            Brick brick = entry.getValue();
-            Brick before = wall.bricks.get(entry.getKey());
-            if (brick.shown() != null && (resend || before == null || !brick.shown().equals(before.shown())
-                    || !brick.real().equals(before.real()))) {
-                changes.add(stateAt(world, entry.getKey(), brick.shown()));
-            }
-        }
-        send(player, changes);
-        wall.bricks = wanted;
-        wall.builtAt = at.clone();
-    }
-
-    /**
-     * Works out which blocks around this spot belong to the front of the
-     * border, see {@link WallSections}. A block found there before keeps
-     * what was worked out for it, unless its section has been read anew
-     * since: whether it changed in the meantime is up to {@link #check}.
-     */
-    private Map<Cell, Brick> plan(Player player, Wall wall, CameraData data, Location at) {
-        Map<Cell, Brick> wanted = new HashMap<>();
-        World world = at.getWorld();
+        // What the player is to see at each block that changes: the wall,
+        // or the real block where the value is null.
+        Map<Cell, BlockData> changes = new HashMap<>();
         Location anchor = distanceAnchor(data, at);
         CamAreaRules rules = settings.getCamAreaRules();
         // Whoever stands in a forbidden area already may leave it in every
@@ -469,26 +478,76 @@ public final class CamBorderWall implements Listener {
         wall.areasCounted = readsAreas() && rules.forbiddenArea(at) == null;
         Set<FlightMedium> media = shutMedia();
         if (anchor == null && !wall.areasCounted && media.isEmpty()) {
-            return wanted;
-        }
-        double half = player.getWidth() / 2.0;
-        BoundingBox body = new BoundingBox(at.getX() - half, at.getY(), at.getZ() - half,
-                at.getX() + half, at.getY() + player.getHeight(), at.getZ() + half);
-        double reach = reachIn(world);
-        wall.sections.prepare(anchor, settings.getMaxDistance(), wall.areasCounted);
-        wall.sections.update(body, reach, wall.ticks, READ_BUDGET_NANOS);
-        CamAreaRules.BlockLookup names = wall.areasCounted ? rules.blockLookup(world) : null;
-        wall.sections.forEachFrontCell(reach, (x, y, z, renewed) -> {
-            Cell cell = new Cell(x, y, z);
-            Brick before = wall.bricks.get(cell);
-            if (before != null && !renewed) {
-                wanted.put(cell, before);
-                return;
+            // Nothing keeps the camera out around here: the wall comes down.
+            for (Map.Entry<Cell, Brick> brick : wall.bricks.entrySet()) {
+                if (brick.getValue().shown() != null) {
+                    changes.put(brick.getKey(), null);
+                }
             }
-            Block block = world.getBlockAt(x, y, z);
-            wanted.put(cell, brickAt(wall, block, block.getBlockData(), names, media));
-        });
-        return wanted;
+            wall.bricks = new HashMap<>();
+            wall.sections = sectionsIn(world);
+        } else {
+            double half = player.getWidth() / 2.0;
+            BoundingBox body = new BoundingBox(at.getX() - half, at.getY(), at.getZ() - half,
+                    at.getX() + half, at.getY() + player.getHeight(), at.getZ() + half);
+            double reach = reachIn(world);
+            wall.sections.prepare(anchor, settings.getMaxDistance(), wall.areasCounted);
+            wall.sections.update(body, reach, wall.ticks, READ_BUDGET_NANOS);
+            CamAreaRules.BlockLookup names = wall.areasCounted ? rules.blockLookup(world) : null;
+            wall.sections.forEachChange(reach, new WallSections.Changes() {
+                @Override
+                public void entered(int x, int y, int z) {
+                    remake(wall, world, new Cell(x, y, z), names, media, changes);
+                }
+
+                @Override
+                public void renewed(int x, int y, int z) {
+                    remake(wall, world, new Cell(x, y, z), names, media, changes);
+                }
+
+                @Override
+                public void left(int x, int y, int z) {
+                    Cell cell = new Cell(x, y, z);
+                    Brick gone = wall.bricks.remove(cell);
+                    if (gone != null && gone.shown() != null) {
+                        changes.put(cell, null);
+                    }
+                }
+            });
+        }
+        if (resend) {
+            for (Map.Entry<Cell, Brick> brick : wall.bricks.entrySet()) {
+                if (brick.getValue().shown() != null) {
+                    changes.put(brick.getKey(), brick.getValue().shown());
+                }
+            }
+        }
+        List<BlockState> states = new ArrayList<>(changes.size());
+        for (Map.Entry<Cell, BlockData> change : changes.entrySet()) {
+            states.add(stateAt(world, change.getKey(), change.getValue()));
+        }
+        send(player, states);
+        wall.builtAt = at.clone();
+    }
+
+    /**
+     * Works out a block of the wall anew and notes what the player has to be
+     * sent for it: the wall where it is new or has changed, the real block
+     * where the wall gives way to it.
+     */
+    private void remake(Wall wall, World world, Cell cell, CamAreaRules.BlockLookup names,
+                        Set<FlightMedium> media, Map<Cell, BlockData> changes) {
+        Block block = world.getBlockAt(cell.x(), cell.y(), cell.z());
+        Brick before = wall.bricks.get(cell);
+        Brick now = brickAt(wall, block, block.getBlockData(), names, media);
+        wall.bricks.put(cell, now);
+        if (now.shown() != null) {
+            if (before == null || !now.shown().equals(before.shown()) || !now.real().equals(before.real())) {
+                changes.put(cell, now.shown());
+            }
+        } else if (before != null && before.shown() != null) {
+            changes.put(cell, null);
+        }
     }
 
     /** What the front of the border is at this block, see {@link Brick}. */
