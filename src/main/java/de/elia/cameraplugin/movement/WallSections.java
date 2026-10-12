@@ -28,9 +28,16 @@ import java.util.Set;
  * for each section, and again once it has grown old, see
  * {@link #maxAge(double)}. The distance is pure arithmetic and is worked out
  * when it is asked, kept for as long as the spot it is measured from stays
- * where it is. The wall itself is the front of the shut blocks - each one
- * next to a block that is not shut - and that front is kept for every section
- * as well, until something in or around it changes.</p>
+ * where it is.</p>
+ *
+ * <p>The wall itself is the front of the shut blocks: each one next to a
+ * block the camera can be in, which is neither shut nor whole, see
+ * {@link WholeBlocks}. Where the border runs through rock, or along the
+ * bottom of a lake, nothing stands next to it that the camera could come
+ * from, and no wall is built there. That front is kept for every section as
+ * well, until something in or around it changes, and looked over again
+ * every so often, see {@link #FRONT_AGE_FACTOR}: a block broken or set next
+ * to it changes it as well.</p>
  *
  * <p>Most sections hold no border at all: they lie well inside
  * {@code max-distance} or far out beyond it, and hold neither a forbidden
@@ -75,6 +82,16 @@ final class WallSections {
     private static final long AREA_AGE_FACTOR = 10L;
 
     /**
+     * How much faster the time a front is kept grows with the distance than
+     * that of the media, see {@link Section#edge}: as if it lay that many
+     * times further out. A block broken or set next to the wall matters to
+     * the camera only near it - further out the wall is only there to be
+     * seen, and is looked over again long before the player gets there. A
+     * second right around the player, ten at 32 blocks, about forty at 64.
+     */
+    private static final double FRONT_AGE_FACTOR = 2.0;
+
+    /**
      * How the time a section is kept grows past {@link #ALWAYS_REACH}: by
      * one tick for every so many blocks of the distance squared. A minute at
      * 160 blocks, about ten seconds at 64, three at 40.
@@ -101,6 +118,13 @@ final class WallSections {
 
     /** How far past what is needed a section stays kept before it is let go, in blocks. */
     private static final double KEEP_MARGIN = 16.0;
+
+    /**
+     * The 26 blocks around one, the six beside it first, the one above it
+     * leading: where the camera can be next to a wall it mostly is right
+     * above it or beside it, and the search ends at the first such block.
+     */
+    private static final int[][] NEIGHBOURS = neighbours();
 
     /** A section made of nothing but such blocks. Never written to. */
     private static final char[] FULL = new char[256];
@@ -143,6 +167,19 @@ final class WallSections {
         /** The front of the shut blocks, the wall, once worked out. */
         private char[] front;
         private boolean frontKnown;
+        /** When the front was last looked over, see {@link #scan}. */
+        private long frontAt;
+        /**
+         * The shut blocks touching open ones, whole or not, and the open
+         * blocks around the section they were worked out from. Kept, so that
+         * the front can be looked over again from them alone, see
+         * {@link #reachable}: whether a block next to the wall is whole can
+         * change without anything else changing.
+         */
+        private char[] edge;
+        private int[] open;
+        /** Whether the front is due to be looked over again. */
+        private boolean recheck;
     }
 
     /**
@@ -170,6 +207,7 @@ final class WallSections {
 
     private final World world;
     private final CamAreaRules rules;
+    private final WholeBlocks wholeBlocks;
     /** Whether forbidden areas are looked for at all, see {@link #areasCounted}. */
     private final boolean areasRead;
     private final Set<FlightMedium> media;
@@ -197,6 +235,8 @@ final class WallSections {
     /** Where the body stood at the last {@link #scan}, and the reach then. */
     private BoundingBox scannedAt;
     private double scannedReach;
+    /** The tick counter of the wall at the last {@link #update}. */
+    private long now;
 
     /** The spot the distance is measured from, or {@code null}, and how far it reaches. */
     private Location anchor;
@@ -209,10 +249,13 @@ final class WallSections {
      *                  {@code cam-area} on level 2, with a biome or structure
      *                  to look for
      * @param media     the media whose switch keeps the camera out
+     * @param whole     which blocks the camera cannot be in
      */
-    WallSections(World world, CamAreaRules rules, boolean areasRead, Set<FlightMedium> media) {
+    WallSections(World world, CamAreaRules rules, boolean areasRead, Set<FlightMedium> media,
+                 WholeBlocks whole) {
         this.world = world;
         this.rules = rules;
+        this.wholeBlocks = whole;
         this.areasRead = areasRead;
         this.media = media;
     }
@@ -267,6 +310,7 @@ final class WallSections {
     void update(BoundingBox body, double reach, long now, long budget, boolean look) {
         this.body = body.clone();
         this.needed = reach + NEIGHBOUR_REACH;
+        this.now = now;
         if (look || scannedAt == null || scannedReach != reach
                 || Math.abs(body.getMinX() - scannedAt.getMinX()) + Math.abs(body.getMinY() - scannedAt.getMinY())
                 + Math.abs(body.getMinZ() - scannedAt.getMinZ()) >= margin(reach)) {
@@ -312,11 +356,17 @@ final class WallSections {
                     if (gap > range) {
                         continue;
                     }
+                    Section section = sections.get(pos);
                     if (gap <= reach + margin) {
                         inReach.add(pos);
                         inReachSet.add(pos);
+                        if (look && section != null && section.frontKnown && section.edge != null
+                                && now - section.frontAt >= maxAge(gap * FRONT_AGE_FACTOR)) {
+                            // Looked over again on the next hand-out: a block
+                            // next to it may have been broken or set.
+                            section.recheck = true;
+                        }
                     }
-                    Section section = sections.get(pos);
                     if (section == null) {
                         missing.add(new Pending(pos, gap, true, true));
                     } else if (look) {
@@ -631,13 +681,16 @@ final class WallSections {
     }
 
     /**
-     * The front of the shut blocks in this section: each shut block with an
-     * open one among the 26 around it. {@code null} when there is none, and
-     * {@link #UNKNOWN} when a section next to it is needed but has not been
-     * read yet.
+     * The front of the shut blocks in this section: each shut block with a
+     * block the camera can be in among the 26 around it. {@code null} when
+     * there is none, and {@link #UNKNOWN} when a section next to it is
+     * needed but has not been read yet.
      */
     private char[] front(Pos pos, Section section) {
         if (section.frontKnown) {
+            if (section.recheck) {
+                recheck(pos, section);
+            }
             return section.front;
         }
         char[][] shut = new char[27][];
@@ -671,21 +724,45 @@ final class WallSections {
             }
         }
         section.frontKnown = true;
-        section.front = empty || full ? null : front(shut);
+        section.frontAt = now;
+        section.recheck = false;
+        section.front = null;
+        section.edge = null;
+        section.open = null;
+        if (empty || full) {
+            return null;
+        }
+        int[] open = openAround(shut);
+        char[] edge = edge(shut[13], open);
+        if (edge != null) {
+            section.edge = edge;
+            section.open = open;
+            section.front = reachable(pos, edge, open);
+        }
         return section.front;
     }
 
     /**
-     * The front of the middle one of 27 sections, given what is shut in each
-     * of them: index {@code ((dx + 1) * 3 + dy + 1) * 3 + dz + 1}.
-     *
-     * <p>Worked out a column at a time. The open blocks of the 18 by 18
-     * columns around the section, one block deeper on every side, are
-     * widened by one in every direction - along the column by shifting the
-     * bits, across it by joining nine neighbouring columns - and what of
-     * that falls on a shut block of the section is the front.</p>
+     * Looks the front of a section over again from its edge, see
+     * {@link Section#edge}. Kept as it was when nothing has changed, so that
+     * {@link #forEachChange} passes it over.
      */
-    private static char[] front(char[][] shut) {
+    private void recheck(Pos pos, Section section) {
+        section.recheck = false;
+        section.frontAt = now;
+        char[] front = reachable(pos, section.edge, section.open);
+        if (!Arrays.equals(front, section.front)) {
+            section.front = front;
+        }
+    }
+
+    /**
+     * The open blocks of the 18 by 18 columns around the middle one of 27
+     * sections, one block deeper on every side, given what is shut in each
+     * of them: index {@code ((dx + 1) * 3 + dy + 1) * 3 + dz + 1}. Bit 0 of
+     * a column is the block below the section, bit 17 the one above it.
+     */
+    private static int[] openAround(char[][] shut) {
         int[] open = new int[18 * 18];
         for (int px = 0; px < 18; px++) {
             int dx = px == 0 ? -1 : px == 17 ? 1 : 0;
@@ -697,13 +774,24 @@ final class WallSections {
                 int below = bits(shut[((dx + 1) * 3) * 3 + dz + 1], column);
                 int middle = bits(shut[((dx + 1) * 3 + 1) * 3 + dz + 1], column);
                 int above = bits(shut[((dx + 1) * 3 + 2) * 3 + dz + 1], column);
-                // Bit 0 is the block below the section, 17 the one above it.
                 int closed = (below >>> 15) & 1 | middle << 1 | (above & 1) << 17;
                 open[px * 18 + pz] = ~closed & 0x3FFFF;
             }
         }
-        char[] middle = shut[13];
-        char[] front = null;
+        return open;
+    }
+
+    /**
+     * The shut blocks of the middle section with an open one among the 26
+     * around them, whole or not.
+     *
+     * <p>Worked out a column at a time: the open blocks around are widened
+     * by one in every direction - along the column by shifting the bits,
+     * across it by joining nine neighbouring columns - and what of that
+     * falls on a shut block of the section is the edge.</p>
+     */
+    private static char[] edge(char[] middle, int[] open) {
+        char[] edge = null;
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
                 int column = bits(middle, x * 16 + z);
@@ -717,16 +805,126 @@ final class WallSections {
                     }
                 }
                 near |= near << 1 | near >>> 1;
-                int edge = (near >>> 1) & column;
-                if (edge != 0) {
-                    if (front == null) {
-                        front = new char[256];
+                int touching = (near >>> 1) & column;
+                if (touching != 0) {
+                    if (edge == null) {
+                        edge = new char[256];
                     }
-                    front[x * 16 + z] = (char) edge;
+                    edge[x * 16 + z] = (char) touching;
                 }
             }
         }
-        return front;
+        return edge;
+    }
+
+    /**
+     * The blocks of the edge the camera can actually get into: those with
+     * an open block around them it can be in, see {@link #passable}. A shut
+     * block that touches nothing but whole blocks and its own kind lies
+     * behind them, out of reach - a wall there would stop nobody.
+     *
+     * <p>Each open block is looked at in the world once, however many
+     * blocks of the edge it lies next to.</p>
+     */
+    private char[] reachable(Pos pos, char[] edge, int[] open) {
+        int x0 = (pos.x() << 4) - 1;
+        int y0 = (pos.y() << 4) - 1;
+        int z0 = (pos.z() << 4) - 1;
+        // Laid out like open: which blocks have been looked at, and which of
+        // those the camera can be in.
+        int[] looked = new int[18 * 18];
+        int[] passable = new int[18 * 18];
+        // The highest block that is not air in each column, once asked:
+        // everything above it is air, and needs no look of its own.
+        int[] surface = new int[18 * 18];
+        Arrays.fill(surface, Integer.MIN_VALUE);
+        char[] reachable = null;
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                int column = edge[x * 16 + z];
+                if (column == 0) {
+                    continue;
+                }
+                int kept = 0;
+                for (int y = 0; y < 16; y++) {
+                    if ((column & (1 << y)) == 0) {
+                        continue;
+                    }
+                    for (int[] step : NEIGHBOURS) {
+                        int px = x + 1 + step[0];
+                        int py = y + 1 + step[1];
+                        int pz = z + 1 + step[2];
+                        int i = px * 18 + pz;
+                        int bit = 1 << py;
+                        if ((open[i] & bit) == 0) {
+                            continue;
+                        }
+                        if ((looked[i] & bit) == 0) {
+                            looked[i] |= bit;
+                            if (surface[i] == Integer.MIN_VALUE) {
+                                surface[i] = surface(x0 + px, z0 + pz);
+                            }
+                            if (y0 + py > surface[i] || passable(x0 + px, y0 + py, z0 + pz)) {
+                                passable[i] |= bit;
+                            }
+                        }
+                        if ((passable[i] & bit) != 0) {
+                            kept |= 1 << y;
+                            break;
+                        }
+                    }
+                }
+                if (kept != 0) {
+                    if (reachable == null) {
+                        reachable = new char[256];
+                    }
+                    reachable[x * 16 + z] = (char) kept;
+                }
+            }
+        }
+        return reachable;
+    }
+
+    /**
+     * Whether the camera can be in the block at this spot: anything short of
+     * a whole block. A spot that cannot be looked at - outside the height of
+     * the world, or in a chunk that is not loaded - counts as one it can be
+     * in: better a wall too many than a gap.
+     */
+    private boolean passable(int x, int y, int z) {
+        if (y < world.getMinHeight() || y >= world.getMaxHeight() || !world.isChunkLoaded(x >> 4, z >> 4)) {
+            return true;
+        }
+        return world.getType(x, y, z).isAir() || !wholeBlocks.whole(world.getBlockAt(x, y, z));
+    }
+
+    /**
+     * The highest block of this column that is not air, or the top of the
+     * world when the chunk is not loaded - then every block is looked at on
+     * its own, see {@link #passable}.
+     */
+    private int surface(int x, int z) {
+        if (!world.isChunkLoaded(x >> 4, z >> 4)) {
+            return world.getMaxHeight();
+        }
+        return world.getHighestBlockYAt(x, z, HeightMap.WORLD_SURFACE);
+    }
+
+    /** The 26 steps to the blocks around one, in the order of {@link #NEIGHBOURS}. */
+    private static int[][] neighbours() {
+        List<int[]> steps = new ArrayList<>();
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (dx != 0 || dy != 0 || dz != 0) {
+                        steps.add(new int[]{dx, dy, dz});
+                    }
+                }
+            }
+        }
+        steps.sort(Comparator.<int[]>comparingInt(step -> Math.abs(step[0]) + Math.abs(step[1]) + Math.abs(step[2]))
+                .thenComparingInt(step -> -step[1]));
+        return steps.toArray(new int[0][]);
     }
 
     private static int bits(char[] section, int column) {

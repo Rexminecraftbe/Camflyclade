@@ -32,6 +32,7 @@ camera-mode:
 
   # Block der Wand: barrier ist unsichtbar, glass zeigt sie (Luft oder ein Block, durch den man durchkommt, z. B. Wasser oder Gras = keine Grenze)
   # Ganze Blöcke bleiben stehen, Luft und halbe Blöcke (Stufen, Zäune, Tropfstein ...) werden ersetzt.
+  # Die Wand steht nur, wo die Kamera hinkommt: bei einem See z. B. an der Oberfläche, nicht am Grund und nicht im Fels.
   border-block: barrier
 
   # Block der Wand in Wasser, Lava und Pulverschnee (ein Block, durch den man durchkommt, z. B. water = wie border-block)

@@ -5123,7 +5123,10 @@ def medium_checks(env, bot):
     border-mode: barrier, der Voreinstellung, steht an der Kante zudem eine
     Wand - Magma, blaues Glas und Schnee -, an der ein echter Client landet,
     ohne dass etwas abgebrochen werden muss; das prueft der Fall auf die Lava
-    am Schluss, samt der Gegenprobe mit push-back.
+    am Schluss, samt der Gegenprobe mit push-back. Die Wand steht nur, wo die
+    Kamera hinkommt: Am Grund des Beckens grenzt das Wasser nur an Glas, Gras
+    und Wasser und bleibt Wasser - bis darunter eine Stufe liegt, in der die
+    Kamera stehen koennte.
 
     Aufgebaut wird viererlei, alles neben dem Testplatz:
       * ein Becken aus Glas, drei Bloecke tief voll Wasser, oben offen,
@@ -5179,6 +5182,8 @@ def medium_checks(env, bot):
     # ihre oberste Lage, der Pulverschnee seine Seite zum Testplatz hin.
     lava_oben = (bx - 8, by + 2, bz)
     wasser_oben = (bx + 8, by + 2, bz)
+    wasser_unten = (bx + 8, by, bz)
+    unter_dem_wasser = (bx + 8, by - 1, bz)
     pulverschnee_vorn = (bx, by + 1, bz + 6)
     ueber_der_lava = [(bx - 7.5, by + 6, bz + 0.5), (bx - 7.5, oben + 1.5, bz + 0.5)]
     zum_wasser = [(bx - 7.5, by + 6, bz + 0.5), (bx + 8.5, by + 6, bz + 0.5),
@@ -5198,6 +5203,8 @@ def medium_checks(env, bot):
         for bereich in (becken, lavabecken, wuerfel, decke):
             bot.chat(f"/fill {bereich} minecraft:air")
             time.sleep(0.5)
+        bot.chat("/setblock {} {} {} minecraft:grass_block".format(*unter_dem_wasser))
+        time.sleep(0.3)
 
     def zeige(ergebnis):
         if ergebnis is None:
@@ -5370,6 +5377,17 @@ def medium_checks(env, bot):
             gelandet = bot.server_pos()
             gesagt = medium_gesagt(bot, since)
             glas = wand_sicht(zum_wasser, wasser_oben)
+            # Der Bot schwebt ueber dem Becken, der Grund liegt in Reichweite.
+            # Neben ihm ist nichts, worin die Kamera sein koennte: Glas, Gras
+            # und Wasser. Eine Stufe darunter aendert das - die Wand sieht
+            # beim naechsten Auffrischen nach, was um sie herum steht.
+            nacheinander = {"Gras": bot.call("block_at", x=wasser_unten[0], y=wasser_unten[1],
+                                              z=wasser_unten[2]).get("name")}
+            for setzen, name in (("stone_slab", "Stufe"), ("grass_block", "wieder Gras")):
+                bot.chat("/setblock {} {} {} minecraft:{}".format(*unter_dem_wasser, setzen))
+                time.sleep(2.5)
+                nacheinander[name] = bot.call("block_at", x=wasser_unten[0], y=wasser_unten[1],
+                                              z=wasser_unten[2]).get("name")
             schnee = wand_sicht(zum_pulverschnee, pulverschnee_vorn)
             cam_off(bot)
             FIND.test("allow_lava_flight: false - mit border-mode: barrier landet die "
@@ -5384,6 +5402,12 @@ def medium_checks(env, bot):
                       magma == "magma_block" and glas == "blue_stained_glass"
                       and schnee == "snow_block",
                       f"Lava -> {magma}, Wasser -> {glas}, Pulverschnee -> {schnee}")
+            FIND.test("Am Grund des Beckens, wo die Kamera nicht hinkommt, bleibt das "
+                      "Wasser Wasser; liegt darunter eine Stufe, wird es gleich zur "
+                      "Wand, und ist sie weg, wieder Wasser",
+                      nacheinander == {"Gras": "water", "Stufe": "blue_stained_glass",
+                                       "wieder Gras": "water"},
+                      "; ".join(f"{name}: {g}" for name, g in nacheinander.items()))
 
         # Gegenprobe mit push-back: keine Wand, die Lava bleibt Lava, und wer
         # hineinfaellt, wird zurueckgesetzt.

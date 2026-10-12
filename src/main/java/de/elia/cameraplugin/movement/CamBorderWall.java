@@ -61,7 +61,8 @@ import java.util.UUID;
  * the few gaps it cannot close, see {@link #shownFor(Wall, Block)}.</p>
  *
  * <p>Only the front of the border is built, the blocks next to the space the
- * camera may use, and of those only the ones up to
+ * camera can be in - not where the border runs through rock, nor on the
+ * bottom of a lake - and of those only the ones up to
  * {@code camera-mode.border-radius} away from the body. Whole blocks keep
  * their place in it, everything else gives way to the wall. The wall moves
  * along with the player, and every block it leaves behind is given back as it
@@ -123,22 +124,14 @@ public final class CamBorderWall implements Listener {
      */
     private static final double TOUCH = 0.05;
 
-    /**
-     * How much a block may lack at its sides and at its bottom and still
-     * count as whole, see {@link #whole(Block)}: a sixteenth, as a cactus
-     * does.
-     */
-    private static final double SIDE_SLIVER = 1.0 / 16.0;
-
-    /** And how much at its top: two sixteenths, as soul sand and mud do. */
-    private static final double TOP_SLIVER = 2.0 / 16.0;
-
     private final CameraPlugin plugin;
     private final CamSettings settings;
     private final CameraPlayers cameraPlayers;
     private final Map<UUID, Wall> walls = new HashMap<>();
     /** Which kinds of block keep data of their own, see {@link #keepsData(Block)}. */
     private final Map<Material, Boolean> dataKinds = new HashMap<>();
+    /** Which blocks stop the camera on their own, shared by every wall. */
+    private final WholeBlocks wholeBlocks = new WholeBlocks();
 
     /** One block position of the wall. */
     private record Cell(int x, int y, int z) {
@@ -579,7 +572,7 @@ public final class CamBorderWall implements Listener {
 
     /** What keeps the camera out of this world: the sections around one player start out empty. */
     private WallSections sectionsIn(World world) {
-        return new WallSections(world, settings.getCamAreaRules(), readsAreas(), shutMedia());
+        return new WallSections(world, settings.getCamAreaRules(), readsAreas(), shutMedia(), wholeBlocks);
     }
 
     /** Whether forbidden biomes or structures keep the camera out at all. */
@@ -647,7 +640,7 @@ public final class CamBorderWall implements Listener {
      * What the wall shows in place of this block, or {@code null} when the
      * block stays as it is.
      *
-     * <p>A whole block stays, see {@link #whole(Block)}: it stops the camera
+     * <p>A whole block stays, see {@link WholeBlocks}: it stops the camera
      * on its own, and a see-through block in its place would open a window
      * into the ground. Everything else gives way to the wall - air, plants,
      * slabs, fences, pointed dripstone - and water, lava and powder snow to
@@ -667,7 +660,7 @@ public final class CamBorderWall implements Listener {
         if (type.isAir()) {
             return wall.block;
         }
-        if (whole(block) || type == Material.FIRE || type == Material.SOUL_FIRE || keepsData(block)) {
+        if (wholeBlocks.whole(block) || type == Material.FIRE || type == Material.SOUL_FIRE || keepsData(block)) {
             return null;
         }
         for (Map.Entry<FlightMedium, BlockData> medium : wall.media.entrySet()) {
@@ -676,36 +669,6 @@ public final class CamBorderWall implements Listener {
             }
         }
         return wall.block;
-    }
-
-    /**
-     * Whether this block fills its space, or so nearly that nobody gets past
-     * what is left of it: stone, glass, leaves, stairs - and soul sand, mud,
-     * farmland, a cactus, which lack a sliver at the top or at the sides but
-     * look whole all the same.
-     */
-    private static boolean whole(Block block) {
-        Collection<BoundingBox> parts = block.getCollisionShape().getBoundingBoxes();
-        if (parts.isEmpty()) {
-            return false;
-        }
-        double minX = 1.0;
-        double minY = 1.0;
-        double minZ = 1.0;
-        double maxX = 0.0;
-        double maxY = 0.0;
-        double maxZ = 0.0;
-        for (BoundingBox part : parts) {
-            minX = Math.min(minX, part.getMinX());
-            minY = Math.min(minY, part.getMinY());
-            minZ = Math.min(minZ, part.getMinZ());
-            maxX = Math.max(maxX, part.getMaxX());
-            maxY = Math.max(maxY, part.getMaxY());
-            maxZ = Math.max(maxZ, part.getMaxZ());
-        }
-        return minX <= SIDE_SLIVER && maxX >= 1.0 - SIDE_SLIVER
-                && minZ <= SIDE_SLIVER && maxZ >= 1.0 - SIDE_SLIVER
-                && minY <= SIDE_SLIVER && maxY >= 1.0 - TOP_SLIVER;
     }
 
     /**

@@ -958,7 +958,9 @@ sagt warum · Gegenprobe: voreingestellt geht all das, und die Lava bleibt auch
 dicht vor der Kamera Lava · gesperrt und mit `border-mode: barrier` landet die
 Kamera auf der Lava wie auf einem Block, ohne zurückgesetzt zu werden, und die
 Wand zeigt Lava als Magma, Wasser als blaues Glas und Pulverschnee als Schnee
-· mit `push-back` bleibt die Lava Lava, und wer hineinfällt, wird
+· am Grund des Beckens, wo das Wasser nur an Glas, Gras und Wasser grenzt,
+bleibt es Wasser · liegt darunter eine Stufe, wird es gleich zur Wand, und ist
+sie weg, wieder Wasser · mit `push-back` bleibt die Lava Lava, und wer hineinfällt, wird
 zurückgesetzt · mitten im Fall startet `/cam` nicht, auch nicht mit Sanftem
 Fall hoch in der Luft, und die Ablehnung sagt warum · Gegenprobe: so hoch wie
 ein Sprung über dem Boden geht es · das Mannequin atmet und friert mit der
