@@ -5,8 +5,9 @@ package de.elia.cameraplugin.body;
  * The name over it is a text display of its own for both types, see
  * {@link BodySpawner#spawnNameDisplay}.
  *
- * <p>The number in brackets is the value used for {@code body.type} in the
- * config file.</p>
+ * <p>The name in brackets is the value used for {@code body.type} in the
+ * config file. The number after it stood there before the names did, and an
+ * older file that still carries it keeps meaning the same type.</p>
  */
 public enum BodyType {
     /**
@@ -15,27 +16,30 @@ public enum BodyType {
      * is no head left to show, and the body is built like
      * {@link #MANNEQUIN}.
      */
-    ARMOR_STAND(1),
+    ARMOR_STAND("armorstand", 1),
     /**
      * Mannequin using the player's own skin, which is hit directly. Switched
      * invisible it stays the body, it is only no longer drawn.
      */
-    MANNEQUIN(2);
+    MANNEQUIN("mannequin", 2);
 
-    private final int id;
+    private final String configName;
+    private final int formerNumber;
 
-    BodyType(int id) {
-        this.id = id;
+    BodyType(String configName, int formerNumber) {
+        this.configName = configName;
+        this.formerNumber = formerNumber;
     }
 
-    public int getId() {
-        return id;
+    /** The value that stands for this type in {@code body.type}. */
+    public String getConfigName() {
+        return configName;
     }
 
     /**
      * Whether the body is a mannequin itself, rather than the armour stand of
-     * a visible type 1 with the invisible mannequin standing in it. An
-     * invisible body has no head to show, so it is the mannequin for both
+     * a visible armorstand body with the invisible mannequin standing in it.
+     * An invisible body has no head to show, so it is the mannequin for both
      * types.
      */
     public boolean isMannequinBody(boolean visible) {
@@ -43,16 +47,30 @@ public enum BodyType {
     }
 
     /**
-     * Resolves the number configured in {@code body.type}.
+     * Resolves the value configured in {@code body.type}: the name of a type,
+     * whatever its case, or the number that used to stand for it.
      *
-     * @return the matching type, or {@code null} if the number is unknown
+     * @return the matching type, or {@code null} if the value is unknown
      */
-    public static BodyType fromId(int id) {
+    public static BodyType fromConfig(String value) {
+        String text = value.trim();
         for (BodyType type : values()) {
-            if (type.id == id) {
+            if (type.configName.equalsIgnoreCase(text) || String.valueOf(type.formerNumber).equals(text)) {
                 return type;
             }
         }
         return null;
+    }
+
+    /** The names {@code body.type} accepts, for a message about a value it does not. */
+    public static String configNames() {
+        StringBuilder names = new StringBuilder();
+        for (BodyType type : values()) {
+            if (!names.isEmpty()) {
+                names.append(", ");
+            }
+            names.append(type.configName);
+        }
+        return names.toString();
     }
 }

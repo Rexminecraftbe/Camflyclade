@@ -213,9 +213,10 @@ public final class DamageMirror implements Listener {
 
     /**
      * The mannequin taking the hits for this player: the one standing in the
-     * armour stand of body type 1, otherwise the body itself. It has the
-     * player's shape and stands where the player will stand once camera mode
-     * is over, so a push worked out on it is the push the player would get.
+     * armour stand of the armorstand body, otherwise the body itself. It has
+     * the player's shape and stands where the player will stand once camera
+     * mode is over, so a push worked out on it is the push the player would
+     * get.
      */
     private LivingEntity standIn(UUID ownerId, Entity damaged) {
         CameraData data = cameraPlayers.get(ownerId);

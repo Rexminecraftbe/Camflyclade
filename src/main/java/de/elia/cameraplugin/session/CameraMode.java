@@ -118,9 +118,9 @@ public final class CameraMode {
         LivingEntity damageTarget = hitbox != null ? hitbox : body;
         // It breathes and freezes in his place from where he left off, and he
         // takes both back from it when he leaves. The mannequin and not the
-        // armour stand of type 1: it has his eye height, so it goes under
-        // water when he would, and it wears the copies of his armour, so
-        // leather keeps the frost off it as it keeps it off him.
+        // armour stand of the armorstand body: it has his eye height, so it
+        // goes under water when he would, and it wears the copies of his
+        // armour, so leather keeps the frost off it as it keeps it off him.
         damageTarget.setRemainingAir(remainingAir);
         damageTarget.setFreezeTicks(freezeTicks);
         TextDisplay nameDisplay = bodies.spawnNameDisplay(player, body);

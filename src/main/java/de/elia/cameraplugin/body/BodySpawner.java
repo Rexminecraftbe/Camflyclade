@@ -83,10 +83,11 @@ public final class BodySpawner {
     }
 
     /**
-     * Copies the armour the armour stand of body type 1 shows. Everything but
-     * the helmet: the player's head sits in that slot and is what the body is
-     * recognised by. The helmet itself is worn by the mannequin standing in the
-     * body, hidden, so a mob head still shortens the range of its kind of mob.
+     * Copies the armour the armour stand of the armorstand body shows.
+     * Everything but the helmet: the player's head sits in that slot and is
+     * what the body is recognised by. The helmet itself is worn by the
+     * mannequin standing in the body, hidden, so a mob head still shortens the
+     * range of its kind of mob.
      */
     private ItemStack[] createArmorStandArmor(ItemStack[] originalArmor) {
         ItemStack[] worn = createMirrorArmor(originalArmor);
@@ -132,13 +133,13 @@ public final class BodySpawner {
 
     /**
      * Creates the invisible mannequin that takes the hits for a body that is
-     * not a mannequin itself, the armour stand of a visible type 1. A
+     * not a mannequin itself, the armour stand of a visible armorstand body. A
      * mannequin has the same hitbox as a player, so hits land on the body the
      * way they would land on the player himself.
      *
      * <p>It is invisible and its armour is not rendered either, but it is a
      * normal entity otherwise: players, mobs and the world hit it directly, just
-     * like the visible mannequin of body type 2.</p>
+     * like the visible mannequin body.</p>
      */
     public Mannequin spawnHitbox(Player player, Location location, ItemStack[] mirrorArmor) {
         Mannequin hitbox = (Mannequin) location.getWorld().spawnEntity(location, EntityType.MANNEQUIN);
@@ -232,7 +233,7 @@ public final class BodySpawner {
 
     /**
      * Whether the body itself is the mannequin. Every body is, except the
-     * visible one of type 1, the armour stand wearing the player's head.
+     * visible armorstand body, the armour stand wearing the player's head.
      *
      * <p>An invisible body has no head to show, so both types end up the same
      * there: an invisible mannequin, with the name standing over it on its
@@ -311,8 +312,8 @@ public final class BodySpawner {
      *
      * <p>The same call fits the hitbox and the body, because the mannequin is
      * the entity that gets pushed in either case. Behind the armour stand of
-     * body type 1 level 2 has already fallen back to level 1, so nobody ever
-     * pushes the hitbox standing in that body.</p>
+     * the armorstand body level 2 has already fallen back to level 1, so
+     * nobody ever pushes the hitbox standing in that body.</p>
      */
     private void applyMovementSensitivity(Mannequin mannequin) {
         mannequin.setImmovable(settings.getMovementSensitivity().isFixed());
@@ -328,7 +329,7 @@ public final class BodySpawner {
     }
 
     /**
-     * Creates the body of a visible type 1: an armour stand wearing the
+     * Creates a visible armorstand body: an armour stand wearing the
      * player's head, and his armour with it when {@link #showsBodyArmor()}
      * says so. An invisible body never gets here, it is a mannequin, see
      * {@link #usesMannequinBody()}.

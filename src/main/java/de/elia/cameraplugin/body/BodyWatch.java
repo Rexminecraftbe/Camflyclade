@@ -34,9 +34,10 @@ public final class BodyWatch {
      * Watches the mannequin while camera mode is running and ends the mode as
      * soon as it leaves its spot. Every body runs through this one check,
      * because every body has a mannequin: behind the visible armour stand of
-     * type 1 it is the invisible one standing in it, otherwise it is the body
-     * itself. It is the entity that takes the hits in either case, so gravity,
-     * water and pistons are noticed on the same entity for both types.
+     * the armorstand body it is the invisible one standing in it, otherwise it
+     * is the body itself. It is the entity that takes the hits in either case,
+     * so gravity, water and pistons are noticed on the same entity for both
+     * types.
      *
      * <p>Deliberately checked by the scheduler and not through an event: the
      * mannequin has no AI, so {@code EntityMoveEvent} does not fire for it, and

@@ -46,11 +46,11 @@ public enum MovementSensitivity {
      * Adjusts the level to what the body can actually show.
      *
      * <p>Being pushed only makes sense where the mannequin is the body itself:
-     * the visible one of type 2 and the invisible body of either type, see
+     * the visible mannequin body and the invisible body of either type, see
      * {@link BodyType#isMannequinBody(boolean)}. Behind the visible armour
-     * stand of type 1 the push would move the invisible mannequin standing
-     * inside it while the body everyone sees stays where it is, so the level
-     * falls back to {@link #NORMAL} there.</p>
+     * stand of the armorstand body the push would move the invisible mannequin
+     * standing inside it while the body everyone sees stays where it is, so
+     * the level falls back to {@link #NORMAL} there.</p>
      */
     public MovementSensitivity forBody(boolean mannequinBody) {
         if (this == PUSHABLE && !mannequinBody) {

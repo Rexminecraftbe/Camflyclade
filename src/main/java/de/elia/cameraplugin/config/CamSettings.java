@@ -229,7 +229,7 @@ public final class CamSettings {
             default -> EffectStart.POSITIVE;
         };
         cameraHeadEnabled = config.getBoolean("camera-head.enabled", false);
-        bodyType = resolveBodyType(config, config.getInt("body.type", BodyType.ARMOR_STAND.getId()));
+        bodyType = resolveBodyType(config, config.getString("body.type", BodyType.ARMOR_STAND.getConfigName()));
         bodyNameVisible = config.getBoolean("body.name-visible", true);
         bodyNameStyle = NameStyle.read(config, "body.name", ChatColor.YELLOW);
         bodyVisible = config.getBoolean("body.visible", true);
@@ -488,14 +488,14 @@ public final class CamSettings {
     }
 
     /**
-     * Turns the number configured in {@code body.type} into a body type and
+     * Turns the value configured in {@code body.type} into a body type and
      * falls back to the armour stand when the value is unknown.
      */
-    private BodyType resolveBodyType(ConfigReader config, int configuredId) {
-        BodyType requested = BodyType.fromId(configuredId);
+    private BodyType resolveBodyType(ConfigReader config, String configured) {
+        BodyType requested = BodyType.fromConfig(configured);
         if (requested == null) {
-            config.warnUnknownValue("body.type", configuredId, "1, 2",
-                    String.valueOf(BodyType.ARMOR_STAND.getId()));
+            config.warnUnknownValue("body.type", configured, BodyType.configNames(),
+                    BodyType.ARMOR_STAND.getConfigName());
             return BodyType.ARMOR_STAND;
         }
         return requested;
@@ -505,9 +505,10 @@ public final class CamSettings {
      * Turns the number configured in {@code body.movement-sensitivity} into a
      * level and falls back to 1 when the value is unknown.
      *
-     * <p>Level 2 is cut back to level 1 for the visible armour stand of type 1.
-     * That is a valid setting in the wrong combination and not a mistake, so
-     * it is described in the config file instead of being logged.</p>
+     * <p>Level 2 is cut back to level 1 for the visible armour stand of the
+     * armorstand body. That is a valid setting in the wrong combination and
+     * not a mistake, so it is described in the config file instead of being
+     * logged.</p>
      */
     private MovementSensitivity resolveMovementSensitivity(ConfigReader config, int configuredId) {
         MovementSensitivity requested = MovementSensitivity.fromId(configuredId);

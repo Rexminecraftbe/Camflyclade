@@ -1915,33 +1915,33 @@ def set_option(env, key, value, section=None):
     set_options(env, [(key, value, section)])
 
 
-# Die beiden Koerpertypen, body.type: 1 ist ein Ruestungsstaender mit einem
-# unsichtbaren Mannequin darin, 2 ein Mannequin allein.
-KOERPERTYPEN = (1, 2)
+# Die beiden Koerpertypen, body.type: armorstand ist ein Ruestungsstaender mit
+# einem unsichtbaren Mannequin darin, mannequin ein Mannequin allein.
+KOERPERTYPEN = ("armorstand", "mannequin")
 
 
 @contextlib.contextmanager
 def mit_koerpertyp(env, typ):
     """Fuer die Dauer des Blocks mit diesem body.type, danach wieder mit der
-    Voreinstellung 1. Jede Probe darin traegt den Typ in ihrem Namen, sonst
-    stuende in der Zusammenfassung zweimal dasselbe da."""
-    set_option(env, "type", str(typ))
+    Voreinstellung armorstand. Jede Probe darin traegt den Typ in ihrem Namen,
+    sonst stuende in der Zusammenfassung zweimal dasselbe da."""
+    set_option(env, "type", typ)
     FIND.zusatz = f" (Koerpertyp {typ})"
     try:
         yield
     finally:
         FIND.zusatz = ""
-        set_option(env, "type", "1")
+        set_option(env, "type", "armorstand")
 
 
 def fuer_beide_koerpertypen(env, bot, *abschnitte):
     """Dieselben Abschnitte einmal mit jedem Koerpertyp.
 
-    Was den Koerper trifft, trifft bei Typ 1 den Ruestungsstaender oder das
-    Mannequin darin, bei Typ 2 das Mannequin allein. Dass ein Treffer bei
-    beiden ankommt und bei beiden gleich weitergeht, sagt die Probe mit nur
-    einem von ihnen nicht: Bei Typ 2 flogen Pfeil, Dreizack, Windkugel und
-    Speerstich durch den Koerper hindurch, waehrend Typ 1 bestand.
+    Was den Koerper trifft, trifft bei armorstand den Ruestungsstaender oder
+    das Mannequin darin, bei mannequin das Mannequin allein. Dass ein Treffer
+    bei beiden ankommt und bei beiden gleich weitergeht, sagt die Probe mit
+    nur einem von ihnen nicht: Bei mannequin flogen Pfeil, Dreizack, Windkugel
+    und Speerstich durch den Koerper hindurch, waehrend armorstand bestand.
     """
     for typ in KOERPERTYPEN:
         with mit_koerpertyp(env, typ):
@@ -3608,22 +3608,22 @@ SCHIEBEN_ABSTAND = 0.3
 def koerpertyp_jetzt(env):
     """Der body.type, der gerade in der Konfiguration des Testservers steht."""
     text = (env.server / "plugins" / "CamFly" / "config.yml").read_text(encoding="utf-8")
-    treffer = re.search(r"(?m)^\s*type:\s*(\d+)", text)
-    return int(treffer.group(1)) if treffer else None
+    treffer = re.search(r"(?m)^\s*type:\s*(\S+)", text)
+    return treffer.group(1) if treffer else None
 
 
 def schieben_checks(env, bot):
     """Ob ein Mob den Koerper schiebt, nach body.movement-sensitivity.
 
     Auf Stufe 1 schiebt ihn niemand, auf Stufe 2 schieben ihn Spieler und
-    Mobs - aber nur, wo das Mannequin selbst der Koerper ist, bei Typ 2. Beim
-    Ruestungsstaender von Typ 1 faellt Stufe 2 auf Stufe 1 zurueck.
+    Mobs - aber nur, wo das Mannequin selbst der Koerper ist, bei mannequin.
+    Beim Ruestungsstaender von armorstand faellt Stufe 2 auf Stufe 1 zurueck.
 
     Vom Schieben haelt das Plugin das Mannequin mit dem Team cam_body ab und
     nicht mehr damit, dass es nicht kollidiert: Daran liess der Server auch
     Pfeil, Dreizack, Windkugel und Speerstich vorbeigehen. Diese Probe haelt
     fest, dass das Team das Schieben genauso abhaelt. Ihre Gegenprobe ist
-    Stufe 2 mit Typ 2 - schiebt das Schwein dort nicht, sagt "schiebt nicht"
+    Stufe 2 mit mannequin - schiebt das Schwein dort nicht, sagt "schiebt nicht"
     auch sonst nichts.
 
     Geschoben wird mit einem Schwein, das sich nicht von der Stelle ruehrt:
@@ -3669,7 +3669,7 @@ def schieben_checks(env, bot):
     try:
         probe(1, False)
         set_option(env, "movement-sensitivity", "2")
-        probe(2, typ == 2)
+        probe(2, typ == "mannequin")
     finally:
         try:
             console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
@@ -4090,7 +4090,7 @@ NAME_UEBER_MANNEQUIN = 1.8 + 0.275
 # Die Schalter des Namens stehen mit demselben Namen auch unter camera-mode,
 # fuer den Namen ueber dem Kamera-Spieler - deshalb mit Abschnitt.
 NAME_VOREINSTELLUNG = [
-    ("type", "1"), ("visible", "true"), ("name-visible", "true", "body"),
+    ("type", "armorstand"), ("visible", "true"), ("name-visible", "true", "body"),
     ("color", "yellow", "body"), ("through-walls", "false", "body"),
     ("view-distance", "64", "body"), ("background", "true", "body"),
     ("shadow", "false", "body"), ("scale", "1.0", "body"),
@@ -4179,7 +4179,10 @@ def name_checks(env, bot):
         return cam_on(bot)
 
     try:
-        # --- Voreingestellt: Typ 1, sichtbar ---
+        # --- Voreingestellt: armorstand, sichtbar ---
+        text = (env.server / "plugins" / "CamFly" / "config.yml").read_text(encoding="utf-8")
+        FIND.test("Voreingestellt steht body.type: armorstand da",
+                  re.search(r"(?m)^\s*type:\s*armorstand\s*$", text) is not None, "")
         if not FIND.test("/cam startet fuer den Namenstest", start(), ""):
             return
         FIND.test("Der Name steht als TextDisplay ueber dem Ruestungsstaender, "
@@ -4224,7 +4227,7 @@ def name_checks(env, bot):
         FIND.test("Der Name wird mit dem Koerper eingesammelt", not name_da(bot), "")
 
         # --- Unsichtbar: bei beiden Typen ein einziges Mannequin ---
-        for typ in ("1", "2"):
+        for typ in KOERPERTYPEN:
             set_options(env, [("type", typ), ("visible", "false")])
             if not FIND.test(f"/cam startet mit type: {typ}, visible: false", start(), ""):
                 continue
@@ -4246,8 +4249,8 @@ def name_checks(env, bot):
                                                        "distance=..6]") == 0, "")
 
         # --- Sichtbares Mannequin: der Name ueber ihm, nicht an ihm ---
-        set_options(env, [("type", "2"), ("visible", "true")])
-        if FIND.test("/cam startet mit type: 2", start(), ""):
+        set_options(env, [("type", "mannequin"), ("visible", "true")])
+        if FIND.test("/cam startet mit type: mannequin", start(), ""):
             FIND.test("Ueber dem sichtbaren Mannequin steht der Name als TextDisplay",
                       name_ueber(bot, "mannequin", NAME_UEBER_MANNEQUIN), "")
             eigener = server_says(bot, "/execute if data entity @e[type=minecraft:mannequin,"
@@ -4258,8 +4261,30 @@ def name_checks(env, bot):
             cam_off(bot)
             time.sleep(1.0)
 
+        # --- Die alten Zahlen und ein unbekannter Wert ---
+        # body.type hiess frueher 1 und 2. Eine alte config.yml traegt das
+        # noch und meint damit dasselbe, ohne dass es gemeldet wird. Was
+        # keins von allem ist, wird gemeldet und ist ein Ruestungsstaender.
+        for typ, staender_soll, gemeldet_soll in (("2", 0, False), ("1", 1, False),
+                                                   ("kiste", 1, True)):
+            vorher = len(server_log(env))
+            set_options(env, [("type", typ), ("visible", "true")])
+            gemeldet = "Unknown value for body.type" in strip_colors(server_log(env)[vorher:])
+            if not FIND.test(f"/cam startet mit type: {typ}", start(), ""):
+                continue
+            staender = anzahl(bot, "@e[type=minecraft:armor_stand,distance=..3]")
+            puppen = anzahl(bot, "@e[type=minecraft:mannequin,distance=..3]")
+            cam_off(bot)
+            time.sleep(1.0)
+            koerper = "ein Mannequin" if staender_soll == 0 else "ein Ruestungsstaender"
+            FIND.test(f"type: {typ} ist {koerper}"
+                      + (" und wird gemeldet" if gemeldet_soll else ", ohne Meldung"),
+                      staender == staender_soll and puppen == 1 and gemeldet == gemeldet_soll,
+                      f"{staender} Ruestungsstaender, {puppen} Mannequins, "
+                      f"{'gemeldet' if gemeldet else 'nicht gemeldet'}")
+
         # --- Die Schalter unter body.name ---
-        set_options(env, [("type", "1"), ("color", "red", "body"), ("through-walls", "true", "body"),
+        set_options(env, [("type", "armorstand"), ("color", "red", "body"), ("through-walls", "true", "body"),
                           ("view-distance", "32", "body"), ("background", "false", "body"),
                           ("shadow", "true", "body"), ("scale", "2.0", "body")])
         if FIND.test("/cam startet mit geaenderten Schaltern fuer den Namen", start(), ""):
@@ -5447,7 +5472,7 @@ def medium_checks(env, bot):
 FALL_HOEHE = 24
 
 # Das unsichtbare Mannequin im Koerper, das die Treffer nimmt - bei
-# Koerpertyp 1, der Voreinstellung, steht es im Ruestungsstaender.
+# Koerpertyp armorstand, der Voreinstellung, steht es im Ruestungsstaender.
 MANNEQUIN = "@e[type=minecraft:mannequin,distance=..12,sort=nearest,limit=1]"
 
 
