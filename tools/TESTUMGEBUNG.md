@@ -966,7 +966,8 @@ Wand zeigt Lava als Magma, Wasser als blaues Glas und Pulverschnee als Schnee
 bleibt es Wasser · liegt darunter eine Stufe, wird es gleich zur Wand, und ist
 sie weg, wieder Wasser · läuft Wasser in einem Steinrahmen ab, zeigt es erst
 Glas, dann nur noch Wasser und Luft: Die Wand blitzt dazwischen nicht wieder
-auf, weder als Glas noch als Barriere · mit `push-back` bleibt die Lava Lava, und wer hineinfällt, wird
+auf, weder als Glas noch als Barriere (der Bot schreibt dafür jeden Block mit,
+den der Client dort bekommt) · mit `push-back` bleibt die Lava Lava, und wer hineinfällt, wird
 zurückgesetzt · mitten im Fall startet `/cam` nicht, auch nicht mit Sanftem
 Fall hoch in der Luft, und die Ablehnung sagt warum · Gegenprobe: so hoch wie
 ein Sprung über dem Boden geht es · das Mannequin atmet und friert mit der

@@ -986,6 +986,8 @@ let spawned = false;
 let dead = false;
 // Was knock_start gerade mitschreibt, bis knock_stop es abholt.
 let knock = null;
+// Was watch_blocks gerade mitschreibt, bis watch_stop es abholt.
+let watched = null;
 
 const bot = mineflayer.createBot({
   host: process.env.CAMFLY_HOST || '127.0.0.1',
@@ -1006,6 +1008,11 @@ bot.on('death', () => { dead = true; out({ event: 'death' }); });
 bot.on('kicked', (reason) => out({ event: 'kicked', reason: String(reason) }));
 bot.on('error', (err) => out({ event: 'error', message: String(err && err.message || err) }));
 bot.on('end', (reason) => { out({ event: 'end', reason: String(reason) }); });
+bot.on('blockUpdate', (alt, neu) => {
+  if (!watched || !neu || !neu.position) return;
+  const folge = watched[`${neu.position.x},${neu.position.y},${neu.position.z}`];
+  if (folge) folge.push(neu.name);
+});
 
 function waitFor(check, timeout) {
   return new Promise((resolve) => {
@@ -1292,6 +1299,19 @@ async function handle(cmd) {
       const Vec3 = require('vec3');
       const block = bot.blockAt(new Vec3(cmd.x, cmd.y, cmd.z));
       return block ? { name: block.name, state: block.stateId } : { name: null };
+    }
+    case 'watch_blocks': {
+      // Jeden Block, den der Client an diesen Stellen bekommt, der Reihe
+      // nach - auch einen, der zwischen zwei Abfragen mit block_at schon
+      // wieder weg waere.
+      watched = {};
+      for (const [x, y, z] of cmd.cells) watched[`${x},${y},${z}`] = [];
+      return { ok: true };
+    }
+    case 'watch_stop': {
+      const log = watched;
+      watched = null;
+      return { log };
     }
     case 'activate_block': {
       // Rechtsklick auf einen Block. Was schiefgeht, kommt als Ergebnis
@@ -5138,6 +5158,20 @@ def medium_start(bot, wo, heim):
     return lief, gesagt
 
 
+def kurz_verlauf(folge):
+    """Was der Client nacheinander an einem Block bekam, zusammengefasst: G
+    fuer blaues Glas, W fuer Wasser, . fuer Luft, je mit der Zahl
+    hintereinander - beim Wasser ist jede Stufe, die es sinkt, eine."""
+    teile = []
+    for name in folge:
+        zeichen = {"blue_stained_glass": "G", "water": "W", "air": "."}.get(name, f"<{name}>")
+        if teile and teile[-1][0] == zeichen:
+            teile[-1][1] += 1
+        else:
+            teile.append([zeichen, 1])
+    return " ".join(f"{zeichen}{n}" for zeichen, n in teile)
+
+
 def medium_checks(env, bot):
     """Die Schalter allow_lava_flight, allow_water_flight und
     allow_powder_snow_flight unter camera-mode.
@@ -5429,20 +5463,25 @@ def medium_checks(env, bot):
             time.sleep(0.5)
             bot.chat(f"/fill {im_rahmen} minecraft:air")
             time.sleep(0.5)
-            medium_fliegen(bot, (quelle[0] + 0.5, by + 6, bz + 0.5),
+            # Erst senkrecht hinauf: schraeg vom Pulverschnee aus bliebe
+            # der Bot am Rand des Beckens haengen.
+            medium_fliegen(bot, (bx + 0.5, by + 6, bz + 4.5), (quelle[0] + 0.5, by + 6, bz + 0.5),
                            (quelle[0] + 0.5, by + 3, bz + 0.5))
             bot.chat("/setblock {} {} {} minecraft:water".format(*quelle))
             time.sleep(2.5)
             vor_dem_abfluss = [bot.call("block_at", x=x, y=y, z=z).get("name") for x, y, z in abfluss]
+            bot.call("watch_blocks", cells=[list(zelle) for zelle in abfluss])
             bot.chat("/setblock {} {} {} minecraft:air".format(*quelle))
-            verlauf = {zelle: [] for zelle in abfluss}
-            ende = time.time() + 3.0
-            while time.time() < ende:
-                for zelle in abfluss:
-                    verlauf[zelle].append(bot.call("block_at", x=zelle[0], y=zelle[1],
-                                                   z=zelle[2]).get("name"))
+            time.sleep(3.0)
+            mitgeschrieben = bot.call("watch_stop").get("log") or {}
+            verlauf = {zelle: mitgeschrieben.get("{},{},{}".format(*zelle), []) for zelle in abfluss}
+            am_ende = [bot.call("block_at", x=x, y=y, z=z).get("name") for x, y, z in abfluss]
+            # Glas, ehe der Server dort etwas schickt, wechselt nur Glas gegen
+            # Glas - so frischt die Wand sich alle paar Sekunden auf. Danach
+            # blitzt es auf.
             danach_anders = []
             for zelle, folge in verlauf.items():
+                Log.detail(f"Abfluss bei {zelle}: {kurz_verlauf(folge)}")
                 erst = next((i for i, g in enumerate(folge) if g != "blue_stained_glass"), len(folge))
                 danach_anders += [g for g in folge[erst:] if g not in ("water", "air")]
             cam_off(bot)
@@ -5461,10 +5500,10 @@ def medium_checks(env, bot):
             FIND.test("Abfliessendes Wasser zeigt erst Glas, dann nur noch Wasser und Luft - "
                       "die Wand blitzt dazwischen nicht wieder auf",
                       all(g == "blue_stained_glass" for g in vor_dem_abfluss)
-                      and not danach_anders and all(folge and folge[-1] == "air"
-                                                     for folge in verlauf.values()),
+                      and all("water" in folge for folge in verlauf.values()) and not danach_anders
+                      and all(g == "air" for g in am_ende),
                       f"vorher {vor_dem_abfluss}, dazwischen {sorted(set(danach_anders)) or 'nichts'}, "
-                      f"am Ende {[folge[-1] if folge else None for folge in verlauf.values()]}")
+                      f"am Ende {am_ende}")
             FIND.test("Am Grund des Beckens, wo die Kamera nicht hinkommt, bleibt das "
                       "Wasser Wasser; liegt darunter eine Stufe, wird es gleich zur "
                       "Wand, und ist sie weg, wieder Wasser",
