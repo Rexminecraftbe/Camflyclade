@@ -964,7 +964,9 @@ Kamera auf der Lava wie auf einem Block, ohne zurückgesetzt zu werden, und die
 Wand zeigt Lava als Magma, Wasser als blaues Glas und Pulverschnee als Schnee
 · am Grund des Beckens, wo das Wasser nur an Glas, Gras und Wasser grenzt,
 bleibt es Wasser · liegt darunter eine Stufe, wird es gleich zur Wand, und ist
-sie weg, wieder Wasser · mit `push-back` bleibt die Lava Lava, und wer hineinfällt, wird
+sie weg, wieder Wasser · läuft Wasser in einem Steinrahmen ab, zeigt es erst
+Glas, dann nur noch Wasser und Luft: Die Wand blitzt dazwischen nicht wieder
+auf, weder als Glas noch als Barriere · mit `push-back` bleibt die Lava Lava, und wer hineinfällt, wird
 zurückgesetzt · mitten im Fall startet `/cam` nicht, auch nicht mit Sanftem
 Fall hoch in der Luft, und die Ablehnung sagt warum · Gegenprobe: so hoch wie
 ein Sprung über dem Boden geht es · das Mannequin atmet und friert mit der
@@ -972,7 +974,8 @@ Luft und dem Frost weiter, die der Spieler beim Start hatte, und nach dem
 Aussteigen hat der Spieler die des Mannequins · voreingestellt steht
 `border-mode: barrier` mit `border-block: barrier`, `border-block-water:
 blue_stained_glass`, `border-block-lava: magma_block`,
-`border-block-powder-snow: snow_block` und `border-radius: 5` da · die Kamera
+`border-block-powder-snow: snow_block`, `border-radius: 5` und
+`border-settle-ticks: 10` da · die Kamera
 bleibt dann an `max-distance` und an einem verbotenen Biom stehen, ohne je
 zurückgesetzt zu werden, und die Meldung kommt · die Wand steht nur im Client
 des Kamera-Spielers: der Server hat dort Luft, ein zweiter Spieler ebenso, und

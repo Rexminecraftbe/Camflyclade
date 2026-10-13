@@ -45,6 +45,10 @@ camera-mode:
   # Ein großer Radius kostet mehr: Die Wand wächst mit der Fläche der Grenze im Umkreis.
   border-radius: 5
 
+  # Wie viele Ticks ein Block der Wand gleich bleiben muss, nachdem er sich in der Welt geändert hat, ehe dort wieder Wand steht
+  # (abfließendes Wasser ändert sich alle 5 Ticks und blitzt so nicht mehr als Wand auf; 0 = sofort, 20 Ticks = 1 Sekunde)
+  border-settle-ticks: 10
+
   # Wer den Spieler im Cam-Modus sehen darf:
   #   cam   = nur Spieler, die selbst im Cam-Modus sind
   #   true  = alle

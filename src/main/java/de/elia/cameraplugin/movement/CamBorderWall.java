@@ -31,6 +31,7 @@ import java.util.Collection;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -185,6 +186,12 @@ public final class CamBorderWall implements Listener {
         private int checked;
         /** Whether the blocks checked until the next look are sent again in any case. */
         private boolean resending;
+        /**
+         * The blocks of the wall whose real block has changed lately, and
+         * the tick it was last seen changing. The wall waits there until it
+         * holds still, see {@link #settle}.
+         */
+        private Map<Cell, Long> unsettled = new HashMap<>();
 
         Wall(World world, BlockData block, Map<FlightMedium, BlockData> media, WallSections sections) {
             this.world = world.getUID();
@@ -372,6 +379,7 @@ public final class CamBorderWall implements Listener {
             build(player, player.getLocation(), false, false);
         }
         check(player, wall);
+        settle(player, wall);
     }
 
     /**
@@ -395,12 +403,13 @@ public final class CamBorderWall implements Listener {
     }
 
     /**
-     * Checks the next share of the wall against the world and sends again
-     * every block whose real block has changed since it was put up: the
-     * server has sent that one to the client in its place. A block whose
-     * real one keeps its place is checked as well, so that the wall takes
-     * that place once it is gone. Every {@link #FULL_RESEND_LOOKS} looks
-     * the blocks checked are sent again in any case.
+     * Checks the next share of the wall against the world for blocks whose
+     * real block has changed since it was put up: the server has sent that
+     * one to the client in its place. The wall goes back there once the
+     * block holds still, see {@link #settle}. A block whose real one keeps
+     * its place is checked as well, so that the wall takes that place once
+     * it is gone. Every {@link #FULL_RESEND_LOOKS} looks the blocks checked
+     * are sent again in any case.
      */
     private void check(Player player, Wall wall) {
         if (wall.checked >= wall.toCheck.size()) {
@@ -423,7 +432,7 @@ public final class CamBorderWall implements Listener {
             Block block = world.getBlockAt(cell.x(), cell.y(), cell.z());
             BlockData real = block.getBlockData();
             if (real.equals(brick.real())) {
-                if (wall.resending && brick.shown() != null) {
+                if (wall.resending && brick.shown() != null && !wall.unsettled.containsKey(cell)) {
                     again.add(stateAt(world, cell, brick.shown()));
                 }
                 continue;
@@ -433,11 +442,89 @@ public final class CamBorderWall implements Listener {
             }
             Brick now = brickAt(wall, block, real, names, media);
             wall.bricks.put(cell, now);
-            if (now.shown() != null) {
+            boolean opened = leftMedium(wall, cell, brick, now);
+            if (settings.getBorderSettleTicks() > 0 || opened) {
+                wall.unsettled.put(cell, wall.ticks);
+            } else if (now.shown() != null) {
                 again.add(stateAt(world, cell, now.shown()));
             }
         }
         send(player, again);
+    }
+
+    /**
+     * Whether the shut medium a block of the wall stood in is gone from it -
+     * water that ran off, lava that was scooped up. Then it may well be open
+     * now, and its section is read again on the next tick, see
+     * {@link WallSections#reread}: until then the wall waits there, rather
+     * than putting its block into what may be open air.
+     */
+    private static boolean leftMedium(Wall wall, Cell cell, Brick before, Brick now) {
+        if (before.medium() == null || now.medium() != null) {
+            return false;
+        }
+        wall.sections.reread(cell.x(), cell.y(), cell.z());
+        return true;
+    }
+
+    /**
+     * Sends the wall again where a changed block has held still for
+     * {@code camera-mode.border-settle-ticks}.
+     *
+     * <p>Water running off changes every five ticks, one level lower each
+     * time, until it is gone, and the server sends every one of those steps
+     * to the client in place of the wall. Sent back at once, the wall would
+     * flash up again between two of them - over the whole of the water at
+     * the moment it is looked at. Waiting until the block holds still, it
+     * comes back only where the water stays. In between the camera is kept
+     * out by {@link CamMovementGuard}, as everywhere the wall has a gap.</p>
+     */
+    private void settle(Player player, Wall wall) {
+        if (wall.unsettled.isEmpty()) {
+            return;
+        }
+        World world = player.getWorld();
+        if (!world.getUID().equals(wall.world)) {
+            wall.unsettled.clear();
+            return;
+        }
+        // At least until the next tick, when a block that has left its
+        // medium has had its section read again, see leftMedium.
+        int wait = Math.max(1, settings.getBorderSettleTicks());
+        Set<FlightMedium> media = null;
+        CamAreaRules.BlockLookup names = null;
+        List<BlockState> settled = new ArrayList<>();
+        Iterator<Map.Entry<Cell, Long>> pending = wall.unsettled.entrySet().iterator();
+        while (pending.hasNext()) {
+            Map.Entry<Cell, Long> entry = pending.next();
+            Cell cell = entry.getKey();
+            Brick brick = wall.bricks.get(cell);
+            if (brick == null) {
+                pending.remove();
+                continue;
+            }
+            Block block = world.getBlockAt(cell.x(), cell.y(), cell.z());
+            BlockData real = block.getBlockData();
+            if (!real.equals(brick.real())) {
+                // Still changing: worked out anew, and the wait starts over.
+                if (media == null) {
+                    media = shutMedia();
+                    names = wall.areasCounted ? settings.getCamAreaRules().blockLookup(world) : null;
+                }
+                Brick now = brickAt(wall, block, real, names, media);
+                wall.bricks.put(cell, now);
+                leftMedium(wall, cell, brick, now);
+                entry.setValue(wall.ticks);
+                continue;
+            }
+            if (wall.ticks - entry.getValue() >= wait) {
+                pending.remove();
+                if (brick.shown() != null) {
+                    settled.add(stateAt(world, cell, brick.shown()));
+                }
+            }
+        }
+        send(player, settled);
     }
 
     /**
@@ -465,6 +552,7 @@ public final class CamBorderWall implements Listener {
             wall.bricks = new HashMap<>();
             wall.sections = sectionsIn(world);
             wall.toCheck = List.of();
+            wall.unsettled = new HashMap<>();
         }
         // What the player is to see at each block that changes: the wall,
         // or the real block where the value is null.
@@ -484,6 +572,7 @@ public final class CamBorderWall implements Listener {
             }
             wall.bricks = new HashMap<>();
             wall.sections = sectionsIn(world);
+            wall.unsettled = new HashMap<>();
         } else {
             double half = player.getWidth() / 2.0;
             BoundingBox body = new BoundingBox(at.getX() - half, at.getY(), at.getZ() - half,
@@ -506,6 +595,7 @@ public final class CamBorderWall implements Listener {
                 @Override
                 public void left(int x, int y, int z) {
                     Cell cell = new Cell(x, y, z);
+                    wall.unsettled.remove(cell);
                     Brick gone = wall.bricks.remove(cell);
                     if (gone != null && gone.shown() != null) {
                         changes.put(cell, null);
@@ -515,7 +605,7 @@ public final class CamBorderWall implements Listener {
         }
         if (resend) {
             for (Map.Entry<Cell, Brick> brick : wall.bricks.entrySet()) {
-                if (brick.getValue().shown() != null) {
+                if (brick.getValue().shown() != null && !wall.unsettled.containsKey(brick.getKey())) {
                     changes.put(brick.getKey(), brick.getValue().shown());
                 }
             }
@@ -530,8 +620,9 @@ public final class CamBorderWall implements Listener {
 
     /**
      * Works out a block of the wall anew and notes what the player has to be
-     * sent for it: the wall where it is new or has changed, the real block
-     * where the wall gives way to it.
+     * sent for it: the wall where it is new, the real block where the wall
+     * gives way to it. Where the real block has changed, the wall waits
+     * until it holds still, see {@link #settle}.
      */
     private void remake(Wall wall, World world, Cell cell, CamAreaRules.BlockLookup names,
                         Set<FlightMedium> media, Map<Cell, BlockData> changes) {
@@ -539,8 +630,16 @@ public final class CamBorderWall implements Listener {
         Brick before = wall.bricks.get(cell);
         Brick now = brickAt(wall, block, block.getBlockData(), names, media);
         wall.bricks.put(cell, now);
+        boolean changed = before != null && !now.real().equals(before.real());
+        if (changed && settings.getBorderSettleTicks() > 0) {
+            wall.unsettled.put(cell, wall.ticks);
+        }
+        if (wall.unsettled.containsKey(cell)) {
+            // The client shows the real block there until it holds still.
+            return;
+        }
         if (now.shown() != null) {
-            if (before == null || !now.shown().equals(before.shown()) || !now.real().equals(before.real())) {
+            if (before == null || changed || !now.shown().equals(before.shown())) {
                 changes.put(cell, now.shown());
             }
         } else if (before != null && before.shown() != null) {
@@ -700,8 +799,10 @@ public final class CamBorderWall implements Listener {
         for (int x = x0; x <= x1; x++) {
             for (int y = y0; y <= y1; y++) {
                 for (int z = z0; z <= z1; z++) {
-                    Brick brick = wall.bricks.get(new Cell(x, y, z));
-                    if (brick != null && brick.shown() != null && (found == null || brick.rank() > found.rank())) {
+                    Cell cell = new Cell(x, y, z);
+                    Brick brick = wall.bricks.get(cell);
+                    if (brick != null && brick.shown() != null && !wall.unsettled.containsKey(cell)
+                            && (found == null || brick.rank() > found.rank())) {
                         found = brick;
                     }
                 }
@@ -723,7 +824,7 @@ public final class CamBorderWall implements Listener {
                 for (int dz = -1; dz <= 1; dz++) {
                     Cell cell = new Cell(clicked.getX() + dx, clicked.getY() + dy, clicked.getZ() + dz);
                     Brick brick = wall.bricks.get(cell);
-                    if (brick != null && brick.shown() != null) {
+                    if (brick != null && brick.shown() != null && !wall.unsettled.containsKey(cell)) {
                         again.add(stateAt(world, cell, brick.shown()));
                     }
                 }

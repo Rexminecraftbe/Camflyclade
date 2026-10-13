@@ -62,6 +62,12 @@ public final class CamSettings {
     /** How far around the player that wall is built, {@code camera-mode.border-radius}. */
     private double borderRadius;
     /**
+     * How many ticks a block of that wall has to stay as it is after it has
+     * changed in the world before the wall goes back there,
+     * {@code camera-mode.border-settle-ticks}.
+     */
+    private int borderSettleTicks;
+    /**
      * Whether the border of {@code max-distance} and {@code cam-area} holds
      * the camera back at all.
      *
@@ -184,6 +190,7 @@ public final class CamSettings {
         // its own cuts it back further, see CamBorderWall.
         borderRadius = config.getDouble("camera-mode.border-radius", 5.0, 0.0,
                 plugin.getServer().getViewDistance() * 16.0);
+        borderSettleTicks = config.getInt("camera-mode.border-settle-ticks", 10, 0);
         // A wall that nobody runs into holds nobody back: made of something
         // that can be walked through, or not built anywhere around the player.
         // Stopping the camera some other way would say the opposite of what
@@ -542,6 +549,10 @@ public final class CamSettings {
 
     public double getBorderRadius() {
         return borderRadius;
+    }
+
+    public int getBorderSettleTicks() {
+        return borderSettleTicks;
     }
 
     /**

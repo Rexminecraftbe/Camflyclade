@@ -418,6 +418,24 @@ final class WallSections {
     }
 
     /**
+     * Has the media of the section holding this block read out of the world
+     * again on the next update, ahead of all others: the block has changed in
+     * a way the wall cannot judge on its own - water that ran off out of it
+     * may have left it open.
+     */
+    void reread(int x, int y, int z) {
+        Pos pos = new Pos(x >> 4, y >> 4, z >> 4);
+        Section section = sections.get(pos);
+        if (section == null || media.isEmpty()) {
+            return;
+        }
+        // Grown old at once, so that a full look still finds it when this
+        // request is passed over.
+        section.mediumReadAt = Long.MIN_VALUE / 2;
+        pending.add(0, new Pending(pos, 0.0, false, true));
+    }
+
+    /**
      * How long a section is kept before it is read again, in ticks:
      * {@link #MIN_AGE} within {@link #ALWAYS_REACH}, and growing with the
      * square of the distance past it, see {@link #AGE_SPREAD}. A far section

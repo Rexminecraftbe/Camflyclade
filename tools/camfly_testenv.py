@@ -5209,6 +5209,12 @@ def medium_checks(env, bot):
     wasser_oben = (bx + 8, by + 2, bz)
     wasser_unten = (bx + 8, by, bz)
     unter_dem_wasser = (bx + 8, by - 1, bz)
+    # Ein Rahmen aus Stein, eine Lage hoch, oestlich vom Becken: Darin laeuft
+    # Wasser aus einer Quelle in der Mitte aus und wieder ab.
+    rahmen = f"{bx + 12} {by} {bz - 3} {bx + 18} {by} {bz + 3}"
+    im_rahmen = f"{bx + 13} {by} {bz - 2} {bx + 17} {by} {bz + 2}"
+    quelle = (bx + 15, by, bz)
+    abfluss = [(bx + 14, by, bz), (bx + 15, by, bz + 1), (bx + 16, by, bz - 1), (bx + 15, by, bz + 2)]
     pulverschnee_vorn = (bx, by + 1, bz + 6)
     ueber_der_lava = [(bx - 7.5, by + 6, bz + 0.5), (bx - 7.5, oben + 1.5, bz + 0.5)]
     zum_wasser = [(bx - 7.5, by + 6, bz + 0.5), (bx + 8.5, by + 6, bz + 0.5),
@@ -5225,7 +5231,7 @@ def medium_checks(env, bot):
         return bot.call("block_at", x=zelle[0], y=zelle[1], z=zelle[2]).get("name")
 
     def aufraeumen():
-        for bereich in (becken, lavabecken, wuerfel, decke):
+        for bereich in (becken, lavabecken, wuerfel, decke, rahmen):
             bot.chat(f"/fill {bereich} minecraft:air")
             time.sleep(0.5)
         bot.chat("/setblock {} {} {} minecraft:grass_block".format(*unter_dem_wasser))
@@ -5414,6 +5420,31 @@ def medium_checks(env, bot):
                 nacheinander[name] = bot.call("block_at", x=wasser_unten[0], y=wasser_unten[1],
                                               z=wasser_unten[2]).get("name")
             schnee = wand_sicht(zum_pulverschnee, pulverschnee_vorn)
+            # Wasser laeuft aus und wieder ab, der Bot schwebt darueber. Jede
+            # Stufe, die es sinkt, schickt der Server dem Client anstelle der
+            # Wand. Die Wand wartet border-settle-ticks, ob es so bleibt -
+            # beim Abfliessen bleibt es nie so, und dazwischen blitzt keine
+            # Wand mehr auf, weder Glas noch die Barriere fuer die Luft.
+            bot.chat(f"/fill {rahmen} minecraft:stone")
+            time.sleep(0.5)
+            bot.chat(f"/fill {im_rahmen} minecraft:air")
+            time.sleep(0.5)
+            medium_fliegen(bot, (quelle[0] + 0.5, by + 6, bz + 0.5),
+                           (quelle[0] + 0.5, by + 3, bz + 0.5))
+            bot.chat("/setblock {} {} {} minecraft:water".format(*quelle))
+            time.sleep(2.5)
+            vor_dem_abfluss = [bot.call("block_at", x=x, y=y, z=z).get("name") for x, y, z in abfluss]
+            bot.chat("/setblock {} {} {} minecraft:air".format(*quelle))
+            verlauf = {zelle: [] for zelle in abfluss}
+            ende = time.time() + 3.0
+            while time.time() < ende:
+                for zelle in abfluss:
+                    verlauf[zelle].append(bot.call("block_at", x=zelle[0], y=zelle[1],
+                                                   z=zelle[2]).get("name"))
+            danach_anders = []
+            for zelle, folge in verlauf.items():
+                erst = next((i for i, g in enumerate(folge) if g != "blue_stained_glass"), len(folge))
+                danach_anders += [g for g in folge[erst:] if g not in ("water", "air")]
             cam_off(bot)
             FIND.test("allow_lava_flight: false - mit border-mode: barrier landet die "
                       "Kamera auf der Lava wie auf einem Block, ohne zurueckgesetzt zu "
@@ -5427,6 +5458,13 @@ def medium_checks(env, bot):
                       magma == "magma_block" and glas == "blue_stained_glass"
                       and schnee == "snow_block",
                       f"Lava -> {magma}, Wasser -> {glas}, Pulverschnee -> {schnee}")
+            FIND.test("Abfliessendes Wasser zeigt erst Glas, dann nur noch Wasser und Luft - "
+                      "die Wand blitzt dazwischen nicht wieder auf",
+                      all(g == "blue_stained_glass" for g in vor_dem_abfluss)
+                      and not danach_anders and all(folge and folge[-1] == "air"
+                                                     for folge in verlauf.values()),
+                      f"vorher {vor_dem_abfluss}, dazwischen {sorted(set(danach_anders)) or 'nichts'}, "
+                      f"am Ende {[folge[-1] if folge else None for folge in verlauf.values()]}")
             FIND.test("Am Grund des Beckens, wo die Kamera nicht hinkommt, bleibt das "
                       "Wasser Wasser; liegt darunter eine Stufe, wird es gleich zur "
                       "Wand, und ist sie weg, wieder Wasser",
@@ -5820,9 +5858,11 @@ def border_checks(env, bot):
                                                   ("border-block-water", "blue_stained_glass"),
                                                   ("border-block-lava", "magma_block"),
                                                   ("border-block-powder-snow", "snow_block"),
-                                                  ("border-radius", "5")))
+                                                  ("border-radius", "5"),
+                                                  ("border-settle-ticks", "10")))
     FIND.test("Voreingestellt steht border-mode: barrier mit border-block: barrier, "
-              "blauem Glas, Magma und Schnee und border-radius: 5 da", voreingestellt, "")
+              "blauem Glas, Magma und Schnee, border-radius: 5 und border-settle-ticks: 10 da",
+              voreingestellt, "")
 
     def drin(ergebnis):
         """Ob der Bot nicht ueber max-distance hinaus kam, aber bis an sie heran."""
