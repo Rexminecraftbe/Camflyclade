@@ -286,6 +286,16 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
 * **Die Chunks drüben hält der Test mit `/forceload` fest.** Ohne einen
   Spieler im Nether fallen sie weg, und `/fill` und `/fillbiome` brauchen sie
   geladen.
+* **Der Test des unbewachten Körpers kommt ohne `/forceload` aus.** Er
+  prüft gerade, dass das Plugin den Chunk des Körpers selbst geladen hält,
+  und ein `/forceload` hielte ihn auch ohne das Plugin. Der Körper steht
+  deshalb auf dem Dach des Nethers bei y=128: Die oberste Lage ist dort immer
+  Grundgestein, der Bot steht darauf ohne `/fill`. Ob der Chunk entladen
+  wäre, fragt der Test nach 30 Sekunden in der Overworld mit `/execute if
+  loaded` - Paper lässt einen Chunk ohne Spieler erst nach einer Weile los.
+  Aufgeräumt wird erst, nachdem der Bot wieder hingegangen ist: Was stehen
+  geblieben ist, liegt in einem Chunk, den sonst niemand lädt, und `/kill`
+  käme nicht an.
 * **`nether` steht zweimal in der Konfiguration**, unter `portals` und unter
   `cam-area.dimensions`. `set_option` nimmt dafür einen Abschnitt entgegen,
   sonst träfe das Muster beide Zeilen auf einmal. Genauso bei `actionbar-on`
@@ -994,8 +1004,14 @@ Körper aus rundum auf `max-distance`, wo sie mit 5 noch nicht steht · wird
 ein Block in ihr zur Stufe, steht dort gleich wieder die Wand, ein ganzer
 Steinblock bleibt stehen, und ist er weg, steht dort wieder die Wand · die
 Kamera bleibt auch damit an `max-distance` stehen, ohne zurückgesetzt zu
-werden, und nach dem Cam-Modus ist die ganze Wand weg · Server-Log ohne
-Fehler des Plugins.
+werden, und nach dem Cam-Modus ist die ganze Wand weg · setzt sich der
+Kamera-Spieler per `/tp` in eine andere Welt, bleibt der Chunk seines Körpers
+geladen, Körper und Name stehen weiter, und `/cam` räumt danach beide
+Körpertypen weg; danach lässt das Plugin den Chunk wieder los · ein Körper
+mit der Marke des Plugins, den ein Absturz in einem entladenen Chunk
+zurückgelassen hat, verschwindet, sobald der Chunk geladen wird, ein
+Rüstungsständer ohne die Marke bleibt stehen · Server-Log ohne Fehler des
+Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
 Arbeitsordner.

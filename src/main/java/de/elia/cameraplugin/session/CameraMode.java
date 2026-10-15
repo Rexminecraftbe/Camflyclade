@@ -7,9 +7,9 @@ import de.elia.cameraplugin.display.GlowMode;
 import de.elia.cameraplugin.scoreboard.NoCollisionTeam;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Player;
@@ -124,6 +124,7 @@ public final class CameraMode {
         damageTarget.setRemainingAir(remainingAir);
         damageTarget.setFreezeTicks(freezeTicks);
         TextDisplay nameDisplay = bodies.spawnNameDisplay(player, body);
+        Chunk bodyChunk = bodies.holdChunk(body);
 
         GameMode originalGameMode = player.getGameMode();
         boolean originalAllowFlight = player.getAllowFlight();
@@ -174,7 +175,7 @@ public final class CameraMode {
         }.runTaskLater(plugin, 2L);
 
         // *** Hand the saved inventory to CameraData ***
-        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, nameDisplay, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects));
+        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, nameDisplay, bodyChunk, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects));
         cameraPlayers.addBody(body.getUniqueId(), player.getUniqueId());
         if (hitbox != null) {
             cameraPlayers.addHitbox(hitbox.getUniqueId(), player.getUniqueId());
@@ -305,25 +306,17 @@ public final class CameraMode {
             cameraPlayers.removeHitbox(hitbox.getUniqueId());
         }
 
-        // Clear equipment before removing to avoid item drops or duplication
-        EntityEquipment bodyEquipment = body.getEquipment();
-        if (bodyEquipment != null) {
-            bodyEquipment.setArmorContents(new ItemStack[4]);
-            bodyEquipment.setHelmet(new ItemStack(Material.AIR));
-        }
-        body.remove();
-        // Remove armour from the hitbox before deleting it to avoid item drops
+        BodySpawner bodies = plugin.getBodySpawner();
+        bodies.remove(body);
         if (hitbox != null) {
-            EntityEquipment hitboxEquipment = hitbox.getEquipment();
-            if (hitboxEquipment != null) {
-                hitboxEquipment.setArmorContents(new ItemStack[4]);
-            }
-            hitbox.remove();
+            bodies.remove(hitbox);
         }
         TextDisplay nameDisplay = cameraData.getNameDisplay();
         if (nameDisplay != null) {
-            nameDisplay.remove();
+            bodies.remove(nameDisplay);
         }
+        // Last: until the body is gone, its chunk has to stay.
+        bodies.releaseChunk(cameraData.getBodyChunk());
 
         for (Player other : Bukkit.getOnlinePlayers()) {
             other.showPlayer(plugin, player);

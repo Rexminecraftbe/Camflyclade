@@ -4,7 +4,9 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.display.NameDisplay;
 import de.elia.cameraplugin.log.ConsoleLog;
+import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -18,6 +20,9 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -28,23 +33,27 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
+import java.util.UUID;
 import java.util.logging.Level;
 
 /**
  * Builds the body a player leaves behind in camera mode, the invisible
  * mannequin that takes the hits for a body that is not a mannequin itself, and
- * the name standing over the body.
+ * the name standing over the body, and clears them away again - a body a
+ * chunk brings back after camera mode is over included.
  */
-public final class BodySpawner {
+public final class BodySpawner implements Listener {
 
     /** Armour slots in the order of {@link org.bukkit.inventory.PlayerInventory#getArmorContents()}. */
     private static final EquipmentSlot[] ARMOR_SLOTS = {
             EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD
     };
 
+    private final JavaPlugin plugin;
     private final CamSettings settings;
     private final Messages messages;
     private final ConsoleLog log;
+    private final CameraPlayers cameraPlayers;
     private final NamespacedKey bodyKey;
     private final NamespacedKey hitboxKey;
     private final NamespacedKey nameKey;
@@ -52,10 +61,13 @@ public final class BodySpawner {
     /** Whether the missing way to hide the "NPC" line has already been reported. */
     private boolean mannequinLabelReported = false;
 
-    public BodySpawner(JavaPlugin plugin, CamSettings settings, Messages messages, ConsoleLog log) {
+    public BodySpawner(JavaPlugin plugin, CamSettings settings, Messages messages, ConsoleLog log,
+                       CameraPlayers cameraPlayers) {
+        this.plugin = plugin;
         this.settings = settings;
         this.messages = messages;
         this.log = log;
+        this.cameraPlayers = cameraPlayers;
         bodyKey = new NamespacedKey(plugin, "cam_body");
         hitboxKey = new NamespacedKey(plugin, "cam_hitbox");
         nameKey = new NamespacedKey(plugin, "cam_name");
@@ -364,8 +376,71 @@ public final class BodySpawner {
     }
 
     /**
+     * Keeps the chunk the body stands in loaded for as long as camera mode
+     * runs, the way the player himself would keep it loaded standing there.
+     *
+     * <p>Without it the chunk goes as soon as no player is near any more - the
+     * camera flew off far enough, or into another world. The body, its hitbox
+     * and its name go with it, and what the chunk brings back later are new
+     * entities under the same ids: everything camera mode holds on to would
+     * from then on point at entities that no longer exist, and the end of
+     * camera mode would remove those and leave the body standing.</p>
+     *
+     * @return the chunk now held, for {@link #releaseChunk(Chunk)}
+     */
+    public Chunk holdChunk(LivingEntity body) {
+        Chunk chunk = body.getLocation().getChunk();
+        chunk.addPluginChunkTicket(plugin);
+        return chunk;
+    }
+
+    /**
+     * Lets go of the chunk {@link #holdChunk(LivingEntity)} held, unless the
+     * body of another camera player stands in it too: the server keeps a
+     * single ticket per plugin and chunk, so that one is his as well. Called
+     * once the player is out of {@link CameraPlayers}.
+     */
+    public void releaseChunk(Chunk chunk) {
+        for (UUID otherId : cameraPlayers.ids()) {
+            Chunk other = cameraPlayers.get(otherId).getBodyChunk();
+            if (other.getX() == chunk.getX() && other.getZ() == chunk.getZ()
+                    && other.getWorld().equals(chunk.getWorld())) {
+                return;
+            }
+        }
+        chunk.removePluginChunkTicket(plugin);
+    }
+
+    /**
+     * Takes the armour off a body, hitbox or name of camera mode, so that
+     * none of it can drop, and removes it.
+     *
+     * <p>Looked up by its id first: should its chunk have been unloaded
+     * after all, the handle kept since the start belongs to an entity that is
+     * gone, and the one standing there now is a new one. One that is not
+     * loaded at all is left to {@link #onEntitiesLoad}.</p>
+     */
+    public void remove(Entity entity) {
+        Entity loaded = Bukkit.getEntity(entity.getUniqueId());
+        if (loaded == null) {
+            return;
+        }
+        if (loaded instanceof LivingEntity living) {
+            EntityEquipment equipment = living.getEquipment();
+            if (equipment != null) {
+                equipment.setArmorContents(new ItemStack[4]);
+            }
+        }
+        loaded.remove();
+    }
+
+    /**
      * Removes every body, hitbox and name the plugin left standing, found by
      * the mark each of them carries.
+     *
+     * <p>Only what is loaded right now. A body or hitbox in a chunk that is
+     * not, one a crash left there, is removed by {@link #onEntitiesLoad} when
+     * the chunk comes back.</p>
      */
     public void removeLeftoverEntities() {
         for (World world : Bukkit.getWorlds()) {
@@ -376,6 +451,26 @@ public final class BodySpawner {
                         || marks.has(nameKey, PersistentDataType.INTEGER)) {
                     entity.remove();
                 }
+            }
+        }
+    }
+
+    /**
+     * Removes a body or hitbox a chunk brings back when it belongs to nobody
+     * in camera mode any more: one camera mode ended without, while its chunk
+     * was not loaded, or one a crash left behind.
+     *
+     * <p>The names are left alone: they are not saved with their chunk, see
+     * {@link NameDisplay}, so none comes back from one, and a chunk that only
+     * wakes up again may hand over one that is still in use.</p>
+     */
+    @EventHandler
+    public void onEntitiesLoad(EntitiesLoadEvent event) {
+        for (Entity entity : event.getEntities()) {
+            PersistentDataContainer marks = entity.getPersistentDataContainer();
+            if ((marks.has(bodyKey, PersistentDataType.INTEGER) || marks.has(hitboxKey, PersistentDataType.INTEGER))
+                    && cameraPlayers.getBodyOrHitboxOwner(entity) == null) {
+                entity.remove();
             }
         }
     }

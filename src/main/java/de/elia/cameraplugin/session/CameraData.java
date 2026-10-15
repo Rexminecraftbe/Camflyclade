@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.session;
 
+import org.bukkit.Chunk;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.entity.LivingEntity;
@@ -19,6 +20,8 @@ public class CameraData {
     private final Mannequin hitbox;
     /** The name standing over the body, or {@code null} when it carries none. */
     private final TextDisplay nameDisplay;
+    /** The chunk kept loaded for the body, see {@link de.elia.cameraplugin.body.BodySpawner#holdChunk}. */
+    private final Chunk bodyChunk;
     private final GameMode originalGameMode;
     private final boolean originalAllowFlight;
     private final boolean originalFlying;
@@ -40,10 +43,11 @@ public class CameraData {
      */
     private Location portalEntry;
 
-    public CameraData(LivingEntity body, Mannequin hitbox, TextDisplay nameDisplay, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, Collection<PotionEffect> pausedEffects) {
+    public CameraData(LivingEntity body, Mannequin hitbox, TextDisplay nameDisplay, Chunk bodyChunk, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, Collection<PotionEffect> pausedEffects) {
         this.body = body;
         this.hitbox = hitbox;
         this.nameDisplay = nameDisplay;
+        this.bodyChunk = bodyChunk;
         this.originalGameMode = originalGameMode;
         this.originalAllowFlight = originalAllowFlight;
         this.originalFlying = originalFlying;
@@ -59,6 +63,8 @@ public class CameraData {
     public LivingEntity getDamageTarget() { return hitbox != null ? hitbox : body; }
     /** The name over the body, or {@code null} when it carries none. */
     public TextDisplay getNameDisplay() { return nameDisplay; }
+    /** The chunk kept loaded for the body while camera mode runs. */
+    public Chunk getBodyChunk() { return bodyChunk; }
     public GameMode getOriginalGameMode() { return originalGameMode; }
     public boolean getOriginalAllowFlight() { return originalAllowFlight; }
     public boolean getOriginalFlying() { return originalFlying; }

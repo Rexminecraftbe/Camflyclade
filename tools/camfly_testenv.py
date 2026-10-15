@@ -6594,6 +6594,150 @@ def portal_checks(env, bot):
                           ("border-mode", "barrier")])
 
 
+# Wo der Koerper fuer den Test des unbewachten Chunks steht: auf dem Dach des
+# Nethers, weit weg von allem, was die anderen Abschnitte dort anfassen. Die
+# oberste Lage bei y=127 ist immer Grundgestein, darauf steht man ohne /fill.
+# Ein /forceload dort verfaelschte die Probe, es haelte den Chunk ja selbst.
+UNBEWACHT_KOERPER = (2000.5, 128, 2000.5)
+
+# Wohin der Bot derweil geht: in die Overworld, weit weg von allem anderen.
+UNBEWACHT_WEG = (6000.5, -60, 6000.5)
+
+# Wie lange er dort bleibt, in Sekunden. Paper laesst einen Chunk ohne
+# Spieler erst nach einer Weile los, die Entitaeten darin danach; nach 30
+# Sekunden war er im Versuch zuverlaessig weg.
+UNBEWACHT_WARTEN = 30
+
+
+def unbewacht_steht(bot, typ, x, y, z):
+    """Ob im Nether um diese Stelle herum eine Entitaet dieses Typs steht."""
+    return server_says(bot, f"/execute in minecraft:the_nether positioned {x} {y} {z} "
+                            f"if entity @e[type=minecraft:{typ},distance=..6] run say {{marke}}")
+
+
+def unbewacht_geladen(bot, x, y, z):
+    """Ob der Chunk an dieser Stelle im Nether gerade geladen ist."""
+    return server_says(bot, f"/execute in minecraft:the_nether if loaded "
+                            f"{_floor(x)} {y} {_floor(z)} run say {{marke}}")
+
+
+def unbewacht_weg(bot):
+    """Den Bot in die Overworld stellen und warten, bis ein Chunk ohne Spieler
+    im Nether entladen waere."""
+    bot.chat("/execute in minecraft:overworld run tp @s {} {} {}".format(*UNBEWACHT_WEG))
+    time.sleep(UNBEWACHT_WARTEN)
+
+
+def unbewacht_checks(env, bot):
+    """Ein Koerper, bei dem kein Spieler mehr steht.
+
+    Gemeldet war: den Cam-Modus im Nether starten, sich per /tp in die
+    Overworld setzen, per /tp zurueck und mit /cam beenden - der
+    Ruestungsstaender oder das Mannequin blieb stehen. Ohne Spieler in der
+    Naehe fiel der Chunk des Koerpers weg, und was er beim naechsten Laden
+    zurueckbrachte, waren neue Entitaeten unter denselben Ids: Das Plugin
+    raeumte die alten weg und liess die neuen stehen. Seitdem haelt es den
+    Chunk, solange der Cam-Modus laeuft, und raeumt ueber die Id weg.
+
+    Gefragt wird, waehrend der Bot in der Overworld steht, ob der Chunk
+    drueben geladen bleibt und Koerper und Name noch dastehen, nach dem Ende,
+    ob der Koerper weg ist, und danach, ob der Chunk wieder losgelassen wird.
+    Laeuft fuer beide Koerpertypen, siehe fuer_beide_koerpertypen.
+    """
+    x, y, z = UNBEWACHT_KOERPER
+    heim = bot.server_pos()
+    try:
+        set_option(env, "nether", "true", "cam-area")
+        cam_off(bot)
+        bot.chat(f"/execute in minecraft:the_nether run tp @s {x} {y} {z}")
+        time.sleep(3)
+        if not FIND.test("Unbewachter Koerper: Cam-Modus startet im Nether",
+                         in_nether(bot) and cam_on(bot), ""):
+            return
+        time.sleep(2)
+
+        unbewacht_weg(bot)
+        FIND.test("Im Cam-Modus bleibt der Chunk des Koerpers geladen, auch ohne "
+                  "Spieler in der Naehe", unbewacht_geladen(bot, x, y, z), "")
+        koerper = "armor_stand" if koerpertyp_jetzt(env) == "armorstand" else "mannequin"
+        FIND.test("Koerper und Name stehen noch, waehrend der Kamera-Spieler in "
+                  "einer anderen Welt ist",
+                  unbewacht_steht(bot, koerper, x, y, z)
+                  and unbewacht_steht(bot, "text_display", x, y, z), "")
+
+        bot.chat(f"/execute in minecraft:the_nether run tp @s {x + 3} {y} {z}")
+        time.sleep(4)
+        cam_off(bot)
+        time.sleep(2)
+        rest = [typ for typ in ("armor_stand", "mannequin")
+                if unbewacht_steht(bot, typ, x, y, z)]
+        FIND.test("Nach /cam ist der Koerper weg, auch nach einem Ausflug per /tp "
+                  "in eine andere Welt", not rest,
+                  "" if not rest else "es steht noch: " + ", ".join(rest))
+
+        unbewacht_weg(bot)
+        FIND.test("Nach dem Cam-Modus laesst das Plugin den Chunk wieder los",
+                  not unbewacht_geladen(bot, x, y, z), "")
+    finally:
+        cam_off(bot)
+        # Erst hin: Ist etwas stehen geblieben, liegt es in einem Chunk, den
+        # sonst niemand laedt, und /kill kaeme nicht an. Der naechste
+        # Koerpertyp zaehlte es dann als seinen eigenen Rest.
+        bot.chat(f"/execute in minecraft:the_nether run tp @s {x + 3} {y} {z}")
+        time.sleep(4)
+        bot.chat(f"/execute in minecraft:the_nether run kill "
+                 f"@e[type=!minecraft:player,x={x},y={y},z={z},distance=..10]")
+        time.sleep(0.5)
+        if heim is not None:
+            bot.chat("/execute in minecraft:overworld run tp @s {:.1f} {:.1f} {:.1f}".format(*heim))
+            time.sleep(1)
+        set_option(env, "nether", "false", "cam-area")
+
+
+def liegengeblieben_checks(env, bot):
+    """Ein Koerper, den ein Absturz in einem entladenen Chunk zurueckgelassen
+    hat, verschwindet, sobald der Chunk wieder geladen wird.
+
+    Nachgestellt mit /summon und der Marke, die das Plugin seinen Koerpern
+    gibt, in einem Chunk, den /forceload kurz laedt und wieder loslaesst.
+    Ein Ruestungsstaender ohne Marke daneben muss stehen bleiben.
+    """
+    x, y, z = _floor(UNBEWACHT_KOERPER[0]) + 100, UNBEWACHT_KOERPER[1], _floor(UNBEWACHT_KOERPER[2])
+    nether = "/execute in minecraft:the_nether run"
+    heim = bot.server_pos()
+    try:
+        bot.chat(f"{nether} forceload add {x} {z}")
+        time.sleep(2)
+        bot.chat(f'{nether} summon minecraft:armor_stand {x} {y} {z} '
+                 f'{{Tags:["camflytest"],BukkitValues:{{"camfly:cam_body":1}}}}')
+        bot.chat(f'{nether} summon minecraft:mannequin {x} {y} {z} '
+                 f'{{Tags:["camflytest"],BukkitValues:{{"camfly:cam_hitbox":1}}}}')
+        bot.chat(f'{nether} summon minecraft:armor_stand {x} {y} {z} '
+                 f'{{Tags:["camflytest","fremd"]}}')
+        time.sleep(1)
+        bot.chat(f"{nether} forceload remove {x} {z}")
+        unbewacht_weg(bot)
+        if not FIND.test("Liegengebliebener Koerper: der Chunk ist entladen",
+                         not unbewacht_geladen(bot, x, y, z), ""):
+            return
+        bot.chat(f"/execute in minecraft:the_nether run tp @s {x + 2} {y} {z}")
+        time.sleep(5)
+        markiert = server_says(bot, f"/execute in minecraft:the_nether positioned {x} {y} {z} "
+                                    f"if entity @e[tag=camflytest,tag=!fremd,distance=..6] "
+                                    f"run say {{marke}}")
+        FIND.test("Ein liegengebliebener Koerper verschwindet, sobald sein Chunk "
+                  "wieder geladen wird", not markiert, "")
+        FIND.test("Ein Ruestungsstaender ohne die Marke des Plugins bleibt dabei stehen",
+                  server_says(bot, f"/execute in minecraft:the_nether positioned {x} {y} {z} "
+                                   f"if entity @e[tag=fremd,distance=..6] run say {{marke}}"), "")
+    finally:
+        bot.chat(f"{nether} kill @e[tag=camflytest,x={x},y={y},z={z},distance=..10]")
+        time.sleep(0.5)
+        if heim is not None:
+            bot.chat("/execute in minecraft:overworld run tp @s {:.1f} {:.1f} {:.1f}".format(*heim))
+            time.sleep(1)
+
+
 # ---------------------------------------------------------------------------
 # Der Boden unter dem Testplatz
 # ---------------------------------------------------------------------------
@@ -6834,6 +6978,10 @@ def step_tests(env):
 
         # --- Portale und das Gedaechtnis fuer gesperrte Portale ---
         portal_checks(env, bot)
+
+        # --- Ein Koerper, bei dem kein Spieler mehr steht, und was ein Absturz liegen laesst ---
+        fuer_beide_koerpertypen(env, bot, unbewacht_checks)
+        liegengeblieben_checks(env, bot)
 
     except Exception as exc:
         FIND.test("Testlauf", False, f"{type(exc).__name__}: {exc}")

@@ -120,7 +120,7 @@ public final class CameraPlugin extends JavaPlugin {
         camSulfurCubeGuard = new CamSulfurCubeGuard(this);
         camInventoryGuard = new CamInventoryGuard(this, this::isInCameraMode);
         configFile.reportConfigWarnings(loadConfigValues(), null);
-        bodySpawner = new BodySpawner(this, settings, messages, log);
+        bodySpawner = new BodySpawner(this, settings, messages, log, cameraPlayers);
         camModeObjective.setUp();
         bodySpawner.removeLeftoverEntities();
         camSulfurCubeGuard.releaseLeftovers();
@@ -151,6 +151,7 @@ public final class CameraPlugin extends JavaPlugin {
                 borderWall,
                 nameTag,
                 camSulfurCubeGuard,
+                bodySpawner,
                 new CamInventoryLock(cameraPlayers),
                 new CamPotionGuard(this),
                 new CamSuggestionFilter(this));
