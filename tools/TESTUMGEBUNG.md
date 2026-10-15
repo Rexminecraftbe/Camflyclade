@@ -975,8 +975,7 @@ Luft und dem Frost weiter, die der Spieler beim Start hatte, und nach dem
 Aussteigen hat der Spieler die des Mannequins · voreingestellt steht
 `border-mode: barrier` mit `border-block: barrier`, `border-block-water:
 blue_stained_glass`, `border-block-lava: magma_block`,
-`border-block-powder-snow: snow_block`, `border-radius: 5` und
-`border-settle-ticks: 10` da · die Kamera
+`border-block-powder-snow: snow_block` und `border-radius: 5` da · die Kamera
 bleibt dann an `max-distance` und an einem verbotenen Biom stehen, ohne je
 zurückgesetzt zu werden, und die Meldung kommt · die Wand steht nur im Client
 des Kamera-Spielers: der Server hat dort Luft, ein zweiter Spieler ebenso, und

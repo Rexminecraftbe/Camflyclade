@@ -5456,9 +5456,9 @@ def medium_checks(env, bot):
             schnee = wand_sicht(zum_pulverschnee, pulverschnee_vorn)
             # Wasser laeuft aus und wieder ab, der Bot schwebt darueber. Jede
             # Stufe, die es sinkt, schickt der Server dem Client anstelle der
-            # Wand. Die Wand wartet border-settle-ticks, ob es so bleibt -
-            # beim Abfliessen bleibt es nie so, und dazwischen blitzt keine
-            # Wand mehr auf, weder Glas noch die Barriere fuer die Luft.
+            # Wand. Die Wand wartet 10 Ticks, ob es so bleibt - beim
+            # Abfliessen bleibt es nie so, und dazwischen blitzt keine Wand
+            # mehr auf, weder Glas noch die Barriere fuer die Luft.
             bot.chat(f"/fill {rahmen} minecraft:stone")
             time.sleep(0.5)
             bot.chat(f"/fill {im_rahmen} minecraft:air")
@@ -5897,11 +5897,9 @@ def border_checks(env, bot):
                                                   ("border-block-water", "blue_stained_glass"),
                                                   ("border-block-lava", "magma_block"),
                                                   ("border-block-powder-snow", "snow_block"),
-                                                  ("border-radius", "5"),
-                                                  ("border-settle-ticks", "10")))
+                                                  ("border-radius", "5")))
     FIND.test("Voreingestellt steht border-mode: barrier mit border-block: barrier, "
-              "blauem Glas, Magma und Schnee, border-radius: 5 und border-settle-ticks: 10 da",
-              voreingestellt, "")
+              "blauem Glas, Magma und Schnee und border-radius: 5 da", voreingestellt, "")
 
     def drin(ergebnis):
         """Ob der Bot nicht ueber max-distance hinaus kam, aber bis an sie heran."""

@@ -98,6 +98,13 @@ public final class CamBorderWall implements Listener {
     private static final double CHECK_SPREAD = 32.0;
 
     /**
+     * How many ticks a block of the wall whose real block has changed has to
+     * hold still before the wall goes back there, see {@link #settle}. Water
+     * running off changes every five.
+     */
+    private static final long SETTLE_TICKS = 10L;
+
+    /**
      * How long the sections around the player may be read out of the world
      * at one look, in nanoseconds - two milliseconds of the fifty a tick has.
      * What does not fit follows in the next ticks, the farthest last; the
@@ -442,34 +449,27 @@ public final class CamBorderWall implements Listener {
             }
             Brick now = brickAt(wall, block, real, names, media);
             wall.bricks.put(cell, now);
-            boolean opened = leftMedium(wall, cell, brick, now);
-            if (settings.getBorderSettleTicks() > 0 || opened) {
-                wall.unsettled.put(cell, wall.ticks);
-            } else if (now.shown() != null) {
-                again.add(stateAt(world, cell, now.shown()));
-            }
+            leftMedium(wall, cell, brick, now);
+            wall.unsettled.put(cell, wall.ticks);
         }
         send(player, again);
     }
 
     /**
-     * Whether the shut medium a block of the wall stood in is gone from it -
-     * water that ran off, lava that was scooped up. Then it may well be open
-     * now, and its section is read again on the next tick, see
-     * {@link WallSections#reread}: until then the wall waits there, rather
-     * than putting its block into what may be open air.
+     * Has the section of a block of the wall read again on the next tick
+     * when the shut medium it stood in is gone from it - water that ran off,
+     * lava that was scooped up. It may well be open now, and the wall is not
+     * to put its block back into open air, see {@link WallSections#reread}.
      */
-    private static boolean leftMedium(Wall wall, Cell cell, Brick before, Brick now) {
-        if (before.medium() == null || now.medium() != null) {
-            return false;
+    private static void leftMedium(Wall wall, Cell cell, Brick before, Brick now) {
+        if (before.medium() != null && now.medium() == null) {
+            wall.sections.reread(cell.x(), cell.y(), cell.z());
         }
-        wall.sections.reread(cell.x(), cell.y(), cell.z());
-        return true;
     }
 
     /**
      * Sends the wall again where a changed block has held still for
-     * {@code camera-mode.border-settle-ticks}.
+     * {@link #SETTLE_TICKS}.
      *
      * <p>Water running off changes every five ticks, one level lower each
      * time, until it is gone, and the server sends every one of those steps
@@ -488,9 +488,6 @@ public final class CamBorderWall implements Listener {
             wall.unsettled.clear();
             return;
         }
-        // At least until the next tick, when a block that has left its
-        // medium has had its section read again, see leftMedium.
-        int wait = Math.max(1, settings.getBorderSettleTicks());
         Set<FlightMedium> media = null;
         CamAreaRules.BlockLookup names = null;
         List<BlockState> settled = new ArrayList<>();
@@ -517,7 +514,7 @@ public final class CamBorderWall implements Listener {
                 entry.setValue(wall.ticks);
                 continue;
             }
-            if (wall.ticks - entry.getValue() >= wait) {
+            if (wall.ticks - entry.getValue() >= SETTLE_TICKS) {
                 pending.remove();
                 if (brick.shown() != null) {
                     settled.add(stateAt(world, cell, brick.shown()));
@@ -630,8 +627,7 @@ public final class CamBorderWall implements Listener {
         Brick before = wall.bricks.get(cell);
         Brick now = brickAt(wall, block, block.getBlockData(), names, media);
         wall.bricks.put(cell, now);
-        boolean changed = before != null && !now.real().equals(before.real());
-        if (changed && settings.getBorderSettleTicks() > 0) {
+        if (before != null && !now.real().equals(before.real())) {
             wall.unsettled.put(cell, wall.ticks);
         }
         if (wall.unsettled.containsKey(cell)) {
@@ -639,7 +635,7 @@ public final class CamBorderWall implements Listener {
             return;
         }
         if (now.shown() != null) {
-            if (before == null || changed || !now.shown().equals(before.shown())) {
+            if (before == null || !now.shown().equals(before.shown())) {
                 changes.put(cell, now.shown());
             }
         } else if (before != null && before.shown() != null) {
