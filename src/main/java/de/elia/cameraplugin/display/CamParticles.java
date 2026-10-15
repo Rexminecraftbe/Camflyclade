@@ -27,7 +27,17 @@ public final class CamParticles {
         this.cameraPlayers = cameraPlayers;
     }
 
+    /**
+     * Starts the particles for a camera player, unless they are switched off.
+     *
+     * <p>Switched off means no task at all. Handing the game a count of 0
+     * would not do: it reads that as one single particle that flies in the
+     * direction of the offsets.</p>
+     */
     public void startCameraParticles(Player player) {
+        if (!settings.areParticlesEnabled()) {
+            return;
+        }
         BukkitRunnable task = new BukkitRunnable() {
             @Override
             public void run() {

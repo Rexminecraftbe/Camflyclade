@@ -114,6 +114,8 @@ public final class CamSettings {
     /** What {@code camera-mode.start-with-effects} allows him to start with. */
     private EffectStart startWithEffects;
 
+    /** Whether the particles are switched on, {@code camera-particles.enabled}. */
+    private boolean particlesEnabled;
     private double particleHeight;
     private int particlesPerTick;
     private boolean showOwnParticles;
@@ -241,6 +243,7 @@ public final class CamSettings {
         mobTargetMode = resolveMobTargetMode(config);
         mobTargetRadius = config.getDouble("body.mob-target-radius", 16.0, 0.0);
         mobTargetHeads = config.getBoolean("body.mob-target-heads", true);
+        particlesEnabled = config.getBoolean("camera-particles.enabled", true);
         particleHeight = config.getDouble("camera-particles.height", 1.0);
         particlesPerTick = config.getInt("camera-particles.particles-per-tick", 5, 0);
         showOwnParticles = config.getBoolean("camera-particles.show-own-particles", false);
@@ -666,6 +669,15 @@ public final class CamSettings {
     }
 
     // ------------------------------------------------- particles and action bar
+
+    /**
+     * Whether a camera player gets particles at all: switched off by
+     * {@code camera-particles.enabled: false}, and just as well by
+     * {@code particles-per-tick: 0}.
+     */
+    public boolean areParticlesEnabled() {
+        return particlesEnabled && particlesPerTick > 0;
+    }
 
     public double getParticleHeight() {
         return particleHeight;
