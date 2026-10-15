@@ -32,6 +32,7 @@ messages:
   cant-fly-in-powder-snow: "&cYou cannot fly into powder snow in camera mode."
   cant-fly-in-water: "&cYou cannot fly into water in camera mode."
   config-allowed-blocks: "any block, e.g. barrier or glass"
+  config-allowed-particles: "a particle without extra data, e.g. soul_fire_flame, flame or end_rod"
   config-broken: "&cThe configuration has an error in {file} and was not applied, the previous settings stay in effect: {error}"
   config-broken-startup: "&cThe configuration has an error in {file}: {error}"
   config-start-failed: "&cStartup failed. To enable the plugin, fix the error in the configuration and restart the server."

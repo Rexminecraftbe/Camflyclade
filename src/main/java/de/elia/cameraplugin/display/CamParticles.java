@@ -4,7 +4,6 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.Particle;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -33,24 +32,37 @@ public final class CamParticles {
      * <p>Switched off means no task at all. Handing the game a count of 0
      * would not do: it reads that as one single particle that flies in the
      * direction of the offsets.</p>
+     *
+     * <p>A count below one per tick is collected from tick to tick, so that
+     * 0.25 sends one particle every fourth tick.</p>
      */
     public void startCameraParticles(Player player) {
         if (!settings.areParticlesEnabled()) {
             return;
         }
         BukkitRunnable task = new BukkitRunnable() {
+            /** Particles owed from the ticks before, not yet a whole one. */
+            private double owed;
+
             @Override
             public void run() {
                 if (!cameraPlayers.contains(player.getUniqueId()) || !player.isOnline()) {
                     this.cancel();
                     return;
                 }
+                owed += settings.getParticlesPerTick();
+                int count = (int) owed;
+                if (count == 0) {
+                    return;
+                }
+                owed -= count;
                 Location particleLoc = player.getLocation().add(0, settings.getParticleHeight(), 0);
+                double spread = settings.getParticleSpread();
                 for (Player viewer : Bukkit.getOnlinePlayers()) {
                     if (!settings.showsOwnParticles() && viewer.equals(player)) continue;
                     if (shouldShowParticlesTo(viewer, particleLoc)) {
-                        viewer.spawnParticle(Particle.SOUL_FIRE_FLAME, particleLoc,
-                                settings.getParticlesPerTick(), 0.1, 0.1, 0.1, 0);
+                        viewer.spawnParticle(settings.getParticleType(), particleLoc,
+                                count, spread, spread, spread, 0);
                     }
                 }
             }

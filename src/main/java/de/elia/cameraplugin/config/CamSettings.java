@@ -17,6 +17,7 @@ import de.elia.cameraplugin.start.EffectStart;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.Particle;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.MultipleFacing;
@@ -116,8 +117,13 @@ public final class CamSettings {
 
     /** Whether the particles are switched on, {@code camera-particles.enabled}. */
     private boolean particlesEnabled;
+    /** Which particle it is, {@code camera-particles.particle}. */
+    private Particle particleType;
     private double particleHeight;
-    private int particlesPerTick;
+    /** Particles per tick, below one meaning one every few ticks. */
+    private double particlesPerTick;
+    /** How far they scatter around the spot, {@code camera-particles.spread}. */
+    private double particleSpread;
     private boolean showOwnParticles;
 
     private boolean actionBarEnabled;
@@ -244,8 +250,10 @@ public final class CamSettings {
         mobTargetRadius = config.getDouble("body.mob-target-radius", 16.0, 0.0);
         mobTargetHeads = config.getBoolean("body.mob-target-heads", true);
         particlesEnabled = config.getBoolean("camera-particles.enabled", true);
+        particleType = resolveParticle(config, "camera-particles.particle", Particle.SOUL_FIRE_FLAME);
         particleHeight = config.getDouble("camera-particles.height", 1.0);
-        particlesPerTick = config.getInt("camera-particles.particles-per-tick", 5, 0);
+        particlesPerTick = config.getDouble("camera-particles.particles-per-tick", 1.0, 0.0);
+        particleSpread = config.getDouble("camera-particles.spread", 0.0, 0.0);
         showOwnParticles = config.getBoolean("camera-particles.show-own-particles", false);
         actionBarEnabled = config.getBoolean("action-bar.enabled", true);
         actionBarOffDuration = config.getInt("action-bar.off-duration", 10, 0);
@@ -456,6 +464,37 @@ public final class CamSettings {
             }
         }
         return block;
+    }
+
+    /**
+     * Reads {@code camera-particles.particle}: the name of a particle, with or
+     * without {@code minecraft:} in front, capitals and spaces not counting.
+     *
+     * <p>Only a particle that needs nothing but its name will do. A dust wants
+     * a colour and a block crack a block, and the server turns one away that
+     * comes without them - every tick, for every player who could see it.</p>
+     */
+    private Particle resolveParticle(ConfigReader config, String path, Particle def) {
+        String defName = def.name().toLowerCase(Locale.ROOT);
+        String raw = config.getString(path, defName);
+        Particle particle = parseParticle(raw);
+        if (particle == null || particle.getDataType() != Void.class) {
+            config.warnUnknownValue(path, raw, messages.configMessage("config-allowed-particles"), defName);
+            return def;
+        }
+        return particle;
+    }
+
+    private static Particle parseParticle(String raw) {
+        String name = raw.trim().toLowerCase(Locale.ROOT).replace(' ', '_');
+        if (name.startsWith("minecraft:")) {
+            name = name.substring("minecraft:".length());
+        }
+        try {
+            return Particle.valueOf(name.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     /**
@@ -679,12 +718,20 @@ public final class CamSettings {
         return particlesEnabled && particlesPerTick > 0;
     }
 
+    public Particle getParticleType() {
+        return particleType;
+    }
+
     public double getParticleHeight() {
         return particleHeight;
     }
 
-    public int getParticlesPerTick() {
+    public double getParticlesPerTick() {
         return particlesPerTick;
+    }
+
+    public double getParticleSpread() {
+        return particleSpread;
     }
 
     public boolean showsOwnParticles() {

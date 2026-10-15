@@ -192,10 +192,15 @@ time-limit:
 camera-particles:
   # Partikel an (true) oder aus (false)
   enabled: true
+  # Welche Partikel, z. B. soul_fire_flame, flame, end_rod oder heart
+  # (nur Partikel ohne Zusatzangaben, also keine dust- oder Block-Partikel)
+  particle: soul_fire_flame
   # Höhe über den Füßen in Blöcken
   height: 0.2
-  # Anzahl der Partikel pro Tick (0 = aus)
+  # Partikel pro Tick, Kommazahl mit Punkt: 0.5 = jeden zweiten Tick eins (0 = aus)
   particles-per-tick: 1
+  # Wie weit die Partikel um den Punkt streuen, in Blöcken (0 = alle auf einem Punkt)
+  spread: 0.0
   # Partikel auch dem Spieler selbst zeigen
   show-own-particles: false
 
