@@ -404,12 +404,13 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   einer Geschwindigkeit kamen - ob er also woanders losging, oben anstieß
   oder noch einen Stoß hinterher bekam.
 * **Tränke, Meldungen und Rückstoß laufen mit beiden Körpertypen.** Bei
-  Typ 1 trifft es den Rüstungsständer oder das unsichtbare Mannequin darin,
-  bei Typ 2 das Mannequin allein - und dort flogen Pfeil, Dreizack,
-  Windkugel und Speerstich durch den Körper hindurch, während jede Probe mit
-  Typ 1 bestand. `fuer_beide_koerpertypen` fährt diese Abschnitte deshalb
-  einmal mit `type: 1` und einmal mit `type: 2`, und jede Probe darin trägt
-  den Typ in Klammern hinter ihrem Namen. Am Ende steht wieder `type: 1` da.
+  `armorstand` trifft es den Rüstungsständer oder das unsichtbare Mannequin
+  darin, bei `mannequin` das Mannequin allein - und dort flogen Pfeil,
+  Dreizack, Windkugel und Speerstich durch den Körper hindurch, während jede
+  Probe mit `armorstand` bestand. `fuer_beide_koerpertypen` fährt diese
+  Abschnitte deshalb einmal mit `type: armorstand` und einmal mit
+  `type: mannequin`, und jede Probe darin trägt den Typ in Klammern hinter
+  ihrem Namen. Am Ende steht wieder `type: armorstand` da.
 * **Geschosse und Speer fragen den Server, ob sie ein Ziel treffen dürfen,
   und der fragt dasselbe Feld wie das Schieben.** `setCollidable(false)`
   setzt in Paper und Spigot `collides`, und `isPickable()` gibt genau das
@@ -422,11 +423,11 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   davon. Ohne KI schiebt ein Mob gar nichts, und genau in der Mitte fehlte
   dem Stoß die Richtung - beides nachgemessen an einem freien Mannequin, das
   sich dann nicht rührte. Auf Stufe 1 muss der Cam-Modus weiterlaufen, auf
-  Stufe 2 muss er mit Typ 2 enden - das ist die Gegenprobe. Mit Typ 1 fällt
-  Stufe 2 auf 1 zurück, der Körper bleibt stehen. Das Schwein kommt erst ein
-  paar Sekunden nach dem Start: Eine Sekunde lang merkt sich die
-  Bewegungsprüfung des Plugins noch keine Stelle, und was den Körper bis
-  dahin verschiebt, fiele ihr nicht auf.
+  Stufe 2 muss er mit `mannequin` enden - das ist die Gegenprobe. Mit
+  `armorstand` fällt Stufe 2 auf 1 zurück, der Körper bleibt stehen. Das
+  Schwein kommt erst ein paar Sekunden nach dem Start: Eine Sekunde lang
+  merkt sich die Bewegungsprüfung des Plugins noch keine Stelle, und was den
+  Körper bis dahin verschiebt, fiele ihr nicht auf.
 * **mineflayer rechnet die Geschwindigkeit von 26.x falsch um.** Das Paket
   trägt sie als lpVec3, schon in Blöcken je Tick; mineflayer teilt sie noch
   einmal durch 8000 wie im alten Format, und der Bot rührte sich nach einem
@@ -493,10 +494,10 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
 * **Die Windkugel trifft im Cam-Modus das Mannequin, bei beiden Typen.** Es
   ist so breit wie ein Spieler, die Kugel explodiert also genau dort, wo sie
   ihn ohne Cam-Modus träfe. Gemessen landet er auf ein Zehntausendstel am
-  selben Fleck. Solange das Mannequin Geschosse durchließ, traf sie bei Typ 1
-  den Rüstungsständer, 0,5 Blöcke breit statt 0,6: Ihr Stoß ging ein wenig
-  steiler, der Spieler landete bis zu 0,09 Blöcke anders, und die Probe
-  brauchte eine eigene Toleranz.
+  selben Fleck. Solange das Mannequin Geschosse durchließ, traf sie bei
+  `armorstand` den Rüstungsständer, 0,5 Blöcke breit statt 0,6: Ihr Stoß
+  ging ein wenig steiler, der Spieler landete bis zu 0,09 Blöcke anders, und
+  die Probe brauchte eine eigene Toleranz.
 * **Der Streitkolben schlägt aus 3,4 Blöcken Höhe, 0,3 Sekunden nach dem
   Teleport.** Erst nach gut 1,5 Blöcken Fall ist es ein Schlag mit Wucht, der
   alles drumherum wegstößt. Früher fehlt der Fall, später ist der Schläger
@@ -715,9 +716,9 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   Server noch auf dem Boden, bis sein Client die erste Bewegung meldet - dann
   sagte die Probe nichts. Ohne den Effekt wäre er aber nach einer halben
   Sekunde schon gelandet.
-* **Luft und Frost liest der Test am Mannequin**, mit `/data get entity`, bei
-  Körpertyp 1 also am unsichtbaren im Rüstungsständer. `TicksFrozen`
-  speichert das Spiel nur, solange der Wert über null liegt.
+* **Luft und Frost liest der Test am Mannequin**, mit `/data get entity`,
+  bei Körpertyp `armorstand` also am unsichtbaren im Rüstungsständer.
+  `TicksFrozen` speichert das Spiel nur, solange der Wert über null liegt.
 * **Der Frost lässt wenig Zeit.** Nach 140 Ticks ist er voll, und von da an
   tut er weh, am Bot wie am Körper. Der Test liest deshalb gleich nach dem
   `/cam`, ohne die Pause von `cam_on` und `cam_off`, und holt den Bot sofort
@@ -890,9 +891,9 @@ Kopf, stößt entlang des Körpers, ein Eisengolem wirft hoch, und der
 Schallstoß eines Wärters schleudert weit weg, alles wie ohne Cam-Modus ·
 Pfeil, TNT, Windkugel, Sprintschlag und Speerstich auch mit
 `damage-mode: false` · die Tränke, die Meldungen zu einem Treffer und jede
-Probe zum Rückstoß mit Körpertyp 1 und mit Körpertyp 2 · auf
-Bewegungsstufe 1 schiebt ein Mob den Körper nicht, auf Stufe 2 bei Typ 2
-schon und beendet damit den Cam-Modus, bei Typ 1 nicht · ein Wärter greift
+Probe zum Rückstoß mit Körpertyp `armorstand` und mit `mannequin` · auf
+Bewegungsstufe 1 schiebt ein Mob den Körper nicht, auf Stufe 2 bei
+`mannequin` schon und beendet damit den Cam-Modus, bei `armorstand` nicht · ein Wärter greift
 den Körper mit `mob-target: vanilla` an und mit `false` nicht, auch wenn ihn der
 Kamera-Spieler reizt · ein Eisengolem, der beim Start hinter dem Spieler her
 ist, geht mit `mob-target: vanilla` auf den Körper los, und er wie ein
@@ -905,7 +906,10 @@ Gegenprobe: mit `true` sehen beide den Kamera-Spieler an · der
 Name steht als TextDisplay genau dort über dem Körper, wo sonst sein
 Namensschild hinge, trägt den Text aus `armorstand.name-format`, folgt dem
 Körper und wird mit ihm eingesammelt · der Körper selbst trägt keinen Namen
-mehr · unsichtbar ist der Körper bei beiden Typen ein einziges unsichtbares
+mehr · voreingestellt steht `body.type: armorstand` da · die alten Werte
+`1` und `2` meinen weiter Rüstungsständer und Mannequin, ohne Meldung, ein
+unbekannter Wert wird gemeldet und ist ein Rüstungsständer · unsichtbar ist
+der Körper bei beiden Typen ein einziges unsichtbares
 Mannequin, ohne Rüstungsständer, mit dem Namen darüber · voreingestellt ist
 der Name gelb, nicht durch Wände zu sehen, hat den Hintergrund eines
 Namensschilds, keinen Schatten, Größe 1 und 64 Blöcke Sichtweite · jeder
@@ -958,7 +962,12 @@ sagt warum · Gegenprobe: voreingestellt geht all das, und die Lava bleibt auch
 dicht vor der Kamera Lava · gesperrt und mit `border-mode: barrier` landet die
 Kamera auf der Lava wie auf einem Block, ohne zurückgesetzt zu werden, und die
 Wand zeigt Lava als Magma, Wasser als blaues Glas und Pulverschnee als Schnee
-· mit `push-back` bleibt die Lava Lava, und wer hineinfällt, wird
+· am Grund des Beckens, wo das Wasser nur an Glas, Gras und Wasser grenzt,
+bleibt es Wasser · liegt darunter eine Stufe, wird es gleich zur Wand, und ist
+sie weg, wieder Wasser · läuft Wasser in einem Steinrahmen ab, zeigt es erst
+Glas, dann nur noch Wasser und Luft: Die Wand blitzt dazwischen nicht wieder
+auf, weder als Glas noch als Barriere (der Bot schreibt dafür jeden Block mit,
+den der Client dort bekommt) · mit `push-back` bleibt die Lava Lava, und wer hineinfällt, wird
 zurückgesetzt · mitten im Fall startet `/cam` nicht, auch nicht mit Sanftem
 Fall hoch in der Luft, und die Ablehnung sagt warum · Gegenprobe: so hoch wie
 ein Sprung über dem Boden geht es · das Mannequin atmet und friert mit der
@@ -979,7 +988,14 @@ dort `border-block` · auf
 `push-back` kommt die Kamera auch nicht weiter, wird dabei aber zurückgesetzt ·
 auf `false`, mit `border-block: air` und mit `border-radius: 0` gibt es keine
 Grenze · ein unbekannter Block und ein zu großer Radius werden gemeldet, und
-die Wand steht mit dem Ersatz · Server-Log ohne Fehler des Plugins.
+die Wand steht mit dem Ersatz · `border-radius: 32`, so weit, wie der
+Testserver die Welt schickt, wird nicht gemeldet · damit steht die Wand vom
+Körper aus rundum auf `max-distance`, wo sie mit 5 noch nicht steht · wird
+ein Block in ihr zur Stufe, steht dort gleich wieder die Wand, ein ganzer
+Steinblock bleibt stehen, und ist er weg, steht dort wieder die Wand · die
+Kamera bleibt auch damit an `max-distance` stehen, ohne zurückgesetzt zu
+werden, und nach dem Cam-Modus ist die ganze Wand weg · Server-Log ohne
+Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
 Arbeitsordner.

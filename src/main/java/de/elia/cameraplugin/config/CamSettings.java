@@ -41,14 +41,6 @@ public final class CamSettings {
      */
     public static final double MIN_MOVE_THRESHOLD = 0.01;
 
-    /**
-     * Largest value accepted for {@code camera-mode.border-radius}, in blocks.
-     * The wall looks at every block that far around the player each time the
-     * player crosses into the next one, and that work grows with the cube of
-     * the radius.
-     */
-    public static final double MAX_BORDER_RADIUS = 16.0;
-
     private final JavaPlugin plugin;
     private final ConsoleLog log;
     private final Messages messages;
@@ -186,7 +178,12 @@ public final class CamSettings {
         readMediumBorderBlock(config, FlightMedium.LAVA, "camera-mode.border-block-lava", "magma_block");
         readMediumBorderBlock(config, FlightMedium.POWDER_SNOW, "camera-mode.border-block-powder-snow",
                 "snow_block");
-        borderRadius = config.getDouble("camera-mode.border-radius", 5.0, 0.0, MAX_BORDER_RADIUS);
+        // No further than the server sends the world to a client, sixteen
+        // blocks for each chunk of its view-distance: the client throws away
+        // every block beyond that. A world with a smaller view-distance of
+        // its own cuts it back further, see CamBorderWall.
+        borderRadius = config.getDouble("camera-mode.border-radius", 5.0, 0.0,
+                plugin.getServer().getViewDistance() * 16.0);
         // A wall that nobody runs into holds nobody back: made of something
         // that can be walked through, or not built anywhere around the player.
         // Stopping the camera some other way would say the opposite of what
@@ -232,7 +229,7 @@ public final class CamSettings {
             default -> EffectStart.POSITIVE;
         };
         cameraHeadEnabled = config.getBoolean("camera-head.enabled", false);
-        bodyType = resolveBodyType(config, config.getInt("body.type", BodyType.ARMOR_STAND.getId()));
+        bodyType = resolveBodyType(config, config.getString("body.type", BodyType.ARMOR_STAND.getConfigName()));
         bodyNameVisible = config.getBoolean("body.name-visible", true);
         bodyNameStyle = NameStyle.read(config, "body.name", ChatColor.YELLOW);
         bodyVisible = config.getBoolean("body.visible", true);
@@ -491,14 +488,14 @@ public final class CamSettings {
     }
 
     /**
-     * Turns the number configured in {@code body.type} into a body type and
+     * Turns the value configured in {@code body.type} into a body type and
      * falls back to the armour stand when the value is unknown.
      */
-    private BodyType resolveBodyType(ConfigReader config, int configuredId) {
-        BodyType requested = BodyType.fromId(configuredId);
+    private BodyType resolveBodyType(ConfigReader config, String configured) {
+        BodyType requested = BodyType.fromConfig(configured);
         if (requested == null) {
-            config.warnUnknownValue("body.type", configuredId, "1, 2",
-                    String.valueOf(BodyType.ARMOR_STAND.getId()));
+            config.warnUnknownValue("body.type", configured, BodyType.configNames(),
+                    BodyType.ARMOR_STAND.getConfigName());
             return BodyType.ARMOR_STAND;
         }
         return requested;
@@ -508,9 +505,10 @@ public final class CamSettings {
      * Turns the number configured in {@code body.movement-sensitivity} into a
      * level and falls back to 1 when the value is unknown.
      *
-     * <p>Level 2 is cut back to level 1 for the visible armour stand of type 1.
-     * That is a valid setting in the wrong combination and not a mistake, so
-     * it is described in the config file instead of being logged.</p>
+     * <p>Level 2 is cut back to level 1 for the visible armour stand of the
+     * armorstand body. That is a valid setting in the wrong combination and
+     * not a mistake, so it is described in the config file instead of being
+     * logged.</p>
      */
     private MovementSensitivity resolveMovementSensitivity(ConfigReader config, int configuredId) {
         MovementSensitivity requested = MovementSensitivity.fromId(configuredId);

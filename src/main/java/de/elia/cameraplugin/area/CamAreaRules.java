@@ -478,14 +478,7 @@ public final class CamAreaRules {
             if (y < world.getMinHeight() || y >= world.getMaxHeight()) {
                 return null;
             }
-            long cube = key(x >> 2, y >> 2, z >> 2);
-            String biome;
-            if (biomes.containsKey(cube)) {
-                biome = biomes.get(cube);
-            } else {
-                biome = forbiddenBiome(world, x, y, z);
-                biomes.put(cube, biome);
-            }
+            String biome = forbiddenCube(x, y, z);
             if (biome != null) {
                 return biome;
             }
@@ -502,6 +495,96 @@ public final class CamAreaRules {
                 }
             }
             return null;
+        }
+
+        /**
+         * Marks every block of one section - sixteen by sixteen by sixteen
+         * blocks, counted in sections like a chunk is counted in chunks - that
+         * {@link #forbidden(int, int, int)} would name an area for.
+         *
+         * <p>Much less work than asking block by block: a biome is looked up
+         * once for each of its cubes of four, and the box of a structure is
+         * laid over the section as a whole.</p>
+         *
+         * @param into one entry for each column of the section, at
+         *             {@code x * 16 + z}, one bit for each block from its
+         *             bottom up; the forbidden ones are added
+         * @return whether any block of the section is forbidden
+         */
+        public boolean markSection(int sectionX, int sectionY, int sectionZ, char[] into) {
+            int x0 = sectionX << 4;
+            int y0 = sectionY << 4;
+            int z0 = sectionZ << 4;
+            int bottom = Math.max(y0, world.getMinHeight());
+            int top = Math.min(y0 + 15, world.getMaxHeight() - 1);
+            if (bottom > top) {
+                return false;
+            }
+            boolean any = false;
+            if (biomesEnabled && !forbiddenBiomes.isEmpty()) {
+                for (int y = bottom; y <= top; y = (y & ~3) + 4) {
+                    int bits = layers(Math.max(y, bottom) - y0, Math.min((y & ~3) + 3, top) - y0);
+                    for (int x = 0; x < 16; x += 4) {
+                        for (int z = 0; z < 16; z += 4) {
+                            // Straight to the world: every cube is asked once
+                            // here, keeping it would only cost.
+                            if (CamAreaRules.this.forbiddenBiome(world, x0 + x, y, z0 + z) == null) {
+                                continue;
+                            }
+                            any = true;
+                            for (int cx = x; cx < x + 4; cx++) {
+                                for (int cz = z; cz < z + 4; cz++) {
+                                    into[cx * 16 + cz] |= (char) bits;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (!structuresEnabled || (boxStructures.isEmpty() && componentStructures.isEmpty())) {
+                return any;
+            }
+            List<ForbiddenStructure> around = chunks.computeIfAbsent(key(sectionX, 0, sectionZ),
+                    chunk -> structuresAround(world, sectionX, sectionZ));
+            for (ForbiddenStructure structure : around) {
+                for (BoundingBox box : structure.boxes()) {
+                    // The blocks whose middle the box contains, the way
+                    // forbidden() measures them.
+                    int fromX = Math.max(x0, (int) Math.ceil(box.getMinX() - 0.5));
+                    int toX = Math.min(x0 + 15, (int) Math.ceil(box.getMaxX() - 0.5) - 1);
+                    int fromY = Math.max(bottom, (int) Math.ceil(box.getMinY() - 0.5));
+                    int toY = Math.min(top, (int) Math.ceil(box.getMaxY() - 0.5) - 1);
+                    int fromZ = Math.max(z0, (int) Math.ceil(box.getMinZ() - 0.5));
+                    int toZ = Math.min(z0 + 15, (int) Math.ceil(box.getMaxZ() - 0.5) - 1);
+                    if (fromX > toX || fromY > toY || fromZ > toZ) {
+                        continue;
+                    }
+                    any = true;
+                    int bits = layers(fromY - y0, toY - y0);
+                    for (int x = fromX; x <= toX; x++) {
+                        for (int z = fromZ; z <= toZ; z++) {
+                            into[(x - x0) * 16 + z - z0] |= (char) bits;
+                        }
+                    }
+                }
+            }
+            return any;
+        }
+
+        /** The forbidden biome of the cube of four this block lies in, kept once asked. */
+        private String forbiddenCube(int x, int y, int z) {
+            long cube = key(x >> 2, y >> 2, z >> 2);
+            if (biomes.containsKey(cube)) {
+                return biomes.get(cube);
+            }
+            String biome = CamAreaRules.this.forbiddenBiome(world, x, y, z);
+            biomes.put(cube, biome);
+            return biome;
+        }
+
+        /** The bits of the layers {@code from} to {@code to} of a section, both included. */
+        private static int layers(int from, int to) {
+            return (0xFFFF >>> (15 - to)) & (0xFFFF << from);
         }
 
         /** Three coordinates in one number, each well inside what a world can hold. */

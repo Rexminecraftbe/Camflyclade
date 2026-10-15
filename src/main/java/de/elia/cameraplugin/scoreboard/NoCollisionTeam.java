@@ -106,12 +106,13 @@ public final class NoCollisionTeam {
      * <p>Switching the mannequin non-collidable would keep them off as well,
      * but the server asks the very same switch whether anything can hit it
      * from afar: an arrow, a trident, a wind charge and the stab of a spear
-     * went straight through, and only the armour stand of a visible type 1
-     * caught them. The collision rule of a team leaves the hits alone.</p>
+     * went straight through, and only the armour stand of a visible armorstand
+     * body caught them. The collision rule of a team leaves the hits
+     * alone.</p>
      *
-     * <p>Only the mannequin goes in, the armour stand of type 1 is left as it
-     * always was. A body that is removed leaves the team by itself, the server
-     * takes every entity out of its team when it goes.</p>
+     * <p>Only the mannequin goes in, the armour stand of the armorstand body
+     * is left as it always was. A body that is removed leaves the team by
+     * itself, the server takes every entity out of its team when it goes.</p>
      */
     private void refreshBodyTeam() {
         if (settings.getMovementSensitivity().allowsEntityPush()) {

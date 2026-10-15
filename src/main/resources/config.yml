@@ -32,6 +32,7 @@ camera-mode:
 
   # Block der Wand: barrier ist unsichtbar, glass zeigt sie (Luft oder ein Block, durch den man durchkommt, z. B. Wasser oder Gras = keine Grenze)
   # Ganze Blöcke bleiben stehen, Luft und halbe Blöcke (Stufen, Zäune, Tropfstein ...) werden ersetzt.
+  # Die Wand steht nur, wo die Kamera hinkommt: bei einem See z. B. an der Oberfläche, nicht am Grund und nicht im Fels.
   border-block: barrier
 
   # Block der Wand in Wasser, Lava und Pulverschnee (ein Block, durch den man durchkommt, z. B. water = wie border-block)
@@ -39,7 +40,9 @@ camera-mode:
   border-block-lava: magma_block
   border-block-powder-snow: snow_block
 
-  # Wie weit um den Spieler die Wand erscheint, in Blöcken (0 = keine Grenze, höchstens 16)
+  # Wie weit um den Spieler die Wand erscheint, in Blöcken (0 = keine Grenze)
+  # Höchstens so weit, wie der Server die Welt schickt: view-distance aus server.properties mal 16.
+  # Ein großer Radius kostet mehr: Die Wand wächst mit der Fläche der Grenze im Umkreis.
   border-radius: 5
 
   # Wer den Spieler im Cam-Modus sehen darf:
@@ -119,9 +122,9 @@ camera-mode:
 # Körper, der im Cam-Modus an der Stelle des Spielers bleibt
 body:
   # Art des Körpers:
-  #   1 = Rüstungsständer mit dem Kopf des Spielers
-  #   2 = Mannequin mit dem Skin des Spielers
-  type: 1
+  #   armorstand = Rüstungsständer mit dem Kopf des Spielers
+  #   mannequin  = Mannequin mit dem Skin des Spielers
+  type: armorstand
 
   # Name über dem Körper
   name-visible: true
@@ -143,16 +146,16 @@ body:
     # Größe (1 = wie ein Namensschild, 0.1 bis 10)
     scale: 1.0
 
-  # Körper sichtbar (false = unsichtbar, der Name bleibt; Typ 1 und 2 sind dann gleich)
+  # Körper sichtbar (false = unsichtbar, der Name bleibt; armorstand und mannequin sind dann gleich)
   visible: true
 
-  # Rüstung des Spielers am Körper zeigen (nur Optik, Typ: 1 zeigt keinen Helm, dort sitzt der Kopf.)
+  # Rüstung des Spielers am Körper zeigen (nur Optik, armorstand zeigt keinen Helm, dort sitzt der Kopf.)
   armor-visible: true
 
   # Wodurch sich der Körper verschieben lässt:
   #   0 = durch nichts, er steht fest
   #   1 = durch Schwerkraft, Wasser und Kolben
-  #   2 = zusätzlich durch Spieler und Mobs   (nur bei type: 2 oder visible: false, sonst gilt 1)
+  #   2 = zusätzlich durch Spieler und Mobs   (nur bei type: mannequin oder visible: false, sonst gilt 1)
   movement-sensitivity: 1
 
   # Erlaubte Bewegung in Blöcken, bevor der Cam-Modus endet

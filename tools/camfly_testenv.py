@@ -986,6 +986,8 @@ let spawned = false;
 let dead = false;
 // Was knock_start gerade mitschreibt, bis knock_stop es abholt.
 let knock = null;
+// Was watch_blocks gerade mitschreibt, bis watch_stop es abholt.
+let watched = null;
 
 const bot = mineflayer.createBot({
   host: process.env.CAMFLY_HOST || '127.0.0.1',
@@ -1006,6 +1008,11 @@ bot.on('death', () => { dead = true; out({ event: 'death' }); });
 bot.on('kicked', (reason) => out({ event: 'kicked', reason: String(reason) }));
 bot.on('error', (err) => out({ event: 'error', message: String(err && err.message || err) }));
 bot.on('end', (reason) => { out({ event: 'end', reason: String(reason) }); });
+bot.on('blockUpdate', (alt, neu) => {
+  if (!watched || !neu || !neu.position) return;
+  const folge = watched[`${neu.position.x},${neu.position.y},${neu.position.z}`];
+  if (folge) folge.push(neu.name);
+});
 
 function waitFor(check, timeout) {
   return new Promise((resolve) => {
@@ -1292,6 +1299,19 @@ async function handle(cmd) {
       const Vec3 = require('vec3');
       const block = bot.blockAt(new Vec3(cmd.x, cmd.y, cmd.z));
       return block ? { name: block.name, state: block.stateId } : { name: null };
+    }
+    case 'watch_blocks': {
+      // Jeden Block, den der Client an diesen Stellen bekommt, der Reihe
+      // nach - auch einen, der zwischen zwei Abfragen mit block_at schon
+      // wieder weg waere.
+      watched = {};
+      for (const [x, y, z] of cmd.cells) watched[`${x},${y},${z}`] = [];
+      return { ok: true };
+    }
+    case 'watch_stop': {
+      const log = watched;
+      watched = null;
+      return { log };
     }
     case 'activate_block': {
       // Rechtsklick auf einen Block. Was schiefgeht, kommt als Ergebnis
@@ -1915,33 +1935,33 @@ def set_option(env, key, value, section=None):
     set_options(env, [(key, value, section)])
 
 
-# Die beiden Koerpertypen, body.type: 1 ist ein Ruestungsstaender mit einem
-# unsichtbaren Mannequin darin, 2 ein Mannequin allein.
-KOERPERTYPEN = (1, 2)
+# Die beiden Koerpertypen, body.type: armorstand ist ein Ruestungsstaender mit
+# einem unsichtbaren Mannequin darin, mannequin ein Mannequin allein.
+KOERPERTYPEN = ("armorstand", "mannequin")
 
 
 @contextlib.contextmanager
 def mit_koerpertyp(env, typ):
     """Fuer die Dauer des Blocks mit diesem body.type, danach wieder mit der
-    Voreinstellung 1. Jede Probe darin traegt den Typ in ihrem Namen, sonst
-    stuende in der Zusammenfassung zweimal dasselbe da."""
-    set_option(env, "type", str(typ))
+    Voreinstellung armorstand. Jede Probe darin traegt den Typ in ihrem Namen,
+    sonst stuende in der Zusammenfassung zweimal dasselbe da."""
+    set_option(env, "type", typ)
     FIND.zusatz = f" (Koerpertyp {typ})"
     try:
         yield
     finally:
         FIND.zusatz = ""
-        set_option(env, "type", "1")
+        set_option(env, "type", "armorstand")
 
 
 def fuer_beide_koerpertypen(env, bot, *abschnitte):
     """Dieselben Abschnitte einmal mit jedem Koerpertyp.
 
-    Was den Koerper trifft, trifft bei Typ 1 den Ruestungsstaender oder das
-    Mannequin darin, bei Typ 2 das Mannequin allein. Dass ein Treffer bei
-    beiden ankommt und bei beiden gleich weitergeht, sagt die Probe mit nur
-    einem von ihnen nicht: Bei Typ 2 flogen Pfeil, Dreizack, Windkugel und
-    Speerstich durch den Koerper hindurch, waehrend Typ 1 bestand.
+    Was den Koerper trifft, trifft bei armorstand den Ruestungsstaender oder
+    das Mannequin darin, bei mannequin das Mannequin allein. Dass ein Treffer
+    bei beiden ankommt und bei beiden gleich weitergeht, sagt die Probe mit
+    nur einem von ihnen nicht: Bei mannequin flogen Pfeil, Dreizack, Windkugel
+    und Speerstich durch den Koerper hindurch, waehrend armorstand bestand.
     """
     for typ in KOERPERTYPEN:
         with mit_koerpertyp(env, typ):
@@ -3608,22 +3628,22 @@ SCHIEBEN_ABSTAND = 0.3
 def koerpertyp_jetzt(env):
     """Der body.type, der gerade in der Konfiguration des Testservers steht."""
     text = (env.server / "plugins" / "CamFly" / "config.yml").read_text(encoding="utf-8")
-    treffer = re.search(r"(?m)^\s*type:\s*(\d+)", text)
-    return int(treffer.group(1)) if treffer else None
+    treffer = re.search(r"(?m)^\s*type:\s*(\S+)", text)
+    return treffer.group(1) if treffer else None
 
 
 def schieben_checks(env, bot):
     """Ob ein Mob den Koerper schiebt, nach body.movement-sensitivity.
 
     Auf Stufe 1 schiebt ihn niemand, auf Stufe 2 schieben ihn Spieler und
-    Mobs - aber nur, wo das Mannequin selbst der Koerper ist, bei Typ 2. Beim
-    Ruestungsstaender von Typ 1 faellt Stufe 2 auf Stufe 1 zurueck.
+    Mobs - aber nur, wo das Mannequin selbst der Koerper ist, bei mannequin.
+    Beim Ruestungsstaender von armorstand faellt Stufe 2 auf Stufe 1 zurueck.
 
     Vom Schieben haelt das Plugin das Mannequin mit dem Team cam_body ab und
     nicht mehr damit, dass es nicht kollidiert: Daran liess der Server auch
     Pfeil, Dreizack, Windkugel und Speerstich vorbeigehen. Diese Probe haelt
     fest, dass das Team das Schieben genauso abhaelt. Ihre Gegenprobe ist
-    Stufe 2 mit Typ 2 - schiebt das Schwein dort nicht, sagt "schiebt nicht"
+    Stufe 2 mit mannequin - schiebt das Schwein dort nicht, sagt "schiebt nicht"
     auch sonst nichts.
 
     Geschoben wird mit einem Schwein, das sich nicht von der Stelle ruehrt:
@@ -3669,7 +3689,7 @@ def schieben_checks(env, bot):
     try:
         probe(1, False)
         set_option(env, "movement-sensitivity", "2")
-        probe(2, typ == 2)
+        probe(2, typ == "mannequin")
     finally:
         try:
             console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
@@ -4090,7 +4110,7 @@ NAME_UEBER_MANNEQUIN = 1.8 + 0.275
 # Die Schalter des Namens stehen mit demselben Namen auch unter camera-mode,
 # fuer den Namen ueber dem Kamera-Spieler - deshalb mit Abschnitt.
 NAME_VOREINSTELLUNG = [
-    ("type", "1"), ("visible", "true"), ("name-visible", "true", "body"),
+    ("type", "armorstand"), ("visible", "true"), ("name-visible", "true", "body"),
     ("color", "yellow", "body"), ("through-walls", "false", "body"),
     ("view-distance", "64", "body"), ("background", "true", "body"),
     ("shadow", "false", "body"), ("scale", "1.0", "body"),
@@ -4179,7 +4199,10 @@ def name_checks(env, bot):
         return cam_on(bot)
 
     try:
-        # --- Voreingestellt: Typ 1, sichtbar ---
+        # --- Voreingestellt: armorstand, sichtbar ---
+        text = (env.server / "plugins" / "CamFly" / "config.yml").read_text(encoding="utf-8")
+        FIND.test("Voreingestellt steht body.type: armorstand da",
+                  re.search(r"(?m)^\s*type:\s*armorstand\s*$", text) is not None, "")
         if not FIND.test("/cam startet fuer den Namenstest", start(), ""):
             return
         FIND.test("Der Name steht als TextDisplay ueber dem Ruestungsstaender, "
@@ -4224,7 +4247,7 @@ def name_checks(env, bot):
         FIND.test("Der Name wird mit dem Koerper eingesammelt", not name_da(bot), "")
 
         # --- Unsichtbar: bei beiden Typen ein einziges Mannequin ---
-        for typ in ("1", "2"):
+        for typ in KOERPERTYPEN:
             set_options(env, [("type", typ), ("visible", "false")])
             if not FIND.test(f"/cam startet mit type: {typ}, visible: false", start(), ""):
                 continue
@@ -4246,8 +4269,8 @@ def name_checks(env, bot):
                                                        "distance=..6]") == 0, "")
 
         # --- Sichtbares Mannequin: der Name ueber ihm, nicht an ihm ---
-        set_options(env, [("type", "2"), ("visible", "true")])
-        if FIND.test("/cam startet mit type: 2", start(), ""):
+        set_options(env, [("type", "mannequin"), ("visible", "true")])
+        if FIND.test("/cam startet mit type: mannequin", start(), ""):
             FIND.test("Ueber dem sichtbaren Mannequin steht der Name als TextDisplay",
                       name_ueber(bot, "mannequin", NAME_UEBER_MANNEQUIN), "")
             eigener = server_says(bot, "/execute if data entity @e[type=minecraft:mannequin,"
@@ -4258,8 +4281,30 @@ def name_checks(env, bot):
             cam_off(bot)
             time.sleep(1.0)
 
+        # --- Die alten Zahlen und ein unbekannter Wert ---
+        # body.type hiess frueher 1 und 2. Eine alte config.yml traegt das
+        # noch und meint damit dasselbe, ohne dass es gemeldet wird. Was
+        # keins von allem ist, wird gemeldet und ist ein Ruestungsstaender.
+        for typ, staender_soll, gemeldet_soll in (("2", 0, False), ("1", 1, False),
+                                                   ("kiste", 1, True)):
+            vorher = len(server_log(env))
+            set_options(env, [("type", typ), ("visible", "true")])
+            gemeldet = "Unknown value for body.type" in strip_colors(server_log(env)[vorher:])
+            if not FIND.test(f"/cam startet mit type: {typ}", start(), ""):
+                continue
+            staender = anzahl(bot, "@e[type=minecraft:armor_stand,distance=..3]")
+            puppen = anzahl(bot, "@e[type=minecraft:mannequin,distance=..3]")
+            cam_off(bot)
+            time.sleep(1.0)
+            koerper = "ein Mannequin" if staender_soll == 0 else "ein Ruestungsstaender"
+            FIND.test(f"type: {typ} ist {koerper}"
+                      + (" und wird gemeldet" if gemeldet_soll else ", ohne Meldung"),
+                      staender == staender_soll and puppen == 1 and gemeldet == gemeldet_soll,
+                      f"{staender} Ruestungsstaender, {puppen} Mannequins, "
+                      f"{'gemeldet' if gemeldet else 'nicht gemeldet'}")
+
         # --- Die Schalter unter body.name ---
-        set_options(env, [("type", "1"), ("color", "red", "body"), ("through-walls", "true", "body"),
+        set_options(env, [("type", "armorstand"), ("color", "red", "body"), ("through-walls", "true", "body"),
                           ("view-distance", "32", "body"), ("background", "false", "body"),
                           ("shadow", "true", "body"), ("scale", "2.0", "body")])
         if FIND.test("/cam startet mit geaenderten Schaltern fuer den Namen", start(), ""):
@@ -5113,6 +5158,20 @@ def medium_start(bot, wo, heim):
     return lief, gesagt
 
 
+def kurz_verlauf(folge):
+    """Was der Client nacheinander an einem Block bekam, zusammengefasst: G
+    fuer blaues Glas, W fuer Wasser, . fuer Luft, je mit der Zahl
+    hintereinander - beim Wasser ist jede Stufe, die es sinkt, eine."""
+    teile = []
+    for name in folge:
+        zeichen = {"blue_stained_glass": "G", "water": "W", "air": "."}.get(name, f"<{name}>")
+        if teile and teile[-1][0] == zeichen:
+            teile[-1][1] += 1
+        else:
+            teile.append([zeichen, 1])
+    return " ".join(f"{zeichen}{n}" for zeichen, n in teile)
+
+
 def medium_checks(env, bot):
     """Die Schalter allow_lava_flight, allow_water_flight und
     allow_powder_snow_flight unter camera-mode.
@@ -5123,7 +5182,10 @@ def medium_checks(env, bot):
     border-mode: barrier, der Voreinstellung, steht an der Kante zudem eine
     Wand - Magma, blaues Glas und Schnee -, an der ein echter Client landet,
     ohne dass etwas abgebrochen werden muss; das prueft der Fall auf die Lava
-    am Schluss, samt der Gegenprobe mit push-back.
+    am Schluss, samt der Gegenprobe mit push-back. Die Wand steht nur, wo die
+    Kamera hinkommt: Am Grund des Beckens grenzt das Wasser nur an Glas, Gras
+    und Wasser und bleibt Wasser - bis darunter eine Stufe liegt, in der die
+    Kamera stehen koennte.
 
     Aufgebaut wird viererlei, alles neben dem Testplatz:
       * ein Becken aus Glas, drei Bloecke tief voll Wasser, oben offen,
@@ -5179,6 +5241,14 @@ def medium_checks(env, bot):
     # ihre oberste Lage, der Pulverschnee seine Seite zum Testplatz hin.
     lava_oben = (bx - 8, by + 2, bz)
     wasser_oben = (bx + 8, by + 2, bz)
+    wasser_unten = (bx + 8, by, bz)
+    unter_dem_wasser = (bx + 8, by - 1, bz)
+    # Ein Rahmen aus Stein, eine Lage hoch, oestlich vom Becken: Darin laeuft
+    # Wasser aus einer Quelle in der Mitte aus und wieder ab.
+    rahmen = f"{bx + 12} {by} {bz - 3} {bx + 18} {by} {bz + 3}"
+    im_rahmen = f"{bx + 13} {by} {bz - 2} {bx + 17} {by} {bz + 2}"
+    quelle = (bx + 15, by, bz)
+    abfluss = [(bx + 14, by, bz), (bx + 15, by, bz + 1), (bx + 16, by, bz - 1), (bx + 15, by, bz + 2)]
     pulverschnee_vorn = (bx, by + 1, bz + 6)
     ueber_der_lava = [(bx - 7.5, by + 6, bz + 0.5), (bx - 7.5, oben + 1.5, bz + 0.5)]
     zum_wasser = [(bx - 7.5, by + 6, bz + 0.5), (bx + 8.5, by + 6, bz + 0.5),
@@ -5195,9 +5265,11 @@ def medium_checks(env, bot):
         return bot.call("block_at", x=zelle[0], y=zelle[1], z=zelle[2]).get("name")
 
     def aufraeumen():
-        for bereich in (becken, lavabecken, wuerfel, decke):
+        for bereich in (becken, lavabecken, wuerfel, decke, rahmen):
             bot.chat(f"/fill {bereich} minecraft:air")
             time.sleep(0.5)
+        bot.chat("/setblock {} {} {} minecraft:grass_block".format(*unter_dem_wasser))
+        time.sleep(0.3)
 
     def zeige(ergebnis):
         if ergebnis is None:
@@ -5370,7 +5442,48 @@ def medium_checks(env, bot):
             gelandet = bot.server_pos()
             gesagt = medium_gesagt(bot, since)
             glas = wand_sicht(zum_wasser, wasser_oben)
+            # Der Bot schwebt ueber dem Becken, der Grund liegt in Reichweite.
+            # Neben ihm ist nichts, worin die Kamera sein koennte: Glas, Gras
+            # und Wasser. Eine Stufe darunter aendert das - die Wand sieht
+            # beim naechsten Auffrischen nach, was um sie herum steht.
+            nacheinander = {"Gras": bot.call("block_at", x=wasser_unten[0], y=wasser_unten[1],
+                                              z=wasser_unten[2]).get("name")}
+            for setzen, name in (("stone_slab", "Stufe"), ("grass_block", "wieder Gras")):
+                bot.chat("/setblock {} {} {} minecraft:{}".format(*unter_dem_wasser, setzen))
+                time.sleep(2.5)
+                nacheinander[name] = bot.call("block_at", x=wasser_unten[0], y=wasser_unten[1],
+                                              z=wasser_unten[2]).get("name")
             schnee = wand_sicht(zum_pulverschnee, pulverschnee_vorn)
+            # Wasser laeuft aus und wieder ab, der Bot schwebt darueber. Jede
+            # Stufe, die es sinkt, schickt der Server dem Client anstelle der
+            # Wand. Die Wand wartet 10 Ticks, ob es so bleibt - beim
+            # Abfliessen bleibt es nie so, und dazwischen blitzt keine Wand
+            # mehr auf, weder Glas noch die Barriere fuer die Luft.
+            bot.chat(f"/fill {rahmen} minecraft:stone")
+            time.sleep(0.5)
+            bot.chat(f"/fill {im_rahmen} minecraft:air")
+            time.sleep(0.5)
+            # Erst senkrecht hinauf: schraeg vom Pulverschnee aus bliebe
+            # der Bot am Rand des Beckens haengen.
+            medium_fliegen(bot, (bx + 0.5, by + 6, bz + 4.5), (quelle[0] + 0.5, by + 6, bz + 0.5),
+                           (quelle[0] + 0.5, by + 3, bz + 0.5))
+            bot.chat("/setblock {} {} {} minecraft:water".format(*quelle))
+            time.sleep(2.5)
+            vor_dem_abfluss = [bot.call("block_at", x=x, y=y, z=z).get("name") for x, y, z in abfluss]
+            bot.call("watch_blocks", cells=[list(zelle) for zelle in abfluss])
+            bot.chat("/setblock {} {} {} minecraft:air".format(*quelle))
+            time.sleep(3.0)
+            mitgeschrieben = bot.call("watch_stop").get("log") or {}
+            verlauf = {zelle: mitgeschrieben.get("{},{},{}".format(*zelle), []) for zelle in abfluss}
+            am_ende = [bot.call("block_at", x=x, y=y, z=z).get("name") for x, y, z in abfluss]
+            # Glas, ehe der Server dort etwas schickt, wechselt nur Glas gegen
+            # Glas - so frischt die Wand sich alle paar Sekunden auf. Danach
+            # blitzt es auf.
+            danach_anders = []
+            for zelle, folge in verlauf.items():
+                Log.detail(f"Abfluss bei {zelle}: {kurz_verlauf(folge)}")
+                erst = next((i for i, g in enumerate(folge) if g != "blue_stained_glass"), len(folge))
+                danach_anders += [g for g in folge[erst:] if g not in ("water", "air")]
             cam_off(bot)
             FIND.test("allow_lava_flight: false - mit border-mode: barrier landet die "
                       "Kamera auf der Lava wie auf einem Block, ohne zurueckgesetzt zu "
@@ -5384,6 +5497,19 @@ def medium_checks(env, bot):
                       magma == "magma_block" and glas == "blue_stained_glass"
                       and schnee == "snow_block",
                       f"Lava -> {magma}, Wasser -> {glas}, Pulverschnee -> {schnee}")
+            FIND.test("Abfliessendes Wasser zeigt erst Glas, dann nur noch Wasser und Luft - "
+                      "die Wand blitzt dazwischen nicht wieder auf",
+                      all(g == "blue_stained_glass" for g in vor_dem_abfluss)
+                      and all("water" in folge for folge in verlauf.values()) and not danach_anders
+                      and all(g == "air" for g in am_ende),
+                      f"vorher {vor_dem_abfluss}, dazwischen {sorted(set(danach_anders)) or 'nichts'}, "
+                      f"am Ende {am_ende}")
+            FIND.test("Am Grund des Beckens, wo die Kamera nicht hinkommt, bleibt das "
+                      "Wasser Wasser; liegt darunter eine Stufe, wird es gleich zur "
+                      "Wand, und ist sie weg, wieder Wasser",
+                      nacheinander == {"Gras": "water", "Stufe": "blue_stained_glass",
+                                       "wieder Gras": "water"},
+                      "; ".join(f"{name}: {g}" for name, g in nacheinander.items()))
 
         # Gegenprobe mit push-back: keine Wand, die Lava bleibt Lava, und wer
         # hineinfaellt, wird zurueckgesetzt.
@@ -5423,7 +5549,7 @@ def medium_checks(env, bot):
 FALL_HOEHE = 24
 
 # Das unsichtbare Mannequin im Koerper, das die Treffer nimmt - bei
-# Koerpertyp 1, der Voreinstellung, steht es im Ruestungsstaender.
+# Koerpertyp armorstand, der Voreinstellung, steht es im Ruestungsstaender.
 MANNEQUIN = "@e[type=minecraft:mannequin,distance=..12,sort=nearest,limit=1]"
 
 
@@ -5639,6 +5765,10 @@ GRENZ_LAUF_MS = 3500
 # in einer Probe hinkommt; die Voreinstellung 100 steht danach wieder da.
 GRENZ_ABSTAND = 6
 
+# Der groesste border-radius, den der Testserver annimmt: so weit, wie er bei
+# view-distance=2 die Welt schickt, zwei Chunks zu 16 Bloecken.
+GROSSER_RADIUS = 32
+
 # Der zweite Spieler, der nachsieht, ob die Wand nur beim Kamera-Spieler
 # steht. Hoechstens 16 Zeichen, und nicht der Name des ersten Bots - sonst
 # kickt der eine den anderen mit duplicate_login.
@@ -5719,6 +5849,10 @@ def border_checks(env, bot):
       * false, Luft als border-block und border-radius 0: keine Grenze.
       * ein unbekannter Block und ein zu grosser Radius werden gemeldet, und
         die Wand steht mit dem, was dafuer genommen wird.
+      * ein grosser Radius, so weit wie der Server die Welt schickt: die
+        Wand steht vom Koerper aus rundum, wo sie mit 5 noch nicht steht,
+        ein geaenderter Block in ihr wird gleich wieder zur Wand, der Bot
+        bleibt an ihr stehen, und danach ist sie ganz weg.
       * an der Wand des Bioms, die eben ist und deshalb Platz fuer Proben
         hat: Wasser, Lava und Pulverschnee zeigt sie voreingestellt als
         blaues Glas, Magma und Schnee, halbe Bloecke ersetzt sie, ganze
@@ -5854,7 +5988,7 @@ def border_checks(env, bot):
 
         # --- was nicht passt, wird gemeldet ---
         vorher = len(server_log(env))
-        set_options(env, [("border-block", "diamond"), ("border-radius", "99")])
+        set_options(env, [("border-block", "diamond"), ("border-radius", "999")])
         neu = strip_colors(server_log(env)[vorher:])
         FIND.test("Ein unbekannter border-block wird gemeldet",
                   "camera-mode.border-block: 'diamond'" in neu, "")
@@ -5864,6 +5998,64 @@ def border_checks(env, bot):
         FIND.test("Mit dem Ersatz fuer beides steht die Wand trotzdem",
                   drin(ergebnis) and ergebnis[1] == 0, grenz_zeige(ergebnis, heim))
         cam_off(bot)
+
+        # --- ein grosser border-radius ---
+        # Die Wand auf max-distance liegt vom Koerper aus rundum sechs Bloecke
+        # weit, nach oben fuenf: Die Ecke des Blocks, die am weitesten weg
+        # liegt, zaehlt. Ein Radius von 5 reicht vom Koerper aus nicht hin,
+        # GROSSER_RADIUS schon - in jede Richtung, ohne dass der Bot hinlaeuft.
+        bot.chat(f"/fill {bx - 7} {by} {bz - 7} {bx + 7} {by + 6} {bz + 7} minecraft:air")
+        time.sleep(0.5)
+        rundum = (("Osten", (bx + GRENZ_ABSTAND, by, bz)),
+                  ("Westen", (bx - GRENZ_ABSTAND, by, bz)),
+                  ("oben", (bx, by + GRENZ_ABSTAND - 1, bz)))
+        westen = rundum[1][1]
+        set_options(env, [("border-block", "barrier"), ("border-radius", "5")])
+        hinstellen(bot, *heim)
+        if cam_on(bot):
+            time.sleep(1.5)
+            gesehen = sieht(westen)
+            FIND.test("border-radius: 5 - am Koerper sieht der Bot die Wand auf "
+                      "max-distance noch nicht", gesehen != "barrier", f"sieht: {gesehen}")
+        cam_off(bot)
+        vorher = len(server_log(env))
+        set_option(env, "border-radius", str(GROSSER_RADIUS))
+        neu = strip_colors(server_log(env)[vorher:])
+        FIND.test(f"border-radius: {GROSSER_RADIUS} - so weit, wie der Server die Welt "
+                  f"schickt, wird nicht gemeldet", "border-radius" not in neu, "")
+        hinstellen(bot, *heim)
+        if FIND.test(f"/cam startet mit border-radius: {GROSSER_RADIUS}", cam_on(bot), ""):
+            time.sleep(1.5)
+            gesehen = {name: sieht(zelle) for name, zelle in rundum}
+            FIND.test(f"border-radius: {GROSSER_RADIUS} - die Wand steht rundum auf "
+                      f"max-distance, ohne dass der Bot hinlaeuft",
+                      all(g == "barrier" for g in gesehen.values()),
+                      "; ".join(f"{name}: {g}" for name, g in gesehen.items()))
+            # Aendert sich der echte Block, schickt der Server ihn dem Client
+            # und ueberschreibt damit die Wand. Das Auffrischen stellt sie
+            # wieder hin - ausser auf einem ganzen Block, der bleibt stehen.
+            x, y, z = westen
+            nacheinander = {}
+            for setzen, name in (("stone_slab", "Stufe"), ("stone", "Stein"), ("air", "Luft")):
+                bot.chat(f"/setblock {x} {y} {z} minecraft:{setzen}")
+                time.sleep(2.5)
+                nacheinander[name] = sieht(westen)
+            FIND.test("Aendert sich ein Block der Wand in der Welt, steht sie dort gleich "
+                      "wieder: auf einer Stufe die Wand, ein ganzer Block bleibt stehen, "
+                      "und ist er weg, steht dort wieder die Wand",
+                      nacheinander == {"Stufe": "barrier", "Stein": "stone", "Luft": "barrier"},
+                      "; ".join(f"{name}: {g}" for name, g in nacheinander.items()))
+        cam_off(bot)
+        ergebnis = grenz_lauf(bot, heim)
+        FIND.test(f"border-radius: {GROSSER_RADIUS} - die Kamera bleibt an max-distance "
+                  f"stehen, ohne zurueckgesetzt zu werden",
+                  drin(ergebnis) and ergebnis[1] == 0, grenz_zeige(ergebnis, heim))
+        cam_off(bot)
+        time.sleep(1.0)
+        nachher = {name: sieht(zelle) for name, zelle in rundum}
+        FIND.test(f"border-radius: {GROSSER_RADIUS} - nach dem Cam-Modus ist die ganze "
+                  f"Wand beim Spieler wieder weg", all(g == "air" for g in nachher.values()),
+                  "; ".join(f"{name}: {g}" for name, g in nachher.items()))
 
         # --- ein verbotenes Biom, und was die Wand dort ersetzt ---
         set_options(env, [("max-distance", "100.0"), ("border-block", "barrier"),

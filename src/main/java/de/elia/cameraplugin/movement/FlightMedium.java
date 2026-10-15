@@ -8,7 +8,9 @@ import org.bukkit.block.Block;
 import org.bukkit.block.data.Waterlogged;
 import org.bukkit.entity.Player;
 
+import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -51,6 +53,13 @@ public enum FlightMedium {
             Material.SEAGRASS, Material.TALL_SEAGRASS);
 
     /**
+     * Which kinds of block can stand in water at all, see
+     * {@link #fills(Block)}. Asked once per kind and then kept: whether a
+     * block can be waterlogged belongs to its kind and never changes.
+     */
+    private static final Map<Material, Boolean> WATERLOGGABLE = new EnumMap<>(Material.class);
+
+    /**
      * How far the body is drawn in on every side before its blocks are looked
      * up, in blocks. Without it a block the body only touches from outside
      * would count as reached into: the ground it stands on, or the water it
@@ -87,12 +96,21 @@ public enum FlightMedium {
 
     /** Whether this block is filled with it. */
     public boolean fills(Block block) {
-        Material type = block.getType();
+        return fills(block, block.getType());
+    }
+
+    /**
+     * {@link #fills(Block)} for a block whose kind has been read already:
+     * every read of it looks the block up in the world again.
+     */
+    boolean fills(Block block, Material type) {
         return switch (this) {
             case LAVA -> type == Material.LAVA;
-            // Air is sorted out first: around a camera almost everything is
-            // air, and getBlockData creates a new object for every block.
+            // Only a kind that can be waterlogged gets its block data read:
+            // getBlockData creates a new object for every block, and the
+            // wall asks about whole sections of stone at a time.
             case WATER -> ALWAYS_IN_WATER.contains(type) || (!type.isAir()
+                    && WATERLOGGABLE.computeIfAbsent(type, kind -> kind.createBlockData() instanceof Waterlogged)
                     && block.getBlockData() instanceof Waterlogged waterlogged && waterlogged.isWaterlogged());
             case POWDER_SNOW -> type == Material.POWDER_SNOW;
         };
