@@ -22,6 +22,7 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.MultipleFacing;
 import org.bukkit.boss.BarColor;
+import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.EnumMap;
@@ -93,6 +94,10 @@ public final class CamSettings {
     private final CamAreaRules camAreaRules;
     /** Whether a portal lets a camera player through, the section {@code portals}. */
     private final PortalRules portalRules = new PortalRules();
+    /** Whether a teleport by a command ends camera mode, {@code teleports.command}. */
+    private boolean commandTeleportEndsCam;
+    /** Whether a teleport by another plugin ends camera mode, {@code teleports.plugin}. */
+    private boolean pluginTeleportEndsCam;
     private VisibilityMode playerVisibilityMode;
     private boolean allowInvisibilityPotion;
     private GlowMode glowMode;
@@ -267,6 +272,8 @@ public final class CamSettings {
         camSafetyDelay = config.getInt("cam-safety.delay", 5, 0);
         camAreaRules.load(config);
         portalRules.load(config);
+        commandTeleportEndsCam = config.getBoolean("teleports.command", true);
+        pluginTeleportEndsCam = config.getBoolean("teleports.plugin", true);
 
         mirrorKnockback = config.getBoolean("mirror-damage.knockback", true);
         // Only for measuring, so left out of config.yml on purpose: whoever
@@ -790,6 +797,22 @@ public final class CamSettings {
 
     public PortalRules getPortalRules() {
         return portalRules;
+    }
+
+    /**
+     * Whether a teleport of this kind ends camera mode, see
+     * {@link de.elia.cameraplugin.teleport.CamTeleportGuard}:
+     * {@code teleports.command} for a command such as {@code /tp},
+     * {@code teleports.plugin} for another plugin such as one for
+     * {@code /tpa}. Portals, ender pearls and the like have rules of their
+     * own or cannot be used in camera mode at all.
+     */
+    public boolean teleportEndsCamMode(TeleportCause cause) {
+        return switch (cause) {
+            case COMMAND -> commandTeleportEndsCam;
+            case PLUGIN -> pluginTeleportEndsCam;
+            default -> false;
+        };
     }
 
     // ----------------------------------------------------------- mirror-damage

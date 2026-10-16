@@ -107,6 +107,10 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
 * **`camera-particles.particles-per-tick: 0`** wird in die Testkonfiguration
   geschrieben. Sonst stirbt jeder Bot in Sichtweite eines Cam-Spielers am
   Partikel-Paket: `minecraft-data` 26.1 kennt die 26.2-IDs nicht.
+* **`teleports.command: false`** steht ebenso in der Testkonfiguration. Die
+  Abschnitte stellen die Kamera mit `/tp` an ihren Platz, und mit der
+  Voreinstellung `true` wäre sie danach keine Kamera mehr. Nur der
+  Teleporttest schaltet den Schalter für sich ein und am Ende wieder aus.
 * **Der Bot-Name steht fest im Skript.** Über `BOT_NAME=... nohup ...` geht die
   Variable verloren, der zweite Bot joint als „TestBot" und kickt den ersten mit
   `duplicate_login`.
@@ -296,6 +300,19 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   Aufgeräumt wird erst, nachdem der Bot wieder hingegangen ist: Was stehen
   geblieben ist, liegt in einem Chunk, den sonst niemand lädt, und `/kill`
   käme nicht an.
+* **Für `teleports.plugin` bringt der Server ein Hilfsplugin mit,
+  `CamFlyTpaHelfer`.** Vanilla `/tp` meldet sich als Befehl, ein tpa-Plugin
+  teleportiert über `player.teleport()` und meldet sich als Plugin - ohne ein
+  zweites Plugin ließe sich das gar nicht prüfen. Der Schritt `server` baut
+  es aus dem Quelltext im Skript gegen paper-api; ohne den Schritt
+  `paperapi` fehlt es, und die Proben dazu fallen mit diesem Hinweis durch.
+  Von der Konsole: `plugintp <spieler> <zu-spieler>` oder
+  `plugintp <spieler> <x> <y> <z>`.
+* **Wer zur Kamera teleportiert wird, bekommt vorher Sanften Fall.** Die
+  Kamera steht sechs Blöcke hoch. Käme er bei ihr in der Luft an statt beim
+  Körper, fiele er ohne den Effekt in einer Sekunde herunter und stünde bei
+  der Frage ohnehin am Körper - die Probe bestand so auch ohne das Plugin.
+  Gefragt wird deshalb eine halbe Sekunde nach dem Teleport.
 * **`nether` steht zweimal in der Konfiguration**, unter `portals` und unter
   `cam-area.dimensions`. `set_option` nimmt dafür einen Abschnitt entgegen,
   sonst träfe das Muster beide Zeilen auf einmal. Genauso bei `actionbar-on`
@@ -1010,8 +1027,14 @@ geladen, Körper und Name stehen weiter, und `/cam` räumt danach beide
 Körpertypen weg; danach lässt das Plugin den Chunk wieder los · ein Körper
 mit der Marke des Plugins, den ein Absturz in einem entladenen Chunk
 zurückgelassen hat, verschwindet, sobald der Chunk geladen wird, ein
-Rüstungsständer ohne die Marke bleibt stehen · Server-Log ohne Fehler des
-Plugins.
+Rüstungsständer ohne die Marke bleibt stehen · wer im Cam-Modus von einem
+Plugin wie `/tpa` oder mit `/tp` teleportiert wird, ist danach heraus, steht
+am Ziel, hat seine Sachen wieder, sein Körper ist weg, und die Meldung
+kommt · wer zu einer Kamera in der Luft teleportiert wird, landet bei ihrem
+Körper, ihr Cam-Modus endet, und die Meldung nennt, wer kam · mit
+`teleports.plugin: false` und `teleports.command: false` bleibt der
+Kamera-Spieler im Cam-Modus, und wer zu ihm kommt, kommt bei der Kamera an ·
+Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
 Arbeitsordner.

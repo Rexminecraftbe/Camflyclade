@@ -220,6 +220,25 @@ public final class CameraMode {
     }
 
     public void exitCameraMode(Player player) {
+        exitCameraMode(player, true);
+    }
+
+    /**
+     * Ends camera mode for a player a command or another plugin is
+     * teleporting away right now, see
+     * {@link de.elia.cameraplugin.teleport.CamTeleportGuard}. He is not put
+     * back at his body first: the teleport under way takes him on from where
+     * he is.
+     */
+    public void exitCameraModeForTeleport(Player player) {
+        exitCameraMode(player, false);
+    }
+
+    /**
+     * @param toBody whether he is put back where his body stands; only not
+     *               when a teleport carries him off anyway
+     */
+    private void exitCameraMode(Player player, boolean toBody) {
         CameraData cameraData = cameraPlayers.get(player.getUniqueId());
         NoCollisionTeam team = plugin.getNoCollisionTeam();
         if (cameraData == null) {
@@ -244,12 +263,15 @@ public final class CameraMode {
         // The name comes off before the teleport: while it sits on the
         // player as a passenger, Spigot turns the teleport down.
         plugin.getNameTag().stopFor(player);
-        // Teleport to the body first
-        player.teleport(body.getLocation());
+        if (toBody) {
+            plugin.getTeleportGuard().teleport(player, body.getLocation());
+        }
         plugin.getParticles().stopCameraParticles(player);
         plugin.getSightGlow().stopSightGlow(player);
         plugin.getActionBar().showActionBarOffMessage(player);
-        boolean standingInFire = plugin.getFireGuard().stopFor(player);
+        // Asked where he stands: at his body - or, carried off by a
+        // teleport, at the camera, whose fire he never stood in.
+        boolean standingInFire = plugin.getFireGuard().stopFor(player) && toBody;
         plugin.getGhastGuard().stopFor(player);
         plugin.getSulfurCubeGuard().stopFor(player);
         // After the teleport to the body: the wall may have stood in another

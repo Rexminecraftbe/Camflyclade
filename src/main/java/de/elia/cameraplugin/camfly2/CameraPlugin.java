@@ -35,6 +35,7 @@ import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.session.SessionListener;
 import de.elia.cameraplugin.start.StartChecks;
 import de.elia.cameraplugin.sulfurcube.CamSulfurCubeGuard;
+import de.elia.cameraplugin.teleport.CamTeleportGuard;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import de.elia.cameraplugin.visibility.CamVisibility;
 import org.bukkit.Bukkit;
@@ -82,6 +83,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final StartChecks startChecks = new StartChecks(settings, messages);
     private final CamMovementGuard movementGuard = new CamMovementGuard(this);
     private final CamBorderWall borderWall = new CamBorderWall(this);
+    private final CamTeleportGuard teleportGuard = new CamTeleportGuard(this);
     private final CameraMode cameraMode = new CameraMode(this);
 
     private CamFireGuard camFireGuard;
@@ -148,6 +150,9 @@ public final class CameraPlugin extends JavaPlugin {
                 startChecks,
                 new SessionListener(this),
                 movementGuard,
+                // Before the wall: a teleport that ends camera mode takes the
+                // wall down, and the wall then has nothing left to rebuild.
+                teleportGuard,
                 borderWall,
                 nameTag,
                 camSulfurCubeGuard,
@@ -369,6 +374,11 @@ public final class CameraPlugin extends JavaPlugin {
         cameraMode.exitCameraMode(player);
     }
 
+    /** Ends camera mode for a player being teleported away, see {@link CameraMode#exitCameraModeForTeleport}. */
+    public void exitCameraModeForTeleport(Player player) {
+        cameraMode.exitCameraModeForTeleport(player);
+    }
+
     public boolean isInCameraMode(Player player) {
         return cameraPlayers.contains(player.getUniqueId());
     }
@@ -468,5 +478,9 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamBorderWall getBorderWall() {
         return borderWall;
+    }
+
+    public CamTeleportGuard getTeleportGuard() {
+        return teleportGuard;
     }
 }

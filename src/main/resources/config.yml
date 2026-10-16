@@ -309,6 +309,18 @@ portals:
   # 0 = aus. Sollte zu portal-search-radius des Servers passen.
   forget-radius: 128
 
+# Teleports im Cam-Modus, z. B. /tpa, /tpahere, /tp, /home, /spawn:
+#   true  = der Cam-Modus endet. Wer im Cam-Modus teleportiert wird, kommt mit seinen Sachen am Ziel an.
+#           Landet ein anderer genau bei einer Kamera (z. B. /tpahere aus dem Cam-Modus), endet deren
+#           Cam-Modus, und er kommt bei ihrem Körper an statt in der Luft.
+#   false = der Spieler bleibt im Cam-Modus, nur die Kamera steht dann am Ziel
+teleports:
+  # Teleports durch Befehle wie /tp und /teleport (manche Plugins melden ihre auch so, z. B. EssentialsX)
+  command: true
+
+  # Teleports durch andere Plugins, z. B. /tpa, /tpahere, /home, /spawn, /warp
+  plugin: true
+
 # Treffer auf den Körper an den Spieler weitergeben
 mirror-damage:
   # Schaden für den Spieler:

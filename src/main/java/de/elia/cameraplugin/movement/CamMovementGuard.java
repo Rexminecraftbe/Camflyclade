@@ -404,7 +404,7 @@ public final class CamMovementGuard implements Listener {
         Location target = returnTarget(data, entry);
         // A name sitting on him would turn the teleport down.
         plugin.getNameTag().takeOffForTeleport(player);
-        player.teleport(target);
+        plugin.getTeleportGuard().teleport(player, target);
         // He may well have been set down in the portal he set out through.
         player.setPortalCooldown(PORTAL_COOLDOWN_TICKS);
         keepFlying(player);
