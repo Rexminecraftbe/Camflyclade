@@ -146,16 +146,9 @@ public final class CamAreaRules {
         readKeys(config, "cam-area.forbidden-biomes", DEFAULT_FORBIDDEN_BIOMES,
                 Registry.BIOME, forbiddenBiomes);
         structuresEnabled = config.getBoolean("cam-area.structures-enabled", false);
-        // The two lists used to be one, which was always measured by the box. A
-        // file that still carries it keeps saying what it said: its entries
-        // become the box list and nothing is measured by pieces until somebody
-        // fills that list himself.
-        List<String> onlyList = config.getStringList("cam-area.forbidden-structures", null);
-        readKeys(config, "cam-area.forbidden-structures-box",
-                onlyList != null ? onlyList : DEFAULT_BOX_STRUCTURES,
+        readKeys(config, "cam-area.forbidden-structures-box", DEFAULT_BOX_STRUCTURES,
                 Registry.STRUCTURE, boxStructures);
-        readKeys(config, "cam-area.forbidden-structures-components",
-                onlyList != null ? List.of() : DEFAULT_COMPONENT_STRUCTURES,
+        readKeys(config, "cam-area.forbidden-structures-components", DEFAULT_COMPONENT_STRUCTURES,
                 Registry.STRUCTURE, componentStructures);
         dropStructuresInBothLists(config);
         rememberedChunks = config.getInt("cam-area.structures-cache-chunks",

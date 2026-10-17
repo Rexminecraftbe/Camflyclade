@@ -66,7 +66,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final ConsoleLog log = new ConsoleLog(this);
     private final Messages messages = new Messages(this);
     private final ConfigFile configFile = new ConfigFile(this, log, messages);
-    private final CamSettings settings = new CamSettings(this, log, messages);
+    private final CamSettings settings = new CamSettings(this, messages);
     private final CameraPlayers cameraPlayers = new CameraPlayers();
 
     private final NoCollisionTeam noCollisionTeam = new NoCollisionTeam(settings, cameraPlayers);
@@ -292,6 +292,7 @@ public final class CameraPlugin extends JavaPlugin {
         if (camFireGuard != null) {
             camFireGuard.loadConfig(config);
         }
+        config.warnUnknownKeys(CamSettings.UNLISTED_KEYS);
         List<ConfigIssue> warnings = new ArrayList<>(config.getWarnings());
         warnings.addAll(messages.check());
         return warnings;

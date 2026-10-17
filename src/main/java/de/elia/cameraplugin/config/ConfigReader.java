@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.config;
 
+import org.bukkit.configuration.Configuration;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 
@@ -8,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * Reads the config file and writes down every value that does not fit.
@@ -36,6 +38,7 @@ public final class ConfigReader {
     private static final String EXPECTED_LIST = "config-expected-list";
     private static final String UNKNOWN_VALUE = "config-unknown-value";
     private static final String UNKNOWN_ENTRY = "config-unknown-entry";
+    private static final String UNKNOWN_KEY = "config-unknown-key";
     private static final String ENTRY_IN_BOTH_LISTS = "config-entry-in-both-lists";
     private static final String TOO_SMALL = "config-too-small";
     private static final String TOO_LARGE = "config-too-large";
@@ -242,9 +245,7 @@ public final class ConfigReader {
      * an entry that is neither - a whole section, say - is left out and
      * reported.
      *
-     * @param def what is used when the key is not in the file, {@code null}
-     *            being allowed so that the caller can tell a missing key from
-     *            an empty list
+     * @param def what is used when the key is not in the file
      */
     public List<String> getStringList(String path, List<String> def) {
         Object raw = config.get(path);
@@ -252,7 +253,7 @@ public final class ConfigReader {
             return def;
         }
         if (!(raw instanceof List<?> list)) {
-            warnWrongType(path, raw, EXPECTED_LIST, def == null ? "" : String.join(", ", def));
+            warnWrongType(path, raw, EXPECTED_LIST, String.join(", ", def));
             return def;
         }
         List<String> values = new ArrayList<>(list.size());
@@ -276,6 +277,45 @@ public final class ConfigReader {
                     Arrays.stream(type.getEnumConstants()).map(Enum::name).toList());
             warnUnknownValue(path, value, allowed, def.name());
             return def;
+        }
+    }
+
+    // -------------------------------------------------------------------- keys
+
+    /**
+     * Adds a note for every key in the file that the plugin does not know.
+     * Bukkit leaves such a key alone without a word, so a misspelt name, or
+     * one indented into the wrong section, would quietly leave its setting at
+     * the default - and so would a setting that has been renamed or dropped
+     * since the file was written.
+     *
+     * <p>Known are the keys of the config file built into the jar, which are
+     * the defaults of the file, and {@code unlisted}. An unknown section is one
+     * note, not one for every line in it.</p>
+     *
+     * @param unlisted keys the plugin reads although the built-in file leaves
+     *                 them out
+     */
+    public void warnUnknownKeys(Set<String> unlisted) {
+        Configuration known = config.getDefaults();
+        // Without the built-in file every key would look unknown.
+        if (known != null) {
+            warnUnknownKeys(config, "", known, unlisted);
+        }
+    }
+
+    private void warnUnknownKeys(ConfigurationSection section, String prefix,
+                                 Configuration known, Set<String> unlisted) {
+        for (String key : section.getKeys(false)) {
+            String path = prefix + key;
+            if (unlisted.contains(path)) {
+                continue;
+            }
+            if (!known.contains(path)) {
+                warnings.add(ConfigIssue.of(UNKNOWN_KEY).with("path", path));
+            } else if (known.isConfigurationSection(path) && section.isConfigurationSection(key)) {
+                warnUnknownKeys(section.getConfigurationSection(key), path + ".", known, unlisted);
+            }
         }
     }
 

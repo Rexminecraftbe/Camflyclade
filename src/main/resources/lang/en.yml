@@ -56,6 +56,7 @@ messages:
   config-too-large: "&cValue for {path} is too large: {value}. Using {max} instead."
   config-too-small: "&cValue for {path} is too small: {value}. Using {min} instead."
   config-unknown-entry: "&cUnknown entry in {path}: '{value}'. It is ignored."
+  config-unknown-key: "&cUnknown setting {path}. It is ignored, check its spelling and indentation."
   config-unknown-value: "&cUnknown value for {path}: '{value}'. Allowed: {allowed}. Using {used} instead."
   cooldown-available: "&aCam mode available again"
   cooldown-text: "You can start cam mode again in %time%."

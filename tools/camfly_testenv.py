@@ -2591,13 +2591,23 @@ def language_checks(env, bot):
         FIND.test("Sie faellt auf Englisch zurueck", said(start, "Cam mode activated"), shown(start))
         cam()
 
-        # --- Die alten Abschnitte in der config.yml ---
-        config.write_text(config_vorher + '\nmessages:\n  camera-on: "alt"\n', encoding="utf-8")
+        # --- Unbekannte Schluessel in der config.yml ---
+        # Ein vertippter Name, ein ganzer alter Abschnitt und mirror-damage.debug,
+        # das absichtlich nicht in der mitgelieferten config.yml steht.
+        text = re.sub(r"(?m)^(\s*)max-distance:", r"\g<1>max-distanse:", config_vorher, count=1)
+        text = re.sub(r"(?m)^mirror-damage:\n", "mirror-damage:\n  debug: false\n", text, count=1)
+        config.write_text(text + '\nmessages:\n  camera-on: "alt"\n', encoding="utf-8")
         vorher = len(server_log(env))
         console(env, "cam reload", pause=2)
-        FIND.test("Texte, die noch in der config.yml stehen, werden als nicht mehr gelesen gemeldet",
-                  'The sections "messages" and "message-settings" in config.yml are not read any more'
-                  in strip_colors(server_log(env)[vorher:]), "")
+        neu = strip_colors(server_log(env)[vorher:])
+        FIND.test("Ein vertippter Schluessel wird gemeldet",
+                  "Unknown setting camera-mode.max-distanse." in neu, "")
+        FIND.test("Texte, die noch in der config.yml stehen, werden als unbekannt gemeldet",
+                  "Unknown setting messages." in neu, "")
+        FIND.test("Ein unbekannter Abschnitt ist eine Meldung, nicht eine je Zeile darin",
+                  "messages.camera-on" not in neu, "")
+        FIND.test("mirror-damage.debug gilt nicht als unbekannt",
+                  "mirror-damage.debug" not in neu, "")
     finally:
         # Der Reload holt ihn auch aus dem Cam-Modus, falls eine Probe
         # mittendrin abgebrochen ist.
@@ -4376,12 +4386,11 @@ def name_checks(env, bot):
             cam_off(bot)
             time.sleep(1.0)
 
-        # --- Die alten Zahlen und ein unbekannter Wert ---
-        # body.type hiess frueher 1 und 2. Eine alte config.yml traegt das
-        # noch und meint damit dasselbe, ohne dass es gemeldet wird. Was
-        # keins von allem ist, wird gemeldet und ist ein Ruestungsstaender.
-        for typ, staender_soll, gemeldet_soll in (("2", 0, False), ("1", 1, False),
-                                                   ("kiste", 1, True)):
+        # --- Eine alte Zahl und ein unbekannter Wert ---
+        # body.type hiess frueher 1 und 2. Das wird nicht mehr gelesen: 2 ist
+        # wie jeder unbekannte Wert eine Meldung und ein Ruestungsstaender,
+        # kein Mannequin.
+        for typ in ("2", "kiste"):
             vorher = len(server_log(env))
             set_options(env, [("type", typ), ("visible", "true")])
             gemeldet = "Unknown value for body.type" in strip_colors(server_log(env)[vorher:])
@@ -4391,10 +4400,8 @@ def name_checks(env, bot):
             puppen = anzahl(bot, "@e[type=minecraft:mannequin,distance=..3]")
             cam_off(bot)
             time.sleep(1.0)
-            koerper = "ein Mannequin" if staender_soll == 0 else "ein Ruestungsstaender"
-            FIND.test(f"type: {typ} ist {koerper}"
-                      + (" und wird gemeldet" if gemeldet_soll else ", ohne Meldung"),
-                      staender == staender_soll and puppen == 1 and gemeldet == gemeldet_soll,
+            FIND.test(f"type: {typ} wird gemeldet und ist ein Ruestungsstaender",
+                      staender == 1 and puppen == 1 and gemeldet,
                       f"{staender} Ruestungsstaender, {puppen} Mannequins, "
                       f"{'gemeldet' if gemeldet else 'nicht gemeldet'}")
 
