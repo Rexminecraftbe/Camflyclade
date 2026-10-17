@@ -842,6 +842,94 @@ def stop_server(env, quiet=False):
     (env.server / "server.pgid").unlink(missing_ok=True)
 
 
+# Ein Hilfsplugin fuer den Testserver, das teleportiert wie ein tpa-Plugin:
+# ueber player.teleport(), also mit der Ursache PLUGIN. Vanilla /tp meldet
+# sich als COMMAND, und teleports.plugin liesse sich ohne ein zweites Plugin
+# gar nicht pruefen. Nur von der Konsole aus gebraucht:
+#   plugintp <spieler> <zu-spieler>
+#   plugintp <spieler> <x> <y> <z>
+TPA_HELFER_NAME = "CamFlyTpaHelfer"
+
+TPA_HELFER_JAVA = r'''
+package camflytest;
+
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
+
+public final class TpaHelfer extends JavaPlugin {
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (args.length != 2 && args.length != 4) {
+            return false;
+        }
+        Player wer = Bukkit.getPlayerExact(args[0]);
+        if (wer == null) {
+            sender.sendMessage("plugintp: kein Spieler " + args[0]);
+            return true;
+        }
+        Location ziel;
+        if (args.length == 2) {
+            Player zu = Bukkit.getPlayerExact(args[1]);
+            if (zu == null) {
+                sender.sendMessage("plugintp: kein Spieler " + args[1]);
+                return true;
+            }
+            ziel = zu.getLocation();
+        } else {
+            ziel = new Location(wer.getWorld(), Double.parseDouble(args[1]),
+                    Double.parseDouble(args[2]), Double.parseDouble(args[3]));
+        }
+        sender.sendMessage("plugintp: " + (wer.teleport(ziel) ? "ok" : "abgelehnt"));
+        return true;
+    }
+}
+'''
+
+TPA_HELFER_YML = f"""\
+name: {TPA_HELFER_NAME}
+version: 1.0
+main: camflytest.TpaHelfer
+api-version: '{MC_VERSION}'
+commands:
+  plugintp:
+    permission: camflytest.plugintp
+permissions:
+  camflytest.plugintp:
+    default: op
+"""
+
+
+def tpa_helfer_bauen(env, plugins):
+    """Das Hilfsplugin gegen paper-api uebersetzen und zu den Plugins legen.
+
+    Ohne paper-api (Schritt paperapi) bleibt es weg; die Proben, die es
+    brauchen, fallen dann mit diesem Hinweis durch.
+    """
+    ziel = plugins / f"{TPA_HELFER_NAME}.jar"
+    ziel.unlink(missing_ok=True)
+    if not env.paper_api_jars:
+        Log.warn(f"{TPA_HELFER_NAME} fehlt: ohne paper-api nicht zu bauen")
+        return
+    ordner = clean_dir(env.work / "tpa-helfer")
+    quelle = ordner / "TpaHelfer.java"
+    quelle.write_text(TPA_HELFER_JAVA, encoding="utf-8")
+    klassen = ordner / "classes"
+    klassen.mkdir()
+    proc = run([str(env.javac), "-nowarn", "--release", "25", "-cp", env.paper_api_cp,
+                "-d", str(klassen), str(quelle)], check=False, timeout=300)
+    if proc.returncode != 0:
+        Log.warn(f"{TPA_HELFER_NAME} liess sich nicht uebersetzen: {(proc.stdout or '').strip()[:300]}")
+        return
+    with zipfile.ZipFile(ziel, "w") as jar:
+        jar.writestr("plugin.yml", TPA_HELFER_YML)
+        for datei in klassen.rglob("*.class"):
+            jar.write(datei, datei.relative_to(klassen).as_posix())
+
+
 def prepare_server_files(env):
     env.server.mkdir(parents=True, exist_ok=True)
     (env.server / "eula.txt").write_text("eula=true\n", encoding="utf-8")
@@ -852,6 +940,7 @@ def prepare_server_files(env):
     if not env.plugin_jar.exists():
         raise RuntimeError("Kein gebautes Jar in artifacts/ - erst Schritt 'build'")
     shutil.copy2(env.plugin_jar, plugins / "CamFly.jar")
+    tpa_helfer_bauen(env, plugins)
 
     # Die Konfiguration kommt aus dem Quellordner. Aus target/classes zu lesen
     # waere eine Falle: Ein Lauf ohne den Schritt build faende dort die
@@ -865,6 +954,12 @@ def prepare_server_files(env):
     text, n = re.subn(r"(?m)^(\s*particles-per-tick:\s*).*$", r"\g<1>0", text)
     if n == 0:
         Log.warn("particles-per-tick nicht in der Konfiguration gefunden")
+    # /tp beendet den Cam-Modus nicht. Die Abschnitte stellen die Kamera mit
+    # /tp an ihren Platz, und mit teleports.command: true waere sie danach
+    # keine Kamera mehr. Nur teleport_checks schaltet ihn fuer sich ein.
+    text, n = replace_option(text, "command", "false", "teleports")
+    if n != 1:
+        Log.warn("teleports.command nicht in der Konfiguration gefunden")
     data_dir = plugins / "CamFly"
     data_dir.mkdir(exist_ok=True)
     (data_dir / "config.yml").write_text(text, encoding="utf-8")
@@ -6594,6 +6689,299 @@ def portal_checks(env, bot):
                           ("border-mode", "barrier")])
 
 
+# Wo der Koerper fuer den Test des unbewachten Chunks steht: auf dem Dach des
+# Nethers, weit weg von allem, was die anderen Abschnitte dort anfassen. Die
+# oberste Lage bei y=127 ist immer Grundgestein, darauf steht man ohne /fill.
+# Ein /forceload dort verfaelschte die Probe, es haelte den Chunk ja selbst.
+UNBEWACHT_KOERPER = (2000.5, 128, 2000.5)
+
+# Wohin der Bot derweil geht: in die Overworld, weit weg von allem anderen.
+UNBEWACHT_WEG = (6000.5, -60, 6000.5)
+
+# Wie lange er dort bleibt, in Sekunden. Paper laesst einen Chunk ohne
+# Spieler erst nach einer Weile los, die Entitaeten darin danach; nach 30
+# Sekunden war er im Versuch zuverlaessig weg.
+UNBEWACHT_WARTEN = 30
+
+
+def unbewacht_steht(bot, typ, x, y, z):
+    """Ob im Nether um diese Stelle herum eine Entitaet dieses Typs steht."""
+    return server_says(bot, f"/execute in minecraft:the_nether positioned {x} {y} {z} "
+                            f"if entity @e[type=minecraft:{typ},distance=..6] run say {{marke}}")
+
+
+def unbewacht_geladen(bot, x, y, z):
+    """Ob der Chunk an dieser Stelle im Nether gerade geladen ist."""
+    return server_says(bot, f"/execute in minecraft:the_nether if loaded "
+                            f"{_floor(x)} {y} {_floor(z)} run say {{marke}}")
+
+
+def unbewacht_weg(bot):
+    """Den Bot in die Overworld stellen und warten, bis ein Chunk ohne Spieler
+    im Nether entladen waere."""
+    bot.chat("/execute in minecraft:overworld run tp @s {} {} {}".format(*UNBEWACHT_WEG))
+    time.sleep(UNBEWACHT_WARTEN)
+
+
+def unbewacht_checks(env, bot):
+    """Ein Koerper, bei dem kein Spieler mehr steht.
+
+    Gemeldet war: den Cam-Modus im Nether starten, sich per /tp in die
+    Overworld setzen, per /tp zurueck und mit /cam beenden - der
+    Ruestungsstaender oder das Mannequin blieb stehen. Ohne Spieler in der
+    Naehe fiel der Chunk des Koerpers weg, und was er beim naechsten Laden
+    zurueckbrachte, waren neue Entitaeten unter denselben Ids: Das Plugin
+    raeumte die alten weg und liess die neuen stehen. Seitdem haelt es den
+    Chunk, solange der Cam-Modus laeuft, und raeumt ueber die Id weg.
+
+    Gefragt wird, waehrend der Bot in der Overworld steht, ob der Chunk
+    drueben geladen bleibt und Koerper und Name noch dastehen, nach dem Ende,
+    ob der Koerper weg ist, und danach, ob der Chunk wieder losgelassen wird.
+    Laeuft fuer beide Koerpertypen, siehe fuer_beide_koerpertypen.
+    """
+    x, y, z = UNBEWACHT_KOERPER
+    heim = bot.server_pos()
+    try:
+        set_option(env, "nether", "true", "cam-area")
+        cam_off(bot)
+        bot.chat(f"/execute in minecraft:the_nether run tp @s {x} {y} {z}")
+        time.sleep(3)
+        if not FIND.test("Unbewachter Koerper: Cam-Modus startet im Nether",
+                         in_nether(bot) and cam_on(bot), ""):
+            return
+        time.sleep(2)
+
+        unbewacht_weg(bot)
+        FIND.test("Im Cam-Modus bleibt der Chunk des Koerpers geladen, auch ohne "
+                  "Spieler in der Naehe", unbewacht_geladen(bot, x, y, z), "")
+        koerper = "armor_stand" if koerpertyp_jetzt(env) == "armorstand" else "mannequin"
+        FIND.test("Koerper und Name stehen noch, waehrend der Kamera-Spieler in "
+                  "einer anderen Welt ist",
+                  unbewacht_steht(bot, koerper, x, y, z)
+                  and unbewacht_steht(bot, "text_display", x, y, z), "")
+
+        bot.chat(f"/execute in minecraft:the_nether run tp @s {x + 3} {y} {z}")
+        time.sleep(4)
+        cam_off(bot)
+        time.sleep(2)
+        rest = [typ for typ in ("armor_stand", "mannequin")
+                if unbewacht_steht(bot, typ, x, y, z)]
+        FIND.test("Nach /cam ist der Koerper weg, auch nach einem Ausflug per /tp "
+                  "in eine andere Welt", not rest,
+                  "" if not rest else "es steht noch: " + ", ".join(rest))
+
+        unbewacht_weg(bot)
+        FIND.test("Nach dem Cam-Modus laesst das Plugin den Chunk wieder los",
+                  not unbewacht_geladen(bot, x, y, z), "")
+    finally:
+        cam_off(bot)
+        # Erst hin: Ist etwas stehen geblieben, liegt es in einem Chunk, den
+        # sonst niemand laedt, und /kill kaeme nicht an. Der naechste
+        # Koerpertyp zaehlte es dann als seinen eigenen Rest.
+        bot.chat(f"/execute in minecraft:the_nether run tp @s {x + 3} {y} {z}")
+        time.sleep(4)
+        bot.chat(f"/execute in minecraft:the_nether run kill "
+                 f"@e[type=!minecraft:player,x={x},y={y},z={z},distance=..10]")
+        time.sleep(0.5)
+        if heim is not None:
+            bot.chat("/execute in minecraft:overworld run tp @s {:.1f} {:.1f} {:.1f}".format(*heim))
+            time.sleep(1)
+        set_option(env, "nether", "false", "cam-area")
+
+
+def liegengeblieben_checks(env, bot):
+    """Ein Koerper, den ein Absturz in einem entladenen Chunk zurueckgelassen
+    hat, verschwindet, sobald der Chunk wieder geladen wird.
+
+    Nachgestellt mit /summon und der Marke, die das Plugin seinen Koerpern
+    gibt, in einem Chunk, den /forceload kurz laedt und wieder loslaesst.
+    Ein Ruestungsstaender ohne Marke daneben muss stehen bleiben.
+    """
+    x, y, z = _floor(UNBEWACHT_KOERPER[0]) + 100, UNBEWACHT_KOERPER[1], _floor(UNBEWACHT_KOERPER[2])
+    nether = "/execute in minecraft:the_nether run"
+    heim = bot.server_pos()
+    try:
+        bot.chat(f"{nether} forceload add {x} {z}")
+        time.sleep(2)
+        bot.chat(f'{nether} summon minecraft:armor_stand {x} {y} {z} '
+                 f'{{Tags:["camflytest"],BukkitValues:{{"camfly:cam_body":1}}}}')
+        bot.chat(f'{nether} summon minecraft:mannequin {x} {y} {z} '
+                 f'{{Tags:["camflytest"],BukkitValues:{{"camfly:cam_hitbox":1}}}}')
+        bot.chat(f'{nether} summon minecraft:armor_stand {x} {y} {z} '
+                 f'{{Tags:["camflytest","fremd"]}}')
+        time.sleep(1)
+        bot.chat(f"{nether} forceload remove {x} {z}")
+        unbewacht_weg(bot)
+        if not FIND.test("Liegengebliebener Koerper: der Chunk ist entladen",
+                         not unbewacht_geladen(bot, x, y, z), ""):
+            return
+        bot.chat(f"/execute in minecraft:the_nether run tp @s {x + 2} {y} {z}")
+        time.sleep(5)
+        markiert = server_says(bot, f"/execute in minecraft:the_nether positioned {x} {y} {z} "
+                                    f"if entity @e[tag=camflytest,tag=!fremd,distance=..6] "
+                                    f"run say {{marke}}")
+        FIND.test("Ein liegengebliebener Koerper verschwindet, sobald sein Chunk "
+                  "wieder geladen wird", not markiert, "")
+        FIND.test("Ein Ruestungsstaender ohne die Marke des Plugins bleibt dabei stehen",
+                  server_says(bot, f"/execute in minecraft:the_nether positioned {x} {y} {z} "
+                                   f"if entity @e[tag=fremd,distance=..6] run say {{marke}}"), "")
+    finally:
+        bot.chat(f"{nether} kill @e[tag=camflytest,x={x},y={y},z={z},distance=..10]")
+        time.sleep(0.5)
+        if heim is not None:
+            bot.chat("/execute in minecraft:overworld run tp @s {:.1f} {:.1f} {:.1f}".format(*heim))
+            time.sleep(1)
+
+
+def tp_koerper_da(bot, x, y, z):
+    """Ob an dieser Stelle der Ruestungsstaender eines Koerpers steht."""
+    return server_says(bot, f"/execute positioned {x} {y} {z} if entity "
+                            f"@e[type=minecraft:armor_stand,distance=..1.5] run say {{marke}}")
+
+
+def tp_steht_bei(bot, name, x, y, z, weit=1.5):
+    """Ob dieser Spieler an dieser Stelle steht, vom Server gefragt."""
+    return server_says(bot, f"/execute positioned {x} {y} {z} if entity "
+                            f"@a[name={name},distance=..{weit}] run say {{marke}}")
+
+
+def tp_kamera_hoch(bot, heim):
+    """Den Bot an heim in den Cam-Modus setzen und die Kamera sechs Bloecke
+    hinauffliegen lassen. Gibt zurueck, ob der Cam-Modus laeuft."""
+    bot.chat("/execute in minecraft:overworld run tp @s {} {} {}".format(*heim))
+    time.sleep(1.5)
+    if not cam_on(bot):
+        return False
+    time.sleep(1)
+    bot.call("fly", wait=30, dy=6, dx=0, timeout=15000)
+    time.sleep(1)
+    return True
+
+
+def teleport_checks(env, bot):
+    """teleports.command und teleports.plugin: was ein Teleport von aussen mit
+    dem Cam-Modus macht.
+
+    Fuer ein tpa-Plugin steht das Hilfsplugin CamFlyTpaHelfer, das ueber
+    player.teleport() teleportiert, fuer /tp der Befehl von der Konsole.
+    Gefragt wird zweierlei, mit beiden Ursachen:
+      * Wer im Cam-Modus teleportiert wird, ist danach heraus, steht am Ziel
+        und hat seine Sachen wieder, und sein Koerper ist weg.
+      * Wer genau bei einer Kamera landen wuerde - das macht /tpahere aus dem
+        Cam-Modus -, landet bei ihrem Koerper und nicht in der Luft, und ihr
+        Cam-Modus endet.
+    Mit dem Schalter auf false bleibt der Kamera-Spieler im Cam-Modus, und wer
+    zu ihm kommt, kommt bei der Kamera an - wie frueher.
+    """
+    pos = bot.server_pos()
+    if not FIND.test("Position fuer den Teleporttest lesbar", pos is not None, str(pos)):
+        return
+    hx, hy, hz = _floor(pos[0]) + 0.5, _floor(pos[1] + 0.5), _floor(pos[2]) + 0.5
+    heim = (hx, hy, hz)
+    ziel = (hx + 10, hy, hz)
+    helfer = (env.server / "plugins" / f"{TPA_HELFER_NAME}.jar").exists()
+    zuschauer = None
+    try:
+        # Auf dem Testserver steht teleports.command auf false, siehe
+        # prepare_server_files. Hier geht es gerade um true, die Voreinstellung.
+        set_options(env, [("command", "true", "teleports"), ("plugin", "true", "teleports")])
+        cam_off(bot)
+        bot.chat("/clear @s")
+        bot.chat("/give @s minecraft:stick")
+        time.sleep(0.5)
+
+        # --- Der Kamera-Spieler selbst wird teleportiert ---
+        for ursache, befehl in (("plugin", f"plugintp {BOT_NAME} {ziel[0]} {ziel[1]} {ziel[2]}"),
+                                ("command", f"tp {BOT_NAME} {ziel[0]} {ziel[1]} {ziel[2]}")):
+            if ursache == "plugin" and not FIND.test("Hilfsplugin fuer tpa steht bereit", helfer,
+                                                     f"{TPA_HELFER_NAME}.jar"):
+                continue
+            if not tp_kamera_hoch(bot, heim):
+                FIND.test(f"teleports.{ursache}: Cam-Modus startet", False, "")
+                continue
+            since = bot.mark()
+            console(env, befehl, pause=2.5)
+            FIND.test(f"teleports.{ursache}: wer im Cam-Modus teleportiert wird, ist danach "
+                      f"heraus und steht am Ziel",
+                      not spielmodus_ist(bot, "adventure")
+                      and tp_steht_bei(bot, BOT_NAME, *ziel), "")
+            FIND.test(f"teleports.{ursache}: er hat seine Sachen wieder, und sein Koerper "
+                      f"bleibt nicht stehen",
+                      server_says(bot, "/execute if items entity @s container.* minecraft:stick "
+                                       "run say {marke}")
+                      and not tp_koerper_da(bot, *heim), "")
+            if ursache == "plugin":
+                FIND.test("Die Meldung teleport-ended kommt",
+                          bool(bot.expect("You were teleported", since, 3000)), "")
+
+        # --- Jemand wird zu einer Kamera teleportiert ---
+        zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer den Teleporttest kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        for ursache, befehl in (("plugin", f"plugintp {ZUSCHAUER_NAME} {BOT_NAME}"),
+                                ("command", f"tp {ZUSCHAUER_NAME} {BOT_NAME}")):
+            if ursache == "plugin" and not helfer:
+                continue
+            console(env, f"tp {ZUSCHAUER_NAME} {ziel[0] + 5} {ziel[1]} {ziel[2]}", pause=1.5)
+            if not tp_kamera_hoch(bot, heim):
+                FIND.test(f"teleports.{ursache}: Cam-Modus startet", False, "")
+                continue
+            # Langsam fallend: Kaeme er bei der Kamera an, faellt er von dort
+            # sonst herunter und stuende bei der Frage ohnehin am Koerper.
+            console(env, f"effect give {ZUSCHAUER_NAME} minecraft:slow_falling 10 0 true")
+            since = bot.mark()
+            console(env, befehl, pause=0.5)
+            FIND.test(f"teleports.{ursache}: wer zu einer Kamera teleportiert wird, landet bei "
+                      f"ihrem Koerper statt in der Luft",
+                      tp_steht_bei(bot, ZUSCHAUER_NAME, *heim), "")
+            console(env, f"effect clear {ZUSCHAUER_NAME}", pause=2.0)
+            FIND.test(f"teleports.{ursache}: der Cam-Modus der Kamera endet dabei, und sie steht "
+                      f"wieder an ihrem Koerper",
+                      not spielmodus_ist(bot, "adventure") and tp_steht_bei(bot, BOT_NAME, *heim)
+                      and not tp_koerper_da(bot, *heim), "")
+            if ursache == "plugin":
+                FIND.test("Die Meldung teleport-arrival-ended nennt, wer kam",
+                          bool(bot.expect(f"{ZUSCHAUER_NAME} was teleported to you", since, 3000)), "")
+
+        # --- Mit dem Schalter auf false bleibt es wie frueher ---
+        set_options(env, [("command", "false", "teleports"), ("plugin", "false", "teleports")])
+        for ursache, befehl in (("plugin", f"plugintp {BOT_NAME} {ziel[0]} {ziel[1]} {ziel[2]}"),
+                                ("command", f"tp {BOT_NAME} {ziel[0]} {ziel[1]} {ziel[2]}")):
+            if ursache == "plugin" and not helfer:
+                continue
+            if not tp_kamera_hoch(bot, heim):
+                FIND.test(f"teleports.{ursache}: false - Cam-Modus startet", False, "")
+                continue
+            console(env, befehl, pause=2.5)
+            FIND.test(f"teleports.{ursache}: false - er bleibt im Cam-Modus, nur die Kamera "
+                      f"steht am Ziel",
+                      spielmodus_ist(bot, "adventure") and tp_steht_bei(bot, BOT_NAME, *ziel)
+                      and tp_koerper_da(bot, *heim), "")
+            cam_off(bot)
+            time.sleep(1)
+        if tp_kamera_hoch(bot, heim):
+            luft = bot.server_pos()
+            # Langsam fallend, sonst ist er unten, bevor die Frage ankommt.
+            console(env, f"effect give {ZUSCHAUER_NAME} minecraft:slow_falling 10 0 true")
+            console(env, f"tp {ZUSCHAUER_NAME} {BOT_NAME}", pause=0.5)
+            FIND.test("teleports.command: false - wer zur Kamera teleportiert wird, kommt bei "
+                      "ihr in der Luft an, und sie bleibt im Cam-Modus",
+                      luft is not None and tp_steht_bei(bot, ZUSCHAUER_NAME, *luft, weit=3)
+                      and spielmodus_ist(bot, "adventure"), str(luft))
+            console(env, f"effect clear {ZUSCHAUER_NAME}")
+    finally:
+        if zuschauer is not None:
+            zuschauer.stop()
+        cam_off(bot)
+        bot.chat("/clear @s")
+        bot.chat("/execute in minecraft:overworld run tp @s {} {} {}".format(*heim))
+        time.sleep(1)
+        set_options(env, [("command", "false", "teleports"), ("plugin", "true", "teleports")])
+
+
 # ---------------------------------------------------------------------------
 # Der Boden unter dem Testplatz
 # ---------------------------------------------------------------------------
@@ -6834,6 +7222,13 @@ def step_tests(env):
 
         # --- Portale und das Gedaechtnis fuer gesperrte Portale ---
         portal_checks(env, bot)
+
+        # --- Ein Koerper, bei dem kein Spieler mehr steht, und was ein Absturz liegen laesst ---
+        fuer_beide_koerpertypen(env, bot, unbewacht_checks)
+        liegengeblieben_checks(env, bot)
+
+        # --- Teleports durch Befehle und andere Plugins (/tp, /tpa, /tpahere) ---
+        teleport_checks(env, bot)
 
     except Exception as exc:
         FIND.test("Testlauf", False, f"{type(exc).__name__}: {exc}")

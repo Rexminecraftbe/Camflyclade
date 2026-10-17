@@ -74,6 +74,8 @@ messages:
   startup-skins-failed: "Skins could not be preloaded at startup: {error}"
   startup-skins-loaded: "Skins loaded successfully."
   startup-skins-loading: "Loading skins..."
+  teleport-arrival-ended: "&c{player} was teleported to you. Camera mode ended."
+  teleport-ended: "&cYou were teleported. Camera mode ended."
   time-limit-expired: "&cCam mode ended: Time limit expired."
 
 # Names the texts above fill in for things of the game: damage types, mobs, effects, biomes,
@@ -397,4 +399,6 @@ message-settings:
   startup-skins-failed: true
   startup-skins-loaded: true
   startup-skins-loading: true
+  teleport-arrival-ended: true
+  teleport-ended: true
   time-limit-expired: true
