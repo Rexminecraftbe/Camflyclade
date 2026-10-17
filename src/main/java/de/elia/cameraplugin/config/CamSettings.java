@@ -6,7 +6,6 @@ import de.elia.cameraplugin.body.MobTargetMode;
 import de.elia.cameraplugin.body.MovementSensitivity;
 import de.elia.cameraplugin.display.GlowMode;
 import de.elia.cameraplugin.display.NameMode;
-import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.mirrordamage.ArmorDamageMode;
 import de.elia.cameraplugin.mirrordamage.DamageMode;
 import de.elia.cameraplugin.mob.MobTargeting;
@@ -27,10 +26,9 @@ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.EnumMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.logging.Level;
+import java.util.Set;
 
 /**
  * Every value of the config file the plugin runs on, read in one go by
@@ -52,8 +50,14 @@ public final class CamSettings {
      */
     private static final double MAX_PARTICLES_PER_TICK = 100.0;
 
+    /**
+     * Keys that are read although the config file built into the jar leaves
+     * them out on purpose, so that they are not reported as unknown, see
+     * {@link ConfigReader#warnUnknownKeys}.
+     */
+    public static final Set<String> UNLISTED_KEYS = Set.of("mirror-damage.debug");
+
     private final JavaPlugin plugin;
-    private final ConsoleLog log;
     private final Messages messages;
 
     // Configurable values
@@ -171,9 +175,8 @@ public final class CamSettings {
     private boolean camSafetyEnabled;
     private int camSafetyDelay;
 
-    public CamSettings(JavaPlugin plugin, ConsoleLog log, Messages messages) {
+    public CamSettings(JavaPlugin plugin, Messages messages) {
         this.plugin = plugin;
-        this.log = log;
         this.messages = messages;
         this.camAreaRules = new CamAreaRules(messages);
     }
@@ -259,7 +262,13 @@ public final class CamSettings {
                 config.getInt("body.movement-sensitivity", MovementSensitivity.NORMAL.getId()));
         double moveThreshold = config.getDouble("body.move-threshold", 0.05, MIN_MOVE_THRESHOLD);
         moveThresholdSquared = moveThreshold * moveThreshold;
-        mobTargetMode = resolveMobTargetMode(config);
+        String mobTarget = config.getChoice("body.mob-target", "false", "vanilla", "custom", "false")
+                .toLowerCase(Locale.ROOT);
+        mobTargetMode = switch (mobTarget) {
+            case "vanilla" -> MobTargetMode.VANILLA;
+            case "custom" -> MobTargetMode.CUSTOM;
+            default -> MobTargetMode.OFF;
+        };
         mobTargetRadius = config.getDouble("body.mob-target-radius", 16.0, 0.0,
                 MobTargeting.MAX_MOB_TARGET_RANGE);
         mobTargetHeads = config.getBoolean("body.mob-target-heads", true);
@@ -286,137 +295,27 @@ public final class CamSettings {
 
         mirrorKnockback = config.getBoolean("mirror-damage.knockback", true);
         // Only for measuring, so left out of config.yml on purpose: whoever
-        // needs it adds "debug: true" under mirror-damage by hand.
+        // needs it adds "debug: true" under mirror-damage by hand. That is
+        // why it is one of the UNLISTED_KEYS.
         mirrorDebug = config.getBoolean("mirror-damage.debug", false);
-        // "off" used to be the spelling for off and is still read.
-        String modeRaw = readMode(config, "mirror-damage.damage-mode", "mirror",
-                List.of("mirror", "custom", "false"), List.of("off"));
-        if ("custom".equalsIgnoreCase(modeRaw)) {
-            damageMode = DamageMode.CUSTOM;
-        } else if ("false".equalsIgnoreCase(modeRaw) || "off".equalsIgnoreCase(modeRaw)) {
-            damageMode = DamageMode.OFF;
-        } else {
-            damageMode = DamageMode.MIRROR;
-        }
+        String mode = config.getChoice("mirror-damage.damage-mode", "mirror", "mirror", "custom", "false")
+                .toLowerCase(Locale.ROOT);
+        damageMode = switch (mode) {
+            case "custom" -> DamageMode.CUSTOM;
+            case "false" -> DamageMode.OFF;
+            default -> DamageMode.MIRROR;
+        };
         customDamageHearts = config.getDouble("mirror-damage.custom-damage-hearts", 0.5, 0.0);
-        // Used to be called custom-damage-counts-armor, back when it only had a
-        // say over the custom damage. A file that still carries the old name
-        // keeps its setting, it is simply read as the default of the new one.
-        damageCountsArmor = config.getBoolean("mirror-damage.damage-counts-armor",
-                config.getBoolean("mirror-damage.custom-damage-counts-armor", true));
-        // The mode grew out of the old truth value damage-armor, so a config
-        // file that still carries only that one keeps saying what it said:
-        // true wears the armour down, false leaves it alone.
-        String armorDefault = config.getBoolean("mirror-damage.damage-armor", true) ? "mirror" : "false";
-        String armorRaw = readMode(config, "mirror-damage.damage-armor-mode", armorDefault,
-                List.of("mirror", "custom", "false"), List.of("off", "true"));
-        if ("custom".equalsIgnoreCase(armorRaw)) {
-            armorDamageMode = ArmorDamageMode.CUSTOM;
-        } else if ("false".equalsIgnoreCase(armorRaw) || "off".equalsIgnoreCase(armorRaw)) {
-            armorDamageMode = ArmorDamageMode.OFF;
-        } else {
-            armorDamageMode = ArmorDamageMode.MIRROR;
-        }
+        damageCountsArmor = config.getBoolean("mirror-damage.damage-counts-armor", true);
+        String armorMode = config.getChoice("mirror-damage.damage-armor-mode", "mirror", "mirror", "custom", "false")
+                .toLowerCase(Locale.ROOT);
+        armorDamageMode = switch (armorMode) {
+            case "custom" -> ArmorDamageMode.CUSTOM;
+            case "false" -> ArmorDamageMode.OFF;
+            default -> ArmorDamageMode.MIRROR;
+        };
         customArmorDamage = config.getInt("mirror-damage.custom-armor-damage", 1, 0);
         respectUnbreaking = config.getBoolean("mirror-damage.respect-unbreaking", true);
-        warnAboutOldMessageSections();
-        warnAboutOldArmorStandSection();
-        warnAboutOldDamageArmorKey();
-        warnAboutOldStructureKey();
-    }
-
-    /**
-     * Says once that the texts are not read from the config file any more.
-     * They stand in a language file of their own now, picked with
-     * {@code language} - without this note the texts and switches of a config
-     * file from an older version would quietly give way to the ones of the
-     * language file.
-     */
-    private void warnAboutOldMessageSections() {
-        if (!plugin.getConfig().isConfigurationSection("messages")
-                && !plugin.getConfig().isConfigurationSection("message-settings")) {
-            return;
-        }
-        log.log(Level.WARNING, "The sections \"messages\" and \"message-settings\" in config.yml are not"
-                + " read any more: texts and switches now stand in the language file in the folder lang,"
-                + " and language in config.yml says which one is used.");
-    }
-
-    /**
-     * Says once that a leftover {@code armorstand} section is not read any
-     * more. Its two remaining settings now sit in {@code body}, and gravity is
-     * decided by {@code body.movement-sensitivity} - without this note a config
-     * file from an older version would quietly run on the default values.
-     */
-    private void warnAboutOldArmorStandSection() {
-        if (!plugin.getConfig().isConfigurationSection("armorstand")) {
-            return;
-        }
-        plugin.getLogger().warning("The section \"armorstand\" is not read any more: name-visible and visible"
-                + " now stand under \"body\", gravity has been replaced by body.movement-sensitivity.");
-    }
-
-    /**
-     * Says once that {@code mirror-damage.damage-armor} has become a mode of
-     * its own. The truth value is still read, as the default of the new key,
-     * so that a config file from an older version keeps behaving the way it
-     * reads - but only the new key knows the third mode.
-     */
-    private void warnAboutOldDamageArmorKey() {
-        if (!plugin.getConfig().isSet("mirror-damage.damage-armor")) {
-            return;
-        }
-        log.log(Level.WARNING, "mirror-damage.damage-armor is now called damage-armor-mode and knows three values:"
-                + " mirror, custom and false. true is read as mirror, false stays false.");
-    }
-
-    /**
-     * Says once that {@code cam-area.forbidden-structures} has become two
-     * lists. The old one is still read, as the default of the box list, so that
-     * a config file from an older version keeps behaving the way it reads - but
-     * measuring by pieces only happens once the new list is filled.
-     */
-    private void warnAboutOldStructureKey() {
-        if (!plugin.getConfig().isSet("cam-area.forbidden-structures")) {
-            return;
-        }
-        plugin.getLogger().warning("cam-area.forbidden-structures has been split into two lists:"
-                + " forbidden-structures-box measures the whole box of a structure,"
-                + " forbidden-structures-components only its single pieces."
-                + " The old entries are read as the box list.");
-    }
-
-    /**
-     * Reads a setting that knows more than two values and hands back the
-     * spelling it was written with.
-     *
-     * <p>Kept apart from {@link ConfigReader#getChoice} because of the
-     * spellings an older config file may carry: those are still read, they are
-     * simply not offered any more. Only {@code shown} turns up in the note
-     * about a value nobody knows, so nobody is sent back to a spelling this
-     * version has left behind.</p>
-     *
-     * @param shown  the spellings this version writes
-     * @param legacy the spellings an older version wrote, read but not offered
-     */
-    private String readMode(ConfigReader config, String path, String def,
-                            List<String> shown, List<String> legacy) {
-        String value = config.getString(path, def);
-        if (isOneOf(value, shown) || isOneOf(value, legacy)) {
-            return value;
-        }
-        config.warnUnknownValue(path, value, String.join(", ", shown), def);
-        return def;
-    }
-
-    /** Whether the value is one of these spellings, capitals not counting. */
-    private static boolean isOneOf(String value, List<String> spellings) {
-        for (String spelling : spellings) {
-            if (spelling.equalsIgnoreCase(value)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
@@ -511,24 +410,6 @@ public final class CamSettings {
         } catch (IllegalArgumentException ex) {
             return null;
         }
-    }
-
-    /**
-     * Reads {@code body.mob-target}. The setting used to be a truth value, back
-     * when there was only the one range to switch on and off, so those two
-     * values keep saying what they said: {@code true} is the range out of the
-     * config file, {@code false} is nobody sent to the body.
-     */
-    private MobTargetMode resolveMobTargetMode(ConfigReader config) {
-        String raw = readMode(config, "body.mob-target", "false",
-                List.of("vanilla", "custom", "false"), List.of("off", "true"));
-        if ("vanilla".equalsIgnoreCase(raw)) {
-            return MobTargetMode.VANILLA;
-        }
-        if ("custom".equalsIgnoreCase(raw) || "true".equalsIgnoreCase(raw)) {
-            return MobTargetMode.CUSTOM;
-        }
-        return MobTargetMode.OFF;
     }
 
     /**

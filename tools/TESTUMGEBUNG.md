@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **664** - alle 664 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **691** - alle 691 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -892,8 +892,10 @@ mitgelieferten `lang/en.yml` · eine eigene Sprachdatei liefert ihre Texte,
 und was ihr fehlt, kommt aus der englischen · ist sie kaputt, meldet der
 Reload das mit Datei und Zeile, meldet keinen Erfolg und lässt die bisherigen
 Texte stehen - und auch die `config.yml` aus derselben Runde · eine Sprache
-ohne Datei wird gemeldet und fällt auf Englisch zurück · Texte, die noch in
-der `config.yml` stehen, werden als nicht mehr gelesen gemeldet · ein offenes
+ohne Datei wird gemeldet und fällt auf Englisch zurück · ein vertippter
+Schlüssel in der `config.yml` wird gemeldet, ebenso Texte, die noch dort
+stehen, als ein unbekannter Abschnitt mit nur einer Meldung ·
+`mirror-damage.debug` gilt nicht als unbekannt · ein offenes
 Portal trägt den Kamera-Spieler in den Nether · ein verbotenes Biom dahinter
 holt ihn zurück · danach lässt
 dasselbe Portal ihn gar nicht mehr durch · ein drüben neu gebautes Portal gibt
@@ -933,9 +935,9 @@ Gegenprobe: mit `true` sehen beide den Kamera-Spieler an · der
 Name steht als TextDisplay genau dort über dem Körper, wo sonst sein
 Namensschild hinge, trägt den Text aus `armorstand.name-format`, folgt dem
 Körper und wird mit ihm eingesammelt · der Körper selbst trägt keinen Namen
-mehr · voreingestellt steht `body.type: armorstand` da · die alten Werte
-`1` und `2` meinen weiter Rüstungsständer und Mannequin, ohne Meldung, ein
-unbekannter Wert wird gemeldet und ist ein Rüstungsständer · unsichtbar ist
+mehr · voreingestellt steht `body.type: armorstand` da · der alte Wert `2`
+und ein unbekannter Wert werden gemeldet und sind ein Rüstungsständer,
+kein Mannequin · unsichtbar ist
 der Körper bei beiden Typen ein einziges unsichtbares
 Mannequin, ohne Rüstungsständer, mit dem Namen darüber · voreingestellt ist
 der Name gelb, nicht durch Wände zu sehen, hat den Hintergrund eines

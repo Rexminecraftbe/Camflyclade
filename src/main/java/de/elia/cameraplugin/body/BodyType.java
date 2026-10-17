@@ -6,8 +6,7 @@ package de.elia.cameraplugin.body;
  * {@link BodySpawner#spawnNameDisplay}.
  *
  * <p>The name in brackets is the value used for {@code body.type} in the
- * config file. The number after it stood there before the names did, and an
- * older file that still carries it keeps meaning the same type.</p>
+ * config file.</p>
  */
 public enum BodyType {
     /**
@@ -16,19 +15,17 @@ public enum BodyType {
      * is no head left to show, and the body is built like
      * {@link #MANNEQUIN}.
      */
-    ARMOR_STAND("armorstand", 1),
+    ARMOR_STAND("armorstand"),
     /**
      * Mannequin using the player's own skin, which is hit directly. Switched
      * invisible it stays the body, it is only no longer drawn.
      */
-    MANNEQUIN("mannequin", 2);
+    MANNEQUIN("mannequin");
 
     private final String configName;
-    private final int formerNumber;
 
-    BodyType(String configName, int formerNumber) {
+    BodyType(String configName) {
         this.configName = configName;
-        this.formerNumber = formerNumber;
     }
 
     /** The value that stands for this type in {@code body.type}. */
@@ -48,14 +45,14 @@ public enum BodyType {
 
     /**
      * Resolves the value configured in {@code body.type}: the name of a type,
-     * whatever its case, or the number that used to stand for it.
+     * whatever its case.
      *
      * @return the matching type, or {@code null} if the value is unknown
      */
     public static BodyType fromConfig(String value) {
         String text = value.trim();
         for (BodyType type : values()) {
-            if (type.configName.equalsIgnoreCase(text) || String.valueOf(type.formerNumber).equals(text)) {
+            if (type.configName.equalsIgnoreCase(text)) {
                 return type;
             }
         }
