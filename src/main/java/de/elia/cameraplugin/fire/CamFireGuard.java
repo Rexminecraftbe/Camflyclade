@@ -19,6 +19,16 @@ import java.util.*;
  * blocks from the player and prevents burning while camera mode is active.
  */
 public class CamFireGuard implements Listener {
+
+    /**
+     * Largest search radius for hide-fire that is accepted, in blocks, the
+     * same for every direction. Every block in reach is looked at on every
+     * pass, for every player in camera mode, so the work grows with the cube
+     * of it: at 8 it is some 3400 blocks, at 1000 it would be billions and
+     * the server would stand still.
+     */
+    private static final int MAX_RADIUS = 8;
+
     private final JavaPlugin plugin;
 
     // configuration values
@@ -45,9 +55,9 @@ public class CamFireGuard implements Listener {
         // A period of zero would make the task run every single tick, so one
         // tick is the smallest interval that is accepted here.
         tickInterval = config.getLong("fireguard.tick-interval", 10L, 1L);
-        radiusH = config.getDouble("fireguard.radius-horizontal", 1.5, 0.0);
-        radiusUp = config.getInt("fireguard.radius-up", 2, 0);
-        radiusDown = config.getInt("fireguard.radius-down", 1, 0);
+        radiusH = config.getDouble("fireguard.radius-horizontal", 1.5, 0.0, MAX_RADIUS);
+        radiusUp = config.getInt("fireguard.radius-up", 2, 0, MAX_RADIUS);
+        radiusDown = config.getInt("fireguard.radius-down", 1, 0, MAX_RADIUS);
         radiusH2 = radiusH * radiusH;
         rangeXZ = (int) Math.ceil(radiusH);
     }

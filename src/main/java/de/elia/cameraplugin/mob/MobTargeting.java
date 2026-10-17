@@ -58,9 +58,10 @@ public final class MobTargeting implements Listener {
      * How far the search around the body reaches at most, in blocks. No mob in
      * vanilla notices anything from further away, so looking further would only
      * cost time. The same reach decides which mobs are handed over when camera
-     * mode starts and ends.
+     * mode starts and ends, and it is the most {@code body.mob-target-radius}
+     * may be set to.
      */
-    private static final double MAX_MOB_TARGET_RANGE = 64.0;
+    public static final double MAX_MOB_TARGET_RANGE = 64.0;
 
     /** What a mob head on the body leaves of the range of that kind of mob. */
     private static final double MOB_HEAD_SIGHT_FACTOR = 0.5;

@@ -9,6 +9,7 @@ import de.elia.cameraplugin.display.NameMode;
 import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.mirrordamage.ArmorDamageMode;
 import de.elia.cameraplugin.mirrordamage.DamageMode;
+import de.elia.cameraplugin.mob.MobTargeting;
 import de.elia.cameraplugin.movement.BorderMode;
 import de.elia.cameraplugin.movement.FlightMedium;
 import de.elia.cameraplugin.portal.PortalRules;
@@ -42,6 +43,14 @@ public final class CamSettings {
      * blocks. Anything below is raised to this value.
      */
     public static final double MIN_MOVE_THRESHOLD = 0.01;
+
+    /**
+     * Largest value that is accepted for
+     * {@code camera-particles.particles-per-tick}. Every player who sees the
+     * camera player gets that many each tick, and the client has to draw all
+     * of them.
+     */
+    private static final double MAX_PARTICLES_PER_TICK = 100.0;
 
     private final JavaPlugin plugin;
     private final ConsoleLog log;
@@ -251,12 +260,14 @@ public final class CamSettings {
         double moveThreshold = config.getDouble("body.move-threshold", 0.05, MIN_MOVE_THRESHOLD);
         moveThresholdSquared = moveThreshold * moveThreshold;
         mobTargetMode = resolveMobTargetMode(config);
-        mobTargetRadius = config.getDouble("body.mob-target-radius", 16.0, 0.0);
+        mobTargetRadius = config.getDouble("body.mob-target-radius", 16.0, 0.0,
+                MobTargeting.MAX_MOB_TARGET_RANGE);
         mobTargetHeads = config.getBoolean("body.mob-target-heads", true);
         particlesEnabled = config.getBoolean("camera-particles.enabled", true);
         particleType = resolveParticle(config, "camera-particles.particle", Particle.SOUL_FIRE_FLAME);
         particleHeight = config.getDouble("camera-particles.height", 1.0);
-        particlesPerTick = config.getDouble("camera-particles.particles-per-tick", 1.0, 0.0);
+        particlesPerTick = config.getDouble("camera-particles.particles-per-tick", 1.0, 0.0,
+                MAX_PARTICLES_PER_TICK);
         particleSpread = config.getDouble("camera-particles.spread", 0.0, 0.0);
         actionBarEnabled = config.getBoolean("action-bar.enabled", true);
         actionBarOffDuration = config.getInt("action-bar.off-duration", 10, 0);
