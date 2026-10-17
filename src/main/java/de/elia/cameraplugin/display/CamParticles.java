@@ -12,7 +12,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/** The particles above a camera player, {@code camera-particles}. */
+/**
+ * The particles above a camera player, {@code camera-particles}. They are
+ * for the others, the camera player himself never sees his own.
+ */
 public final class CamParticles {
 
     private final JavaPlugin plugin;
@@ -59,7 +62,7 @@ public final class CamParticles {
                 Location particleLoc = player.getLocation().add(0, settings.getParticleHeight(), 0);
                 double spread = settings.getParticleSpread();
                 for (Player viewer : Bukkit.getOnlinePlayers()) {
-                    if (!settings.showsOwnParticles() && viewer.equals(player)) continue;
+                    if (viewer.equals(player)) continue;
                     if (shouldShowParticlesTo(viewer, particleLoc)) {
                         viewer.spawnParticle(settings.getParticleType(), particleLoc,
                                 count, spread, spread, spread, 0);

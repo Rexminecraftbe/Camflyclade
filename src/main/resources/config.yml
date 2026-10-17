@@ -188,7 +188,7 @@ time-limit:
   # BLUE, GREEN, PINK, PURPLE, RED, WHITE oder YELLOW
   bossbar-color: BLUE
 
-# Partikel um den Spieler im Cam-Modus
+# Partikel um den Spieler im Cam-Modus (er selbst sieht sie nicht, nur andere)
 camera-particles:
   # Partikel an (true) oder aus (false)
   enabled: true
@@ -201,8 +201,6 @@ camera-particles:
   particles-per-tick: 1
   # Wie weit die Partikel um den Punkt streuen, in Blöcken (0 = alle auf einem Punkt)
   spread: 0.0
-  # Partikel auch dem Spieler selbst zeigen
-  show-own-particles: false
 
 # Feuerschutz im Cam-Modus: Der Spieler brennt nicht
 fireguard:

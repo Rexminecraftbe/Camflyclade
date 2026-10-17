@@ -129,7 +129,6 @@ public final class CamSettings {
     private double particlesPerTick;
     /** How far they scatter around the spot, {@code camera-particles.spread}. */
     private double particleSpread;
-    private boolean showOwnParticles;
 
     private boolean actionBarEnabled;
     private int actionBarOffDuration;
@@ -259,7 +258,6 @@ public final class CamSettings {
         particleHeight = config.getDouble("camera-particles.height", 1.0);
         particlesPerTick = config.getDouble("camera-particles.particles-per-tick", 1.0, 0.0);
         particleSpread = config.getDouble("camera-particles.spread", 0.0, 0.0);
-        showOwnParticles = config.getBoolean("camera-particles.show-own-particles", false);
         actionBarEnabled = config.getBoolean("action-bar.enabled", true);
         actionBarOffDuration = config.getInt("action-bar.off-duration", 10, 0);
         timeLimitEnabled = config.getBoolean("time-limit.enabled", false);
@@ -739,10 +737,6 @@ public final class CamSettings {
 
     public double getParticleSpread() {
         return particleSpread;
-    }
-
-    public boolean showsOwnParticles() {
-        return showOwnParticles;
     }
 
     public boolean isActionBarEnabled() {
