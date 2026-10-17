@@ -1337,6 +1337,10 @@ async function handle(cmd) {
       // mineflayer teilt das lpVec3 von 26.x noch durch 8000, als kaeme es im
       // alten Format, und der Bot ruehrte sich nach einem Treffer kaum. Im
       // Paket steht sie schon in Bloecken je Tick.
+      //
+      // 'tick' an jedem Paket zaehlt, wie viele Physik-Ticks der Bot bis
+      // dahin gerechnet hat. Daran liest der Test den Takt ab, in dem die
+      // Stoesse ankamen, siehe stoss_takt.
       if (knock) knock.stop();
       const log = { velocity: [], explosion: [], teleport: [], path: [] };
       const start = Date.now();
@@ -1350,11 +1354,13 @@ async function handle(cmd) {
         if (!bot.entity || packet.entityId !== bot.entity.id) return;
         const v = packet.velocity;
         bot.entity.velocity.set(v.x, v.y, v.z);
-        log.velocity.push({ t: Date.now() - start, v: [v.x, v.y, v.z], pos: where() });
+        log.velocity.push({ t: Date.now() - start, v: [v.x, v.y, v.z], pos: where(),
+                            tick: log.path.length });
       };
       const onExplosion = (packet) => {
         const k = packet.playerKnockback;
-        log.explosion.push({ t: Date.now() - start, knockback: k ? [k.x, k.y, k.z] : null });
+        log.explosion.push({ t: Date.now() - start, knockback: k ? [k.x, k.y, k.z] : null,
+                             tick: log.path.length });
       };
       const onTeleport = () => {
         log.teleport.push({ t: Date.now() - start, pos: where(), schritt: log.path.length });
@@ -3226,10 +3232,16 @@ def armor_checks(env, bot):
 RUECKSTOSS_HOEHE = 10
 
 # Wie weit der Landeplatz im Cam-Modus von dem ohne Cam-Modus abweichen darf,
-# in Bloecken. Gemessen liegen beide auf ein Zehntausendstel beieinander: Die
+# in Bloecken. Gemessen liegen beide auf ein Zehntausendstel beieinander,
+# sobald die Stoesse im selben Takt ankamen (siehe stoss_takt): Die
 # Geschwindigkeit kommt in 26.x als lpVec3 und ist damit ein wenig gerundet,
 # der Stoss einer Explosion ohne Cam-Modus nicht.
 RUECKSTOSS_TOLERANZ = 0.05
+
+# Wie oft eine Probe hoechstens noch einmal laeuft, wenn ihre beiden Laeufe
+# die Stoesse in einem anderen Takt bekamen, siehe rueckstoss_im_takt.
+# Gemessen kam das in fuenf von 160 Laeufen mit einer Windkugel vor.
+RUECKSTOSS_NACHLAEUFE = 4
 
 # Wie weit die Platte aus Obsidian um das Ziel herum reicht. TNT risse die
 # Grasschicht sonst auf, und in der Grube stuende der Bot bei der naechsten
@@ -3356,8 +3368,9 @@ def rueckstoss_lauf(env, bot, ziel, cam, treffen):
     setzt ihn an den Koerper und gibt ihm den Stoss mit. `treffen` loest den
     Treffer aus.
 
-    Gibt zurueck, wo er liegen bleibt, vom Ziel aus gerechnet, und die erste
-    Geschwindigkeit, die er bekommt - oder None, wenn der Cam-Modus gar nicht
+    Gibt zurueck, wo er liegen bleibt, vom Ziel aus gerechnet, die erste
+    Geschwindigkeit, die er bekommt, und den Takt, in dem die Stoesse
+    ankamen (siehe stoss_takt) - oder None, wenn der Cam-Modus gar nicht
     erst startete. Dazu, fuer eine Probe, die durchfaellt: wo sein Flug
     anfing und wie hoch er ging, beides vom Ziel aus, und wie viele Pakete
     mit einer Geschwindigkeit kamen.
@@ -3391,14 +3404,82 @@ def rueckstoss_lauf(env, bot, ziel, cam, treffen):
             "erste": erste or explosion, "beendet": beendet,
             "anfang": None if anfang is None else [anfang[0] - x, anfang[1] - y, anfang[2] - z],
             "hoehe": max((p[1] for p in pfad), default=y) - y,
-            "pakete": len(log["velocity"])}
+            "pakete": len(log["velocity"]),
+            "takt": stoss_takt(log)}
+
+
+def stoss_takt(log):
+    """In welchem Physik-Tick des Bots jedes Paket mit einem Stoss ankam, vom
+    ersten an gezaehlt: jedes mit einer Geschwindigkeit und jede Explosion,
+    die ihn stoesst.
+
+    Der Bot rechnet seine Ticks nach der eigenen Uhr, alle 50 ms, und die
+    Pakete kommen nach der des Servers. Zwei Pakete aus zwei Ticks des Servers
+    liegen deshalb meist einen Tick des Bots auseinander - aber nicht immer:
+    Kommt das erste knapp nach einem seiner Ticks an und das zweite knapp vor
+    dem naechsten, liegt keiner dazwischen, und holt er einen verspaeteten
+    Tick nach, liegen zwei dazwischen. Er fliegt dann einen Tick weniger oder
+    mehr mit dem ersten Stoss allein und landet ganz woanders, ohne Cam-Modus
+    genauso wie mit. Eine Windkugel stoesst mit zwei solchen Paketen, erst mit
+    ihrer Explosion, einen Tick spaeter mit dem Treffer - gemessen landete der
+    Bot nach (0, 1) bei -4,83, nach (0, 0) bei -2,81.
+    """
+    pakete = sorted([(v["t"], v["tick"]) for v in log["velocity"]]
+                    + [(e["t"], e["tick"]) for e in log["explosion"]
+                       if e["knockback"] and any(e["knockback"])])
+    if not pakete:
+        return ()
+    return tuple(tick - pakete[0][1] for _, tick in pakete)
 
 
 def _zahlen(werte):
     return "-" if werte is None else "(" + ", ".join(f"{w:.4f}" for w in werte) + ")"
 
 
-def rueckstoss_vergleich(name, ohne, mit, wie="auf den Koerper", gegenprobe=True):
+def gleicher_landeplatz(ohne, mit):
+    """Ob der Bot beide Male an derselben Stelle liegen blieb."""
+    return max(abs(a - b) for a, b in zip(ohne["weg"], mit["weg"])) <= RUECKSTOSS_TOLERANZ
+
+
+def rueckstoss_im_takt(ohne, mit, nochmal):
+    """Die Paare aus einem Lauf ohne und einem mit Cam-Modus, an denen die
+    Probe entschieden wird.
+
+    Das ist das erste Paar - ausser der Bot liegt dort an zwei Stellen, und
+    die Stoesse kamen beide Male in gleich vielen Paketen, aber in einem
+    anderen Takt an (siehe stoss_takt). Dann hat der Bot sie verschieden
+    verrechnet, und der Vergleich sagt nichts ueber das Plugin. Die Probe
+    laeuft dann noch einmal, abwechselnd mit und ohne Cam-Modus, bis ein
+    Paar im selben Takt dabei ist; entschieden wird an allen Paaren im
+    selben Takt. Kam im Cam-Modus ein Paket mehr oder weniger an, laeuft
+    nichts nach: Das ist ein Stoss zu viel oder zu wenig.
+
+    `ohne` sind die Laeufe ohne Cam-Modus und bekommen jeden Nachlauf ohne
+    ihn dazu, `nochmal(cam)` faehrt einen weiteren Lauf. Gibt die Paare
+    zurueck und wie oft nachgefahren wurde.
+    """
+    erstes = (ohne[0], mit)
+    if (nochmal is None or gleicher_landeplatz(*erstes)
+            or len(ohne[0]["takt"]) != len(mit["takt"]) or ohne[0]["takt"] == mit["takt"]):
+        return [erstes], 0
+    mits = [mit]
+
+    def im_takt():
+        return [(o, m) for m in mits for o in ohne if o["takt"] == m["takt"]]
+
+    nachgefahren = 0
+    while not im_takt() and nachgefahren < RUECKSTOSS_NACHLAEUFE:
+        cam = nachgefahren % 2 == 0
+        Log.detail(f"Takt ohne Cam-Modus {[o['takt'] for o in ohne]}, mit {[m['takt'] for m in mits]}"
+                   f" - noch ein Lauf {'mit' if cam else 'ohne'} Cam-Modus")
+        lauf = nochmal(cam)
+        nachgefahren += 1
+        if lauf is not None and (not cam or lauf["beendet"]):
+            (mits if cam else ohne).append(lauf)
+    return im_takt() or [erstes], nachgefahren
+
+
+def rueckstoss_vergleich(name, ohne, mit, wie="auf den Koerper", gegenprobe=True, nochmal=None):
     """Ob der Treffer auf den Koerper den Spieler dorthin stoesst, wo derselbe
     Treffer ihn ohne Cam-Modus hinstoesst.
 
@@ -3406,26 +3487,40 @@ def rueckstoss_vergleich(name, ohne, mit, wie="auf den Koerper", gegenprobe=True
     geht, wie weit er traegt und wie hoch er hebt. Die erste Geschwindigkeit
     steht zum Nachlesen dabei. Die Gegenprobe ohne Cam-Modus steht nur beim
     ersten Vergleich mit ihr als eigene Probe da.
+
+    `ohne` sind die Laeufe ohne Cam-Modus, der erste vorne. Kamen die Stoesse
+    in einem anderen Takt an, faehrt `nochmal(cam)` weitere Laeufe, siehe
+    rueckstoss_im_takt.
     """
-    weg_ohne = ohne is not None and ohne["weg"][0] < -0.3
+    erster = ohne[0]
+    weg_ohne = erster is not None and erster["weg"][0] < -0.3
     if gegenprobe:
         FIND.test(f"{name} ohne Cam-Modus stoesst den Bot weg (Gegenprobe)", weg_ohne,
-                  "" if ohne is None else f"Weg {_zahlen(ohne['weg'])}")
+                  "" if erster is None else f"Weg {_zahlen(erster['weg'])}")
     if not weg_ohne:
         return
     if not FIND.test(f"{name} {wie} beendet den Cam-Modus",
                      mit is not None and mit["beendet"], ""):
         return
-    gleich = max(abs(a - b) for a, b in zip(ohne["weg"], mit["weg"])) <= RUECKSTOSS_TOLERANZ
-    erklaerung = (f"Weg ohne {_zahlen(ohne['weg'])}, mit {_zahlen(mit['weg'])}; "
-                  f"erste Geschwindigkeit ohne {_zahlen(ohne['erste'])}, mit {_zahlen(mit['erste'])}")
-    if not gleich:
+    paare, nachgefahren = rueckstoss_im_takt(ohne, mit, nochmal)
+    daneben = next((paar for paar in paare if not gleicher_landeplatz(*paar)), None)
+    o, m = daneben or paare[0]
+    erklaerung = (f"Weg ohne {_zahlen(o['weg'])}, mit {_zahlen(m['weg'])}; "
+                  f"erste Geschwindigkeit ohne {_zahlen(o['erste'])}, mit {_zahlen(m['erste'])}")
+    if nachgefahren:
+        nachlaeufe = f"{nachgefahren} {'Nachlauf' if nachgefahren == 1 else 'Nachlaeufen'}"
+        erklaerung += (f"; zuerst kamen die Stoesse im Takt {erster['takt']} ohne und {mit['takt']} mit"
+                       f" Cam-Modus an, "
+                       + (f"im selben Takt nach {nachlaeufe}" if o["takt"] == m["takt"]
+                          else f"auch nach {nachlaeufe} kein Paar im selben Takt"))
+    if daneben:
         # Woran es lag: Fing der Flug woanders an, stiess er oben an, kam noch
         # ein Stoss hinterher?
-        erklaerung += (f"; Anfang ohne {_zahlen(ohne['anfang'])}, mit {_zahlen(mit['anfang'])}; "
-                       f"hoechster Punkt ohne {ohne['hoehe']:.4f}, mit {mit['hoehe']:.4f}; "
-                       f"Pakete mit Geschwindigkeit ohne {ohne['pakete']}, mit {mit['pakete']}")
-    FIND.test(f"{name} {wie} stoesst den Spieler wie ohne Cam-Modus", gleich, erklaerung)
+        erklaerung += (f"; Anfang ohne {_zahlen(o['anfang'])}, mit {_zahlen(m['anfang'])}; "
+                       f"hoechster Punkt ohne {o['hoehe']:.4f}, mit {m['hoehe']:.4f}; "
+                       f"Pakete mit Geschwindigkeit ohne {o['pakete']}, mit {m['pakete']}; "
+                       f"Takt ohne {o['takt']}, mit {m['takt']}")
+    FIND.test(f"{name} {wie} stoesst den Spieler wie ohne Cam-Modus", daneben is None, erklaerung)
 
 
 def rueckstoss_checks(env, bot):
@@ -3449,6 +3544,18 @@ def rueckstoss_checks(env, bot):
     Der Bot traegt Resistenz 255: Jeder Treffer landet und stoesst, aber
     keiner verletzt ihn. cam-safety ist fuer die Dauer des Abschnitts aus,
     sonst ginge nach jedem Treffer fuenf Sekunden lang kein /cam.
+
+    Fallschaden nimmt der Bot fuer die Dauer des Abschnitts keinen. Wer
+    hoeher als drei Bloecke fliegt - nach der Windkugel eines Breeze -, nimmt
+    ihn sonst beim Aufkommen, und mit ihm kommt ein Paket mit der
+    Geschwindigkeit, die der Server gerade von ihm kennt. Welche das ist,
+    haengt daran, welche Bewegung des Bots er bis dahin verarbeitet hat:
+    gemessen -0,0658, -0,0723 oder -0,0599 zur Seite, und der Bot rutschte
+    danach bis zu 0,05 Bloecke weiter oder weniger weit, mit Cam-Modus wie
+    ohne.
+
+    Kamen die Stoesse in einem anderen Takt an, laeuft eine Probe noch
+    einmal, siehe rueckstoss_im_takt.
     """
     if not FIND.test("Cam-Modus ist vor dem Rueckstosstest aus", cam_off(bot), ""):
         return
@@ -3463,17 +3570,27 @@ def rueckstoss_checks(env, bot):
              f"minecraft:obsidian")
     bot.chat("/gamemode survival")
     bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
+    bot.chat(f"/attribute {BOT_NAME} minecraft:fall_damage_multiplier base set 0")
     time.sleep(0.5)
     set_option(env, "enabled", "false", "cam-safety")
     damage_mode_umgestellt = False
+
+    def geschoss(kommando):
+        """Ein Lauf mit dem Geschoss, das dieses Kommando setzt, mit oder
+        ohne Cam-Modus."""
+        def lauf(cam):
+            return rueckstoss_lauf(env, bot, ziel, cam, lambda: console(env, kommando, pause=0))
+        return lauf
+
     try:
+        # Je Probe die Laeufe ohne Cam-Modus, der erste vorne. Ein Nachlauf
+        # haengt sich an, und die Proben mit damage-mode: false vergleichen
+        # spaeter mit allen.
         ohne_cam = {}
         for name, kommando in rueckstoss_proben(x, y, z):
-            def treffen(k=kommando):
-                console(env, k, pause=0)
-            ohne_cam[name] = rueckstoss_lauf(env, bot, ziel, False, treffen)
-            mit = rueckstoss_lauf(env, bot, ziel, True, treffen)
-            rueckstoss_vergleich(name, ohne_cam[name], mit)
+            lauf = geschoss(kommando)
+            ohne_cam[name] = [lauf(False)]
+            rueckstoss_vergleich(name, ohne_cam[name], lauf(True), nochmal=lauf)
 
         # Die Schlaege eines zweiten Spielers, von Osten her. Liegengebliebene
         # Geschosse raeumt der Test vorher weg: Ein Schlag trifft die naechste
@@ -3487,15 +3604,21 @@ def rueckstoss_checks(env, bot):
                 time.sleep(1.5)
                 console(env, f"gamemode survival {ZUSCHAUER_NAME}", pause=0.3)
                 schlaege = rueckstoss_schlaege(env, schlaeger, x, y, z)
-                for name, vorbereiten, schlagen in schlaege:
-                    for cam in (False, True):
+
+                def schlag(vorbereiten, schlagen):
+                    """Ein Lauf mit diesem Schlag, mit oder ohne Cam-Modus."""
+                    def lauf(cam):
                         vorbereiten()
-                        lauf = rueckstoss_lauf(env, bot, ziel, cam, schlagen)
+                        ergebnis = rueckstoss_lauf(env, bot, ziel, cam, schlagen)
                         schlaeger.call("sprint", on=False)
-                        if cam:
-                            rueckstoss_vergleich(name, ohne_cam[name], lauf, rueckstoss_wie(name))
-                        else:
-                            ohne_cam[name] = lauf
+                        return ergebnis
+                    return lauf
+
+                for name, vorbereiten, schlagen in schlaege:
+                    lauf = schlag(vorbereiten, schlagen)
+                    ohne_cam[name] = [lauf(False)]
+                    rueckstoss_vergleich(name, ohne_cam[name], lauf(True), rueckstoss_wie(name),
+                                         nochmal=lauf)
 
                 # Ohne Schaden gibt das Plugin den Stoss ganz von Hand weiter -
                 # den eines Sprints und den eines Stichs, der mit seinem
@@ -3505,11 +3628,9 @@ def rueckstoss_checks(env, bot):
                 for name, vorbereiten, schlagen in schlaege:
                     if name not in ("Sprintschlag", "Speerstich"):
                         continue
-                    vorbereiten()
-                    mit = rueckstoss_lauf(env, bot, ziel, True, schlagen)
-                    schlaeger.call("sprint", on=False)
-                    rueckstoss_vergleich(name, ohne_cam[name], mit, "auf den Koerper mit damage-mode: false",
-                                         gegenprobe=False)
+                    lauf = schlag(vorbereiten, schlagen)
+                    rueckstoss_vergleich(name, ohne_cam[name], lauf(True), "auf den Koerper mit damage-mode: false",
+                                         gegenprobe=False, nochmal=lauf)
         finally:
             schlaeger.stop()
 
@@ -3520,11 +3641,9 @@ def rueckstoss_checks(env, bot):
         for name, kommando in rueckstoss_proben(x, y, z):
             if name not in ("Pfeil", "TNT", "Windkugel"):
                 continue
-            def treffen(k=kommando):
-                console(env, k, pause=0)
-            mit = rueckstoss_lauf(env, bot, ziel, True, treffen)
-            rueckstoss_vergleich(name, ohne_cam[name], mit, "auf den Koerper mit damage-mode: false",
-                                 gegenprobe=False)
+            lauf = geschoss(kommando)
+            rueckstoss_vergleich(name, ohne_cam[name], lauf(True), "auf den Koerper mit damage-mode: false",
+                                 gegenprobe=False, nochmal=lauf)
     finally:
         try:
             if damage_mode_umgestellt:
@@ -3532,6 +3651,7 @@ def rueckstoss_checks(env, bot):
             set_option(env, "enabled", "true", "cam-safety")
             console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.5)
             bot.chat(f"/effect clear {BOT_NAME}")
+            bot.chat(f"/attribute {BOT_NAME} minecraft:fall_damage_multiplier base reset")
             boden_ebnen(bot)
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:

@@ -427,9 +427,47 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   zehn Blöcke darüber im Cam-Modus wartet. Verglichen wird, wo er liegen
   bleibt - darin stecken Richtung, Weite und Höhe des Stoßes. Die erste
   Geschwindigkeit steht zum Nachlesen dabei. Fällt eine Probe durch, steht
-  auch da, wo der Flug anfing, wie hoch er ging und wie viele Pakete mit
-  einer Geschwindigkeit kamen - ob er also woanders losging, oben anstieß
-  oder noch einen Stoß hinterher bekam.
+  auch da, wo der Flug anfing, wie hoch er ging, wie viele Pakete mit
+  einer Geschwindigkeit kamen und in welchem Takt die Stöße ankamen - ob er
+  also woanders losging, oben anstieß oder noch einen Stoß hinterher bekam.
+* **Wie viele Ticks der Bot zwischen zwei Stößen rechnet, hängt an seinem
+  Takt.** mineflayer rechnet alle 50 ms nach der eigenen Uhr und setzt eine
+  Geschwindigkeit, sobald ihr Paket ankommt. Zwei Pakete aus zwei Ticks des
+  Servers liegen deshalb meist einen Tick des Bots auseinander, aber nicht
+  immer: Kommt das erste knapp nach einem seiner Ticks an und das zweite
+  knapp vor dem nächsten, liegt keiner dazwischen; holt er einen
+  verspäteten Tick nach, liegen zwei dazwischen. Eine Windkugel stößt mit
+  zwei solchen Paketen, und der Bot landete dann ganz woanders - nach der
+  eines Spielers ohne Cam-Modus bei -2,81 statt -4,83, nach der eines Breeze
+  im Cam-Modus bei -6,15 statt -5,80. In 160 Läufen mit einer Windkugel kam
+  das fünfmal vor, zweimal ohne Cam-Modus und dreimal mit; was der Server
+  schickte, war jedes Mal dasselbe.
+  `knock_start` schreibt deshalb an jedes Paket, wie viele Ticks der Bot bis
+  dahin gerechnet hat, und `stoss_takt` liest daraus, in welchem Tick jeder
+  Stoß ankam. Liegt der Bot an zwei Stellen, und kamen die Stöße beide Male
+  in gleich vielen Paketen, aber in einem anderen Takt an, läuft die Probe
+  noch einmal - abwechselnd mit und ohne Cam-Modus, höchstens viermal -, und
+  entschieden wird an den Läufen im selben Takt, mit derselben Toleranz. Kam
+  im Cam-Modus ein Paket mehr oder weniger an, läuft nichts nach: Das ist ein
+  Stoß zu viel oder zu wenig, und die Probe fällt durch.
+* **Der Bot nimmt im Rückstoßtest keinen Fallschaden**,
+  `fall_damage_multiplier` steht für den Abschnitt auf 0. Nach der Windkugel
+  eines Breeze fliegt er über drei Blöcke hoch - nur die Windkugel eines
+  Spielers erspart ihm den Fallschaden -, und mit dem Fallschaden kommt beim
+  Aufkommen ein Paket mit der Geschwindigkeit, die der Server gerade von ihm
+  kennt. Welche das ist, hängt daran, welche Bewegung des Bots er bis dahin
+  verarbeitet hat: gemessen -0,0658, -0,0723 oder -0,0599 zur Seite. Der Bot
+  rutschte danach bis zu 0,05 Blöcke weiter oder weniger weit, ohne
+  Cam-Modus wie mit, und eine Probe fiel mit 0,0503 durch.
+* **Im Cam-Modus stößt eine Windkugel mit einem Paket mehr.** Ohne Cam-Modus
+  kommt der Stoß ihrer Explosion im Explosionspaket an und einen Tick später
+  ein Paket mit der Geschwindigkeit, in der er und der des Treffers
+  zusammen stecken. Im Cam-Modus hält das Plugin die Explosion vom Spieler
+  fern und schickt beides selbst, erst die Explosion, einen Tick später
+  beide zusammen - beides als Geschwindigkeit, im Explosionspaket steht dann
+  nichts. „Pakete mit Geschwindigkeit ohne 1, mit 2“ ist also richtig so;
+  nachgezählt in 80 Läufen im Cam-Modus, mit jedem Paket, das der Server dem
+  Spieler schickte, kam nie eines mehr.
 * **Tränke, Meldungen und Rückstoß laufen mit beiden Körpertypen.** Bei
   `armorstand` trifft es den Rüstungsständer oder das unsichtbare Mannequin
   darin, bei `mannequin` das Mannequin allein - und dort flogen Pfeil,
