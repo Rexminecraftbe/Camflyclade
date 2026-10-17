@@ -79,6 +79,14 @@ public final class CamAreaRules {
     /** How many chunks the structure lookup keeps at once by default. */
     private static final int DEFAULT_REMEMBERED_CHUNKS = 256;
 
+    /**
+     * How many chunks the structure lookup may be set to keep, some 800 KB.
+     * The store fills with every chunk a camera player flies through and is
+     * only emptied by {@code /cam reload}, so with a very large value a
+     * long-running server would keep a good part of its world in it.
+     */
+    private static final int MAX_REMEMBERED_CHUNKS = 4096;
+
     /** How long the message at the border waits before it is sent again, in seconds. */
     private static final int DEFAULT_WARNING_COOLDOWN = 3;
 
@@ -151,7 +159,7 @@ public final class CamAreaRules {
                 Registry.STRUCTURE, componentStructures);
         dropStructuresInBothLists(config);
         rememberedChunks = config.getInt("cam-area.structures-cache-chunks",
-                DEFAULT_REMEMBERED_CHUNKS, 0);
+                DEFAULT_REMEMBERED_CHUNKS, 0, MAX_REMEMBERED_CHUNKS);
         knownChunks.clear();
         allowedDimensions.clear();
         for (Map.Entry<World.Environment, String> dimension : DIMENSIONS.entrySet()) {

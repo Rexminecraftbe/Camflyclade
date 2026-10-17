@@ -168,7 +168,7 @@ body:
   # Der Wärter hält sich nur auf Paper daran, auf Spigot greift er den Körper an, wenn er ihn riecht.
   mob-target: false
 
-  # Reichweite in Blöcken für mob-target: custom (0 = kein Mob)
+  # Reichweite in Blöcken für mob-target: custom (0 = kein Mob, höchstens 64 wie der weiteste Mob in Vanilla)
   mob-target-radius: 16.0
 
   # Mobkopf als Helm halbiert die Reichweite dieser Mobart (wie in Vanilla )
@@ -197,7 +197,7 @@ camera-particles:
   particle: soul_fire_flame
   # Höhe über den Füßen in Blöcken
   height: 0.2
-  # Partikel pro Tick, Kommazahl mit Punkt: 0.5 = jeden zweiten Tick eins (0 = aus)
+  # Partikel pro Tick, Kommazahl mit Punkt: 0.5 = jeden zweiten Tick eins (0 = aus, höchstens 100)
   particles-per-tick: 1
   # Wie weit die Partikel um den Punkt streuen, in Blöcken (0 = alle auf einem Punkt)
   spread: 0.0
@@ -209,7 +209,7 @@ fireguard:
   hide-fire: true
   # Prüfintervall in Ticks
   tick-interval: 10
-  # Suchradius für hide-fire in Blöcken
+  # Suchradius für hide-fire in Blöcken (höchstens 8, jeder Block im Umkreis wird bei jeder Prüfung angesehen)
   radius-horizontal: 1.5
   radius-up: 2
   radius-down: 1
@@ -263,7 +263,7 @@ cam-area:
     - bastion_remnant
     - end_city
 
-  # Zwischenspeicher der Struktur-Prüfung in Chunks (256 = etwa 50 KB RAM; 0 = aus, kostet dann mehr Rechenzeit)
+  # Zwischenspeicher der Struktur-Prüfung in Chunks (256 = etwa 50 KB RAM, höchstens 4096; 0 = aus, kostet dann mehr Rechenzeit)
   # Neu platzierte Strukturen zählen erst nach /cam reload (bei 0 sofort).
   structures-cache-chunks: 256
 

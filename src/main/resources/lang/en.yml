@@ -44,6 +44,8 @@ messages:
   config-expected-list: "&cWrong value for {path}: '{value}'. Expected a list. Using {used} instead."
   config-expected-number: "&cWrong value for {path}: '{value}'. Expected a number. Using {used} instead."
   config-expected-text: "&cWrong value for {path}: '{value}'. Expected text. Using {used} instead."
+  config-expected-whole-number: "&cWrong value for {path}: '{value}'. Expected a whole number. Using {used} instead."
+  config-out-of-range: "&cValue for {path} is out of range: {value}. Using {used} instead."
   config-syntax-extra-colon: 'there is one ":" too many here, or the value belongs in quotes'
   config-syntax-indentation: "the indentation here does not match the lines above"
   config-syntax-missing-colon: 'a "-" at the start of the line or a ":" after the name is missing here'

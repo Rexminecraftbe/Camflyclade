@@ -3,6 +3,7 @@ package de.elia.cameraplugin.config;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -30,6 +31,7 @@ public final class ConfigReader {
     /** Message keys of the notes, matching the {@code messages} block of the language file. */
     private static final String EXPECTED_BOOLEAN = "config-expected-boolean";
     private static final String EXPECTED_NUMBER = "config-expected-number";
+    private static final String EXPECTED_WHOLE_NUMBER = "config-expected-whole-number";
     private static final String EXPECTED_TEXT = "config-expected-text";
     private static final String EXPECTED_LIST = "config-expected-list";
     private static final String UNKNOWN_VALUE = "config-unknown-value";
@@ -37,6 +39,7 @@ public final class ConfigReader {
     private static final String ENTRY_IN_BOTH_LISTS = "config-entry-in-both-lists";
     private static final String TOO_SMALL = "config-too-small";
     private static final String TOO_LARGE = "config-too-large";
+    private static final String OUT_OF_RANGE = "config-out-of-range";
 
     private final FileConfiguration config;
     private final List<ConfigIssue> warnings = new ArrayList<>();
@@ -86,7 +89,7 @@ public final class ConfigReader {
     // ----------------------------------------------------------------- numbers
 
     public int getInt(String path, int def) {
-        Number value = readNumber(path, def);
+        Long value = readWholeNumber(path, def, Integer.MIN_VALUE, Integer.MAX_VALUE);
         return value == null ? def : value.intValue();
     }
 
@@ -100,10 +103,23 @@ public final class ConfigReader {
         return value;
     }
 
+    /**
+     * Reads a whole number and keeps it between {@code min} and
+     * {@code max}, for a value that costs more work the larger it gets.
+     */
+    public int getInt(String path, int def, int min, int max) {
+        int value = getInt(path, def, min);
+        if (value > max) {
+            warnTooLarge(path, String.valueOf(value), String.valueOf(max));
+            return max;
+        }
+        return value;
+    }
+
     /** Reads a whole number and raises it when it is below {@code min}. */
     public long getLong(String path, long def, long min) {
-        Number raw = readNumber(path, def);
-        long value = raw == null ? def : raw.longValue();
+        Long raw = readWholeNumber(path, def, Long.MIN_VALUE, Long.MAX_VALUE);
+        long value = raw == null ? def : raw;
         if (value < min) {
             warnTooSmall(path, String.valueOf(value), String.valueOf(min));
             return min;
@@ -139,16 +155,54 @@ public final class ConfigReader {
         return value;
     }
 
+    /**
+     * Reads a number of any kind. {@code .nan} and {@code .inf} are numbers to
+     * YAML, but none the plugin can work with: not-a-number compares as false
+     * with everything, so it would slip past every limit, and an endless value
+     * keeps no limit either.
+     */
     private Number readNumber(String path, Object def) {
         Object raw = config.get(path);
         if (raw == null) {
             return null;
         }
-        if (raw instanceof Number value) {
-            return value;
+        if (!(raw instanceof Number value) || Double.isNaN(value.doubleValue())) {
+            warnWrongType(path, raw, EXPECTED_NUMBER, String.valueOf(def));
+            return null;
         }
-        warnWrongType(path, raw, EXPECTED_NUMBER, String.valueOf(def));
-        return null;
+        if (Double.isInfinite(value.doubleValue())) {
+            warnOutOfRange(path, raw, String.valueOf(def));
+            return null;
+        }
+        return value;
+    }
+
+    /**
+     * Reads a whole number that fits between {@code lowest} and
+     * {@code highest}, the range of the type it is kept in.
+     *
+     * <p>A decimal number is not cut down to a whole one, and one that does not
+     * fit is not wrapped around, the way Java would do it: both would quietly
+     * turn into a value the file never said, 2.5 into 2 and 3000000000 into a
+     * negative one. Neither says which whole number was meant, so the default
+     * is used instead.</p>
+     */
+    private Long readWholeNumber(String path, Object def, long lowest, long highest) {
+        Number value = readNumber(path, def);
+        if (value == null) {
+            return null;
+        }
+        BigDecimal exact = new BigDecimal(value.toString());
+        if (exact.remainder(BigDecimal.ONE).signum() != 0) {
+            warnWrongType(path, value, EXPECTED_WHOLE_NUMBER, String.valueOf(def));
+            return null;
+        }
+        if (exact.compareTo(BigDecimal.valueOf(lowest)) < 0
+                || exact.compareTo(BigDecimal.valueOf(highest)) > 0) {
+            warnOutOfRange(path, value, String.valueOf(def));
+            return null;
+        }
+        return exact.longValueExact();
     }
 
     // -------------------------------------------------------------------- text
@@ -286,5 +340,18 @@ public final class ConfigReader {
                 .with("path", path)
                 .with("value", value)
                 .with("max", max));
+    }
+
+    /**
+     * Adds a note that a number lies beyond anything that can be kept, as
+     * opposed to beyond the limit a setting draws for itself.
+     *
+     * @param used the default, which is used instead
+     */
+    private void warnOutOfRange(String path, Object value, String used) {
+        warnings.add(ConfigIssue.of(OUT_OF_RANGE)
+                .with("path", path)
+                .with("value", value)
+                .with("used", used));
     }
 }
