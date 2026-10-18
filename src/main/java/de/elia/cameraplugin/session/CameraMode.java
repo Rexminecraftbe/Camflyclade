@@ -175,7 +175,10 @@ public final class CameraMode {
         }.runTaskLater(plugin, 2L);
 
         // *** Hand the saved inventory to CameraData ***
-        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, nameDisplay, bodyChunk, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects));
+        CameraData cameraData = new CameraData(body, hitbox, nameDisplay, bodyChunk, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects);
+        cameraPlayers.put(player.getUniqueId(), cameraData);
+        // Before the flight speed below: the file is to hold the one he had.
+        plugin.getCrashGuard().save(player, cameraData);
         cameraPlayers.addBody(body.getUniqueId(), player.getUniqueId());
         if (hitbox != null) {
             cameraPlayers.addHitbox(hitbox.getUniqueId(), player.getUniqueId());
@@ -185,6 +188,8 @@ public final class CameraMode {
         plugin.getSightGlow().startSightGlow(player);
         plugin.getNameTag().startFor(player);
         plugin.getActionBar().startActionBar(player);
+        plugin.getFlightSpeed().startFor(player);
+        plugin.getNightVision().startFor(player);
         plugin.getFireGuard().startFor(player);
         plugin.getHungerGuard().startFor(player);
         plugin.getGhastGuard().startFor(player);
@@ -217,10 +222,11 @@ public final class CameraMode {
                 }
             }.runTaskLater(plugin, 2L); // delay to ensure armour is restored
         }
+        settings.getStartSound().play(player);
     }
 
-    public void exitCameraMode(Player player) {
-        exitCameraMode(player, true);
+    public void exitCameraMode(Player player, EndReason reason) {
+        exitCameraMode(player, true, reason);
     }
 
     /**
@@ -231,14 +237,15 @@ public final class CameraMode {
      * he is.
      */
     public void exitCameraModeForTeleport(Player player) {
-        exitCameraMode(player, false);
+        exitCameraMode(player, false, EndReason.FORCED);
     }
 
     /**
      * @param toBody whether he is put back where his body stands; only not
      *               when a teleport carries him off anyway
+     * @param reason why it ends, which picks the sound
      */
-    private void exitCameraMode(Player player, boolean toBody) {
+    private void exitCameraMode(Player player, boolean toBody, EndReason reason) {
         CameraData cameraData = cameraPlayers.get(player.getUniqueId());
         NoCollisionTeam team = plugin.getNoCollisionTeam();
         if (cameraData == null) {
@@ -251,6 +258,8 @@ public final class CameraMode {
             plugin.getSulfurCubeGuard().stopFor(player);
             plugin.getInventoryGuard().stopFor(player);
             plugin.getBorderWall().stopFor(player);
+            plugin.getFlightSpeed().stopFor(player);
+            plugin.getNightVision().stopFor(player);
             team.updateViewerTeam(player);
             plugin.getCamModeObjective().setScore(player, 0);
             return;
@@ -290,6 +299,9 @@ public final class CameraMode {
         player.updateInventory();
 
         player.removePotionEffect(PotionEffectType.INVISIBILITY);
+        // Before the paused effects come back: night vision among them would
+        // otherwise be taken off along with the one of camera mode.
+        plugin.getNightVision().stopFor(player);
 
         if (standingInFire) {
             player.setFireTicks(160);
@@ -303,6 +315,7 @@ public final class CameraMode {
         player.setAllowFlight(cameraData.getOriginalAllowFlight());
         player.setFlying(cameraData.getOriginalFlying());
         player.setGlowing(cameraData.getOriginalGlowing());
+        plugin.getFlightSpeed().stopFor(player);
         // He stands where the mannequin stood, in the same water or powder
         // snow: what air it has left and how frozen it got is his now.
         LivingEntity standIn = cameraData.getDamageTarget();
@@ -344,8 +357,13 @@ public final class CameraMode {
             other.showPlayer(plugin, player);
         }
         plugin.getVisibility().updateVisibilityForAll();
+        // Only now that he has everything back: until here the file is the
+        // one thing that would give it to him after a crash.
+        plugin.getCrashGuard().delete(player);
         if (!plugin.isShuttingDown()) {
             plugin.getTimeLimit().startCooldown(player);
+            // Last, at his body: the sound says he is back, and why.
+            settings.getEndSound(reason).play(player);
         }
     }
 }

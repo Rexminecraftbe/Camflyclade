@@ -3,6 +3,7 @@ package de.elia.cameraplugin.interaction;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.EndReason;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -96,7 +97,7 @@ public final class CamInteractionGuard implements Listener {
             messages.sendConfiguredMessage(player, "camera-off");
             Player owner = Bukkit.getPlayer(ownerUUID);
             if (owner != null) {
-                plugin.exitCameraMode(owner);
+                plugin.exitCameraMode(owner, EndReason.COMMAND);
             }
         }
     }

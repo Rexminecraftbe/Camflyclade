@@ -6,6 +6,8 @@
 
 # Texts the plugin sends (colour codes with &)
 messages:
+  actionbar-distance: "&aBody: &f{distance} blocks &e{arrow}"
+  actionbar-distance-portal: "&aPortal: &f{distance} blocks &e{arrow}"
   actionbar-off: "&cCam mode ended"
   actionbar-on: "&aCam mode activated"
   armorstand.name-format: "{player}'s Body"
@@ -20,6 +22,10 @@ messages:
   cam-area-start: "&cYou cannot start cam mode in {area}."
   cam-effect-start: "&cYou cannot start cam mode with {effect} on you."
   cam-falling-start: "&cYou cannot start cam mode while falling."
+  cam-list-empty: "&eNobody is in cam mode."
+  cam-list-entry: "&7- &f{player}&7: for {time}, {distance} blocks from the body"
+  cam-list-entry-away: "&7- &f{player}&7: for {time}, in another world than the body"
+  cam-list-header: "&eIn cam mode ({count}):"
   cam-lava-start: "&cYou cannot start cam mode in lava."
   cam-powder-snow-start: "&cYou cannot start cam mode in powder snow."
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
@@ -33,6 +39,7 @@ messages:
   cant-fly-in-water: "&cYou cannot fly into water in camera mode."
   config-allowed-blocks: "any block, e.g. barrier or glass"
   config-allowed-particles: "a particle without extra data, e.g. soul_fire_flame, flame or end_rod"
+  config-allowed-sounds: "a sound as /playsound names it, e.g. block.beacon.activate"
   config-broken: "&cThe configuration has an error in {file} and was not applied, the previous settings stay in effect: {error}"
   config-broken-startup: "&cThe configuration has an error in {file}: {error}"
   config-start-failed: "&cStartup failed. To enable the plugin, fix the error in the configuration and restart the server."
@@ -59,10 +66,12 @@ messages:
   config-unknown-key: "&cUnknown setting {path}. It is ignored, check its spelling and indentation."
   config-unknown-value: "&cUnknown value for {path}: '{value}'. Allowed: {allowed}. Using {used} instead."
   cooldown-available: "&aCam mode available again"
+  crash-restored: "&eThe server went down while you were in cam mode. You got your things back and are at your body again."
   cooldown-text: "You can start cam mode again in %time%."
   distance-from-body: "your body"
   distance-from-portal: "the portal you came out of"
   distance-limit: "&cYou cannot move further than {distance} blocks from {from}!"
+  flight-speed: "&bFlight speed: &f{speed}x"
   hitbox.name-format: "&c[HITBOX] {player}"
   no-permission: "&cYou don't have permission to use this command."
   no-player: "&cThis command can only be used by players."
@@ -362,6 +371,8 @@ portal-names:
 
 # Switch single messages on and off
 message-settings:
+  actionbar-distance: true
+  actionbar-distance-portal: true
   actionbar-off: true
   actionbar-on: true
   body-attacked: true
@@ -376,6 +387,10 @@ message-settings:
   cam-effect-start: true
   cam-falling-start: true
   cam-lava-start: true
+  cam-list-empty: true
+  cam-list-entry: true
+  cam-list-entry-away: true
+  cam-list-header: true
   cam-powder-snow-start: true
   cam-safety: true
   cam-spectator-start: true
@@ -388,9 +403,11 @@ message-settings:
   cant-fly-in-water: true
   config-errors: true
   cooldown-available: true
+  crash-restored: true
   cooldown-text: true
   distance-limit: true
   enabled: true
+  flight-speed: true
   no-permission: true
   no-projectiles: true
   portal-blocked: true

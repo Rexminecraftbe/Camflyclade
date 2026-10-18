@@ -5,6 +5,7 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.EndReason;
 import org.bukkit.Bukkit;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
@@ -128,7 +129,7 @@ public final class DamageMirror implements Listener {
         // the mannequin standing in it.
         if (owner.isDead()) {
             event.setCancelled(true);
-            plugin.exitCameraMode(owner);
+            plugin.exitCameraMode(owner, EndReason.SILENT);
             return;
         }
 
@@ -138,7 +139,7 @@ public final class DamageMirror implements Listener {
         if (event instanceof EntityDamageByEntityEvent selfHit &&
                 selfHit.getDamager().getUniqueId().equals(owner.getUniqueId())) {
             messages.sendConfiguredMessage(owner, "camera-off");
-            plugin.exitCameraMode(owner);
+            plugin.exitCameraMode(owner, EndReason.COMMAND);
             return;
         }
 
@@ -192,7 +193,7 @@ public final class DamageMirror implements Listener {
         HitPush push = HitPush.of(event, standIn(ownerUUID, damagedEntity),
                 announcedRadius(event.getDamageSource()), swingStrength);
 
-        plugin.exitCameraMode(owner);
+        plugin.exitCameraMode(owner, EndReason.BODY);
 
         sendDamageMessage(owner, event);
 

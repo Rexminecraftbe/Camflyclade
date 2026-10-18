@@ -1,6 +1,8 @@
 package de.elia.cameraplugin.camfly2;
 
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.list.CamList;
+import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.start.StartChecks;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import org.bukkit.command.Command;
@@ -15,12 +17,14 @@ public class CamCommand implements CommandExecutor {
     private final Messages messages;
     private final StartChecks startChecks;
     private final CamTimeLimit timeLimit;
+    private final CamList camList;
 
     public CamCommand(CameraPlugin plugin) {
         this.plugin = plugin;
         this.messages = plugin.getMessages();
         this.startChecks = plugin.getStartChecks();
         this.timeLimit = plugin.getTimeLimit();
+        this.camList = plugin.getCamList();
     }
 
     @Override
@@ -30,6 +34,16 @@ public class CamCommand implements CommandExecutor {
         // an operator in the game to type the command.
         if (args.length > 0 && args[0].equalsIgnoreCase("reload")) {
             return reload(sender);
+        }
+        // From the console as well: whoever runs the server wants to know who
+        // is flying around, without being in the game.
+        if (args.length > 0 && args[0].equalsIgnoreCase("list")) {
+            if (camList.mayUse(sender)) {
+                camList.show(sender);
+            } else {
+                messages.sendConfiguredMessage(sender, "no-permission");
+            }
+            return true;
         }
 
         if (!(sender instanceof Player player)) {
@@ -43,7 +57,7 @@ public class CamCommand implements CommandExecutor {
         }
 
         if (plugin.isInCameraMode(player)) {
-            plugin.exitCameraMode(player);
+            plugin.exitCameraMode(player, EndReason.COMMAND);
             messages.sendConfiguredMessage(player, "camera-off");
         } else {
             // Before the cooldown: "wait ten more seconds" tells a spectator

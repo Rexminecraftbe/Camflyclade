@@ -10,6 +10,14 @@ language: en
 # Anzeige in der Action-Bar
 action-bar:
   enabled: true
+  # Was dort steht, solange der Cam-Modus läuft:
+  #   distance = wie weit der Körper weg ist und in welche Richtung, z. B. "Body: 42 blocks ↖"
+  #              (Text: actionbar-distance in der Sprachdatei; zu Beginn steht kurz actionbar-on)
+  #              Der Pfeil zeigt von der Blickrichtung aus. ▲/▼ = der Körper liegt steiler als 60° über/unter dir,
+  #              ● = du bist höchstens 2 Blöcke von ihm weg.
+  #              In einer anderen Welt zeigt er zum Portal, aus dem man kam (actionbar-distance-portal).
+  #   text     = der feste Text actionbar-on, wie bisher
+  display: distance
   # Wie lange actionbar-off gesendet wird, in Ticks
   off-duration: 1
 
@@ -173,6 +181,89 @@ body:
 
   # Mobkopf als Helm halbiert die Reichweite dieser Mobart (wie in Vanilla )
   mob-target-heads: true
+
+# Fluggeschwindigkeit im Cam-Modus (1 = normal, wie im Kreativmodus)
+flight-speed:
+  # Mit dem Mausrad ändern: hoch = schneller, runter = langsamer (wie im Zuschauermodus).
+  # Geht in jedem Spielmodus, auch im Abenteuermodus. Der Platz in der Hotbar bleibt dabei, wie er war,
+  # und die Action-Bar zeigt kurz die neue Geschwindigkeit (Text: flight-speed in der Sprachdatei).
+  # Auch die Zifferntasten ändern sie dann um eine Stufe - der Server kann sie vom Mausrad nicht unterscheiden.
+  mouse-wheel: true
+  # Geschwindigkeit beim Start, zwischen min und max
+  start: 1.0
+  # Langsamste und schnellste Geschwindigkeit (0.1 bis 5; schneller lädt die Welt nicht mehr rechtzeitig nach,
+  # und die Wand von border-mode: barrier kommt nicht hinterher)
+  min: 0.5
+  max: 3.0
+  # Wie viel ein Dreh am Mausrad ändert
+  step: 0.5
+
+# Nachtsicht im Cam-Modus (nur der Spieler selbst sieht heller, ohne Partikel und ohne Symbol)
+night-vision:
+  # Wann:
+  #   true  = immer
+  #   false = nie
+  #   dark  = nur, wenn es um die Kamera dunkel ist (siehe light-level), auch nachts unter freiem Himmel
+  mode: dark
+  # Bis zu welcher Helligkeit es als dunkel gilt, 0 bis 15 (Fackel direkt daneben: 14, Nacht unter freiem Himmel: 4).
+  # Aus geht die Nachtsicht erst wieder, wenn es 2 Stufen heller ist, damit sie an der Grenze nicht flackert.
+  light-level: 7
+
+# Töne im Cam-Modus. Nur der Spieler selbst hört sie, sonst würden sie einen unsichtbaren Spieler verraten.
+#   enabled = Ton an (true) oder aus (false)
+#   sound   = der Name wie bei /playsound, z. B. block.beacon.activate, entity.player.levelup, block.note_block.pling
+#             (ein Ton aus einem Ressourcenpaket mit seinem eigenen Namensraum, z. B. meinpaket:kamera.an)
+#   volume  = Lautstärke, 0 bis 1 (0 = aus)
+#   pitch   = Tonhöhe, 0.5 (tief) bis 2 (hoch), 1 = wie er ist
+sounds:
+  # Beim Start des Cam-Modus
+  start:
+    enabled: true
+    sound: block.beacon.activate
+    volume: 1.0
+    pitch: 1.0
+  # Beim Ende mit /cam (oder einem Klick auf den eigenen Körper), zurück am Körper
+  end:
+    enabled: true
+    sound: block.beacon.deactivate
+    volume: 1.0
+    pitch: 1.0
+  # Beim Ende, weil dem Körper etwas passiert ist: angegriffen, beschädigt, verschoben, ertrinkt, erstickt, Trank
+  end-body:
+    enabled: true
+    sound: entity.illusioner.mirror_move
+    volume: 1.0
+    pitch: 1.0
+  # Beim Ende von außen: /cam reload, Zeitlimit abgelaufen, Teleport
+  # (beim Tod, beim Verlassen des Servers und beim Herunterfahren gibt es keinen Ton)
+  end-forced:
+    enabled: true
+    sound: block.respawn_anchor.deplete
+    volume: 1.0
+    pitch: 1.0
+  # An der Grenze: max-distance, cam-area, gesperrte Lava, Wasser, Pulverschnee und gesperrte Portale.
+  # So oft wie die Meldung dazu (distance-warning-cooldown usw.), auch wenn die Meldung selbst abgeschaltet ist.
+  border:
+    enabled: true
+    sound: block.note_block.bass
+    volume: 1.0
+    pitch: 0.5
+
+# Schutz bei einem Absturz. Was der Cam-Modus dem Spieler abnimmt (Inventar, Spielmodus, Effekte, Flug), steht,
+# solange der Cam-Modus läuft, auch in plugins/CamFly/playerdata/<UUID>.yml. Beim Ende wird die Datei gelöscht.
+# Stürzt der Server ab, ist sie beim nächsten Betreten noch da: Der Spieler bekommt alles zurück und steht wieder
+# bei seinem Körper. Kostet eine kleine Datei beim Start und ein Löschen beim Ende, im Cam-Modus selbst nichts.
+# Dateien, die schon da sind, werden auch mit false noch zurückgegeben.
+crash-protection:
+  enabled: true
+
+# /cam list: wer gerade im Cam-Modus ist, wie lange schon und wie weit von seinem Körper
+cam-list:
+  # Wer den Befehl benutzen darf (die Konsole immer):
+  #   admin = Operatoren und wer das Recht camplugin.list hat
+  #   all   = jeder, der /cam benutzen darf
+  #   false = kein Spieler
+  access: admin
 
 # Zeitlimit für den Cam-Modus
 time-limit:

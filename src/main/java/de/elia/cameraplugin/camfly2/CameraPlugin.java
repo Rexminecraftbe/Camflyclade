@@ -7,6 +7,7 @@ import de.elia.cameraplugin.config.ConfigFile;
 import de.elia.cameraplugin.config.ConfigIssue;
 import de.elia.cameraplugin.config.ConfigReader;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.crash.CamCrashGuard;
 import de.elia.cameraplugin.display.CamActionBar;
 import de.elia.cameraplugin.display.CamNameTag;
 import de.elia.cameraplugin.display.CamParticles;
@@ -19,6 +20,7 @@ import de.elia.cameraplugin.interaction.CamInteractionGuard;
 import de.elia.cameraplugin.interaction.CamKnockbackGuard;
 import de.elia.cameraplugin.inventory.CamInventoryGuard;
 import de.elia.cameraplugin.inventory.CamInventoryLock;
+import de.elia.cameraplugin.list.CamList;
 import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.mirrordamage.DamageMirror;
 import de.elia.cameraplugin.mirrordamage.SwingStrength;
@@ -26,13 +28,16 @@ import de.elia.cameraplugin.mob.MobGaze;
 import de.elia.cameraplugin.mob.MobTargeting;
 import de.elia.cameraplugin.movement.CamBorderWall;
 import de.elia.cameraplugin.movement.CamMovementGuard;
+import de.elia.cameraplugin.nightvision.CamNightVision;
 import de.elia.cameraplugin.potion.CamPotionGuard;
 import de.elia.cameraplugin.scoreboard.CamModeObjective;
 import de.elia.cameraplugin.scoreboard.NoCollisionTeam;
 import de.elia.cameraplugin.session.CameraHead;
 import de.elia.cameraplugin.session.CameraMode;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.session.SessionListener;
+import de.elia.cameraplugin.speed.CamFlightSpeed;
 import de.elia.cameraplugin.start.StartChecks;
 import de.elia.cameraplugin.sulfurcube.CamSulfurCubeGuard;
 import de.elia.cameraplugin.teleport.CamTeleportGuard;
@@ -76,6 +81,10 @@ public final class CameraPlugin extends JavaPlugin {
     private final SightGlow sightGlow = new SightGlow(this, settings, cameraPlayers);
     private final CamNameTag nameTag = new CamNameTag(this, settings, messages, cameraPlayers);
     private final CamActionBar actionBar = new CamActionBar(this);
+    private final CamFlightSpeed flightSpeed = new CamFlightSpeed(this);
+    private final CamNightVision nightVision = new CamNightVision(this, settings, cameraPlayers);
+    private final CamList camList = new CamList(settings, messages, cameraPlayers);
+    private final CamCrashGuard crashGuard = new CamCrashGuard(this, log);
     private final MobTargeting mobTargeting = new MobTargeting(this, settings, cameraPlayers);
     private final MobGaze mobGaze = new MobGaze(this, settings, cameraPlayers);
     private final BodyWatch bodyWatch = new BodyWatch(this);
@@ -130,9 +139,10 @@ public final class CameraPlugin extends JavaPlugin {
         // Nobody is in camera mode at startup -> remove a team left over.
         noCollisionTeam.deleteNoCollisionTeam();
         this.getCommand("cam").setExecutor(new CamCommand(this));
-        this.getCommand("cam").setTabCompleter(new CamTabCompleter());
+        this.getCommand("cam").setTabCompleter(new CamTabCompleter(camList));
         registerListeners();
         noCollisionTeam.refreshNoCollisionTeam();
+        crashGuard.restoreOnline();
         startedUp = true;
         getLogger().info("CameraPlugin has been enabled!");
     }
@@ -159,6 +169,8 @@ public final class CameraPlugin extends JavaPlugin {
                 bodySpawner,
                 new CamInventoryLock(cameraPlayers),
                 new CamPotionGuard(this),
+                flightSpeed,
+                crashGuard,
                 new CamSuggestionFilter(this));
         for (Listener listener : listeners) {
             pluginManager.registerEvents(listener, this);
@@ -231,7 +243,7 @@ public final class CameraPlugin extends JavaPlugin {
         for (UUID playerId : new HashSet<>(cameraPlayers.ids())) {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) {
-                exitCameraMode(player);
+                exitCameraMode(player, EndReason.SILENT);
             }
         }
         if (camFireGuard != null) {
@@ -252,6 +264,7 @@ public final class CameraPlugin extends JavaPlugin {
         sightGlow.onDisable();
         nameTag.onDisable();
         actionBar.onDisable();
+        nightVision.onDisable();
         timeLimit.onDisable();
         // No player left in camera mode -> remove the team.
         noCollisionTeam.deleteNoCollisionTeam();
@@ -316,7 +329,7 @@ public final class CameraPlugin extends JavaPlugin {
             Player camPlayer = Bukkit.getPlayer(uuid);
             if (camPlayer != null) {
                 messages.sendConfiguredMessage(camPlayer, "reload-exit");
-                exitCameraMode(camPlayer);
+                exitCameraMode(camPlayer, EndReason.FORCED);
             }
         }
         configFile.reportConfigWarnings(loadConfigValues(), initiator);
@@ -371,8 +384,9 @@ public final class CameraPlugin extends JavaPlugin {
         cameraMode.enterCameraMode(player);
     }
 
-    public void exitCameraMode(Player player) {
-        cameraMode.exitCameraMode(player);
+    /** Ends camera mode, with the sound that goes with the reason. */
+    public void exitCameraMode(Player player, EndReason reason) {
+        cameraMode.exitCameraMode(player, reason);
     }
 
     /** Ends camera mode for a player being teleported away, see {@link CameraMode#exitCameraModeForTeleport}. */
@@ -431,6 +445,22 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamActionBar getActionBar() {
         return actionBar;
+    }
+
+    public CamFlightSpeed getFlightSpeed() {
+        return flightSpeed;
+    }
+
+    public CamNightVision getNightVision() {
+        return nightVision;
+    }
+
+    public CamList getCamList() {
+        return camList;
+    }
+
+    public CamCrashGuard getCrashGuard() {
+        return crashGuard;
     }
 
     public CamFireGuard getFireGuard() {

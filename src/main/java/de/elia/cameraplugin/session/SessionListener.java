@@ -25,7 +25,7 @@ public final class SessionListener implements Listener {
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         if (cameraPlayers.contains(event.getPlayer().getUniqueId())) {
-            plugin.exitCameraMode(event.getPlayer());
+            plugin.exitCameraMode(event.getPlayer(), EndReason.SILENT);
         }
         plugin.getMovementGuard().forget(event.getPlayer().getUniqueId());
         plugin.getNoCollisionTeam().removePlayerFromNoCollisionTeam(event.getPlayer());
@@ -67,6 +67,6 @@ public final class SessionListener implements Listener {
                 }
             }
         }
-        plugin.exitCameraMode(player);
+        plugin.exitCameraMode(player, EndReason.SILENT);
     }
 }

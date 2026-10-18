@@ -29,6 +29,8 @@ public class CameraData {
     /** Every slot of his inventory, the armour and the off hand included. */
     private final ItemStack[] originalInventoryContents;
     private final Collection<PotionEffect> pausedEffects;
+    /** When camera mode started, in milliseconds as {@link System#currentTimeMillis()} counts them. */
+    private final long startedAt = System.currentTimeMillis();
     /**
      * Where the distance to the body is measured from while the player is
      * in a world his body is not in: the portal he came out of there.
@@ -72,6 +74,8 @@ public class CameraData {
     public boolean getOriginalGlowing() { return originalGlowing; }
     public ItemStack[] getOriginalInventoryContents() { return originalInventoryContents; }
     public Collection<PotionEffect> getPausedEffects() { return pausedEffects; }
+    /** When camera mode started, for {@code /cam list}. */
+    public long getStartedAt() { return startedAt; }
     /** The portal the distance is measured from, or {@code null} for the body. */
     public Location getPortalAnchor() { return portalAnchor; }
     public void setPortalAnchor(Location portalAnchor) { this.portalAnchor = portalAnchor; }
