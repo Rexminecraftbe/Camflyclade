@@ -2902,7 +2902,8 @@ def absturz_checks(env, bot):
         kopf = (ordner / dateien()[0]).read_text(encoding="utf-8").splitlines()[:3]
         FIND.test("crash-protection: oben in der Datei steht, wozu sie da ist, mit der Warnung",
                   len(kopf) == 3
-                  and kopf[0] == "# CamFly crash protection: what cam mode took from this player."
+                  and kopf[0] == "# CamFly crash protection: backup of what cam mode took from this player."
+                  and kopf[1] == "# Only used after a server crash, on the next join. Deleted when cam mode ends."
                   and kopf[2] == "# \u26a0 Do not edit or delete it while the server is running! \u26a0",
                   str(kopf))
     cam_off(bot)
