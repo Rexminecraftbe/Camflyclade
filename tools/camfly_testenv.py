@@ -3453,9 +3453,13 @@ def alte_absturzdatei_checks(env, bot):
     Vor dem Ordner playerdata/stats lagen die Dateien direkt unter
     playerdata. Eine, die ein Absturz vor dem Update dort hinterlassen hat,
     muss trotzdem zurueckgegeben werden. Der Test legt eine solche Datei an,
-    waehrend der Bot abgemeldet ist - mit leerem Inventar und Kreativmodus,
-    an einer Stelle zwei Bloecke neben ihm. Nach dem Anmelden steht er dort,
-    ist im Kreativmodus, und die Datei ist weg.
+    waehrend der Bot abgemeldet ist: mit leerem Inventar, an einer Stelle
+    zwei Bloecke neben ihm, und mit dem Spielmodus und dem Flug, die er
+    gerade hat - die Datei gibt sie ihm zurueck, und spaetere Abschnitte
+    finden ihn so vor, wie er war. Ohne Flug faellt er etwa im
+    Interaktionstest vom Happy Ghast und darf danach wegen cam-safety nicht
+    starten. Nach dem Anmelden steht er an der Stelle aus der Datei, und die
+    Datei ist weg.
     """
     ordner = env.server / "plugins" / "CamFly" / "playerdata"
     datei = {}
@@ -3463,20 +3467,21 @@ def alte_absturzdatei_checks(env, bot):
     if not FIND.test("Standort fuer die alte Absturzdatei lesbar", pos is not None, ""):
         return
     ziel = (_floor(pos[0]) + 2.5, _floor(pos[1] + 0.5), _floor(pos[2]) + 0.5)
+    modus = next((m for m in ("survival", "creative", "adventure") if spielmodus_ist(bot, m)), "survival")
+    darf_fliegen = bool(bot.server_data("abilities.mayfly"))
 
     def anlegen():
         stats = spielerdatei(env)
-        uuid = stats.stem if stats is not None else None
-        if uuid is None:
+        if stats is None:
             return
-        datei["pfad"] = ordner / f"{uuid}.yml"
+        datei["pfad"] = ordner / f"{stats.stem}.yml"
         datei["pfad"].write_text(
             "format: 1\n"
             f"name: {BOT_NAME}\n"
             "inventory: []\n"
             "effects: []\n"
-            "game-mode: CREATIVE\n"
-            "allow-flight: false\n"
+            f"game-mode: {modus.upper()}\n"
+            f"allow-flight: {str(darf_fliegen).lower()}\n"
             "flying: false\n"
             "glowing: false\n"
             "fly-speed: 0.1\n"
@@ -3487,8 +3492,6 @@ def alte_absturzdatei_checks(env, bot):
 
     try:
         cam_off(bot)
-        bot.chat("/gamemode survival")
-        time.sleep(0.5)
         if not FIND.test("Bot meldet sich fuer die alte Absturzdatei neu an", neu_anmelden(bot, anlegen), ""):
             return
         if not FIND.test("Die alte Absturzdatei liegt unter playerdata", "pfad" in datei, ""):
@@ -3497,16 +3500,16 @@ def alte_absturzdatei_checks(env, bot):
         z = zeilen_seit(bot, 0)
         FIND.test("Alte Absturzdatei: die Meldung, dass er alles zurueckhat",
                   gesagt(z, r"server went down while you were in cam mode"), zeige(z))
-        FIND.test("Alte Absturzdatei: er ist im Spielmodus aus der Datei", spielmodus_ist(bot, "creative"), "")
         neu = bot.server_pos()
         FIND.test("Alte Absturzdatei: er steht an der Stelle aus der Datei",
                   neu is not None and math.dist(neu, ziel) < 1.0, f"{ziel} -> {neu}")
         FIND.test("Alte Absturzdatei: sie ist danach weg", not datei["pfad"].exists(), str(datei["pfad"]))
+        FIND.test("Alte Absturzdatei: Spielmodus und Flug sind, wie sie waren",
+                  spielmodus_ist(bot, modus) and bool(bot.server_data("abilities.mayfly")) == darf_fliegen,
+                  f"{modus}, Fliegen erlaubt: {darf_fliegen}")
     finally:
         if "pfad" in datei:
             datei["pfad"].unlink(missing_ok=True)
-        bot.chat("/gamemode survival")
-        time.sleep(0.5)
 
 
 # ---------------------------------------------------------------------------

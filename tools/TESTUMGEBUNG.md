@@ -1142,7 +1142,8 @@ andere, `false` auch mit op niemanden · `/cam stats reset` setzt die eigene
 auf null · mit `statistics.enabled: false` sagt `/cam stats`, dass sie aus
 ist · die Datei der crash-protection liegt unter `playerdata/crash/`, und
 eine, die vor dem Update noch direkt unter `playerdata/` lag, gibt dem
-Spieler beim Betreten trotzdem alles zurück ·
+Spieler beim Betreten trotzdem alles zurück: er steht an der Stelle aus der
+Datei, sie ist weg, und Spielmodus und Flug sind die aus der Datei ·
 Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
