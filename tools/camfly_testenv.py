@@ -2899,9 +2899,12 @@ def absturz_checks(env, bot):
     FIND.test("crash-protection: im Cam-Modus liegt eine Datei unter playerdata",
               len(dateien()) == 1, str(dateien()))
     if dateien():
-        kopf = (ordner / dateien()[0]).read_text(encoding="utf-8").splitlines()[:1]
-        FIND.test("crash-protection: oben in der Datei steht, wozu sie da ist",
-                  kopf == ["# CamFly crash protection: what cam mode took from this player."], str(kopf))
+        kopf = (ordner / dateien()[0]).read_text(encoding="utf-8").splitlines()[:3]
+        FIND.test("crash-protection: oben in der Datei steht, wozu sie da ist, mit der Warnung",
+                  len(kopf) == 3
+                  and kopf[0] == "# CamFly crash protection: what cam mode took from this player."
+                  and kopf[2] == "# \u26a0 Do not edit or delete it while the server is running! \u26a0",
+                  str(kopf))
     cam_off(bot)
     time.sleep(0.5)
     FIND.test("crash-protection: nach dem Ende ist die Datei wieder weg", not dateien(), str(dateien()))

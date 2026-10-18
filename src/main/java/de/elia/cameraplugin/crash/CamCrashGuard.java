@@ -65,7 +65,7 @@ public final class CamCrashGuard implements Listener {
     private static final List<String> HEADER = List.of(
             "CamFly crash protection: what cam mode took from this player.",
             "Deleted when cam mode ends. Still here after a crash: given back on the next join.",
-            "Do not edit or delete it while the server is running.");
+            "⚠ Do not edit or delete it while the server is running! ⚠");
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
