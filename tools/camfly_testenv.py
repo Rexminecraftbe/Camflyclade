@@ -2591,10 +2591,10 @@ def aktionsleiste_checks(env, bot):
 
     distance ist voreingestellt - nachgesehen und nicht gesetzt. Zu Beginn
     kommt auch dort "Cam mode activated", danach "Body: N blocks" mit einem
-    Pfeil. Zehn Bloecke ueber dem Koerper, per /tp hingesetzt, steht dort 10
-    und ein Pfeil nach unten: Die Testkonfiguration hat teleports.command:
-    false, der Teleport beendet den Cam-Modus also nicht. text ist die alte
-    feste Zeile, ohne Abstand.
+    Pfeil. Zehn Bloecke ueber dem Koerper steht dort 10 und ein Pfeil nach
+    unten. Hinauf geht es mit 'fly' und nicht mit /tp: Der Bot fiele danach
+    mit der Physik des Clients wieder hinunter, bevor die Zeile kommt. text
+    ist die alte feste Zeile, ohne Abstand.
     """
     text = (env.server / "plugins" / "CamFly" / "config.yml").read_text(encoding="utf-8")
     FIND.test("Voreingestellt steht action-bar.display: distance da",
@@ -2612,8 +2612,8 @@ def aktionsleiste_checks(env, bot):
         FIND.test("display: distance - am Koerper ist der Abstand hoechstens 1",
                   bool(nah) and nah[-1][0] <= 1, str(nah[-3:]))
 
-        bot.chat(f"/tp {BOT_NAME} ~ ~10 ~")
-        time.sleep(1.5)
+        bot.call("fly", wait=30, dy=10, timeout=15000)
+        time.sleep(1.0)
         since = bot.mark()
         time.sleep(1.0)
         weit = abstaende(zeilen_seit(bot, since))
