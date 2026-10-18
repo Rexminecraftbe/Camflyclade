@@ -185,6 +185,8 @@ public final class CameraMode {
         plugin.getSightGlow().startSightGlow(player);
         plugin.getNameTag().startFor(player);
         plugin.getActionBar().startActionBar(player);
+        plugin.getFlightSpeed().startFor(player);
+        plugin.getNightVision().startFor(player);
         plugin.getFireGuard().startFor(player);
         plugin.getHungerGuard().startFor(player);
         plugin.getGhastGuard().startFor(player);
@@ -217,6 +219,7 @@ public final class CameraMode {
                 }
             }.runTaskLater(plugin, 2L); // delay to ensure armour is restored
         }
+        settings.getStartSound().play(player);
     }
 
     public void exitCameraMode(Player player) {
@@ -251,6 +254,8 @@ public final class CameraMode {
             plugin.getSulfurCubeGuard().stopFor(player);
             plugin.getInventoryGuard().stopFor(player);
             plugin.getBorderWall().stopFor(player);
+            plugin.getFlightSpeed().stopFor(player);
+            plugin.getNightVision().stopFor(player);
             team.updateViewerTeam(player);
             plugin.getCamModeObjective().setScore(player, 0);
             return;
@@ -290,6 +295,9 @@ public final class CameraMode {
         player.updateInventory();
 
         player.removePotionEffect(PotionEffectType.INVISIBILITY);
+        // Before the paused effects come back: night vision among them would
+        // otherwise be taken off along with the one of camera mode.
+        plugin.getNightVision().stopFor(player);
 
         if (standingInFire) {
             player.setFireTicks(160);
@@ -303,6 +311,7 @@ public final class CameraMode {
         player.setAllowFlight(cameraData.getOriginalAllowFlight());
         player.setFlying(cameraData.getOriginalFlying());
         player.setGlowing(cameraData.getOriginalGlowing());
+        plugin.getFlightSpeed().stopFor(player);
         // He stands where the mannequin stood, in the same water or powder
         // snow: what air it has left and how frozen it got is his now.
         LivingEntity standIn = cameraData.getDamageTarget();
@@ -346,6 +355,8 @@ public final class CameraMode {
         plugin.getVisibility().updateVisibilityForAll();
         if (!plugin.isShuttingDown()) {
             plugin.getTimeLimit().startCooldown(player);
+            // Last, at his body: the sound says he is back.
+            settings.getEndSound().play(player);
         }
     }
 }

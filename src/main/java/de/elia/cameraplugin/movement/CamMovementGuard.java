@@ -156,6 +156,7 @@ public final class CamMovementGuard implements Listener {
         if (!mayWarn(distanceMessageCooldown, player, settings.getDistanceWarningCooldown())) {
             return;
         }
+        settings.getBorderSound().play(player);
         messages.sendMessage(player, key, "{distance}", String.valueOf(settings.getMaxDistance()),
                 "{from}", distanceAnchorName(data, where));
     }
@@ -164,6 +165,10 @@ public final class CamMovementGuard implements Listener {
      * Whether a warning of this kind may go out to the player now. If so, the
      * next one has to wait {@code seconds}: the border and the portal ask over
      * and over, and the chat would fill up with the same line.
+     *
+     * <p>The sound of {@code sounds.border} goes with each warning and waits
+     * just as long. It is played even when the message itself is switched
+     * off.</p>
      */
     private static boolean mayWarn(Map<UUID, Long> cooldowns, Player player, int seconds) {
         long now = System.currentTimeMillis();
@@ -321,6 +326,7 @@ public final class CamMovementGuard implements Listener {
         if (!mayWarn(portalMessageCooldown, player, settings.getPortalRules().getWarningCooldown())) {
             return;
         }
+        settings.getBorderSound().play(player);
         if (area != null) {
             messages.sendMessage(player, "cam-area-limit", "{area}", area);
         } else {
@@ -367,11 +373,13 @@ public final class CamMovementGuard implements Listener {
             // player would be sent over and straight back again on every
             // trip through it.
             settings.getPortalRules().rememberForbiddenArea(entry, area, arrival);
+            settings.getBorderSound().play(player);
             messages.sendMessage(player, "portal-return-area", "{area}", area);
             bringBack(player, data);
             return;
         }
         if (settings.limitsDistance() && beyondMaxDistance(data, arrival)) {
+            settings.getBorderSound().play(player);
             messages.sendMessage(player, "portal-return-distance", "{distance}",
                     String.valueOf(settings.getMaxDistance()), "{from}", distanceAnchorName(data, arrival));
             bringBack(player, data);
@@ -462,9 +470,10 @@ public final class CamMovementGuard implements Listener {
     /**
      * What the distance to the body is measured from in the world of this spot,
      * or {@code null} when nothing there can be measured against. The wall of
-     * {@link CamBorderWall} stands around the same spot.
+     * {@link CamBorderWall} stands around the same spot, and the action bar
+     * of {@code action-bar.display: distance} points to it.
      */
-    Location distanceAnchor(CameraData data, Location location) {
+    public Location distanceAnchor(CameraData data, Location location) {
         Location body = data.getBody().getLocation();
         if (body.getWorld().equals(location.getWorld())) {
             return body;
@@ -509,6 +518,7 @@ public final class CamMovementGuard implements Listener {
      */
     private void warnMedium(Player player, FlightMedium medium) {
         if (mayWarn(mediumMessageCooldown, player, settings.getDistanceWarningCooldown())) {
+            settings.getBorderSound().play(player);
             messages.sendMessage(player, medium.getFlightMessage());
         }
     }
@@ -548,6 +558,7 @@ public final class CamMovementGuard implements Listener {
      */
     private void warnAreaLimit(Player player, String area) {
         if (mayWarn(areaMessageCooldown, player, settings.getCamAreaRules().getWarningCooldown())) {
+            settings.getBorderSound().play(player);
             messages.sendMessage(player, "cam-area-limit", "{area}", area);
         }
     }

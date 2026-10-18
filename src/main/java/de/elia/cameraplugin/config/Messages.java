@@ -95,10 +95,16 @@ public final class Messages {
      * Only a player is held to that switch: the console and command blocks
      * always get the answer to their command, which is also why
      * {@code no-player}, sent to them alone, has no switch at all.
+     *
+     * @param fills placeholder and value, one pair after the other
      */
-    public void sendConfiguredMessage(CommandSender sender, String path) {
+    public void sendConfiguredMessage(CommandSender sender, String path, String... fills) {
         if (!(sender instanceof Player) || isMessageEnabled(path)) {
-            sender.sendMessage(getMessage(path));
+            String text = getMessage(path);
+            for (int i = 0; i + 1 < fills.length; i += 2) {
+                text = text.replace(fills[i], fills[i + 1]);
+            }
+            sender.sendMessage(text);
         }
     }
 

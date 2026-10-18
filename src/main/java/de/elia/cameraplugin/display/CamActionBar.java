@@ -3,9 +3,11 @@ package de.elia.cameraplugin.display;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
 import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 
@@ -13,8 +15,42 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/** The line above the hotbar while camera mode runs and right after it, {@code action-bar}. */
+/**
+ * The line above the hotbar while camera mode runs and right after it, {@code action-bar}.
+ *
+ * <p>While camera mode runs it says either that camera mode is on, or - with
+ * {@code display: distance} - how far away the body is and which way it lies.
+ * The latter starts with the first for a moment as well, so that the player
+ * is told camera mode has started at all.</p>
+ */
 public final class CamActionBar {
+
+    /** How often the fixed line {@code actionbar-on} is sent again, in ticks. */
+    private static final long TEXT_INTERVAL = 40L;
+
+    /**
+     * How often the distance to the body is sent, in ticks. It changes with
+     * every step, and the client keeps a line up for three seconds anyway.
+     */
+    private static final long DISTANCE_INTERVAL = 4L;
+
+    /** How long {@code actionbar-on} stands before the distance takes over, in ticks. */
+    private static final long ON_TEXT_TICKS = 40L;
+
+    /** How long a line of {@link #flash} keeps the regular one away, in milliseconds. */
+    private static final long FLASH_MILLIS = 1500L;
+
+    /**
+     * The direction of the body as seen by the player, clockwise from straight
+     * ahead in steps of 45 degrees.
+     */
+    private static final String[] ARROWS = {"\u2191", "\u2197", "\u2192", "\u2198",
+            "\u2193", "\u2199", "\u2190", "\u2196"};
+
+    /** In place of an arrow when the body is right above or below, or right here. */
+    private static final String ABOVE = "\u25B2";
+    private static final String BELOW = "\u25BC";
+    private static final String HERE = "\u25CF";
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
@@ -22,6 +58,8 @@ public final class CamActionBar {
     private final CameraPlayers cameraPlayers;
     private final Map<UUID, BukkitRunnable> actionBarTasks = new HashMap<>();
     private final Map<UUID, BukkitRunnable> offMessageTasks = new HashMap<>();
+    /** Until when a line of {@link #flash} stands, as {@link System#currentTimeMillis()} counts. */
+    private final Map<UUID, Long> flashUntil = new HashMap<>();
 
     public CamActionBar(CameraPlugin plugin) {
         this.plugin = plugin;
@@ -35,22 +73,103 @@ public final class CamActionBar {
         stopActionBar(player);
         BukkitRunnable off = offMessageTasks.remove(player.getUniqueId());
         if (off != null) off.cancel();
-        if (!messages.isMessageEnabled("actionbar-on")) return;
+        boolean distance = settings.getActionBarDisplay() == ActionBarDisplay.DISTANCE;
+        boolean onText = messages.isMessageEnabled("actionbar-on");
+        if (!distance && !onText) return;
+        long interval = distance ? DISTANCE_INTERVAL : TEXT_INTERVAL;
         BukkitRunnable task = new BukkitRunnable() {
+            private long ticks = 0;
+
             @Override
             public void run() {
                 if (!cameraPlayers.contains(player.getUniqueId()) || !player.isOnline()) {
                     this.cancel();
                     return;
                 }
-                player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(messages.getMessage("actionbar-on")));
+                long now = ticks;
+                ticks += interval;
+                if (flashUntil.getOrDefault(player.getUniqueId(), 0L) > System.currentTimeMillis()) {
+                    return;
+                }
+                String line;
+                if (!distance) {
+                    line = messages.getMessage("actionbar-on");
+                } else if (onText && now < ON_TEXT_TICKS) {
+                    // Sent once, the client keeps it up until the distance comes.
+                    line = now == 0 ? messages.getMessage("actionbar-on") : null;
+                } else {
+                    line = distanceLine(player);
+                }
+                if (line != null) {
+                    player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(line));
+                }
             }
         };
-        task.runTaskTimer(plugin, 0L, 40L);
+        task.runTaskTimer(plugin, 0L, interval);
         actionBarTasks.put(player.getUniqueId(), task);
     }
 
+    /**
+     * Shows a line for a moment in place of the regular one, such as the new
+     * speed after a turn of the mouse wheel. Shown even with
+     * {@code action-bar.enabled: false}: it answers something the player has
+     * just done, and its own switch in {@code message-settings} turns it off.
+     */
+    public void flash(Player player, String text) {
+        if (text.isEmpty()) return;
+        flashUntil.put(player.getUniqueId(), System.currentTimeMillis() + FLASH_MILLIS);
+        player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(text));
+    }
+
+    /**
+     * The line of {@code display: distance}: how far it is to the body and
+     * which way it lies. In a world the body is not in, the portal he came out
+     * of takes its place, the same spot {@code max-distance} is measured from.
+     *
+     * @return the line, or {@code null} when its switch is off or nothing can
+     *         be measured against
+     */
+    private String distanceLine(Player player) {
+        CameraData data = cameraPlayers.get(player.getUniqueId());
+        if (data == null) return null;
+        Location at = player.getLocation();
+        Location anchor = plugin.getMovementGuard().distanceAnchor(data, at);
+        if (anchor == null) return null;
+        boolean atBody = anchor.getWorld().equals(data.getBody().getWorld());
+        String key = atBody ? "actionbar-distance" : "actionbar-distance-portal";
+        if (!messages.isMessageEnabled(key)) return null;
+        double dx = anchor.getX() - at.getX();
+        double dy = anchor.getY() - at.getY();
+        double dz = anchor.getZ() - at.getZ();
+        long blocks = Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz));
+        return messages.getMessage(key)
+                .replace("{distance}", String.valueOf(blocks))
+                .replace("{arrow}", arrow(dx, dy, dz, at.getYaw()));
+    }
+
+    /**
+     * Which way the spot lies, seen from where the player looks: an arrow in
+     * one of eight directions, or above and below when it is right over or
+     * under him.
+     *
+     * @param dx  from the player to the spot, east positive
+     * @param dy  from the player to the spot, up positive
+     * @param dz  from the player to the spot, south positive
+     * @param yaw where the player looks, as the game counts it: 0 to the
+     *            south, 90 to the west, growing clockwise
+     */
+    private static String arrow(double dx, double dy, double dz, float yaw) {
+        if (dx * dx + dz * dz < 1.0) {
+            if (Math.abs(dy) < 1.0) return HERE;
+            return dy > 0 ? ABOVE : BELOW;
+        }
+        double towards = Math.toDegrees(Math.atan2(-dx, dz));
+        int sector = Math.floorMod(Math.round((towards - yaw) / 45.0), ARROWS.length);
+        return ARROWS[sector];
+    }
+
     public void stopActionBar(Player player) {
+        flashUntil.remove(player.getUniqueId());
         BukkitRunnable task = actionBarTasks.remove(player.getUniqueId());
         if (task != null) {
             task.cancel();
@@ -114,5 +233,6 @@ public final class CamActionBar {
             task.cancel();
         }
         offMessageTasks.clear();
+        flashUntil.clear();
     }
 }

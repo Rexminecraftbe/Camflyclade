@@ -8,7 +8,7 @@ description: A plugin for a camera mode with an armour stand or mannequin body
 commands:
   cam:
     description: Enables or disables camera mode
-    usage: /<command>
+    usage: /<command> [list|reload]
     permission: camplugin.use
     permission-message: "You do not have permission for this command.!"
 
@@ -16,3 +16,6 @@ permissions:
   camplugin.use:
     description: Allows the use of camera mode
     default: true
+  camplugin.list:
+    description: Allows /cam list while cam-list.access is admin
+    default: op

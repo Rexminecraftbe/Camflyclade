@@ -4,15 +4,19 @@ import de.elia.cameraplugin.area.CamAreaRules;
 import de.elia.cameraplugin.body.BodyType;
 import de.elia.cameraplugin.body.MobTargetMode;
 import de.elia.cameraplugin.body.MovementSensitivity;
+import de.elia.cameraplugin.display.ActionBarDisplay;
 import de.elia.cameraplugin.display.GlowMode;
 import de.elia.cameraplugin.display.NameMode;
+import de.elia.cameraplugin.list.ListAccess;
 import de.elia.cameraplugin.mirrordamage.ArmorDamageMode;
 import de.elia.cameraplugin.mirrordamage.DamageMode;
 import de.elia.cameraplugin.mob.MobTargeting;
 import de.elia.cameraplugin.movement.BorderMode;
 import de.elia.cameraplugin.movement.FlightMedium;
+import de.elia.cameraplugin.nightvision.NightVisionMode;
 import de.elia.cameraplugin.portal.PortalRules;
 import de.elia.cameraplugin.session.CamGameMode;
+import de.elia.cameraplugin.sound.CamSound;
 import de.elia.cameraplugin.start.EffectStart;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.ChatColor;
@@ -49,6 +53,20 @@ public final class CamSettings {
      * of them.
      */
     private static final double MAX_PARTICLES_PER_TICK = 100.0;
+
+    /**
+     * Fastest speed {@code flight-speed} accepts, 1 being the speed of the
+     * game. Sprinting at it the camera covers more than five blocks a tick:
+     * any faster and the world does not load in time ahead of it, nor does
+     * the wall of {@code border-mode: barrier} get built.
+     */
+    public static final double MAX_FLIGHT_SPEED = 5.0;
+
+    /** Slowest speed {@code flight-speed} accepts: slower than that hardly moves at all. */
+    private static final double MIN_FLIGHT_SPEED = 0.1;
+
+    /** The brightest light level there is, {@code night-vision.light-level} going up to it. */
+    private static final int MAX_LIGHT_LEVEL = 15;
 
     /**
      * Keys that are read although the config file built into the jar leaves
@@ -145,6 +163,29 @@ public final class CamSettings {
 
     private boolean actionBarEnabled;
     private int actionBarOffDuration;
+    /** What the action bar shows while camera mode runs, {@code action-bar.display}. */
+    private ActionBarDisplay actionBarDisplay;
+
+    /** Whether the mouse wheel changes the speed, {@code flight-speed.mouse-wheel}. */
+    private boolean flightSpeedWheel;
+    /** The speeds of {@code flight-speed}, 1 being the speed of the game. */
+    private double flightSpeedStart;
+    private double flightSpeedMin;
+    private double flightSpeedMax;
+    private double flightSpeedStep;
+
+    /** When the camera player sees in the dark, {@code night-vision.mode}. */
+    private NightVisionMode nightVisionMode;
+    /** Up to which light level it counts as dark, {@code night-vision.light-level}. */
+    private int nightVisionLightLevel;
+
+    /** The sounds of {@code sounds}, {@link CamSound#OFF} for one that is switched off. */
+    private CamSound startSound;
+    private CamSound endSound;
+    private CamSound borderSound;
+
+    /** Who may use {@code /cam list}, {@code cam-list.access}. */
+    private ListAccess camListAccess;
 
     // Damage transfer settings
     private DamageMode damageMode;
@@ -280,6 +321,29 @@ public final class CamSettings {
         particleSpread = config.getDouble("camera-particles.spread", 0.0, 0.0);
         actionBarEnabled = config.getBoolean("action-bar.enabled", true);
         actionBarOffDuration = config.getInt("action-bar.off-duration", 10, 0);
+        String display = config.getChoice("action-bar.display", "distance", "distance", "text")
+                .toLowerCase(Locale.ROOT);
+        actionBarDisplay = display.equals("text") ? ActionBarDisplay.TEXT : ActionBarDisplay.DISTANCE;
+        readFlightSpeed(config);
+        String nightVision = config.getChoice("night-vision.mode", "dark", "true", "false", "dark")
+                .toLowerCase(Locale.ROOT);
+        nightVisionMode = switch (nightVision) {
+            case "true" -> NightVisionMode.ALWAYS;
+            case "false" -> NightVisionMode.OFF;
+            default -> NightVisionMode.DARK;
+        };
+        nightVisionLightLevel = config.getInt("night-vision.light-level", 7, 0, MAX_LIGHT_LEVEL);
+        String allowedSounds = messages.configMessage("config-allowed-sounds");
+        startSound = CamSound.read(config, "sounds.start", allowedSounds, "block.beacon.activate", 1.0);
+        endSound = CamSound.read(config, "sounds.end", allowedSounds, "block.beacon.deactivate", 1.0);
+        borderSound = CamSound.read(config, "sounds.border", allowedSounds, "block.note_block.bass", 0.5);
+        String listAccess = config.getChoice("cam-list.access", "admin", "admin", "all", "false")
+                .toLowerCase(Locale.ROOT);
+        camListAccess = switch (listAccess) {
+            case "all" -> ListAccess.ALL;
+            case "false" -> ListAccess.OFF;
+            default -> ListAccess.ADMIN;
+        };
         timeLimitEnabled = config.getBoolean("time-limit.enabled", false);
         cooldownsEnabled = config.getBoolean("time-limit.cooldowns-enabled", false);
         durationSeconds = config.getInt("time-limit.duration-seconds", 300, 1);
@@ -316,6 +380,23 @@ public final class CamSettings {
         };
         customArmorDamage = config.getInt("mirror-damage.custom-armor-damage", 1, 0);
         respectUnbreaking = config.getBoolean("mirror-damage.respect-unbreaking", true);
+    }
+
+    /**
+     * Reads the section {@code flight-speed}. The slowest speed is read first,
+     * the others are held to it: the fastest is no slower, and the one at the
+     * start lies between the two. Their defaults follow along, so that a
+     * slowest speed above 3 does not set off a note about a fastest speed that
+     * is not even in the file.
+     */
+    private void readFlightSpeed(ConfigReader config) {
+        flightSpeedWheel = config.getBoolean("flight-speed.mouse-wheel", true);
+        flightSpeedMin = config.getDouble("flight-speed.min", 0.5, MIN_FLIGHT_SPEED, MAX_FLIGHT_SPEED);
+        flightSpeedMax = config.getDouble("flight-speed.max", Math.max(3.0, flightSpeedMin),
+                flightSpeedMin, MAX_FLIGHT_SPEED);
+        flightSpeedStart = config.getDouble("flight-speed.start",
+                Math.min(Math.max(1.0, flightSpeedMin), flightSpeedMax), flightSpeedMin, flightSpeedMax);
+        flightSpeedStep = config.getDouble("flight-speed.step", 0.5, 0.05, MAX_FLIGHT_SPEED);
     }
 
     /**
@@ -637,6 +718,58 @@ public final class CamSettings {
 
     public int getActionBarOffDuration() {
         return actionBarOffDuration;
+    }
+
+    public ActionBarDisplay getActionBarDisplay() {
+        return actionBarDisplay;
+    }
+
+    // ------------------------------------------- flight speed and night vision
+
+    public boolean isFlightSpeedWheel() {
+        return flightSpeedWheel;
+    }
+
+    public double getFlightSpeedStart() {
+        return flightSpeedStart;
+    }
+
+    public double getFlightSpeedMin() {
+        return flightSpeedMin;
+    }
+
+    public double getFlightSpeedMax() {
+        return flightSpeedMax;
+    }
+
+    public double getFlightSpeedStep() {
+        return flightSpeedStep;
+    }
+
+    public NightVisionMode getNightVisionMode() {
+        return nightVisionMode;
+    }
+
+    public int getNightVisionLightLevel() {
+        return nightVisionLightLevel;
+    }
+
+    // ------------------------------------------------------- sounds, cam-list
+
+    public CamSound getStartSound() {
+        return startSound;
+    }
+
+    public CamSound getEndSound() {
+        return endSound;
+    }
+
+    public CamSound getBorderSound() {
+        return borderSound;
+    }
+
+    public ListAccess getCamListAccess() {
+        return camListAccess;
     }
 
     // --------------------------------------------------- time limit and cooldown

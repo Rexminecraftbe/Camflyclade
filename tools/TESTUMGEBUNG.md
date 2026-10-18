@@ -159,6 +159,19 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   dem aus, was der Bot noch hat: ein fester Wert erschlägt ihn, sobald ein
   Durchgang auf den anderen folgt.
 * **Zwei „partial packet"-Warnungen beim Login** sind harmlos.
+* **Das Mausrad ist für den Server nur ein neuer Platz in der Hotbar.** Der
+  Bot dreht es mit `setQuickBarSlot`: von 0 auf 8 heißt schneller, auf 1
+  langsamer. Das Plugin lässt den Platz auf dem Server bei 0; vor jedem Dreh
+  setzt sich der Bot deshalb selbst wieder auf 0, falls er die Antwort des
+  Servers nicht übernommen hat. Die Geschwindigkeit steht unter
+  `abilities.flySpeed` als die Hälfte dessen, was Bukkit `setFlySpeed`
+  nennt: 0.05 ist normal.
+* **Die Töne liest der Test aus den Paketen**, die beim Bot ankommen
+  (`sound_effect`, `entity_sound_effect`), als Text des ganzen Pakets: Wo der
+  Name des Tons darin steht, hängt an den geflickten Paketdaten.
+* **Die Nachtsicht hängt am Licht am Auge**, das die Tageszeit mitrechnet:
+  mittags 15, um Mitternacht unter freiem Himmel 4. Der Test stellt die Zeit
+  dafür mit `/time set` und am Ende wieder auf Mittag.
 * **Tränke setzt der Test mit `/summon` ab**, einen Block über dem Ziel: der
   Trank fällt, zerschellt und wirkt vier Blöcke weit. Die Entitätstypen heißen
   `minecraft:splash_potion` und `minecraft:lingering_potion`;

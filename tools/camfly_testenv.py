@@ -1083,6 +1083,10 @@ let dead = false;
 let knock = null;
 // Was watch_blocks gerade mitschreibt, bis watch_stop es abholt.
 let watched = null;
+// Die Toene, die der Server schickt, als Text des ganzen Pakets: Wo der Name
+// des Tons darin steht, haengt an den geflickten Paketdaten, gesucht wird
+// deshalb im ganzen Text.
+const sounds = [];
 
 const bot = mineflayer.createBot({
   host: process.env.CAMFLY_HOST || '127.0.0.1',
@@ -1103,6 +1107,14 @@ bot.on('death', () => { dead = true; out({ event: 'death' }); });
 bot.on('kicked', (reason) => out({ event: 'kicked', reason: String(reason) }));
 bot.on('error', (err) => out({ event: 'error', message: String(err && err.message || err) }));
 bot.on('end', (reason) => { out({ event: 'end', reason: String(reason) }); });
+function soundText(packet) {
+  try {
+    return JSON.stringify(packet, (k, v) => (typeof v === 'bigint' ? String(v) : v));
+  } catch (e) { return String(packet); }
+}
+for (const name of ['sound_effect', 'entity_sound_effect']) {
+  bot._client.on(name, (packet) => sounds.push({ t: Date.now(), text: soundText(packet) }));
+}
 bot.on('blockUpdate', (alt, neu) => {
   if (!watched || !neu || !neu.position) return;
   const folge = watched[`${neu.position.x},${neu.position.y},${neu.position.z}`];
@@ -1160,6 +1172,8 @@ async function handle(cmd) {
       return { messages: messages.slice(cmd.since || 0), count: messages.length };
     case 'mark':
       return { count: messages.length };
+    case 'sounds':
+      return { sounds: sounds.slice(cmd.since || 0), count: sounds.length };
     case 'wait_message': {
       const re = new RegExp(cmd.pattern, 'i');
       const since = cmd.since || 0;
@@ -2495,6 +2509,312 @@ def message_switch_checks(env, bot):
         set_options(env, [("actionbar-on", "true", "message-settings"),
                           ("actionbar-off", "true", "message-settings"),
                           ("enabled", "true", "message-settings")])
+
+
+# ---------------------------------------------------------------------------
+# /cam list, die Action-Bar mit dem Abstand, die Fluggeschwindigkeit, die
+# Nachtsicht und die Toene
+# ---------------------------------------------------------------------------
+
+def zeilen_seit(bot, since):
+    """Was seit der Marke im Chat und in der Action-Bar stand, ohne Farbcodes."""
+    return [strip_colors(m["text"])
+            for m in bot.call("messages", since=since).get("messages", [])]
+
+
+def gesagt(zeilen, muster):
+    return any(re.search(muster, z) for z in zeilen)
+
+
+def zeige(zeilen):
+    return "; ".join(z for z in zeilen if z) or "nichts"
+
+
+def liste_checks(env, bot):
+    """/cam list und wer es benutzen darf, cam-list.access.
+
+    admin heisst: wer camplugin.list hat, und das haben Operatoren von
+    selbst. all heisst: jeder, der /cam benutzen darf, false: kein Spieler.
+    Die Konsole darf immer. Geprueft wird mit dem Bot einmal mit und einmal
+    ohne op; das op bekommt er am Ende in jedem Fall zurueck.
+    """
+    def liste():
+        since = bot.mark()
+        bot.chat("/cam list")
+        time.sleep(1.5)
+        return zeilen_seit(bot, since)
+
+    try:
+        cam_off(bot)
+        z = liste()
+        FIND.test("/cam list: niemand im Cam-Modus", gesagt(z, r"Nobody is in cam mode"), zeige(z))
+
+        if FIND.test("Cam-Modus fuer /cam list gestartet", cam_on(bot), ""):
+            z = liste()
+            FIND.test("/cam list nennt den Spieler im Cam-Modus, seit wann und wie weit vom Koerper",
+                      gesagt(z, r"In cam mode \(1\)")
+                      and gesagt(z, rf"{BOT_NAME}: for .+, \d+ blocks from the body"), zeige(z))
+            vorher = len(server_log(env))
+            console(env, "cam list", pause=1.5)
+            # Die Konsole schreibt Farben womoeglich als ANSI-Folgen ins Log.
+            log = re.sub(r"\x1b\[[0-9;]*m", "", strip_colors(server_log(env)[vorher:]))
+            FIND.test("/cam list geht auch von der Konsole", f"{BOT_NAME}: for" in log,
+                      log.strip()[-200:] or "nichts im Log")
+            cam_off(bot)
+
+        set_option(env, "access", "false", "cam-list")
+        z = liste()
+        FIND.test("cam-list.access: false sperrt auch einen Operator", gesagt(z, r"permission"), zeige(z))
+
+        set_option(env, "access", "admin", "cam-list")
+        console(env, f"deop {BOT_NAME}", pause=1.5)
+        z = liste()
+        FIND.test("cam-list.access: admin sperrt einen Spieler ohne op", gesagt(z, r"permission"), zeige(z))
+
+        set_option(env, "access", "all", "cam-list")
+        z = liste()
+        FIND.test("cam-list.access: all laesst auch einen Spieler ohne op",
+                  gesagt(z, r"Nobody is in cam mode"), zeige(z))
+    finally:
+        console(env, f"op {BOT_NAME}", pause=1.5)
+        set_option(env, "access", "admin", "cam-list")
+
+
+def abstaende(zeilen):
+    """Die Abstaende aus den Zeilen "Body: N blocks", mit dem Pfeil dahinter."""
+    return [(int(m.group(1)), m.group(2)) for z in zeilen
+            for m in [re.search(r"Body: (\d+) blocks (\S+)", z)] if m]
+
+
+def aktionsleiste_checks(env, bot):
+    """action-bar.display: distance und text.
+
+    distance ist voreingestellt - nachgesehen und nicht gesetzt. Zu Beginn
+    kommt auch dort "Cam mode activated", danach "Body: N blocks" mit einem
+    Pfeil. Zehn Bloecke ueber dem Koerper, per /tp hingesetzt, steht dort 10
+    und ein Pfeil nach unten: Die Testkonfiguration hat teleports.command:
+    false, der Teleport beendet den Cam-Modus also nicht. text ist die alte
+    feste Zeile, ohne Abstand.
+    """
+    text = (env.server / "plugins" / "CamFly" / "config.yml").read_text(encoding="utf-8")
+    FIND.test("Voreingestellt steht action-bar.display: distance da",
+              re.search(r"(?m)^\s*display:\s*distance\s*$", text) is not None, "")
+    try:
+        cam_off(bot)
+        since = bot.mark()
+        if not FIND.test("Cam-Modus fuer die Action-Bar gestartet", cam_on(bot), ""):
+            return
+        time.sleep(3.5)
+        z = zeilen_seit(bot, since)
+        nah = abstaende(z)
+        FIND.test("display: distance - erst Cam mode activated, dann der Abstand zum Koerper",
+                  gesagt(z, r"[Cc]am mode activated") and bool(nah), zeige(z[-3:]))
+        FIND.test("display: distance - am Koerper ist der Abstand hoechstens 1",
+                  bool(nah) and nah[-1][0] <= 1, str(nah[-3:]))
+
+        bot.chat(f"/tp {BOT_NAME} ~ ~10 ~")
+        time.sleep(1.5)
+        since = bot.mark()
+        time.sleep(1.0)
+        weit = abstaende(zeilen_seit(bot, since))
+        FIND.test("display: distance - zehn Bloecke ueber dem Koerper: 10 und ein Pfeil nach unten",
+                  bool(weit) and weit[-1] == (10, "\u25bc"), str(weit[-3:]))
+        cam_off(bot)
+
+        set_option(env, "display", "text", "action-bar")
+        since = bot.mark()
+        cam_on(bot)
+        time.sleep(3.0)
+        z = zeilen_seit(bot, since)
+        FIND.test("display: text - nur die feste Zeile, kein Abstand",
+                  gesagt(z, r"[Cc]am mode activated") and not abstaende(z), zeige(z[-3:]))
+    finally:
+        cam_off(bot)
+        set_option(env, "display", "distance", "action-bar")
+
+
+def tempo_checks(env, bot):
+    """Die Fluggeschwindigkeit: flight-speed.start und das Mausrad.
+
+    Das Mausrad schickt dem Server nur einen neuen Platz in der Hotbar, und
+    genau das tut mineflayer mit setQuickBarSlot. Von Platz 0 auf 8 ist ein
+    Dreh nach oben (schneller), auf 1 einer nach unten. Der Server laesst den
+    Platz bei 0; vor jedem Dreh setzt sich der Bot deshalb selbst wieder auf 0,
+    falls er die Antwort des Servers nicht uebernommen hat - der Server sieht
+    darin keinen Wechsel.
+
+    Gelesen wird abilities.flySpeed. Das Spiel fuehrt dort die Haelfte dessen,
+    was Bukkit setFlySpeed nennt: 0.05 ist die normale Geschwindigkeit 1.
+    """
+    def tempo():
+        return bot.server_data("abilities.flySpeed")
+
+    def gleich(wert, soll):
+        return wert is not None and abs(wert - soll) < 0.001
+
+    def drehen(hoch):
+        bot.call("hotbar", slot=0)
+        time.sleep(0.3)
+        bot.call("hotbar", slot=8 if hoch else 1)
+        time.sleep(0.8)
+
+    try:
+        cam_off(bot)
+        bot.call("hotbar", slot=0)
+        time.sleep(0.5)
+        vorher = tempo()
+        if not FIND.test("Cam-Modus fuer die Fluggeschwindigkeit gestartet", cam_on(bot), ""):
+            return
+        FIND.test("flight-speed.start: 1 - im Cam-Modus normal schnell", gleich(tempo(), 0.05), str(tempo()))
+        since = bot.mark()
+        drehen(True)
+        schneller = tempo()
+        FIND.test("Mausrad hoch - schneller, eine Stufe von 0.5", gleich(schneller, 0.075), str(schneller))
+        z = zeilen_seit(bot, since)
+        FIND.test("Die Action-Bar sagt die neue Geschwindigkeit", gesagt(z, r"Flight speed: 1\.5x"), zeige(z))
+        platz = bot.server_data("SelectedItemSlot")
+        FIND.test("Der Platz in der Hotbar bleibt dabei, wie er war", platz == 0, str(platz))
+        drehen(False)
+        FIND.test("Mausrad runter - wieder normal", gleich(tempo(), 0.05), str(tempo()))
+        for _ in range(6):
+            drehen(True)
+        FIND.test("Nicht schneller als flight-speed.max (3)", gleich(tempo(), 0.15), str(tempo()))
+        for _ in range(8):
+            drehen(False)
+        FIND.test("Nicht langsamer als flight-speed.min (0.5)", gleich(tempo(), 0.025), str(tempo()))
+        cam_off(bot)
+        FIND.test("Nach dem Cam-Modus wieder die Geschwindigkeit von vorher",
+                  gleich(tempo(), vorher), f"{vorher} -> {tempo()}")
+
+        set_option(env, "mouse-wheel", "false", "flight-speed")
+        cam_on(bot)
+        drehen(True)
+        FIND.test("mouse-wheel: false - das Mausrad aendert nichts", gleich(tempo(), 0.05), str(tempo()))
+        platz = bot.server_data("SelectedItemSlot")
+        FIND.test("mouse-wheel: false - der Platz in der Hotbar wechselt wie sonst", platz == 8, str(platz))
+    finally:
+        cam_off(bot)
+        set_option(env, "mouse-wheel", "true", "flight-speed")
+        bot.call("hotbar", slot=0)
+
+
+NACHTSICHT = '{active_effects:[{id:"minecraft:night_vision"}]}'
+NACHTSICHT_DAUER = 'active_effects[{id:"minecraft:night_vision"}].duration'
+
+
+def nachtsicht_checks(env, bot):
+    """night-vision.mode: dark, true und false.
+
+    dark ist voreingestellt. Der Bot steht auf der Flachwelt unter freiem
+    Himmel: mittags ist es dort hell (15), um Mitternacht dunkel (4) - das
+    Licht am Auge rechnet die Tageszeit mit. Die Nachtsicht des Cam-Modus ist
+    endlos (Dauer -1); eine eigene, die er vorher hatte, ruht im Cam-Modus und
+    kommt danach mit ihrer Restzeit zurueck.
+    """
+    def hat():
+        return nbt_frage(bot, "@s", NACHTSICHT)
+
+    def zeit(wann):
+        bot.chat(f"/time set {wann}")
+        time.sleep(1.5)
+
+    try:
+        cam_off(bot)
+        bot.chat("/effect clear @s")
+        bot.chat("/weather clear")
+        zeit("noon")
+        if not FIND.test("Cam-Modus fuer die Nachtsicht gestartet", cam_on(bot), ""):
+            return
+        time.sleep(1.0)
+        FIND.test("night-vision: dark - am hellen Tag keine Nachtsicht", not hat(), "")
+        zeit("midnight")
+        dauer = bot.server_data(NACHTSICHT_DAUER)
+        FIND.test("night-vision: dark - um Mitternacht unter freiem Himmel Nachtsicht, endlos",
+                  dauer == -1, str(dauer))
+        zeit("noon")
+        FIND.test("night-vision: dark - wieder Tag, wieder ohne", not hat(), "")
+        zeit("midnight")
+        cam_off(bot)
+        time.sleep(0.5)
+        FIND.test("Nach dem Cam-Modus ist die Nachtsicht wieder weg", not hat(), "")
+
+        bot.chat("/effect give @s minecraft:night_vision 120 0")
+        time.sleep(0.5)
+        cam_on(bot)
+        time.sleep(1.0)
+        dauer = bot.server_data(NACHTSICHT_DAUER)
+        FIND.test("Im Cam-Modus ruht die eigene Nachtsicht, die des Cam-Modus ist da",
+                  dauer == -1, str(dauer))
+        cam_off(bot)
+        time.sleep(0.5)
+        dauer = bot.server_data(NACHTSICHT_DAUER)
+        FIND.test("Die eigene Nachtsicht kommt nach dem Cam-Modus mit ihrer Restzeit zurueck",
+                  dauer is not None and 0 < dauer <= 2400, str(dauer))
+        bot.chat("/effect clear @s")
+
+        set_option(env, "mode", "false", "night-vision")
+        cam_on(bot)
+        time.sleep(1.0)
+        FIND.test("night-vision: false - auch um Mitternacht keine", not hat(), "")
+        cam_off(bot)
+
+        set_option(env, "mode", "true", "night-vision")
+        zeit("noon")
+        cam_on(bot)
+        time.sleep(1.0)
+        FIND.test("night-vision: true - auch am hellen Tag", hat(), "")
+    finally:
+        cam_off(bot)
+        set_option(env, "mode", "dark", "night-vision")
+        bot.chat("/time set noon")
+        bot.chat("/effect clear @s")
+        time.sleep(0.5)
+
+
+def toene_checks(env, bot):
+    """Die Toene von sounds: beim Start, beim Ende und an der Grenze.
+
+    Nachgesehen wird an den Paketen, die beim Bot ankommen. Die Grenze ist
+    max-distance, dafuer auf GRENZ_ABSTAND gestellt; der Bot laeuft wie im
+    Grenztest nach Osten, auf einem frisch geraeumten Streifen.
+    """
+    def anzahl():
+        return bot.call("sounds", since=10 ** 9).get("count", 0)
+
+    def gehoert(seit, name):
+        toene = [t["text"] for t in bot.call("sounds", since=seit).get("sounds", [])]
+        return any(name in t for t in toene), toene
+
+    try:
+        cam_off(bot)
+        seit = anzahl()
+        cam_on(bot)
+        time.sleep(1.0)
+        da, toene = gehoert(seit, "block.beacon.activate")
+        FIND.test("sounds.start - der Ton beim Start", da, f"{len(toene)} Toene")
+        seit = anzahl()
+        cam_off(bot)
+        time.sleep(1.0)
+        da, toene = gehoert(seit, "block.beacon.deactivate")
+        FIND.test("sounds.end - der Ton beim Ende", da, f"{len(toene)} Toene")
+
+        pos = bot.server_pos()
+        if pos is None:
+            FIND.test("Standort fuer den Ton an der Grenze lesbar", False, "")
+            return
+        bx, by, bz = _floor(pos[0]), _floor(pos[1] + 0.5), _floor(pos[2]) - 20
+        bot.chat(f"/fill {bx - 2} {by} {bz - 3} {bx + 16} {by + 3} {bz + 3} minecraft:air")
+        bot.chat(f"/fill {bx - 2} {by - 1} {bz - 3} {bx + 16} {by - 1} {bz + 3} minecraft:grass_block")
+        time.sleep(1.0)
+        set_option(env, "max-distance", f"{GRENZ_ABSTAND}.0")
+        seit = anzahl()
+        ergebnis = grenz_lauf(bot, (bx + 0.5, by, bz + 0.5))
+        da, toene = gehoert(seit, "block.note_block.bass")
+        FIND.test("sounds.border - der Ton an der Grenze", da,
+                  grenz_zeige(ergebnis, (bx + 0.5, by, bz + 0.5)))
+    finally:
+        cam_off(bot)
+        set_option(env, "max-distance", "100.0")
 
 
 # ---------------------------------------------------------------------------
@@ -7300,6 +7620,14 @@ def step_tests(env):
 
         # --- Die Sprache der Texte ---
         language_checks(env, bot)
+
+        # --- /cam list, die Action-Bar mit dem Abstand, die Fluggeschwindigkeit,
+        # --- die Nachtsicht und die Toene ---
+        liste_checks(env, bot)
+        aktionsleiste_checks(env, bot)
+        tempo_checks(env, bot)
+        nachtsicht_checks(env, bot)
+        toene_checks(env, bot)
 
         # --- Geworfene Traenke und was den Koerper getroffen hat, mit beiden Koerpertypen ---
         fuer_beide_koerpertypen(env, bot, potion_checks, grund_checks)
