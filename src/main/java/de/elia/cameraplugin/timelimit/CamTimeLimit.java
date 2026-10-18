@@ -82,7 +82,7 @@ public final class CamTimeLimit {
                 if (remaining <= 0) {
                     cancel();
                     if (finalBar != null) finalBar.removeAll();
-                    plugin.exitCameraMode(player, EndReason.FORCED);
+                    plugin.exitCameraMode(player, EndReason.TIME_LIMIT);
                     messages.sendConfiguredMessage(player, "time-limit-expired");
                 }
             }

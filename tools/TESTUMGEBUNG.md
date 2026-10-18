@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **691** - alle 691 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **754** - alle 754 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -174,6 +174,13 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   ist. Der Neustart beginnt ein neues `server.log`, das alte prüft der Test
   deshalb vorher auf Fehler des Plugins. Er steht ganz am Ende, weil der
   Neustart auch die Konfiguration des Testservers zurücksetzt.
+* **Welches Item der Bot hält, fragt der Test den Server**, mit
+  `/execute if data entity @s {Inventory:[...]}`. Die Itemliste von
+  mineflayer stammt aus 26.1 und nennt den Kopf des Kamera-Items „mutton“.
+  Den Rechtsklick in die Luft schickt die Bot-Aktion `use_item`.
+* **Zwei Tests melden den Bot ab und wieder an**: das Kamera-Item für
+  `give-on-join`, und der Akku, der dazwischen die Datei des Bots unter
+  `players/` löscht - solange er online ist, hält das Plugin sie im Speicher.
 * **Die Nachtsicht hängt am Licht am Auge**, das die Tageszeit mitrechnet:
   mittags 15, um Mitternacht unter freiem Himmel 4. Der Test stellt die Zeit
   dafür mit `/time set` und am Ende wieder auf Mittag.
@@ -1092,6 +1099,31 @@ kommt · wer zu einer Kamera in der Luft teleportiert wird, landet bei ihrem
 Körper, ihr Cam-Modus endet, und die Meldung nennt, wer kam · mit
 `teleports.plugin: false` und `teleports.command: false` bleibt der
 Kamera-Spieler im Cam-Modus, und wer zu ihm kommt, kommt bei der Kamera an ·
+voreingestellt ist das Kamera-Item aus, und `/cam item` sagt das ·
+eingeschaltet gibt `/cam item` eine Kamera, eine zweite weder dem Bot noch
+von der Konsole · ein Rechtsklick damit startet den Cam-Modus, im Cam-Modus
+ist auch die Kamera aus den Händen, danach wieder da · mit `give-on-join`
+bekommt beim Betreten eine, wer keine hat · voreingestellt schreibt
+`cam-log` nichts · eingeschaltet steht der Start mit Name, UUID und dem
+Platz des Körpers in `logs/<Datum>.log`, das Ende mit Grund, Dauer,
+geflogener Strecke, weitestem Abstand und letztem Platz der Kamera · ein
+Ende durch `/cam reload` heißt `reload` · mit `console: true` stehen die
+Zeilen auch im Server-Log · `keep-days` löscht eine alte Datei, eine fremde
+bleibt · ein Akku mit 5 Sekunden ist nach etwa 5 Sekunden leer und beendet
+den Cam-Modus · mit leerem Akku wird `/cam` abgelehnt, und die Meldung nennt
+die Zeit bis zum nächsten Start · `/cam stats` zeigt den Ladestand, und er
+steht in der Datei unter `players/` · mit schnellerem Laden geht `/cam` nach
+ein paar Sekunden wieder · ohne die Level und Items von `start-cost` startet
+der Cam-Modus nicht, und die Meldung nennt Kosten und was fehlt · mit allem
+startet er, die Meldung sagt, was es gekostet hat, und genau das ist weg ·
+reicht es nur für einen Teil, wird nichts genommen · das Kamera-Item zählt
+nicht zu den Kosten, auch wenn es aus demselben Item ist · `money` ohne Vault
+kostet nichts und steht einmal in der Konsole · `/cam stats` zählt einen
+Flug, seine Strecke und den weitesten Abstand zum Körper, die Zahlen stehen
+in der Datei unter `players/` · ein unbekannter Name wird gemeldet, die
+Konsole darf jeden ansehen · ohne op sieht der Bot sich selbst, auch unter
+seinem Namen, andere nicht · mit `statistics.enabled: false` sagt
+`/cam stats`, dass sie aus ist ·
 Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im

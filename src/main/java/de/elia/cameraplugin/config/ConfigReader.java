@@ -7,8 +7,10 @@ import org.bukkit.configuration.file.FileConfiguration;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -36,6 +38,7 @@ public final class ConfigReader {
     private static final String EXPECTED_WHOLE_NUMBER = "config-expected-whole-number";
     private static final String EXPECTED_TEXT = "config-expected-text";
     private static final String EXPECTED_LIST = "config-expected-list";
+    private static final String EXPECTED_AMOUNTS = "config-expected-amounts";
     private static final String UNKNOWN_VALUE = "config-unknown-value";
     private static final String UNKNOWN_ENTRY = "config-unknown-entry";
     private static final String UNKNOWN_KEY = "config-unknown-key";
@@ -265,6 +268,32 @@ public final class ConfigReader {
             }
         }
         return values;
+    }
+
+    /**
+     * Reads a section of names, each with a whole number, such as
+     * {@code ender_eye: 1}. The names are left to the caller to check; each
+     * number is read like {@link #getInt(String, int, int, int)}, with 1 for
+     * one that is no whole number. Anything other than such a section counts
+     * as none and is reported.
+     *
+     * @return the names as they stand in the file and their numbers, in the
+     *         order of the file
+     */
+    public Map<String, Integer> getAmounts(String path, int min, int max) {
+        Map<String, Integer> amounts = new LinkedHashMap<>();
+        Object raw = config.get(path);
+        if (raw == null) {
+            return amounts;
+        }
+        if (!(raw instanceof ConfigurationSection section)) {
+            warnWrongType(path, raw, EXPECTED_AMOUNTS, "{}");
+            return amounts;
+        }
+        for (String key : section.getKeys(false)) {
+            amounts.put(key, getInt(path + "." + key, 1, min, max));
+        }
+        return amounts;
     }
 
     /** Reads the name of an enum constant, ignoring case. */

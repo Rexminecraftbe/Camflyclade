@@ -234,7 +234,7 @@ sounds:
     sound: entity.illusioner.mirror_move
     volume: 1.0
     pitch: 1.0
-  # Beim Ende von außen: /cam reload, Zeitlimit abgelaufen, Teleport
+  # Beim Ende von außen: /cam reload, Zeitlimit abgelaufen, Akku leer, Teleport
   # (beim Tod, beim Verlassen des Servers und beim Herunterfahren gibt es keinen Ton)
   end-forced:
     enabled: true
@@ -265,6 +265,25 @@ cam-list:
   #   false = kein Spieler
   access: admin
 
+# Statistik für /cam stats: wie oft jemand im Cam-Modus war, wie lange insgesamt und am längsten,
+# wie weit die Kamera geflogen ist und wie weit sie höchstens vom Körper weg war.
+# Jeder sieht seine eigene mit /cam stats. Die von anderen mit /cam stats <Spieler> sehen Operatoren
+# und wer das Recht camplugin.stats.others hat (die Konsole immer).
+# Gezählt wird ein Cam-Modus, wenn er endet. Gespeichert wird in plugins/CamFly/players/<UUID>.yml.
+statistics:
+  enabled: true
+
+# Protokoll: Jeder Start und jedes Ende des Cam-Modus kommt in eine Datei, eine pro Tag:
+# plugins/CamFly/logs/<Datum>.log. Darin steht, wer, wann, wo der Körper stand, warum der Cam-Modus
+# endete, wie lange er lief, wie weit die Kamera geflogen ist und wo sie zuletzt war -
+# so lässt sich nachsehen, wer wo herumgeflogen ist.
+cam-log:
+  enabled: false
+  # Dieselben Zeilen auch in die Konsole schreiben
+  console: false
+  # Wie viele Tage die Dateien bleiben, ältere werden gelöscht (0 = alle behalten)
+  keep-days: 30
+
 # Zeitlimit für den Cam-Modus
 time-limit:
   enabled: false
@@ -278,6 +297,42 @@ time-limit:
   show-bossbar: true
   # BLUE, GREEN, PINK, PURPLE, RED, WHITE oder YELLOW
   bossbar-color: BLUE
+
+# Akku: Im Cam-Modus läuft er leer, außerhalb lädt er sich wieder auf. Ist er leer, endet der Cam-Modus.
+# Geht neben time-limit oder an seiner Stelle. Der Ladestand wird in plugins/CamFly/players/<UUID>.yml gespeichert,
+# zu sehen ist er mit /cam stats.
+battery:
+  enabled: false
+  # Ein voller Akku, in Sekunden Flug
+  capacity: 300
+  # Wie viele Sekunden Flug pro Sekunde außerhalb des Cam-Modus zurückkommen
+  # (0.5 = ein leerer Akku mit 300 Sekunden ist nach 10 Minuten wieder voll; mindestens 0.01)
+  recharge-per-second: 0.5
+  # So viele Sekunden Flug braucht ein Start mindestens (höchstens capacity)
+  min-start: 10
+  # Auch laden, während der Spieler nicht auf dem Server ist (false = nur, solange er online ist)
+  recharge-offline: true
+  # Ladestand als Bossbar im Cam-Modus anzeigen (Text: battery-bossbar in der Sprachdatei)
+  show-bossbar: true
+  # BLUE, GREEN, PINK, PURPLE, RED, WHITE oder YELLOW
+  bossbar-color: GREEN
+
+# Was ein Start des Cam-Modus kostet. Bezahlt wird erst, wenn sonst nichts mehr gegen den Start spricht.
+# Fehlt etwas, wird gar nichts genommen und der Spieler erfährt, was ihm fehlt.
+start-cost:
+  enabled: false
+  # Erfahrungslevel pro Start (0 = keine)
+  xp-levels: 0
+  # Geld pro Start (0 = keins). Braucht Vault und ein Economy-Plugin, sonst kostet der Start kein Geld
+  # (das steht dann einmal in der Konsole).
+  money: 0.0
+  # Items pro Start, je eine Zeile Name: Anzahl, z. B.
+  #   items:
+  #     ender_eye: 1
+  #     paper: 2
+  # Gezählt wird, was der Spieler in Hotbar, Inventar und Zweithand trägt, nicht die Rüstung.
+  # Das Kamera-Item (camera-item) zählt nie mit. {} = keine Items
+  items: {}
 
 # Partikel um den Spieler im Cam-Modus (er selbst sieht sie nicht, nur andere)
 camera-particles:
@@ -308,6 +363,21 @@ fireguard:
 # Kamera-Kopf auf dem Spieler im Cam-Modus (auch bei unsichtbarem Spieler zu sehen)
 camera-head:
   enabled: false
+
+# Kamera-Item: Ein Rechtsklick damit startet den Cam-Modus, mit denselben Prüfungen wie /cam.
+# Beendet wird er wie immer mit /cam oder einem Klick auf den eigenen Körper - im Cam-Modus sind die Hände leer,
+# das Item kommt mit dem Rest des Inventars am Ende zurück.
+# Holen mit /cam item (Recht camplugin.item, hat jeder), einem anderen geben mit /cam item <Spieler>
+# (Operatoren und wer das Recht camplugin.item.others hat, die Konsole immer).
+# Name und Beschreibung stehen in der Sprachdatei unter camera-item-name und camera-item-lore.
+camera-item:
+  enabled: false
+  # Woraus es ist: camera_head = ein Kopf mit einer Kamera darauf (wie bei camera-head),
+  # sonst ein Item, z. B. clock, spyglass oder compass
+  # Ein schon verteiltes Item bleibt eine Kamera, auch wenn hier später etwas anderes steht.
+  material: camera_head
+  # Beim Betreten des Servers ins Inventar legen, wenn er noch keins hat (und ein Platz frei ist)
+  give-on-join: false
 
 # Kein Cam-Modus direkt nach erlittenem Schaden
 cam-safety:

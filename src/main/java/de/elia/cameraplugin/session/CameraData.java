@@ -44,6 +44,10 @@ public class CameraData {
      * while he has not left the world of his body.
      */
     private Location portalEntry;
+    /** How far the camera has flown so far, in blocks, see {@link SessionTracker}. */
+    private double distanceFlown;
+    /** The farthest the camera has been from the body so far, in blocks, in the world of the body. */
+    private double farthestFromBody;
 
     public CameraData(LivingEntity body, Mannequin hitbox, TextDisplay nameDisplay, Chunk bodyChunk, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, Collection<PotionEffect> pausedEffects) {
         this.body = body;
@@ -82,4 +86,10 @@ public class CameraData {
     /** The portal he set out through, or {@code null} when he is still home. */
     public Location getPortalEntry() { return portalEntry; }
     public void setPortalEntry(Location portalEntry) { this.portalEntry = portalEntry; }
+    /** How far the camera has flown so far, for {@code cam-log} and the statistics. */
+    public double getDistanceFlown() { return distanceFlown; }
+    public void addDistanceFlown(double blocks) { distanceFlown += blocks; }
+    /** The farthest the camera has been from the body, for {@code cam-log} and the statistics. */
+    public double getFarthestFromBody() { return farthestFromBody; }
+    public void noteDistanceFromBody(double blocks) { farthestFromBody = Math.max(farthestFromBody, blocks); }
 }
