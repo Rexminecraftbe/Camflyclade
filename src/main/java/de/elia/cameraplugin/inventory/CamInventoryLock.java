@@ -8,6 +8,7 @@ import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 
 /**
  * Turns away everything that would put something into the pockets of a camera
@@ -33,6 +34,17 @@ public final class CamInventoryLock implements Listener {
 
     @EventHandler
     public void onPlayerDropItem(PlayerDropItemEvent event) {
+        if (cameraPlayers.contains(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Nothing changes hands either. The only thing he holds is the camera
+     * item, and in the off hand the sweep would take it away.
+     */
+    @EventHandler
+    public void onSwapHands(PlayerSwapHandItemsEvent event) {
         if (cameraPlayers.contains(event.getPlayer().getUniqueId())) {
             event.setCancelled(true);
         }

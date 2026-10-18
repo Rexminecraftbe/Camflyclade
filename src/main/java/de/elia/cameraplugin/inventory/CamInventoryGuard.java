@@ -42,6 +42,9 @@ import java.util.function.Predicate;
  * <p>Nothing is lost by this: what the player brought with him is written down
  * in his {@code CameraData} at the start and put back when he leaves, and a
  * block picked in the creative mode was made out of nothing anyway.</p>
+ *
+ * <p>The one thing that stays is the camera item of {@code camera-item}, which
+ * camera mode itself puts into his hand.</p>
  */
 public class CamInventoryGuard {
 
@@ -65,12 +68,15 @@ public class CamInventoryGuard {
      * see for itself that its player is gone.</p>
      */
     private final Predicate<Player> inCameraMode;
+    /** Whether an item belongs in his hands all the same: the camera item. */
+    private final Predicate<ItemStack> keep;
     /** The sweep of every player currently in camera mode, by player id. */
     private final Map<UUID, BukkitRunnable> tasks = new HashMap<>();
 
-    public CamInventoryGuard(JavaPlugin plugin, Predicate<Player> inCameraMode) {
+    public CamInventoryGuard(JavaPlugin plugin, Predicate<Player> inCameraMode, Predicate<ItemStack> keep) {
         this.plugin = plugin;
         this.inCameraMode = inCameraMode;
+        this.keep = keep;
     }
 
     /** Starts sweeping for this camera player. */
@@ -119,7 +125,8 @@ public class CamInventoryGuard {
         PlayerInventory inventory = player.getInventory();
         boolean taken = false;
         for (int slot = 0; slot < STORAGE_SLOTS; slot++) {
-            if (holdsSomething(inventory.getItem(slot))) {
+            ItemStack item = inventory.getItem(slot);
+            if (holdsSomething(item) && !keep.test(item)) {
                 inventory.clear(slot);
                 taken = true;
             }

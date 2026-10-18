@@ -20,12 +20,19 @@ import java.util.concurrent.TimeUnit;
  * how often a player flew, how long altogether and at most, how far his
  * camera flew, and how far it got from his body.
  *
+ * <ul>
+ *   <li>{@code /cam stats} - his own</li>
+ *   <li>{@code /cam stats reset} - sets his own back to nothing</li>
+ *   <li>{@code /cam stats player <name>} - those of somebody else, for whoever
+ *       {@code statistics.view-others} lets</li>
+ * </ul>
+ *
  * <p>A camera mode counts once it has ended. One that a crash cut short
  * never ended and is not counted.</p>
  */
 public final class CamStats {
 
-    /** Who may look at the statistics of somebody else. Operators have it by default. */
+    /** Who may look at the statistics of somebody else on {@code view-others: admin}. Operators have it by default. */
     public static final String PERMISSION_OTHERS = "camplugin.stats.others";
 
     private final CamSettings settings;
@@ -54,49 +61,83 @@ public final class CamStats {
                 data.getDistanceFlown(), data.getFarthestFromBody());
     }
 
-    /** Whether a sender may look at the statistics of somebody else. The console always may. */
+    /**
+     * Whether a sender may look at the statistics of somebody else, after
+     * {@code statistics.view-others}. The console always may, it is the
+     * server.
+     */
     public boolean mayViewOthers(CommandSender sender) {
-        return !(sender instanceof Player player) || player.hasPermission(PERMISSION_OTHERS);
+        if (!(sender instanceof Player player)) {
+            return true;
+        }
+        return switch (settings.getStatsViewOthers()) {
+            case ADMIN -> player.hasPermission(PERMISSION_OTHERS);
+            case ALL -> player.hasPermission("camplugin.use");
+            case OFF -> false;
+        };
     }
 
     /**
-     * {@code /cam stats [player]}: sends the statistics of the sender himself,
-     * or of the player named. That player need not be online, only have been
-     * on the server once.
+     * {@code /cam stats} with what follows it.
      *
-     * @param targetName the player named, or {@code null} for the sender
+     * @param args the words after {@code stats}
      */
-    public void show(CommandSender sender, String targetName) {
+    public void command(CommandSender sender, String[] args) {
+        if (args.length == 0) {
+            if (sender instanceof Player player) {
+                show(sender, player.getUniqueId(), player.getName());
+            } else {
+                messages.sendConfiguredMessage(sender, "no-player");
+            }
+        } else if (args.length == 1 && args[0].equalsIgnoreCase("reset")) {
+            reset(sender);
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("player")) {
+            showOther(sender, args[1]);
+        } else {
+            messages.sendConfiguredMessage(sender, "stats-usage");
+        }
+    }
+
+    /** {@code /cam stats player <name>}: the statistics of a player who has been on the server once. */
+    private void showOther(CommandSender sender, String name) {
+        // His own name is nobody else.
+        if (sender instanceof Player self && self.getName().equalsIgnoreCase(name)) {
+            show(sender, self.getUniqueId(), self.getName());
+            return;
+        }
+        if (!mayViewOthers(sender)) {
+            messages.sendConfiguredMessage(sender, "no-permission");
+            return;
+        }
+        OfflinePlayer target = find(name);
+        if (target == null) {
+            messages.sendConfiguredMessage(sender, "stats-unknown-player", "{player}", name);
+            return;
+        }
+        show(sender, target.getUniqueId(), target.getName() != null ? target.getName() : name);
+    }
+
+    /** {@code /cam stats reset}: sets the statistics of the sender back to nothing. */
+    private void reset(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            messages.sendConfiguredMessage(sender, "no-player");
+            return;
+        }
+        if (!settings.isStatsEnabled()) {
+            messages.sendConfiguredMessage(sender, "stats-off");
+            return;
+        }
+        store.get(player.getUniqueId()).resetStats();
+        store.save(player.getUniqueId());
+        messages.sendConfiguredMessage(player, "stats-reset");
+    }
+
+    /** Sends the statistics of one player, and his battery while there is one. */
+    private void show(CommandSender sender, UUID id, String name) {
         // With the statistics switched off the battery is still worth a look.
         if (!settings.isStatsEnabled() && !settings.isBatteryEnabled()) {
             messages.sendConfiguredMessage(sender, "stats-off");
             return;
-        }
-        UUID id;
-        String name;
-        // His own name is no other player.
-        if (targetName != null && sender instanceof Player self && self.getName().equalsIgnoreCase(targetName)) {
-            targetName = null;
-        }
-        if (targetName == null) {
-            if (!(sender instanceof Player player)) {
-                messages.sendConfiguredMessage(sender, "no-player");
-                return;
-            }
-            id = player.getUniqueId();
-            name = player.getName();
-        } else {
-            if (!mayViewOthers(sender)) {
-                messages.sendConfiguredMessage(sender, "no-permission");
-                return;
-            }
-            OfflinePlayer target = find(targetName);
-            if (target == null) {
-                messages.sendConfiguredMessage(sender, "stats-unknown-player", "{player}", targetName);
-                return;
-            }
-            id = target.getUniqueId();
-            name = target.getName() != null ? target.getName() : targetName;
         }
         PlayerRecord record = store.peek(id);
         if (!settings.isStatsEnabled()) {

@@ -960,6 +960,13 @@ def prepare_server_files(env):
     text, n = replace_option(text, "command", "false", "teleports")
     if n != 1:
         Log.warn("teleports.command nicht in der Konfiguration gefunden")
+    # Das Kamera-Item aus. Mit ihm in der Hand beendet jeder Rechtsklick den
+    # Cam-Modus, auch der auf einen Hebel in den Interaktionstests, und die
+    # Taschen waeren nicht leer. Nur kamera_item_checks schaltet es fuer sich
+    # ein.
+    text, n = replace_option(text, "enabled", "false", "camera-item")
+    if n != 1:
+        Log.warn("camera-item.enabled nicht in der Konfiguration gefunden")
     data_dir = plugins / "CamFly"
     data_dir.mkdir(exist_ok=True)
     (data_dir / "config.yml").write_text(text, encoding="utf-8")
@@ -1115,6 +1122,22 @@ function soundText(packet) {
 for (const name of ['sound_effect', 'entity_sound_effect']) {
   bot._client.on(name, (packet) => sounds.push({ t: Date.now(), text: soundText(packet) }));
 }
+// Die Bossbars, die gerade zu sehen sind, nach ihrer UUID: der Titel als Text
+// des ganzen Titels, wie bei den Toenen, und der Fuellstand.
+const bossbars = {};
+bot._client.on('boss_bar', (packet) => {
+  const id = String(packet.entityUUID);
+  const action = packet.action;
+  if (action === 0 || action === 'add') {
+    bossbars[id] = { title: soundText(packet.title), health: packet.health };
+  } else if (action === 1 || action === 'remove') {
+    delete bossbars[id];
+  } else if (bossbars[id] && (action === 2 || action === 'update_health')) {
+    bossbars[id].health = packet.health;
+  } else if (bossbars[id] && (action === 3 || action === 'update_title')) {
+    bossbars[id].title = soundText(packet.title);
+  }
+});
 bot.on('blockUpdate', (alt, neu) => {
   if (!watched || !neu || !neu.position) return;
   const folge = watched[`${neu.position.x},${neu.position.y},${neu.position.z}`];
@@ -1567,6 +1590,8 @@ async function handle(cmd) {
     case 'hotbar':
       bot.setQuickBarSlot(cmd.slot || 0);
       return { slot: bot.quickBarSlot };
+    case 'bossbars':
+      return { bars: Object.values(bossbars) };
     case 'use_item':
       // Rechtsklick in die Luft mit dem, was er gerade in der Hand haelt.
       bot.activateItem(!!cmd.offhand);
@@ -2876,7 +2901,7 @@ def toene_checks(env, bot):
 
 
 def absturz_checks(env, bot):
-    """crash-protection: die Datei unter plugins/CamFly/playerdata, und was
+    """crash-protection: die Datei unter plugins/CamFly/playerdata/crash, und was
     nach einem Absturz aus ihr wird.
 
     Im Cam-Modus liegt eine Datei da, nach dem Ende nicht mehr; mit
@@ -2893,7 +2918,7 @@ def absturz_checks(env, bot):
     ihm auf einem frisch gestarteten Server mit zurueckgesetzter
     Konfiguration landet.
     """
-    ordner = env.server / "plugins" / "CamFly" / "playerdata"
+    ordner = env.server / "plugins" / "CamFly" / "playerdata" / "crash"
 
     def dateien():
         return sorted(p.name for p in ordner.glob("*.yml")) if ordner.exists() else []
@@ -2902,7 +2927,7 @@ def absturz_checks(env, bot):
         return
     cam_on(bot)
     time.sleep(0.5)
-    FIND.test("crash-protection: im Cam-Modus liegt eine Datei unter playerdata",
+    FIND.test("crash-protection: im Cam-Modus liegt eine Datei unter playerdata/crash",
               len(dateien()) == 1, str(dateien()))
     if dateien():
         kopf = (ordner / dateien()[0]).read_text(encoding="utf-8").splitlines()[:3]
@@ -3016,8 +3041,8 @@ def neu_anmelden(bot, dazwischen=None):
 
 
 def spielerdatei(env):
-    """Die Datei des Bots unter plugins/CamFly/players, oder None."""
-    ordner = env.server / "plugins" / "CamFly" / "players"
+    """Die Datei des Bots unter plugins/CamFly/playerdata/stats, oder None."""
+    ordner = env.server / "plugins" / "CamFly" / "playerdata" / "stats"
     if not ordner.exists():
         return None
     for datei in ordner.glob("*.yml"):
@@ -3027,61 +3052,77 @@ def spielerdatei(env):
 
 
 def kamera_item_checks(env, bot):
-    """camera-item: /cam item, der Rechtsklick damit und give-on-join.
+    """camera-item: das Item, mit dem der Cam-Modus endet.
 
-    Voreingestellt ist das Item aus, und /cam item sagt das. Eingeschaltet
-    holt sich der Bot eines - einen Kopf mit Kamera -, ein zweites gibt es
-    nicht, auch nicht von der Konsole. Ein Rechtsklick damit in die Luft
-    startet den Cam-Modus; im Cam-Modus sind die Haende leer, danach ist die
-    Kamera wieder da. Mit give-on-join bekommt er beim Betreten eine, wenn
-    er keine hat - dafuer meldet er sich einmal ab und wieder an.
+    Voreingestellt ist es an, mit einer Barriere - nachgesehen in der
+    ausgelieferten config.yml, die Testkonfiguration schaltet es fuer die
+    anderen Abschnitte aus. Beim Start liegt die Barriere in dem Platz der
+    Hotbar, den der Bot haelt, und sie bleibt, waehrend der Sweep einen Stein
+    abraeumt. Ein Rechtsklick damit beendet den Cam-Modus, danach ist sie
+    weg, ebenso nach /cam. Mit material: clock ist es eine Uhr, ausgeschaltet
+    gibt es keins. Eine Barriere, die nach einem Absturz uebrig ist, nimmt
+    ihm der naechste Rechtsklick ausserhalb des Cam-Modus ab.
     """
-    def hat_kamera():
-        # Am Server gefragt: Die Itemliste von mineflayer stammt aus einer
-        # aelteren Version des Spiels und nennt den Kopf anders.
-        return nbt_frage(bot, "@s", '{Inventory:[{id:"minecraft:player_head"}]}')
+    def item_da(art, platz=None):
+        slot = f"Slot:{platz}b," if platz is not None else ""
+        return nbt_frage(bot, "@s", f'{{Inventory:[{{{slot}id:"minecraft:{art}"}}]}}')
 
+    quelle = (env.repo / "src" / "main" / "resources" / "config.yml").read_text(encoding="utf-8")
+    block = re.search(r"(?ms)^camera-item:\n(.*?)(?=^\S)", quelle)
+    FIND.test("camera-item ist voreingestellt an, mit einer Barriere",
+              block is not None and re.search(r"(?m)^\s*enabled:\s*true\s*$", block.group(1)) is not None
+              and re.search(r"(?m)^\s*material:\s*barrier\s*$", block.group(1)) is not None, "")
     try:
         cam_off(bot)
         bot.chat("/clear @s")
+        bot.call("hotbar", slot=2)
         time.sleep(0.5)
-        z = befehl(bot, "/cam item")
-        FIND.test("camera-item.enabled: false - /cam item sagt, dass es aus ist",
-                  gesagt(z, r"camera item is switched off") and not hat_kamera(), zeige(z))
-
         set_option(env, "enabled", "true", "camera-item")
-        z = befehl(bot, "/cam item")
-        FIND.test("/cam item gibt dem Bot eine Kamera", gesagt(z, r"You got a camera") and hat_kamera(), zeige(z))
-        z = befehl(bot, "/cam item")
-        FIND.test("/cam item - eine zweite gibt es nicht", gesagt(z, r"already have a camera"), zeige(z))
-        vorher = len(server_log(env))
-        console(env, f"cam item {BOT_NAME}", pause=1.5)
-        neu = strip_colors(server_log(env)[vorher:])
-        FIND.test("/cam item <Spieler> - auch die Konsole gibt ihm keine zweite",
-                  f"{BOT_NAME} already has a camera" in neu, neu.strip()[-200:] or "nichts im Log")
-
-        bot.call("hotbar", slot=0)
+        if not FIND.test("Cam-Modus fuer das Kamera-Item gestartet", cam_on(bot), ""):
+            return
         time.sleep(0.5)
+        FIND.test("camera-item: beim Start liegt die Barriere in dem Platz, den er haelt", item_da("barrier", 2), "")
+        bot.chat(f"/give {BOT_NAME} minecraft:stone 1")
+        time.sleep(1.2)
+        FIND.test("camera-item: der Sweep raeumt einen Stein ab und laesst die Barriere",
+                  item_da("barrier", 2) and not item_da("stone"), "")
         since = bot.mark()
         bot.call("use_item")
         time.sleep(2)
         z = zeilen_seit(bot, since)
-        an = gesagt(z, r"[Cc]am mode activated")
-        FIND.test("Ein Rechtsklick mit der Kamera startet den Cam-Modus", an, zeige(z))
-        if an:
-            FIND.test("Im Cam-Modus ist auch die Kamera aus den Haenden", not hat_kamera(), "")
-            cam_off(bot)
-            time.sleep(1)
-            FIND.test("Nach dem Cam-Modus ist die Kamera wieder da", hat_kamera(), "")
+        FIND.test("camera-item: ein Rechtsklick damit beendet den Cam-Modus", gesagt(z, r"[Cc]am mode ended"), zeige(z))
+        FIND.test("camera-item: danach ist die Barriere weg", not item_da("barrier"), "")
+        cam_on(bot)
+        cam_off(bot)
+        FIND.test("camera-item: auch nach /cam ist sie weg", not item_da("barrier"), "")
 
+        set_option(env, "material", "clock", "camera-item")
+        cam_on(bot)
+        FIND.test("camera-item.material: clock - es ist eine Uhr", item_da("clock", 2) and not item_da("barrier"), "")
+        cam_off(bot)
+
+        set_option(env, "enabled", "false", "camera-item")
+        cam_on(bot)
+        FIND.test("camera-item.enabled: false - die Hand bleibt leer", not item_da("clock") and not item_da("barrier"), "")
+        cam_off(bot)
+
+        # Wie nach einem Absturz ohne crash-protection: Die Barriere mit der
+        # Marke des Plugins liegt ausserhalb des Cam-Modus in der Hand.
+        # /give legt sie in den ersten freien Platz, den haelt er dafuer.
         bot.chat("/clear @s")
-        set_option(env, "give-on-join", "true", "camera-item")
-        if FIND.test("Bot meldet sich fuer give-on-join neu an", neu_anmelden(bot), ""):
-            FIND.test("give-on-join - wer ohne Kamera kommt, bekommt eine", hat_kamera(), "")
+        bot.call("hotbar", slot=0)
+        bot.chat(f'/give {BOT_NAME} minecraft:barrier[minecraft:custom_data={{PublicBukkitValues:'
+                 f'{{"camfly:camera_item":1b}}}}] 1')
+        time.sleep(1)
+        if FIND.test("Eine uebrige Barriere mit der Marke liegt in der Hand", item_da("barrier", 0), ""):
+            bot.call("use_item")
+            time.sleep(1)
+            FIND.test("camera-item: eine uebrige Barriere nimmt ihm der Rechtsklick ab", not item_da("barrier"), "")
     finally:
         cam_off(bot)
         bot.chat("/clear @s")
-        set_options(env, [("enabled", "false", "camera-item"), ("give-on-join", "false", "camera-item")])
+        bot.call("hotbar", slot=0)
+        set_options(env, [("enabled", "false", "camera-item"), ("material", "barrier", "camera-item")])
 
 
 def protokoll_checks(env, bot):
@@ -3161,35 +3202,48 @@ def protokoll_checks(env, bot):
 
 
 def akku_checks(env, bot):
-    """battery: im Cam-Modus leert sich der Akku, draussen laedt er sich auf.
+    """flight-limit: battery - der Akku leert sich im Cam-Modus und laedt sich
+    draussen wieder auf.
 
-    Der Bot faengt mit einem frischen Akku an: Seine Datei unter players wird
-    geloescht, waehrend er abgemeldet ist. Der Akku haelt 5 Sekunden, laedt
-    sich mit 0.01 pro Sekunde so gut wie nicht auf, und ein Start braucht 2.
-    Nach gut fuenf Sekunden endet der Cam-Modus mit der Meldung dazu; ein
-    neuer Start wird abgelehnt und nennt die Zeit, bis es wieder reicht, und
-    /cam stats zeigt den leeren Akku. Mit 1 pro Sekunde reicht es nach ein
-    paar Sekunden wieder. Der Ladestand steht in der Datei des Bots.
+    Der Bot faengt mit einem frischen Akku an: Seine Datei unter
+    playerdata/stats wird geloescht, waehrend er abgemeldet ist. Der Akku
+    haelt 5 Sekunden, laedt sich mit 0.01 pro Sekunde so gut wie nicht auf,
+    und ein Start braucht 2. Im Flug zeigt die Bossbar den Akku. Nach gut
+    fuenf Sekunden endet der Cam-Modus mit der Meldung dazu, und die Bossbar
+    zeigt das Laden - auch nach dem Neuanmelden. Ein neuer Start wird
+    abgelehnt und nennt die Zeit, bis es wieder reicht, und /cam stats zeigt
+    den leeren Akku. Mit 1 pro Sekunde reicht es nach ein paar Sekunden
+    wieder, und ist er voll, verschwindet die Bossbar. Mit
+    show-bossbar-charging: false gibt es nach dem Ende keine.
     """
     def loeschen():
         datei = spielerdatei(env)
         if datei is not None:
             datei.unlink()
 
+    def balken(muster):
+        titel = [b.get("title", "") for b in bot.call("bossbars").get("bars", [])]
+        return any(re.search(muster, t) for t in titel), titel
+
     try:
         cam_off(bot)
         if not FIND.test("Bot meldet sich fuer einen frischen Akku neu an", neu_anmelden(bot, loeschen), ""):
             return
-        set_options(env, [("enabled", "true", "battery"), ("capacity", "5", "battery"),
+        set_options(env, [("flight-limit", "battery"), ("capacity", "5", "battery"),
                           ("recharge-per-second", "0.01", "battery"), ("min-start", "2", "battery")])
         if not FIND.test("Cam-Modus mit vollem Akku gestartet", cam_on(bot), ""):
             return
-        start = time.time()
+        start = time.time() - 1.5
+        da, titel = balken(r"Battery: \d")
+        FIND.test("battery: im Flug zeigt die Bossbar den Akku", da, str(titel))
         since = bot.mark()
         leer = bot.expect(r"battery is empty", since, 10000)
         dauer = time.time() - start
         FIND.test("battery: nach 5 Sekunden ist der Akku leer und der Cam-Modus endet",
                   bool(leer) and 3.5 <= dauer <= 8.0, f"nach {dauer:.1f} s")
+        time.sleep(1)
+        da, titel = balken(r"Battery charging: 0 seconds, full in")
+        FIND.test("battery: nach dem Ende zeigt die Bossbar, wie er laedt", da, str(titel))
 
         z = befehl(bot, "/cam")
         FIND.test("battery: mit leerem Akku startet der Cam-Modus nicht, und er erfaehrt, wie lange es dauert",
@@ -3198,39 +3252,63 @@ def akku_checks(env, bot):
         z = befehl(bot, "/cam stats")
         FIND.test("battery: /cam stats zeigt den Ladestand", gesagt(z, r"Battery: 0 seconds of 5 seconds"), zeige(z))
         datei = spielerdatei(env)
-        FIND.test("battery: der Ladestand steht in der Datei unter players",
+        FIND.test("battery: der Ladestand steht in der Datei unter playerdata/stats",
                   datei is not None and "charge:" in datei.read_text(encoding="utf-8"), str(datei))
+        if FIND.test("Bot meldet sich mit leerem Akku neu an", neu_anmelden(bot), ""):
+            da, titel = balken(r"Battery charging")
+            FIND.test("battery: nach dem Betreten zeigt die Bossbar weiter, wie er laedt", da, str(titel))
 
         set_option(env, "recharge-per-second", "1.0", "battery")
         time.sleep(2)
         FIND.test("battery: mit 1 pro Sekunde reicht es nach ein paar Sekunden wieder", cam_on(bot), "")
+        cam_off(bot)
+        time.sleep(7)
+        da, titel = balken(r"Battery")
+        FIND.test("battery: ist er wieder voll, verschwindet die Bossbar", not da, str(titel))
+
+        set_option(env, "show-bossbar-charging", "false", "battery")
+        cam_on(bot)
+        cam_off(bot)
+        da, titel = balken(r"Battery")
+        FIND.test("battery.show-bossbar-charging: false - nach dem Ende keine Bossbar", not da, str(titel))
+
+        set_option(env, "flight-limit", "time-limit")
+        z = befehl(bot, "/cam stats")
+        FIND.test("flight-limit: time-limit - kein Akku mehr in /cam stats", not gesagt(z, r"Battery"), zeige(z))
     finally:
         cam_off(bot)
-        set_options(env, [("enabled", "false", "battery"), ("capacity", "300", "battery"),
-                          ("recharge-per-second", "0.5", "battery"), ("min-start", "10", "battery")])
+        set_options(env, [("flight-limit", "false"), ("capacity", "300", "battery"),
+                          ("recharge-per-second", "0.5", "battery"), ("min-start", "10", "battery"),
+                          ("show-bossbar-charging", "true", "battery")])
 
 
 def kosten_checks(env, bot):
-    """start-cost: was ein Start kostet - Level, Items und Geld.
+    """start-cost: was ein Start kostet - Erfahrung, Items und Geld.
 
     Ein Start kostet 2 Level und 3 Diamanten. Ohne beides wird er abgelehnt,
     und die Meldung nennt Kosten und was fehlt. Mit 3 Leveln und 5 Diamanten
     startet er, die Meldung sagt, was es gekostet hat, und danach sind 1
     Level und 2 Diamanten uebrig. Reicht es nur fuer einen Teil, wird gar
-    nichts genommen. Ist das Kamera-Item ein Diamant, zaehlt es nicht zu den
-    Kosten. Geld ohne Vault: Der Start kostet nichts, und die Konsole sagt
-    es einmal.
+    nichts genommen. Mit xp-type: points kostet er 10 Punkte: Von 25 bleiben
+    15, das ist Level 1, und mit 5 fehlen 5. Geld ohne Vault: Der Start
+    kostet nichts, und die Konsole sagt es einmal.
     """
     def bestand(diamanten, level):
         return (nbt_frage(bot, "@s", f'{{Inventory:[{{id:"minecraft:diamond",count:{diamanten}}}]}}')
                 and nbt_frage(bot, "@s", f"{{XpLevel:{level}}}"))
+
+    def punkte(anzahl):
+        bot.chat("/xp set @s 0 levels")
+        bot.chat("/xp set @s 0 points")
+        bot.chat(f"/xp add @s {anzahl} points")
+        time.sleep(0.5)
 
     try:
         cam_off(bot)
         bot.chat("/clear @s")
         bot.chat("/xp set @s 0 levels")
         time.sleep(0.5)
-        set_options(env, [("enabled", "true", "start-cost"), ("xp-levels", "2", "start-cost"),
+        set_options(env, [("enabled", "true", "start-cost"), ("xp", "2", "start-cost"),
                           ("items", "{diamond: 3}", "start-cost")])
         z = befehl(bot, "/cam")
         FIND.test("start-cost: ohne Level und Diamanten kein Start, und er erfaehrt, was fehlt",
@@ -3251,15 +3329,23 @@ def kosten_checks(env, bot):
         FIND.test("start-cost: reicht es nur fuer einen Teil, wird gar nichts genommen",
                   gesagt(z, r"You are missing 1 XP level, 1x diamond") and bestand(2, 1), zeige(z))
 
-        set_options(env, [("xp-levels", "0", "start-cost"), ("enabled", "true", "camera-item"),
-                          ("material", "diamond", "camera-item")])
-        befehl(bot, "/cam item")
+        set_options(env, [("xp", "10", "start-cost"), ("xp-type", "points", "start-cost"),
+                          ("items", "{}", "start-cost")])
+        punkte(25)
+        z = befehl(bot, "/cam", warten=2)
+        FIND.test("start-cost.xp-type: points - der Start kostet 10 Punkte",
+                  gesagt(z, r"[Cc]am mode activated") and gesagt(z, r"cost you 10 XP points"), zeige(z))
+        cam_off(bot)
+        time.sleep(0.5)
+        FIND.test("start-cost.xp-type: points - von 25 Punkten bleiben 15, Level 1",
+                  nbt_frage(bot, "@s", "{XpTotal:15}") and nbt_frage(bot, "@s", "{XpLevel:1}"), "")
+        punkte(5)
         z = befehl(bot, "/cam")
-        FIND.test("start-cost: das Kamera-Item zaehlt nicht mit, auch wenn es ein Diamant ist",
-                  gesagt(z, r"You are missing 1x diamond") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
+        FIND.test("start-cost.xp-type: points - mit 5 Punkten fehlen 5",
+                  gesagt(z, r"You are missing 5 XP points") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
 
-        set_options(env, [("items", "{}", "start-cost"), ("money", "5.0", "start-cost"),
-                          ("enabled", "false", "camera-item"), ("material", "camera_head", "camera-item")])
+        set_options(env, [("xp", "0", "start-cost"), ("xp-type", "levels", "start-cost"),
+                          ("money", "5.0", "start-cost")])
         vorher = len(server_log(env))
         an = cam_on(bot)
         cam_off(bot)
@@ -3271,20 +3357,24 @@ def kosten_checks(env, bot):
         cam_off(bot)
         bot.chat("/clear @s")
         bot.chat("/xp set @s 0 levels")
-        set_options(env, [("enabled", "false", "start-cost"), ("xp-levels", "0", "start-cost"),
-                          ("items", "{}", "start-cost"), ("money", "0.0", "start-cost"),
-                          ("enabled", "false", "camera-item"), ("material", "camera_head", "camera-item")])
+        bot.chat("/xp set @s 0 points")
+        set_options(env, [("enabled", "false", "start-cost"), ("xp", "0", "start-cost"),
+                          ("xp-type", "levels", "start-cost"), ("items", "{}", "start-cost"),
+                          ("money", "0.0", "start-cost")])
 
 
 def statistik_checks(env, bot):
-    """statistics und /cam stats.
+    """statistics, /cam stats, /cam stats player und /cam stats reset.
 
     Ein Flug von sechs Bloecken nach oben zaehlt einmal mehr, die Strecke
     waechst um ihn, und der weiteste Abstand zum Koerper ist mindestens so
-    gross. Die Zahlen stehen in der Datei des Bots. Ein unbekannter Name wird
-    gemeldet, die Konsole darf jeden ansehen. Ohne op darf der Bot nur sich
-    selbst ansehen - auch unter seinem eigenen Namen -, andere nicht. Mit
-    statistics.enabled: false sagt /cam stats, dass sie aus ist.
+    gross. Die Zahlen stehen in der Datei des Bots unter playerdata/stats.
+    Ein unbekannter Name wird gemeldet, ein unbekanntes Wort nach stats sagt,
+    wie es geht, die Konsole darf jeden ansehen. view-others: admin laesst
+    den Bot ohne op nur sich selbst ansehen - auch unter seinem eigenen
+    Namen -, all auch andere, false auch mit op niemanden. /cam stats reset
+    setzt seine eigene auf null. Mit statistics.enabled: false sagt
+    /cam stats, dass sie aus ist.
     """
     def zahl(zeilen, muster):
         for z in zeilen:
@@ -3309,26 +3399,44 @@ def statistik_checks(env, bot):
         FIND.test("/cam stats - der weiteste Abstand zum Koerper",
                   zahl(z, r"Farthest from the body: (\d+) blocks") >= 4, zeige(z))
         datei = spielerdatei(env)
-        FIND.test("statistics: die Zahlen stehen in der Datei unter players",
+        FIND.test("statistics: die Zahlen stehen in der Datei unter playerdata/stats",
                   datei is not None and re.search(rf"(?m)^\s*sessions: {mal + 1}$",
                                                   datei.read_text(encoding="utf-8")) is not None, str(datei))
 
-        z = befehl(bot, "/cam stats NiemandHier")
-        FIND.test("/cam stats <Name> - ein unbekannter Name wird gemeldet",
+        z = befehl(bot, "/cam stats player NiemandHier")
+        FIND.test("/cam stats player <Name> - ein unbekannter Name wird gemeldet",
                   gesagt(z, r"Nobody called NiemandHier"), zeige(z))
+        z = befehl(bot, "/cam stats quatsch")
+        FIND.test("/cam stats mit einem unbekannten Wort sagt, wie es geht",
+                  gesagt(z, r"Use /cam stats, /cam stats reset or /cam stats player"), zeige(z))
         vorher = len(server_log(env))
-        console(env, f"cam stats {BOT_NAME}", pause=1.5)
+        console(env, f"cam stats player {BOT_NAME}", pause=1.5)
         log = strip_colors(server_log(env)[vorher:])
-        FIND.test("/cam stats <Spieler> geht auch von der Konsole",
+        FIND.test("/cam stats player <Name> geht auch von der Konsole",
                   f"Cam mode statistics of {BOT_NAME}" in log, log.strip()[-200:] or "nichts im Log")
 
         console(env, f"deop {BOT_NAME}", pause=1.5)
-        z = befehl(bot, f"/cam stats {BOT_NAME}")
-        FIND.test("Ohne op: unter seinem eigenen Namen sieht er sich selbst",
+        z = befehl(bot, f"/cam stats player {BOT_NAME}")
+        FIND.test("view-others: admin - ohne op sieht er sich unter seinem eigenen Namen",
                   gesagt(z, rf"Cam mode statistics of {BOT_NAME}"), zeige(z))
-        z = befehl(bot, "/cam stats NiemandHier")
-        FIND.test("Ohne op: andere darf er nicht ansehen", gesagt(z, r"permission"), zeige(z))
+        z = befehl(bot, "/cam stats player NiemandHier")
+        FIND.test("view-others: admin - ohne op darf er andere nicht ansehen", gesagt(z, r"permission"), zeige(z))
+        set_option(env, "view-others", "all", "statistics")
+        z = befehl(bot, "/cam stats player NiemandHier")
+        FIND.test("view-others: all - auch ohne op darf er andere ansehen",
+                  gesagt(z, r"Nobody called NiemandHier"), zeige(z))
         console(env, f"op {BOT_NAME}", pause=1.5)
+        set_option(env, "view-others", "false", "statistics")
+        z = befehl(bot, "/cam stats player NiemandHier")
+        FIND.test("view-others: false - auch mit op niemand", gesagt(z, r"permission"), zeige(z))
+        set_option(env, "view-others", "admin", "statistics")
+
+        z = befehl(bot, "/cam stats reset")
+        FIND.test("/cam stats reset meldet, dass die Statistik weg ist",
+                  gesagt(z, r"statistics have been reset"), zeige(z))
+        z = befehl(bot, "/cam stats")
+        FIND.test("/cam stats reset - danach ist sie wirklich auf null",
+                  gesagt(z, rf"{BOT_NAME} has not been in cam mode yet"), zeige(z))
 
         set_option(env, "enabled", "false", "statistics")
         z = befehl(bot, "/cam stats")
@@ -3336,7 +3444,69 @@ def statistik_checks(env, bot):
                   gesagt(z, r"statistics are switched off"), zeige(z))
     finally:
         console(env, f"op {BOT_NAME}", pause=1.5)
-        set_option(env, "enabled", "true", "statistics")
+        set_options(env, [("enabled", "true", "statistics"), ("view-others", "admin", "statistics")])
+
+
+def alte_absturzdatei_checks(env, bot):
+    """Eine Datei der crash-protection an ihrem alten Platz.
+
+    Vor dem Ordner playerdata/stats lagen die Dateien direkt unter
+    playerdata. Eine, die ein Absturz vor dem Update dort hinterlassen hat,
+    muss trotzdem zurueckgegeben werden. Der Test legt eine solche Datei an,
+    waehrend der Bot abgemeldet ist - mit leerem Inventar und Kreativmodus,
+    an einer Stelle zwei Bloecke neben ihm. Nach dem Anmelden steht er dort,
+    ist im Kreativmodus, und die Datei ist weg.
+    """
+    ordner = env.server / "plugins" / "CamFly" / "playerdata"
+    datei = {}
+    pos = bot.server_pos()
+    if not FIND.test("Standort fuer die alte Absturzdatei lesbar", pos is not None, ""):
+        return
+    ziel = (_floor(pos[0]) + 2.5, _floor(pos[1] + 0.5), _floor(pos[2]) + 0.5)
+
+    def anlegen():
+        stats = spielerdatei(env)
+        uuid = stats.stem if stats is not None else None
+        if uuid is None:
+            return
+        datei["pfad"] = ordner / f"{uuid}.yml"
+        datei["pfad"].write_text(
+            "format: 1\n"
+            f"name: {BOT_NAME}\n"
+            "inventory: []\n"
+            "effects: []\n"
+            "game-mode: CREATIVE\n"
+            "allow-flight: false\n"
+            "flying: false\n"
+            "glowing: false\n"
+            "fly-speed: 0.1\n"
+            "body:\n"
+            "  world: world\n"
+            f"  x: {ziel[0]}\n  y: {ziel[1]}\n  z: {ziel[2]}\n"
+            "  yaw: 0.0\n  pitch: 0.0\n", encoding="utf-8")
+
+    try:
+        cam_off(bot)
+        bot.chat("/gamemode survival")
+        time.sleep(0.5)
+        if not FIND.test("Bot meldet sich fuer die alte Absturzdatei neu an", neu_anmelden(bot, anlegen), ""):
+            return
+        if not FIND.test("Die alte Absturzdatei liegt unter playerdata", "pfad" in datei, ""):
+            return
+        time.sleep(1)
+        z = zeilen_seit(bot, 0)
+        FIND.test("Alte Absturzdatei: die Meldung, dass er alles zurueckhat",
+                  gesagt(z, r"server went down while you were in cam mode"), zeige(z))
+        FIND.test("Alte Absturzdatei: er ist im Spielmodus aus der Datei", spielmodus_ist(bot, "creative"), "")
+        neu = bot.server_pos()
+        FIND.test("Alte Absturzdatei: er steht an der Stelle aus der Datei",
+                  neu is not None and math.dist(neu, ziel) < 1.0, f"{ziel} -> {neu}")
+        FIND.test("Alte Absturzdatei: sie ist danach weg", not datei["pfad"].exists(), str(datei["pfad"]))
+    finally:
+        if "pfad" in datei:
+            datei["pfad"].unlink(missing_ok=True)
+        bot.chat("/gamemode survival")
+        time.sleep(0.5)
 
 
 # ---------------------------------------------------------------------------
@@ -8157,6 +8327,7 @@ def step_tests(env):
         akku_checks(env, bot)
         kosten_checks(env, bot)
         statistik_checks(env, bot)
+        alte_absturzdatei_checks(env, bot)
 
         # --- Geworfene Traenke und was den Koerper getroffen hat, mit beiden Koerpertypen ---
         fuer_beide_koerpertypen(env, bot, potion_checks, grund_checks)

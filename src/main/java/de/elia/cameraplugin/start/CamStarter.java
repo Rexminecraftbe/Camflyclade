@@ -8,9 +8,9 @@ import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 
 /**
- * Starts and ends camera mode the way a player asks for it: with
- * {@code /cam}, or with a right click of the camera item. Both go through the
- * same checks, in the same order, and say the same things.
+ * Starts and ends camera mode the way a player asks for it with
+ * {@code /cam}: every check that can turn him away, in the order that tells
+ * him the reason that really stands in the way, and the cost last of all.
  */
 public final class CamStarter {
 

@@ -62,6 +62,16 @@ public final class PlayerRecord {
         dirty = true;
     }
 
+    /** Sets the statistics back to nothing, {@code /cam stats reset}. The battery stays as it is. */
+    public void resetStats() {
+        sessions = 0;
+        totalSeconds = 0;
+        longestSeconds = 0;
+        distanceFlown = 0.0;
+        farthestFromBody = 0.0;
+        dirty = true;
+    }
+
     /** Sets the charge of the battery, as worked out at that moment. */
     public void setBattery(double charge, long at) {
         batteryCharge = charge;

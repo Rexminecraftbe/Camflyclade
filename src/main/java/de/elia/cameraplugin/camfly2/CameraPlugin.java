@@ -98,7 +98,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamStats stats = new CamStats(settings, messages, playerStore, battery);
     private final CamLog camLog = new CamLog(this, settings, log);
     private final CameraItem cameraItem = new CameraItem(this);
-    private final StartCost startCost = new StartCost(settings, messages, log, cameraItem);
+    private final StartCost startCost = new StartCost(settings, messages, log);
     private final MobTargeting mobTargeting = new MobTargeting(this, settings, cameraPlayers);
     private final MobGaze mobGaze = new MobGaze(this, settings, cameraPlayers);
     private final BodyWatch bodyWatch = new BodyWatch(this);
@@ -144,7 +144,7 @@ public final class CameraPlugin extends JavaPlugin {
         camFireGuard = new CamFireGuard(this);
         camGhastGuard = new CamGhastGuard(this);
         camSulfurCubeGuard = new CamSulfurCubeGuard(this);
-        camInventoryGuard = new CamInventoryGuard(this, this::isInCameraMode);
+        camInventoryGuard = new CamInventoryGuard(this, this::isInCameraMode, cameraItem::isCameraItem);
         configFile.reportConfigWarnings(loadConfigValues(), null);
         bodySpawner = new BodySpawner(this, settings, messages, log, cameraPlayers);
         camModeObjective.setUp();
@@ -154,7 +154,7 @@ public final class CameraPlugin extends JavaPlugin {
         // Nobody is in camera mode at startup -> remove a team left over.
         noCollisionTeam.deleteNoCollisionTeam();
         this.getCommand("cam").setExecutor(new CamCommand(this));
-        this.getCommand("cam").setTabCompleter(new CamTabCompleter(settings, camList, stats));
+        this.getCommand("cam").setTabCompleter(new CamTabCompleter(camList, stats));
         registerListeners();
         noCollisionTeam.refreshNoCollisionTeam();
         crashGuard.restoreOnline();
@@ -363,6 +363,7 @@ public final class CameraPlugin extends JavaPlugin {
         timeLimit.clearCooldowns();
         startCost.reset();
         camLog.reset();
+        battery.refreshCharging();
         return true;
     }
 

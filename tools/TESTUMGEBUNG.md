@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **754** - alle 754 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **758** - alle 758 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -176,11 +176,20 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   Neustart auch die Konfiguration des Testservers zurücksetzt.
 * **Welches Item der Bot hält, fragt der Test den Server**, mit
   `/execute if data entity @s {Inventory:[...]}`. Die Itemliste von
-  mineflayer stammt aus 26.1 und nennt den Kopf des Kamera-Items „mutton“.
-  Den Rechtsklick in die Luft schickt die Bot-Aktion `use_item`.
-* **Zwei Tests melden den Bot ab und wieder an**: das Kamera-Item für
-  `give-on-join`, und der Akku, der dazwischen die Datei des Bots unter
-  `players/` löscht - solange er online ist, hält das Plugin sie im Speicher.
+  mineflayer stammt aus 26.1 und nennt manche Items anders, einen Kopf etwa
+  „mutton“. Den Rechtsklick in die Luft schickt die Bot-Aktion `use_item`.
+* **`camera-item.enabled: false`** steht in der Testkonfiguration. Mit dem
+  Item in der Hand beendet jeder Rechtsklick den Cam-Modus, auch der auf
+  einen Hebel in den Interaktionstests, und die Taschen wären nicht leer. Nur
+  der Test des Kamera-Items schaltet es für sich ein.
+* **Die Bossbars liest der Bot aus den `boss_bar`-Paketen**, den Titel als
+  Text des ganzen Titels wie bei den Tönen; die Bot-Aktion `bossbars` gibt
+  die zurück, die gerade zu sehen sind.
+* **Drei Tests melden den Bot ab und wieder an**: der Akku, der dazwischen
+  die Datei des Bots unter `playerdata/stats/` löscht - solange er online
+  ist, hält das Plugin sie im Speicher -, der Akku noch einmal für die
+  Bossbar nach dem Betreten, und die alte Absturzdatei, die nur beim
+  Betreten gelesen wird.
 * **Die Nachtsicht hängt am Licht am Auge**, das die Tageszeit mitrechnet:
   mittags 15, um Mitternacht unter freiem Himmel 4. Der Test stellt die Zeit
   dafür mit `/time set` und am Ende wieder auf Mittag.
@@ -1099,31 +1108,41 @@ kommt · wer zu einer Kamera in der Luft teleportiert wird, landet bei ihrem
 Körper, ihr Cam-Modus endet, und die Meldung nennt, wer kam · mit
 `teleports.plugin: false` und `teleports.command: false` bleibt der
 Kamera-Spieler im Cam-Modus, und wer zu ihm kommt, kommt bei der Kamera an ·
-voreingestellt ist das Kamera-Item aus, und `/cam item` sagt das ·
-eingeschaltet gibt `/cam item` eine Kamera, eine zweite weder dem Bot noch
-von der Konsole · ein Rechtsklick damit startet den Cam-Modus, im Cam-Modus
-ist auch die Kamera aus den Händen, danach wieder da · mit `give-on-join`
-bekommt beim Betreten eine, wer keine hat · voreingestellt schreibt
-`cam-log` nichts · eingeschaltet steht der Start mit Name, UUID und dem
-Platz des Körpers in `logs/<Datum>.log`, das Ende mit Grund, Dauer,
-geflogener Strecke, weitestem Abstand und letztem Platz der Kamera · ein
-Ende durch `/cam reload` heißt `reload` · mit `console: true` stehen die
-Zeilen auch im Server-Log · `keep-days` löscht eine alte Datei, eine fremde
-bleibt · ein Akku mit 5 Sekunden ist nach etwa 5 Sekunden leer und beendet
-den Cam-Modus · mit leerem Akku wird `/cam` abgelehnt, und die Meldung nennt
+voreingestellt ist das Kamera-Item an, mit einer Barriere · beim Start
+liegt sie in dem Platz der Hotbar, den der Spieler hält, und bleibt dort,
+während der Sweep einen Stein abräumt · ein Rechtsklick damit beendet den
+Cam-Modus, danach ist sie weg, ebenso nach `/cam` · mit `material: clock`
+ist es eine Uhr, ausgeschaltet gibt es keins · eine übrige Barriere mit der
+Marke des Plugins nimmt ihm der Rechtsklick außerhalb des Cam-Modus ab ·
+voreingestellt schreibt `cam-log` nichts · eingeschaltet steht der Start mit
+Name, UUID und dem Platz des Körpers in `logs/<Datum>.log`, das Ende mit
+Grund, Dauer, geflogener Strecke, weitestem Abstand und letztem Platz der
+Kamera · ein Ende durch `/cam reload` heißt `reload` · mit `console: true`
+stehen die Zeilen auch im Server-Log · `keep-days` löscht eine alte Datei,
+eine fremde bleibt · mit `flight-limit: battery` zeigt die Bossbar im Flug
+den Akku · ein Akku mit 5 Sekunden ist nach etwa 5 Sekunden leer und beendet
+den Cam-Modus, danach zeigt die Bossbar, wie er lädt, auch nach dem
+Neuanmelden · mit leerem Akku wird `/cam` abgelehnt, und die Meldung nennt
 die Zeit bis zum nächsten Start · `/cam stats` zeigt den Ladestand, und er
-steht in der Datei unter `players/` · mit schnellerem Laden geht `/cam` nach
-ein paar Sekunden wieder · ohne die Level und Items von `start-cost` startet
-der Cam-Modus nicht, und die Meldung nennt Kosten und was fehlt · mit allem
-startet er, die Meldung sagt, was es gekostet hat, und genau das ist weg ·
-reicht es nur für einen Teil, wird nichts genommen · das Kamera-Item zählt
-nicht zu den Kosten, auch wenn es aus demselben Item ist · `money` ohne Vault
-kostet nichts und steht einmal in der Konsole · `/cam stats` zählt einen
-Flug, seine Strecke und den weitesten Abstand zum Körper, die Zahlen stehen
-in der Datei unter `players/` · ein unbekannter Name wird gemeldet, die
-Konsole darf jeden ansehen · ohne op sieht der Bot sich selbst, auch unter
-seinem Namen, andere nicht · mit `statistics.enabled: false` sagt
-`/cam stats`, dass sie aus ist ·
+steht in der Datei unter `playerdata/stats/` · mit schnellerem Laden geht
+`/cam` nach ein paar Sekunden wieder, und ist er voll, verschwindet die
+Bossbar · mit `show-bossbar-charging: false` gibt es nach dem Ende keine ·
+mit `flight-limit: time-limit` gibt es keinen Akku · ohne die Level und
+Items von `start-cost` startet der Cam-Modus nicht, und die Meldung nennt
+Kosten und was fehlt · mit allem startet er, die Meldung sagt, was es
+gekostet hat, und genau das ist weg · reicht es nur für einen Teil, wird
+nichts genommen · mit `xp-type: points` kostet er Punkte statt Level, und es
+bleibt genau der Rest · `money` ohne Vault kostet nichts und steht einmal in
+der Konsole · `/cam stats` zählt einen Flug, seine Strecke und den weitesten
+Abstand zum Körper, die Zahlen stehen in der Datei unter
+`playerdata/stats/` · ein unbekannter Name wird gemeldet, ein unbekanntes
+Wort nach `stats` sagt, wie es geht, die Konsole darf jeden ansehen ·
+`view-others: admin` lässt ohne op nur den eigenen Namen zu, `all` auch
+andere, `false` auch mit op niemanden · `/cam stats reset` setzt die eigene
+auf null · mit `statistics.enabled: false` sagt `/cam stats`, dass sie aus
+ist · die Datei der crash-protection liegt unter `playerdata/crash/`, und
+eine, die vor dem Update noch direkt unter `playerdata/` lag, gibt dem
+Spieler beim Betreten trotzdem alles zurück ·
 Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im

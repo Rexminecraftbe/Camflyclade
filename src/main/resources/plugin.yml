@@ -10,7 +10,7 @@ softdepend: [Vault]
 commands:
   cam:
     description: Enables or disables camera mode
-    usage: /<command> [list|reload|item [player]|stats [player]]
+    usage: /<command> [list|reload|stats [reset|player <name>]]
     permission: camplugin.use
     permission-message: "You do not have permission for this command.!"
 
@@ -21,12 +21,6 @@ permissions:
   camplugin.list:
     description: Allows /cam list while cam-list.access is admin
     default: op
-  camplugin.item:
-    description: Allows /cam item, to get the camera item
-    default: true
-  camplugin.item.others:
-    description: Allows /cam item <player>, to hand somebody else the camera item
-    default: op
   camplugin.stats.others:
-    description: Allows /cam stats <player>, to look at the statistics of somebody else
+    description: Allows /cam stats player <name> while statistics.view-others is admin
     default: op

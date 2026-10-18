@@ -1,7 +1,5 @@
 package de.elia.cameraplugin.camfly2;
 
-import de.elia.cameraplugin.config.CamSettings;
-import de.elia.cameraplugin.item.CameraItem;
 import de.elia.cameraplugin.list.CamList;
 import de.elia.cameraplugin.stats.CamStats;
 import org.bukkit.Bukkit;
@@ -17,29 +15,28 @@ import java.util.Locale;
 
 public class CamTabCompleter implements TabCompleter {
 
-    private final CamSettings settings;
     private final CamList camList;
     private final CamStats stats;
 
-    public CamTabCompleter(CamSettings settings, CamList camList, CamStats stats) {
-        this.settings = settings;
+    public CamTabCompleter(CamList camList, CamStats stats) {
         this.camList = camList;
         this.stats = stats;
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (args.length == 2) {
-            return playerNames(sender, args[0].toLowerCase(Locale.ROOT), args[1].toLowerCase(Locale.ROOT));
+        boolean statsCommand = args.length > 1 && args[0].equalsIgnoreCase("stats");
+        if (statsCommand && args.length == 2) {
+            return statsWords(sender, args[1].toLowerCase(Locale.ROOT));
+        }
+        if (statsCommand && args.length == 3 && args[1].equalsIgnoreCase("player")) {
+            return playerNames(sender, args[2].toLowerCase(Locale.ROOT));
         }
         if (args.length != 1) {
             return Collections.emptyList();
         }
         String partial = args[0].toLowerCase();
         List<String> completions = new ArrayList<>();
-        if (settings.isCameraItemEnabled() && "item".startsWith(partial)) {
-            completions.add("item");
-        }
         if (camList.mayUse(sender) && "list".startsWith(partial)) {
             completions.add("list");
         }
@@ -55,17 +52,26 @@ public class CamTabCompleter implements TabCompleter {
     }
 
     /**
-     * The players online, for {@code /cam item <player>} and
-     * {@code /cam stats <player>} - offered only to whoever may name somebody
-     * there.
+     * What may follow {@code /cam stats}: {@code player} for whoever may look
+     * at somebody else, {@code reset} for a player.
      */
-    private List<String> playerNames(CommandSender sender, String subcommand, String partial) {
-        boolean mayName = switch (subcommand) {
-            case "item" -> !(sender instanceof Player) || sender.hasPermission(CameraItem.PERMISSION_OTHERS);
-            case "stats" -> stats.mayViewOthers(sender);
-            default -> false;
-        };
-        if (!mayName) {
+    private List<String> statsWords(CommandSender sender, String partial) {
+        List<String> words = new ArrayList<>();
+        if (stats.mayViewOthers(sender) && "player".startsWith(partial)) {
+            words.add("player");
+        }
+        if (sender instanceof Player && "reset".startsWith(partial)) {
+            words.add("reset");
+        }
+        return words;
+    }
+
+    /**
+     * The players online, for {@code /cam stats player <name>} - offered
+     * only to whoever may name somebody there.
+     */
+    private List<String> playerNames(CommandSender sender, String partial) {
+        if (!stats.mayViewOthers(sender)) {
             return Collections.emptyList();
         }
         List<String> names = new ArrayList<>();

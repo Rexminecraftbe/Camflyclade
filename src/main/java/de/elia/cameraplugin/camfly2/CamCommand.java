@@ -7,6 +7,8 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+import java.util.Arrays;
+
 public class CamCommand implements CommandExecutor {
 
     private final CameraPlugin plugin;
@@ -37,14 +39,10 @@ public class CamCommand implements CommandExecutor {
             }
             return true;
         }
-        // The console can hand out a camera and look at statistics, only not
-        // for itself.
-        if (args.length > 0 && args[0].equalsIgnoreCase("item")) {
-            plugin.getCameraItem().give(sender, args.length > 1 ? args[1] : null);
-            return true;
-        }
+        // The console can look at the statistics of a player, only not at
+        // its own.
         if (args.length > 0 && args[0].equalsIgnoreCase("stats")) {
-            plugin.getStats().show(sender, args.length > 1 ? args[1] : null);
+            plugin.getStats().command(sender, Arrays.copyOfRange(args, 1, args.length));
             return true;
         }
 

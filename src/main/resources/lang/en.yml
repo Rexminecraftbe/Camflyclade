@@ -12,6 +12,7 @@ messages:
   actionbar-on: "&aCam mode activated"
   armorstand.name-format: "{player}'s Body"
   battery-bossbar: "Battery: {time}"
+  battery-bossbar-charging: "Battery charging: {charge}, full in {time}"
   battery-empty: "&cCam mode ended: the battery is empty."
   battery-low: "&cThe battery holds {charge} of flight, a start needs {needed}. Ready again in {time}."
   body-attacked: "&cYour body was attacked by {damager}! Camera mode ended."
@@ -34,16 +35,9 @@ messages:
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
   cam-spectator-start: "&cYou cannot start cam mode in spectator mode."
   cam-water-start: "&cYou cannot start cam mode in water."
-  camera-item-already: "&eYou already have a camera."
-  camera-item-already-other: "&e{player} already has a camera."
-  camera-item-given: "&aGave {player} a camera."
-  camera-item-in-cam: "&c{player} is in cam mode right now. Try again afterwards."
   # Name and description of the camera item (camera-item), \n starts a new line of the description.
-  # Only new cameras get them, the ones handed out already keep theirs.
-  camera-item-lore: "&7Right-click to start cam mode"
-  camera-item-name: "&bCamera"
-  camera-item-off: "&cThe camera item is switched off."
-  camera-item-received: "&aYou got a camera. Right-click with it to start cam mode."
+  camera-item-lore: "&7Right-click to end cam mode"
+  camera-item-name: "&cLeave cam mode"
   camera-off: "&aCamera mode ended."
   camera-on: "&aCamera mode activated! Use /cam again to exit."
   cant-attack-other-body: "&cYou cannot attack other bodies in camera mode."
@@ -51,7 +45,7 @@ messages:
   cant-fly-in-powder-snow: "&cYou cannot fly into powder snow in camera mode."
   cant-fly-in-water: "&cYou cannot fly into water in camera mode."
   config-allowed-blocks: "any block, e.g. barrier or glass"
-  config-allowed-items: "camera_head or an item, e.g. clock or spyglass"
+  config-allowed-items: "an item, e.g. barrier, clock or compass"
   config-allowed-particles: "a particle without extra data, e.g. soul_fire_flame, flame or end_rod"
   config-allowed-sounds: "a sound as /playsound names it, e.g. block.beacon.activate"
   config-broken: "&cThe configuration has an error in {file} and was not applied, the previous settings stay in effect: {error}"
@@ -87,6 +81,8 @@ messages:
   cost-item: "{amount}x {item}"
   cost-level: "1 XP level"
   cost-levels: "{amount} XP levels"
+  cost-point: "1 XP point"
+  cost-points: "{amount} XP points"
   cost-missing: "&cStarting cam mode costs {cost}. You are missing {missing}."
   cost-paid: "&7Cam mode cost you {cost}."
   distance-from-body: "your body"
@@ -97,7 +93,6 @@ messages:
   no-permission: "&cYou don't have permission to use this command."
   no-player: "&cThis command can only be used by players."
   no-projectiles: "&cYou cannot shoot projectiles in camera mode."
-  player-not-online: "&c{player} is not online."
   player.name-format: "{player}'s Cam"
   portal-blocked: "&cYou cannot go through {portal} portals in camera mode."
   portal-return-area: "&cCam mode is not allowed in {area}, you were brought back."
@@ -115,9 +110,11 @@ messages:
   stats-longest: "&7Longest flight: &f{time}"
   stats-none: "&e{player} has not been in cam mode yet."
   stats-off: "&cThe statistics are switched off."
+  stats-reset: "&aYour cam mode statistics have been reset."
   stats-sessions: "&7Times in cam mode: &f{count}"
   stats-total-time: "&7Time in cam mode: &f{time}"
   stats-unknown-player: "&cNobody called {player} has been on this server."
+  stats-usage: "&eUse /cam stats, /cam stats reset or /cam stats player <name>."
   teleport-arrival-ended: "&c{player} was teleported to you. Camera mode ended."
   teleport-ended: "&cYou were teleported. Camera mode ended."
   time-limit-expired: "&cCam mode ended: Time limit expired."
@@ -419,6 +416,7 @@ message-settings:
   body-moved: true
   body-suffocating: true
   battery-bossbar: true
+  battery-bossbar-charging: true
   battery-empty: true
   battery-low: true
   bossbar-text: true
@@ -435,12 +433,6 @@ message-settings:
   cam-safety: true
   cam-spectator-start: true
   cam-water-start: true
-  camera-item-already: true
-  camera-item-already-other: true
-  camera-item-given: true
-  camera-item-in-cam: true
-  camera-item-off: true
-  camera-item-received: true
   camera-off: false
   camera-on: false
   cant-attack-other-body: true
@@ -458,7 +450,6 @@ message-settings:
   flight-speed: true
   no-permission: true
   no-projectiles: true
-  player-not-online: true
   portal-blocked: true
   portal-return-area: true
   portal-return-distance: true
@@ -475,9 +466,11 @@ message-settings:
   stats-longest: true
   stats-none: true
   stats-off: true
+  stats-reset: true
   stats-sessions: true
   stats-total-time: true
   stats-unknown-player: true
+  stats-usage: true
   teleport-arrival-ended: true
   teleport-ended: true
   time-limit-expired: true

@@ -19,6 +19,7 @@ import de.elia.cameraplugin.session.CamGameMode;
 import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.sound.CamSound;
 import de.elia.cameraplugin.start.EffectStart;
+import de.elia.cameraplugin.timelimit.FlightLimit;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -79,12 +80,6 @@ public final class CamSettings {
      * everything below them is checked when it is read instead.
      */
     public static final Set<String> UNLISTED_KEYS = Set.of("mirror-damage.debug", "start-cost.items");
-
-    /**
-     * The value of {@code camera-item.material} that stands for the head of
-     * {@code camera-head}, a player head with a camera on it.
-     */
-    public static final String CAMERA_HEAD_ITEM = "camera_head";
 
     /**
      * The most of one item {@code start-cost.items} accepts: a full inventory
@@ -226,8 +221,9 @@ public final class CamSettings {
     private double customDamageHearts;
 
     private boolean cameraHeadEnabled;
+    /** What holds camera mode to a time, {@code flight-limit}. */
+    private FlightLimit flightLimit;
     // Time limit and cooldown settings
-    private boolean timeLimitEnabled;
     private boolean cooldownsEnabled;
     private int durationSeconds;
     private int cooldownSeconds;
@@ -238,15 +234,11 @@ public final class CamSettings {
     private boolean camSafetyEnabled;
     private int camSafetyDelay;
 
-    /** Whether a right click with the camera item starts camera mode, {@code camera-item.enabled}. */
+    /** Whether camera mode hands out the item that ends it, {@code camera-item.enabled}. */
     private boolean cameraItemEnabled;
-    /** What the camera item is made of, {@code null} for the camera head, {@code camera-item.material}. */
+    /** What the camera item is made of, {@code camera-item.material}. */
     private Material cameraItemMaterial;
-    /** Whether a player who joins without one gets the camera item, {@code camera-item.give-on-join}. */
-    private boolean cameraItemOnJoin;
 
-    /** Whether camera mode runs on a battery, the section {@code battery}. */
-    private boolean batteryEnabled;
     /** A full battery, in seconds of flight. */
     private int batteryCapacity;
     /** Seconds of flight that come back for every second outside camera mode. */
@@ -256,12 +248,16 @@ public final class CamSettings {
     /** Whether the battery charges while the player is not on the server. */
     private boolean batteryRechargeOffline;
     private boolean batteryBossbar;
+    /** Whether the bossbar stays after camera mode until the battery is full, {@code show-bossbar-charging}. */
+    private boolean batteryBossbarCharging;
     private BarColor batteryBossbarColor;
 
     /** Whether a start costs something, the section {@code start-cost}. */
     private boolean startCostEnabled;
-    /** Experience levels a start costs. */
-    private int startCostLevels;
+    /** Experience a start costs, in levels or points. */
+    private int startCostXp;
+    /** Whether {@link #startCostXp} counts points rather than levels, {@code start-cost.xp-type}. */
+    private boolean startCostXpPoints;
     /** Money a start costs, through Vault. */
     private double startCostMoney;
     /** Items a start costs, and how many of each, in the order of the file. */
@@ -269,6 +265,8 @@ public final class CamSettings {
 
     /** Whether camera mode is counted for {@code /cam stats}, {@code statistics.enabled}. */
     private boolean statsEnabled;
+    /** Who may look at the statistics of somebody else, {@code statistics.view-others}. */
+    private ListAccess statsViewOthers;
 
     /** Whether start and end of camera mode are written down, the section {@code cam-log}. */
     private boolean camLogEnabled;
@@ -403,14 +401,14 @@ public final class CamSettings {
                 "block.respawn_anchor.deplete", 1.0);
         borderSound = CamSound.read(config, "sounds.border", allowedSounds, "block.note_block.bass", 0.5);
         crashProtectionEnabled = config.getBoolean("crash-protection.enabled", true);
-        String listAccess = config.getChoice("cam-list.access", "admin", "admin", "all", "false")
+        camListAccess = readAccess(config, "cam-list.access");
+        String limit = config.getChoice("flight-limit", "false", "false", "time-limit", "battery")
                 .toLowerCase(Locale.ROOT);
-        camListAccess = switch (listAccess) {
-            case "all" -> ListAccess.ALL;
-            case "false" -> ListAccess.OFF;
-            default -> ListAccess.ADMIN;
+        flightLimit = switch (limit) {
+            case "time-limit" -> FlightLimit.TIME_LIMIT;
+            case "battery" -> FlightLimit.BATTERY;
+            default -> FlightLimit.OFF;
         };
-        timeLimitEnabled = config.getBoolean("time-limit.enabled", false);
         cooldownsEnabled = config.getBoolean("time-limit.cooldowns-enabled", false);
         durationSeconds = config.getInt("time-limit.duration-seconds", 300, 1);
         cooldownSeconds = config.getInt("time-limit.cooldown-seconds", 120, 0);
@@ -418,12 +416,12 @@ public final class CamSettings {
         bossbarColor = config.getEnum("time-limit.bossbar-color", BarColor.class, BarColor.BLUE);
         camSafetyEnabled = config.getBoolean("cam-safety.enabled", true);
         camSafetyDelay = config.getInt("cam-safety.delay", 5, 0);
-        cameraItemEnabled = config.getBoolean("camera-item.enabled", false);
+        cameraItemEnabled = config.getBoolean("camera-item.enabled", true);
         cameraItemMaterial = readCameraItemMaterial(config);
-        cameraItemOnJoin = config.getBoolean("camera-item.give-on-join", false);
         readBattery(config);
         readStartCost(config);
         statsEnabled = config.getBoolean("statistics.enabled", true);
+        statsViewOthers = readAccess(config, "statistics.view-others");
         camLogEnabled = config.getBoolean("cam-log.enabled", false);
         camLogConsole = config.getBoolean("cam-log.console", false);
         camLogKeepDays = config.getInt("cam-log.keep-days", 30, 0);
@@ -474,23 +472,27 @@ public final class CamSettings {
         flightSpeedStep = config.getDouble("flight-speed.step", 0.5, 0.05, MAX_FLIGHT_SPEED);
     }
 
+    /** Reads who may use something, the values admin, all and false. */
+    private static ListAccess readAccess(ConfigReader config, String path) {
+        String access = config.getChoice(path, "admin", "admin", "all", "false").toLowerCase(Locale.ROOT);
+        return switch (access) {
+            case "all" -> ListAccess.ALL;
+            case "false" -> ListAccess.OFF;
+            default -> ListAccess.ADMIN;
+        };
+    }
+
     /**
-     * Reads {@code camera-item.material}: {@link #CAMERA_HEAD_ITEM}, or the
-     * name of an item, with or without {@code minecraft:} in front, capitals
-     * and spaces not counting.
-     *
-     * @return the item, or {@code null} for the camera head
+     * Reads {@code camera-item.material}: the name of an item, with or
+     * without {@code minecraft:} in front, capitals and spaces not counting.
      */
     private Material readCameraItemMaterial(ConfigReader config) {
-        String raw = config.getString("camera-item.material", CAMERA_HEAD_ITEM);
-        String name = raw.trim().toLowerCase(Locale.ROOT).replace(' ', '_');
-        if (name.equals(CAMERA_HEAD_ITEM)) {
-            return null;
-        }
-        Material material = parseItem(name);
+        String raw = config.getString("camera-item.material", "barrier");
+        Material material = parseItem(raw.trim().toLowerCase(Locale.ROOT).replace(' ', '_'));
         if (material == null) {
             config.warnUnknownValue("camera-item.material", raw, messages.configMessage("config-allowed-items"),
-                    CAMERA_HEAD_ITEM);
+                    "barrier");
+            return Material.BARRIER;
         }
         return material;
     }
@@ -500,13 +502,13 @@ public final class CamSettings {
      * the capacity: more than a full battery would let nobody start at all.
      */
     private void readBattery(ConfigReader config) {
-        batteryEnabled = config.getBoolean("battery.enabled", false);
         batteryCapacity = config.getInt("battery.capacity", 300, 1);
         // Without any charging an empty battery would stay empty for good.
         batteryRecharge = config.getDouble("battery.recharge-per-second", 0.5, 0.01);
         batteryMinStart = config.getInt("battery.min-start", Math.min(10, batteryCapacity), 0, batteryCapacity);
         batteryRechargeOffline = config.getBoolean("battery.recharge-offline", true);
         batteryBossbar = config.getBoolean("battery.show-bossbar", true);
+        batteryBossbarCharging = config.getBoolean("battery.show-bossbar-charging", true);
         batteryBossbarColor = config.getEnum("battery.bossbar-color", BarColor.class, BarColor.GREEN);
     }
 
@@ -516,7 +518,9 @@ public final class CamSettings {
      */
     private void readStartCost(ConfigReader config) {
         startCostEnabled = config.getBoolean("start-cost.enabled", false);
-        startCostLevels = config.getInt("start-cost.xp-levels", 0, 0);
+        startCostXp = config.getInt("start-cost.xp", 0, 0);
+        startCostXpPoints = config.getChoice("start-cost.xp-type", "levels", "levels", "points")
+                .equalsIgnoreCase("points");
         startCostMoney = config.getDouble("start-cost.money", 0.0, 0.0);
         startCostItems.clear();
         for (Map.Entry<String, Integer> entry
@@ -928,8 +932,9 @@ public final class CamSettings {
 
     // --------------------------------------------------- time limit and cooldown
 
+    /** Whether {@code flight-limit} is {@code time-limit}. */
     public boolean isTimeLimitEnabled() {
-        return timeLimitEnabled;
+        return flightLimit == FlightLimit.TIME_LIMIT;
     }
 
     public boolean isCooldownsEnabled() {
@@ -968,19 +973,15 @@ public final class CamSettings {
         return cameraItemEnabled;
     }
 
-    /** What the camera item is made of, {@code null} for the camera head. */
     public Material getCameraItemMaterial() {
         return cameraItemMaterial;
     }
 
-    public boolean givesCameraItemOnJoin() {
-        return cameraItemOnJoin;
-    }
-
     // ---------------------------------------------------------------- battery
 
+    /** Whether {@code flight-limit} is {@code battery}. */
     public boolean isBatteryEnabled() {
-        return batteryEnabled;
+        return flightLimit == FlightLimit.BATTERY;
     }
 
     public int getBatteryCapacity() {
@@ -1003,6 +1004,10 @@ public final class CamSettings {
         return batteryBossbar;
     }
 
+    public boolean showsBatteryBossbarCharging() {
+        return batteryBossbarCharging;
+    }
+
     public BarColor getBatteryBossbarColor() {
         return batteryBossbarColor;
     }
@@ -1011,11 +1016,16 @@ public final class CamSettings {
 
     /** Whether a start costs anything at all: switched on, and something to pay. */
     public boolean hasStartCost() {
-        return startCostEnabled && (startCostLevels > 0 || startCostMoney > 0.0 || !startCostItems.isEmpty());
+        return startCostEnabled && (startCostXp > 0 || startCostMoney > 0.0 || !startCostItems.isEmpty());
     }
 
-    public int getStartCostLevels() {
-        return startCostLevels;
+    /** The experience a start costs, in points or levels as {@link #costsXpPoints()} says. */
+    public int getStartCostXp() {
+        return startCostXp;
+    }
+
+    public boolean costsXpPoints() {
+        return startCostXpPoints;
     }
 
     public double getStartCostMoney() {
@@ -1031,6 +1041,10 @@ public final class CamSettings {
 
     public boolean isStatsEnabled() {
         return statsEnabled;
+    }
+
+    public ListAccess getStatsViewOthers() {
+        return statsViewOthers;
     }
 
     public boolean isCamLogEnabled() {

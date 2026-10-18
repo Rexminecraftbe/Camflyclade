@@ -20,7 +20,8 @@ import java.util.logging.Level;
 
 /**
  * Keeps the {@link PlayerRecord} of every player in a file of its own,
- * {@code players/<uuid>.yml} in the folder of the plugin.
+ * {@code playerdata/stats/<uuid>.yml} in the folder of the plugin, next to
+ * the folder {@code crash} of the crash protection.
  *
  * <p>A record is read the first time it is needed and stays in memory while
  * its player is online. It is written when camera mode ends and when he
@@ -32,7 +33,10 @@ import java.util.logging.Level;
 public final class PlayerStore {
 
     /** The folder of the files, inside the folder of the plugin. */
-    private static final String FOLDER = "players";
+    private static final String FOLDER = "stats";
+
+    /** The folder of everything the plugin keeps per player. */
+    private static final String PLAYER_FOLDER = "playerdata";
 
     /** Which layout a file has, for a later version that changes it. */
     private static final int FORMAT = 1;
@@ -52,7 +56,7 @@ public final class PlayerStore {
     }
 
     private Path file(UUID playerId) {
-        return plugin.getDataFolder().toPath().resolve(FOLDER).resolve(playerId + ".yml");
+        return plugin.getDataFolder().toPath().resolve(PLAYER_FOLDER).resolve(FOLDER).resolve(playerId + ".yml");
     }
 
     /** The record of a player, read from his file the first time and kept from then on. */
