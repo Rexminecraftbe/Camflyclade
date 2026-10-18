@@ -2,6 +2,7 @@ package de.elia.cameraplugin.camfly2;
 
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.list.CamList;
+import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.start.StartChecks;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import org.bukkit.command.Command;
@@ -56,7 +57,7 @@ public class CamCommand implements CommandExecutor {
         }
 
         if (plugin.isInCameraMode(player)) {
-            plugin.exitCameraMode(player);
+            plugin.exitCameraMode(player, EndReason.COMMAND);
             messages.sendConfiguredMessage(player, "camera-off");
         } else {
             // Before the cooldown: "wait ten more seconds" tells a spectator

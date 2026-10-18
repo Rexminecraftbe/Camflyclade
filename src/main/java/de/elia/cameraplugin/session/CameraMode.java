@@ -175,7 +175,10 @@ public final class CameraMode {
         }.runTaskLater(plugin, 2L);
 
         // *** Hand the saved inventory to CameraData ***
-        cameraPlayers.put(player.getUniqueId(), new CameraData(body, hitbox, nameDisplay, bodyChunk, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects));
+        CameraData cameraData = new CameraData(body, hitbox, nameDisplay, bodyChunk, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects);
+        cameraPlayers.put(player.getUniqueId(), cameraData);
+        // Before the flight speed below: the file is to hold the one he had.
+        plugin.getCrashGuard().save(player, cameraData);
         cameraPlayers.addBody(body.getUniqueId(), player.getUniqueId());
         if (hitbox != null) {
             cameraPlayers.addHitbox(hitbox.getUniqueId(), player.getUniqueId());
@@ -222,8 +225,8 @@ public final class CameraMode {
         settings.getStartSound().play(player);
     }
 
-    public void exitCameraMode(Player player) {
-        exitCameraMode(player, true);
+    public void exitCameraMode(Player player, EndReason reason) {
+        exitCameraMode(player, true, reason);
     }
 
     /**
@@ -234,14 +237,15 @@ public final class CameraMode {
      * he is.
      */
     public void exitCameraModeForTeleport(Player player) {
-        exitCameraMode(player, false);
+        exitCameraMode(player, false, EndReason.FORCED);
     }
 
     /**
      * @param toBody whether he is put back where his body stands; only not
      *               when a teleport carries him off anyway
+     * @param reason why it ends, which picks the sound
      */
-    private void exitCameraMode(Player player, boolean toBody) {
+    private void exitCameraMode(Player player, boolean toBody, EndReason reason) {
         CameraData cameraData = cameraPlayers.get(player.getUniqueId());
         NoCollisionTeam team = plugin.getNoCollisionTeam();
         if (cameraData == null) {
@@ -353,10 +357,13 @@ public final class CameraMode {
             other.showPlayer(plugin, player);
         }
         plugin.getVisibility().updateVisibilityForAll();
+        // Only now that he has everything back: until here the file is the
+        // one thing that would give it to him after a crash.
+        plugin.getCrashGuard().delete(player);
         if (!plugin.isShuttingDown()) {
             plugin.getTimeLimit().startCooldown(player);
-            // Last, at his body: the sound says he is back.
-            settings.getEndSound().play(player);
+            // Last, at his body: the sound says he is back, and why.
+            settings.getEndSound(reason).play(player);
         }
     }
 }

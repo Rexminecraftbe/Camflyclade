@@ -2580,6 +2580,10 @@ def liste_checks(env, bot):
         set_option(env, "access", "admin", "cam-list")
 
 
+# Die Pfeile der Action-Bar, die zur Seite zeigen - von vorn im Uhrzeigersinn.
+PFEILE_ZUR_SEITE = ("\u2191", "\u2197", "\u2192", "\u2198", "\u2193", "\u2199", "\u2190", "\u2196")
+
+
 def abstaende(zeilen):
     """Die Abstaende aus den Zeilen "Body: N blocks", mit dem Pfeil dahinter."""
     return [(int(m.group(1)), m.group(2)) for z in zeilen
@@ -2591,10 +2595,12 @@ def aktionsleiste_checks(env, bot):
 
     distance ist voreingestellt - nachgesehen und nicht gesetzt. Zu Beginn
     kommt auch dort "Cam mode activated", danach "Body: N blocks" mit einem
-    Pfeil. Zehn Bloecke ueber dem Koerper steht dort 10 und ein Pfeil nach
-    unten. Hinauf geht es mit 'fly' und nicht mit /tp: Der Bot fiele danach
-    mit der Physik des Clients wieder hinunter, bevor die Zeile kommt. text
-    ist die alte feste Zeile, ohne Abstand.
+    Pfeil, am Koerper ein Punkt. Zehn Bloecke ueber dem Koerper steht dort 10
+    und ein Pfeil nach unten, drei Bloecke daneben noch immer: Steiler als
+    60 Grad zeigt er nach unten. Acht Bloecke daneben ist es flacher, und er
+    zeigt zur Seite. Hinauf geht es mit 'fly' und nicht mit /tp: Der Bot
+    fiele danach mit der Physik des Clients wieder hinunter, bevor die Zeile
+    kommt. text ist die alte feste Zeile, ohne Abstand.
     """
     text = (env.server / "plugins" / "CamFly" / "config.yml").read_text(encoding="utf-8")
     FIND.test("Voreingestellt steht action-bar.display: distance da",
@@ -2609,8 +2615,8 @@ def aktionsleiste_checks(env, bot):
         nah = abstaende(z)
         FIND.test("display: distance - erst Cam mode activated, dann der Abstand zum Koerper",
                   gesagt(z, r"[Cc]am mode activated") and bool(nah), zeige(z[-3:]))
-        FIND.test("display: distance - am Koerper ist der Abstand hoechstens 1",
-                  bool(nah) and nah[-1][0] <= 1, str(nah[-3:]))
+        FIND.test("display: distance - am Koerper ist der Abstand hoechstens 1, mit einem Punkt",
+                  bool(nah) and nah[-1][0] <= 1 and nah[-1][1] == "\u25cf", str(nah[-3:]))
 
         bot.call("fly", wait=30, dy=10, timeout=15000)
         time.sleep(1.0)
@@ -2619,6 +2625,23 @@ def aktionsleiste_checks(env, bot):
         weit = abstaende(zeilen_seit(bot, since))
         FIND.test("display: distance - zehn Bloecke ueber dem Koerper: 10 und ein Pfeil nach unten",
                   bool(weit) and weit[-1] == (10, "\u25bc"), str(weit[-3:]))
+
+        bot.call("fly", wait=30, dx=3, timeout=15000)
+        time.sleep(1.0)
+        since = bot.mark()
+        time.sleep(1.0)
+        schraeg = abstaende(zeilen_seit(bot, since))
+        FIND.test("display: distance - zehn hoch und drei daneben (73 Grad): noch nach unten",
+                  bool(schraeg) and schraeg[-1] == (10, "\u25bc"), str(schraeg[-3:]))
+
+        bot.call("fly", wait=30, dx=5, timeout=15000)
+        time.sleep(1.0)
+        since = bot.mark()
+        time.sleep(1.0)
+        flach = abstaende(zeilen_seit(bot, since))
+        FIND.test("display: distance - zehn hoch und acht daneben (51 Grad): zur Seite",
+                  bool(flach) and flach[-1][0] == 13 and flach[-1][1] in PFEILE_ZUR_SEITE,
+                  str(flach[-3:]))
         cam_off(bot)
 
         set_option(env, "display", "text", "action-bar")
@@ -2772,11 +2795,15 @@ def nachtsicht_checks(env, bot):
 
 
 def toene_checks(env, bot):
-    """Die Toene von sounds: beim Start, beim Ende und an der Grenze.
+    """Die Toene von sounds: beim Start, beim Ende je nach Grund und an der
+    Grenze.
 
-    Nachgesehen wird an den Paketen, die beim Bot ankommen. Die Grenze ist
-    max-distance, dafuer auf GRENZ_ABSTAND gestellt; der Bot laeuft wie im
-    Grenztest nach Osten, auf einem frisch geraeumten Streifen.
+    Nachgesehen wird an den Paketen, die beim Bot ankommen. Das Ende kommt
+    einmal mit /cam (end), einmal von aussen mit /cam reload (end-forced) und
+    einmal von einem Treffer auf den Koerper (end-body) - mit Resistenz, und
+    ohne cam-safety, die den naechsten Start sonst fuenf Sekunden sperrte.
+    Die Grenze ist max-distance, dafuer auf GRENZ_ABSTAND gestellt; der Bot
+    laeuft wie im Grenztest nach Osten, auf einem frisch geraeumten Streifen.
     """
     def anzahl():
         return bot.call("sounds", since=10 ** 9).get("count", 0)
@@ -2796,7 +2823,30 @@ def toene_checks(env, bot):
         cam_off(bot)
         time.sleep(1.0)
         da, toene = gehoert(seit, "block.beacon.deactivate")
-        FIND.test("sounds.end - der Ton beim Ende", da, f"{len(toene)} Toene")
+        FIND.test("sounds.end - der Ton beim Ende mit /cam", da, f"{len(toene)} Toene")
+
+        cam_on(bot)
+        seit = anzahl()
+        console(env, "cam reload", pause=2)
+        da, toene = gehoert(seit, "block.respawn_anchor.deplete")
+        anders, _ = gehoert(seit, "block.beacon.deactivate")
+        FIND.test("sounds.end-forced - ein eigener Ton, wenn /cam reload den Cam-Modus beendet",
+                  da and not anders, f"{len(toene)} Toene")
+
+        bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
+        set_option(env, "enabled", "false", "cam-safety")
+        if cam_on(bot):
+            koerper = bot.server_pos()
+            if koerper is not None:
+                x, y, z = koerper
+                hinstellen(bot, x - 6, _floor(y + 0.5), z)
+                seit = anzahl()
+                console(env, f"damage @e[type=minecraft:mannequin,x={x},y={y},z={z},distance=..1,limit=1] "
+                             f"1 minecraft:cactus", pause=2)
+                da, toene = gehoert(seit, "block.bell.use")
+                anders, _ = gehoert(seit, "block.beacon.deactivate")
+                FIND.test("sounds.end-body - ein eigener Ton, wenn der Koerper getroffen wird",
+                          da and not anders, f"{len(toene)} Toene")
 
         pos = bot.server_pos()
         if pos is None:
@@ -2814,7 +2864,111 @@ def toene_checks(env, bot):
                   grenz_zeige(ergebnis, (bx + 0.5, by, bz + 0.5)))
     finally:
         cam_off(bot)
-        set_option(env, "max-distance", "100.0")
+        bot.chat(f"/effect clear {BOT_NAME}")
+        set_options(env, [("max-distance", "100.0"), ("enabled", "true", "cam-safety")])
+
+
+
+def absturz_checks(env, bot):
+    """crash-protection: die Datei unter plugins/CamFly/playerdata, und was
+    nach einem Absturz aus ihr wird.
+
+    Im Cam-Modus liegt eine Datei da, nach dem Ende nicht mehr; mit
+    enabled: false gibt es gar keine. Fuer den Absturz traegt der Bot sieben
+    Diamanten, steht im Ueberlebensmodus und fliegt im Cam-Modus sechs Bloecke
+    hoch, schneller gedreht. save-all schreibt ihn so auf die Platte, wie er
+    im Cam-Modus ist - ohne Diamanten, im Abenteuermodus, in der Luft -, und
+    dann wird der Server mit SIGKILL beendet, ohne dass das Plugin noch etwas
+    tun koennte. Nach dem Neustart muss der Bot alles zurueckhaben, am Koerper
+    stehen, und die Datei muss weg sein.
+
+    Der Neustart beginnt ein neues server.log: Was im alten stand, wird
+    deshalb vorher geprueft. Der Test steht am Ende, damit kein anderer nach
+    ihm auf einem frisch gestarteten Server mit zurueckgesetzter
+    Konfiguration landet.
+    """
+    ordner = env.server / "plugins" / "CamFly" / "playerdata"
+
+    def dateien():
+        return sorted(p.name for p in ordner.glob("*.yml")) if ordner.exists() else []
+
+    if not FIND.test("Cam-Modus ist vor dem Absturztest aus", cam_off(bot), ""):
+        return
+    cam_on(bot)
+    time.sleep(0.5)
+    FIND.test("crash-protection: im Cam-Modus liegt eine Datei unter playerdata",
+              len(dateien()) == 1, str(dateien()))
+    cam_off(bot)
+    time.sleep(0.5)
+    FIND.test("crash-protection: nach dem Ende ist die Datei wieder weg", not dateien(), str(dateien()))
+
+    set_option(env, "enabled", "false", "crash-protection")
+    cam_on(bot)
+    time.sleep(0.5)
+    FIND.test("crash-protection.enabled: false - keine Datei", not dateien(), str(dateien()))
+    cam_off(bot)
+    set_option(env, "enabled", "true", "crash-protection")
+
+    bot.chat("/clear @s")
+    bot.chat("/give @s minecraft:diamond 7")
+    bot.chat("/gamemode survival")
+    time.sleep(1.0)
+    heim = bot.server_pos()
+    if not FIND.test("Cam-Modus fuer den Absturz gestartet", heim is not None and cam_on(bot), ""):
+        return
+    bot.call("fly", wait=30, dy=6, timeout=15000)
+    bot.call("hotbar", slot=0)
+    time.sleep(0.3)
+    bot.call("hotbar", slot=8)
+    time.sleep(0.5)
+    console(env, "save-all", pause=3)
+    hits = log_problems(env)
+    FIND.test("Server-Log vor dem Absturz ohne Fehler des Plugins", not hits,
+              "" if not hits else "; ".join(hits[:5]))
+
+    ereignisse = len(bot.events)
+    pgid = server_running(env)
+    if pgid is not None:
+        os.killpg(pgid, signal.SIGKILL)
+    for _ in range(40):
+        if server_running(env) is None:
+            break
+        time.sleep(0.25)
+    (env.server / "server.pgid").unlink(missing_ok=True)
+    FIND.test("Nach dem Absturz liegt die Datei noch da", len(dateien()) == 1, str(dateien()))
+    bot.stop()
+    # Was der Absturz beim Bot ausloest - die Verbindung reisst ab -, ist
+    # kein Fehler des Plugins.
+    del bot.events[ereignisse:]
+
+    if not step_server(env):
+        return
+    bot.start()
+    if not FIND.test("Bot verbindet sich nach dem Neustart",
+                     bot.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+        return
+    time.sleep(3)
+    z = zeilen_seit(bot, 0)
+    FIND.test("Nach dem Neustart: die Meldung, dass er alles zurueckhat",
+              gesagt(z, r"server went down while you were in cam mode"), zeige(z))
+    FIND.test("Nach dem Neustart: die Diamanten sind wieder da",
+              nbt_frage(bot, "@s", '{Inventory:[{id:"minecraft:diamond"}]}'), "")
+    FIND.test("Nach dem Neustart: wieder im Ueberlebensmodus", spielmodus_ist(bot, "survival"), "")
+    pos = bot.server_pos()
+    FIND.test("Nach dem Neustart: er steht wieder am Koerper",
+              pos is not None and math.dist(pos, heim) < 1.5, f"{heim} -> {pos}")
+    FIND.test("Nach dem Neustart: keine Unsichtbarkeit mehr",
+              not nbt_frage(bot, "@s", '{active_effects:[{id:"minecraft:invisibility"}]}'), "")
+    tempo = bot.server_data("abilities.flySpeed")
+    FIND.test("Nach dem Neustart: die Fluggeschwindigkeit ist wieder normal",
+              tempo is not None and abs(tempo - 0.05) < 0.001, str(tempo))
+    FIND.test("Nach dem Neustart: die Datei ist geloescht", not dateien(), str(dateien()))
+    hx, hy, hz = heim
+    FIND.test("Nach dem Neustart: kein Koerper liegt mehr herum",
+              not server_says(bot, f"/execute positioned {hx} {hy} {hz} if entity "
+                                   f"@e[type=minecraft:armor_stand,distance=..2] run say {{marke}}"), "")
+    bot.chat("/clear @s")
+    time.sleep(0.5)
 
 
 # ---------------------------------------------------------------------------
@@ -7684,6 +7838,9 @@ def step_tests(env):
 
         # --- Teleports durch Befehle und andere Plugins (/tp, /tpa, /tpahere) ---
         teleport_checks(env, bot)
+
+        # --- Ein Absturz im Cam-Modus, zuletzt: er startet den Server neu ---
+        absturz_checks(env, bot)
 
     except Exception as exc:
         FIND.test("Testlauf", False, f"{type(exc).__name__}: {exc}")

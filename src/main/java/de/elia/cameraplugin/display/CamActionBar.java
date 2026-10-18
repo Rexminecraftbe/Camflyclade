@@ -47,10 +47,21 @@ public final class CamActionBar {
     private static final String[] ARROWS = {"\u2191", "\u2197", "\u2192", "\u2198",
             "\u2193", "\u2199", "\u2190", "\u2196"};
 
-    /** In place of an arrow when the body is right above or below, or right here. */
+    /** In place of an arrow when the body is steeply above or below, or right here. */
     private static final String ABOVE = "\u25B2";
     private static final String BELOW = "\u25BC";
     private static final String HERE = "\u25CF";
+
+    /** How close the body counts as right here, in blocks: a sphere around it. */
+    private static final double HERE_RADIUS = 2.0;
+
+    /**
+     * From how steep the body counts as above or below: 60 degrees, as the
+     * tangent. Steeper than that, which way it lies to the side hardly
+     * matters any more - looking down finds it - and an arrow to the side
+     * would swing round with every turn of the head.
+     */
+    private static final double STEEP = Math.tan(Math.toRadians(60.0));
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
@@ -149,8 +160,9 @@ public final class CamActionBar {
 
     /**
      * Which way the spot lies, seen from where the player looks: an arrow in
-     * one of eight directions, or above and below when it is right over or
-     * under him.
+     * one of eight directions, or above and below when it lies more than 60
+     * degrees up or down, or a dot inside the sphere of
+     * {@link #HERE_RADIUS} around it.
      *
      * @param dx  from the player to the spot, east positive
      * @param dy  from the player to the spot, up positive
@@ -159,10 +171,9 @@ public final class CamActionBar {
      *            south, 90 to the west, growing clockwise
      */
     private static String arrow(double dx, double dy, double dz, float yaw) {
-        if (dx * dx + dz * dz < 1.0) {
-            if (Math.abs(dy) < 1.0) return HERE;
-            return dy > 0 ? ABOVE : BELOW;
-        }
+        double flat = Math.sqrt(dx * dx + dz * dz);
+        if (flat * flat + dy * dy <= HERE_RADIUS * HERE_RADIUS) return HERE;
+        if (Math.abs(dy) > flat * STEEP) return dy > 0 ? ABOVE : BELOW;
         double towards = Math.toDegrees(Math.atan2(-dx, dz));
         int sector = Math.floorMod(Math.round((towards - yaw) / 45.0), ARROWS.length);
         return ARROWS[sector];

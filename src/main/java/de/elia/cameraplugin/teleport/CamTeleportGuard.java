@@ -5,6 +5,7 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.EndReason;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -133,7 +134,7 @@ public final class CamTeleportGuard implements Listener {
         Player camera = Bukkit.getPlayer(cameraId);
         if (camera != null) {
             messages.sendMessage(camera, "teleport-arrival-ended", "{player}", player.getName());
-            plugin.exitCameraMode(camera);
+            plugin.exitCameraMode(camera, EndReason.FORCED);
         }
     }
 

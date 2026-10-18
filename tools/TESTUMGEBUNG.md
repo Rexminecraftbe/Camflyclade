@@ -169,6 +169,11 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
 * **Die Töne liest der Test aus den Paketen**, die beim Bot ankommen
   (`sound_effect`, `entity_sound_effect`), als Text des ganzen Pakets: Wo der
   Name des Tons darin steht, hängt an den geflickten Paketdaten.
+* **Der Absturztest beendet den Server mit `SIGKILL`** und startet ihn neu,
+  vorher schreibt `save-all` den Bot so auf die Platte, wie er im Cam-Modus
+  ist. Der Neustart beginnt ein neues `server.log`, das alte prüft der Test
+  deshalb vorher auf Fehler des Plugins. Er steht ganz am Ende, weil der
+  Neustart auch die Konfiguration des Testservers zurücksetzt.
 * **Die Nachtsicht hängt am Licht am Auge**, das die Tageszeit mitrechnet:
   mittags 15, um Mitternacht unter freiem Himmel 4. Der Test stellt die Zeit
   dafür mit `/time set` und am Ende wieder auf Mittag.

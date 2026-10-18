@@ -66,6 +66,7 @@ messages:
   config-unknown-key: "&cUnknown setting {path}. It is ignored, check its spelling and indentation."
   config-unknown-value: "&cUnknown value for {path}: '{value}'. Allowed: {allowed}. Using {used} instead."
   cooldown-available: "&aCam mode available again"
+  crash-restored: "&eThe server went down while you were in cam mode. You got your things back and are at your body again."
   cooldown-text: "You can start cam mode again in %time%."
   distance-from-body: "your body"
   distance-from-portal: "the portal you came out of"
@@ -402,6 +403,7 @@ message-settings:
   cant-fly-in-water: true
   config-errors: true
   cooldown-available: true
+  crash-restored: true
   cooldown-text: true
   distance-limit: true
   enabled: true

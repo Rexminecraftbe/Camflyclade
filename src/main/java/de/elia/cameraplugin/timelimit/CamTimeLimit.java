@@ -4,6 +4,7 @@ import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.EndReason;
 import org.bukkit.Bukkit;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.boss.BossBar;
@@ -81,7 +82,7 @@ public final class CamTimeLimit {
                 if (remaining <= 0) {
                     cancel();
                     if (finalBar != null) finalBar.removeAll();
-                    plugin.exitCameraMode(player);
+                    plugin.exitCameraMode(player, EndReason.FORCED);
                     messages.sendConfiguredMessage(player, "time-limit-expired");
                 }
             }

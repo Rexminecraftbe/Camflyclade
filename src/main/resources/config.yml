@@ -13,7 +13,8 @@ action-bar:
   # Was dort steht, solange der Cam-Modus läuft:
   #   distance = wie weit der Körper weg ist und in welche Richtung, z. B. "Body: 42 blocks ↖"
   #              (Text: actionbar-distance in der Sprachdatei; zu Beginn steht kurz actionbar-on)
-  #              Der Pfeil zeigt von der Blickrichtung aus; ▲/▼ = der Körper ist direkt über/unter dir, ● = du bist bei ihm.
+  #              Der Pfeil zeigt von der Blickrichtung aus. ▲/▼ = der Körper liegt steiler als 60° über/unter dir,
+  #              ● = du bist höchstens 2 Blöcke von ihm weg.
   #              In einer anderen Welt zeigt er zum Portal, aus dem man kam (actionbar-distance-portal).
   #   text     = der feste Text actionbar-on, wie bisher
   display: distance
@@ -221,10 +222,23 @@ sounds:
     sound: block.beacon.activate
     volume: 1.0
     pitch: 1.0
-  # Beim Ende, zurück am Körper
+  # Beim Ende mit /cam (oder einem Klick auf den eigenen Körper), zurück am Körper
   end:
     enabled: true
     sound: block.beacon.deactivate
+    volume: 1.0
+    pitch: 1.0
+  # Beim Ende, weil dem Körper etwas passiert ist: angegriffen, beschädigt, verschoben, ertrinkt, erstickt, Trank
+  end-body:
+    enabled: true
+    sound: block.bell.use
+    volume: 1.0
+    pitch: 1.0
+  # Beim Ende von außen: /cam reload, Zeitlimit abgelaufen, Teleport
+  # (beim Tod, beim Verlassen des Servers und beim Herunterfahren gibt es keinen Ton)
+  end-forced:
+    enabled: true
+    sound: block.respawn_anchor.deplete
     volume: 1.0
     pitch: 1.0
   # An der Grenze: max-distance, cam-area, gesperrte Lava, Wasser, Pulverschnee und gesperrte Portale.
@@ -234,6 +248,14 @@ sounds:
     sound: block.note_block.bass
     volume: 1.0
     pitch: 0.5
+
+# Schutz bei einem Absturz. Was der Cam-Modus dem Spieler abnimmt (Inventar, Spielmodus, Effekte, Flug), steht,
+# solange der Cam-Modus läuft, auch in plugins/CamFly/playerdata/<UUID>.yml. Beim Ende wird die Datei gelöscht.
+# Stürzt der Server ab, ist sie beim nächsten Betreten noch da: Der Spieler bekommt alles zurück und steht wieder
+# bei seinem Körper. Kostet eine kleine Datei beim Start und ein Löschen beim Ende, im Cam-Modus selbst nichts.
+# Dateien, die schon da sind, werden auch mit false noch zurückgegeben.
+crash-protection:
+  enabled: true
 
 # /cam list: wer gerade im Cam-Modus ist, wie lange schon und wie weit von seinem Körper
 cam-list:

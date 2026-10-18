@@ -7,6 +7,7 @@ import de.elia.cameraplugin.config.ConfigFile;
 import de.elia.cameraplugin.config.ConfigIssue;
 import de.elia.cameraplugin.config.ConfigReader;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.crash.CamCrashGuard;
 import de.elia.cameraplugin.display.CamActionBar;
 import de.elia.cameraplugin.display.CamNameTag;
 import de.elia.cameraplugin.display.CamParticles;
@@ -34,6 +35,7 @@ import de.elia.cameraplugin.scoreboard.NoCollisionTeam;
 import de.elia.cameraplugin.session.CameraHead;
 import de.elia.cameraplugin.session.CameraMode;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.session.SessionListener;
 import de.elia.cameraplugin.speed.CamFlightSpeed;
 import de.elia.cameraplugin.start.StartChecks;
@@ -82,6 +84,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamFlightSpeed flightSpeed = new CamFlightSpeed(this);
     private final CamNightVision nightVision = new CamNightVision(this, settings, cameraPlayers);
     private final CamList camList = new CamList(settings, messages, cameraPlayers);
+    private final CamCrashGuard crashGuard = new CamCrashGuard(this, log);
     private final MobTargeting mobTargeting = new MobTargeting(this, settings, cameraPlayers);
     private final MobGaze mobGaze = new MobGaze(this, settings, cameraPlayers);
     private final BodyWatch bodyWatch = new BodyWatch(this);
@@ -139,6 +142,7 @@ public final class CameraPlugin extends JavaPlugin {
         this.getCommand("cam").setTabCompleter(new CamTabCompleter(camList));
         registerListeners();
         noCollisionTeam.refreshNoCollisionTeam();
+        crashGuard.restoreOnline();
         startedUp = true;
         getLogger().info("CameraPlugin has been enabled!");
     }
@@ -166,6 +170,7 @@ public final class CameraPlugin extends JavaPlugin {
                 new CamInventoryLock(cameraPlayers),
                 new CamPotionGuard(this),
                 flightSpeed,
+                crashGuard,
                 new CamSuggestionFilter(this));
         for (Listener listener : listeners) {
             pluginManager.registerEvents(listener, this);
@@ -238,7 +243,7 @@ public final class CameraPlugin extends JavaPlugin {
         for (UUID playerId : new HashSet<>(cameraPlayers.ids())) {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) {
-                exitCameraMode(player);
+                exitCameraMode(player, EndReason.SILENT);
             }
         }
         if (camFireGuard != null) {
@@ -324,7 +329,7 @@ public final class CameraPlugin extends JavaPlugin {
             Player camPlayer = Bukkit.getPlayer(uuid);
             if (camPlayer != null) {
                 messages.sendConfiguredMessage(camPlayer, "reload-exit");
-                exitCameraMode(camPlayer);
+                exitCameraMode(camPlayer, EndReason.FORCED);
             }
         }
         configFile.reportConfigWarnings(loadConfigValues(), initiator);
@@ -379,8 +384,9 @@ public final class CameraPlugin extends JavaPlugin {
         cameraMode.enterCameraMode(player);
     }
 
-    public void exitCameraMode(Player player) {
-        cameraMode.exitCameraMode(player);
+    /** Ends camera mode, with the sound that goes with the reason. */
+    public void exitCameraMode(Player player, EndReason reason) {
+        cameraMode.exitCameraMode(player, reason);
     }
 
     /** Ends camera mode for a player being teleported away, see {@link CameraMode#exitCameraModeForTeleport}. */
@@ -451,6 +457,10 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamList getCamList() {
         return camList;
+    }
+
+    public CamCrashGuard getCrashGuard() {
+        return crashGuard;
     }
 
     public CamFireGuard getFireGuard() {

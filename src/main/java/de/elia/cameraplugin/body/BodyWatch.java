@@ -3,6 +3,7 @@ package de.elia.cameraplugin.body;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.EndReason;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
@@ -83,7 +84,7 @@ public final class BodyWatch {
                 if (hasMoved(reference, current)) {
                     Vector motion = mannequin.getVelocity();
                     plugin.getMessages().sendConfiguredMessage(player, "body-moved");
-                    plugin.exitCameraMode(player);
+                    plugin.exitCameraMode(player, EndReason.BODY);
                     player.setVelocity(motion);
                     this.cancel();
                 }
