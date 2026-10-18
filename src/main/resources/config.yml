@@ -231,7 +231,7 @@ sounds:
   # Beim Ende, weil dem Körper etwas passiert ist: angegriffen, beschädigt, verschoben, ertrinkt, erstickt, Trank
   end-body:
     enabled: true
-    sound: block.bell.use
+    sound: entity.illusioner.mirror_move
     volume: 1.0
     pitch: 1.0
   # Beim Ende von außen: /cam reload, Zeitlimit abgelaufen, Teleport

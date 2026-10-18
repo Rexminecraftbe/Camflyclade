@@ -2843,7 +2843,7 @@ def toene_checks(env, bot):
                 seit = anzahl()
                 console(env, f"damage @e[type=minecraft:mannequin,x={x},y={y},z={z},distance=..1,limit=1] "
                              f"1 minecraft:cactus", pause=2)
-                da, toene = gehoert(seit, "block.bell.use")
+                da, toene = gehoert(seit, "entity.illusioner.mirror_move")
                 anders, _ = gehoert(seit, "block.beacon.deactivate")
                 FIND.test("sounds.end-body - ein eigener Ton, wenn der Koerper getroffen wird",
                           da and not anders, f"{len(toene)} Toene")
@@ -2898,6 +2898,10 @@ def absturz_checks(env, bot):
     time.sleep(0.5)
     FIND.test("crash-protection: im Cam-Modus liegt eine Datei unter playerdata",
               len(dateien()) == 1, str(dateien()))
+    if dateien():
+        kopf = (ordner / dateien()[0]).read_text(encoding="utf-8").splitlines()[:1]
+        FIND.test("crash-protection: oben in der Datei steht, wozu sie da ist",
+                  kopf == ["# CamFly crash protection: what cam mode took from this player."], str(kopf))
     cam_off(bot)
     time.sleep(0.5)
     FIND.test("crash-protection: nach dem Ende ist die Datei wieder weg", not dateien(), str(dateien()))

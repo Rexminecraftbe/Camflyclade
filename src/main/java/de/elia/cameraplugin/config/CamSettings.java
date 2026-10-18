@@ -342,7 +342,8 @@ public final class CamSettings {
         String allowedSounds = messages.configMessage("config-allowed-sounds");
         startSound = CamSound.read(config, "sounds.start", allowedSounds, "block.beacon.activate", 1.0);
         endSound = CamSound.read(config, "sounds.end", allowedSounds, "block.beacon.deactivate", 1.0);
-        endBodySound = CamSound.read(config, "sounds.end-body", allowedSounds, "block.bell.use", 1.0);
+        endBodySound = CamSound.read(config, "sounds.end-body", allowedSounds,
+                "entity.illusioner.mirror_move", 1.0);
         endForcedSound = CamSound.read(config, "sounds.end-forced", allowedSounds,
                 "block.respawn_anchor.deplete", 1.0);
         borderSound = CamSound.read(config, "sounds.border", allowedSounds, "block.note_block.bass", 0.5);
