@@ -190,6 +190,10 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   ist, hält das Plugin sie im Speicher -, der Akku noch einmal für die
   Bossbar nach dem Betreten, und die alte Absturzdatei, die nur beim
   Betreten gelesen wird.
+* **Vom Happy Ghast herunter, bevor er weggeräumt wird.** Steht der Bot noch
+  auf ihm, fällt er sechs Blöcke tief, und `cam-safety` sperrt `/cam` fünf
+  Sekunden lang - im Interaktionstest fiel das nur nicht auf, solange der Bot
+  zufällig fliegen durfte. Der Test stellt ihn deshalb erst auf den Boden.
 * **Die Nachtsicht hängt am Licht am Auge**, das die Tageszeit mitrechnet:
   mittags 15, um Mitternacht unter freiem Himmel 4. Der Test stellt die Zeit
   dafür mit `/time set` und am Ende wieder auf Mittag.

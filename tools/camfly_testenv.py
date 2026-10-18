@@ -3903,6 +3903,11 @@ def interact_checks(env, bot):
         ghast_ohne = ghast_probe(bot, base)
 
         # --- Und nun im Cam-Modus, von derselben Stelle aus ---
+        # Erst vom Happy Ghast herunter: Raeumte das Aufraeumen ihn weg,
+        # waehrend der Bot noch auf ihm steht, fiele er sechs Bloecke tief,
+        # und cam-safety sperrte /cam danach fuenf Sekunden lang - es sei
+        # denn, er darf zufaellig gerade fliegen.
+        hinstellen(bot, bx + 0.5, by, bz + 0.5)
         interact_aufraeumen(bot, base)
         hinstellen(bot, bx + 0.5, by, bz + 0.5)
         bot.chat(f"/give {BOT_NAME} minecraft:stone 1")
