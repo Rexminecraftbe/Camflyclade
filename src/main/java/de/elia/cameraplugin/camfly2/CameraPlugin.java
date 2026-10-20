@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.camfly2;
 
+import de.elia.cameraplugin.battery.CamBattery;
 import de.elia.cameraplugin.body.BodySpawner;
 import de.elia.cameraplugin.body.BodyWatch;
 import de.elia.cameraplugin.config.CamSettings;
@@ -7,6 +8,7 @@ import de.elia.cameraplugin.config.ConfigFile;
 import de.elia.cameraplugin.config.ConfigIssue;
 import de.elia.cameraplugin.config.ConfigReader;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.cost.StartCost;
 import de.elia.cameraplugin.crash.CamCrashGuard;
 import de.elia.cameraplugin.display.CamActionBar;
 import de.elia.cameraplugin.display.CamNameTag;
@@ -21,6 +23,7 @@ import de.elia.cameraplugin.interaction.CamKnockbackGuard;
 import de.elia.cameraplugin.inventory.CamInventoryGuard;
 import de.elia.cameraplugin.inventory.CamInventoryLock;
 import de.elia.cameraplugin.list.CamList;
+import de.elia.cameraplugin.log.CamLog;
 import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.mirrordamage.DamageMirror;
 import de.elia.cameraplugin.mirrordamage.SwingStrength;
@@ -36,9 +39,14 @@ import de.elia.cameraplugin.session.CameraHead;
 import de.elia.cameraplugin.session.CameraMode;
 import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.session.EndReason;
+import de.elia.cameraplugin.session.ExitKey;
 import de.elia.cameraplugin.session.SessionListener;
+import de.elia.cameraplugin.session.SessionTracker;
 import de.elia.cameraplugin.speed.CamFlightSpeed;
+import de.elia.cameraplugin.start.CamStarter;
 import de.elia.cameraplugin.start.StartChecks;
+import de.elia.cameraplugin.stats.CamStats;
+import de.elia.cameraplugin.storage.PlayerStore;
 import de.elia.cameraplugin.sulfurcube.CamSulfurCubeGuard;
 import de.elia.cameraplugin.teleport.CamTeleportGuard;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
@@ -85,11 +93,17 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamNightVision nightVision = new CamNightVision(this, settings, cameraPlayers);
     private final CamList camList = new CamList(settings, messages, cameraPlayers);
     private final CamCrashGuard crashGuard = new CamCrashGuard(this, log);
+    private final PlayerStore playerStore = new PlayerStore(this, log);
+    private final CamBattery battery = new CamBattery(this, playerStore);
+    private final CamStats stats = new CamStats(settings, messages, playerStore, battery);
+    private final CamLog camLog = new CamLog(this, settings, log);
+    private final StartCost startCost = new StartCost(settings, messages, log);
     private final MobTargeting mobTargeting = new MobTargeting(this, settings, cameraPlayers);
     private final MobGaze mobGaze = new MobGaze(this, settings, cameraPlayers);
     private final BodyWatch bodyWatch = new BodyWatch(this);
     private final CamTimeLimit timeLimit = new CamTimeLimit(this);
     private final StartChecks startChecks = new StartChecks(settings, messages);
+    private final CamStarter starter = new CamStarter(this);
     private final CamMovementGuard movementGuard = new CamMovementGuard(this);
     private final CamBorderWall borderWall = new CamBorderWall(this);
     private final CamTeleportGuard teleportGuard = new CamTeleportGuard(this);
@@ -139,10 +153,15 @@ public final class CameraPlugin extends JavaPlugin {
         // Nobody is in camera mode at startup -> remove a team left over.
         noCollisionTeam.deleteNoCollisionTeam();
         this.getCommand("cam").setExecutor(new CamCommand(this));
-        this.getCommand("cam").setTabCompleter(new CamTabCompleter(camList));
+        this.getCommand("cam").setTabCompleter(new CamTabCompleter(camList, stats));
         registerListeners();
         noCollisionTeam.refreshNoCollisionTeam();
         crashGuard.restoreOnline();
+        // Started by hand on a running server: for the battery, everybody
+        // online joins now.
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            battery.onJoin(player);
+        }
         startedUp = true;
         getLogger().info("CameraPlugin has been enabled!");
     }
@@ -171,6 +190,8 @@ public final class CameraPlugin extends JavaPlugin {
                 new CamPotionGuard(this),
                 flightSpeed,
                 crashGuard,
+                new SessionTracker(cameraPlayers),
+                new ExitKey(this),
                 new CamSuggestionFilter(this));
         for (Listener listener : listeners) {
             pluginManager.registerEvents(listener, this);
@@ -243,7 +264,7 @@ public final class CameraPlugin extends JavaPlugin {
         for (UUID playerId : new HashSet<>(cameraPlayers.ids())) {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) {
-                exitCameraMode(player, EndReason.SILENT);
+                exitCameraMode(player, EndReason.SHUTDOWN);
             }
         }
         if (camFireGuard != null) {
@@ -266,6 +287,10 @@ public final class CameraPlugin extends JavaPlugin {
         actionBar.onDisable();
         nightVision.onDisable();
         timeLimit.onDisable();
+        // After camera mode has ended for everybody, which settled the
+        // batteries in flight and counted the flights.
+        battery.onDisable();
+        playerStore.saveAll();
         // No player left in camera mode -> remove the team.
         noCollisionTeam.deleteNoCollisionTeam();
         bodySpawner.removeLeftoverEntities();
@@ -329,12 +354,15 @@ public final class CameraPlugin extends JavaPlugin {
             Player camPlayer = Bukkit.getPlayer(uuid);
             if (camPlayer != null) {
                 messages.sendConfiguredMessage(camPlayer, "reload-exit");
-                exitCameraMode(camPlayer, EndReason.FORCED);
+                exitCameraMode(camPlayer, EndReason.RELOAD);
             }
         }
         configFile.reportConfigWarnings(loadConfigValues(), initiator);
         noCollisionTeam.refreshNoCollisionTeam();
         timeLimit.clearCooldowns();
+        startCost.reset();
+        camLog.reset();
+        battery.refreshCharging();
         return true;
     }
 
@@ -501,6 +529,30 @@ public final class CameraPlugin extends JavaPlugin {
 
     public StartChecks getStartChecks() {
         return startChecks;
+    }
+
+    public CamStarter getStarter() {
+        return starter;
+    }
+
+    public PlayerStore getPlayerStore() {
+        return playerStore;
+    }
+
+    public CamBattery getBattery() {
+        return battery;
+    }
+
+    public CamStats getStats() {
+        return stats;
+    }
+
+    public CamLog getCamLog() {
+        return camLog;
+    }
+
+    public StartCost getStartCost() {
+        return startCost;
     }
 
     public CamMovementGuard getMovementGuard() {

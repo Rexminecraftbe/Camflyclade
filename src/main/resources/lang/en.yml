@@ -9,8 +9,15 @@ messages:
   actionbar-distance: "&aBody: &f{distance} blocks &e{arrow}"
   actionbar-distance-portal: "&aPortal: &f{distance} blocks &e{arrow}"
   actionbar-off: "&cCam mode ended"
-  actionbar-on: "&aCam mode activated"
+  # {hint} is replaced by actionbar-hint while exit-key is on, and {key} there by the key that swaps
+  # the hands - the one the player has bound it to, F unless changed.
+  actionbar-hint: " &7- &f{key} &7to leave"
+  actionbar-on: "&aCam mode activated{hint}"
   armorstand.name-format: "{player}'s Body"
+  battery-bossbar: "Battery: {time}"
+  battery-bossbar-charging: "Battery charging: {charge}, full in {time}"
+  battery-empty: "&cCam mode ended: the battery is empty."
+  battery-low: "&cThe battery holds {charge} of flight, a start needs {needed}. Ready again in {time}."
   body-attacked: "&cYour body was attacked by {damager}! Camera mode ended."
   body-drowning: "&cYour body is drowning! Camera mode ended."
   body-env-damage: "&cYour body was damaged by {cause}! Camera mode ended."
@@ -47,6 +54,7 @@ messages:
   config-error-header: "&cThe configuration has {count} invalid entries:"
   config-error-header-single: "&cThe configuration has one invalid entry:"
   config-error-more: "&c... and {count} more. All of them are in the server console."
+  config-expected-amounts: "&cWrong value for {path}: '{value}'. Expected entries such as name: number. Using {used} instead."
   config-expected-boolean: "&cWrong value for {path}: '{value}'. Expected true or false. Using {used} instead."
   config-expected-list: "&cWrong value for {path}: '{value}'. Expected a list. Using {used} instead."
   config-expected-number: "&cWrong value for {path}: '{value}'. Expected a number. Using {used} instead."
@@ -68,6 +76,14 @@ messages:
   cooldown-available: "&aCam mode available again"
   crash-restored: "&eThe server went down while you were in cam mode. You got your things back and are at your body again."
   cooldown-text: "You can start cam mode again in %time%."
+  # The parts of start-cost that cost-missing and cost-paid list, one after the other.
+  cost-item: "{amount}x {item}"
+  cost-level: "1 XP level"
+  cost-levels: "{amount} XP levels"
+  cost-point: "1 XP point"
+  cost-points: "{amount} XP points"
+  cost-missing: "&cStarting cam mode costs {cost}. You are missing {missing}."
+  cost-paid: "&7Cam mode cost you {cost}."
   distance-from-body: "your body"
   distance-from-portal: "the portal you came out of"
   distance-limit: "&cYou cannot move further than {distance} blocks from {from}!"
@@ -86,6 +102,18 @@ messages:
   startup-skins-failed: "Skins could not be preloaded at startup: {error}"
   startup-skins-loaded: "Skins loaded successfully."
   startup-skins-loading: "Loading skins..."
+  stats-battery: "&7Battery: &f{charge} &7of &f{capacity}"
+  stats-distance: "&7Distance flown: &f{distance} blocks"
+  stats-farthest: "&7Farthest from the body: &f{distance} blocks"
+  stats-header: "&eCam mode statistics of {player}:"
+  stats-longest: "&7Longest flight: &f{time}"
+  stats-none: "&e{player} has not been in cam mode yet."
+  stats-off: "&cThe statistics are switched off."
+  stats-reset: "&aYour cam mode statistics have been reset."
+  stats-sessions: "&7Times in cam mode: &f{count}"
+  stats-total-time: "&7Time in cam mode: &f{time}"
+  stats-unknown-player: "&cNobody called {player} has been on this server."
+  stats-usage: "&eUse /cam stats, /cam stats reset or /cam stats player <name>."
   teleport-arrival-ended: "&c{player} was teleported to you. Camera mode ended."
   teleport-ended: "&cYou were teleported. Camera mode ended."
   time-limit-expired: "&cCam mode ended: Time limit expired."
@@ -369,10 +397,16 @@ portal-names:
   end: "end"
   nether: "nether"
 
+# Items, for {item} in cost-item (start-cost.items). Without a name here an item goes by its key, with
+# spaces for the underscores: ender_eye reads "ender eye". To give it a name of its own, add a list:
+#   item-names:
+#     ender_eye: "eye of ender"
+
 # Switch single messages on and off
 message-settings:
   actionbar-distance: true
   actionbar-distance-portal: true
+  actionbar-hint: true
   actionbar-off: true
   actionbar-on: true
   body-attacked: true
@@ -381,6 +415,10 @@ message-settings:
   body-got-effect: true
   body-moved: true
   body-suffocating: true
+  battery-bossbar: true
+  battery-bossbar-charging: true
+  battery-empty: true
+  battery-low: true
   bossbar-text: true
   cam-area-limit: true
   cam-area-start: true
@@ -405,6 +443,8 @@ message-settings:
   cooldown-available: true
   crash-restored: true
   cooldown-text: true
+  cost-missing: true
+  cost-paid: true
   distance-limit: true
   enabled: true
   flight-speed: true
@@ -419,6 +459,18 @@ message-settings:
   startup-skins-failed: true
   startup-skins-loaded: true
   startup-skins-loading: true
+  stats-battery: true
+  stats-distance: true
+  stats-farthest: true
+  stats-header: true
+  stats-longest: true
+  stats-none: true
+  stats-off: true
+  stats-reset: true
+  stats-sessions: true
+  stats-total-time: true
+  stats-unknown-player: true
+  stats-usage: true
   teleport-arrival-ended: true
   teleport-ended: true
   time-limit-expired: true

@@ -19,6 +19,7 @@ import de.elia.cameraplugin.session.CamGameMode;
 import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.sound.CamSound;
 import de.elia.cameraplugin.start.EffectStart;
+import de.elia.cameraplugin.timelimit.FlightLimit;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -30,7 +31,9 @@ import org.bukkit.boss.BarColor;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.Collections;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -72,9 +75,17 @@ public final class CamSettings {
     /**
      * Keys that are read although the config file built into the jar leaves
      * them out on purpose, so that they are not reported as unknown, see
-     * {@link ConfigReader#warnUnknownKeys}.
+     * {@link ConfigReader#warnUnknownKeys}. Also sections whose keys are names
+     * the file chooses itself, such as the items of {@code start-cost.items}:
+     * everything below them is checked when it is read instead.
      */
-    public static final Set<String> UNLISTED_KEYS = Set.of("mirror-damage.debug");
+    public static final Set<String> UNLISTED_KEYS = Set.of("mirror-damage.debug", "start-cost.items");
+
+    /**
+     * The most of one item {@code start-cost.items} accepts: a full inventory
+     * of it. More could never be paid.
+     */
+    private static final int MAX_COST_ITEMS = 36 * 64;
 
     private final JavaPlugin plugin;
     private final Messages messages;
@@ -164,6 +175,8 @@ public final class CamSettings {
 
     private boolean actionBarEnabled;
     private int actionBarOffDuration;
+    /** How long {@code actionbar-on} stands at the start before the distance, in ticks, {@code action-bar.on-duration}. */
+    private int actionBarOnDuration;
     /** What the action bar shows while camera mode runs, {@code action-bar.display}. */
     private ActionBarDisplay actionBarDisplay;
 
@@ -210,8 +223,9 @@ public final class CamSettings {
     private double customDamageHearts;
 
     private boolean cameraHeadEnabled;
+    /** What holds camera mode to a time, {@code flight-limit}. */
+    private FlightLimit flightLimit;
     // Time limit and cooldown settings
-    private boolean timeLimitEnabled;
     private boolean cooldownsEnabled;
     private int durationSeconds;
     private int cooldownSeconds;
@@ -221,6 +235,45 @@ public final class CamSettings {
     // Camera safety settings
     private boolean camSafetyEnabled;
     private int camSafetyDelay;
+
+    /** Whether the key that swaps the hands ends camera mode, {@code exit-key.enabled}. */
+    private boolean exitKeyEnabled;
+
+    /** A full battery, in seconds of flight. */
+    private int batteryCapacity;
+    /** Seconds of flight that come back for every second outside camera mode. */
+    private double batteryRecharge;
+    /** The charge a start needs at least, in seconds of flight. */
+    private int batteryMinStart;
+    /** Whether the battery charges while the player is not on the server. */
+    private boolean batteryRechargeOffline;
+    private boolean batteryBossbar;
+    /** Whether the bossbar stays after camera mode until the battery is full, {@code show-bossbar-charging}. */
+    private boolean batteryBossbarCharging;
+    private BarColor batteryBossbarColor;
+
+    /** Whether a start costs something, the section {@code start-cost}. */
+    private boolean startCostEnabled;
+    /** Experience a start costs, in levels or points. */
+    private int startCostXp;
+    /** Whether {@link #startCostXp} counts points rather than levels, {@code start-cost.xp-type}. */
+    private boolean startCostXpPoints;
+    /** Money a start costs, through Vault. */
+    private double startCostMoney;
+    /** Items a start costs, and how many of each, in the order of the file. */
+    private final Map<Material, Integer> startCostItems = new LinkedHashMap<>();
+
+    /** Whether camera mode is counted for {@code /cam stats}, {@code statistics.enabled}. */
+    private boolean statsEnabled;
+    /** Who may look at the statistics of somebody else, {@code statistics.view-others}. */
+    private ListAccess statsViewOthers;
+
+    /** Whether start and end of camera mode are written down, the section {@code cam-log}. */
+    private boolean camLogEnabled;
+    /** Whether the same lines go into the console as well. */
+    private boolean camLogConsole;
+    /** How many days of log files are kept, 0 for all of them. */
+    private int camLogKeepDays;
 
     public CamSettings(JavaPlugin plugin, Messages messages) {
         this.plugin = plugin;
@@ -327,6 +380,7 @@ public final class CamSettings {
         particleSpread = config.getDouble("camera-particles.spread", 0.0, 0.0);
         actionBarEnabled = config.getBoolean("action-bar.enabled", true);
         actionBarOffDuration = config.getInt("action-bar.off-duration", 10, 0);
+        actionBarOnDuration = config.getInt("action-bar.on-duration", 60, 0);
         String display = config.getChoice("action-bar.display", "distance", "distance", "text")
                 .toLowerCase(Locale.ROOT);
         actionBarDisplay = display.equals("text") ? ActionBarDisplay.TEXT : ActionBarDisplay.DISTANCE;
@@ -348,14 +402,14 @@ public final class CamSettings {
                 "block.respawn_anchor.deplete", 1.0);
         borderSound = CamSound.read(config, "sounds.border", allowedSounds, "block.note_block.bass", 0.5);
         crashProtectionEnabled = config.getBoolean("crash-protection.enabled", true);
-        String listAccess = config.getChoice("cam-list.access", "admin", "admin", "all", "false")
+        camListAccess = readAccess(config, "cam-list.access");
+        String limit = config.getChoice("flight-limit", "false", "false", "time-limit", "battery")
                 .toLowerCase(Locale.ROOT);
-        camListAccess = switch (listAccess) {
-            case "all" -> ListAccess.ALL;
-            case "false" -> ListAccess.OFF;
-            default -> ListAccess.ADMIN;
+        flightLimit = switch (limit) {
+            case "time-limit" -> FlightLimit.TIME_LIMIT;
+            case "battery" -> FlightLimit.BATTERY;
+            default -> FlightLimit.OFF;
         };
-        timeLimitEnabled = config.getBoolean("time-limit.enabled", false);
         cooldownsEnabled = config.getBoolean("time-limit.cooldowns-enabled", false);
         durationSeconds = config.getInt("time-limit.duration-seconds", 300, 1);
         cooldownSeconds = config.getInt("time-limit.cooldown-seconds", 120, 0);
@@ -363,6 +417,14 @@ public final class CamSettings {
         bossbarColor = config.getEnum("time-limit.bossbar-color", BarColor.class, BarColor.BLUE);
         camSafetyEnabled = config.getBoolean("cam-safety.enabled", true);
         camSafetyDelay = config.getInt("cam-safety.delay", 5, 0);
+        exitKeyEnabled = config.getBoolean("exit-key.enabled", true);
+        readBattery(config);
+        readStartCost(config);
+        statsEnabled = config.getBoolean("statistics.enabled", true);
+        statsViewOthers = readAccess(config, "statistics.view-others");
+        camLogEnabled = config.getBoolean("cam-log.enabled", false);
+        camLogConsole = config.getBoolean("cam-log.console", false);
+        camLogKeepDays = config.getInt("cam-log.keep-days", 30, 0);
         camAreaRules.load(config);
         portalRules.load(config);
         commandTeleportEndsCam = config.getBoolean("teleports.command", true);
@@ -408,6 +470,62 @@ public final class CamSettings {
         flightSpeedStart = config.getDouble("flight-speed.start",
                 Math.min(Math.max(1.0, flightSpeedMin), flightSpeedMax), flightSpeedMin, flightSpeedMax);
         flightSpeedStep = config.getDouble("flight-speed.step", 0.5, 0.05, MAX_FLIGHT_SPEED);
+    }
+
+    /** Reads who may use something, the values admin, all and false. */
+    private static ListAccess readAccess(ConfigReader config, String path) {
+        String access = config.getChoice(path, "admin", "admin", "all", "false").toLowerCase(Locale.ROOT);
+        return switch (access) {
+            case "all" -> ListAccess.ALL;
+            case "false" -> ListAccess.OFF;
+            default -> ListAccess.ADMIN;
+        };
+    }
+
+    /**
+     * Reads the section {@code battery}. The charge a start needs is held to
+     * the capacity: more than a full battery would let nobody start at all.
+     */
+    private void readBattery(ConfigReader config) {
+        batteryCapacity = config.getInt("battery.capacity", 300, 1);
+        // Without any charging an empty battery would stay empty for good.
+        batteryRecharge = config.getDouble("battery.recharge-per-second", 0.5, 0.01);
+        batteryMinStart = config.getInt("battery.min-start", Math.min(10, batteryCapacity), 0, batteryCapacity);
+        batteryRechargeOffline = config.getBoolean("battery.recharge-offline", true);
+        batteryBossbar = config.getBoolean("battery.show-bossbar", true);
+        batteryBossbarCharging = config.getBoolean("battery.show-bossbar-charging", true);
+        batteryBossbarColor = config.getEnum("battery.bossbar-color", BarColor.class, BarColor.GREEN);
+    }
+
+    /**
+     * Reads the section {@code start-cost}. An item the game does not have, or
+     * that cannot be carried, is reported and left out of the cost.
+     */
+    private void readStartCost(ConfigReader config) {
+        startCostEnabled = config.getBoolean("start-cost.enabled", false);
+        startCostXp = config.getInt("start-cost.xp", 0, 0);
+        startCostXpPoints = config.getChoice("start-cost.xp-type", "levels", "levels", "points")
+                .equalsIgnoreCase("points");
+        startCostMoney = config.getDouble("start-cost.money", 0.0, 0.0);
+        startCostItems.clear();
+        for (Map.Entry<String, Integer> entry
+                : config.getAmounts("start-cost.items", 0, MAX_COST_ITEMS).entrySet()) {
+            Material material = parseItem(entry.getKey().trim().toLowerCase(Locale.ROOT).replace(' ', '_'));
+            if (material == null) {
+                config.warnUnknownEntry("start-cost.items", entry.getKey());
+            } else if (entry.getValue() > 0) {
+                startCostItems.merge(material, entry.getValue(), Integer::sum);
+            }
+        }
+    }
+
+    /** The item a name stands for, or {@code null} when it is none a player can carry. */
+    private static Material parseItem(String name) {
+        Material material = name.isEmpty() ? null : Material.matchMaterial(name);
+        if (material == null || !material.isItem() || material.isAir()) {
+            return null;
+        }
+        return material;
     }
 
     /**
@@ -731,6 +849,10 @@ public final class CamSettings {
         return actionBarOffDuration;
     }
 
+    public int getActionBarOnDuration() {
+        return actionBarOnDuration;
+    }
+
     public ActionBarDisplay getActionBarDisplay() {
         return actionBarDisplay;
     }
@@ -777,8 +899,8 @@ public final class CamSettings {
      * would hear.
      */
     public CamSound getEndSound(EndReason reason) {
-        return switch (reason) {
-            case COMMAND -> endSound;
+        return switch (reason.getKind()) {
+            case SELF -> endSound;
             case BODY -> endBodySound;
             case FORCED -> endForcedSound;
             case SILENT -> CamSound.OFF;
@@ -799,8 +921,9 @@ public final class CamSettings {
 
     // --------------------------------------------------- time limit and cooldown
 
+    /** Whether {@code flight-limit} is {@code time-limit}. */
     public boolean isTimeLimitEnabled() {
-        return timeLimitEnabled;
+        return flightLimit == FlightLimit.TIME_LIMIT;
     }
 
     public boolean isCooldownsEnabled() {
@@ -831,6 +954,94 @@ public final class CamSettings {
 
     public int getCamSafetyDelay() {
         return camSafetyDelay;
+    }
+
+    // --------------------------------------------------------------- exit-key
+
+    public boolean isExitKeyEnabled() {
+        return exitKeyEnabled;
+    }
+
+    // ---------------------------------------------------------------- battery
+
+    /** Whether {@code flight-limit} is {@code battery}. */
+    public boolean isBatteryEnabled() {
+        return flightLimit == FlightLimit.BATTERY;
+    }
+
+    public int getBatteryCapacity() {
+        return batteryCapacity;
+    }
+
+    public double getBatteryRecharge() {
+        return batteryRecharge;
+    }
+
+    public int getBatteryMinStart() {
+        return batteryMinStart;
+    }
+
+    public boolean batteryRechargesOffline() {
+        return batteryRechargeOffline;
+    }
+
+    public boolean showsBatteryBossbar() {
+        return batteryBossbar;
+    }
+
+    public boolean showsBatteryBossbarCharging() {
+        return batteryBossbarCharging;
+    }
+
+    public BarColor getBatteryBossbarColor() {
+        return batteryBossbarColor;
+    }
+
+    // ------------------------------------------------------------- start-cost
+
+    /** Whether a start costs anything at all: switched on, and something to pay. */
+    public boolean hasStartCost() {
+        return startCostEnabled && (startCostXp > 0 || startCostMoney > 0.0 || !startCostItems.isEmpty());
+    }
+
+    /** The experience a start costs, in points or levels as {@link #costsXpPoints()} says. */
+    public int getStartCostXp() {
+        return startCostXp;
+    }
+
+    public boolean costsXpPoints() {
+        return startCostXpPoints;
+    }
+
+    public double getStartCostMoney() {
+        return startCostMoney;
+    }
+
+    /** The items a start costs and how many of each, not to be changed. */
+    public Map<Material, Integer> getStartCostItems() {
+        return Collections.unmodifiableMap(startCostItems);
+    }
+
+    // ---------------------------------------------------- statistics, cam-log
+
+    public boolean isStatsEnabled() {
+        return statsEnabled;
+    }
+
+    public ListAccess getStatsViewOthers() {
+        return statsViewOthers;
+    }
+
+    public boolean isCamLogEnabled() {
+        return camLogEnabled;
+    }
+
+    public boolean logsCamToConsole() {
+        return camLogConsole;
+    }
+
+    public int getCamLogKeepDays() {
+        return camLogKeepDays;
     }
 
     // --------------------------------------------------------- cam-area, portals

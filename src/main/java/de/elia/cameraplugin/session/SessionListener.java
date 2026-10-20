@@ -25,15 +25,19 @@ public final class SessionListener implements Listener {
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         if (cameraPlayers.contains(event.getPlayer().getUniqueId())) {
-            plugin.exitCameraMode(event.getPlayer(), EndReason.SILENT);
+            plugin.exitCameraMode(event.getPlayer(), EndReason.QUIT);
         }
         plugin.getMovementGuard().forget(event.getPlayer().getUniqueId());
         plugin.getNoCollisionTeam().removePlayerFromNoCollisionTeam(event.getPlayer());
         plugin.getStartChecks().forget(event.getPlayer().getUniqueId());
+        // After the end above, which counted his last flight.
+        plugin.getBattery().onQuit(event.getPlayer());
+        plugin.getPlayerStore().unload(event.getPlayer().getUniqueId());
     }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
+        plugin.getBattery().onJoin(event.getPlayer());
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -67,6 +71,6 @@ public final class SessionListener implements Listener {
                 }
             }
         }
-        plugin.exitCameraMode(player, EndReason.SILENT);
+        plugin.exitCameraMode(player, EndReason.DEATH);
     }
 }

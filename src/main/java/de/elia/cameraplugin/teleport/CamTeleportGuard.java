@@ -134,7 +134,7 @@ public final class CamTeleportGuard implements Listener {
         Player camera = Bukkit.getPlayer(cameraId);
         if (camera != null) {
             messages.sendMessage(camera, "teleport-arrival-ended", "{player}", player.getName());
-            plugin.exitCameraMode(camera, EndReason.FORCED);
+            plugin.exitCameraMode(camera, EndReason.TELEPORT);
         }
     }
 

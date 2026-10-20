@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **691** - alle 691 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **750** - alle 750 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -174,6 +174,32 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   ist. Der Neustart beginnt ein neues `server.log`, das alte prüft der Test
   deshalb vorher auf Fehler des Plugins. Er steht ganz am Ende, weil der
   Neustart auch die Konfiguration des Testservers zurücksetzt.
+* **Welches Item der Bot hält, fragt der Test den Server**, mit
+  `/execute if data entity @s {Inventory:[...]}`. Die Itemliste von
+  mineflayer stammt aus 26.1 und nennt manche Items anders, einen Kopf etwa
+  „mutton“.
+* **Die Taste zum Tauschen der Hände** schickt die Bot-Aktion `swap_hands`
+  als Paket, wie der echte Client es auch mit leeren Händen tut. Die Taste
+  im Hinweis der Action-Bar kommt als Keybind; mineflayer schreibt ihn als
+  Namen, `key.swapOffhand`, und genau der wird geprüft: Die Konstante
+  `Keybinds.SWAP_HANDS` der Chat-Bibliothek heißt `key.swapHands`, und den
+  Namen kennt der Client nicht.
+* **Kein Test setzt den Spielmodus des Bots, um ihn zurückzustellen.**
+  `/gamemode` nimmt ihm dabei das Fliegen, und ohne Flug fällt er etwa im
+  Interaktionstest vom Happy Ghast. Wer den Spielmodus braucht, liest den,
+  den er gerade hat.
+* **Die Bossbars liest der Bot aus den `boss_bar`-Paketen**, den Titel als
+  Text des ganzen Titels wie bei den Tönen; die Bot-Aktion `bossbars` gibt
+  die zurück, die gerade zu sehen sind.
+* **Drei Tests melden den Bot ab und wieder an**: der Akku, der dazwischen
+  die Datei des Bots unter `playerdata/stats/` löscht - solange er online
+  ist, hält das Plugin sie im Speicher -, der Akku noch einmal für die
+  Bossbar nach dem Betreten, und die alte Absturzdatei, die nur beim
+  Betreten gelesen wird.
+* **Vom Happy Ghast herunter, bevor er weggeräumt wird.** Steht der Bot noch
+  auf ihm, fällt er sechs Blöcke tief, und `cam-safety` sperrt `/cam` fünf
+  Sekunden lang - im Interaktionstest fiel das nur nicht auf, solange der Bot
+  zufällig fliegen durfte. Der Test stellt ihn deshalb erst auf den Boden.
 * **Die Nachtsicht hängt am Licht am Auge**, das die Tageszeit mitrechnet:
   mittags 15, um Mitternacht unter freiem Himmel 4. Der Test stellt die Zeit
   dafür mit `/time set` und am Ende wieder auf Mittag.
@@ -1092,6 +1118,43 @@ kommt · wer zu einer Kamera in der Luft teleportiert wird, landet bei ihrem
 Körper, ihr Cam-Modus endet, und die Meldung nennt, wer kam · mit
 `teleports.plugin: false` und `teleports.command: false` bleibt der
 Kamera-Spieler im Cam-Modus, und wer zu ihm kommt, kommt bei der Kamera an ·
+voreingestellt ist `exit-key` an · zu Beginn steht der Hinweis auf die
+Taste in der Action-Bar, als Keybind `key.swapOffhand` · die Taste zum
+Tauschen der Hände beendet den Cam-Modus, und was der Spieler vorher hielt,
+ist danach in derselben Hand · Gegenprobe: ohne Cam-Modus tauscht sie die
+Hände · mit `exit-key: false` fehlt der Hinweis, und die Taste lässt den
+Cam-Modus laufen · `action-bar.on-duration: 100` hält die Startzeile fünf
+Sekunden, mit `0` kommt gleich der Abstand ·
+voreingestellt schreibt `cam-log` nichts · eingeschaltet steht der Start mit
+Name, UUID und dem Platz des Körpers in `logs/<Datum>.log`, das Ende mit
+Grund, Dauer, geflogener Strecke, weitestem Abstand und letztem Platz der
+Kamera · ein Ende durch `/cam reload` heißt `reload` · mit `console: true`
+stehen die Zeilen auch im Server-Log · `keep-days` löscht eine alte Datei,
+eine fremde bleibt · mit `flight-limit: battery` zeigt die Bossbar im Flug
+den Akku · ein Akku mit 5 Sekunden ist nach etwa 5 Sekunden leer und beendet
+den Cam-Modus, danach zeigt die Bossbar, wie er lädt, auch nach dem
+Neuanmelden · mit leerem Akku wird `/cam` abgelehnt, und die Meldung nennt
+die Zeit bis zum nächsten Start · `/cam stats` zeigt den Ladestand, und er
+steht in der Datei unter `playerdata/stats/` · mit schnellerem Laden geht
+`/cam` nach ein paar Sekunden wieder, und ist er voll, verschwindet die
+Bossbar · mit `show-bossbar-charging: false` gibt es nach dem Ende keine ·
+mit `flight-limit: time-limit` gibt es keinen Akku · ohne die Level und
+Items von `start-cost` startet der Cam-Modus nicht, und die Meldung nennt
+Kosten und was fehlt · mit allem startet er, die Meldung sagt, was es
+gekostet hat, und genau das ist weg · reicht es nur für einen Teil, wird
+nichts genommen · mit `xp-type: points` kostet er Punkte statt Level, und es
+bleibt genau der Rest · `money` ohne Vault kostet nichts und steht einmal in
+der Konsole · `/cam stats` zählt einen Flug, seine Strecke und den weitesten
+Abstand zum Körper, die Zahlen stehen in der Datei unter
+`playerdata/stats/` · ein unbekannter Name wird gemeldet, ein unbekanntes
+Wort nach `stats` sagt, wie es geht, die Konsole darf jeden ansehen ·
+`view-others: admin` lässt ohne op nur den eigenen Namen zu, `all` auch
+andere, `false` auch mit op niemanden · `/cam stats reset` setzt die eigene
+auf null · mit `statistics.enabled: false` sagt `/cam stats`, dass sie aus
+ist · die Datei der crash-protection liegt unter `playerdata/crash/`, und
+eine, die vor dem Update noch direkt unter `playerdata/` lag, gibt dem
+Spieler beim Betreten trotzdem alles zurück: er steht an der Stelle aus der
+Datei, sie ist weg, und Spielmodus und Flug sind die aus der Datei ·
 Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im

@@ -129,7 +129,7 @@ public final class DamageMirror implements Listener {
         // the mannequin standing in it.
         if (owner.isDead()) {
             event.setCancelled(true);
-            plugin.exitCameraMode(owner, EndReason.SILENT);
+            plugin.exitCameraMode(owner, EndReason.DEATH);
             return;
         }
 

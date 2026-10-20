@@ -4,11 +4,13 @@ main: de.elia.cameraplugin.camfly2.CameraPlugin
 api-version: 26.2
 author: Rexminecraft343
 description: A plugin for a camera mode with an armour stand or mannequin body
+# Only for start-cost.money, found through Vault when it is there.
+softdepend: [Vault]
 
 commands:
   cam:
     description: Enables or disables camera mode
-    usage: /<command> [list|reload]
+    usage: /<command> [list|reload|stats [reset|player <name>]]
     permission: camplugin.use
     permission-message: "You do not have permission for this command.!"
 
@@ -18,4 +20,7 @@ permissions:
     default: true
   camplugin.list:
     description: Allows /cam list while cam-list.access is admin
+    default: op
+  camplugin.stats.others:
+    description: Allows /cam stats player <name> while statistics.view-others is admin
     default: op

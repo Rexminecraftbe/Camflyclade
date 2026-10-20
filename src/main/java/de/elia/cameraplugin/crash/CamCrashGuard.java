@@ -42,7 +42,7 @@ import java.util.logging.Level;
  * the camera.</p>
  *
  * <p>So when camera mode starts, the same things go into a file of their own,
- * {@code playerdata/<uuid>.yml} in the folder of the plugin, and the file is
+ * {@code playerdata/crash/<uuid>.yml} in the folder of the plugin, and the file is
  * deleted when it ends. A file that is still there when he joins means camera
  * mode never ended: he gets everything back from it and stands at his body
  * again. What his body left behind is cleared away by
@@ -55,8 +55,20 @@ import java.util.logging.Level;
  */
 public final class CamCrashGuard implements Listener {
 
-    /** The folder of the files, inside the folder of the plugin. */
-    private static final String FOLDER = "playerdata";
+    /**
+     * The folder of the files, inside the folder of the plugin: under
+     * {@code playerdata}, next to the statistics of
+     * {@link de.elia.cameraplugin.storage.PlayerStore}.
+     */
+    private static final String FOLDER = "crash";
+
+    /**
+     * The folder of everything the plugin keeps per player. The files lay
+     * right in it before the statistics got a folder next to them, and are
+     * still looked for there: a crash from before the update must not be
+     * lost.
+     */
+    private static final String PLAYER_FOLDER = "playerdata";
 
     /** Which layout a file has, for a later version that changes it. */
     private static final int FORMAT = 1;
@@ -80,7 +92,21 @@ public final class CamCrashGuard implements Listener {
     }
 
     private Path file(UUID playerId) {
-        return plugin.getDataFolder().toPath().resolve(FOLDER).resolve(playerId + ".yml");
+        return plugin.getDataFolder().toPath().resolve(PLAYER_FOLDER).resolve(FOLDER).resolve(playerId + ".yml");
+    }
+
+    private Path oldFile(UUID playerId) {
+        return plugin.getDataFolder().toPath().resolve(PLAYER_FOLDER).resolve(playerId + ".yml");
+    }
+
+    /** The file a player left behind, in the folder of now or of before, or {@code null} for none. */
+    private Path leftBehind(UUID playerId) {
+        Path file = file(playerId);
+        if (Files.exists(file)) {
+            return file;
+        }
+        Path old = oldFile(playerId);
+        return Files.exists(old) ? old : null;
     }
 
     /**
@@ -154,7 +180,7 @@ public final class CamCrashGuard implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        if (!Files.exists(file(player.getUniqueId()))) {
+        if (leftBehind(player.getUniqueId()) == null) {
             return;
         }
         Bukkit.getScheduler().runTask(plugin, () -> {
@@ -170,7 +196,7 @@ public final class CamCrashGuard implements Listener {
      */
     public void restoreOnline() {
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (Files.exists(file(player.getUniqueId()))) {
+            if (leftBehind(player.getUniqueId()) != null) {
                 restore(player);
             }
         }
@@ -189,7 +215,10 @@ public final class CamCrashGuard implements Listener {
      * nothing in it is lost and somebody can still look into it.</p>
      */
     private void restore(Player player) {
-        Path path = file(player.getUniqueId());
+        Path path = leftBehind(player.getUniqueId());
+        if (path == null) {
+            return;
+        }
         YamlConfiguration file = new YamlConfiguration();
         try {
             file.loadFromString(Files.readString(path, StandardCharsets.UTF_8));

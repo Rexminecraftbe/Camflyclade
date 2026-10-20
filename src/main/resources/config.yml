@@ -12,12 +12,16 @@ action-bar:
   enabled: true
   # Was dort steht, solange der Cam-Modus läuft:
   #   distance = wie weit der Körper weg ist und in welche Richtung, z. B. "Body: 42 blocks ↖"
-  #              (Text: actionbar-distance in der Sprachdatei; zu Beginn steht kurz actionbar-on)
+  #              (Text: actionbar-distance in der Sprachdatei; zu Beginn steht für on-duration actionbar-on)
   #              Der Pfeil zeigt von der Blickrichtung aus. ▲/▼ = der Körper liegt steiler als 60° über/unter dir,
   #              ● = du bist höchstens 2 Blöcke von ihm weg.
   #              In einer anderen Welt zeigt er zum Portal, aus dem man kam (actionbar-distance-portal).
-  #   text     = der feste Text actionbar-on, wie bisher
+  #   text     = der feste Text actionbar-on, die ganze Zeit
+  # actionbar-on trägt den Hinweis auf die Taste zum Beenden (exit-key), Text: actionbar-hint.
   display: distance
+  # Wie lange zu Beginn actionbar-on mit dem Hinweis steht, bevor der Abstand kommt (nur bei distance),
+  # in Ticks: 20 = 1 Sekunde, 0 = gleich der Abstand
+  on-duration: 60
   # Wie lange actionbar-off gesendet wird, in Ticks
   off-duration: 1
 
@@ -234,7 +238,7 @@ sounds:
     sound: entity.illusioner.mirror_move
     volume: 1.0
     pitch: 1.0
-  # Beim Ende von außen: /cam reload, Zeitlimit abgelaufen, Teleport
+  # Beim Ende von außen: /cam reload, Zeitlimit abgelaufen, Akku leer, Teleport
   # (beim Tod, beim Verlassen des Servers und beim Herunterfahren gibt es keinen Ton)
   end-forced:
     enabled: true
@@ -250,7 +254,7 @@ sounds:
     pitch: 0.5
 
 # Schutz bei einem Absturz. Was der Cam-Modus dem Spieler abnimmt (Inventar, Spielmodus, Effekte, Flug), steht,
-# solange der Cam-Modus läuft, auch in plugins/CamFly/playerdata/<UUID>.yml. Beim Ende wird die Datei gelöscht.
+# solange der Cam-Modus läuft, auch in plugins/CamFly/playerdata/crash/<UUID>.yml. Beim Ende wird die Datei gelöscht.
 # Stürzt der Server ab, ist sie beim nächsten Betreten noch da: Der Spieler bekommt alles zurück und steht wieder
 # bei seinem Körper. Kostet eine kleine Datei beim Start und ein Löschen beim Ende, im Cam-Modus selbst nichts.
 # Dateien, die schon da sind, werden auch mit false noch zurückgegeben.
@@ -265,10 +269,41 @@ cam-list:
   #   false = kein Spieler
   access: admin
 
-# Zeitlimit für den Cam-Modus
-time-limit:
+# Statistik: wie oft jemand im Cam-Modus war, wie lange insgesamt und am längsten,
+# wie weit die Kamera geflogen ist und wie weit sie höchstens vom Körper weg war.
+#   /cam stats                 = die eigene
+#   /cam stats reset           = die eigene auf null setzen (der Akku bleibt, wie er ist)
+#   /cam stats player <Name>   = die eines anderen (wer das darf, sagt view-others)
+# Gezählt wird ein Cam-Modus, wenn er endet. Gespeichert wird in plugins/CamFly/playerdata/stats/<UUID>.yml,
+# zusammen mit dem Ladestand des Akkus.
+statistics:
+  enabled: true
+  # Wer die Statistik anderer mit /cam stats player <Name> sehen darf (die Konsole immer):
+  #   admin = Operatoren und wer das Recht camplugin.stats.others hat
+  #   all   = jeder, der /cam benutzen darf
+  #   false = kein Spieler
+  view-others: admin
+
+# Protokoll: Jeder Start und jedes Ende des Cam-Modus kommt in eine Datei, eine pro Tag:
+# plugins/CamFly/logs/<Datum>.log. Darin steht, wer, wann, wo der Körper stand, warum der Cam-Modus
+# endete, wie lange er lief, wie weit die Kamera geflogen ist und wo sie zuletzt war -
+# so lässt sich nachsehen, wer wo herumgeflogen ist.
+cam-log:
   enabled: false
-  # Wartezeit nach dem Beenden (auch ohne Zeitlimit)
+  # Dieselben Zeilen auch in die Konsole schreiben
+  console: false
+  # Wie viele Tage die Dateien bleiben, ältere werden gelöscht (0 = alle behalten)
+  keep-days: 30
+
+# Wie lange ein Cam-Modus laufen darf - mit Zeitlimit oder mit Akku, nur eins von beiden:
+#   time-limit = jeder Flug dauert höchstens time-limit.duration-seconds
+#   battery    = ein Akku, der sich im Flug leert und danach wieder lädt (Abschnitt battery)
+#   false      = so lange er will
+flight-limit: false
+
+# Zeitlimit für den Cam-Modus (bei flight-limit: time-limit)
+time-limit:
+  # Wartezeit nach dem Beenden (geht bei jedem flight-limit, auch bei false)
   cooldowns-enabled: false
   # Maximale Dauer in Sekunden
   duration-seconds: 300
@@ -278,6 +313,47 @@ time-limit:
   show-bossbar: true
   # BLUE, GREEN, PINK, PURPLE, RED, WHITE oder YELLOW
   bossbar-color: BLUE
+
+# Akku (bei flight-limit: battery): Im Cam-Modus läuft er leer, außerhalb lädt er sich wieder auf.
+# Ist er leer, endet der Cam-Modus. Der Ladestand wird in plugins/CamFly/playerdata/stats/<UUID>.yml gespeichert,
+# zu sehen ist er mit /cam stats.
+battery:
+  # Ein voller Akku, in Sekunden Flug
+  capacity: 300
+  # Wie viele Sekunden Flug pro Sekunde außerhalb des Cam-Modus zurückkommen
+  # (0.5 = ein leerer Akku mit 300 Sekunden ist nach 10 Minuten wieder voll; mindestens 0.01)
+  recharge-per-second: 0.5
+  # So viele Sekunden Flug braucht ein Start mindestens (höchstens capacity)
+  min-start: 10
+  # Auch laden, während der Spieler nicht auf dem Server ist (false = nur, solange er online ist)
+  recharge-offline: true
+  # Ladestand als Bossbar im Cam-Modus anzeigen (Text: battery-bossbar in der Sprachdatei)
+  show-bossbar: true
+  # Die Bossbar nach dem Ende weiter zeigen, solange der Akku lädt, bis er wieder voll ist
+  # (auch nach dem Betreten des Servers; Text: battery-bossbar-charging)
+  show-bossbar-charging: true
+  # BLUE, GREEN, PINK, PURPLE, RED, WHITE oder YELLOW
+  bossbar-color: GREEN
+
+# Was ein Start des Cam-Modus kostet. Bezahlt wird erst, wenn sonst nichts mehr gegen den Start spricht.
+# Fehlt etwas, wird gar nichts genommen und der Spieler erfährt, was ihm fehlt.
+start-cost:
+  enabled: false
+  # Erfahrung pro Start (0 = keine)
+  xp: 0
+  # Worin xp zählt:
+  #   levels = ganze Level
+  #   points = Erfahrungspunkte (wie bei /xp add <Spieler> <Zahl> points)
+  xp-type: levels
+  # Geld pro Start (0 = keins). Braucht Vault und ein Economy-Plugin, sonst kostet der Start kein Geld
+  # (das steht dann einmal in der Konsole).
+  money: 0.0
+  # Items pro Start, je eine Zeile Name: Anzahl, z. B.
+  #   items:
+  #     ender_eye: 1
+  #     paper: 2
+  # Gezählt wird, was der Spieler in Hotbar, Inventar und Zweithand trägt, nicht die Rüstung. {} = keine Items
+  items: {}
 
 # Partikel um den Spieler im Cam-Modus (er selbst sieht sie nicht, nur andere)
 camera-particles:
@@ -308,6 +384,12 @@ fireguard:
 # Kamera-Kopf auf dem Spieler im Cam-Modus (auch bei unsichtbarem Spieler zu sehen)
 camera-head:
   enabled: false
+
+# Den Cam-Modus mit der Taste zum Tauschen der Hände beenden (voreingestellt F), wie mit /cam.
+# Geht mit leeren Händen. Hat ein Spieler die Taste anders belegt, gilt seine - und der Hinweis
+# in der Action-Bar nennt auch seine.
+exit-key:
+  enabled: true
 
 # Kein Cam-Modus direkt nach erlittenem Schaden
 cam-safety:

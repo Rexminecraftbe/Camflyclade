@@ -212,6 +212,8 @@ public final class CameraMode {
         plugin.getVisibility().updateVisibilityForAll();
         plugin.getCamModeObjective().setScore(player, 1);
         plugin.getTimeLimit().startTimeLimit(player);
+        plugin.getBattery().startFor(player);
+        plugin.getCamLog().started(player, cameraData);
 
         if (settings.isCameraHeadEnabled()) {
             new BukkitRunnable() {
@@ -237,13 +239,13 @@ public final class CameraMode {
      * he is.
      */
     public void exitCameraModeForTeleport(Player player) {
-        exitCameraMode(player, false, EndReason.FORCED);
+        exitCameraMode(player, false, EndReason.TELEPORT);
     }
 
     /**
      * @param toBody whether he is put back where his body stands; only not
      *               when a teleport carries him off anyway
-     * @param reason why it ends, which picks the sound
+     * @param reason why it ends, which picks the sound and goes into the log
      */
     private void exitCameraMode(Player player, boolean toBody, EndReason reason) {
         CameraData cameraData = cameraPlayers.get(player.getUniqueId());
@@ -260,14 +262,18 @@ public final class CameraMode {
             plugin.getBorderWall().stopFor(player);
             plugin.getFlightSpeed().stopFor(player);
             plugin.getNightVision().stopFor(player);
+            plugin.getBattery().stopFor(player);
             team.updateViewerTeam(player);
             plugin.getCamModeObjective().setScore(player, 0);
             return;
         }
         plugin.getTimeLimit().cancelTimeLimit(player);
+        plugin.getBattery().stopFor(player);
         plugin.getMobTargeting().stopMobTargeting(player);
         LivingEntity body = cameraData.getBody();
         Mannequin hitbox = cameraData.getHitbox();
+        // For the log, before he is put back at his body.
+        Location cameraAt = player.getLocation();
 
         // The name comes off before the teleport: while it sits on the
         // player as a passenger, Spigot turns the teleport down.
@@ -360,6 +366,10 @@ public final class CameraMode {
         // Only now that he has everything back: until here the file is the
         // one thing that would give it to him after a crash.
         plugin.getCrashGuard().delete(player);
+        plugin.getStats().record(player, cameraData);
+        plugin.getCamLog().ended(player, cameraData, reason, cameraAt);
+        // One write for both, the battery left over and the flight counted.
+        plugin.getPlayerStore().save(player.getUniqueId());
         if (!plugin.isShuttingDown()) {
             plugin.getTimeLimit().startCooldown(player);
             // Last, at his body: the sound says he is back, and why.
