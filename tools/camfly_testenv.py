@@ -960,13 +960,6 @@ def prepare_server_files(env):
     text, n = replace_option(text, "command", "false", "teleports")
     if n != 1:
         Log.warn("teleports.command nicht in der Konfiguration gefunden")
-    # Das Kamera-Item aus. Mit ihm in der Hand beendet jeder Rechtsklick den
-    # Cam-Modus, auch der auf einen Hebel in den Interaktionstests, und die
-    # Taschen waeren nicht leer. Nur kamera_item_checks schaltet es fuer sich
-    # ein.
-    text, n = replace_option(text, "enabled", "false", "camera-item")
-    if n != 1:
-        Log.warn("camera-item.enabled nicht in der Konfiguration gefunden")
     data_dir = plugins / "CamFly"
     data_dir.mkdir(exist_ok=True)
     (data_dir / "config.yml").write_text(text, encoding="utf-8")
@@ -1592,12 +1585,11 @@ async function handle(cmd) {
       return { slot: bot.quickBarSlot };
     case 'bossbars':
       return { bars: Object.values(bossbars) };
-    case 'use_item':
-      // Rechtsklick in die Luft mit dem, was er gerade in der Hand haelt.
-      bot.activateItem(!!cmd.offhand);
-      await new Promise((r) => setTimeout(r, 100));
-      try { bot.deactivateItem(); } catch (e) { /* egal */ }
-      return { used: true };
+    case 'swap_hands':
+      // Die Taste zum Tauschen der Haende (F). Der echte Client schickt sie
+      // auch mit leeren Haenden, als Paket ohne Ort.
+      bot._client.write('block_dig', { status: 6, location: { x: 0, y: 0, z: 0 }, face: 0, sequence: 0 });
+      return { swapped: true };
     case 'window':
       return { open: !!bot.currentWindow,
                title: bot.currentWindow ? String(bot.currentWindow.title || '') : null };
@@ -3011,7 +3003,7 @@ def absturz_checks(env, bot):
 
 
 # ---------------------------------------------------------------------------
-# Kamera-Item, Protokoll, Akku, Startkosten und Statistik
+# Taste zum Beenden, Protokoll, Akku, Startkosten und Statistik
 # ---------------------------------------------------------------------------
 
 def befehl(bot, text, warten=1.5):
@@ -3051,78 +3043,91 @@ def spielerdatei(env):
     return None
 
 
-def kamera_item_checks(env, bot):
-    """camera-item: das Item, mit dem der Cam-Modus endet.
+def taste_checks(env, bot):
+    """exit-key, der Hinweis darauf in der Action-Bar und action-bar.on-duration.
 
-    Voreingestellt ist es an, mit einer Barriere - nachgesehen in der
-    ausgelieferten config.yml, die Testkonfiguration schaltet es fuer die
-    anderen Abschnitte aus. Beim Start liegt die Barriere in dem Platz der
-    Hotbar, den der Bot haelt, und sie bleibt, waehrend der Sweep einen Stein
-    abraeumt. Ein Rechtsklick damit beendet den Cam-Modus, danach ist sie
-    weg, ebenso nach /cam. Mit material: clock ist es eine Uhr, ausgeschaltet
-    gibt es keins. Eine Barriere, die nach einem Absturz uebrig ist, nimmt
-    ihm der naechste Rechtsklick ausserhalb des Cam-Modus ab.
+    Voreingestellt ist exit-key an - nachgesehen in der ausgelieferten
+    config.yml. Zu Beginn steht in der Action-Bar "Cam mode activated" mit
+    dem Hinweis "to leave". Die Taste zum Tauschen der Haende beendet den
+    Cam-Modus, und der Stein, den er vorher hielt, ist danach wieder in der
+    Hand und nicht in der anderen. Gegenprobe: ohne Cam-Modus tauscht
+    dieselbe Taste die Haende wie immer. Mit exit-key: false fehlt der
+    Hinweis, und die Taste laesst den Cam-Modus laufen. on-duration: 100
+    haelt die Startzeile fuenf Sekunden, ehe der Abstand kommt; mit 0 kommt
+    gleich der Abstand.
+
+    Ob der Cam-Modus laeuft, sagt der Spielmodus: Er laeuft im
+    Abenteuermodus, der Bot steht sonst in dem, in dem er ankam - gesetzt
+    wird keiner, das nimmt ihm das Fliegen, auf das spaetere Abschnitte
+    zaehlen.
     """
-    def item_da(art, platz=None):
-        slot = f"Slot:{platz}b," if platz is not None else ""
-        return nbt_frage(bot, "@s", f'{{Inventory:[{{{slot}id:"minecraft:{art}"}}]}}')
+    def stein_in_der_hand():
+        return nbt_frage(bot, "@s", '{Inventory:[{Slot:0b,id:"minecraft:stone"}]}')
+
+    def stein_in_der_anderen():
+        return (nbt_frage(bot, "@s", '{equipment:{offhand:{id:"minecraft:stone"}}}')
+                or nbt_frage(bot, "@s", '{Inventory:[{Slot:-106b,id:"minecraft:stone"}]}'))
+
+    def taste():
+        since = bot.mark()
+        bot.call("swap_hands")
+        time.sleep(1.5)
+        return zeilen_seit(bot, since)
 
     quelle = (env.repo / "src" / "main" / "resources" / "config.yml").read_text(encoding="utf-8")
-    block = re.search(r"(?ms)^camera-item:\n(.*?)(?=^\S)", quelle)
-    FIND.test("camera-item ist voreingestellt an, mit einer Barriere",
-              block is not None and re.search(r"(?m)^\s*enabled:\s*true\s*$", block.group(1)) is not None
-              and re.search(r"(?m)^\s*material:\s*barrier\s*$", block.group(1)) is not None, "")
+    FIND.test("exit-key ist voreingestellt an",
+              re.search(r"(?m)^exit-key:\n\s+enabled:\s*true\s*$", quelle) is not None, "")
     try:
         cam_off(bot)
-        bot.chat("/clear @s")
-        bot.call("hotbar", slot=2)
-        time.sleep(0.5)
-        set_option(env, "enabled", "true", "camera-item")
-        if not FIND.test("Cam-Modus fuer das Kamera-Item gestartet", cam_on(bot), ""):
-            return
-        time.sleep(0.5)
-        FIND.test("camera-item: beim Start liegt die Barriere in dem Platz, den er haelt", item_da("barrier", 2), "")
-        bot.chat(f"/give {BOT_NAME} minecraft:stone 1")
-        time.sleep(1.2)
-        FIND.test("camera-item: der Sweep raeumt einen Stein ab und laesst die Barriere",
-                  item_da("barrier", 2) and not item_da("stone"), "")
-        since = bot.mark()
-        bot.call("use_item")
-        time.sleep(2)
-        z = zeilen_seit(bot, since)
-        FIND.test("camera-item: ein Rechtsklick damit beendet den Cam-Modus", gesagt(z, r"[Cc]am mode ended"), zeige(z))
-        FIND.test("camera-item: danach ist die Barriere weg", not item_da("barrier"), "")
-        cam_on(bot)
-        cam_off(bot)
-        FIND.test("camera-item: auch nach /cam ist sie weg", not item_da("barrier"), "")
-
-        set_option(env, "material", "clock", "camera-item")
-        cam_on(bot)
-        FIND.test("camera-item.material: clock - es ist eine Uhr", item_da("clock", 2) and not item_da("barrier"), "")
-        cam_off(bot)
-
-        set_option(env, "enabled", "false", "camera-item")
-        cam_on(bot)
-        FIND.test("camera-item.enabled: false - die Hand bleibt leer", not item_da("clock") and not item_da("barrier"), "")
-        cam_off(bot)
-
-        # Wie nach einem Absturz ohne crash-protection: Die Barriere mit der
-        # Marke des Plugins liegt ausserhalb des Cam-Modus in der Hand.
-        # /give legt sie in den ersten freien Platz, den haelt er dafuer.
+        modus = next((m for m in ("survival", "creative") if spielmodus_ist(bot, m)), "survival")
         bot.chat("/clear @s")
         bot.call("hotbar", slot=0)
-        bot.chat(f'/give {BOT_NAME} minecraft:barrier[minecraft:custom_data={{PublicBukkitValues:'
-                 f'{{"camfly:camera_item":1b}}}}] 1')
+        bot.chat(f"/give {BOT_NAME} minecraft:stone 1")
         time.sleep(1)
-        if FIND.test("Eine uebrige Barriere mit der Marke liegt in der Hand", item_da("barrier", 0), ""):
-            bot.call("use_item")
-            time.sleep(1)
-            FIND.test("camera-item: eine uebrige Barriere nimmt ihm der Rechtsklick ab", not item_da("barrier"), "")
+        taste()
+        FIND.test("Gegenprobe: ohne Cam-Modus tauscht die Taste die Haende",
+                  stein_in_der_anderen() and not stein_in_der_hand(), "")
+        taste()
+
+        z = befehl(bot, "/cam", warten=2)
+        # mineflayer schreibt die Taste so, wie sie im Paket steht: als Namen,
+        # den der echte Client durch die belegte Taste ersetzt.
+        FIND.test("exit-key: zu Beginn steht der Hinweis auf die Taste in der Action-Bar",
+                  gesagt(z, r"[Cc]am mode activated") and gesagt(z, r"key\.swapOffhand to leave"), zeige(z))
+        z = taste()
+        FIND.test("exit-key: die Taste beendet den Cam-Modus",
+                  gesagt(z, r"[Cc]am mode ended") and spielmodus_ist(bot, modus), zeige(z))
+        FIND.test("exit-key: der Stein ist danach in der Hand und nicht in der anderen",
+                  stein_in_der_hand() and not stein_in_der_anderen(), "")
+
+        set_option(env, "enabled", "false", "exit-key")
+        z = befehl(bot, "/cam", warten=2)
+        FIND.test("exit-key: false - kein Hinweis in der Action-Bar",
+                  gesagt(z, r"[Cc]am mode activated") and not gesagt(z, r"to leave"), zeige(z))
+        taste()
+        FIND.test("exit-key: false - die Taste laesst den Cam-Modus laufen", spielmodus_ist(bot, "adventure"), "")
+        cam_off(bot)
+        set_option(env, "enabled", "true", "exit-key")
+
+        set_option(env, "on-duration", "100", "action-bar")
+        z = befehl(bot, "/cam", warten=3.5)
+        FIND.test("action-bar.on-duration: 100 - nach 3,5 Sekunden steht noch die Startzeile",
+                  gesagt(z, r"[Cc]am mode activated") and not abstaende(z), zeige(z))
+        since = bot.mark()
+        time.sleep(2.5)
+        z = zeilen_seit(bot, since)
+        FIND.test("action-bar.on-duration: 100 - nach 6 Sekunden steht der Abstand",
+                  bool(abstaende(z)), zeige(z))
+        cam_off(bot)
+
+        set_option(env, "on-duration", "0", "action-bar")
+        z = befehl(bot, "/cam", warten=2)
+        FIND.test("action-bar.on-duration: 0 - gleich der Abstand, ohne Startzeile",
+                  bool(abstaende(z)) and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
     finally:
         cam_off(bot)
         bot.chat("/clear @s")
-        bot.call("hotbar", slot=0)
-        set_options(env, [("enabled", "false", "camera-item"), ("material", "barrier", "camera-item")])
+        set_options(env, [("enabled", "true", "exit-key"), ("on-duration", "60", "action-bar")])
 
 
 def protokoll_checks(env, bot):
@@ -8329,8 +8334,8 @@ def step_tests(env):
         nachtsicht_checks(env, bot)
         toene_checks(env, bot)
 
-        # --- Kamera-Item, Protokoll, Akku, Startkosten und Statistik ---
-        kamera_item_checks(env, bot)
+        # --- Taste zum Beenden, Protokoll, Akku, Startkosten und Statistik ---
+        taste_checks(env, bot)
         protokoll_checks(env, bot)
         akku_checks(env, bot)
         kosten_checks(env, bot)

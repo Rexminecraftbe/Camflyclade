@@ -175,6 +175,8 @@ public final class CamSettings {
 
     private boolean actionBarEnabled;
     private int actionBarOffDuration;
+    /** How long {@code actionbar-on} stands at the start before the distance, in ticks, {@code action-bar.on-duration}. */
+    private int actionBarOnDuration;
     /** What the action bar shows while camera mode runs, {@code action-bar.display}. */
     private ActionBarDisplay actionBarDisplay;
 
@@ -234,10 +236,8 @@ public final class CamSettings {
     private boolean camSafetyEnabled;
     private int camSafetyDelay;
 
-    /** Whether camera mode hands out the item that ends it, {@code camera-item.enabled}. */
-    private boolean cameraItemEnabled;
-    /** What the camera item is made of, {@code camera-item.material}. */
-    private Material cameraItemMaterial;
+    /** Whether the key that swaps the hands ends camera mode, {@code exit-key.enabled}. */
+    private boolean exitKeyEnabled;
 
     /** A full battery, in seconds of flight. */
     private int batteryCapacity;
@@ -380,6 +380,7 @@ public final class CamSettings {
         particleSpread = config.getDouble("camera-particles.spread", 0.0, 0.0);
         actionBarEnabled = config.getBoolean("action-bar.enabled", true);
         actionBarOffDuration = config.getInt("action-bar.off-duration", 10, 0);
+        actionBarOnDuration = config.getInt("action-bar.on-duration", 60, 0);
         String display = config.getChoice("action-bar.display", "distance", "distance", "text")
                 .toLowerCase(Locale.ROOT);
         actionBarDisplay = display.equals("text") ? ActionBarDisplay.TEXT : ActionBarDisplay.DISTANCE;
@@ -416,8 +417,7 @@ public final class CamSettings {
         bossbarColor = config.getEnum("time-limit.bossbar-color", BarColor.class, BarColor.BLUE);
         camSafetyEnabled = config.getBoolean("cam-safety.enabled", true);
         camSafetyDelay = config.getInt("cam-safety.delay", 5, 0);
-        cameraItemEnabled = config.getBoolean("camera-item.enabled", true);
-        cameraItemMaterial = readCameraItemMaterial(config);
+        exitKeyEnabled = config.getBoolean("exit-key.enabled", true);
         readBattery(config);
         readStartCost(config);
         statsEnabled = config.getBoolean("statistics.enabled", true);
@@ -480,21 +480,6 @@ public final class CamSettings {
             case "false" -> ListAccess.OFF;
             default -> ListAccess.ADMIN;
         };
-    }
-
-    /**
-     * Reads {@code camera-item.material}: the name of an item, with or
-     * without {@code minecraft:} in front, capitals and spaces not counting.
-     */
-    private Material readCameraItemMaterial(ConfigReader config) {
-        String raw = config.getString("camera-item.material", "barrier");
-        Material material = parseItem(raw.trim().toLowerCase(Locale.ROOT).replace(' ', '_'));
-        if (material == null) {
-            config.warnUnknownValue("camera-item.material", raw, messages.configMessage("config-allowed-items"),
-                    "barrier");
-            return Material.BARRIER;
-        }
-        return material;
     }
 
     /**
@@ -864,6 +849,10 @@ public final class CamSettings {
         return actionBarOffDuration;
     }
 
+    public int getActionBarOnDuration() {
+        return actionBarOnDuration;
+    }
+
     public ActionBarDisplay getActionBarDisplay() {
         return actionBarDisplay;
     }
@@ -967,14 +956,10 @@ public final class CamSettings {
         return camSafetyDelay;
     }
 
-    // ----------------------------------------------------------- camera-item
+    // --------------------------------------------------------------- exit-key
 
-    public boolean isCameraItemEnabled() {
-        return cameraItemEnabled;
-    }
-
-    public Material getCameraItemMaterial() {
-        return cameraItemMaterial;
+    public boolean isExitKeyEnabled() {
+        return exitKeyEnabled;
     }
 
     // ---------------------------------------------------------------- battery

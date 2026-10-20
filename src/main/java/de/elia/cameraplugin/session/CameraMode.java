@@ -86,8 +86,6 @@ public final class CameraMode {
         // *** Empty inventory and armour ***
         playerInventory.clear();
         player.updateInventory();
-        // The one thing he holds while he flies, and with it he can leave.
-        plugin.getCameraItem().handTo(player);
 
         Location playerLocation = player.getLocation();
 

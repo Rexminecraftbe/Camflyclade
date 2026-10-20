@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **758** - alle 758 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **750** - alle 750 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -177,11 +177,17 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
 * **Welches Item der Bot hält, fragt der Test den Server**, mit
   `/execute if data entity @s {Inventory:[...]}`. Die Itemliste von
   mineflayer stammt aus 26.1 und nennt manche Items anders, einen Kopf etwa
-  „mutton“. Den Rechtsklick in die Luft schickt die Bot-Aktion `use_item`.
-* **`camera-item.enabled: false`** steht in der Testkonfiguration. Mit dem
-  Item in der Hand beendet jeder Rechtsklick den Cam-Modus, auch der auf
-  einen Hebel in den Interaktionstests, und die Taschen wären nicht leer. Nur
-  der Test des Kamera-Items schaltet es für sich ein.
+  „mutton“.
+* **Die Taste zum Tauschen der Hände** schickt die Bot-Aktion `swap_hands`
+  als Paket, wie der echte Client es auch mit leeren Händen tut. Die Taste
+  im Hinweis der Action-Bar kommt als Keybind; mineflayer schreibt ihn als
+  Namen, `key.swapOffhand`, und genau der wird geprüft: Die Konstante
+  `Keybinds.SWAP_HANDS` der Chat-Bibliothek heißt `key.swapHands`, und den
+  Namen kennt der Client nicht.
+* **Kein Test setzt den Spielmodus des Bots, um ihn zurückzustellen.**
+  `/gamemode` nimmt ihm dabei das Fliegen, und ohne Flug fällt er etwa im
+  Interaktionstest vom Happy Ghast. Wer den Spielmodus braucht, liest den,
+  den er gerade hat.
 * **Die Bossbars liest der Bot aus den `boss_bar`-Paketen**, den Titel als
   Text des ganzen Titels wie bei den Tönen; die Bot-Aktion `bossbars` gibt
   die zurück, die gerade zu sehen sind.
@@ -1112,12 +1118,13 @@ kommt · wer zu einer Kamera in der Luft teleportiert wird, landet bei ihrem
 Körper, ihr Cam-Modus endet, und die Meldung nennt, wer kam · mit
 `teleports.plugin: false` und `teleports.command: false` bleibt der
 Kamera-Spieler im Cam-Modus, und wer zu ihm kommt, kommt bei der Kamera an ·
-voreingestellt ist das Kamera-Item an, mit einer Barriere · beim Start
-liegt sie in dem Platz der Hotbar, den der Spieler hält, und bleibt dort,
-während der Sweep einen Stein abräumt · ein Rechtsklick damit beendet den
-Cam-Modus, danach ist sie weg, ebenso nach `/cam` · mit `material: clock`
-ist es eine Uhr, ausgeschaltet gibt es keins · eine übrige Barriere mit der
-Marke des Plugins nimmt ihm der Rechtsklick außerhalb des Cam-Modus ab ·
+voreingestellt ist `exit-key` an · zu Beginn steht der Hinweis auf die
+Taste in der Action-Bar, als Keybind `key.swapOffhand` · die Taste zum
+Tauschen der Hände beendet den Cam-Modus, und was der Spieler vorher hielt,
+ist danach in derselben Hand · Gegenprobe: ohne Cam-Modus tauscht sie die
+Hände · mit `exit-key: false` fehlt der Hinweis, und die Taste lässt den
+Cam-Modus laufen · `action-bar.on-duration: 100` hält die Startzeile fünf
+Sekunden, mit `0` kommt gleich der Abstand ·
 voreingestellt schreibt `cam-log` nichts · eingeschaltet steht der Start mit
 Name, UUID und dem Platz des Körpers in `logs/<Datum>.log`, das Ende mit
 Grund, Dauer, geflogener Strecke, weitestem Abstand und letztem Platz der

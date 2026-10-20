@@ -22,7 +22,6 @@ import de.elia.cameraplugin.interaction.CamInteractionGuard;
 import de.elia.cameraplugin.interaction.CamKnockbackGuard;
 import de.elia.cameraplugin.inventory.CamInventoryGuard;
 import de.elia.cameraplugin.inventory.CamInventoryLock;
-import de.elia.cameraplugin.item.CameraItem;
 import de.elia.cameraplugin.list.CamList;
 import de.elia.cameraplugin.log.CamLog;
 import de.elia.cameraplugin.log.ConsoleLog;
@@ -40,6 +39,7 @@ import de.elia.cameraplugin.session.CameraHead;
 import de.elia.cameraplugin.session.CameraMode;
 import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.session.EndReason;
+import de.elia.cameraplugin.session.ExitKey;
 import de.elia.cameraplugin.session.SessionListener;
 import de.elia.cameraplugin.session.SessionTracker;
 import de.elia.cameraplugin.speed.CamFlightSpeed;
@@ -97,7 +97,6 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamBattery battery = new CamBattery(this, playerStore);
     private final CamStats stats = new CamStats(settings, messages, playerStore, battery);
     private final CamLog camLog = new CamLog(this, settings, log);
-    private final CameraItem cameraItem = new CameraItem(this);
     private final StartCost startCost = new StartCost(settings, messages, log);
     private final MobTargeting mobTargeting = new MobTargeting(this, settings, cameraPlayers);
     private final MobGaze mobGaze = new MobGaze(this, settings, cameraPlayers);
@@ -144,7 +143,7 @@ public final class CameraPlugin extends JavaPlugin {
         camFireGuard = new CamFireGuard(this);
         camGhastGuard = new CamGhastGuard(this);
         camSulfurCubeGuard = new CamSulfurCubeGuard(this);
-        camInventoryGuard = new CamInventoryGuard(this, this::isInCameraMode, cameraItem::isCameraItem);
+        camInventoryGuard = new CamInventoryGuard(this, this::isInCameraMode);
         configFile.reportConfigWarnings(loadConfigValues(), null);
         bodySpawner = new BodySpawner(this, settings, messages, log, cameraPlayers);
         camModeObjective.setUp();
@@ -192,7 +191,7 @@ public final class CameraPlugin extends JavaPlugin {
                 flightSpeed,
                 crashGuard,
                 new SessionTracker(cameraPlayers),
-                cameraItem,
+                new ExitKey(this),
                 new CamSuggestionFilter(this));
         for (Listener listener : listeners) {
             pluginManager.registerEvents(listener, this);
@@ -550,10 +549,6 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamLog getCamLog() {
         return camLog;
-    }
-
-    public CameraItem getCameraItem() {
-        return cameraItem;
     }
 
     public StartCost getStartCost() {

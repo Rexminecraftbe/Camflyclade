@@ -9,7 +9,7 @@ import java.util.Locale;
  * log of {@code cam-log}.
  */
 public enum EndReason {
-    /** The player ended it himself: {@code /cam}, or a click or hit on his own body. */
+    /** The player ended it himself: {@code /cam}, the exit key, or a click or hit on his own body. */
     COMMAND(Kind.SELF),
     /** Something happened to the body: hit, hurt, moved, drowning, suffocating, or a potion. */
     BODY(Kind.BODY),

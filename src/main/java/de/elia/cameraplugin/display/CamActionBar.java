@@ -6,12 +6,18 @@ import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
 import net.md_5.bungee.api.ChatMessageType;
+import net.md_5.bungee.api.chat.BaseComponent;
+import net.md_5.bungee.api.chat.KeybindComponent;
 import net.md_5.bungee.api.chat.TextComponent;
+import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -20,12 +26,16 @@ import java.util.UUID;
  *
  * <p>While camera mode runs it says either that camera mode is on, or - with
  * {@code display: distance} - how far away the body is and which way it lies.
- * The latter starts with the first for a moment as well, so that the player
- * is told camera mode has started at all.</p>
+ * The latter starts with the first for {@code on-duration} as well, so that the
+ * player is told camera mode has started at all - and, while {@code exit-key}
+ * is on, which key ends it.</p>
  */
 public final class CamActionBar {
 
-    /** How often the fixed line {@code actionbar-on} is sent again, in ticks. */
+    /**
+     * How often the fixed line {@code actionbar-on} is sent again, in ticks.
+     * The client lets a line fade after three seconds.
+     */
     private static final long TEXT_INTERVAL = 40L;
 
     /**
@@ -34,8 +44,16 @@ public final class CamActionBar {
      */
     private static final long DISTANCE_INTERVAL = 4L;
 
-    /** How long {@code actionbar-on} stands before the distance takes over, in ticks. */
-    private static final long ON_TEXT_TICKS = 40L;
+    /** Where {@code actionbar-hint} names the key that ends camera mode. */
+    private static final String KEY = "{key}";
+
+    /**
+     * The key that swaps the hands, as the client names it. Not
+     * {@code Keybinds.SWAP_HANDS} of the chat library: that one says
+     * {@code key.swapHands}, a name the client does not know, and it would
+     * show those very words instead of the key.
+     */
+    private static final String SWAP_HANDS_KEY = "key.swapOffhand";
 
     /** How long a line of {@link #flash} keeps the regular one away, in milliseconds. */
     private static final long FLASH_MILLIS = 1500L;
@@ -88,6 +106,7 @@ public final class CamActionBar {
         boolean onText = messages.isMessageEnabled("actionbar-on");
         if (!distance && !onText) return;
         long interval = distance ? DISTANCE_INTERVAL : TEXT_INTERVAL;
+        long onTicks = settings.getActionBarOnDuration();
         BukkitRunnable task = new BukkitRunnable() {
             private long ticks = 0;
 
@@ -102,22 +121,66 @@ public final class CamActionBar {
                 if (flashUntil.getOrDefault(player.getUniqueId(), 0L) > System.currentTimeMillis()) {
                     return;
                 }
-                String line;
+                BaseComponent[] line;
                 if (!distance) {
-                    line = messages.getMessage("actionbar-on");
-                } else if (onText && now < ON_TEXT_TICKS) {
-                    // Sent once, the client keeps it up until the distance comes.
-                    line = now == 0 ? messages.getMessage("actionbar-on") : null;
+                    line = onLine();
+                } else if (onText && now < onTicks) {
+                    // Sent again before the client lets it fade, as long as
+                    // on-duration asks for it.
+                    line = now % TEXT_INTERVAL == 0 ? onLine() : null;
                 } else {
-                    line = distanceLine(player);
+                    String text = distanceLine(player);
+                    line = text == null ? null : TextComponent.fromLegacyText(text);
                 }
                 if (line != null) {
-                    player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(line));
+                    player.spigot().sendMessage(ChatMessageType.ACTION_BAR, line);
                 }
             }
         };
         task.runTaskTimer(plugin, 0L, interval);
         actionBarTasks.put(player.getUniqueId(), task);
+    }
+
+    /**
+     * The line {@code actionbar-on}, with {@code actionbar-hint} in place of
+     * {@code {hint}} while the exit key is on, see
+     * {@link de.elia.cameraplugin.session.ExitKey}.
+     */
+    private BaseComponent[] onLine() {
+        String hint = settings.isExitKeyEnabled() && messages.isMessageEnabled("actionbar-hint")
+                ? messages.getMessage("actionbar-hint")
+                : "";
+        return withKey(messages.getMessage("actionbar-on").replace("{hint}", hint));
+    }
+
+    /**
+     * Turns a text with colour codes into components, every {@code {key}} in
+     * it into the key that swaps the hands.
+     *
+     * <p>As a keybind and not as the letter F: the client fills it in with
+     * the key the player has bound it to, so the hint is right for somebody
+     * who changed it as well. It carries the colour the text had up to there,
+     * and the text after it goes on in that colour unless it names another
+     * one.</p>
+     */
+    @SuppressWarnings("deprecation")
+    private static BaseComponent[] withKey(String text) {
+        List<BaseComponent> parts = new ArrayList<>();
+        String colors = "";
+        int from = 0;
+        int at;
+        while ((at = text.indexOf(KEY, from)) >= 0) {
+            String piece = colors + text.substring(from, at);
+            parts.addAll(Arrays.asList(TextComponent.fromLegacyText(piece)));
+            colors = ChatColor.getLastColors(piece);
+            KeybindComponent key = new KeybindComponent(SWAP_HANDS_KEY);
+            BaseComponent[] style = TextComponent.fromLegacyText(colors + " ");
+            key.copyFormatting(style[style.length - 1]);
+            parts.add(key);
+            from = at + KEY.length();
+        }
+        parts.addAll(Arrays.asList(TextComponent.fromLegacyText(colors + text.substring(from))));
+        return parts.toArray(new BaseComponent[0]);
     }
 
     /**

@@ -9,7 +9,10 @@ messages:
   actionbar-distance: "&aBody: &f{distance} blocks &e{arrow}"
   actionbar-distance-portal: "&aPortal: &f{distance} blocks &e{arrow}"
   actionbar-off: "&cCam mode ended"
-  actionbar-on: "&aCam mode activated"
+  # {hint} is replaced by actionbar-hint while exit-key is on, and {key} there by the key that swaps
+  # the hands - the one the player has bound it to, F unless changed.
+  actionbar-hint: " &7- &f{key} &7to leave"
+  actionbar-on: "&aCam mode activated{hint}"
   armorstand.name-format: "{player}'s Body"
   battery-bossbar: "Battery: {time}"
   battery-bossbar-charging: "Battery charging: {charge}, full in {time}"
@@ -35,9 +38,6 @@ messages:
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
   cam-spectator-start: "&cYou cannot start cam mode in spectator mode."
   cam-water-start: "&cYou cannot start cam mode in water."
-  # Name and description of the camera item (camera-item), \n starts a new line of the description.
-  camera-item-lore: "&7Right-click to end cam mode"
-  camera-item-name: "&cLeave cam mode"
   camera-off: "&aCamera mode ended."
   camera-on: "&aCamera mode activated! Use /cam again to exit."
   cant-attack-other-body: "&cYou cannot attack other bodies in camera mode."
@@ -45,7 +45,6 @@ messages:
   cant-fly-in-powder-snow: "&cYou cannot fly into powder snow in camera mode."
   cant-fly-in-water: "&cYou cannot fly into water in camera mode."
   config-allowed-blocks: "any block, e.g. barrier or glass"
-  config-allowed-items: "an item, e.g. barrier, clock or compass"
   config-allowed-particles: "a particle without extra data, e.g. soul_fire_flame, flame or end_rod"
   config-allowed-sounds: "a sound as /playsound names it, e.g. block.beacon.activate"
   config-broken: "&cThe configuration has an error in {file} and was not applied, the previous settings stay in effect: {error}"
@@ -407,6 +406,7 @@ portal-names:
 message-settings:
   actionbar-distance: true
   actionbar-distance-portal: true
+  actionbar-hint: true
   actionbar-off: true
   actionbar-on: true
   body-attacked: true

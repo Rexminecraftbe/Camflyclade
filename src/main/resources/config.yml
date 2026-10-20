@@ -12,12 +12,16 @@ action-bar:
   enabled: true
   # Was dort steht, solange der Cam-Modus läuft:
   #   distance = wie weit der Körper weg ist und in welche Richtung, z. B. "Body: 42 blocks ↖"
-  #              (Text: actionbar-distance in der Sprachdatei; zu Beginn steht kurz actionbar-on)
+  #              (Text: actionbar-distance in der Sprachdatei; zu Beginn steht für on-duration actionbar-on)
   #              Der Pfeil zeigt von der Blickrichtung aus. ▲/▼ = der Körper liegt steiler als 60° über/unter dir,
   #              ● = du bist höchstens 2 Blöcke von ihm weg.
   #              In einer anderen Welt zeigt er zum Portal, aus dem man kam (actionbar-distance-portal).
-  #   text     = der feste Text actionbar-on, wie bisher
+  #   text     = der feste Text actionbar-on, die ganze Zeit
+  # actionbar-on trägt den Hinweis auf die Taste zum Beenden (exit-key), Text: actionbar-hint.
   display: distance
+  # Wie lange zu Beginn actionbar-on mit dem Hinweis steht, bevor der Abstand kommt (nur bei distance),
+  # in Ticks: 20 = 1 Sekunde, 0 = gleich der Abstand
+  on-duration: 60
   # Wie lange actionbar-off gesendet wird, in Ticks
   off-duration: 1
 
@@ -381,14 +385,11 @@ fireguard:
 camera-head:
   enabled: false
 
-# Kamera-Item: Beim Start des Cam-Modus kommt es in die Hand, ein Rechtsklick damit beendet den Cam-Modus wieder,
-# wie /cam oder ein Klick auf den eigenen Körper. Es lässt sich nicht ablegen oder in die andere Hand nehmen,
-# und am Ende ist es wieder weg.
-# Name und Beschreibung stehen in der Sprachdatei unter camera-item-name und camera-item-lore.
-camera-item:
+# Den Cam-Modus mit der Taste zum Tauschen der Hände beenden (voreingestellt F), wie mit /cam.
+# Geht mit leeren Händen. Hat ein Spieler die Taste anders belegt, gilt seine - und der Hinweis
+# in der Action-Bar nennt auch seine.
+exit-key:
   enabled: true
-  # Welches Item, z. B. barrier, clock oder compass
-  material: barrier
 
 # Kein Cam-Modus direkt nach erlittenem Schaden
 cam-safety:
