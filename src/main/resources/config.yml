@@ -17,10 +17,14 @@ action-bar:
   #              ● = du bist höchstens 2 Blöcke von ihm weg.
   #              In einer anderen Welt zeigt er zum Portal, aus dem man kam (actionbar-distance-portal).
   #   text     = der feste Text actionbar-on, die ganze Zeit
-  # actionbar-on trägt den Hinweis auf die Taste zum Beenden (exit-key), Text: actionbar-hint.
+  #   false    = nur zu Beginn actionbar-on mit dem Hinweis, für on-duration; danach verblasst die Zeile
+  #              wie actionbar-off und es kommt nichts mehr
+  # actionbar-on trägt den Hinweis, wie man den Cam-Modus beendet: mit der Taste (exit-key) oder /cam,
+  # Text: actionbar-hint (bei exit-key: false actionbar-hint-command, nur /cam).
+  # Warnungen (end-warning, body-alarm) und das Tempo des Mausrads kommen bei jeder Einstellung.
   display: distance
-  # Wie lange zu Beginn actionbar-on mit dem Hinweis steht, bevor der Abstand kommt (nur bei distance),
-  # in Ticks: 20 = 1 Sekunde, 0 = gleich der Abstand
+  # Wie lange zu Beginn actionbar-on mit dem Hinweis steht (bei distance, bevor der Abstand kommt, und bei false),
+  # in Ticks: 20 = 1 Sekunde, 0 = gleich der Abstand (bei false: gar nichts)
   on-duration: 60
   # Wie lange actionbar-off gesendet wird, in Ticks
   off-duration: 1
@@ -252,6 +256,24 @@ sounds:
     sound: block.note_block.bass
     volume: 1.0
     pitch: 0.5
+  # Beim Sprung zurück zum Körper mit /cam back (back-command)
+  back:
+    enabled: true
+    sound: entity.enderman.teleport
+    volume: 1.0
+    pitch: 1.0
+  # Kurz vor dem Ende durch Zeitlimit oder Akku (end-warning)
+  end-warning:
+    enabled: true
+    sound: block.note_block.pling
+    volume: 1.0
+    pitch: 1.0
+  # Wenn etwas dem Körper gefährlich wird (body-alarm)
+  body-alarm:
+    enabled: true
+    sound: block.bell.use
+    volume: 1.0
+    pitch: 1.0
 
 # Schutz bei einem Absturz. Was der Cam-Modus dem Spieler abnimmt (Inventar, Spielmodus, Effekte, Flug), steht,
 # solange der Cam-Modus läuft, auch in plugins/CamFly/playerdata/crash/<UUID>.yml. Beim Ende wird die Datei gelöscht.
@@ -268,6 +290,12 @@ cam-list:
   #   all   = jeder, der /cam benutzen darf
   #   false = kein Spieler
   access: admin
+  # Hinter jedem Eintrag zwei Knöpfe: [Camera] teleportiert zur Kamera, [Body] neben den Körper
+  # (Texte: cam-list-camera und cam-list-body in der Sprachdatei). Ein Klick schickt /cam tp <Name> camera|body.
+  # Nur für Spieler, die die Liste sehen dürfen und das Recht camplugin.teleport haben (Operatoren haben es).
+  # Wer selbst im Cam-Modus ist, beendet ihn dabei. Zur Kamera kommt nur, wer fliegen kann
+  # (Kreativ- oder Zuschauermodus, oder /fly), sonst fiele er herunter. Der Cam-Modus des anderen läuft weiter.
+  teleport: true
 
 # Statistik: wie oft jemand im Cam-Modus war, wie lange insgesamt und am längsten,
 # wie weit die Kamera geflogen ist und wie weit sie höchstens vom Körper weg war.
@@ -299,6 +327,7 @@ cam-log:
 #   time-limit = jeder Flug dauert höchstens time-limit.duration-seconds
 #   battery    = ein Akku, der sich im Flug leert und danach wieder lädt (Abschnitt battery)
 #   false      = so lange er will
+# Kurz vor dem Ende warnt end-warning.
 flight-limit: false
 
 # Zeitlimit für den Cam-Modus (bei flight-limit: time-limit)
@@ -390,6 +419,34 @@ camera-head:
 # in der Action-Bar nennt auch seine.
 exit-key:
   enabled: true
+
+# /cam back: Die Kamera springt zurück zum Körper, der Cam-Modus läuft weiter - für jeden, der sich verflogen hat.
+# Sie schaut danach in dieselbe Richtung wie vorher. Aus einer anderen Welt (Portal) geht es genauso zurück.
+# Ton: sounds.back, Text: back-to-body in der Sprachdatei.
+back-command:
+  enabled: true
+
+# Warnung kurz vor dem Ende durch flight-limit (Zeitlimit oder Akku): ein Ton (sounds.end-warning)
+# und eine Zeile in der Action-Bar (Texte: end-warning-time-limit, end-warning-battery).
+end-warning:
+  enabled: true
+  # Bei wie vielen Sekunden Rest gewarnt wird, z. B. [60, 30, 10] ([] = nie)
+  # Nur, wenn die Zeit dort hinunter läuft: Wer mit 20 Sekunden Akku startet, bekommt die 30 nicht mehr.
+  seconds: [30, 10]
+
+# Alarm, wenn etwas dem Körper gefährlich wird: ein Ton (sounds.body-alarm) und eine Zeile in der Action-Bar
+# (Texte: body-alarm-mob, body-alarm-player). Jeder Mob und jeder Spieler löst ihn nur einmal aus, solange er bleibt.
+body-alarm:
+  # Mobs, die hinter dem Körper her sind. Das gibt es nur bei body.mob-target: vanilla oder custom,
+  # bei false greift kein Mob den Körper an, und es kommt kein Alarm.
+  mobs: true
+  # Andere Spieler, die dem Körper näher kommen als player-radius
+  # (nicht die im Cam-Modus, keine Zuschauer und keine, die der Spieler nicht sehen kann, z. B. durch Vanish)
+  players: false
+  # Wie nah ein Spieler kommen muss, in Blöcken (höchstens 64)
+  player-radius: 10.0
+  # Sekunden zwischen zwei Alarmen
+  cooldown: 5
 
 # Kein Cam-Modus direkt nach erlittenem Schaden
 cam-safety:

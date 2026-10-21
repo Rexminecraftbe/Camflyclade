@@ -10,14 +10,22 @@ messages:
   actionbar-distance-portal: "&aPortal: &f{distance} blocks &e{arrow}"
   actionbar-off: "&cCam mode ended"
   # {hint} is replaced by actionbar-hint while exit-key is on, and {key} there by the key that swaps
-  # the hands - the one the player has bound it to, F unless changed.
-  actionbar-hint: " &7- &f{key} &7to leave"
+  # the hands - the one the player has bound it to, F unless changed. While exit-key is off it is
+  # replaced by actionbar-hint-command.
+  actionbar-hint: " &7- &f{key} &7or type &f/cam &7to leave"
+  actionbar-hint-command: " &7- type &f/cam &7to leave"
   actionbar-on: "&aCam mode activated{hint}"
   armorstand.name-format: "{player}'s Body"
+  back-not-in-cam: "&cYou are not in cam mode."
+  back-off: "&c/cam back is switched off."
+  back-to-body: "&aBack at your body"
   battery-bossbar: "Battery: {time}"
   battery-bossbar-charging: "Battery charging: {charge}, full in {time}"
   battery-empty: "&cCam mode ended: the battery is empty."
   battery-low: "&cThe battery holds {charge} of flight, a start needs {needed}. Ready again in {time}."
+  # {mob} as mob-names has it, {player} the player's name, {distance} how far from the body in blocks.
+  body-alarm-mob: "&cWatch out: {mob} is after your body!"
+  body-alarm-player: "&cWatch out: {player} is close to your body!"
   body-attacked: "&cYour body was attacked by {damager}! Camera mode ended."
   body-drowning: "&cYour body is drowning! Camera mode ended."
   body-env-damage: "&cYour body was damaged by {cause}! Camera mode ended."
@@ -29,6 +37,11 @@ messages:
   cam-area-start: "&cYou cannot start cam mode in {area}."
   cam-effect-start: "&cYou cannot start cam mode with {effect} on you."
   cam-falling-start: "&cYou cannot start cam mode while falling."
+  # The buttons behind each line of /cam list, see cam-list.teleport, and what hovering over them says.
+  cam-list-body: "&a[Body]"
+  cam-list-body-hover: "&7Teleport next to the body of {player}"
+  cam-list-camera: "&b[Camera]"
+  cam-list-camera-hover: "&7Teleport to the camera of {player}"
   cam-list-empty: "&eNobody is in cam mode."
   cam-list-entry: "&7- &f{player}&7: for {time}, {distance} blocks from the body"
   cam-list-entry-away: "&7- &f{player}&7: for {time}, in another world than the body"
@@ -37,6 +50,12 @@ messages:
   cam-powder-snow-start: "&cYou cannot start cam mode in powder snow."
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
   cam-spectator-start: "&cYou cannot start cam mode in spectator mode."
+  cam-tp-body: "&aTeleported next to the body of {player}."
+  cam-tp-camera: "&aTeleported to the camera of {player}."
+  cam-tp-cannot-fly: "&cYou can only go to a camera while you can fly."
+  cam-tp-not-in-cam: "&c{player} is not in cam mode."
+  cam-tp-self: "&cThat is your own camera. Use /cam back to go back to your body."
+  cam-tp-usage: "&eUse /cam tp <player> camera or /cam tp <player> body."
   cam-water-start: "&cYou cannot start cam mode in water."
   camera-off: "&aCamera mode ended."
   camera-on: "&aCamera mode activated! Use /cam again to exit."
@@ -87,6 +106,9 @@ messages:
   distance-from-body: "your body"
   distance-from-portal: "the portal you came out of"
   distance-limit: "&cYou cannot move further than {distance} blocks from {from}!"
+  # {time} is the time left.
+  end-warning-battery: "&eBattery almost empty: {time} left"
+  end-warning-time-limit: "&eCam mode ends in {time}"
   flight-speed: "&bFlight speed: &f{speed}x"
   hitbox.name-format: "&c[HITBOX] {player}"
   no-permission: "&cYou don't have permission to use this command."
@@ -181,8 +203,8 @@ damage-names:
   wither: "the wither effect"
   wither_skull: "a wither skull"
 
-# Which mob attacked the body, for {damager} in body-attacked.
-# Players and mobs with a name of their own go by that name.
+# Which mob attacked the body, for {damager} in body-attacked, and which one is after it, for {mob} in
+# body-alarm-mob. Players and mobs with a name of their own go by that name.
 mob-names:
   bee: "a bee"
   blaze: "a blaze"
@@ -407,8 +429,14 @@ message-settings:
   actionbar-distance: true
   actionbar-distance-portal: true
   actionbar-hint: true
+  actionbar-hint-command: true
   actionbar-off: true
   actionbar-on: true
+  back-not-in-cam: true
+  back-off: true
+  back-to-body: true
+  body-alarm-mob: true
+  body-alarm-player: true
   body-attacked: true
   body-drowning: true
   body-env-damage: true
@@ -425,6 +453,8 @@ message-settings:
   cam-effect-start: true
   cam-falling-start: true
   cam-lava-start: true
+  cam-list-body: true
+  cam-list-camera: true
   cam-list-empty: true
   cam-list-entry: true
   cam-list-entry-away: true
@@ -432,6 +462,12 @@ message-settings:
   cam-powder-snow-start: true
   cam-safety: true
   cam-spectator-start: true
+  cam-tp-body: true
+  cam-tp-camera: true
+  cam-tp-cannot-fly: true
+  cam-tp-not-in-cam: true
+  cam-tp-self: true
+  cam-tp-usage: true
   cam-water-start: true
   camera-off: false
   camera-on: false
@@ -446,6 +482,8 @@ message-settings:
   cost-missing: true
   cost-paid: true
   distance-limit: true
+  end-warning-battery: true
+  end-warning-time-limit: true
   enabled: true
   flight-speed: true
   no-permission: true

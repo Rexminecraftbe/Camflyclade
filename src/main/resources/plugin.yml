@@ -10,7 +10,7 @@ softdepend: [Vault]
 commands:
   cam:
     description: Enables or disables camera mode
-    usage: /<command> [list|reload|stats [reset|player <name>]]
+    usage: /<command> [back|list|reload|stats [reset|player <name>]|tp <name> camera|body]
     permission: camplugin.use
     permission-message: "You do not have permission for this command.!"
 
@@ -23,4 +23,7 @@ permissions:
     default: op
   camplugin.stats.others:
     description: Allows /cam stats player <name> while statistics.view-others is admin
+    default: op
+  camplugin.teleport:
+    description: Allows the buttons of /cam list and /cam tp, to go to a camera or a body
     default: op

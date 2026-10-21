@@ -13,7 +13,6 @@ import org.bukkit.damage.DamageType;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.AbstractArrow;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Cancellable;
@@ -632,7 +631,7 @@ public final class DamageMirror implements Listener {
         String cause = damageName(source.getDamageType());
         if (source.getCausingEntity() instanceof LivingEntity attacker) {
             messages.sendMessage(owner, "body-attacked",
-                    "{damager}", attackerName(attacker), "{cause}", cause);
+                    "{damager}", messages.getMobName(attacker), "{cause}", cause);
             return;
         }
         String key = switch (event.getCause()) {
@@ -647,20 +646,6 @@ public final class DamageMirror implements Listener {
     /** What the language file calls a damage type, see {@code damage-names}. */
     private String damageName(DamageType type) {
         return messages.getName("damage-names", type.getKey());
-    }
-
-    /**
-     * What the language file calls the mob that attacked, see
-     * {@code mob-names}. Players and mobs with a name of their own go by that
-     * name, the way the game names them in a death message.
-     */
-    private String attackerName(LivingEntity attacker) {
-        EntityType type = attacker.getType();
-        // A mob a mod adds has no key to look it up by.
-        if (attacker instanceof Player || attacker.getCustomName() != null || type == EntityType.UNKNOWN) {
-            return attacker.getName();
-        }
-        return messages.getName("mob-names", type.getKey().getKey(), attacker.getName());
     }
 
     /**

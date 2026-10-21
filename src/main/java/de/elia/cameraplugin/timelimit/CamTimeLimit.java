@@ -72,7 +72,9 @@ public final class CamTimeLimit {
                     if (finalBar != null) finalBar.removeAll();
                     return;
                 }
+                long before = remaining;
                 remaining--;
+                plugin.getEndWarning().check(player, before, remaining, "end-warning-time-limit");
                 if (finalBar != null) {
                     finalBar.setProgress(Math.max(0.0, remaining / (double) total));
                     if (messages.isMessageEnabled("bossbar-text")) {

@@ -205,6 +205,7 @@ public final class CameraMode {
         // its spot already, instead of following it away for that one tick.
         plugin.getBodyWatch().keepNameOverBody(player, body, nameDisplay);
         plugin.getMobTargeting().startMobTargeting(player, damageTarget);
+        plugin.getBodyAlarm().startFor(player, damageTarget);
         // Creates the teams when needed and sets all members anew - the
         // player is in cameraPlayers already and so joins it as well, and
         // his body joins the one that keeps players and mobs from pushing it.
@@ -270,6 +271,7 @@ public final class CameraMode {
         plugin.getTimeLimit().cancelTimeLimit(player);
         plugin.getBattery().stopFor(player);
         plugin.getMobTargeting().stopMobTargeting(player);
+        plugin.getBodyAlarm().stopFor(player);
         LivingEntity body = cameraData.getBody();
         Mannequin hitbox = cameraData.getHitbox();
         // For the log, before he is put back at his body.
