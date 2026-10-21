@@ -3709,9 +3709,9 @@ def alarm_checks(env, bot):
         bot.call("fly", wait=30, dy=RUECKSTOSS_HOEHE, timeout=15000)
         console(env, zombie, pause=0.3)
         bot.expect(muster, since, 8000)
-        z = zeilen_seit(bot, since)
-        treffer = next((i for i, t in enumerate(z) if re.search(r"body was attacked", t)), len(z))
-        gewarnt = next((i for i, t in enumerate(z) if re.search(muster, t)), None)
+        zeilen = zeilen_seit(bot, since)
+        treffer = next((i for i, t in enumerate(zeilen) if re.search(r"body was attacked", t)), len(zeilen))
+        gewarnt = next((i for i, t in enumerate(zeilen) if re.search(muster, t)), None)
         return gewarnt is not None, gewarnt is not None and gewarnt < treffer, \
             ton_da(bot, seit, "block.bell.use")
 
@@ -3845,17 +3845,17 @@ def knoepfe_checks(env, bot):
             return
         bot.chat("/gamemode survival")
         time.sleep(0.5)
-        z = befehl(bot, f"/cam tp {ZUSCHAUER_NAME} body")
+        antwort = befehl(bot, f"/cam tp {ZUSCHAUER_NAME} body")
         FIND.test("/cam tp ... body: der Bot steht neben dem Koerper, nicht darin",
                   server_says(bot, f"/execute positioned {x} {y} {z} if entity "
-                                   f"@a[name={BOT_NAME},distance=0.5..1.6] run say {{marke}}"), zeige(z))
+                                   f"@a[name={BOT_NAME},distance=0.5..1.6] run say {{marke}}"), zeige(antwort))
         FIND.test("/cam tp ... body: der Cam-Modus des anderen laeuft weiter", noch_im_cam_modus(), "")
 
         zuschauer.call("fly", wait=30, dy=5, timeout=15000)
         time.sleep(1.0)
-        z = befehl(bot, f"/cam tp {ZUSCHAUER_NAME} camera")
+        antwort = befehl(bot, f"/cam tp {ZUSCHAUER_NAME} camera")
         FIND.test("/cam tp ... camera: im Ueberlebensmodus nicht, er fiele herunter",
-                  gesagt(z, r"only go to a camera while you can fly"), zeige(z))
+                  gesagt(antwort, r"only go to a camera while you can fly"), zeige(antwort))
         bot.chat("/gamemode creative")
         time.sleep(0.5)
         # Ohne Schwerkraft beim Bot, sonst fiele er auf seiner Seite gleich
