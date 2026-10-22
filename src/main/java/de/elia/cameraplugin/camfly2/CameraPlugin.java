@@ -1,6 +1,8 @@
 package de.elia.cameraplugin.camfly2;
 
+import de.elia.cameraplugin.back.CamBack;
 import de.elia.cameraplugin.battery.CamBattery;
+import de.elia.cameraplugin.body.BodyAlarm;
 import de.elia.cameraplugin.body.BodySpawner;
 import de.elia.cameraplugin.body.BodyWatch;
 import de.elia.cameraplugin.config.CamSettings;
@@ -23,6 +25,7 @@ import de.elia.cameraplugin.interaction.CamKnockbackGuard;
 import de.elia.cameraplugin.inventory.CamInventoryGuard;
 import de.elia.cameraplugin.inventory.CamInventoryLock;
 import de.elia.cameraplugin.list.CamList;
+import de.elia.cameraplugin.list.CamListTeleport;
 import de.elia.cameraplugin.log.CamLog;
 import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.mirrordamage.DamageMirror;
@@ -50,6 +53,7 @@ import de.elia.cameraplugin.storage.PlayerStore;
 import de.elia.cameraplugin.sulfurcube.CamSulfurCubeGuard;
 import de.elia.cameraplugin.teleport.CamTeleportGuard;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
+import de.elia.cameraplugin.timelimit.EndWarning;
 import de.elia.cameraplugin.visibility.CamVisibility;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -92,6 +96,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamFlightSpeed flightSpeed = new CamFlightSpeed(this);
     private final CamNightVision nightVision = new CamNightVision(this, settings, cameraPlayers);
     private final CamList camList = new CamList(settings, messages, cameraPlayers);
+    private final CamListTeleport listTeleport = new CamListTeleport(this);
     private final CamCrashGuard crashGuard = new CamCrashGuard(this, log);
     private final PlayerStore playerStore = new PlayerStore(this, log);
     private final CamBattery battery = new CamBattery(this, playerStore);
@@ -102,6 +107,9 @@ public final class CameraPlugin extends JavaPlugin {
     private final MobGaze mobGaze = new MobGaze(this, settings, cameraPlayers);
     private final BodyWatch bodyWatch = new BodyWatch(this);
     private final CamTimeLimit timeLimit = new CamTimeLimit(this);
+    private final EndWarning endWarning = new EndWarning(this);
+    private final BodyAlarm bodyAlarm = new BodyAlarm(this);
+    private final CamBack back = new CamBack(this);
     private final StartChecks startChecks = new StartChecks(settings, messages);
     private final CamStarter starter = new CamStarter(this);
     private final CamMovementGuard movementGuard = new CamMovementGuard(this);
@@ -153,7 +161,7 @@ public final class CameraPlugin extends JavaPlugin {
         // Nobody is in camera mode at startup -> remove a team left over.
         noCollisionTeam.deleteNoCollisionTeam();
         this.getCommand("cam").setExecutor(new CamCommand(this));
-        this.getCommand("cam").setTabCompleter(new CamTabCompleter(camList, stats));
+        this.getCommand("cam").setTabCompleter(new CamTabCompleter(this));
         registerListeners();
         noCollisionTeam.refreshNoCollisionTeam();
         crashGuard.restoreOnline();
@@ -287,6 +295,7 @@ public final class CameraPlugin extends JavaPlugin {
         actionBar.onDisable();
         nightVision.onDisable();
         timeLimit.onDisable();
+        bodyAlarm.onDisable();
         // After camera mode has ended for everybody, which settled the
         // batteries in flight and counted the flights.
         battery.onDisable();
@@ -487,6 +496,10 @@ public final class CameraPlugin extends JavaPlugin {
         return camList;
     }
 
+    public CamListTeleport getListTeleport() {
+        return listTeleport;
+    }
+
     public CamCrashGuard getCrashGuard() {
         return crashGuard;
     }
@@ -525,6 +538,18 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamTimeLimit getTimeLimit() {
         return timeLimit;
+    }
+
+    public EndWarning getEndWarning() {
+        return endWarning;
+    }
+
+    public BodyAlarm getBodyAlarm() {
+        return bodyAlarm;
+    }
+
+    public CamBack getBack() {
+        return back;
     }
 
     public StartChecks getStartChecks() {

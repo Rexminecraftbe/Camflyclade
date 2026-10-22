@@ -70,10 +70,13 @@ public final class CamBattery {
     private static final class Flight extends Bar {
         final double startCharge;
         final long startedAt;
+        /** What it held at the last look, for {@code end-warning}. */
+        double lastCharge;
 
         Flight(double startCharge, long startedAt) {
             this.startCharge = startCharge;
             this.startedAt = startedAt;
+            this.lastCharge = startCharge;
         }
 
         double chargeAt(long now) {
@@ -168,7 +171,10 @@ public final class CamBattery {
                 }
                 long at = System.currentTimeMillis();
                 updateFlightBar(flight, at);
-                if (flight.chargeAt(at) <= 0.0) {
+                double left = flight.chargeAt(at);
+                plugin.getEndWarning().check(player, flight.lastCharge, left, "end-warning-battery");
+                flight.lastCharge = left;
+                if (left <= 0.0) {
                     plugin.exitCameraMode(player, EndReason.BATTERY);
                     messages.sendMessage(player, "battery-empty");
                 }

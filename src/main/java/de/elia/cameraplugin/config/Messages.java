@@ -5,6 +5,8 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -161,6 +163,21 @@ public final class Messages {
      */
     public String getName(String list, NamespacedKey key) {
         return getName(list, key.getKey(), key.getKey().replace('_', ' '));
+    }
+
+    /**
+     * What the language file calls a mob, see {@code mob-names}: the one that
+     * attacked a body, or one that is after it. Players and mobs with a name
+     * of their own go by that name, the way the game names them in a death
+     * message.
+     */
+    public String getMobName(LivingEntity mob) {
+        EntityType type = mob.getType();
+        // A mob a mod adds has no key to look it up by.
+        if (mob instanceof Player || mob.getCustomName() != null || type == EntityType.UNKNOWN) {
+            return mob.getName();
+        }
+        return getName("mob-names", type.getKey().getKey(), mob.getName());
     }
 
     /**

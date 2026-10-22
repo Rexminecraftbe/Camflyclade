@@ -27,8 +27,9 @@ import java.util.UUID;
  * <p>While camera mode runs it says either that camera mode is on, or - with
  * {@code display: distance} - how far away the body is and which way it lies.
  * The latter starts with the first for {@code on-duration} as well, so that the
- * player is told camera mode has started at all - and, while {@code exit-key}
- * is on, which key ends it.</p>
+ * player is told camera mode has started at all - and how to end it: with the
+ * key of {@code exit-key} while it is on, and with {@code /cam}. With
+ * {@code display: false} that start is all there is.</p>
  */
 public final class CamActionBar {
 
@@ -57,6 +58,12 @@ public final class CamActionBar {
 
     /** How long a line of {@link #flash} keeps the regular one away, in milliseconds. */
     private static final long FLASH_MILLIS = 1500L;
+
+    /**
+     * How long a line of {@link #warn} keeps the regular one away, in
+     * milliseconds: as long as the client shows a line, fading included.
+     */
+    private static final long WARN_MILLIS = 3000L;
 
     /**
      * The direction of the body as seen by the player, clockwise from straight
@@ -102,11 +109,15 @@ public final class CamActionBar {
         stopActionBar(player);
         BukkitRunnable off = offMessageTasks.remove(player.getUniqueId());
         if (off != null) off.cancel();
-        boolean distance = settings.getActionBarDisplay() == ActionBarDisplay.DISTANCE;
+        ActionBarDisplay display = settings.getActionBarDisplay();
+        boolean distance = display == ActionBarDisplay.DISTANCE;
         boolean onText = messages.isMessageEnabled("actionbar-on");
         if (!distance && !onText) return;
-        long interval = distance ? DISTANCE_INTERVAL : TEXT_INTERVAL;
         long onTicks = settings.getActionBarOnDuration();
+        boolean startOnly = display == ActionBarDisplay.START;
+        // Only the start line, and that for no time: nothing to show at all.
+        if (startOnly && onTicks <= 0) return;
+        long interval = distance ? DISTANCE_INTERVAL : TEXT_INTERVAL;
         BukkitRunnable task = new BukkitRunnable() {
             private long ticks = 0;
 
@@ -118,6 +129,13 @@ public final class CamActionBar {
                 }
                 long now = ticks;
                 ticks += interval;
+                if (startOnly && now > 0 && now + TEXT_INTERVAL > onTicks) {
+                    // The line sent last stands until on-duration is over,
+                    // and then the client lets it fade by itself.
+                    this.cancel();
+                    actionBarTasks.remove(player.getUniqueId(), this);
+                    return;
+                }
                 if (flashUntil.getOrDefault(player.getUniqueId(), 0L) > System.currentTimeMillis()) {
                     return;
                 }
@@ -142,14 +160,15 @@ public final class CamActionBar {
     }
 
     /**
-     * The line {@code actionbar-on}, with {@code actionbar-hint} in place of
-     * {@code {hint}} while the exit key is on, see
-     * {@link de.elia.cameraplugin.session.ExitKey}.
+     * The line {@code actionbar-on}, with how to end camera mode in place of
+     * {@code {hint}}: {@code actionbar-hint} while the exit key is on, see
+     * {@link de.elia.cameraplugin.session.ExitKey}, and
+     * {@code actionbar-hint-command} while it is off - {@code /cam} ends it
+     * either way.
      */
     private BaseComponent[] onLine() {
-        String hint = settings.isExitKeyEnabled() && messages.isMessageEnabled("actionbar-hint")
-                ? messages.getMessage("actionbar-hint")
-                : "";
+        String key = settings.isExitKeyEnabled() ? "actionbar-hint" : "actionbar-hint-command";
+        String hint = messages.isMessageEnabled(key) ? messages.getMessage(key) : "";
         return withKey(messages.getMessage("actionbar-on").replace("{hint}", hint));
     }
 
@@ -190,8 +209,23 @@ public final class CamActionBar {
      * just done, and its own switch in {@code message-settings} turns it off.
      */
     public void flash(Player player, String text) {
+        show(player, text, FLASH_MILLIS);
+    }
+
+    /**
+     * Shows a warning in place of the regular line, such as the end coming
+     * close or something after the body. It stands as long as the client
+     * shows a line at all, longer than {@link #flash}: it comes unasked, and
+     * the player may be looking elsewhere. Shown even with
+     * {@code action-bar.enabled: false}, as its own switches turn it off.
+     */
+    public void warn(Player player, String text) {
+        show(player, text, WARN_MILLIS);
+    }
+
+    private void show(Player player, String text, long millis) {
         if (text.isEmpty()) return;
-        flashUntil.put(player.getUniqueId(), System.currentTimeMillis() + FLASH_MILLIS);
+        flashUntil.put(player.getUniqueId(), System.currentTimeMillis() + millis);
         player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(text));
     }
 

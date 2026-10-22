@@ -1,6 +1,8 @@
 package de.elia.cameraplugin.camfly2;
 
+import de.elia.cameraplugin.back.CamBack;
 import de.elia.cameraplugin.list.CamList;
+import de.elia.cameraplugin.list.CamListTeleport;
 import de.elia.cameraplugin.stats.CamStats;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
@@ -15,12 +17,18 @@ import java.util.Locale;
 
 public class CamTabCompleter implements TabCompleter {
 
+    private final CameraPlugin plugin;
     private final CamList camList;
     private final CamStats stats;
+    private final CamBack back;
+    private final CamListTeleport listTeleport;
 
-    public CamTabCompleter(CamList camList, CamStats stats) {
-        this.camList = camList;
-        this.stats = stats;
+    public CamTabCompleter(CameraPlugin plugin) {
+        this.plugin = plugin;
+        this.camList = plugin.getCamList();
+        this.stats = plugin.getStats();
+        this.back = plugin.getBack();
+        this.listTeleport = plugin.getListTeleport();
     }
 
     @Override
@@ -32,11 +40,23 @@ public class CamTabCompleter implements TabCompleter {
         if (statsCommand && args.length == 3 && args[1].equalsIgnoreCase("player")) {
             return playerNames(sender, args[2].toLowerCase(Locale.ROOT));
         }
+        boolean tpCommand = args.length > 1 && args[0].equalsIgnoreCase("tp") && listTeleport.mayUse(sender);
+        if (tpCommand && args.length == 2) {
+            return cameraNames(sender, args[1].toLowerCase(Locale.ROOT));
+        }
+        if (tpCommand && args.length == 3) {
+            return startingWith(args[2].toLowerCase(Locale.ROOT), "camera", "body");
+        }
         if (args.length != 1) {
             return Collections.emptyList();
         }
         String partial = args[0].toLowerCase();
         List<String> completions = new ArrayList<>();
+        // Only offered where it does something: to a player in camera mode.
+        if (sender instanceof Player player && player.hasPermission("camplugin.use") && back.mayUse(player)
+                && "back".startsWith(partial)) {
+            completions.add("back");
+        }
         if (camList.mayUse(sender) && "list".startsWith(partial)) {
             completions.add("list");
         }
@@ -48,7 +68,32 @@ public class CamTabCompleter implements TabCompleter {
         if ("stats".startsWith(partial)) {
             completions.add("stats");
         }
+        if (listTeleport.mayUse(sender) && "tp".startsWith(partial)) {
+            completions.add("tp");
+        }
         return completions;
+    }
+
+    private static List<String> startingWith(String partial, String... words) {
+        List<String> matches = new ArrayList<>();
+        for (String word : words) {
+            if (word.startsWith(partial)) {
+                matches.add(word);
+            }
+        }
+        return matches;
+    }
+
+    /** The players in camera mode, for {@code /cam tp <name>} - nobody's own. */
+    private List<String> cameraNames(CommandSender sender, String partial) {
+        List<String> names = new ArrayList<>();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (plugin.isInCameraMode(player) && !player.equals(sender)
+                    && player.getName().toLowerCase(Locale.ROOT).startsWith(partial)) {
+                names.add(player.getName());
+            }
+        }
+        return names;
     }
 
     /**

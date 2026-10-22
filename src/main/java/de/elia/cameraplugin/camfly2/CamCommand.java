@@ -33,7 +33,7 @@ public class CamCommand implements CommandExecutor {
         // is flying around, without being in the game.
         if (args.length > 0 && args[0].equalsIgnoreCase("list")) {
             if (camList.mayUse(sender)) {
-                camList.show(sender);
+                camList.show(sender, plugin.getListTeleport().mayUse(sender));
             } else {
                 messages.sendConfiguredMessage(sender, "no-permission");
             }
@@ -53,6 +53,16 @@ public class CamCommand implements CommandExecutor {
 
         if (!player.hasPermission("camplugin.use")) {
             messages.sendConfiguredMessage(player, "no-permission");
+            return true;
+        }
+
+        if (args.length > 0 && args[0].equalsIgnoreCase("back")) {
+            plugin.getBack().command(player);
+            return true;
+        }
+        // What the buttons of /cam list run.
+        if (args.length > 0 && args[0].equalsIgnoreCase("tp")) {
+            plugin.getListTeleport().command(player, Arrays.copyOfRange(args, 1, args.length));
             return true;
         }
 

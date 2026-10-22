@@ -31,9 +31,12 @@ import org.bukkit.boss.BarColor;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -199,12 +202,34 @@ public final class CamSettings {
     private CamSound endBodySound;
     private CamSound endForcedSound;
     private CamSound borderSound;
+    private CamSound backSound;
+    private CamSound endWarningSound;
+    private CamSound bodyAlarmSound;
 
     /** Whether camera mode leaves a file to recover from a crash, {@code crash-protection.enabled}. */
     private boolean crashProtectionEnabled;
 
     /** Who may use {@code /cam list}, {@code cam-list.access}. */
     private ListAccess camListAccess;
+    /** Whether the list offers to go to a camera or a body, {@code cam-list.teleport}. */
+    private boolean camListTeleport;
+
+    /** Whether {@code /cam back} takes the camera back to its body, {@code back-command.enabled}. */
+    private boolean backCommandEnabled;
+
+    /** Whether the end of a time limit or a battery is announced, {@code end-warning.enabled}. */
+    private boolean endWarningEnabled;
+    /** At how many seconds left it is announced, the most first, {@code end-warning.seconds}. */
+    private List<Integer> endWarningSeconds = List.of();
+
+    /** Whether a mob after the body sets off the alarm, {@code body-alarm.mobs}. */
+    private boolean bodyAlarmMobs;
+    /** Whether a player close to the body sets it off, {@code body-alarm.players}. */
+    private boolean bodyAlarmPlayers;
+    /** How close a player has to come for that, in blocks, {@code body-alarm.player-radius}. */
+    private double bodyAlarmPlayerRadius;
+    /** Seconds before the next alarm, {@code body-alarm.cooldown}. */
+    private int bodyAlarmCooldown;
 
     // Damage transfer settings
     private DamageMode damageMode;
@@ -381,9 +406,13 @@ public final class CamSettings {
         actionBarEnabled = config.getBoolean("action-bar.enabled", true);
         actionBarOffDuration = config.getInt("action-bar.off-duration", 10, 0);
         actionBarOnDuration = config.getInt("action-bar.on-duration", 60, 0);
-        String display = config.getChoice("action-bar.display", "distance", "distance", "text")
+        String display = config.getChoice("action-bar.display", "distance", "distance", "text", "false")
                 .toLowerCase(Locale.ROOT);
-        actionBarDisplay = display.equals("text") ? ActionBarDisplay.TEXT : ActionBarDisplay.DISTANCE;
+        actionBarDisplay = switch (display) {
+            case "text" -> ActionBarDisplay.TEXT;
+            case "false" -> ActionBarDisplay.START;
+            default -> ActionBarDisplay.DISTANCE;
+        };
         readFlightSpeed(config);
         String nightVision = config.getChoice("night-vision.mode", "dark", "true", "false", "dark")
                 .toLowerCase(Locale.ROOT);
@@ -401,8 +430,22 @@ public final class CamSettings {
         endForcedSound = CamSound.read(config, "sounds.end-forced", allowedSounds,
                 "block.respawn_anchor.deplete", 1.0);
         borderSound = CamSound.read(config, "sounds.border", allowedSounds, "block.note_block.bass", 0.5);
+        backSound = CamSound.read(config, "sounds.back", allowedSounds, "entity.enderman.teleport", 1.0);
+        endWarningSound = CamSound.read(config, "sounds.end-warning", allowedSounds,
+                "item.lodestone_compass.lock", 1.0);
+        bodyAlarmSound = CamSound.read(config, "sounds.body-alarm", allowedSounds,
+                "entity.warden.nearby_close", 1.0);
         crashProtectionEnabled = config.getBoolean("crash-protection.enabled", true);
         camListAccess = readAccess(config, "cam-list.access");
+        camListTeleport = config.getBoolean("cam-list.teleport", true);
+        backCommandEnabled = config.getBoolean("back-command.enabled", true);
+        endWarningEnabled = config.getBoolean("end-warning.enabled", true);
+        endWarningSeconds = readSeconds(config, "end-warning.seconds", List.of(30, 10));
+        bodyAlarmMobs = config.getBoolean("body-alarm.mobs", true);
+        bodyAlarmPlayers = config.getBoolean("body-alarm.players", false);
+        bodyAlarmPlayerRadius = config.getDouble("body-alarm.player-radius", 10.0, 0.0,
+                MobTargeting.MAX_MOB_TARGET_RANGE);
+        bodyAlarmCooldown = config.getInt("body-alarm.cooldown", 5, 0);
         String limit = config.getChoice("flight-limit", "false", "false", "time-limit", "battery")
                 .toLowerCase(Locale.ROOT);
         flightLimit = switch (limit) {
@@ -470,6 +513,34 @@ public final class CamSettings {
         flightSpeedStart = config.getDouble("flight-speed.start",
                 Math.min(Math.max(1.0, flightSpeedMin), flightSpeedMax), flightSpeedMin, flightSpeedMax);
         flightSpeedStep = config.getDouble("flight-speed.step", 0.5, 0.05, MAX_FLIGHT_SPEED);
+    }
+
+    /**
+     * Reads a list of seconds, such as {@code end-warning.seconds}: whole
+     * numbers of at least 1, the most first and each once. An entry that is
+     * none is reported and left out.
+     */
+    private static List<Integer> readSeconds(ConfigReader config, String path, List<Integer> def) {
+        List<String> defaults = new ArrayList<>();
+        for (Integer seconds : def) {
+            defaults.add(String.valueOf(seconds));
+        }
+        List<Integer> seconds = new ArrayList<>();
+        for (String entry : config.getStringList(path, defaults)) {
+            int value;
+            try {
+                value = Integer.parseInt(entry.trim());
+            } catch (NumberFormatException ex) {
+                value = 0;
+            }
+            if (value < 1) {
+                config.warnUnknownEntry(path, entry);
+            } else if (!seconds.contains(value)) {
+                seconds.add(value);
+            }
+        }
+        seconds.sort(Comparator.reverseOrder());
+        return List.copyOf(seconds);
     }
 
     /** Reads who may use something, the values admin, all and false. */
@@ -911,8 +982,60 @@ public final class CamSettings {
         return borderSound;
     }
 
+    public CamSound getBackSound() {
+        return backSound;
+    }
+
+    public CamSound getEndWarningSound() {
+        return endWarningSound;
+    }
+
+    public CamSound getBodyAlarmSound() {
+        return bodyAlarmSound;
+    }
+
     public ListAccess getCamListAccess() {
         return camListAccess;
+    }
+
+    public boolean isCamListTeleport() {
+        return camListTeleport;
+    }
+
+    // ------------------------------------------- back-command, end-warning, body-alarm
+
+    public boolean isBackCommandEnabled() {
+        return backCommandEnabled;
+    }
+
+    public boolean isEndWarningEnabled() {
+        return endWarningEnabled;
+    }
+
+    /** At how many seconds left the end is announced, the most first. */
+    public List<Integer> getEndWarningSeconds() {
+        return endWarningSeconds;
+    }
+
+    /**
+     * Whether a mob after the body sets off the alarm. Only where a mob can
+     * be after it at all: in the mode {@code false} of {@code body.mob-target}
+     * none is.
+     */
+    public boolean alarmsForMobs() {
+        return bodyAlarmMobs && mobTargetMode.attractsMobs();
+    }
+
+    public boolean alarmsForPlayers() {
+        return bodyAlarmPlayers && bodyAlarmPlayerRadius > 0.0;
+    }
+
+    public double getBodyAlarmPlayerRadius() {
+        return bodyAlarmPlayerRadius;
+    }
+
+    public int getBodyAlarmCooldown() {
+        return bodyAlarmCooldown;
     }
 
     public boolean isCrashProtectionEnabled() {

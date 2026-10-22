@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **750** - alle 750 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **765** - alle 765 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -940,6 +940,19 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   deshalb am Vergleich mit dem, was derselbe Client vorher dort sah; was in
   der Welt steht, fragt er beim Server. Die Blöcke der Wand selbst - Barriere,
   Glas, Magma, Schnee, Stein - liest der Bot richtig.
+* **Die Knöpfe von `/cam list` liest der Test aus dem Paket**, `system_chat`
+  als Text des ganzen Pakets wie bei den Tönen. mineflayer gibt von einer
+  Zeile nur den Text weiter, Klick und Hover fehlen darin.
+* **Der Akku für die Warnung lädt 100 Sekunden in der Sekunde.** Was er
+  hält, rechnet das Plugin beim Start aus dem letzten Stand und der Zeit seit
+  damals aus. Nach dem Akkutest steht er fast leer da, und mit dem schnellen
+  Laden ist er beim Start trotzdem voll; im Flug lädt er nicht.
+* **Für den Alarm räumt der Test die Luft zwischen Zombie und Körper.** Die
+  Flachwelt erzeugt Dörfer, und durch eine Hauswand sähe der Zombie den Körper
+  nicht und ginge gar nicht erst los.
+* **Zur Kamera fliegt der Bot vorher einen Block hoch.** Der Flug nimmt ihm
+  auf seiner Seite die Schwerkraft. Mit ihr fiele er nach dem Teleport sofort
+  wieder herunter, und die Frage, ob er bei der Kamera steht, käme zu spät.
 
 ## Was die Tests abdecken
 
@@ -1119,11 +1132,12 @@ Körper, ihr Cam-Modus endet, und die Meldung nennt, wer kam · mit
 `teleports.plugin: false` und `teleports.command: false` bleibt der
 Kamera-Spieler im Cam-Modus, und wer zu ihm kommt, kommt bei der Kamera an ·
 voreingestellt ist `exit-key` an · zu Beginn steht der Hinweis auf die
-Taste in der Action-Bar, als Keybind `key.swapOffhand` · die Taste zum
+Taste und auf `/cam` in der Action-Bar, die Taste als Keybind
+`key.swapOffhand` · die Taste zum
 Tauschen der Hände beendet den Cam-Modus, und was der Spieler vorher hielt,
 ist danach in derselben Hand · Gegenprobe: ohne Cam-Modus tauscht sie die
-Hände · mit `exit-key: false` fehlt der Hinweis, und die Taste lässt den
-Cam-Modus laufen · `action-bar.on-duration: 100` hält die Startzeile fünf
+Hände · mit `exit-key: false` nennt der Hinweis nur noch `/cam`, und die
+Taste lässt den Cam-Modus laufen · `action-bar.on-duration: 100` hält die Startzeile fünf
 Sekunden, mit `0` kommt gleich der Abstand ·
 voreingestellt schreibt `cam-log` nichts · eingeschaltet steht der Start mit
 Name, UUID und dem Platz des Körpers in `logs/<Datum>.log`, das Ende mit
@@ -1155,6 +1169,22 @@ ist · die Datei der crash-protection liegt unter `playerdata/crash/`, und
 eine, die vor dem Update noch direkt unter `playerdata/` lag, gibt dem
 Spieler beim Betreten trotzdem alles zurück: er steht an der Stelle aus der
 Datei, sie ist weg, und Spielmodus und Flug sind die aus der Datei ·
+`action-bar.display: false` zeigt die Startzeile mit dem Hinweis nur zu
+Beginn, danach kommt nichts mehr · `/cam back` setzt die Kamera an den
+Körper, der Cam-Modus läuft weiter, mit dem Ton und der Zeile in der
+Action-Bar, und sie fliegt danach weiter · mit `back-command.enabled: false`
+sagt `/cam back`, dass es aus ist, und die Kamera bleibt, wo sie ist, ohne
+Cam-Modus, dass er keinen hat · `end-warning` warnt beim Zeitlimit bei 10 und
+5 Sekunden Rest mit Ton und Zeile, danach endet der Cam-Modus, mit
+`enabled: false` ohne Warnung · der Akku warnt bei 10 Sekunden · `body-alarm`
+warnt mit `mob-target: vanilla` vor dem Zombie, der auf den Körper losgeht,
+bevor er trifft, mit Ton · mit `mob-target: false` kein Alarm · ein Spieler
+nahe am Körper löst voreingestellt keinen aus, mit `players: true` schon ·
+hinter der Zeile von `/cam list` stehen die Klicks auf `/cam tp <Name>
+camera` und `body`, ohne `camplugin.teleport` und mit `teleport: false` nicht
+· `/cam tp ... body` stellt neben den Körper, nicht hinein · zur Kamera geht
+es im Überlebensmodus nicht, im Kreativmodus steht der Spieler danach bei
+ihr in der Luft · der Cam-Modus des anderen läuft dabei weiter ·
 Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im

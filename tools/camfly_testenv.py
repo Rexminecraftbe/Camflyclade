@@ -1115,6 +1115,10 @@ function soundText(packet) {
 for (const name of ['sound_effect', 'entity_sound_effect']) {
   bot._client.on(name, (packet) => sounds.push({ t: Date.now(), text: soundText(packet) }));
 }
+// Die Chatzeilen des Servers als Text des ganzen Pakets, wie bei den Toenen:
+// Klick und Hover stehen nur dort, der Text der Zeile hat sie nicht mehr.
+const chatPackets = [];
+bot._client.on('system_chat', (packet) => chatPackets.push({ t: Date.now(), text: soundText(packet) }));
 // Die Bossbars, die gerade zu sehen sind, nach ihrer UUID: der Titel als Text
 // des ganzen Titels, wie bei den Toenen, und der Fuellstand.
 const bossbars = {};
@@ -1190,6 +1194,8 @@ async function handle(cmd) {
       return { count: messages.length };
     case 'sounds':
       return { sounds: sounds.slice(cmd.since || 0), count: sounds.length };
+    case 'chat_packets':
+      return { packets: chatPackets.slice(cmd.since || 0), count: chatPackets.length };
     case 'wait_message': {
       const re = new RegExp(cmd.pattern, 'i');
       const since = cmd.since || 0;
@@ -2623,7 +2629,9 @@ def aktionsleiste_checks(env, bot):
     60 Grad zeigt er nach unten. Acht Bloecke daneben ist es flacher, und er
     zeigt zur Seite. Hinauf geht es mit 'fly' und nicht mit /tp: Der Bot
     fiele danach mit der Physik des Clients wieder hinunter, bevor die Zeile
-    kommt. text ist die alte feste Zeile, ohne Abstand.
+    kommt. text ist die alte feste Zeile, ohne Abstand. false zeigt die
+    Startzeile nur zu Beginn - mit on-duration 60 ein einziges Mal -, danach
+    kommt nichts mehr.
     """
     text = (env.server / "plugins" / "CamFly" / "config.yml").read_text(encoding="utf-8")
     FIND.test("Voreingestellt steht action-bar.display: distance da",
@@ -2674,6 +2682,19 @@ def aktionsleiste_checks(env, bot):
         z = zeilen_seit(bot, since)
         FIND.test("display: text - nur die feste Zeile, kein Abstand",
                   gesagt(z, r"[Cc]am mode activated") and not abstaende(z), zeige(z[-3:]))
+        cam_off(bot)
+
+        set_option(env, "display", "false", "action-bar")
+        since = bot.mark()
+        cam_on(bot)
+        z = zeilen_seit(bot, since)
+        FIND.test("display: false - zu Beginn die Startzeile mit dem Hinweis",
+                  gesagt(z, r"[Cc]am mode activated") and gesagt(z, r"to leave"), zeige(z))
+        since = bot.mark()
+        time.sleep(5.0)
+        z = zeilen_seit(bot, since)
+        FIND.test("display: false - danach kommt nichts mehr, weder die Startzeile noch der Abstand",
+                  not gesagt(z, r"[Cc]am mode activated") and not abstaende(z), zeige(z))
     finally:
         cam_off(bot)
         set_option(env, "display", "distance", "action-bar")
@@ -3048,11 +3069,11 @@ def taste_checks(env, bot):
 
     Voreingestellt ist exit-key an - nachgesehen in der ausgelieferten
     config.yml. Zu Beginn steht in der Action-Bar "Cam mode activated" mit
-    dem Hinweis "to leave". Die Taste zum Tauschen der Haende beendet den
+    dem Hinweis "or type /cam to leave". Die Taste zum Tauschen der Haende beendet den
     Cam-Modus, und der Stein, den er vorher hielt, ist danach wieder in der
     Hand und nicht in der anderen. Gegenprobe: ohne Cam-Modus tauscht
-    dieselbe Taste die Haende wie immer. Mit exit-key: false fehlt der
-    Hinweis, und die Taste laesst den Cam-Modus laufen. on-duration: 100
+    dieselbe Taste die Haende wie immer. Mit exit-key: false nennt der
+    Hinweis nur noch /cam, und die Taste laesst den Cam-Modus laufen. on-duration: 100
     haelt die Startzeile fuenf Sekunden, ehe der Abstand kommt; mit 0 kommt
     gleich der Abstand.
 
@@ -3092,8 +3113,9 @@ def taste_checks(env, bot):
         z = befehl(bot, "/cam", warten=2)
         # mineflayer schreibt die Taste so, wie sie im Paket steht: als Namen,
         # den der echte Client durch die belegte Taste ersetzt.
-        FIND.test("exit-key: zu Beginn steht der Hinweis auf die Taste in der Action-Bar",
-                  gesagt(z, r"[Cc]am mode activated") and gesagt(z, r"key\.swapOffhand to leave"), zeige(z))
+        FIND.test("exit-key: zu Beginn steht der Hinweis auf die Taste und /cam in der Action-Bar",
+                  gesagt(z, r"[Cc]am mode activated")
+                  and gesagt(z, r"key\.swapOffhand or type /cam to leave"), zeige(z))
         z = taste()
         FIND.test("exit-key: die Taste beendet den Cam-Modus",
                   gesagt(z, r"[Cc]am mode ended") and spielmodus_ist(bot, modus), zeige(z))
@@ -3102,8 +3124,9 @@ def taste_checks(env, bot):
 
         set_option(env, "enabled", "false", "exit-key")
         z = befehl(bot, "/cam", warten=2)
-        FIND.test("exit-key: false - kein Hinweis in der Action-Bar",
-                  gesagt(z, r"[Cc]am mode activated") and not gesagt(z, r"to leave"), zeige(z))
+        FIND.test("exit-key: false - der Hinweis nennt nur noch /cam, keine Taste",
+                  gesagt(z, r"[Cc]am mode activated") and gesagt(z, r"- type /cam to leave")
+                  and not gesagt(z, r"swapOffhand"), zeige(z))
         taste()
         FIND.test("exit-key: false - die Taste laesst den Cam-Modus laufen", spielmodus_ist(bot, "adventure"), "")
         cam_off(bot)
@@ -3515,6 +3538,345 @@ def alte_absturzdatei_checks(env, bot):
     finally:
         if "pfad" in datei:
             datei["pfad"].unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# /cam back, die Warnung vor dem Ende, der Koerper-Alarm und die Knoepfe von /cam list
+# ---------------------------------------------------------------------------
+
+def toene_marke(bot):
+    """Wie viele Toene bisher beim Bot ankamen, als Marke fuer ton_da."""
+    return bot.call("sounds", since=10 ** 9).get("count", 0)
+
+
+def ton_da(bot, seit, name):
+    """Ob seit der Marke dieser Ton beim Bot ankam."""
+    return any(name in t["text"] for t in bot.call("sounds", since=seit).get("sounds", []))
+
+
+def zurueck_checks(env, bot):
+    """back-command: /cam back bringt die Kamera zum Koerper, und der Cam-Modus
+    laeuft weiter.
+
+    Der Bot fliegt sechs hoch und sechs zur Seite, /cam back setzt ihn wieder
+    an den Koerper - im Abenteuermodus, also noch im Cam-Modus -, mit dem Ton
+    von sounds.back und "Back at your body" in der Action-Bar. Er fliegt
+    danach weiter: Ein zweiter Flug kommt vom Fleck. Mit enabled: false sagt
+    /cam back, dass es abgeschaltet ist, und die Kamera bleibt, wo sie ist;
+    ohne Cam-Modus sagt es, dass er keinen hat.
+    """
+    try:
+        cam_off(bot)
+        heim = bot.server_pos()
+        if not FIND.test("Cam-Modus fuer /cam back gestartet", heim is not None and cam_on(bot), ""):
+            return
+        bot.call("fly", wait=30, dy=6, dx=6, timeout=15000)
+        time.sleep(1.0)
+        weg = bot.server_pos()
+        seit = toene_marke(bot)
+        z = befehl(bot, "/cam back")
+        da = bot.server_pos()
+        FIND.test("/cam back: die Kamera steht wieder am Koerper",
+                  weg is not None and da is not None and math.dist(weg, heim) > 5 and math.dist(da, heim) < 1.0,
+                  f"{heim} -> {weg} -> {da}")
+        FIND.test("/cam back: der Cam-Modus laeuft weiter", spielmodus_ist(bot, "adventure"), "")
+        FIND.test("/cam back: \"Back at your body\" in der Action-Bar", gesagt(z, r"Back at your body"), zeige(z))
+        FIND.test("sounds.back - der Ton bei /cam back", ton_da(bot, seit, "entity.enderman.teleport"), "")
+        bot.call("fly", wait=30, dy=4, timeout=15000)
+        time.sleep(1.0)
+        wieder = bot.server_pos()
+        FIND.test("/cam back: danach fliegt die Kamera weiter",
+                  wieder is not None and wieder[1] - heim[1] > 2.5, f"{heim} -> {wieder}")
+
+        # Der reload dabei beendet den Cam-Modus.
+        set_option(env, "enabled", "false", "back-command")
+        cam_on(bot)
+        bot.call("fly", wait=30, dy=4, timeout=15000)
+        time.sleep(1.0)
+        oben = bot.server_pos()
+        z = befehl(bot, "/cam back")
+        noch = bot.server_pos()
+        FIND.test("back-command.enabled: false - /cam back ist abgeschaltet, die Kamera bleibt oben",
+                  gesagt(z, r"/cam back is switched off") and oben is not None and noch is not None
+                  and math.dist(oben, noch) < 0.5, f"{zeige(z)} - {oben} -> {noch}")
+        cam_off(bot)
+        set_option(env, "enabled", "true", "back-command")
+
+        z = befehl(bot, "/cam back")
+        FIND.test("/cam back ohne Cam-Modus sagt, dass er keinen hat",
+                  gesagt(z, r"You are not in cam mode") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
+    finally:
+        cam_off(bot)
+        set_option(env, "enabled", "true", "back-command")
+
+
+def endwarnung_checks(env, bot):
+    """end-warning: kurz vor dem Ende durch Zeitlimit oder Akku ein Ton und
+    eine Zeile in der Action-Bar.
+
+    Das Zeitlimit steht auf 13 Sekunden und die Warnung auf 10 und 5: Drei
+    Sekunden nach dem Start kommt "Cam mode ends in 10 seconds" mit dem Ton
+    von sounds.end-warning, fuenf Sekunden spaeter "... 5 seconds", und dann
+    endet der Cam-Modus. Mit enabled: false endet er ohne Warnung. Der Akku
+    haelt 12 Sekunden und warnt bei 10 mit "Battery almost empty". Damit er
+    beim Start voll ist, laedt er dafuer 100 Sekunden in der Sekunde: Was er
+    haelt, rechnet das Plugin beim Start aus der Zeit seit dem letzten Flug
+    aus, und im Flug laedt er nicht.
+    """
+    try:
+        cam_off(bot)
+        set_options(env, [("flight-limit", "time-limit"), ("duration-seconds", "13", "time-limit"),
+                          ("seconds", "[10, 5]", "end-warning")])
+        seit = toene_marke(bot)
+        since = bot.mark()
+        if not FIND.test("Cam-Modus mit Zeitlimit fuer die Warnung gestartet", cam_on(bot), ""):
+            return
+        zehn = bot.expect(r"Cam mode ends in 10 seconds", since, 8000)
+        FIND.test("end-warning: bei 10 Sekunden Rest steht \"Cam mode ends in 10 seconds\" in der Action-Bar",
+                  bool(zehn), "")
+        FIND.test("sounds.end-warning - der Ton zur Warnung", ton_da(bot, seit, "item.lodestone_compass.lock"), "")
+        fuenf = bot.expect(r"Cam mode ends in 5 seconds", since, 10000)
+        FIND.test("end-warning: bei 5 Sekunden Rest noch einmal", bool(fuenf), "")
+        ende = bot.expect(r"Time limit expired", since, 10000)
+        FIND.test("end-warning: danach endet der Cam-Modus mit dem Zeitlimit", bool(ende), "")
+
+        set_option(env, "enabled", "false", "end-warning")
+        since = bot.mark()
+        cam_on(bot)
+        ende = bot.expect(r"Time limit expired", since, 20000)
+        z = zeilen_seit(bot, since)
+        FIND.test("end-warning.enabled: false - das Zeitlimit endet ohne Warnung",
+                  bool(ende) and not gesagt(z, r"Cam mode ends in \d"), zeige(z[-3:]))
+        set_option(env, "enabled", "true", "end-warning")
+
+        set_options(env, [("flight-limit", "battery"), ("capacity", "12", "battery"),
+                          ("recharge-per-second", "100", "battery"), ("min-start", "2", "battery")])
+        since = bot.mark()
+        if not FIND.test("Cam-Modus mit vollem Akku fuer die Warnung gestartet", cam_on(bot), ""):
+            return
+        warnung = bot.expect(r"Battery almost empty: (9|10) seconds left", since, 8000)
+        FIND.test("end-warning: der Akku warnt bei 10 Sekunden mit \"Battery almost empty\"", bool(warnung),
+                  strip_colors(warnung["text"]) if warnung else "")
+        leer = bot.expect(r"battery is empty", since, 15000)
+        FIND.test("end-warning: danach ist der Akku leer und der Cam-Modus endet", bool(leer), "")
+    finally:
+        cam_off(bot)
+        set_options(env, [("flight-limit", "false"), ("duration-seconds", "300", "time-limit"),
+                          ("seconds", "[30, 10]", "end-warning"), ("enabled", "true", "end-warning"),
+                          ("capacity", "300", "battery"), ("recharge-per-second", "0.5", "battery"),
+                          ("min-start", "10", "battery")])
+
+
+def alarm_checks(env, bot):
+    """body-alarm: ein Ton und eine Zeile in der Action-Bar, wenn etwas dem
+    Koerper gefaehrlich wird.
+
+    Ein Zombie acht Bloecke vom Koerper: Mit body.mob-target: vanilla geht er
+    auf den Koerper los, und es kommt "Watch out: a zombie is after your
+    body!" mit dem Ton von sounds.body-alarm, bevor er zuschlaegt. Mit der
+    Voreinstellung false laesst er den Koerper in Ruhe, und es kommt kein
+    Alarm. Ein zweiter Spieler drei Bloecke neben dem Koerper loest
+    voreingestellt keinen aus, mit body-alarm.players: true schon. Fuer den
+    Zombie steht der Server auf easy, in peaceful verschwaende er sofort; der
+    Bot hat Resistenz und cam-safety ist aus, falls der Zombie ihn doch
+    erwischt. Zwischen Zombie und Koerper wird die Luft geraeumt: Die
+    Flachwelt erzeugt Doerfer, und durch eine Hauswand saehe er ihn nicht.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Alarmtest aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    bot.chat(f"/fill {_floor(x) - 2} {y} {_floor(z) - 2} {_floor(x) + 10} {y + 3} {_floor(z) + 2} minecraft:air")
+    time.sleep(0.5)
+    zombie = (f'summon minecraft:zombie {x + 8} {y} {z} {{Tags:["{INTERACT_TAG}"],'
+              f"PersistenceRequired:1b,Silent:1b,IsBaby:0b}}")
+    zuschauer = None
+
+    def alarm(modus, muster):
+        """Mit diesem mob-target den Zombie hinstellen und den Cam-Modus
+        starten: (kam der Alarm, kam er vor dem Treffer auf den Koerper, kam
+        der Ton) - oder None, wenn der Cam-Modus nicht startete."""
+        set_option(env, "mob-target", modus, "body")
+        console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+        hinstellen(bot, x, y, z)
+        seit = toene_marke(bot)
+        since = bot.mark()
+        bot.chat("/cam")
+        if not bot.expect("Cam mode activated", since, 8000):
+            return None
+        bot.call("fly", wait=30, dy=RUECKSTOSS_HOEHE, timeout=15000)
+        console(env, zombie, pause=0.3)
+        bot.expect(muster, since, 8000)
+        zeilen = zeilen_seit(bot, since)
+        treffer = next((i for i, t in enumerate(zeilen) if re.search(r"body was attacked", t)), len(zeilen))
+        gewarnt = next((i for i, t in enumerate(zeilen) if re.search(muster, t)), None)
+        return gewarnt is not None, gewarnt is not None and gewarnt < treffer, \
+            ton_da(bot, seit, "entity.warden.nearby_close")
+
+    try:
+        bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
+        set_option(env, "enabled", "false", "cam-safety")
+        console(env, "difficulty easy", pause=0.5)
+
+        ergebnis = alarm("vanilla", r"Watch out: a zombie is after your body!")
+        if FIND.test("Cam-Modus fuer den Alarm mit mob-target: vanilla gestartet", ergebnis is not None, ""):
+            FIND.test("body-alarm: mit mob-target: vanilla warnt der Zombie, der auf den Koerper losgeht",
+                      ergebnis[0], "")
+            FIND.test("body-alarm: die Warnung kommt, bevor er den Koerper trifft", ergebnis[1], "")
+            FIND.test("sounds.body-alarm - der Ton zum Alarm", ergebnis[2], "")
+        cam_off(bot)
+
+        ergebnis = alarm("false", r"Watch out")
+        if FIND.test("Cam-Modus fuer den Alarm mit mob-target: false gestartet", ergebnis is not None, ""):
+            FIND.test("body-alarm: mit mob-target: false kein Alarm, der Zombie laesst den Koerper in Ruhe",
+                      not ergebnis[0], "")
+        cam_off(bot)
+        console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+        console(env, "difficulty peaceful", pause=0.3)
+
+        zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer den Alarm kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        for an in (False, True):
+            set_option(env, "players", "true" if an else "false", "body-alarm")
+            console(env, f"tp {ZUSCHAUER_NAME} {x + 20} {y} {z}", pause=1.0)
+            hinstellen(bot, x, y, z)
+            since = bot.mark()
+            if not cam_on(bot):
+                FIND.test(f"Cam-Modus fuer den Alarm mit players: {str(an).lower()} gestartet", False, "")
+                continue
+            console(env, f"tp {ZUSCHAUER_NAME} {x + 3} {y} {z}", pause=0.3)
+            gewarnt = bot.expect(rf"Watch out: {ZUSCHAUER_NAME} is close to your body!", since, 4000)
+            if an:
+                FIND.test("body-alarm.players: true - ein Spieler nahe am Koerper loest den Alarm aus",
+                          bool(gewarnt), "")
+            else:
+                FIND.test("body-alarm.players: voreingestellt false - ein Spieler nahe am Koerper loest nichts aus",
+                          not gewarnt, "")
+            cam_off(bot)
+    finally:
+        try:
+            if zuschauer is not None:
+                zuschauer.stop()
+            console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+            console(env, "difficulty peaceful", pause=0.3)
+            cam_off(bot)
+            set_options(env, [("enabled", "true", "cam-safety"), ("mob-target", "false", "body"),
+                              ("players", "false", "body-alarm")])
+            bot.chat(f"/effect clear {BOT_NAME}")
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Alarmtest: {exc}")
+
+
+def knoepfe_checks(env, bot):
+    """cam-list.teleport: die Knoepfe [Camera] und [Body] hinter jeder Zeile
+    von /cam list, und /cam tp, das sie schicken.
+
+    Im Cam-Modus ist ein zweiter Spieler. In der Liste des Bots - op, also mit
+    camplugin.teleport - stehen hinter seiner Zeile zwei Klicks auf
+    "/cam tp <Name> camera" und "... body"; nachgesehen im Paket, denn der
+    Text der Zeile hat keinen Klick mehr. Ohne op, mit access: all, sieht der
+    Bot die Liste ohne Knoepfe, ebenso mit teleport: false. /cam tp ... body
+    setzt den Bot neben den Koerper, nicht hinein. Zur Kamera kommt er im
+    Ueberlebensmodus nicht, er fiele herunter; im Kreativmodus steht er
+    danach genau bei ihr in der Luft. Der Cam-Modus des anderen laeuft dabei
+    jedes Mal weiter.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test der Knoepfe aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    modus = next((m for m in ("survival", "creative") if spielmodus_ist(bot, m)), "survival")
+    x, y, z = _floor(heim[0]) + 4.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    # Platz neben dem Koerper, falls dort ein Haus eines Dorfes steht.
+    bot.chat(f"/fill {_floor(x) - 2} {y} {_floor(z) - 2} {_floor(x) + 2} {y + 3} {_floor(z) + 2} minecraft:air")
+    time.sleep(0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+
+    def pakete_seit_liste():
+        seit = bot.call("chat_packets", since=10 ** 9).get("count", 0)
+        befehl(bot, "/cam list")
+        return " ".join(p["text"] for p in bot.call("chat_packets", since=seit).get("packets", []))
+
+    def kamera_an():
+        console(env, f"tp {ZUSCHAUER_NAME} {x} {y} {z}", pause=1.0)
+        return cam_on(zuschauer)
+
+    def noch_im_cam_modus():
+        return server_says(bot, f"/execute if entity @a[name={ZUSCHAUER_NAME},gamemode=adventure] "
+                                f"run say {{marke}}")
+
+    try:
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Knoepfe kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        if not FIND.test("Der zweite Spieler ist im Cam-Modus", kamera_an(), ""):
+            return
+        pakete = pakete_seit_liste()
+        FIND.test("cam-list.teleport: hinter der Zeile stehen die Knoepfe zur Kamera und zum Koerper",
+                  f"/cam tp {ZUSCHAUER_NAME} camera" in pakete and f"/cam tp {ZUSCHAUER_NAME} body" in pakete,
+                  pakete[-300:] or "kein Paket")
+
+        set_option(env, "access", "all", "cam-list")
+        console(env, f"deop {BOT_NAME}", pause=1.5)
+        kamera_an()
+        pakete = pakete_seit_liste()
+        FIND.test("cam-list.teleport: ohne camplugin.teleport die Liste ohne Knoepfe",
+                  ZUSCHAUER_NAME in pakete and "/cam tp" not in pakete, pakete[-300:] or "kein Paket")
+        console(env, f"op {BOT_NAME}", pause=1.5)
+
+        set_options(env, [("access", "admin", "cam-list"), ("teleport", "false", "cam-list")])
+        kamera_an()
+        pakete = pakete_seit_liste()
+        FIND.test("cam-list.teleport: false - die Liste ohne Knoepfe",
+                  ZUSCHAUER_NAME in pakete and "/cam tp" not in pakete, pakete[-300:] or "kein Paket")
+        set_option(env, "teleport", "true", "cam-list")
+
+        if not kamera_an():
+            return
+        bot.chat("/gamemode survival")
+        time.sleep(0.5)
+        antwort = befehl(bot, f"/cam tp {ZUSCHAUER_NAME} body")
+        FIND.test("/cam tp ... body: der Bot steht neben dem Koerper, nicht darin",
+                  server_says(bot, f"/execute positioned {x} {y} {z} if entity "
+                                   f"@a[name={BOT_NAME},distance=0.5..1.6] run say {{marke}}"), zeige(antwort))
+        FIND.test("/cam tp ... body: der Cam-Modus des anderen laeuft weiter", noch_im_cam_modus(), "")
+
+        zuschauer.call("fly", wait=30, dy=5, timeout=15000)
+        time.sleep(1.0)
+        antwort = befehl(bot, f"/cam tp {ZUSCHAUER_NAME} camera")
+        FIND.test("/cam tp ... camera: im Ueberlebensmodus nicht, er fiele herunter",
+                  gesagt(antwort, r"only go to a camera while you can fly"), zeige(antwort))
+        bot.chat("/gamemode creative")
+        time.sleep(0.5)
+        # Ohne Schwerkraft beim Bot, sonst fiele er auf seiner Seite gleich
+        # wieder herunter, ehe gefragt wird.
+        bot.call("fly", wait=30, dy=1, timeout=5000)
+        befehl(bot, f"/cam tp {ZUSCHAUER_NAME} camera")
+        FIND.test("/cam tp ... camera: im Kreativmodus steht der Bot bei der Kamera in der Luft",
+                  server_says(bot, f"/execute as {ZUSCHAUER_NAME} at @s if entity "
+                                   f"@a[name={BOT_NAME},distance=..0.5] run say {{marke}}"), "")
+        FIND.test("/cam tp ... camera: der Cam-Modus des anderen laeuft weiter", noch_im_cam_modus(), "")
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                zuschauer.stop()
+            console(env, f"op {BOT_NAME}", pause=1.0)
+            set_options(env, [("access", "admin", "cam-list"), ("teleport", "true", "cam-list")])
+            hinstellen(bot, heim[0], heim[1], heim[2])
+            bot.chat(f"/gamemode {modus}")
+            time.sleep(0.5)
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Knoepfe: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -8341,6 +8703,12 @@ def step_tests(env):
         kosten_checks(env, bot)
         statistik_checks(env, bot)
         alte_absturzdatei_checks(env, bot)
+
+        # --- /cam back, die Warnung vor dem Ende, der Koerper-Alarm und die Knoepfe von /cam list ---
+        zurueck_checks(env, bot)
+        endwarnung_checks(env, bot)
+        alarm_checks(env, bot)
+        knoepfe_checks(env, bot)
 
         # --- Geworfene Traenke und was den Koerper getroffen hat, mit beiden Koerpertypen ---
         fuer_beide_koerpertypen(env, bot, potion_checks, grund_checks)

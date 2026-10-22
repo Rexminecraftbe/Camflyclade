@@ -405,18 +405,44 @@ public final class CamMovementGuard implements Listener {
      * @return the spot he was put down at
      */
     private Location bringBack(Player player, CameraData data) {
+        Location target = returnTarget(data, data.getPortalEntry());
+        putDown(player, data, target);
+        return target;
+    }
+
+    /**
+     * Takes the camera back to its body and lets camera mode run on, for
+     * {@code /cam back}: from wherever it is, a world away included. He keeps
+     * looking the way he looked, only the spot changes - the same spot he
+     * started from.
+     *
+     * @return whether the server carried the teleport out
+     */
+    public boolean returnToBody(Player player, CameraData data) {
+        Location target = data.getBody().getLocation();
+        Location at = player.getLocation();
+        target.setYaw(at.getYaw());
+        target.setPitch(at.getPitch());
+        return putDown(player, data, target);
+    }
+
+    /**
+     * Teleports the camera to a spot camera mode holds it at, as camera mode's
+     * own teleport, and keeps it flying there.
+     *
+     * @return whether the server carried the teleport out
+     */
+    private boolean putDown(Player player, CameraData data, Location target) {
         // Whatever he was measured against over there is done with.
         data.setPortalAnchor(null);
-        Location entry = data.getPortalEntry();
         data.setPortalEntry(null);
-        Location target = returnTarget(data, entry);
         // A name sitting on him would turn the teleport down.
         plugin.getNameTag().takeOffForTeleport(player);
-        plugin.getTeleportGuard().teleport(player, target);
+        boolean moved = plugin.getTeleportGuard().teleport(player, target);
         // He may well have been set down in the portal he set out through.
         player.setPortalCooldown(PORTAL_COOLDOWN_TICKS);
         keepFlying(player);
-        return target;
+        return moved;
     }
 
     /** Where {@link #bringBack(Player, CameraData)} puts the player down. */
