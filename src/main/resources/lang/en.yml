@@ -24,6 +24,24 @@ messages:
   back-not-in-cam: "&cYou are not in cam mode."
   back-off: "&c/cam back is switched off."
   back-to-body: "&aBack at your body"
+  # /cam ban: {time} is ban-for or ban-for-good, {reason} is ban-reason or nothing when no reason was given,
+  # {player} who was banned or who banned, {by} who banned.
+  ban-done: "&a{player} is banned from cam mode {time}{reason}."
+  ban-everybody-done: "&aCam mode is locked for everybody {time}{reason}."
+  ban-for: "for {time}"
+  ban-for-good: "for good"
+  ban-off: "&c/cam ban is switched off."
+  ban-reason: " ({reason})"
+  ban-unknown-player: "&cNobody called {player} has been on this server."
+  ban-usage: "&eUse /cam ban <player|all> [time] [reason], /cam unban <player|all> or /cam banlist. A time is e.g. 30m, 2h or 7d."
+  banlist-empty: "&eNobody is banned from cam mode."
+  banlist-entry: "&7- &f{player}&7: {time}, by {by}{reason}"
+  banlist-everybody: "&7- &fEverybody&7: {time}, by {by}{reason}"
+  banlist-header: "&eBanned from cam mode ({count}):"
+  banned: "&cYou are banned from cam mode {time}{reason}."
+  banned-everybody: "&cCam mode is locked for everybody {time}{reason}."
+  banned-everybody-now: "&c{player} locked cam mode for everybody {time}{reason}."
+  banned-now: "&c{player} banned you from cam mode {time}{reason}."
   battery-bossbar: "Battery: {time}"
   battery-bossbar-charging: "Battery charging: {charge}, full in {time}"
   battery-empty: "&cCam mode ended: the battery is empty."
@@ -99,6 +117,8 @@ messages:
   config-unknown-entry: "&cUnknown entry in {path}: '{value}'. It is ignored."
   config-unknown-key: "&cUnknown setting {path}. It is ignored, check its spelling and indentation."
   config-unknown-value: "&cUnknown value for {path}: '{value}'. Allowed: {allowed}. Using {used} instead."
+  # Who {player} in stopped-by, banned-now and banlist is when the command comes from the console.
+  console-name: "the server"
   cooldown-available: "&aCam mode available again"
   # The bossbar of time-limit.show-bossbar-cooldown, {time} is the time left.
   cooldown-bossbar: "Cam mode again in: {time}"
@@ -148,8 +168,6 @@ messages:
   stats-unknown-player: "&cNobody called {player} has been on this server."
   stats-usage: "&eUse /cam stats, /cam stats reset or /cam stats player <name>."
   stop-all-done: "&aEnded the cam mode of {count} players."
-  # Who {player} in stopped-by is when /cam stop comes from the console.
-  stop-console-name: "the server"
   stop-done: "&aEnded the cam mode of {player}."
   stop-none: "&eNobody is in cam mode."
   stop-not-in-cam: "&c{player} is not in cam mode."
@@ -159,6 +177,12 @@ messages:
   teleport-arrival-ended: "&c{player} was teleported to you. Camera mode ended."
   teleport-ended: "&cYou were teleported. Camera mode ended."
   time-limit-expired: "&cCam mode ended: Time limit expired."
+  unban-done: "&a{player} may use cam mode again."
+  unban-everybody-done: "&aCam mode is open for everybody again."
+  unban-everybody-none: "&eCam mode is not locked for everybody."
+  unban-not-banned: "&e{player} is not banned from cam mode."
+  unbanned-everybody-now: "&aCam mode is open for everybody again."
+  unbanned-now: "&aYou may use cam mode again."
 
 # Names the texts above fill in for things of the game: damage types, mobs, effects, biomes,
 # structures, dimensions and portals. Each list goes by the key of the game without the part up to
@@ -456,6 +480,19 @@ message-settings:
   back-not-in-cam: true
   back-off: true
   back-to-body: true
+  ban-done: true
+  ban-everybody-done: true
+  ban-off: true
+  ban-unknown-player: true
+  ban-usage: true
+  banlist-empty: true
+  banlist-entry: true
+  banlist-everybody: true
+  banlist-header: true
+  banned: true
+  banned-everybody: true
+  banned-everybody-now: true
+  banned-now: true
   body-alarm-mob: true
   body-alarm-player: true
   body-attacked: true
@@ -544,3 +581,9 @@ message-settings:
   teleport-arrival-ended: true
   teleport-ended: true
   time-limit-expired: true
+  unban-done: true
+  unban-everybody-done: true
+  unban-everybody-none: true
+  unban-not-banned: true
+  unbanned-everybody-now: true
+  unbanned-now: true

@@ -120,7 +120,7 @@ public final class CamStop {
     /** Ends the camera mode of one player and tells him who did it. */
     private void stop(Player target, CommandSender by) {
         plugin.exitCameraMode(target, EndReason.STOP);
-        String name = by instanceof Player player ? player.getName() : messages.getMessage("stop-console-name");
+        String name = by instanceof Player player ? player.getName() : messages.getMessage("console-name");
         messages.sendMessage(target, "stopped-by", "{player}", name);
     }
 }

@@ -10,7 +10,7 @@ softdepend: [Vault]
 commands:
   cam:
     description: Enables or disables camera mode
-    usage: /<command> [back|list|reload|stats [reset|player <name>]|stop <name>|all|tp <name> camera|body]
+    usage: /<command> [back|list|reload|stats [reset|player <name>]|stop <name>|all|ban <name>|all [time] [reason]|unban <name>|all|banlist|tp <name> camera|body]
     permission: camplugin.use
     permission-message: "You do not have permission for this command.!"
 
@@ -29,4 +29,10 @@ permissions:
     default: op
   camplugin.stop:
     description: Allows /cam stop and its button in /cam list, to end the cam mode of others, while stop-command is on
+    default: op
+  camplugin.ban:
+    description: Allows /cam ban, /cam unban and /cam banlist, to keep players out of cam mode, while cam-ban is on
+    default: op
+  camplugin.ban.bypass:
+    description: Lets a player use cam mode while /cam ban all keeps everybody else out
     default: op

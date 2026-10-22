@@ -243,7 +243,7 @@ sounds:
     sound: entity.illusioner.mirror_move
     volume: 1.0
     pitch: 1.0
-  # Beim Ende von außen: /cam reload, /cam stop, Zeitlimit abgelaufen, Akku leer, afk-end, Teleport
+  # Beim Ende von außen: /cam reload, /cam stop, /cam ban, Zeitlimit abgelaufen, Akku leer, afk-end, Teleport
   # (beim Tod, beim Verlassen des Servers und beim Herunterfahren gibt es keinen Ton)
   end-forced:
     enabled: true
@@ -450,6 +450,22 @@ back-command:
 # Event oder einem Neustart. Er kommt zurück zu seinem Körper und erfährt, wer es war (Text: stopped-by).
 # Benutzen dürfen es die Konsole und wer das Recht camplugin.stop hat (Operatoren haben es). Ton: sounds.end-forced.
 stop-command:
+  enabled: false
+
+# /cam ban sperrt Spieler aus dem Cam-Modus aus, einzelne oder alle:
+#   /cam ban <Name> [Zeit] [Grund]  = einen Spieler, z. B. /cam ban Steve 2h Griefing (ohne Zeit für immer)
+#   /cam ban all [Zeit] [Grund]     = alle, z. B. während eines Events - außer wer das Recht camplugin.ban.bypass hat
+#                                     (Operatoren haben es)
+#   /cam unban <Name>               = die Sperre eines Spielers aufheben
+#   /cam unban all                  = die Sperre für alle aufheben (die einzelnen bleiben)
+#   /cam banlist                    = wer gesperrt ist, wie lange noch, von wem und warum
+# Zeit: Zahlen mit s, m, h, d oder w dahinter, auch zusammen, z. B. 30m, 2h, 1d12h oder 1w.
+# Wer gerade im Cam-Modus ist, kommt zurück zu seinem Körper (Ton: sounds.end-forced) und erfährt, wer es war.
+# Die Sperre eines einzelnen Spielers gilt auch für Operatoren. Gespeichert wird in plugins/CamFly/bans.yml,
+# die Sperren bleiben nach /cam reload und einem Neustart.
+# Benutzen dürfen es die Konsole und wer das Recht camplugin.ban hat (Operatoren haben es).
+cam-ban:
+  # false = die Befehle sind aus, und keine Sperre gilt (bans.yml bleibt, wie sie ist)
   enabled: false
 
 # Der Cam-Modus endet, wenn der Spieler eine Weile gar nichts tut: nicht fliegt, sich nicht umsieht und nicht

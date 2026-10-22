@@ -229,6 +229,9 @@ public final class CamSettings {
     /** Whether {@code /cam stop} ends the camera mode of others, {@code stop-command.enabled}. */
     private boolean stopCommandEnabled;
 
+    /** Whether {@code /cam ban} keeps players out of camera mode, {@code cam-ban.enabled}. */
+    private boolean camBanEnabled;
+
     /** Whether camera mode ends after a while without moving, {@code afk-end.enabled}. */
     private boolean afkEndEnabled;
     /** How long that while is, in seconds, {@code afk-end.seconds}. */
@@ -472,6 +475,7 @@ public final class CamSettings {
         camListTeleport = config.getBoolean("cam-list.teleport", true);
         camListStop = config.getBoolean("cam-list.stop", true);
         stopCommandEnabled = config.getBoolean("stop-command.enabled", false);
+        camBanEnabled = config.getBoolean("cam-ban.enabled", false);
         afkEndEnabled = config.getBoolean("afk-end.enabled", false);
         afkEndSeconds = config.getInt("afk-end.seconds", 300, MIN_AFK_SECONDS);
         backCommandEnabled = config.getBoolean("back-command.enabled", true);
@@ -1088,10 +1092,14 @@ public final class CamSettings {
         return camListStop;
     }
 
-    // ------------------------------------------------------ stop-command, afk-end
+    // --------------------------------------------- stop-command, cam-ban, afk-end
 
     public boolean isStopCommandEnabled() {
         return stopCommandEnabled;
+    }
+
+    public boolean isCamBanEnabled() {
+        return camBanEnabled;
     }
 
     public boolean isAfkEndEnabled() {

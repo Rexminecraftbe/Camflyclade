@@ -2,6 +2,8 @@ package de.elia.cameraplugin.camfly2;
 
 import de.elia.cameraplugin.afk.CamAfk;
 import de.elia.cameraplugin.back.CamBack;
+import de.elia.cameraplugin.ban.BanList;
+import de.elia.cameraplugin.ban.CamBan;
 import de.elia.cameraplugin.battery.CamBattery;
 import de.elia.cameraplugin.body.BodyAlarm;
 import de.elia.cameraplugin.body.BodySpawner;
@@ -100,6 +102,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamList camList = new CamList(settings, messages, cameraPlayers);
     private final CamListTeleport listTeleport = new CamListTeleport(this);
     private final CamStop stop = new CamStop(this);
+    private final CamBan ban = new CamBan(this, new BanList(this, log));
     private final CamCrashGuard crashGuard = new CamCrashGuard(this, log);
     private final PlayerStore playerStore = new PlayerStore(this, log);
     private final CamBattery battery = new CamBattery(this, playerStore);
@@ -157,6 +160,7 @@ public final class CameraPlugin extends JavaPlugin {
         camSulfurCubeGuard = new CamSulfurCubeGuard(this);
         camInventoryGuard = new CamInventoryGuard(this, this::isInCameraMode);
         configFile.reportConfigWarnings(loadConfigValues(), null);
+        ban.reload();
         bodySpawner = new BodySpawner(this, settings, messages, log, cameraPlayers);
         camModeObjective.setUp();
         bodySpawner.removeLeftoverEntities();
@@ -374,6 +378,7 @@ public final class CameraPlugin extends JavaPlugin {
             }
         }
         configFile.reportConfigWarnings(loadConfigValues(), initiator);
+        ban.reload();
         noCollisionTeam.refreshNoCollisionTeam();
         timeLimit.onReload();
         startCost.reset();
@@ -509,6 +514,10 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamStop getStop() {
         return stop;
+    }
+
+    public CamBan getBan() {
+        return ban;
     }
 
     public CamCrashGuard getCrashGuard() {

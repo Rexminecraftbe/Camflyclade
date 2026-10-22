@@ -3894,6 +3894,21 @@ def bossbar_suche(bot, muster):
     return [b for b in bars if re.search(muster, b.get("title", ""))], [b.get("title", "") for b in bars]
 
 
+def zuschauer_cam_an(env, zuschauer, x, y, z):
+    """Den zweiten Spieler auf seinen Platz stellen und in den Cam-Modus bringen.
+
+    Meldet er sich in der Luft an - dort, wo ihn ein frueherer Lauf
+    zurueckliess -, faellt er, nimmt Fallschaden, und cam-safety sperrt /cam
+    fuenf Sekunden lang. Klappt der Start nicht, geht es deshalb nach dieser
+    Zeit noch einmal.
+    """
+    console(env, f"tp {ZUSCHAUER_NAME} {x} {y} {z}", pause=1.0)
+    if cam_on(zuschauer):
+        return True
+    time.sleep(5.5)
+    return cam_on(zuschauer)
+
+
 def stopp_checks(env, bot):
     """stop-command: /cam stop <Name> und /cam stop all beenden den Cam-Modus
     anderer, und der Knopf [Stop] hinter jeder Zeile von /cam list.
@@ -3919,8 +3934,7 @@ def stopp_checks(env, bot):
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
 
     def kamera_an():
-        console(env, f"tp {ZUSCHAUER_NAME} {x} {y} {z}", pause=1.0)
-        return cam_on(zuschauer)
+        return zuschauer_cam_an(env, zuschauer, x, y, z)
 
     def noch_im_cam_modus():
         return server_says(bot, f"/execute if entity @a[name={ZUSCHAUER_NAME},gamemode=adventure] "
@@ -3998,6 +4012,170 @@ def stopp_checks(env, bot):
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test von /cam stop: {exc}")
+
+
+def bann_checks(env, bot):
+    """cam-ban: /cam ban, /cam unban und /cam banlist.
+
+    Voreingestellt ist es aus - nachgesehen in der ausgelieferten Datei -, und
+    /cam ban sagt das. Eingeschaltet sperrt der Bot (op) den zweiten Spieler
+    fuer eine Stunde mit einem Grund: Dessen laufender Cam-Modus endet, er
+    erfaehrt, wer es war, und ein neuer Start wird abgelehnt, mit der Zeit,
+    die noch bleibt, und dem Grund. Die Sperre steht in bans.yml und in
+    /cam banlist und bleibt nach /cam reload. /cam unban hebt sie auf, ein
+    zweites Mal sagt es, dass er nicht gesperrt ist. Eine Sperre fuer drei
+    Sekunden laeuft von selbst ab. /cam ban all von der Konsole sperrt den
+    zweiten Spieler aus, den Bot nicht: Als op hat er camplugin.ban.bypass.
+    /cam unban all macht wieder auf. Ein unbekannter Name wird gemeldet, und
+    ohne op fehlt das Recht.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Sperrtest aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 4.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    # Platz fuer den zweiten Spieler, falls dort ein Haus eines Dorfes steht.
+    bot.chat(f"/fill {_floor(x) - 2} {y} {_floor(z) - 2} {_floor(x) + 2} {y + 3} {_floor(z) + 2} minecraft:air")
+    time.sleep(0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    sperren = env.server / "plugins" / "CamFly" / "bans.yml"
+    # Die Zeit, die eine Stunde nach ein paar Sekunden noch hat.
+    stunde = r"for (59m \d+s|1h 0m 0s)"
+
+    def kamera_an():
+        return zuschauer_cam_an(env, zuschauer, x, y, z)
+
+    def noch_im_cam_modus():
+        return server_says(bot, f"/execute if entity @a[name={ZUSCHAUER_NAME},gamemode=adventure] "
+                                f"run say {{marke}}")
+
+    def konsole(befehl_text):
+        vorher = len(server_log(env))
+        console(env, befehl_text, pause=1.5)
+        return strip_colors(server_log(env)[vorher:])
+
+    try:
+        FIND.test("Voreingestellt steht cam-ban.enabled: false da",
+                  re.search(r"(?m)^cam-ban:\s*\n(?:\s*#.*\n)*\s*enabled:\s*false\s*$", ausgeliefert(env)) is not None,
+                  "")
+        zeilen = befehl(bot, f"/cam ban {ZUSCHAUER_NAME}")
+        FIND.test("cam-ban.enabled: false - /cam ban ist abgeschaltet", gesagt(zeilen, r"/cam ban is switched off"),
+                  zeige(zeilen))
+
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer den Sperrtest kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        if sperren.exists():
+            sperren.unlink()
+        set_option(env, "enabled", "true", "cam-ban")
+        if not FIND.test("Der zweite Spieler ist fuer den Sperrtest im Cam-Modus", kamera_an(), ""):
+            return
+
+        since = zuschauer.mark()
+        seit = toene_marke(zuschauer)
+        zeilen = befehl(bot, f"/cam ban {ZUSCHAUER_NAME} 1h Testgrund")
+        FIND.test("/cam ban <Name> 1h <Grund>: der Bot bekommt die Bestaetigung mit Zeit und Grund",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} is banned from cam mode for 1h 0m 0s \(Testgrund\)"),
+                  zeige(zeilen))
+        FIND.test("/cam ban: ein laufender Cam-Modus endet", not noch_im_cam_modus(), "")
+        FIND.test("/cam ban: er erfaehrt, wer es war",
+                  bool(zuschauer.expect(rf"{BOT_NAME} banned you from cam mode {stunde} \(Testgrund\)", since, 4000)),
+                  "")
+        FIND.test("/cam ban: er hoert sounds.end-forced", ton_da(zuschauer, seit, "block.respawn_anchor.deplete"), "")
+        zeilen = befehl(zuschauer, "/cam")
+        FIND.test("/cam ban: gesperrt startet er nicht und erfaehrt, wie lange noch und warum",
+                  gesagt(zeilen, rf"You are banned from cam mode {stunde} \(Testgrund\)")
+                  and not gesagt(zeilen, r"[Cc]am mode activated"), zeige(zeilen))
+        text = sperren.read_text(encoding="utf-8") if sperren.exists() else ""
+        FIND.test("cam-ban: die Sperre steht in bans.yml",
+                  f"name: {ZUSCHAUER_NAME}" in text and "Testgrund" in text, text[-300:] or "keine Datei")
+        zeilen = befehl(bot, "/cam banlist")
+        FIND.test("/cam banlist nennt ihn, wie lange noch, von wem und warum",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME}: {stunde}, by {BOT_NAME} \(Testgrund\)"), zeige(zeilen))
+        console(env, "cam reload", pause=2)
+        zeilen = befehl(zuschauer, "/cam")
+        FIND.test("cam-ban: nach /cam reload ist er immer noch gesperrt",
+                  gesagt(zeilen, r"You are banned from cam mode"), zeige(zeilen))
+
+        since = zuschauer.mark()
+        zeilen = befehl(bot, f"/cam unban {ZUSCHAUER_NAME}")
+        FIND.test("/cam unban <Name>: die Bestaetigung", gesagt(zeilen, rf"{ZUSCHAUER_NAME} may use cam mode again"),
+                  zeige(zeilen))
+        FIND.test("/cam unban <Name>: er erfaehrt es",
+                  bool(zuschauer.expect(r"You may use cam mode again", since, 4000)), "")
+        an = kamera_an()
+        cam_off(zuschauer)
+        FIND.test("/cam unban <Name>: danach startet er wieder", an, "")
+        zeilen = befehl(bot, f"/cam unban {ZUSCHAUER_NAME}")
+        FIND.test("/cam unban: wer nicht gesperrt ist, wird gemeldet",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} is not banned from cam mode"), zeige(zeilen))
+
+        befehl(bot, f"/cam ban {ZUSCHAUER_NAME} 3s")
+        zeilen = befehl(zuschauer, "/cam")
+        gesperrt = gesagt(zeilen, r"You are banned from cam mode for \d seconds\.")
+        time.sleep(3.0)
+        an = kamera_an()
+        cam_off(zuschauer)
+        FIND.test("/cam ban <Name> 3s: erst gesperrt, dann laeuft die Sperre von selbst ab", gesperrt and an,
+                  zeige(zeilen))
+
+        kamera_an()
+        cam_on(bot)
+        since = zuschauer.mark()
+        log = konsole("cam ban all 1h Event")
+        FIND.test("/cam ban all von der Konsole: die Bestaetigung",
+                  "Cam mode is locked for everybody for 1h 0m 0s (Event)" in log, log.strip()[-200:] or "nichts im Log")
+        FIND.test("/cam ban all: der Cam-Modus des zweiten Spielers endet", not noch_im_cam_modus(), "")
+        FIND.test("/cam ban all: er erfaehrt, dass es der Server war",
+                  bool(zuschauer.expect(rf"the server locked cam mode for everybody {stunde} \(Event\)", since, 4000)),
+                  "")
+        FIND.test("camplugin.ban.bypass: der Bot (op) bleibt dabei im Cam-Modus", spielmodus_ist(bot, "adventure"), "")
+        cam_off(bot)
+        zeilen = befehl(zuschauer, "/cam")
+        FIND.test("/cam ban all: ohne camplugin.ban.bypass startet er nicht",
+                  gesagt(zeilen, rf"Cam mode is locked for everybody {stunde} \(Event\)")
+                  and not gesagt(zeilen, r"[Cc]am mode activated"), zeige(zeilen))
+        an = cam_on(bot)
+        cam_off(bot)
+        FIND.test("camplugin.ban.bypass: der Bot (op) startet trotzdem", an, "")
+        zeilen = befehl(bot, "/cam banlist")
+        FIND.test("/cam banlist nennt die Sperre fuer alle",
+                  gesagt(zeilen, rf"Everybody: {stunde}, by the server \(Event\)"), zeige(zeilen))
+        since = zuschauer.mark()
+        log = konsole("cam unban all")
+        FIND.test("/cam unban all von der Konsole: die Bestaetigung",
+                  "Cam mode is open for everybody again" in log, log.strip()[-200:] or "nichts im Log")
+        FIND.test("/cam unban all: der zweite Spieler erfaehrt es",
+                  bool(zuschauer.expect(r"Cam mode is open for everybody again", since, 4000)), "")
+        an = kamera_an()
+        cam_off(zuschauer)
+        FIND.test("/cam unban all: danach startet er wieder", an, "")
+
+        zeilen = befehl(bot, "/cam ban NiemandHier")
+        FIND.test("/cam ban: ein unbekannter Name wird gemeldet", gesagt(zeilen, r"Nobody called NiemandHier"),
+                  zeige(zeilen))
+        console(env, f"deop {BOT_NAME}", pause=1.5)
+        zeilen = befehl(bot, f"/cam ban {ZUSCHAUER_NAME}")
+        console(env, f"op {BOT_NAME}", pause=1.5)
+        liste = befehl(bot, "/cam banlist")
+        FIND.test("/cam ban ohne camplugin.ban: keine Berechtigung, und niemand ist gesperrt",
+                  gesagt(zeilen, r"permission") and gesagt(liste, r"Nobody is banned from cam mode"),
+                  f"{zeige(zeilen)} - {zeige(liste)}")
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                zuschauer.stop()
+            console(env, f"op {BOT_NAME}", pause=1.0)
+            cam_off(bot)
+            if sperren.exists():
+                sperren.unlink()
+            set_option(env, "enabled", "false", "cam-ban")
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Sperrtest: {exc}")
 
 
 def welten_checks(env, bot):
@@ -9205,9 +9383,10 @@ def step_tests(env):
         alarm_checks(env, bot)
         knoepfe_checks(env, bot)
 
-        # --- /cam stop, die Welten-Liste, die Sperre nach einem Angriff, afk-end, {health},
+        # --- /cam stop, /cam ban, die Welten-Liste, die Sperre nach einem Angriff, afk-end, {health},
         # --- die Wartezeit und der Akku: Bossbar, Einteilung und wo sie liegen ---
         stopp_checks(env, bot)
+        bann_checks(env, bot)
         welten_checks(env, bot)
         angriff_checks(env, bot)
         afk_checks(env, bot)

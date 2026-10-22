@@ -179,9 +179,9 @@ public final class CamStats {
     /**
      * A player by his name: online, or once on this server. Only players the
      * server knows are looked through - a name nobody here has had is not
-     * looked up anywhere else.
+     * looked up anywhere else. For {@code /cam ban} as well.
      */
-    private static OfflinePlayer find(String name) {
+    public static OfflinePlayer find(String name) {
         Player online = Bukkit.getPlayerExact(name);
         if (online != null) {
             return online;

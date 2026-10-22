@@ -68,7 +68,13 @@ public final class CamTimeLimit {
     }
 
     public static String formatDuration(long seconds) {
-        if (seconds >= 3600) {
+        if (seconds >= 86400) {
+            // Days only come up with a ban, see /cam ban.
+            long d = seconds / 86400;
+            long h = (seconds % 86400) / 3600;
+            long m = (seconds % 3600) / 60;
+            return d + "d " + h + "h " + m + "m";
+        } else if (seconds >= 3600) {
             long h = seconds / 3600;
             long m = (seconds % 3600) / 60;
             long s = seconds % 60;

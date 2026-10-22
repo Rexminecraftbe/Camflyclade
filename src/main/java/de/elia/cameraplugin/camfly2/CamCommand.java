@@ -39,6 +39,19 @@ public class CamCommand implements CommandExecutor {
             }
             return true;
         }
+        // From the console as well, like /cam stop.
+        if (args.length > 0 && args[0].equalsIgnoreCase("ban")) {
+            plugin.getBan().ban(sender, Arrays.copyOfRange(args, 1, args.length));
+            return true;
+        }
+        if (args.length > 0 && args[0].equalsIgnoreCase("unban")) {
+            plugin.getBan().unban(sender, Arrays.copyOfRange(args, 1, args.length));
+            return true;
+        }
+        if (args.length > 0 && args[0].equalsIgnoreCase("banlist")) {
+            plugin.getBan().list(sender);
+            return true;
+        }
         // From the console as well: whoever restarts the server wants
         // everybody back at his body first.
         if (args.length > 0 && args[0].equalsIgnoreCase("stop")) {

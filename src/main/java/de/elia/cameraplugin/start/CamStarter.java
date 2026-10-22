@@ -44,6 +44,11 @@ public final class CamStarter {
      */
     public boolean start(Player player) {
         StartChecks checks = plugin.getStartChecks();
+        // First of all: neither waiting nor going somewhere else helps a
+        // banned player.
+        if (!plugin.getBan().checkStart(player)) {
+            return false;
+        }
         // Before the cooldown: "wait ten more seconds" tells a spectator
         // the wrong thing - waiting does not let a spectator start either.
         if (!checks.checkCamSpectator(player)) {

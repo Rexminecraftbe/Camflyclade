@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **769** - alle 769 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **778** - alle 778 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -215,6 +215,13 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   ein halbes Herz alle paar Ticks. Der Test von `{health}` stellt deshalb
   `natural_health_regeneration` für sich ab, sonst stünde der Bot schon vor
   dem Start des Cam-Modus wieder mit vollen Herzen da.
+* **Der Sperrtest löscht `plugins/CamFly/bans.yml`**, vorher und nachher.
+  Die Sperren bleiben sonst über einen Neustart hinweg stehen, und ein
+  abgebrochener Lauf ließe den zweiten Spieler gesperrt zurück.
+* **Der zweite Spieler meldet sich an, wo ihn der letzte Lauf zurückließ**,
+  auch in der Luft. Fällt er von dort, nimmt er Fallschaden, und
+  `cam-safety` sperrt `/cam` fünf Sekunden lang. `zuschauer_cam_an` stellt
+  ihn deshalb auf seinen Platz und versucht es nach dieser Zeit noch einmal.
 * **Für `afk-end` steht der Bot im Cam-Modus einfach still.** mineflayer
   schickt dann keine neue Position und keinen neuen Blick, und Paper meldet
   ohne Änderung kein `PlayerMoveEvent`. Bewegt sich der Bot, fliegt er alle

@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.camfly2;
 
 import de.elia.cameraplugin.back.CamBack;
+import de.elia.cameraplugin.ban.CamBan;
 import de.elia.cameraplugin.list.CamList;
 import de.elia.cameraplugin.list.CamListTeleport;
 import de.elia.cameraplugin.stats.CamStats;
@@ -24,6 +25,7 @@ public class CamTabCompleter implements TabCompleter {
     private final CamBack back;
     private final CamListTeleport listTeleport;
     private final CamStop stop;
+    private final CamBan ban;
 
     public CamTabCompleter(CameraPlugin plugin) {
         this.plugin = plugin;
@@ -32,6 +34,7 @@ public class CamTabCompleter implements TabCompleter {
         this.back = plugin.getBack();
         this.listTeleport = plugin.getListTeleport();
         this.stop = plugin.getStop();
+        this.ban = plugin.getBan();
     }
 
     @Override
@@ -49,6 +52,33 @@ public class CamTabCompleter implements TabCompleter {
         }
         if (tpCommand && args.length == 3) {
             return startingWith(args[2].toLowerCase(Locale.ROOT), "camera", "body");
+        }
+        boolean banCommand = args.length > 1 && args[0].equalsIgnoreCase("ban") && ban.mayUse(sender);
+        if (banCommand && args.length == 2) {
+            String partial = args[1].toLowerCase(Locale.ROOT);
+            List<String> names = new ArrayList<>(startingWith(partial, "all"));
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                if (player.getName().toLowerCase(Locale.ROOT).startsWith(partial)) {
+                    names.add(player.getName());
+                }
+            }
+            return names;
+        }
+        if (banCommand && args.length == 3) {
+            return startingWith(args[2].toLowerCase(Locale.ROOT), "30m", "1h", "1d", "7d");
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("unban") && ban.mayUse(sender)) {
+            String partial = args[1].toLowerCase(Locale.ROOT);
+            List<String> names = new ArrayList<>();
+            if (ban.everybodyBanned() && "all".startsWith(partial)) {
+                names.add("all");
+            }
+            for (String name : ban.bannedNames()) {
+                if (name != null && name.toLowerCase(Locale.ROOT).startsWith(partial)) {
+                    names.add(name);
+                }
+            }
+            return names;
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("stop") && stop.mayUse(sender)) {
             String partial = args[1].toLowerCase(Locale.ROOT);
@@ -83,6 +113,9 @@ public class CamTabCompleter implements TabCompleter {
         }
         if (stop.mayUse(sender) && "stop".startsWith(partial)) {
             completions.add("stop");
+        }
+        if (ban.mayUse(sender)) {
+            completions.addAll(startingWith(partial, "ban", "banlist", "unban"));
         }
         if (listTeleport.mayUse(sender) && "tp".startsWith(partial)) {
             completions.add("tp");
