@@ -2,8 +2,8 @@ package de.elia.cameraplugin.storage;
 
 /**
  * What the plugin keeps about a player from one camera mode to the next: his
- * statistics and the charge of his battery. Kept in a file of its own by
- * {@link PlayerStore}.
+ * statistics, the charge of his battery and when his last cooldown began.
+ * Kept in a file of its own by {@link PlayerStore}.
  */
 public final class PlayerRecord {
 
@@ -27,6 +27,13 @@ public final class PlayerRecord {
     private Double batteryCharge;
     /** When {@link #batteryCharge} was last worked out, as {@link System#currentTimeMillis()} counts. */
     private long batteryUpdated;
+    /**
+     * When his last cooldown of {@code time-limit} began, as
+     * {@link System#currentTimeMillis()} counts, or {@code null} while he has
+     * never had one. How long it lasts is up to the config file, so a new
+     * {@code cooldown-seconds} counts for a cooldown that is running as well.
+     */
+    private Long cooldownStarted;
     /** Whether something has changed since the file was last written. */
     private boolean dirty;
 
@@ -34,7 +41,7 @@ public final class PlayerRecord {
     }
 
     PlayerRecord(String name, long sessions, long totalSeconds, long longestSeconds, double distanceFlown,
-                 double farthestFromBody, Double batteryCharge, long batteryUpdated) {
+                 double farthestFromBody, Double batteryCharge, long batteryUpdated, Long cooldownStarted) {
         this.name = name;
         this.sessions = sessions;
         this.totalSeconds = totalSeconds;
@@ -43,6 +50,7 @@ public final class PlayerRecord {
         this.farthestFromBody = farthestFromBody;
         this.batteryCharge = batteryCharge;
         this.batteryUpdated = batteryUpdated;
+        this.cooldownStarted = cooldownStarted;
     }
 
     /**
@@ -79,6 +87,12 @@ public final class PlayerRecord {
         dirty = true;
     }
 
+    /** Notes that a cooldown begins now. */
+    public void setCooldownStarted(long at) {
+        cooldownStarted = at;
+        dirty = true;
+    }
+
     public String getName() { return name; }
     public long getSessions() { return sessions; }
     public long getTotalSeconds() { return totalSeconds; }
@@ -88,6 +102,8 @@ public final class PlayerRecord {
     /** The charge of the battery at {@link #getBatteryUpdated()}, or {@code null} for a battery never used. */
     public Double getBatteryCharge() { return batteryCharge; }
     public long getBatteryUpdated() { return batteryUpdated; }
+    /** When the last cooldown began, or {@code null} for a player who never had one. */
+    public Long getCooldownStarted() { return cooldownStarted; }
 
     boolean isDirty() { return dirty; }
     void markSaved() { dirty = false; }

@@ -27,9 +27,10 @@ import java.util.concurrent.TimeUnit;
  * and how far from his body.
  *
  * <p>For whoever may go there, each line ends in two buttons, to the camera
- * and to the body, see {@link CamListTeleport}. They are put behind the
- * line and not into its text, so that a language file from before them gets
- * them as well.</p>
+ * and to the body, see {@link CamListTeleport}, and for whoever may end it
+ * in a third one that does, see {@link de.elia.cameraplugin.stop.CamStop}.
+ * They are put behind the line and not into its text, so that a language
+ * file from before them gets them as well.</p>
  */
 public final class CamList {
 
@@ -64,10 +65,12 @@ public final class CamList {
     /**
      * Sends the list, one line for each camera player, sorted by name.
      *
-     * @param buttons whether each line ends in the buttons to the camera and
-     *                to the body, see {@link CamListTeleport#mayUse}
+     * @param teleport whether each line ends in the buttons to the camera and
+     *                 to the body, see {@link CamListTeleport#mayUse}
+     * @param stop     whether it ends in the button that ends his camera
+     *                 mode, see {@link de.elia.cameraplugin.stop.CamStop#showsButton}
      */
-    public void show(CommandSender sender, boolean buttons) {
+    public void show(CommandSender sender, boolean teleport, boolean stop) {
         List<Player> players = new ArrayList<>();
         for (UUID id : cameraPlayers.ids()) {
             Player player = Bukkit.getPlayer(id);
@@ -91,29 +94,34 @@ public final class CamList {
             boolean sameWorld = body.getWorld().equals(at.getWorld());
             String key = sameWorld ? "cam-list-entry" : "cam-list-entry-away";
             String distance = sameWorld ? String.valueOf(Math.round(at.distance(body))) : "";
-            if (!buttons) {
+            if (!teleport && !stop) {
                 messages.sendConfiguredMessage(sender, key, "{player}", player.getName(),
                         "{time}", time, "{distance}", distance);
             } else if (messages.isMessageEnabled(key)) {
                 String text = messages.getMessage(key).replace("{player}", player.getName())
                         .replace("{time}", time).replace("{distance}", distance);
                 List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
-                line.addAll(button("cam-list-camera", player.getName(), "camera"));
-                line.addAll(button("cam-list-body", player.getName(), "body"));
+                if (teleport) {
+                    line.addAll(button("cam-list-camera", player.getName(), "/cam tp " + player.getName() + " camera"));
+                    line.addAll(button("cam-list-body", player.getName(), "/cam tp " + player.getName() + " body"));
+                }
+                if (stop) {
+                    line.addAll(button("cam-list-stop", player.getName(), "/cam stop " + player.getName()));
+                }
                 sender.spigot().sendMessage(line.toArray(new BaseComponent[0]));
             }
         }
     }
 
     /**
-     * One button behind a line: its text, {@code cam-list-camera} or
-     * {@code cam-list-body}, and on hovering the text of the same name with
-     * {@code -hover} after it. A click runs {@code /cam tp}. Nothing when the
-     * text is switched off or empty.
+     * One button behind a line: its text, {@code cam-list-camera},
+     * {@code cam-list-body} or {@code cam-list-stop}, and on hovering the text
+     * of the same name with {@code -hover} after it. Nothing when the text is
+     * switched off or empty.
      *
-     * @param where {@code camera} or {@code body}, as {@code /cam tp} takes it
+     * @param command what a click runs, {@code /cam tp} or {@code /cam stop}
      */
-    private List<BaseComponent> button(String key, String player, String where) {
+    private List<BaseComponent> button(String key, String player, String command) {
         if (!messages.isMessageEnabled(key)) {
             return List.of();
         }
@@ -123,7 +131,7 @@ public final class CamList {
         }
         HoverEvent hover = new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text(TextComponent.fromLegacyText(
                 messages.getMessage(key + "-hover").replace("{player}", player))));
-        ClickEvent click = new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam tp " + player + " " + where);
+        ClickEvent click = new ClickEvent(ClickEvent.Action.RUN_COMMAND, command);
         List<BaseComponent> parts = new ArrayList<>();
         parts.add(new TextComponent(" "));
         for (BaseComponent part : TextComponent.fromLegacyText(text)) {

@@ -6,9 +6,9 @@ import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.storage.PlayerRecord;
 import de.elia.cameraplugin.storage.PlayerStore;
+import de.elia.cameraplugin.storage.StorageMode;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import org.bukkit.Bukkit;
-import org.bukkit.boss.BarStyle;
 import org.bukkit.boss.BossBar;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -24,11 +24,13 @@ import java.util.UUID;
  * and camera mode ends when it is empty.
  *
  * <p>Nothing counts while a player is not flying. His record holds the charge
- * and the moment it was worked out, and whatever has come back since is
- * worked out from the time that has passed whenever somebody asks. Only the
- * bossbar runs a task, once a second: in flight with what is left, and with
- * {@code show-bossbar-charging} after the flight until the battery is full
- * again - also after he joins with one that is not full yet.</p>
+ * and the moment it was worked out - or, on {@code storage: memory}, a map
+ * here that {@code /cam reload} and a restart empty -, and whatever has come
+ * back since is worked out from the time that has passed whenever somebody
+ * asks. Only the bossbar runs a task, once a second: in flight with what is
+ * left, and with {@code show-bossbar-charging} after the flight until the
+ * battery is full again - also after he joins with one that is not full
+ * yet.</p>
  *
  * <p>With {@code recharge-offline: false} only the time on the server
  * counts: the charge is settled when he leaves, and the clock starts again
@@ -47,6 +49,12 @@ public final class CamBattery {
     private final Map<UUID, Flight> flights = new HashMap<>();
     /** The bossbar of every player whose battery is charging, by player id. */
     private final Map<UUID, Bar> chargingBars = new HashMap<>();
+    /** What each battery held between two flights, on {@code storage: memory}. */
+    private final Map<UUID, Stored> inMemory = new HashMap<>();
+
+    /** What a battery held at a moment, as {@link System#currentTimeMillis()} counts it. */
+    private record Stored(double charge, long at) {
+    }
 
     /** A bossbar and the task that keeps it up to date. */
     private static class Bar {
@@ -102,18 +110,45 @@ public final class CamBattery {
         if (flight != null) {
             return Math.min(flight.chargeAt(now), settings.getBatteryCapacity());
         }
-        return chargedUntil(store.peek(playerId), now);
+        return chargedUntil(playerId, now);
     }
 
-    /** What a record holds at {@code now}, outside camera mode. */
-    private double chargedUntil(PlayerRecord record, long now) {
-        Double stored = record.getBatteryCharge();
+    /** What the battery of a player holds at {@code now}, outside camera mode. */
+    private double chargedUntil(UUID playerId, long now) {
+        Stored stored = stored(playerId);
         double capacity = settings.getBatteryCapacity();
         if (stored == null) {
             return capacity;
         }
-        double back = Math.max(0L, now - record.getBatteryUpdated()) / 1000.0 * settings.getBatteryRecharge();
-        return Math.min(capacity, stored + back);
+        double back = Math.max(0L, now - stored.at()) / 1000.0 * settings.getBatteryRecharge();
+        return Math.min(capacity, stored.charge() + back);
+    }
+
+    /**
+     * What the battery of a player held when it was last worked out, from
+     * his record or from memory as {@code storage} says, or {@code null} for
+     * a battery nobody has touched yet.
+     */
+    private Stored stored(UUID playerId) {
+        if (settings.getBatteryStorage() == StorageMode.MEMORY) {
+            return inMemory.get(playerId);
+        }
+        PlayerRecord record = store.look(playerId);
+        Double charge = record.getBatteryCharge();
+        return charge == null ? null : new Stored(charge, record.getBatteryUpdated());
+    }
+
+    /**
+     * Keeps what the battery of a player holds at a moment. Into his record
+     * on {@code storage: file}, which is written when camera mode ends and
+     * when he leaves.
+     */
+    private void keep(UUID playerId, double charge, long at) {
+        if (settings.getBatteryStorage() == StorageMode.MEMORY) {
+            inMemory.put(playerId, new Stored(charge, at));
+        } else {
+            store.get(playerId).setBattery(charge, at);
+        }
     }
 
     /** How long until a battery holding {@code charge} holds {@code wanted}, in whole seconds. */
@@ -154,11 +189,11 @@ public final class CamBattery {
         stopCharging(player);
         UUID id = player.getUniqueId();
         long now = System.currentTimeMillis();
-        PlayerRecord record = store.get(id);
-        Flight flight = new Flight(chargedUntil(record, now), now);
-        record.setBattery(flight.startCharge, now);
+        Flight flight = new Flight(chargedUntil(id, now), now);
+        keep(id, flight.startCharge, now);
         if (settings.showsBatteryBossbar()) {
-            flight.bar = Bukkit.createBossBar("", settings.getBatteryBossbarColor(), BarStyle.SEGMENTED_10);
+            flight.bar = Bukkit.createBossBar("", settings.getBatteryBossbarColor(),
+                    settings.getBatteryBossbarStyle());
             flight.bar.addPlayer(player);
             updateFlightBar(flight, now);
         }
@@ -202,8 +237,8 @@ public final class CamBattery {
 
     /**
      * Stops the battery of a player leaving camera mode and writes down what
-     * is left of it. The record is written to its file by whoever ends camera
-     * mode, together with the statistics. From here on it charges, and the
+     * is left of it. On {@code storage: file} the record is written to its
+     * file by whoever ends camera mode, together with the statistics. From here on it charges, and the
      * bossbar of {@code show-bossbar-charging} shows that.
      */
     public void stopFor(Player player) {
@@ -213,7 +248,7 @@ public final class CamBattery {
         }
         flight.remove();
         long now = System.currentTimeMillis();
-        store.get(player.getUniqueId()).setBattery(flight.chargeAt(now), now);
+        keep(player.getUniqueId(), flight.chargeAt(now), now);
         if (!plugin.isShuttingDown()) {
             // A tick later: camera mode is still ending right now, and a
             // player who is leaving the server is gone by then.
@@ -237,7 +272,8 @@ public final class CamBattery {
             return;
         }
         Bar charging = new Bar();
-        charging.bar = Bukkit.createBossBar("", settings.getBatteryBossbarColor(), BarStyle.SEGMENTED_10);
+        charging.bar = Bukkit.createBossBar("", settings.getBatteryBossbarColor(),
+                settings.getBatteryBossbarStyle());
         charging.bar.addPlayer(player);
         updateChargingBar(charging, charge);
         charging.task = new BukkitRunnable() {
@@ -281,10 +317,17 @@ public final class CamBattery {
     }
 
     /**
-     * After a reload: whoever has a battery that is not full sees it charging,
-     * now that {@code show-bossbar-charging} may have been switched on.
+     * After a reload: on {@code storage: memory} every battery is full again,
+     * on {@code file} each holds what it held. Whoever has one that is not
+     * full sees it charging the way the config file now says - a bossbar
+     * that is up already goes and comes back in its new colour and notches.
      */
-    public void refreshCharging() {
+    public void onReload() {
+        for (Bar charging : chargingBars.values()) {
+            charging.remove();
+        }
+        chargingBars.clear();
+        inMemory.clear();
         for (Player player : Bukkit.getOnlinePlayers()) {
             startCharging(player);
         }
@@ -300,9 +343,9 @@ public final class CamBattery {
             return;
         }
         if (!settings.batteryRechargesOffline()) {
-            PlayerRecord record = store.get(player.getUniqueId());
-            if (record.getBatteryCharge() != null) {
-                record.setBattery(record.getBatteryCharge(), System.currentTimeMillis());
+            Stored stored = stored(player.getUniqueId());
+            if (stored != null) {
+                keep(player.getUniqueId(), stored.charge(), System.currentTimeMillis());
             }
         }
         startCharging(player);
@@ -318,10 +361,9 @@ public final class CamBattery {
         if (!settings.isBatteryEnabled() || settings.batteryRechargesOffline()) {
             return;
         }
-        PlayerRecord record = store.get(player.getUniqueId());
-        if (record.getBatteryCharge() != null) {
+        if (stored(player.getUniqueId()) != null) {
             long now = System.currentTimeMillis();
-            record.setBattery(chargedUntil(record, now), now);
+            keep(player.getUniqueId(), chargedUntil(player.getUniqueId(), now), now);
         }
     }
 

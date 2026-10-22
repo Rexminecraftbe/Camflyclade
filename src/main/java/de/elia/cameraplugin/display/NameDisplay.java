@@ -88,11 +88,7 @@ public final class NameDisplay {
             // An empty box would float there, saying nothing.
             return null;
         }
-        // The colour comes from the style. It takes the place of a colour code
-        // at the very start of the text, where name-format carried it before
-        // the setting existed (&e), so an older config file follows the setting
-        // as well; codes further on still colour what comes after them.
-        String text = style.color() + LEADING_COLOR.matcher(format).replaceFirst("");
+        String text = text(format, style);
         return location.getWorld().spawn(location, TextDisplay.class, display -> {
             display.setText(text);
             // Turned towards whoever looks at it, like a name tag, and never
@@ -120,5 +116,21 @@ public final class NameDisplay {
             display.getPersistentDataContainer().set(mark, PersistentDataType.INTEGER, 1);
             setup.accept(display);
         });
+    }
+
+    /** Writes a new text into a name that is up already, such as one showing {@code {health}}. */
+    public static void setText(TextDisplay display, String format, NameStyle style) {
+        display.setText(text(format, style));
+    }
+
+    /**
+     * The text a name shows. The colour comes from the style. It takes the
+     * place of a colour code at the very start of the text, where name-format
+     * carried it before the setting existed ({@code &e}), so an older config
+     * file follows the setting as well; codes further on still colour what
+     * comes after them.
+     */
+    private static String text(String format, NameStyle style) {
+        return style.color() + LEADING_COLOR.matcher(format).replaceFirst("");
     }
 }

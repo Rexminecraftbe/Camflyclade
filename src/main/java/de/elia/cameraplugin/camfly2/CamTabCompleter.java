@@ -4,6 +4,7 @@ import de.elia.cameraplugin.back.CamBack;
 import de.elia.cameraplugin.list.CamList;
 import de.elia.cameraplugin.list.CamListTeleport;
 import de.elia.cameraplugin.stats.CamStats;
+import de.elia.cameraplugin.stop.CamStop;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -22,6 +23,7 @@ public class CamTabCompleter implements TabCompleter {
     private final CamStats stats;
     private final CamBack back;
     private final CamListTeleport listTeleport;
+    private final CamStop stop;
 
     public CamTabCompleter(CameraPlugin plugin) {
         this.plugin = plugin;
@@ -29,6 +31,7 @@ public class CamTabCompleter implements TabCompleter {
         this.stats = plugin.getStats();
         this.back = plugin.getBack();
         this.listTeleport = plugin.getListTeleport();
+        this.stop = plugin.getStop();
     }
 
     @Override
@@ -46,6 +49,16 @@ public class CamTabCompleter implements TabCompleter {
         }
         if (tpCommand && args.length == 3) {
             return startingWith(args[2].toLowerCase(Locale.ROOT), "camera", "body");
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("stop") && stop.mayUse(sender)) {
+            String partial = args[1].toLowerCase(Locale.ROOT);
+            List<String> names = new ArrayList<>(startingWith(partial, "all"));
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                if (plugin.isInCameraMode(player) && player.getName().toLowerCase(Locale.ROOT).startsWith(partial)) {
+                    names.add(player.getName());
+                }
+            }
+            return names;
         }
         if (args.length != 1) {
             return Collections.emptyList();
@@ -67,6 +80,9 @@ public class CamTabCompleter implements TabCompleter {
         }
         if ("stats".startsWith(partial)) {
             completions.add("stats");
+        }
+        if (stop.mayUse(sender) && "stop".startsWith(partial)) {
+            completions.add("stop");
         }
         if (listTeleport.mayUse(sender) && "tp".startsWith(partial)) {
             completions.add("tp");

@@ -3,15 +3,22 @@ package de.elia.cameraplugin.start;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.movement.FlightMedium;
+import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.ChatColor;
 import org.bukkit.FluidCollisionMode;
 import org.bukkit.GameMode;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -25,10 +32,11 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Whether a player may start camera mode right now: not straight after a hit,
- * not as a spectator, not with the wrong effects on him, not in a forbidden
- * area, not in lava, water or powder snow that camera mode is kept out of and
- * not in the middle of a fall.
+ * Whether a player may start camera mode right now: not straight after a hit -
+ * taken, or with {@code cam-safety.after-attack} handed out -, not as a
+ * spectator, not with the wrong effects on him, not in a forbidden area, not
+ * in lava, water or powder snow that camera mode is kept out of and not in the
+ * middle of a fall.
  */
 public final class StartChecks implements Listener {
 
@@ -42,11 +50,14 @@ public final class StartChecks implements Listener {
 
     private final CamSettings settings;
     private final Messages messages;
+    private final CameraPlayers cameraPlayers;
+    /** The last hit each player took, or handed out where {@code after-attack} counts it. */
     private final Map<UUID, Long> lastDamageTimes = new HashMap<>();
 
-    public StartChecks(CamSettings settings, Messages messages) {
+    public StartChecks(CamSettings settings, Messages messages, CameraPlayers cameraPlayers) {
         this.settings = settings;
         this.messages = messages;
+        this.cameraPlayers = cameraPlayers;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -54,6 +65,50 @@ public final class StartChecks implements Listener {
         if (event.getEntity() instanceof Player player) {
             lastDamageTimes.put(player.getUniqueId(), System.currentTimeMillis());
         }
+    }
+
+    /**
+     * Notes a hit a player hands out, as {@code cam-safety.after-attack} has
+     * it, so that nobody slips into camera mode in the middle of a fight: by
+     * his own hand or by a projectile of his, on another player or, on
+     * {@code all}, on any mob. Armour stands and mannequins standing around
+     * for show are nobody to fight with.
+     *
+     * <p>The body of a camera player counts as that player. A hit on it is
+     * always cancelled - the plugin hands it on to him, or with
+     * {@code mirror-damage.damage-mode: false} not even that - so for a body a
+     * cancelled hit counts as well. For anything else it does not: the hit
+     * did not happen, something such as a protected area held it back.</p>
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void recordLastAttack(EntityDamageByEntityEvent event) {
+        AttackSafety safety = settings.getCamSafetyAfterAttack();
+        Player attacker = attacker(event.getDamager());
+        Entity victim = event.getEntity();
+        if (safety == AttackSafety.OFF || attacker == null || !(victim instanceof LivingEntity)) {
+            return;
+        }
+        UUID owner = cameraPlayers.getBodyOrHitboxOwner(victim);
+        if (attacker.equals(victim) || attacker.getUniqueId().equals(owner)
+                || (event.isCancelled() && owner == null)) {
+            return;
+        }
+        boolean opponent = victim instanceof Player || owner != null
+                || (safety == AttackSafety.ALL && !(victim instanceof ArmorStand) && !(victim instanceof Mannequin));
+        if (opponent) {
+            lastDamageTimes.put(attacker.getUniqueId(), System.currentTimeMillis());
+        }
+    }
+
+    /** The player behind a hit: the one who struck it, or who shot or threw what struck. */
+    private static Player attacker(Entity damager) {
+        if (damager instanceof Player player) {
+            return player;
+        }
+        if (damager instanceof Projectile projectile && projectile.getShooter() instanceof Player shooter) {
+            return shooter;
+        }
+        return null;
     }
 
     /** Forgets the last hit of a player who left the server. */
@@ -147,8 +202,9 @@ public final class StartChecks implements Listener {
      * as long as {@code cam-area.level} is not 0.
      *
      * <p>Which areas those are is decided by
-     * {@link de.elia.cameraplugin.area.CamAreaRules}: the dimension the world
-     * belongs to and the biome the player stands in.</p>
+     * {@link de.elia.cameraplugin.area.CamAreaRules}: the world, by its name
+     * and by the dimension it belongs to, the biome the player stands in and
+     * the structure around him.</p>
      *
      * @return {@code true} when he may start, otherwise {@code false} and he
      *         has been told why

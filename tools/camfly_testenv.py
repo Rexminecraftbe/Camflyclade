@@ -1120,19 +1120,22 @@ for (const name of ['sound_effect', 'entity_sound_effect']) {
 const chatPackets = [];
 bot._client.on('system_chat', (packet) => chatPackets.push({ t: Date.now(), text: soundText(packet) }));
 // Die Bossbars, die gerade zu sehen sind, nach ihrer UUID: der Titel als Text
-// des ganzen Titels, wie bei den Toenen, und der Fuellstand.
+// des ganzen Titels, wie bei den Toenen, der Fuellstand und die Einteilung
+// (dividers: 0 keine, 1 sechs, 2 zehn, 3 zwoelf, 4 zwanzig Abschnitte).
 const bossbars = {};
 bot._client.on('boss_bar', (packet) => {
   const id = String(packet.entityUUID);
   const action = packet.action;
   if (action === 0 || action === 'add') {
-    bossbars[id] = { title: soundText(packet.title), health: packet.health };
+    bossbars[id] = { title: soundText(packet.title), health: packet.health, dividers: packet.dividers };
   } else if (action === 1 || action === 'remove') {
     delete bossbars[id];
   } else if (bossbars[id] && (action === 2 || action === 'update_health')) {
     bossbars[id].health = packet.health;
   } else if (bossbars[id] && (action === 3 || action === 'update_title')) {
     bossbars[id].title = soundText(packet.title);
+  } else if (bossbars[id] && (action === 4 || action === 'update_style')) {
+    bossbars[id].dividers = packet.dividers;
   }
 });
 bot.on('blockUpdate', (alt, neu) => {
@@ -3877,6 +3880,491 @@ def knoepfe_checks(env, bot):
             time.sleep(0.5)
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test der Knoepfe: {exc}")
+
+
+def ausgeliefert(env):
+    """Die config.yml des Testservers, wie sie gerade auf der Platte steht."""
+    return (env.server / "plugins" / "CamFly" / "config.yml").read_text(encoding="utf-8")
+
+
+def bossbar_suche(bot, muster):
+    """Die Bossbars beim Bot, deren Titel auf das Muster passt, und die Titel
+    aller, fuer die Ausgabe."""
+    bars = bot.call("bossbars").get("bars", [])
+    return [b for b in bars if re.search(muster, b.get("title", ""))], [b.get("title", "") for b in bars]
+
+
+def stopp_checks(env, bot):
+    """stop-command: /cam stop <Name> und /cam stop all beenden den Cam-Modus
+    anderer, und der Knopf [Stop] hinter jeder Zeile von /cam list.
+
+    Voreingestellt ist es aus - nachgesehen in der ausgelieferten Datei -, und
+    /cam stop sagt das. Eingeschaltet beendet der Bot (op) den Cam-Modus des
+    zweiten Spielers: Der erfaehrt, wer es war, und hoert sounds.end-forced,
+    der Bot bekommt die Bestaetigung. Wer nicht im Cam-Modus ist, wird
+    gemeldet. /cam stop all von der Konsole beendet beide, und der zweite
+    Spieler liest "the server". Ohne op fehlt das Recht camplugin.stop, und
+    der Cam-Modus des anderen laeuft weiter. In der Liste steht hinter seiner
+    Zeile ein Klick auf "/cam stop <Name>", mit cam-list.stop: false nicht.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test von /cam stop aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 4.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    # Platz fuer den zweiten Spieler, falls dort ein Haus eines Dorfes steht.
+    bot.chat(f"/fill {_floor(x) - 2} {y} {_floor(z) - 2} {_floor(x) + 2} {y + 3} {_floor(z) + 2} minecraft:air")
+    time.sleep(0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+
+    def kamera_an():
+        console(env, f"tp {ZUSCHAUER_NAME} {x} {y} {z}", pause=1.0)
+        return cam_on(zuschauer)
+
+    def noch_im_cam_modus():
+        return server_says(bot, f"/execute if entity @a[name={ZUSCHAUER_NAME},gamemode=adventure] "
+                                f"run say {{marke}}")
+
+    def pakete_seit_liste():
+        seit = bot.call("chat_packets", since=10 ** 9).get("count", 0)
+        befehl(bot, "/cam list")
+        return " ".join(p["text"] for p in bot.call("chat_packets", since=seit).get("packets", []))
+
+    try:
+        FIND.test("Voreingestellt steht stop-command.enabled: false da",
+                  re.search(r"(?m)^stop-command:\s*\n\s*enabled:\s*false\s*$", ausgeliefert(env)) is not None, "")
+        zeilen = befehl(bot, "/cam stop all")
+        FIND.test("stop-command.enabled: false - /cam stop ist abgeschaltet",
+                  gesagt(zeilen, r"/cam stop is switched off"), zeige(zeilen))
+
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer /cam stop kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        set_option(env, "enabled", "true", "stop-command")
+        if not FIND.test("Der zweite Spieler ist fuer /cam stop im Cam-Modus", kamera_an(), ""):
+            return
+        pakete = pakete_seit_liste()
+        FIND.test("cam-list.stop: hinter der Zeile steht der Knopf, der den Cam-Modus beendet",
+                  f"/cam stop {ZUSCHAUER_NAME}" in pakete, pakete[-300:] or "kein Paket")
+
+        since = zuschauer.mark()
+        seit = toene_marke(zuschauer)
+        zeilen = befehl(bot, f"/cam stop {ZUSCHAUER_NAME}")
+        FIND.test("/cam stop <Name>: der Bot bekommt die Bestaetigung",
+                  gesagt(zeilen, rf"Ended the cam mode of {ZUSCHAUER_NAME}"), zeige(zeilen))
+        FIND.test("/cam stop <Name>: der Cam-Modus des anderen ist vorbei", not noch_im_cam_modus(), "")
+        FIND.test("/cam stop <Name>: er erfaehrt, wer es war",
+                  bool(zuschauer.expect(rf"Your cam mode was ended by {BOT_NAME}", since, 4000)), "")
+        FIND.test("/cam stop <Name>: er hoert sounds.end-forced",
+                  ton_da(zuschauer, seit, "block.respawn_anchor.deplete"), "")
+        zeilen = befehl(bot, f"/cam stop {ZUSCHAUER_NAME}")
+        FIND.test("/cam stop <Name>: wer nicht im Cam-Modus ist, wird gemeldet",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} is not in cam mode"), zeige(zeilen))
+
+        kamera_an()
+        cam_on(bot)
+        since = zuschauer.mark()
+        vorher = len(server_log(env))
+        console(env, "cam stop all", pause=1.5)
+        log = strip_colors(server_log(env)[vorher:])
+        FIND.test("/cam stop all von der Konsole beendet den Cam-Modus von beiden",
+                  "Ended the cam mode of 2 players" in log and not noch_im_cam_modus()
+                  and not spielmodus_ist(bot, "adventure"), log.strip()[-200:] or "nichts im Log")
+        FIND.test("/cam stop all von der Konsole: er liest, dass es der Server war",
+                  bool(zuschauer.expect(r"Your cam mode was ended by the server", since, 4000)), "")
+
+        kamera_an()
+        console(env, f"deop {BOT_NAME}", pause=1.5)
+        zeilen = befehl(bot, f"/cam stop {ZUSCHAUER_NAME}")
+        console(env, f"op {BOT_NAME}", pause=1.5)
+        FIND.test("/cam stop ohne camplugin.stop: keine Berechtigung, der Cam-Modus des anderen laeuft weiter",
+                  gesagt(zeilen, r"permission") and noch_im_cam_modus(), zeige(zeilen))
+
+        set_option(env, "stop", "false", "cam-list")
+        kamera_an()
+        pakete = pakete_seit_liste()
+        FIND.test("cam-list.stop: false - die Liste ohne den Knopf",
+                  ZUSCHAUER_NAME in pakete and "/cam stop" not in pakete, pakete[-300:] or "kein Paket")
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                zuschauer.stop()
+            console(env, f"op {BOT_NAME}", pause=1.0)
+            cam_off(bot)
+            set_options(env, [("enabled", "false", "stop-command"), ("stop", "true", "cam-list")])
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test von /cam stop: {exc}")
+
+
+def welten_checks(env, bot):
+    """cam-area.forbidden-worlds: Welten nach ihrem Namen.
+
+    Voreingestellt ist die Liste aus - nachgesehen in der ausgelieferten
+    Datei. Steht die Welt des Testservers, "world", darin, startet der
+    Cam-Modus trotzdem, solange worlds-enabled false ist. Mit true startet
+    er nicht, und die Meldung nennt die Welt; gross geschrieben steht sie
+    genauso in der Liste. Mit cam-area.level: 0 zaehlt auch diese Liste
+    nicht.
+    """
+    try:
+        cam_off(bot)
+        FIND.test("Voreingestellt steht cam-area.worlds-enabled: false da",
+                  re.search(r"(?m)^\s*worlds-enabled:\s*false\s*$", ausgeliefert(env)) is not None, "")
+        set_option(env, "forbidden-worlds", "[world]")
+        an = cam_on(bot)
+        cam_off(bot)
+        FIND.test("worlds-enabled: false - die Welten-Liste zaehlt nicht", an, "")
+
+        set_option(env, "worlds-enabled", "true")
+        z = befehl(bot, "/cam")
+        FIND.test("forbidden-worlds: in einer verbotenen Welt startet der Cam-Modus nicht, die Meldung nennt sie",
+                  gesagt(z, r"cannot start cam mode in the world world") and not gesagt(z, r"[Cc]am mode activated"),
+                  zeige(z))
+        set_option(env, "forbidden-worlds", "[WORLD]")
+        z = befehl(bot, "/cam")
+        FIND.test("forbidden-worlds: der Name zaehlt ohne Gross- und Kleinschreibung",
+                  gesagt(z, r"cannot start cam mode in the world world"), zeige(z))
+
+        set_option(env, "level", "0", "cam-area")
+        an = cam_on(bot)
+        cam_off(bot)
+        FIND.test("cam-area.level: 0 - auch die Welten-Liste zaehlt nicht", an, "")
+    finally:
+        cam_off(bot)
+        set_options(env, [("worlds-enabled", "false"), ("forbidden-worlds", "[lobby]"), ("level", "2", "cam-area")])
+
+
+def angriff_checks(env, bot):
+    """cam-safety.after-attack: Wer zuschlaegt, wartet wie einer, der
+    getroffen wurde.
+
+    Neben dem Bot stehen ein Schwein und der zweite Spieler. Voreingestellt
+    (false) startet der Cam-Modus gleich nach einem Schlag auf das Schwein.
+    Mit players auch, ein Schwein ist kein Spieler; nach einem Schlag auf den
+    zweiten Spieler wird /cam dagegen abgelehnt, und nach den fuenf Sekunden
+    von cam-safety.delay geht es wieder. Mit all sperrt auch der Schlag auf
+    das Schwein. Geschlagen wird jedes Mal frisch vor dem /cam, die fuenf
+    Sekunden laufen ab dem Schlag.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Angriffstest aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    bot.chat(f"/fill {_floor(x) - 3} {y} {_floor(z) - 3} {_floor(x) + 3} {y + 3} {_floor(z) + 3} minecraft:air")
+    time.sleep(0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+
+    def schlag(art, wo):
+        hinstellen(bot, x, y, z)
+        return bool(bot.call("attack_entity", wait=20, type=art, radius=1.5, at=wo).get("done"))
+
+    def start_nach(art, wo):
+        """(kam der Schlag an, startete der Cam-Modus danach, was er sagte)"""
+        geschlagen = schlag(art, wo)
+        zeilen = befehl(bot, "/cam")
+        an = gesagt(zeilen, r"[Cc]am mode activated")
+        if an:
+            cam_off(bot)
+        return geschlagen, an, zeilen
+
+    try:
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer den Angriffstest kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        console(env, f"tp {ZUSCHAUER_NAME} {x - 2} {y} {z}", pause=0.5)
+        console(env, f"effect give {ZUSCHAUER_NAME} minecraft:resistance infinite 255 true", pause=0.3)
+        console(env, f'summon minecraft:pig {x + 2} {y} {z} {{Tags:["{INTERACT_TAG}"],NoAI:1b,Silent:1b,'
+                     f'Invulnerable:0b,PersistenceRequired:1b}}', pause=0.5)
+        schwein, spieler = [x + 2, y, z], [x - 2, y, z]
+
+        FIND.test("Voreingestellt steht cam-safety.after-attack: false da",
+                  re.search(r"(?m)^\s*after-attack:\s*false\s*$", ausgeliefert(env)) is not None, "")
+        geschlagen, an, zeilen = start_nach("pig", schwein)
+        FIND.test("after-attack: false - nach einem Schlag startet der Cam-Modus gleich",
+                  geschlagen and an, zeige(zeilen))
+
+        set_option(env, "after-attack", "players")
+        geschlagen, an, zeilen = start_nach("pig", schwein)
+        FIND.test("after-attack: players - ein Schlag auf ein Schwein sperrt nicht", geschlagen and an, zeige(zeilen))
+        geschlagen, an, zeilen = start_nach("player", spieler)
+        FIND.test("after-attack: players - nach einem Schlag auf einen Spieler wird /cam abgelehnt",
+                  geschlagen and not an and gesagt(zeilen, r"remain safe"), zeige(zeilen))
+        time.sleep(5.5)
+        an = cam_on(bot)
+        cam_off(bot)
+        FIND.test("after-attack: nach cam-safety.delay geht es wieder", an, "")
+
+        set_option(env, "after-attack", "all")
+        geschlagen, an, zeilen = start_nach("pig", schwein)
+        FIND.test("after-attack: all - auch ein Schlag auf ein Schwein sperrt",
+                  geschlagen and not an and gesagt(zeilen, r"remain safe"), zeige(zeilen))
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                zuschauer.stop()
+            console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+            cam_off(bot)
+            set_option(env, "after-attack", "false")
+            time.sleep(5.5)
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Angriffstest: {exc}")
+
+
+def afk_checks(env, bot):
+    """afk-end: Der Cam-Modus endet, wenn der Spieler eine Weile nichts tut.
+
+    Voreingestellt ist es aus - nachgesehen in der ausgelieferten Datei. Mit
+    seconds: 12 und end-warning bei 5 steht der Bot im Cam-Modus still: Nach
+    etwa sieben Sekunden kommt "You are not moving: cam mode ends in 5
+    seconds", nach zwoelf endet der Cam-Modus mit "you did not move for 12
+    seconds" und dem Ton von sounds.end-forced. Wer sich bewegt, bleibt: Der
+    Bot fliegt alle paar Sekunden ein Stueck und ist nach zwanzig Sekunden
+    noch im Cam-Modus. Weniger als 10 Sekunden werden gemeldet und auf 10
+    gehoben.
+    """
+    try:
+        cam_off(bot)
+        FIND.test("Voreingestellt steht afk-end.enabled: false da",
+                  re.search(r"(?m)^afk-end:\s*\n\s*enabled:\s*false\s*$", ausgeliefert(env)) is not None, "")
+        set_options(env, [("enabled", "true", "afk-end"), ("seconds", "12", "afk-end"),
+                          ("seconds", "[5]", "end-warning")])
+        seit = toene_marke(bot)
+        since = bot.mark()
+        if not FIND.test("Cam-Modus fuer afk-end gestartet", cam_on(bot), ""):
+            return
+        start = time.time() - 1.5
+        warnung = bot.expect(r"You are not moving: cam mode ends in 5 seconds", since, 12000)
+        FIND.test("afk-end: vorher warnt end-warning mit \"You are not moving\"", bool(warnung), "")
+        ende = bot.expect(r"you did not move for 12 seconds", since, 12000)
+        dauer = time.time() - start
+        FIND.test("afk-end: nach 12 Sekunden ohne Bewegung endet der Cam-Modus",
+                  bool(ende) and 10.0 <= dauer <= 16.0, f"nach {dauer:.1f} s")
+        FIND.test("afk-end: mit dem Ton von sounds.end-forced", ton_da(bot, seit, "block.respawn_anchor.deplete"), "")
+
+        if FIND.test("Cam-Modus fuer afk-end mit Bewegung gestartet", cam_on(bot), ""):
+            since = bot.mark()
+            for schritt in range(7):
+                bot.call("fly", wait=30, dy=0.5 if schritt % 2 == 0 else -0.5, timeout=5000)
+                time.sleep(2.5)
+            z = zeilen_seit(bot, since)
+            FIND.test("afk-end: wer sich bewegt, bleibt im Cam-Modus",
+                      spielmodus_ist(bot, "adventure") and not gesagt(z, r"did not move"), zeige(z[-3:]))
+            cam_off(bot)
+
+        vorher = len(server_log(env))
+        set_option(env, "seconds", "3", "afk-end")
+        log = strip_colors(server_log(env)[vorher:])
+        FIND.test("afk-end.seconds: weniger als 10 wird gemeldet und auf 10 gehoben",
+                  "afk-end.seconds is too small: 3. Using 10" in log, log.strip()[-200:] or "nichts im Log")
+    finally:
+        cam_off(bot)
+        set_options(env, [("enabled", "false", "afk-end"), ("seconds", "300", "afk-end"),
+                          ("seconds", "[30, 10]", "end-warning")])
+
+
+def herzen_checks(env, bot):
+    """{health} im Namen ueber dem Koerper: die Herzen des Spielers.
+
+    Mit armorstand.name-format "{player} {health}" steht ueber dem Koerper
+    der Name und so viele Herzen, wie der Server dem Bot gerade gibt, in
+    halben wie in seiner Leiste: 13 Leben sind 6.5. Damit es weniger als
+    volle sind, nimmt /damage ihm vorher neun; cam-safety ist dafuer aus.
+    Bekommt er im Cam-Modus Leben dazu - hier mit dem Effekt Direktheilung,
+    den das Plugin einem Kamera-Spieler laesst -, steht dort gleich darauf
+    die neue Zahl.
+    """
+    def herzen():
+        text = daten_von(bot, "@s", "Health")
+        m = re.search(r"(-?[\d.]+)f?\s*$", text or "")
+        if not m:
+            return None
+        halbe = math.ceil(float(m.group(1)))
+        return str(halbe // 2) if halbe % 2 == 0 else f"{halbe / 2:.1f}"
+
+    modus = next((m for m in ("survival", "creative") if spielmodus_ist(bot, m)), "survival")
+    try:
+        cam_off(bot)
+        set_options(env, [("armorstand.name-format", '"{player} {health}"', "messages"),
+                          ("enabled", "false", "cam-safety"), ("name-visible", "false", "camera-mode")])
+        spielmodus_setzen(bot, "survival")
+        bot.chat("/damage @s 9")
+        time.sleep(0.5)
+        if not FIND.test("Cam-Modus fuer {health} gestartet", cam_on(bot), ""):
+            return
+        erwartet = herzen()
+        text = daten_von(bot, NAME, "text")
+        FIND.test("{health}: der Name ueber dem Koerper zeigt die Herzen des Spielers",
+                  erwartet is not None and bool(text) and f"{BOT_NAME} {erwartet}" in text,
+                  f"erwartet {erwartet} - {text or 'keine Antwort'}")
+        bot.chat("/effect give @s minecraft:instant_health 1 0 true")
+        time.sleep(1.0)
+        danach = herzen()
+        text = daten_von(bot, NAME, "text")
+        FIND.test("{health}: bekommt er im Cam-Modus Leben dazu, steht gleich die neue Zahl da",
+                  danach is not None and danach != erwartet and bool(text) and f"{BOT_NAME} {danach}" in text,
+                  f"{erwartet} -> {danach} - {text or 'keine Antwort'}")
+    finally:
+        cam_off(bot)
+        set_options(env, [("armorstand.name-format", '"{player}\'s Body"', "messages"),
+                          ("enabled", "true", "cam-safety"), ("name-visible", "true", "camera-mode")])
+        bot.chat(f"/effect clear {BOT_NAME}")
+        spielmodus_setzen(bot, modus)
+
+
+def wartezeit_checks(env, bot):
+    """time-limit: die Wartezeit nach dem Cam-Modus - ihre Bossbar, ihre
+    Einteilung und wo sie liegt.
+
+    Mit cooldowns-enabled und 30 Sekunden Wartezeit bringt ein Ende durch
+    /cam reload keine Wartezeit, der Cam-Modus startet gleich wieder. Nach
+    einem /cam zeigt eine Bossbar "Cam mode again in: ...", voreingestellt
+    ohne Einteilung, und ein neuer Start wird abgelehnt. /cam stats nennt die
+    Wartezeit, und sie steht in der Datei des Bots unter cooldown.started.
+    Voreingestellt liegt sie dort (storage: file): Ein /cam reload laesst
+    sie weiterlaufen, ebenso das Neuanmelden, und die Bossbar ist danach
+    wieder da. Mit bossbar-notches: 12 hat sie zwoelf Abschnitte, mit
+    show-bossbar-cooldown: false gibt es keine. Mit storage: memory zaehlt
+    die Datei nicht, und ein /cam reload vergisst, was im Speicher liegt. Mit
+    3 Sekunden ist sie bald vorbei: "Cam mode available again", und die
+    Bossbar verschwindet.
+    """
+    try:
+        cam_off(bot)
+        set_options(env, [("cooldowns-enabled", "true"), ("cooldown-seconds", "30", "time-limit")])
+        if not FIND.test("Cam-Modus fuer die Wartezeit gestartet", cam_on(bot), ""):
+            return
+        console(env, "cam reload", pause=2)
+        an = cam_on(bot)
+        FIND.test("time-limit: ein Ende durch /cam reload bringt keine Wartezeit", an, "")
+        cam_off(bot)
+        time.sleep(1.5)
+        treffer, titel = bossbar_suche(bot, r"Cam mode again in: \d")
+        FIND.test("show-bossbar-cooldown: nach dem Ende zeigt eine Bossbar die Wartezeit", bool(treffer), str(titel))
+        FIND.test("time-limit.bossbar-notches: voreingestellt 0 - die Bossbar ohne Einteilung",
+                  bool(treffer) and treffer[0].get("dividers") == 0, str(treffer))
+        z = befehl(bot, "/cam")
+        FIND.test("time-limit: waehrend der Wartezeit wird ein Start abgelehnt",
+                  gesagt(z, r"can start cam mode again in") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
+        z = befehl(bot, "/cam stats")
+        FIND.test("/cam stats nennt die Wartezeit", gesagt(z, r"Cam mode again in: \d"), zeige(z))
+        datei = spielerdatei(env)
+        FIND.test("time-limit.storage: file - die Wartezeit steht in der Datei unter playerdata/stats",
+                  datei is not None and re.search(r"(?m)^cooldown:\s*\n\s*started: \d+",
+                                                  datei.read_text(encoding="utf-8")) is not None, str(datei))
+        console(env, "cam reload", pause=2)
+        z = befehl(bot, "/cam")
+        FIND.test("time-limit.storage: file - nach /cam reload laeuft die Wartezeit weiter",
+                  gesagt(z, r"can start cam mode again in"), zeige(z))
+        if FIND.test("Bot meldet sich waehrend der Wartezeit neu an", neu_anmelden(bot), ""):
+            treffer, titel = bossbar_suche(bot, r"Cam mode again in")
+            FIND.test("show-bossbar-cooldown: nach dem Betreten ist die Bossbar wieder da", bool(treffer), str(titel))
+
+        set_option(env, "bossbar-notches", "12", "time-limit")
+        treffer, titel = bossbar_suche(bot, r"Cam mode again in")
+        FIND.test("time-limit.bossbar-notches: 12 - die Bossbar in zwoelf Abschnitten",
+                  bool(treffer) and treffer[0].get("dividers") == 3, str(treffer))
+        set_option(env, "show-bossbar-cooldown", "false")
+        treffer, titel = bossbar_suche(bot, r"Cam mode again in")
+        FIND.test("show-bossbar-cooldown: false - keine Bossbar", not treffer, str(titel))
+
+        set_options(env, [("show-bossbar-cooldown", "true"), ("storage", "memory", "time-limit")])
+        an = cam_on(bot)
+        FIND.test("time-limit.storage: memory - die Wartezeit in der Datei zaehlt nicht", an, "")
+        cam_off(bot)
+        z = befehl(bot, "/cam")
+        FIND.test("time-limit.storage: memory - nach dem Ende wartet er wie sonst",
+                  gesagt(z, r"can start cam mode again in"), zeige(z))
+        console(env, "cam reload", pause=2)
+        an = cam_on(bot)
+        FIND.test("time-limit.storage: memory - /cam reload vergisst die Wartezeit", an, "")
+        cam_off(bot)
+
+        set_option(env, "cooldown-seconds", "3", "time-limit")
+        cam_on(bot)
+        since = bot.mark()
+        cam_off(bot)
+        vorbei = bot.expect(r"Cam mode available again", since, 8000)
+        time.sleep(1.0)
+        treffer, titel = bossbar_suche(bot, r"Cam mode again in")
+        FIND.test("time-limit: ist die Wartezeit vorbei, kommt \"Cam mode available again\" und die Bossbar geht",
+                  bool(vorbei) and not treffer, str(titel))
+    finally:
+        cam_off(bot)
+        set_options(env, [("cooldowns-enabled", "false"), ("cooldown-seconds", "120", "time-limit"),
+                          ("show-bossbar-cooldown", "true"), ("bossbar-notches", "0", "time-limit"),
+                          ("storage", "file", "time-limit")])
+
+
+def akku_speicher_checks(env, bot):
+    """battery.bossbar-notches und battery.storage.
+
+    Voreingestellt hat die Bossbar des Akkus zehn Abschnitte, mit
+    bossbar-notches: 6 sechs. Der Akku haelt 5 Sekunden und laedt so gut wie
+    nicht: Nach dem Flug ist er leer. Voreingestellt liegt der Ladestand in
+    der Datei (storage: file), nach /cam reload ist er also immer noch leer.
+    Mit storage: memory zaehlt die Datei nicht, der Akku ist voll; ist er
+    wieder leer, macht ihn ein /cam reload wieder voll. Damit er zu Beginn
+    voll ist, laedt er vorher 100 Sekunden in der Sekunde. Ein Start braucht
+    nur eine Sekunde: Was nach den beiden ersten Fluegen uebrig ist, rechnet
+    das Plugin ab dem Ende des zweiten mit dem neuen, langsamen Laden weiter,
+    und das sind nur ein paar Sekunden.
+    """
+    def leer_fliegen():
+        since = bot.mark()
+        if not cam_on(bot):
+            return False
+        return bool(bot.expect(r"battery is empty", since, 12000))
+
+    try:
+        cam_off(bot)
+        set_options(env, [("flight-limit", "battery"), ("capacity", "5", "battery"),
+                          ("recharge-per-second", "100", "battery"), ("min-start", "1", "battery")])
+        time.sleep(1.0)
+        if not FIND.test("Cam-Modus fuer die Einteilung der Akku-Bossbar gestartet", cam_on(bot), ""):
+            return
+        treffer, titel = bossbar_suche(bot, r"Battery: \d")
+        FIND.test("battery.bossbar-notches: voreingestellt zehn Abschnitte",
+                  bool(treffer) and treffer[0].get("dividers") == 2, str(treffer))
+        cam_off(bot)
+        set_option(env, "bossbar-notches", "6", "battery")
+        cam_on(bot)
+        treffer, titel = bossbar_suche(bot, r"Battery: \d")
+        FIND.test("battery.bossbar-notches: 6 - sechs Abschnitte",
+                  bool(treffer) and treffer[0].get("dividers") == 1, str(treffer))
+        cam_off(bot)
+
+        set_option(env, "recharge-per-second", "0.01", "battery")
+        FIND.test("battery: mit 5 Sekunden ist der Akku nach dem Flug leer", leer_fliegen(), "")
+        console(env, "cam reload", pause=2)
+        z = befehl(bot, "/cam")
+        FIND.test("battery.storage: file - nach /cam reload ist der Akku immer noch leer",
+                  gesagt(z, r"battery holds 0 seconds") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
+
+        set_option(env, "storage", "memory", "battery")
+        an = cam_on(bot)
+        FIND.test("battery.storage: memory - der Ladestand in der Datei zaehlt nicht, der Akku ist voll", an, "")
+        cam_off(bot)
+        leer_fliegen()
+        z = befehl(bot, "/cam")
+        FIND.test("battery.storage: memory - leer ist er auch im Speicher leer",
+                  gesagt(z, r"battery holds 0 seconds"), zeige(z))
+        console(env, "cam reload", pause=2)
+        an = cam_on(bot)
+        FIND.test("battery.storage: memory - nach /cam reload ist der Akku wieder voll", an, "")
+    finally:
+        cam_off(bot)
+        set_options(env, [("flight-limit", "false"), ("capacity", "300", "battery"),
+                          ("recharge-per-second", "0.5", "battery"), ("min-start", "10", "battery"),
+                          ("bossbar-notches", "10", "battery"), ("storage", "file", "battery")])
 
 
 # ---------------------------------------------------------------------------
@@ -8709,6 +9197,16 @@ def step_tests(env):
         endwarnung_checks(env, bot)
         alarm_checks(env, bot)
         knoepfe_checks(env, bot)
+
+        # --- /cam stop, die Welten-Liste, die Sperre nach einem Angriff, afk-end, {health},
+        # --- die Wartezeit und der Akku: Bossbar, Einteilung und wo sie liegen ---
+        stopp_checks(env, bot)
+        welten_checks(env, bot)
+        angriff_checks(env, bot)
+        afk_checks(env, bot)
+        herzen_checks(env, bot)
+        wartezeit_checks(env, bot)
+        akku_speicher_checks(env, bot)
 
         # --- Geworfene Traenke und was den Koerper getroffen hat, mit beiden Koerpertypen ---
         fuer_beide_koerpertypen(env, bot, potion_checks, grund_checks)

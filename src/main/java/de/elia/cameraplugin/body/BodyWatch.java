@@ -131,6 +131,10 @@ public final class BodyWatch {
      * the body used to be. It is therefore put back over the body whenever the
      * two have come apart.</p>
      *
+     * <p>A name showing {@code {health}} is written anew whenever the health
+     * of the player changes. A hit on the body ends camera mode, so that is
+     * mostly healing somebody hands him - an effect, another plugin.</p>
+     *
      * @param name the name over the body, {@code null} when it carries none
      */
     public void keepNameOverBody(Player player, LivingEntity body, TextDisplay name) {
@@ -138,7 +142,11 @@ public final class BodyWatch {
             return;
         }
         BodySpawner bodies = plugin.getBodySpawner();
+        boolean showsHealth = bodies.nameShowsHealth();
         new BukkitRunnable() {
+            /** The health the name shows. */
+            private double health = player.getHealth();
+
             @Override
             public void run() {
                 if (!cameraPlayers.contains(player.getUniqueId()) || !player.isOnline() || body.isDead()
@@ -151,6 +159,10 @@ public final class BodyWatch {
                 if (!current.getWorld().equals(target.getWorld())
                         || current.distanceSquared(target) > CamSettings.MIN_MOVE_THRESHOLD * CamSettings.MIN_MOVE_THRESHOLD) {
                     name.teleport(target);
+                }
+                if (showsHealth && player.getHealth() != health) {
+                    health = player.getHealth();
+                    bodies.refreshName(player, name);
                 }
             }
         }.runTaskTimer(plugin, 1L, 1L);

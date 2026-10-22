@@ -145,7 +145,8 @@ body:
   # Name über dem Körper
   name-visible: true
 
-  # Aussehen des Namens (der Text steht in der Sprachdatei unter messages.armorstand.name-format, \n beginnt eine neue Zeile)
+  # Aussehen des Namens (der Text steht in der Sprachdatei unter messages.armorstand.name-format, \n beginnt eine neue Zeile).
+  # {health} im Text zeigt die Herzen des Spielers, z. B. "{player}'s Body ❤ {health}" - ohne {health} keine.
   name:
     # Farbe der Schrift (ersetzt einen Farbcode am Anfang von name-format):
     #   white, yellow, gold, red, dark_red, light_purple, dark_purple, blue,
@@ -242,7 +243,7 @@ sounds:
     sound: entity.illusioner.mirror_move
     volume: 1.0
     pitch: 1.0
-  # Beim Ende von außen: /cam reload, Zeitlimit abgelaufen, Akku leer, Teleport
+  # Beim Ende von außen: /cam reload, /cam stop, Zeitlimit abgelaufen, Akku leer, afk-end, Teleport
   # (beim Tod, beim Verlassen des Servers und beim Herunterfahren gibt es keinen Ton)
   end-forced:
     enabled: true
@@ -296,6 +297,10 @@ cam-list:
   # Wer selbst im Cam-Modus ist, beendet ihn dabei. Zur Kamera kommt nur, wer fliegen kann
   # (Kreativ- oder Zuschauermodus, oder /fly), sonst fiele er herunter. Der Cam-Modus des anderen läuft weiter.
   teleport: true
+  # Dahinter ein dritter Knopf [Stop], der den Cam-Modus des Spielers beendet (Text: cam-list-stop).
+  # Ein Klick schickt /cam stop <Name>. Nur bei stop-command.enabled: true und für Spieler, die die Liste
+  # sehen dürfen und das Recht camplugin.stop haben (Operatoren haben es).
+  stop: true
 
 # Statistik: wie oft jemand im Cam-Modus war, wie lange insgesamt und am längsten,
 # wie weit die Kamera geflogen ist und wie weit sie höchstens vom Körper weg war.
@@ -303,7 +308,8 @@ cam-list:
 #   /cam stats reset           = die eigene auf null setzen (der Akku bleibt, wie er ist)
 #   /cam stats player <Name>   = die eines anderen (wer das darf, sagt view-others)
 # Gezählt wird ein Cam-Modus, wenn er endet. Gespeichert wird in plugins/CamFly/playerdata/stats/<UUID>.yml,
-# zusammen mit dem Ladestand des Akkus.
+# zusammen mit dem Ladestand des Akkus und der Wartezeit von time-limit (bei storage: file).
+# /cam stats zeigt auch den Akku und eine Wartezeit, die noch läuft.
 statistics:
   enabled: true
   # Wer die Statistik anderer mit /cam stats player <Name> sehen darf (die Konsole immer):
@@ -332,7 +338,7 @@ flight-limit: false
 
 # Zeitlimit für den Cam-Modus (bei flight-limit: time-limit)
 time-limit:
-  # Wartezeit nach dem Beenden (geht bei jedem flight-limit, auch bei false)
+  # Wartezeit nach dem Beenden (geht bei jedem flight-limit, auch bei false; ein Ende durch /cam reload zählt nicht)
   cooldowns-enabled: false
   # Maximale Dauer in Sekunden
   duration-seconds: 300
@@ -340,12 +346,20 @@ time-limit:
   cooldown-seconds: 120
   # Restzeit als Bossbar anzeigen
   show-bossbar: true
-  # BLUE, GREEN, PINK, PURPLE, RED, WHITE oder YELLOW
+  # Die Wartezeit als Bossbar anzeigen, bis man wieder in den Cam-Modus darf - auch nach dem Betreten des Servers
+  # (Text: cooldown-bossbar in der Sprachdatei)
+  show-bossbar-cooldown: true
+  # BLUE, GREEN, PINK, PURPLE, RED, WHITE oder YELLOW (für beide Bossbars)
   bossbar-color: BLUE
+  # Einteilung der Bossbars in Abschnitte: 0 = keine, 6, 10, 12 oder 20
+  bossbar-notches: 0
+  # Wo die Wartezeiten liegen:
+  #   file   = in plugins/CamFly/playerdata/stats/<UUID>.yml - sie laufen nach /cam reload und einem Neustart weiter
+  #   memory = nur im Arbeitsspeicher - nach /cam reload oder einem Neustart sind alle vorbei
+  storage: file
 
 # Akku (bei flight-limit: battery): Im Cam-Modus läuft er leer, außerhalb lädt er sich wieder auf.
-# Ist er leer, endet der Cam-Modus. Der Ladestand wird in plugins/CamFly/playerdata/stats/<UUID>.yml gespeichert,
-# zu sehen ist er mit /cam stats.
+# Ist er leer, endet der Cam-Modus. Zu sehen ist der Ladestand mit /cam stats.
 battery:
   # Ein voller Akku, in Sekunden Flug
   capacity: 300
@@ -361,8 +375,14 @@ battery:
   # Die Bossbar nach dem Ende weiter zeigen, solange der Akku lädt, bis er wieder voll ist
   # (auch nach dem Betreten des Servers; Text: battery-bossbar-charging)
   show-bossbar-charging: true
-  # BLUE, GREEN, PINK, PURPLE, RED, WHITE oder YELLOW
+  # BLUE, GREEN, PINK, PURPLE, RED, WHITE oder YELLOW (für beide Bossbars)
   bossbar-color: GREEN
+  # Einteilung der Bossbars in Abschnitte: 0 = keine, 6, 10, 12 oder 20
+  bossbar-notches: 10
+  # Wo der Ladestand liegt:
+  #   file   = in plugins/CamFly/playerdata/stats/<UUID>.yml - er bleibt nach /cam reload und einem Neustart
+  #   memory = nur im Arbeitsspeicher - nach /cam reload oder einem Neustart sind alle Akkus wieder voll
+  storage: file
 
 # Was ein Start des Cam-Modus kostet. Bezahlt wird erst, wenn sonst nichts mehr gegen den Start spricht.
 # Fehlt etwas, wird gar nichts genommen und der Spieler erfährt, was ihm fehlt.
@@ -426,8 +446,22 @@ exit-key:
 back-command:
   enabled: true
 
-# Warnung kurz vor dem Ende durch flight-limit (Zeitlimit oder Akku): ein Ton (sounds.end-warning)
-# und eine Zeile in der Action-Bar (Texte: end-warning-time-limit, end-warning-battery).
+# /cam stop <Name> beendet den Cam-Modus eines anderen Spielers, /cam stop all den von allen - z. B. vor einem
+# Event oder einem Neustart. Er kommt zurück zu seinem Körper und erfährt, wer es war (Text: stopped-by).
+# Benutzen dürfen es die Konsole und wer das Recht camplugin.stop hat (Operatoren haben es). Ton: sounds.end-forced.
+stop-command:
+  enabled: false
+
+# Der Cam-Modus endet, wenn der Spieler eine Weile gar nichts tut: nicht fliegt, sich nicht umsieht und nicht
+# am Mausrad dreht. So steht kein Körper stundenlang herum, und der Akku läuft nicht leer, während niemand fliegt.
+# Vorher warnt end-warning (Text: end-warning-afk), beim Ende kommt afk-ended und der Ton sounds.end-forced.
+afk-end:
+  enabled: false
+  # Nach wie vielen Sekunden ohne etwas zu tun (mindestens 10)
+  seconds: 300
+
+# Warnung kurz vor dem Ende durch flight-limit (Zeitlimit oder Akku) und durch afk-end: ein Ton (sounds.end-warning)
+# und eine Zeile in der Action-Bar (Texte: end-warning-time-limit, end-warning-battery, end-warning-afk).
 end-warning:
   enabled: true
   # Bei wie vielen Sekunden Rest gewarnt wird, z. B. [60, 30, 10] ([] = nie)
@@ -453,6 +487,12 @@ cam-safety:
   enabled: true
   # Wartezeit nach dem letzten Schaden in Sekunden
   delay: 5
+  # Auch nach ausgeteiltem Schaden warten, damit niemand mitten im Kampf in den Cam-Modus flüchtet:
+  #   false   = nein, nur erlittener Schaden zählt
+  #   players = nach einem Treffer auf einen anderen Spieler (auch auf seinen Körper im Cam-Modus)
+  #   all     = nach einem Treffer auf einen Spieler oder einen Mob (Rüstungsständer und Mannequins zählen nicht)
+  # Pfeile, Dreizacke und andere Geschosse des Spielers zählen mit.
+  after-attack: false
 
 # Wo der Cam-Modus erlaubt ist
 cam-area:
@@ -502,6 +542,13 @@ cam-area:
     overworld: true
     nether: false
     end: false
+
+  # Welten-Liste beachten
+  worlds-enabled: false
+
+  # Verbotene Welten nach ihrem Namen - für eigene Welten wie eine Lobby oder eine Eventwelt, die dimensions
+  # nicht auseinanderhält. Der Name wie der Ordner der Welt, z. B. [lobby, event, world_nether] ([] = keine)
+  forbidden-worlds: [lobby]
 
 # Portale im Cam-Modus (In der anderen Welt zählt max-distance ab dem Portal, wenn cam-area level:2 dann kann man zurück geschikt werden wenn Umgebung gespert ist)
 portals:

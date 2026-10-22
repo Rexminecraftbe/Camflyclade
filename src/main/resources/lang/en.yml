@@ -15,6 +15,11 @@ messages:
   actionbar-hint: " &7- &f{key} &7or type &f/cam &7to leave"
   actionbar-hint-command: " &7- type &f/cam &7to leave"
   actionbar-on: "&aCam mode activated{hint}"
+  # {time} is afk-end.seconds.
+  afk-ended: "&cCam mode ended: you did not move for {time}."
+  # How {area} names a world of cam-area.forbidden-worlds, {world} being its name.
+  area-world: "the world {world}"
+  # {health} is how many hearts the player has, e.g. "{player}'s Body ❤ {health}".
   armorstand.name-format: "{player}'s Body"
   back-not-in-cam: "&cYou are not in cam mode."
   back-off: "&c/cam back is switched off."
@@ -37,7 +42,7 @@ messages:
   cam-area-start: "&cYou cannot start cam mode in {area}."
   cam-effect-start: "&cYou cannot start cam mode with {effect} on you."
   cam-falling-start: "&cYou cannot start cam mode while falling."
-  # The buttons behind each line of /cam list, see cam-list.teleport, and what hovering over them says.
+  # The buttons behind each line of /cam list, see cam-list.teleport and cam-list.stop, and what hovering over them says.
   cam-list-body: "&a[Body]"
   cam-list-body-hover: "&7Teleport next to the body of {player}"
   cam-list-camera: "&b[Camera]"
@@ -46,6 +51,8 @@ messages:
   cam-list-entry: "&7- &f{player}&7: for {time}, {distance} blocks from the body"
   cam-list-entry-away: "&7- &f{player}&7: for {time}, in another world than the body"
   cam-list-header: "&eIn cam mode ({count}):"
+  cam-list-stop: "&c[Stop]"
+  cam-list-stop-hover: "&7End the cam mode of {player}"
   cam-lava-start: "&cYou cannot start cam mode in lava."
   cam-powder-snow-start: "&cYou cannot start cam mode in powder snow."
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
@@ -93,6 +100,8 @@ messages:
   config-unknown-key: "&cUnknown setting {path}. It is ignored, check its spelling and indentation."
   config-unknown-value: "&cUnknown value for {path}: '{value}'. Allowed: {allowed}. Using {used} instead."
   cooldown-available: "&aCam mode available again"
+  # The bossbar of time-limit.show-bossbar-cooldown, {time} is the time left.
+  cooldown-bossbar: "Cam mode again in: {time}"
   crash-restored: "&eThe server went down while you were in cam mode. You got your things back and are at your body again."
   cooldown-text: "You can start cam mode again in %time%."
   # The parts of start-cost that cost-missing and cost-paid list, one after the other.
@@ -107,6 +116,7 @@ messages:
   distance-from-portal: "the portal you came out of"
   distance-limit: "&cYou cannot move further than {distance} blocks from {from}!"
   # {time} is the time left.
+  end-warning-afk: "&eYou are not moving: cam mode ends in {time}"
   end-warning-battery: "&eBattery almost empty: {time} left"
   end-warning-time-limit: "&eCam mode ends in {time}"
   flight-speed: "&bFlight speed: &f{speed}x"
@@ -125,6 +135,7 @@ messages:
   startup-skins-loaded: "Skins loaded successfully."
   startup-skins-loading: "Loading skins..."
   stats-battery: "&7Battery: &f{charge} &7of &f{capacity}"
+  stats-cooldown: "&7Cam mode again in: &f{time}"
   stats-distance: "&7Distance flown: &f{distance} blocks"
   stats-farthest: "&7Farthest from the body: &f{distance} blocks"
   stats-header: "&eCam mode statistics of {player}:"
@@ -136,6 +147,15 @@ messages:
   stats-total-time: "&7Time in cam mode: &f{time}"
   stats-unknown-player: "&cNobody called {player} has been on this server."
   stats-usage: "&eUse /cam stats, /cam stats reset or /cam stats player <name>."
+  stop-all-done: "&aEnded the cam mode of {count} players."
+  # Who {player} in stopped-by is when /cam stop comes from the console.
+  stop-console-name: "the server"
+  stop-done: "&aEnded the cam mode of {player}."
+  stop-none: "&eNobody is in cam mode."
+  stop-not-in-cam: "&c{player} is not in cam mode."
+  stop-off: "&c/cam stop is switched off."
+  stop-usage: "&eUse /cam stop <player> or /cam stop all."
+  stopped-by: "&cYour cam mode was ended by {player}."
   teleport-arrival-ended: "&c{player} was teleported to you. Camera mode ended."
   teleport-ended: "&cYou were teleported. Camera mode ended."
   time-limit-expired: "&cCam mode ended: Time limit expired."
@@ -432,6 +452,7 @@ message-settings:
   actionbar-hint-command: true
   actionbar-off: true
   actionbar-on: true
+  afk-ended: true
   back-not-in-cam: true
   back-off: true
   back-to-body: true
@@ -459,6 +480,7 @@ message-settings:
   cam-list-entry: true
   cam-list-entry-away: true
   cam-list-header: true
+  cam-list-stop: true
   cam-powder-snow-start: true
   cam-safety: true
   cam-spectator-start: true
@@ -477,11 +499,13 @@ message-settings:
   cant-fly-in-water: true
   config-errors: true
   cooldown-available: true
+  cooldown-bossbar: true
   crash-restored: true
   cooldown-text: true
   cost-missing: true
   cost-paid: true
   distance-limit: true
+  end-warning-afk: true
   end-warning-battery: true
   end-warning-time-limit: true
   enabled: true
@@ -498,6 +522,7 @@ message-settings:
   startup-skins-loaded: true
   startup-skins-loading: true
   stats-battery: true
+  stats-cooldown: true
   stats-distance: true
   stats-farthest: true
   stats-header: true
@@ -509,6 +534,13 @@ message-settings:
   stats-total-time: true
   stats-unknown-player: true
   stats-usage: true
+  stop-all-done: true
+  stop-done: true
+  stop-none: true
+  stop-not-in-cam: true
+  stop-off: true
+  stop-usage: true
+  stopped-by: true
   teleport-arrival-ended: true
   teleport-ended: true
   time-limit-expired: true

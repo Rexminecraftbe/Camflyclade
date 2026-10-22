@@ -285,8 +285,33 @@ public final class BodySpawner implements Listener {
         if (!settings.isBodyNameVisible()) {
             return null;
         }
-        String format = messages.getMessage("armorstand.name-format").replace("{player}", player.getName());
-        return NameDisplay.spawn(nameLocation(body), format, settings.getBodyNameStyle(), nameKey);
+        return NameDisplay.spawn(nameLocation(body), nameText(player), settings.getBodyNameStyle(), nameKey);
+    }
+
+    /**
+     * The text of the name over the body of a player: {@code name-format}
+     * with his name and, for {@code {health}}, how many hearts he has - in
+     * halves, the way his bar of hearts shows them, so 19 health reads 9.5.
+     */
+    private String nameText(Player player) {
+        double hearts = Math.ceil(player.getHealth()) / 2.0;
+        String health = hearts == Math.rint(hearts) ? String.valueOf((long) hearts) : String.valueOf(hearts);
+        return messages.getMessage("armorstand.name-format")
+                .replace("{player}", player.getName())
+                .replace("{health}", health);
+    }
+
+    /**
+     * Whether the name over a body says something that changes while camera
+     * mode runs, {@code {health}}, and has to be looked after.
+     */
+    public boolean nameShowsHealth() {
+        return messages.getMessage("armorstand.name-format").contains("{health}");
+    }
+
+    /** Writes the text of a name over a body anew, for {@code {health}}. */
+    public void refreshName(Player player, TextDisplay name) {
+        NameDisplay.setText(name, nameText(player), settings.getBodyNameStyle());
     }
 
     /**

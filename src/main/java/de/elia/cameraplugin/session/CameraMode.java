@@ -214,6 +214,7 @@ public final class CameraMode {
         plugin.getCamModeObjective().setScore(player, 1);
         plugin.getTimeLimit().startTimeLimit(player);
         plugin.getBattery().startFor(player);
+        plugin.getAfk().startFor(player);
         plugin.getCamLog().started(player, cameraData);
 
         if (settings.isCameraHeadEnabled()) {
@@ -264,12 +265,14 @@ public final class CameraMode {
             plugin.getFlightSpeed().stopFor(player);
             plugin.getNightVision().stopFor(player);
             plugin.getBattery().stopFor(player);
+            plugin.getAfk().stopFor(player);
             team.updateViewerTeam(player);
             plugin.getCamModeObjective().setScore(player, 0);
             return;
         }
         plugin.getTimeLimit().cancelTimeLimit(player);
         plugin.getBattery().stopFor(player);
+        plugin.getAfk().stopFor(player);
         plugin.getMobTargeting().stopMobTargeting(player);
         plugin.getBodyAlarm().stopFor(player);
         LivingEntity body = cameraData.getBody();
@@ -370,10 +373,13 @@ public final class CameraMode {
         plugin.getCrashGuard().delete(player);
         plugin.getStats().record(player, cameraData);
         plugin.getCamLog().ended(player, cameraData, reason, cameraAt);
-        // One write for both, the battery left over and the flight counted.
+        if (!plugin.isShuttingDown()) {
+            plugin.getTimeLimit().startCooldown(player, reason);
+        }
+        // One write for all three, the battery left over, the flight counted
+        // and the cooldown begun.
         plugin.getPlayerStore().save(player.getUniqueId());
         if (!plugin.isShuttingDown()) {
-            plugin.getTimeLimit().startCooldown(player);
             // Last, at his body: the sound says he is back, and why.
             settings.getEndSound(reason).play(player);
         }

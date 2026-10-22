@@ -21,6 +21,10 @@ public enum EndReason {
     TELEPORT(Kind.FORCED),
     /** {@code /cam reload}. */
     RELOAD(Kind.FORCED),
+    /** Somebody ended it for him with {@code /cam stop}, {@code stop-command}. */
+    STOP(Kind.FORCED),
+    /** The camera stood still for too long, {@code afk-end}. */
+    AFK(Kind.FORCED),
     /** He died. */
     DEATH(Kind.SILENT),
     /** He left the server. */

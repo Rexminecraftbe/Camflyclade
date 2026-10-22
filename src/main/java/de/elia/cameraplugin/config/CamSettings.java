@@ -18,7 +18,9 @@ import de.elia.cameraplugin.portal.PortalRules;
 import de.elia.cameraplugin.session.CamGameMode;
 import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.sound.CamSound;
+import de.elia.cameraplugin.start.AttackSafety;
 import de.elia.cameraplugin.start.EffectStart;
+import de.elia.cameraplugin.storage.StorageMode;
 import de.elia.cameraplugin.timelimit.FlightLimit;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.ChatColor;
@@ -28,6 +30,7 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.MultipleFacing;
 import org.bukkit.boss.BarColor;
+import org.bukkit.boss.BarStyle;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -74,6 +77,13 @@ public final class CamSettings {
 
     /** The brightest light level there is, {@code night-vision.light-level} going up to it. */
     private static final int MAX_LIGHT_LEVEL = 15;
+
+    /**
+     * The shortest time {@code afk-end.seconds} accepts. Anything shorter
+     * would take camera mode off a player who only stops to look at
+     * something for a moment.
+     */
+    private static final int MIN_AFK_SECONDS = 10;
 
     /**
      * Keys that are read although the config file built into the jar leaves
@@ -213,6 +223,16 @@ public final class CamSettings {
     private ListAccess camListAccess;
     /** Whether the list offers to go to a camera or a body, {@code cam-list.teleport}. */
     private boolean camListTeleport;
+    /** Whether the list offers to end a camera mode, {@code cam-list.stop}. */
+    private boolean camListStop;
+
+    /** Whether {@code /cam stop} ends the camera mode of others, {@code stop-command.enabled}. */
+    private boolean stopCommandEnabled;
+
+    /** Whether camera mode ends after a while without moving, {@code afk-end.enabled}. */
+    private boolean afkEndEnabled;
+    /** How long that while is, in seconds, {@code afk-end.seconds}. */
+    private int afkEndSeconds;
 
     /** Whether {@code /cam back} takes the camera back to its body, {@code back-command.enabled}. */
     private boolean backCommandEnabled;
@@ -255,11 +275,19 @@ public final class CamSettings {
     private int durationSeconds;
     private int cooldownSeconds;
     private boolean showBossbar;
+    /** Whether the cooldown shows as a bossbar until it is over, {@code time-limit.show-bossbar-cooldown}. */
+    private boolean cooldownBossbar;
     private BarColor bossbarColor;
+    /** The notches of both bossbars of the time limit, {@code time-limit.bossbar-notches}. */
+    private BarStyle bossbarStyle;
+    /** Where the cooldowns are kept, {@code time-limit.storage}. */
+    private StorageMode cooldownStorage;
 
     // Camera safety settings
     private boolean camSafetyEnabled;
     private int camSafetyDelay;
+    /** Which hits a player hands out make him wait as well, {@code cam-safety.after-attack}. */
+    private AttackSafety camSafetyAfterAttack;
 
     /** Whether the key that swaps the hands ends camera mode, {@code exit-key.enabled}. */
     private boolean exitKeyEnabled;
@@ -276,6 +304,10 @@ public final class CamSettings {
     /** Whether the bossbar stays after camera mode until the battery is full, {@code show-bossbar-charging}. */
     private boolean batteryBossbarCharging;
     private BarColor batteryBossbarColor;
+    /** The notches of both bossbars of the battery, {@code battery.bossbar-notches}. */
+    private BarStyle batteryBossbarStyle;
+    /** Where the charge is kept, {@code battery.storage}. */
+    private StorageMode batteryStorage;
 
     /** Whether a start costs something, the section {@code start-cost}. */
     private boolean startCostEnabled;
@@ -438,6 +470,10 @@ public final class CamSettings {
         crashProtectionEnabled = config.getBoolean("crash-protection.enabled", true);
         camListAccess = readAccess(config, "cam-list.access");
         camListTeleport = config.getBoolean("cam-list.teleport", true);
+        camListStop = config.getBoolean("cam-list.stop", true);
+        stopCommandEnabled = config.getBoolean("stop-command.enabled", false);
+        afkEndEnabled = config.getBoolean("afk-end.enabled", false);
+        afkEndSeconds = config.getInt("afk-end.seconds", 300, MIN_AFK_SECONDS);
         backCommandEnabled = config.getBoolean("back-command.enabled", true);
         endWarningEnabled = config.getBoolean("end-warning.enabled", true);
         endWarningSeconds = readSeconds(config, "end-warning.seconds", List.of(30, 10));
@@ -457,9 +493,19 @@ public final class CamSettings {
         durationSeconds = config.getInt("time-limit.duration-seconds", 300, 1);
         cooldownSeconds = config.getInt("time-limit.cooldown-seconds", 120, 0);
         showBossbar = config.getBoolean("time-limit.show-bossbar", true);
+        cooldownBossbar = config.getBoolean("time-limit.show-bossbar-cooldown", true);
         bossbarColor = config.getEnum("time-limit.bossbar-color", BarColor.class, BarColor.BLUE);
+        bossbarStyle = readNotches(config, "time-limit.bossbar-notches", 0);
+        cooldownStorage = readStorage(config, "time-limit.storage");
         camSafetyEnabled = config.getBoolean("cam-safety.enabled", true);
         camSafetyDelay = config.getInt("cam-safety.delay", 5, 0);
+        String afterAttack = config.getChoice("cam-safety.after-attack", "false", "false", "players", "all")
+                .toLowerCase(Locale.ROOT);
+        camSafetyAfterAttack = switch (afterAttack) {
+            case "players" -> AttackSafety.PLAYERS;
+            case "all" -> AttackSafety.ALL;
+            default -> AttackSafety.OFF;
+        };
         exitKeyEnabled = config.getBoolean("exit-key.enabled", true);
         readBattery(config);
         readStartCost(config);
@@ -543,6 +589,40 @@ public final class CamSettings {
         return List.copyOf(seconds);
     }
 
+    /**
+     * Reads how many notches a bossbar is divided into, such as
+     * {@code time-limit.bossbar-notches}: 0 for none, or 6, 10, 12 or 20 -
+     * the ones the game can draw, as {@code /bossbar} has them.
+     */
+    private static BarStyle readNotches(ConfigReader config, String path, int def) {
+        int notches = config.getInt(path, def);
+        BarStyle style = notchStyle(notches);
+        if (style == null) {
+            config.warnUnknownValue(path, notches, "0, 6, 10, 12, 20", String.valueOf(def));
+            return notchStyle(def);
+        }
+        return style;
+    }
+
+    /** The bossbar with this many notches, or {@code null} when the game has none. */
+    private static BarStyle notchStyle(int notches) {
+        return switch (notches) {
+            case 0 -> BarStyle.SOLID;
+            case 6 -> BarStyle.SEGMENTED_6;
+            case 10 -> BarStyle.SEGMENTED_10;
+            case 12 -> BarStyle.SEGMENTED_12;
+            case 20 -> BarStyle.SEGMENTED_20;
+            default -> null;
+        };
+    }
+
+    /** Reads where something is kept, the values file and memory. */
+    private static StorageMode readStorage(ConfigReader config, String path) {
+        return config.getChoice(path, "file", "file", "memory").equalsIgnoreCase("memory")
+                ? StorageMode.MEMORY
+                : StorageMode.FILE;
+    }
+
     /** Reads who may use something, the values admin, all and false. */
     private static ListAccess readAccess(ConfigReader config, String path) {
         String access = config.getChoice(path, "admin", "admin", "all", "false").toLowerCase(Locale.ROOT);
@@ -566,6 +646,8 @@ public final class CamSettings {
         batteryBossbar = config.getBoolean("battery.show-bossbar", true);
         batteryBossbarCharging = config.getBoolean("battery.show-bossbar-charging", true);
         batteryBossbarColor = config.getEnum("battery.bossbar-color", BarColor.class, BarColor.GREEN);
+        batteryBossbarStyle = readNotches(config, "battery.bossbar-notches", 10);
+        batteryStorage = readStorage(config, "battery.storage");
     }
 
     /**
@@ -1002,6 +1084,24 @@ public final class CamSettings {
         return camListTeleport;
     }
 
+    public boolean isCamListStop() {
+        return camListStop;
+    }
+
+    // ------------------------------------------------------ stop-command, afk-end
+
+    public boolean isStopCommandEnabled() {
+        return stopCommandEnabled;
+    }
+
+    public boolean isAfkEndEnabled() {
+        return afkEndEnabled;
+    }
+
+    public int getAfkEndSeconds() {
+        return afkEndSeconds;
+    }
+
     // ------------------------------------------- back-command, end-warning, body-alarm
 
     public boolean isBackCommandEnabled() {
@@ -1069,6 +1169,18 @@ public final class CamSettings {
         return bossbarColor;
     }
 
+    public boolean showsCooldownBossbar() {
+        return cooldownBossbar;
+    }
+
+    public BarStyle getBossbarStyle() {
+        return bossbarStyle;
+    }
+
+    public StorageMode getCooldownStorage() {
+        return cooldownStorage;
+    }
+
     // --------------------------------------------------------------- cam-safety
 
     public boolean isCamSafetyEnabled() {
@@ -1077,6 +1189,10 @@ public final class CamSettings {
 
     public int getCamSafetyDelay() {
         return camSafetyDelay;
+    }
+
+    public AttackSafety getCamSafetyAfterAttack() {
+        return camSafetyAfterAttack;
     }
 
     // --------------------------------------------------------------- exit-key
@@ -1118,6 +1234,14 @@ public final class CamSettings {
 
     public BarColor getBatteryBossbarColor() {
         return batteryBossbarColor;
+    }
+
+    public BarStyle getBatteryBossbarStyle() {
+        return batteryBossbarStyle;
+    }
+
+    public StorageMode getBatteryStorage() {
+        return batteryStorage;
     }
 
     // ------------------------------------------------------------- start-cost
