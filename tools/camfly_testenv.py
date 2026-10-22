@@ -4048,7 +4048,9 @@ def angriff_checks(env, bot):
     zweiten Spieler wird /cam dagegen abgelehnt, und nach den fuenf Sekunden
     von cam-safety.delay geht es wieder. Mit all sperrt auch der Schlag auf
     das Schwein. Geschlagen wird jedes Mal frisch vor dem /cam, die fuenf
-    Sekunden laufen ab dem Schlag.
+    Sekunden laufen ab dem Schlag. Gezielt wird nach dem Platz, nicht nach
+    der Art: Einen Spieler nennt mineflayer mit den Daten von 26.1 nach einer
+    anderen Art, "fishing_bobber".
     """
     if not FIND.test("Cam-Modus ist vor dem Angriffstest aus", cam_off(bot), ""):
         return
@@ -4060,13 +4062,13 @@ def angriff_checks(env, bot):
     time.sleep(0.5)
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
 
-    def schlag(art, wo):
+    def schlag(wo):
         hinstellen(bot, x, y, z)
-        return bool(bot.call("attack_entity", wait=20, type=art, radius=1.5, at=wo).get("done"))
+        return bool(bot.call("attack_entity", wait=20, radius=0.8, at=wo).get("done"))
 
-    def start_nach(art, wo):
+    def start_nach(wo):
         """(kam der Schlag an, startete der Cam-Modus danach, was er sagte)"""
-        geschlagen = schlag(art, wo)
+        geschlagen = schlag(wo)
         zeilen = befehl(bot, "/cam")
         an = gesagt(zeilen, r"[Cc]am mode activated")
         if an:
@@ -4087,14 +4089,14 @@ def angriff_checks(env, bot):
 
         FIND.test("Voreingestellt steht cam-safety.after-attack: false da",
                   re.search(r"(?m)^\s*after-attack:\s*false\s*$", ausgeliefert(env)) is not None, "")
-        geschlagen, an, zeilen = start_nach("pig", schwein)
+        geschlagen, an, zeilen = start_nach(schwein)
         FIND.test("after-attack: false - nach einem Schlag startet der Cam-Modus gleich",
                   geschlagen and an, zeige(zeilen))
 
         set_option(env, "after-attack", "players")
-        geschlagen, an, zeilen = start_nach("pig", schwein)
+        geschlagen, an, zeilen = start_nach(schwein)
         FIND.test("after-attack: players - ein Schlag auf ein Schwein sperrt nicht", geschlagen and an, zeige(zeilen))
-        geschlagen, an, zeilen = start_nach("player", spieler)
+        geschlagen, an, zeilen = start_nach(spieler)
         FIND.test("after-attack: players - nach einem Schlag auf einen Spieler wird /cam abgelehnt",
                   geschlagen and not an and gesagt(zeilen, r"remain safe"), zeige(zeilen))
         time.sleep(5.5)
@@ -4103,7 +4105,7 @@ def angriff_checks(env, bot):
         FIND.test("after-attack: nach cam-safety.delay geht es wieder", an, "")
 
         set_option(env, "after-attack", "all")
-        geschlagen, an, zeilen = start_nach("pig", schwein)
+        geschlagen, an, zeilen = start_nach(schwein)
         FIND.test("after-attack: all - auch ein Schlag auf ein Schwein sperrt",
                   geschlagen and not an and gesagt(zeilen, r"remain safe"), zeige(zeilen))
     finally:
@@ -4176,8 +4178,11 @@ def herzen_checks(env, bot):
 
     Mit armorstand.name-format "{player} {health}" steht ueber dem Koerper
     der Name und so viele Herzen, wie der Server dem Bot gerade gibt, in
-    halben wie in seiner Leiste: 13 Leben sind 6.5. Damit es weniger als
-    volle sind, nimmt /damage ihm vorher neun; cam-safety ist dafuer aus.
+    halben wie in seiner Leiste: 11 Leben sind 5.5. Damit es weniger als
+    volle sind, nimmt /damage ihm vorher neun; cam-safety ist dafuer aus, und
+    die Regeneration steht still - aus der Saettigung des Testservers waeren
+    die neun Leben sonst in zwei, drei Sekunden wieder da, noch ehe der
+    Cam-Modus laeuft.
     Bekommt er im Cam-Modus Leben dazu - hier mit dem Effekt Direktheilung,
     den das Plugin einem Kamera-Spieler laesst -, steht dort gleich darauf
     die neue Zahl.
@@ -4195,6 +4200,7 @@ def herzen_checks(env, bot):
         cam_off(bot)
         set_options(env, [("armorstand.name-format", '"{player} {health}"', "messages"),
                           ("enabled", "false", "cam-safety"), ("name-visible", "false", "camera-mode")])
+        console(env, "gamerule natural_health_regeneration false", pause=0.3)
         spielmodus_setzen(bot, "survival")
         bot.chat("/damage @s 9")
         time.sleep(0.5)
@@ -4216,6 +4222,7 @@ def herzen_checks(env, bot):
         cam_off(bot)
         set_options(env, [("armorstand.name-format", '"{player}\'s Body"', "messages"),
                           ("enabled", "true", "cam-safety"), ("name-visible", "true", "camera-mode")])
+        console(env, "gamerule natural_health_regeneration true", pause=0.3)
         bot.chat(f"/effect clear {BOT_NAME}")
         spielmodus_setzen(bot, modus)
 

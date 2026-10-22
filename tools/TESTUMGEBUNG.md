@@ -206,6 +206,15 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   langsame Wert rückwirkend ab dem letzten Flug: Was danach übrig ist, sind
   ein paar Sekunden, kein voller Akku. Der Test der Akku-Ablage braucht
   deshalb für einen Start nur eine Sekunde.
+* **Einen Spieler nennt mineflayer nicht `player`.** Die Arten kommen aus
+  den Daten von 26.1, und dort steht unter der Nummer, die 26.2 einem
+  Spieler gibt, `fishing_bobber`. Wer einen Spieler schlagen will, zielt
+  deshalb nach dem Platz (`at` mit kleinem `radius`), nicht nach der Art.
+* **Die Herzen sind auf dem Testserver in zwei, drei Sekunden wieder voll.**
+  `peaceful` hält die Sättigung bei knapp 20, und aus ihr heilt der Server
+  ein halbes Herz alle paar Ticks. Der Test von `{health}` stellt deshalb
+  `natural_health_regeneration` für sich ab, sonst stünde der Bot schon vor
+  dem Start des Cam-Modus wieder mit vollen Herzen da.
 * **Für `afk-end` steht der Bot im Cam-Modus einfach still.** mineflayer
   schickt dann keine neue Position und keinen neuen Blick, und Paper meldet
   ohne Änderung kein `PlayerMoveEvent`. Bewegt sich der Bot, fliegt er alle
