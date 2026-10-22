@@ -3634,7 +3634,7 @@ def endwarnung_checks(env, bot):
         zehn = bot.expect(r"Cam mode ends in 10 seconds", since, 8000)
         FIND.test("end-warning: bei 10 Sekunden Rest steht \"Cam mode ends in 10 seconds\" in der Action-Bar",
                   bool(zehn), "")
-        FIND.test("sounds.end-warning - der Ton zur Warnung", ton_da(bot, seit, "block.note_block.pling"), "")
+        FIND.test("sounds.end-warning - der Ton zur Warnung", ton_da(bot, seit, "item.lodestone_compass.lock"), "")
         fuenf = bot.expect(r"Cam mode ends in 5 seconds", since, 10000)
         FIND.test("end-warning: bei 5 Sekunden Rest noch einmal", bool(fuenf), "")
         ende = bot.expect(r"Time limit expired", since, 10000)
@@ -3713,7 +3713,7 @@ def alarm_checks(env, bot):
         treffer = next((i for i, t in enumerate(zeilen) if re.search(r"body was attacked", t)), len(zeilen))
         gewarnt = next((i for i, t in enumerate(zeilen) if re.search(muster, t)), None)
         return gewarnt is not None, gewarnt is not None and gewarnt < treffer, \
-            ton_da(bot, seit, "block.bell.use")
+            ton_da(bot, seit, "entity.warden.nearby_close")
 
     try:
         bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")

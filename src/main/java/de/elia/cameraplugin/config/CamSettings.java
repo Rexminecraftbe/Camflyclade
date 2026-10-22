@@ -432,8 +432,9 @@ public final class CamSettings {
         borderSound = CamSound.read(config, "sounds.border", allowedSounds, "block.note_block.bass", 0.5);
         backSound = CamSound.read(config, "sounds.back", allowedSounds, "entity.enderman.teleport", 1.0);
         endWarningSound = CamSound.read(config, "sounds.end-warning", allowedSounds,
-                "block.note_block.pling", 1.0);
-        bodyAlarmSound = CamSound.read(config, "sounds.body-alarm", allowedSounds, "block.bell.use", 1.0);
+                "item.lodestone_compass.lock", 1.0);
+        bodyAlarmSound = CamSound.read(config, "sounds.body-alarm", allowedSounds,
+                "entity.warden.nearby_close", 1.0);
         crashProtectionEnabled = config.getBoolean("crash-protection.enabled", true);
         camListAccess = readAccess(config, "cam-list.access");
         camListTeleport = config.getBoolean("cam-list.teleport", true);

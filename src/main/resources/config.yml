@@ -265,13 +265,13 @@ sounds:
   # Kurz vor dem Ende durch Zeitlimit oder Akku (end-warning)
   end-warning:
     enabled: true
-    sound: block.note_block.pling
+    sound: item.lodestone_compass.lock
     volume: 1.0
     pitch: 1.0
   # Wenn etwas dem Körper gefährlich wird (body-alarm)
   body-alarm:
     enabled: true
-    sound: block.bell.use
+    sound: entity.warden.nearby_close
     volume: 1.0
     pitch: 1.0
 
