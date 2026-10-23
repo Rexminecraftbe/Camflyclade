@@ -279,10 +279,13 @@ public final class BodySpawner implements Listener {
      * invisible body keeps as a name without a second entity to carry it: an
      * invisible mannequin shows no name tag.
      *
+     * <p>With {@code body.health-visible} the hearts of the player stand there
+     * as well - on their own, when {@code name-visible} is off.</p>
+     *
      * @return the name, or {@code null} when the body carries none
      */
     public TextDisplay spawnNameDisplay(Player player, LivingEntity body) {
-        if (!settings.isBodyNameVisible()) {
+        if (!settings.isBodyNameVisible() && !settings.isBodyHealthVisible()) {
             return null;
         }
         return NameDisplay.spawn(nameLocation(body), nameText(player), settings.getBodyNameStyle(), nameKey);
@@ -290,26 +293,26 @@ public final class BodySpawner implements Listener {
 
     /**
      * The text of the name over the body of a player: {@code name-format}
-     * with his name and, for {@code {health}}, how many hearts he has - in
+     * with his name, and with {@code body.health-visible}
+     * {@code health-format} behind it with how many hearts he has - in
      * halves, the way his bar of hearts shows them, so 19 health reads 9.5.
      */
     private String nameText(Player player) {
+        String name = settings.isBodyNameVisible()
+                ? messages.getMessage("armorstand.name-format").replace("{player}", player.getName())
+                : "";
+        if (!settings.isBodyHealthVisible()) {
+            return name;
+        }
         double hearts = Math.ceil(player.getHealth()) / 2.0;
-        String health = hearts == Math.rint(hearts) ? String.valueOf((long) hearts) : String.valueOf(hearts);
-        return messages.getMessage("armorstand.name-format")
-                .replace("{player}", player.getName())
-                .replace("{health}", health);
+        String health = messages.getMessage("armorstand.health-format").replace("{health}",
+                hearts == Math.rint(hearts) ? String.valueOf((long) hearts) : String.valueOf(hearts));
+        // Without a name in front, the gap that keeps the two apart would
+        // only push the hearts aside.
+        return name.isEmpty() ? health.stripLeading() : name + health;
     }
 
-    /**
-     * Whether the name over a body says something that changes while camera
-     * mode runs, {@code {health}}, and has to be looked after.
-     */
-    public boolean nameShowsHealth() {
-        return messages.getMessage("armorstand.name-format").contains("{health}");
-    }
-
-    /** Writes the text of a name over a body anew, for {@code {health}}. */
+    /** Writes the text of a name over a body anew, when the hearts of the player have changed. */
     public void refreshName(Player player, TextDisplay name) {
         NameDisplay.setText(name, nameText(player), settings.getBodyNameStyle());
     }

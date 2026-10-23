@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **778** - alle 778 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **779** - alle 779 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -212,7 +212,7 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   deshalb nach dem Platz (`at` mit kleinem `radius`), nicht nach der Art.
 * **Die Herzen sind auf dem Testserver in zwei, drei Sekunden wieder voll.**
   `peaceful` hält die Sättigung bei knapp 20, und aus ihr heilt der Server
-  ein halbes Herz alle paar Ticks. Der Test von `{health}` stellt deshalb
+  ein halbes Herz alle paar Ticks. Der Test von `body.health-visible` stellt deshalb
   `natural_health_regeneration` für sich ab, sonst stünde der Bot schon vor
   dem Start des Cam-Modus wieder mit vollen Herzen da.
 * **Der Sperrtest löscht `plugins/CamFly/bans.yml`**, vorher und nachher.
@@ -222,6 +222,11 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   auch in der Luft. Fällt er von dort, nimmt er Fallschaden, und
   `cam-safety` sperrt `/cam` fünf Sekunden lang. `zuschauer_cam_an` stellt
   ihn deshalb auf seinen Platz und versucht es nach dieser Zeit noch einmal.
+* **Der feindliche Mob im Angriffstest ist ein Wüstenzombie ohne KI.** In
+  `peaceful` verschwindet jeder feindliche Mob sofort, der Test stellt den
+  Server dafür auf `easy`. Ohne KI greift er niemanden an, und anders als
+  ein Zombie brennt ein Wüstenzombie in der Mittagssonne nicht ab, ehe der
+  Bot ihn schlägt.
 * **Für `afk-end` steht der Bot im Cam-Modus einfach still.** mineflayer
   schickt dann keine neue Position und keinen neuen Blick, und Paper meldet
   ohne Änderung kein `PlayerMoveEvent`. Bewegt sich der Bot, fliegt er alle

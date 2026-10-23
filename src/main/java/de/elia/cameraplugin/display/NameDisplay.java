@@ -118,7 +118,7 @@ public final class NameDisplay {
         });
     }
 
-    /** Writes a new text into a name that is up already, such as one showing {@code {health}}. */
+    /** Writes a new text into a name that is up already, such as one showing the hearts of a player. */
     public static void setText(TextDisplay display, String format, NameStyle style) {
         display.setText(text(format, style));
     }

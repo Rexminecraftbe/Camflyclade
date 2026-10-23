@@ -131,9 +131,10 @@ public final class BodyWatch {
      * the body used to be. It is therefore put back over the body whenever the
      * two have come apart.</p>
      *
-     * <p>A name showing {@code {health}} is written anew whenever the health
-     * of the player changes. A hit on the body ends camera mode, so that is
-     * mostly healing somebody hands him - an effect, another plugin.</p>
+     * <p>With {@code body.health-visible} the name is written anew whenever
+     * the health of the player changes. A hit on the body ends camera mode, so
+     * that is mostly healing somebody hands him - an effect, another
+     * plugin.</p>
      *
      * @param name the name over the body, {@code null} when it carries none
      */
@@ -142,7 +143,7 @@ public final class BodyWatch {
             return;
         }
         BodySpawner bodies = plugin.getBodySpawner();
-        boolean showsHealth = bodies.nameShowsHealth();
+        boolean showsHealth = settings.isBodyHealthVisible();
         new BukkitRunnable() {
             /** The health the name shows. */
             private double health = player.getHealth();

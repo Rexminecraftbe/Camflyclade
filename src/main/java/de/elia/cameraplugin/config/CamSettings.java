@@ -18,7 +18,6 @@ import de.elia.cameraplugin.portal.PortalRules;
 import de.elia.cameraplugin.session.CamGameMode;
 import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.sound.CamSound;
-import de.elia.cameraplugin.start.AttackSafety;
 import de.elia.cameraplugin.start.EffectStart;
 import de.elia.cameraplugin.storage.StorageMode;
 import de.elia.cameraplugin.timelimit.FlightLimit;
@@ -131,6 +130,8 @@ public final class CamSettings {
      */
     private boolean bordersHold;
     private boolean bodyNameVisible;
+    /** Whether the name over the body shows the hearts of the player, {@code body.health-visible}. */
+    private boolean bodyHealthVisible;
     /** How the name over the body looks, the section {@code body.name}. */
     private NameStyle bodyNameStyle;
     private boolean bodyVisible;
@@ -236,6 +237,8 @@ public final class CamSettings {
     private boolean afkEndEnabled;
     /** How long that while is, in seconds, {@code afk-end.seconds}. */
     private int afkEndSeconds;
+    /** After how much of that while the warning comes, in percent, 0 for none, {@code afk-end.warning-percent}. */
+    private int afkWarningPercent;
 
     /** Whether {@code /cam back} takes the camera back to its body, {@code back-command.enabled}. */
     private boolean backCommandEnabled;
@@ -289,8 +292,12 @@ public final class CamSettings {
     // Camera safety settings
     private boolean camSafetyEnabled;
     private int camSafetyDelay;
-    /** Which hits a player hands out make him wait as well, {@code cam-safety.after-attack}. */
-    private AttackSafety camSafetyAfterAttack;
+    /** Whether a hit on another player makes him wait as well, {@code cam-safety.after-attack.players}. */
+    private boolean camSafetyAfterPlayers;
+    /** The same for a hit on a hostile mob, {@code cam-safety.after-attack.mobs}. */
+    private boolean camSafetyAfterMobs;
+    /** The same for a hit on anything friendly, {@code cam-safety.after-attack.friendly}. */
+    private boolean camSafetyAfterFriendly;
 
     /** Whether the key that swaps the hands ends camera mode, {@code exit-key.enabled}. */
     private boolean exitKeyEnabled;
@@ -415,6 +422,7 @@ public final class CamSettings {
         cameraHeadEnabled = config.getBoolean("camera-head.enabled", false);
         bodyType = resolveBodyType(config, config.getString("body.type", BodyType.ARMOR_STAND.getConfigName()));
         bodyNameVisible = config.getBoolean("body.name-visible", true);
+        bodyHealthVisible = config.getBoolean("body.health-visible", false);
         bodyNameStyle = NameStyle.read(config, "body.name", ChatColor.YELLOW);
         bodyVisible = config.getBoolean("body.visible", true);
         bodyArmorVisible = config.getBoolean("body.armor-visible", true);
@@ -478,6 +486,7 @@ public final class CamSettings {
         camBanEnabled = config.getBoolean("cam-ban.enabled", false);
         afkEndEnabled = config.getBoolean("afk-end.enabled", false);
         afkEndSeconds = config.getInt("afk-end.seconds", 300, MIN_AFK_SECONDS);
+        afkWarningPercent = config.getInt("afk-end.warning-percent", 80, 0, 99);
         backCommandEnabled = config.getBoolean("back-command.enabled", true);
         endWarningEnabled = config.getBoolean("end-warning.enabled", true);
         endWarningSeconds = readSeconds(config, "end-warning.seconds", List.of(30, 10));
@@ -503,13 +512,9 @@ public final class CamSettings {
         cooldownStorage = readStorage(config, "time-limit.storage");
         camSafetyEnabled = config.getBoolean("cam-safety.enabled", true);
         camSafetyDelay = config.getInt("cam-safety.delay", 5, 0);
-        String afterAttack = config.getChoice("cam-safety.after-attack", "false", "false", "players", "all")
-                .toLowerCase(Locale.ROOT);
-        camSafetyAfterAttack = switch (afterAttack) {
-            case "players" -> AttackSafety.PLAYERS;
-            case "all" -> AttackSafety.ALL;
-            default -> AttackSafety.OFF;
-        };
+        camSafetyAfterPlayers = config.getBoolean("cam-safety.after-attack.players", false);
+        camSafetyAfterMobs = config.getBoolean("cam-safety.after-attack.mobs", false);
+        camSafetyAfterFriendly = config.getBoolean("cam-safety.after-attack.friendly", false);
         exitKeyEnabled = config.getBoolean("exit-key.enabled", true);
         readBattery(config);
         readStartCost(config);
@@ -939,6 +944,10 @@ public final class CamSettings {
         return bodyNameVisible;
     }
 
+    public boolean isBodyHealthVisible() {
+        return bodyHealthVisible;
+    }
+
     public NameStyle getBodyNameStyle() {
         return bodyNameStyle;
     }
@@ -1110,6 +1119,10 @@ public final class CamSettings {
         return afkEndSeconds;
     }
 
+    public int getAfkWarningPercent() {
+        return afkWarningPercent;
+    }
+
     // ------------------------------------------- back-command, end-warning, body-alarm
 
     public boolean isBackCommandEnabled() {
@@ -1199,8 +1212,16 @@ public final class CamSettings {
         return camSafetyDelay;
     }
 
-    public AttackSafety getCamSafetyAfterAttack() {
-        return camSafetyAfterAttack;
+    public boolean waitsAfterHittingPlayers() {
+        return camSafetyAfterPlayers;
+    }
+
+    public boolean waitsAfterHittingMobs() {
+        return camSafetyAfterMobs;
+    }
+
+    public boolean waitsAfterHittingFriendly() {
+        return camSafetyAfterFriendly;
     }
 
     // --------------------------------------------------------------- exit-key

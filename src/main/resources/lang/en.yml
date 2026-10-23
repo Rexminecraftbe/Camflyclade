@@ -19,7 +19,9 @@ messages:
   afk-ended: "&cCam mode ended: you did not move for {time}."
   # How {area} names a world of cam-area.forbidden-worlds, {world} being its name.
   area-world: "the world {world}"
-  # {health} is how many hearts the player has, e.g. "{player}'s Body ❤ {health}".
+  # What stands behind the name over the body with body.health-visible: true, {health} being how many hearts the
+  # player has. It starts with a space to keep it apart from the name; \n instead puts it on a line of its own.
+  armorstand.health-format: " &c❤ {health}"
   armorstand.name-format: "{player}'s Body"
   back-not-in-cam: "&cYou are not in cam mode."
   back-off: "&c/cam back is switched off."
@@ -135,7 +137,7 @@ messages:
   distance-from-body: "your body"
   distance-from-portal: "the portal you came out of"
   distance-limit: "&cYou cannot move further than {distance} blocks from {from}!"
-  # {time} is the time left.
+  # {time} is the time left; end-warning-afk comes at afk-end.warning-percent.
   end-warning-afk: "&eYou are not moving: cam mode ends in {time}"
   end-warning-battery: "&eBattery almost empty: {time} left"
   end-warning-time-limit: "&eCam mode ends in {time}"

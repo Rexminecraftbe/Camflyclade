@@ -4218,17 +4218,20 @@ def welten_checks(env, bot):
 
 def angriff_checks(env, bot):
     """cam-safety.after-attack: Wer zuschlaegt, wartet wie einer, der
-    getroffen wurde.
+    getroffen wurde - mit einem Schalter fuer Spieler, einem fuer feindliche
+    Mobs und einem fuer Friedliches.
 
-    Neben dem Bot stehen ein Schwein und der zweite Spieler. Voreingestellt
-    (false) startet der Cam-Modus gleich nach einem Schlag auf das Schwein.
-    Mit players auch, ein Schwein ist kein Spieler; nach einem Schlag auf den
-    zweiten Spieler wird /cam dagegen abgelehnt, und nach den fuenf Sekunden
-    von cam-safety.delay geht es wieder. Mit all sperrt auch der Schlag auf
-    das Schwein. Geschlagen wird jedes Mal frisch vor dem /cam, die fuenf
-    Sekunden laufen ab dem Schlag. Gezielt wird nach dem Platz, nicht nach
-    der Art: Einen Spieler nennt mineflayer mit den Daten von 26.1 nach einer
-    anderen Art, "fishing_bobber".
+    Neben dem Bot stehen der zweite Spieler, ein Wuestenzombie und ein
+    Schwein. Voreingestellt sind alle drei Schalter aus - nachgesehen in der
+    ausgelieferten Datei -, und der Cam-Modus startet gleich nach einem
+    Schlag. Mit players sperrt nur der Schlag auf den Spieler, mit mobs nur
+    der auf den Zombie, mit friendly nur der auf das Schwein, jeweils bis
+    die fuenf Sekunden von cam-safety.delay um sind. Geschlagen wird jedes
+    Mal frisch vor dem /cam. Gezielt wird nach dem Platz, nicht nach der
+    Art: Einen Spieler nennt mineflayer mit den Daten von 26.1 nach einer
+    anderen Art, "fishing_bobber". Fuer den Zombie steht der Server auf easy,
+    in peaceful verschwaende er sofort; ohne KI tut er niemandem etwas, und
+    ein Wuestenzombie brennt in der Sonne nicht.
     """
     if not FIND.test("Cam-Modus ist vor dem Angriffstest aus", cam_off(bot), ""):
         return
@@ -4239,6 +4242,7 @@ def angriff_checks(env, bot):
     bot.chat(f"/fill {_floor(x) - 3} {y} {_floor(z) - 3} {_floor(x) + 3} {y + 3} {_floor(z) + 3} minecraft:air")
     time.sleep(0.5)
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    spieler, zombie, schwein = [x - 2, y, z], [x, y, z + 2], [x + 2, y, z]
 
     def schlag(wo):
         hinstellen(bot, x, y, z)
@@ -4253,47 +4257,61 @@ def angriff_checks(env, bot):
             cam_off(bot)
         return geschlagen, an, zeilen
 
+    def schalter(players, mobs, friendly):
+        set_options(env, [("players", players, "cam-safety"), ("mobs", mobs, "cam-safety"),
+                          ("friendly", friendly, "cam-safety")])
+
+    def sperrt(name, wo):
+        geschlagen, an, zeilen = start_nach(wo)
+        FIND.test(f"after-attack: {name}", geschlagen and not an and gesagt(zeilen, r"remain safe"), zeige(zeilen))
+        time.sleep(5.5)
+
+    def sperrt_nicht(name, wo):
+        geschlagen, an, zeilen = start_nach(wo)
+        FIND.test(f"after-attack: {name}", geschlagen and an, zeige(zeilen))
+
     try:
         zuschauer.start()
         if not FIND.test("Zweiter Spieler fuer den Angriffstest kommt herein",
                          zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
             return
         time.sleep(1.5)
-        console(env, f"tp {ZUSCHAUER_NAME} {x - 2} {y} {z}", pause=0.5)
+        console(env, "difficulty easy", pause=0.5)
+        console(env, f"tp {ZUSCHAUER_NAME} {spieler[0]} {y} {z}", pause=0.5)
         console(env, f"effect give {ZUSCHAUER_NAME} minecraft:resistance infinite 255 true", pause=0.3)
-        console(env, f'summon minecraft:pig {x + 2} {y} {z} {{Tags:["{INTERACT_TAG}"],NoAI:1b,Silent:1b,'
-                     f'Invulnerable:0b,PersistenceRequired:1b}}', pause=0.5)
-        schwein, spieler = [x + 2, y, z], [x - 2, y, z]
+        for art, wo in (("husk", zombie), ("pig", schwein)):
+            console(env, f'summon minecraft:{art} {wo[0]} {wo[1]} {wo[2]} {{Tags:["{INTERACT_TAG}"],NoAI:1b,'
+                         f'Silent:1b,PersistenceRequired:1b}}', pause=0.3)
+        time.sleep(0.5)
 
-        FIND.test("Voreingestellt steht cam-safety.after-attack: false da",
-                  re.search(r"(?m)^\s*after-attack:\s*false\s*$", ausgeliefert(env)) is not None, "")
-        geschlagen, an, zeilen = start_nach(schwein)
-        FIND.test("after-attack: false - nach einem Schlag startet der Cam-Modus gleich",
-                  geschlagen and an, zeige(zeilen))
+        block = re.search(r"(?ms)^cam-safety:.*?(?=^\S)", ausgeliefert(env))
+        FIND.test("Voreingestellt stehen players, mobs und friendly unter cam-safety.after-attack auf false",
+                  block is not None and all(re.search(rf"(?m)^\s*{k}:\s*false\s*$", block.group(0))
+                                            for k in ("players", "mobs", "friendly")), "")
+        sperrt_nicht("alle drei aus - nach einem Schlag auf einen Spieler startet der Cam-Modus gleich", spieler)
 
-        set_option(env, "after-attack", "players")
-        geschlagen, an, zeilen = start_nach(schwein)
-        FIND.test("after-attack: players - ein Schlag auf ein Schwein sperrt nicht", geschlagen and an, zeige(zeilen))
-        geschlagen, an, zeilen = start_nach(spieler)
-        FIND.test("after-attack: players - nach einem Schlag auf einen Spieler wird /cam abgelehnt",
-                  geschlagen and not an and gesagt(zeilen, r"remain safe"), zeige(zeilen))
-        time.sleep(5.5)
+        schalter("true", "false", "false")
+        sperrt_nicht("players - ein Schlag auf einen Mob sperrt nicht", zombie)
+        sperrt("players - nach einem Schlag auf einen Spieler wird /cam abgelehnt", spieler)
         an = cam_on(bot)
         cam_off(bot)
         FIND.test("after-attack: nach cam-safety.delay geht es wieder", an, "")
 
-        set_option(env, "after-attack", "all")
-        geschlagen, an, zeilen = start_nach(schwein)
-        FIND.test("after-attack: all - auch ein Schlag auf ein Schwein sperrt",
-                  geschlagen and not an and gesagt(zeilen, r"remain safe"), zeige(zeilen))
+        schalter("false", "true", "false")
+        sperrt_nicht("mobs - ein Schlag auf ein Schwein sperrt nicht", schwein)
+        sperrt("mobs - nach einem Schlag auf einen feindlichen Mob wird /cam abgelehnt", zombie)
+
+        schalter("false", "false", "true")
+        sperrt_nicht("friendly - ein Schlag auf einen feindlichen Mob sperrt nicht", zombie)
+        sperrt("friendly - nach einem Schlag auf ein Schwein wird /cam abgelehnt", schwein)
     finally:
         try:
             if zuschauer.proc is not None:
                 zuschauer.stop()
             console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+            console(env, "difficulty peaceful", pause=0.3)
             cam_off(bot)
-            set_option(env, "after-attack", "false")
-            time.sleep(5.5)
+            schalter("false", "false", "false")
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Angriffstest: {exc}")
@@ -4302,33 +4320,49 @@ def angriff_checks(env, bot):
 def afk_checks(env, bot):
     """afk-end: Der Cam-Modus endet, wenn der Spieler eine Weile nichts tut.
 
-    Voreingestellt ist es aus - nachgesehen in der ausgelieferten Datei. Mit
-    seconds: 12 und end-warning bei 5 steht der Bot im Cam-Modus still: Nach
-    etwa sieben Sekunden kommt "You are not moving: cam mode ends in 5
-    seconds", nach zwoelf endet der Cam-Modus mit "you did not move for 12
-    seconds" und dem Ton von sounds.end-forced. Wer sich bewegt, bleibt: Der
-    Bot fliegt alle paar Sekunden ein Stueck und ist nach zwanzig Sekunden
-    noch im Cam-Modus. Weniger als 10 Sekunden werden gemeldet und auf 10
-    gehoben.
+    Voreingestellt ist es aus und warnt bei 80 Prozent - nachgesehen in der
+    ausgelieferten Datei. Mit seconds: 12 und warning-percent: 50 steht der
+    Bot im Cam-Modus still: Nach etwa sechs Sekunden kommt "You are not
+    moving: cam mode ends in 6 seconds" mit dem Ton von sounds.end-warning,
+    nach zwoelf endet der Cam-Modus mit "you did not move for 12 seconds" und
+    dem Ton von sounds.end-forced. Mit warning-percent: 0 endet er ohne
+    Warnung. Wer sich bewegt, bleibt: Der Bot fliegt alle paar Sekunden ein
+    Stueck und ist nach zwanzig Sekunden noch im Cam-Modus. Weniger als 10
+    Sekunden werden gemeldet und auf 10 gehoben.
     """
     try:
         cam_off(bot)
+        text = ausgeliefert(env)
         FIND.test("Voreingestellt steht afk-end.enabled: false da",
-                  re.search(r"(?m)^afk-end:\s*\n\s*enabled:\s*false\s*$", ausgeliefert(env)) is not None, "")
+                  re.search(r"(?m)^afk-end:\s*\n\s*enabled:\s*false\s*$", text) is not None, "")
+        FIND.test("Voreingestellt steht afk-end.warning-percent: 80 da",
+                  re.search(r"(?m)^\s*warning-percent:\s*80\s*$", text) is not None, "")
         set_options(env, [("enabled", "true", "afk-end"), ("seconds", "12", "afk-end"),
-                          ("seconds", "[5]", "end-warning")])
+                          ("warning-percent", "50", "afk-end")])
         seit = toene_marke(bot)
         since = bot.mark()
         if not FIND.test("Cam-Modus fuer afk-end gestartet", cam_on(bot), ""):
             return
         start = time.time() - 1.5
-        warnung = bot.expect(r"You are not moving: cam mode ends in 5 seconds", since, 12000)
-        FIND.test("afk-end: vorher warnt end-warning mit \"You are not moving\"", bool(warnung), "")
+        warnung = bot.expect(r"You are not moving: cam mode ends in [56] seconds", since, 12000)
+        gewarnt = time.time() - start
+        FIND.test("afk-end.warning-percent: 50 - nach der Haelfte der 12 Sekunden kommt die Warnung",
+                  bool(warnung) and 5.0 <= gewarnt <= 8.5, f"nach {gewarnt:.1f} s")
+        FIND.test("afk-end: die Warnung mit dem Ton von sounds.end-warning",
+                  ton_da(bot, seit, "item.lodestone_compass.lock"), "")
         ende = bot.expect(r"you did not move for 12 seconds", since, 12000)
         dauer = time.time() - start
         FIND.test("afk-end: nach 12 Sekunden ohne Bewegung endet der Cam-Modus",
                   bool(ende) and 10.0 <= dauer <= 16.0, f"nach {dauer:.1f} s")
         FIND.test("afk-end: mit dem Ton von sounds.end-forced", ton_da(bot, seit, "block.respawn_anchor.deplete"), "")
+
+        set_option(env, "warning-percent", "0", "afk-end")
+        since = bot.mark()
+        if FIND.test("Cam-Modus fuer afk-end ohne Warnung gestartet", cam_on(bot), ""):
+            ende = bot.expect(r"you did not move for 12 seconds", since, 16000)
+            z = zeilen_seit(bot, since)
+            FIND.test("afk-end.warning-percent: 0 - der Cam-Modus endet ohne Warnung",
+                      bool(ende) and not gesagt(z, r"You are not moving"), zeige(z[-3:]))
 
         if FIND.test("Cam-Modus fuer afk-end mit Bewegung gestartet", cam_on(bot), ""):
             since = bot.mark()
@@ -4348,22 +4382,25 @@ def afk_checks(env, bot):
     finally:
         cam_off(bot)
         set_options(env, [("enabled", "false", "afk-end"), ("seconds", "300", "afk-end"),
-                          ("seconds", "[30, 10]", "end-warning")])
+                          ("warning-percent", "80", "afk-end")])
 
 
 def herzen_checks(env, bot):
-    """{health} im Namen ueber dem Koerper: die Herzen des Spielers.
+    """body.health-visible: die Herzen des Spielers am Namen ueber dem Koerper.
 
-    Mit armorstand.name-format "{player} {health}" steht ueber dem Koerper
-    der Name und so viele Herzen, wie der Server dem Bot gerade gibt, in
-    halben wie in seiner Leiste: 11 Leben sind 5.5. Damit es weniger als
-    volle sind, nimmt /damage ihm vorher neun; cam-safety ist dafuer aus, und
-    die Regeneration steht still - aus der Saettigung des Testservers waeren
-    die neun Leben sonst in zwei, drei Sekunden wieder da, noch ehe der
-    Cam-Modus laeuft.
-    Bekommt er im Cam-Modus Leben dazu - hier mit dem Effekt Direktheilung,
-    den das Plugin einem Kamera-Spieler laesst -, steht dort gleich darauf
-    die neue Zahl.
+    Voreingestellt ist es aus - nachgesehen in der ausgelieferten Datei -, und
+    ueber dem Koerper steht nur der Name. Eingeschaltet steht hinter ihm so
+    viele Herzen, wie der Server dem Bot gerade gibt, in halben wie in seiner
+    Leiste: 11 Leben sind 5.5. Damit es weniger als volle sind, nimmt /damage
+    ihm vorher neun; cam-safety ist dafuer aus, und die Regeneration steht
+    still - aus der Saettigung des Testservers waeren die neun Leben sonst in
+    zwei, drei Sekunden wieder da, noch ehe der Cam-Modus laeuft. Bekommt er
+    im Cam-Modus Leben dazu - hier mit dem Effekt Direktheilung, den das
+    Plugin einem Kamera-Spieler laesst -, steht dort gleich darauf die neue
+    Zahl. Mit body.name-visible: false stehen die Herzen allein da.
+
+    Die Zahl wird am Ende ihres Textteils gesucht, mit dem Anfuehrungszeichen
+    dahinter: Wie /data das Herz davor schreibt, haengt an der Ausgabe.
     """
     def herzen():
         text = daten_von(bot, "@s", "Health")
@@ -4373,32 +4410,49 @@ def herzen_checks(env, bot):
         halbe = math.ceil(float(m.group(1)))
         return str(halbe // 2) if halbe % 2 == 0 else f"{halbe / 2:.1f}"
 
+    def zeigt(text, zahl):
+        return bool(text) and zahl is not None and re.search(rf"[ ❤]{re.escape(zahl)}\"", text) is not None
+
     modus = next((m for m in ("survival", "creative") if spielmodus_ist(bot, m)), "survival")
     try:
         cam_off(bot)
-        set_options(env, [("armorstand.name-format", '"{player} {health}"', "messages"),
-                          ("enabled", "false", "cam-safety"), ("name-visible", "false", "camera-mode")])
+        FIND.test("Voreingestellt steht body.health-visible: false da",
+                  re.search(r"(?m)^\s*health-visible:\s*false\s*$", ausgeliefert(env)) is not None, "")
+        set_options(env, [("enabled", "false", "cam-safety"), ("name-visible", "false", "camera-mode")])
         console(env, "gamerule natural_health_regeneration false", pause=0.3)
         spielmodus_setzen(bot, "survival")
         bot.chat("/damage @s 9")
         time.sleep(0.5)
-        if not FIND.test("Cam-Modus fuer {health} gestartet", cam_on(bot), ""):
+        if not FIND.test("Cam-Modus fuer die Herzen gestartet", cam_on(bot), ""):
             return
         erwartet = herzen()
         text = daten_von(bot, NAME, "text")
-        FIND.test("{health}: der Name ueber dem Koerper zeigt die Herzen des Spielers",
-                  erwartet is not None and bool(text) and f"{BOT_NAME} {erwartet}" in text,
+        FIND.test("body.health-visible: false - ueber dem Koerper steht nur der Name",
+                  bool(text) and f"{BOT_NAME}'s Body" in text and not zeigt(text, erwartet),
+                  f"{erwartet} - {text or 'keine Antwort'}")
+
+        set_option(env, "health-visible", "true")
+        cam_on(bot)
+        text = daten_von(bot, NAME, "text")
+        FIND.test("body.health-visible: true - hinter dem Namen stehen die Herzen des Spielers",
+                  bool(text) and f"{BOT_NAME}'s Body" in text and zeigt(text, erwartet),
                   f"erwartet {erwartet} - {text or 'keine Antwort'}")
         bot.chat("/effect give @s minecraft:instant_health 1 0 true")
         time.sleep(1.0)
         danach = herzen()
         text = daten_von(bot, NAME, "text")
-        FIND.test("{health}: bekommt er im Cam-Modus Leben dazu, steht gleich die neue Zahl da",
-                  danach is not None and danach != erwartet and bool(text) and f"{BOT_NAME} {danach}" in text,
+        FIND.test("body.health-visible: bekommt er im Cam-Modus Leben dazu, steht gleich die neue Zahl da",
+                  danach != erwartet and zeigt(text, danach),
                   f"{erwartet} -> {danach} - {text or 'keine Antwort'}")
+
+        set_option(env, "name-visible", "false", "body")
+        cam_on(bot)
+        text = daten_von(bot, NAME, "text")
+        FIND.test("body.health-visible mit name-visible: false - die Herzen stehen allein da",
+                  zeigt(text, danach) and "'s Body" not in (text or ""), text or "keine Antwort")
     finally:
         cam_off(bot)
-        set_options(env, [("armorstand.name-format", '"{player}\'s Body"', "messages"),
+        set_options(env, [("health-visible", "false"), ("name-visible", "true", "body"),
                           ("enabled", "true", "cam-safety"), ("name-visible", "true", "camera-mode")])
         console(env, "gamerule natural_health_regeneration true", pause=0.3)
         bot.chat(f"/effect clear {BOT_NAME}")
@@ -9383,7 +9437,7 @@ def step_tests(env):
         alarm_checks(env, bot)
         knoepfe_checks(env, bot)
 
-        # --- /cam stop, /cam ban, die Welten-Liste, die Sperre nach einem Angriff, afk-end, {health},
+        # --- /cam stop, /cam ban, die Welten-Liste, die Sperre nach einem Angriff, afk-end, die Herzen,
         # --- die Wartezeit und der Akku: Bossbar, Einteilung und wo sie liegen ---
         stopp_checks(env, bot)
         bann_checks(env, bot)

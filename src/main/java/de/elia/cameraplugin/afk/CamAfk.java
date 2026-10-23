@@ -26,8 +26,9 @@ import java.util.UUID;
  * <p>Still means the player does nothing at all: he does not fly, does not
  * look around and does not turn the mouse wheel. A step the border turns
  * away counts as doing something - he is at the keys, only the camera cannot
- * go there. Shortly before the end {@code end-warning} speaks up, the way it
- * does before a time limit or a battery runs out.</p>
+ * go there. Once {@code warning-percent} of the while has passed, he is
+ * warned with the sound and the line of {@code end-warning} - once, and
+ * again only after he has done something in between.</p>
  */
 public final class CamAfk implements Listener {
 
@@ -56,9 +57,11 @@ public final class CamAfk implements Listener {
         UUID id = player.getUniqueId();
         lastActive.put(id, System.currentTimeMillis());
         long limit = settings.getAfkEndSeconds() * 1000L;
+        int percent = settings.getAfkWarningPercent();
+        long warnAt = limit * percent / 100L;
         BukkitRunnable task = new BukkitRunnable() {
-            /** The seconds left at the look before, for {@code end-warning}. */
-            private double before = limit / 1000.0;
+            /** Whether he has been warned since he last did something. */
+            private boolean warned;
 
             @Override
             public void run() {
@@ -67,9 +70,14 @@ public final class CamAfk implements Listener {
                     stopFor(player);
                     return;
                 }
-                double left = (limit - (System.currentTimeMillis() - active)) / 1000.0;
-                plugin.getEndWarning().check(player, before, left, "end-warning-afk");
-                before = left;
+                long still = System.currentTimeMillis() - active;
+                double left = (limit - still) / 1000.0;
+                if (still < warnAt) {
+                    warned = false;
+                } else if (percent > 0 && !warned && left > 0.0) {
+                    warned = true;
+                    plugin.getEndWarning().warn(player, left, "end-warning-afk");
+                }
                 if (left <= 0.0) {
                     plugin.exitCameraMode(player, EndReason.AFK);
                     messages.sendMessage(player, "afk-ended",

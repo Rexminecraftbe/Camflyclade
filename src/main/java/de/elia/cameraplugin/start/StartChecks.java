@@ -10,6 +10,7 @@ import org.bukkit.GameMode;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Enemy;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
@@ -70,9 +71,9 @@ public final class StartChecks implements Listener {
     /**
      * Notes a hit a player hands out, as {@code cam-safety.after-attack} has
      * it, so that nobody slips into camera mode in the middle of a fight: by
-     * his own hand or by a projectile of his, on another player or, on
-     * {@code all}, on any mob. Armour stands and mannequins standing around
-     * for show are nobody to fight with.
+     * his own hand or by a projectile of his, on another player, a hostile
+     * mob or something friendly - each with a switch of its own, see
+     * {@link #counts(Entity, UUID)}.
      *
      * <p>The body of a camera player counts as that player. A hit on it is
      * always cancelled - the plugin hands it on to him, or with
@@ -82,10 +83,9 @@ public final class StartChecks implements Listener {
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void recordLastAttack(EntityDamageByEntityEvent event) {
-        AttackSafety safety = settings.getCamSafetyAfterAttack();
         Player attacker = attacker(event.getDamager());
         Entity victim = event.getEntity();
-        if (safety == AttackSafety.OFF || attacker == null || !(victim instanceof LivingEntity)) {
+        if (attacker == null || !(victim instanceof LivingEntity)) {
             return;
         }
         UUID owner = cameraPlayers.getBodyOrHitboxOwner(victim);
@@ -93,11 +93,42 @@ public final class StartChecks implements Listener {
                 || (event.isCancelled() && owner == null)) {
             return;
         }
-        boolean opponent = victim instanceof Player || owner != null
-                || (safety == AttackSafety.ALL && !(victim instanceof ArmorStand) && !(victim instanceof Mannequin));
-        if (opponent) {
+        if (counts(victim, owner)) {
             lastDamageTimes.put(attacker.getUniqueId(), System.currentTimeMillis());
         }
+    }
+
+    /**
+     * Whether a hit on this entity makes the attacker wait, after the three
+     * switches of {@code cam-safety.after-attack}:
+     *
+     * <ul>
+     *   <li>{@code players}: another player, or the body of one in camera
+     *       mode</li>
+     *   <li>{@code mobs}: a hostile mob, a zombie, a creeper, a piglin</li>
+     *   <li>{@code friendly}: everything else alive - animals, villagers,
+     *       golems -, and the NPCs of other plugins such as Citizens, which
+     *       are players to the server and mark themselves as {@code NPC}</li>
+     * </ul>
+     *
+     * <p>Armour stands and mannequins standing around for show are nobody to
+     * fight with.</p>
+     *
+     * @param owner the camera player whose body it is, or {@code null}
+     */
+    private boolean counts(Entity victim, UUID owner) {
+        if (owner != null) {
+            return settings.waitsAfterHittingPlayers();
+        }
+        if (victim instanceof Player) {
+            return victim.hasMetadata("NPC") ? settings.waitsAfterHittingFriendly()
+                    : settings.waitsAfterHittingPlayers();
+        }
+        if (victim instanceof Enemy) {
+            return settings.waitsAfterHittingMobs();
+        }
+        return settings.waitsAfterHittingFriendly() && !(victim instanceof ArmorStand)
+                && !(victim instanceof Mannequin);
     }
 
     /** The player behind a hit: the one who struck it, or who shot or threw what struck. */

@@ -145,8 +145,12 @@ body:
   # Name über dem Körper
   name-visible: true
 
-  # Aussehen des Namens (der Text steht in der Sprachdatei unter messages.armorstand.name-format, \n beginnt eine neue Zeile).
-  # {health} im Text zeigt die Herzen des Spielers, z. B. "{player}'s Body ❤ {health}" - ohne {health} keine.
+  # Die Herzen des Spielers hinter dem Namen über dem Körper zeigen, z. B. "Steve's Body ❤ 7.5"
+  # (Text: messages.armorstand.health-format in der Sprachdatei). Bei name-visible: false stehen sie allein da.
+  # Ändern sie sich im Cam-Modus, etwa durch einen Heiltrank, geht die Zahl mit.
+  health-visible: false
+
+  # Aussehen des Namens (der Text steht in der Sprachdatei unter messages.armorstand.name-format, \n beginnt eine neue Zeile)
   name:
     # Farbe der Schrift (ersetzt einen Farbcode am Anfang von name-format):
     #   white, yellow, gold, red, dark_red, light_purple, dark_purple, blue,
@@ -470,14 +474,19 @@ cam-ban:
 
 # Der Cam-Modus endet, wenn der Spieler eine Weile gar nichts tut: nicht fliegt, sich nicht umsieht und nicht
 # am Mausrad dreht. So steht kein Körper stundenlang herum, und der Akku läuft nicht leer, während niemand fliegt.
-# Vorher warnt end-warning (Text: end-warning-afk), beim Ende kommt afk-ended und der Ton sounds.end-forced.
+# Beim Ende kommt afk-ended und der Ton sounds.end-forced.
 afk-end:
   enabled: false
   # Nach wie vielen Sekunden ohne etwas zu tun (mindestens 10)
   seconds: 300
+  # Wann gewarnt wird: wenn so viel Prozent von seconds ohne etwas zu tun vergangen sind, 0 bis 99 (0 = keine Warnung).
+  # Bei seconds: 300 und 80 also nach 240 Sekunden, eine Minute vor dem Ende. Gewarnt wird einmal, mit dem Ton
+  # sounds.end-warning und einer Zeile in der Action-Bar (Text: end-warning-afk); tut er danach etwas, beginnt es von vorn.
+  warning-percent: 80
 
-# Warnung kurz vor dem Ende durch flight-limit (Zeitlimit oder Akku) und durch afk-end: ein Ton (sounds.end-warning)
-# und eine Zeile in der Action-Bar (Texte: end-warning-time-limit, end-warning-battery, end-warning-afk).
+# Warnung kurz vor dem Ende durch flight-limit (Zeitlimit oder Akku): ein Ton (sounds.end-warning)
+# und eine Zeile in der Action-Bar (Texte: end-warning-time-limit, end-warning-battery).
+# Wann afk-end warnt, steht dort unter warning-percent.
 end-warning:
   enabled: true
   # Bei wie vielen Sekunden Rest gewarnt wird, z. B. [60, 30, 10] ([] = nie)
@@ -503,12 +512,15 @@ cam-safety:
   enabled: true
   # Wartezeit nach dem letzten Schaden in Sekunden
   delay: 5
-  # Auch nach ausgeteiltem Schaden warten, damit niemand mitten im Kampf in den Cam-Modus flüchtet:
-  #   false   = nein, nur erlittener Schaden zählt
-  #   players = nach einem Treffer auf einen anderen Spieler (auch auf seinen Körper im Cam-Modus)
-  #   all     = nach einem Treffer auf einen Spieler oder einen Mob (Rüstungsständer und Mannequins zählen nicht)
-  # Pfeile, Dreizacke und andere Geschosse des Spielers zählen mit.
-  after-attack: false
+  # Auch nach ausgeteiltem Schaden warten, damit niemand mitten im Kampf in den Cam-Modus flüchtet.
+  # Pfeile, Dreizacke und andere Geschosse des Spielers zählen mit; Rüstungsständer und Mannequins zählen nie.
+  after-attack:
+    # Nach einem Treffer auf einen anderen Spieler (auch auf seinen Körper im Cam-Modus)
+    players: false
+    # Nach einem Treffer auf einen feindlichen Mob, z. B. Zombie, Skelett, Creeper, Piglin
+    mobs: false
+    # Nach einem Treffer auf etwas Friedliches: Tiere, Dorfbewohner, Golems und NPCs anderer Plugins (z. B. Citizens)
+    friendly: false
 
 # Wo der Cam-Modus erlaubt ist
 cam-area:
