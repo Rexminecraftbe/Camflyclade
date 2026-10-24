@@ -93,7 +93,8 @@ public class CamTabCompleter implements TabCompleter {
             }
             return names;
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("trail") && trail.mayUse(sender)) {
+        boolean trailCommand = args.length > 1 && args[0].equalsIgnoreCase("trail") && trail.mayUse(sender);
+        if (trailCommand && args.length == 2) {
             String partial = args[1].toLowerCase(Locale.ROOT);
             List<String> names = new ArrayList<>();
             for (String name : trail.recordedNames()) {
@@ -102,6 +103,9 @@ public class CamTabCompleter implements TabCompleter {
                 }
             }
             return names;
+        }
+        if (trailCommand && args.length == 3) {
+            return startingWith(args[2].toLowerCase(Locale.ROOT), trail.choicesFor(args[1]).toArray(new String[0]));
         }
         if (args.length != 1) {
             return Collections.emptyList();
@@ -121,7 +125,7 @@ public class CamTabCompleter implements TabCompleter {
         if ((!(sender instanceof Player) || sender.isOp()) && "reload".startsWith(partial)) {
             completions.add("reload");
         }
-        if ("stats".startsWith(partial)) {
+        if (stats.showsAnything() && "stats".startsWith(partial)) {
             completions.add("stats");
         }
         if (stop.mayUse(sender) && "stop".startsWith(partial)) {
@@ -163,14 +167,15 @@ public class CamTabCompleter implements TabCompleter {
 
     /**
      * What may follow {@code /cam stats}: {@code player} for whoever may look
-     * at somebody else, {@code reset} for a player.
+     * at somebody else, while there is anything to see, {@code reset} for a
+     * player, while there are statistics to reset.
      */
     private List<String> statsWords(CommandSender sender, String partial) {
         List<String> words = new ArrayList<>();
-        if (stats.mayViewOthers(sender) && "player".startsWith(partial)) {
+        if (stats.showsAnything() && stats.mayViewOthers(sender) && "player".startsWith(partial)) {
             words.add("player");
         }
-        if (sender instanceof Player && "reset".startsWith(partial)) {
+        if (sender instanceof Player && plugin.getSettings().isStatsEnabled() && "reset".startsWith(partial)) {
             words.add("reset");
         }
         return words;
@@ -181,7 +186,7 @@ public class CamTabCompleter implements TabCompleter {
      * only to whoever may name somebody there.
      */
     private List<String> playerNames(CommandSender sender, String partial) {
-        if (!stats.mayViewOthers(sender)) {
+        if (!stats.showsAnything() || !stats.mayViewOthers(sender)) {
             return Collections.emptyList();
         }
         List<String> names = new ArrayList<>();

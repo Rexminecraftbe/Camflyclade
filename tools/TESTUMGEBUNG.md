@@ -107,6 +107,9 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
 * **`camera-particles.particles-per-tick: 0`** wird in die Testkonfiguration
   geschrieben. Die Partikel eines Cam-Spielers mischten sich sonst unter die,
   die der Test von `/cam trail` beim Bot zählt.
+* **Auf eine leere Tab-Vervollständigung antwortet der Server gar nicht.**
+  Die Bot-Aktion `tab` wartet deshalb höchstens 2,5 Sekunden und nimmt keine
+  Antwort als leere Liste.
 * **Das Partikelpaket liest der Bot nur bis vor den Partikel.** Ort, Menge und
   das Flag für die Sichtweite stehen davor, dahinter die Nummer des Partikels
   und seine Daten - und die Nummern vergibt 26.1 anders als 26.2. Früher starb
@@ -1249,7 +1252,15 @@ Flag für die Sichtweite und alle auf dem geflogenen Weg, keinen quer zurück,
 wo `/cam back` die Kamera versetzt hat · `/cam trail` ohne Namen blendet sie
 aus, nach `show-seconds` hört sie von selbst auf · ein Name ohne Flug wird
 gemeldet, ohne `camplugin.trail` fehlt das Recht, und `enabled: false`
-vergisst die Flüge ·
+vergisst die Flüge · nach einem zweiten Flug zeigt `/cam trail <Name>` nur
+den neuen, mit Knöpfen für `[1]`, `[2]` und `[all]`, `/cam trail <Name> 2`
+nur den alten und `all` beide, Flug 3 gibt es nicht, und die
+Tab-Vervollständigung bietet `1`, `2` und `all` an · `flights: 1` lässt nach
+dem Reload nur den letzten stehen · mit `statistics.enabled: false` schlägt
+`/cam` kein `stats` mehr vor und `/cam stats` weder `reset` noch `player`, mit
+`flight-limit: battery` steht es für den Akku wieder da, ohne `reset` ·
+`cam-list.access: false` nimmt `list` aus den Vorschlägen, und `/cam list` ist
+für Spieler aus, die Konsole darf es weiter ·
 Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im

@@ -65,6 +65,16 @@ public final class CamStats {
     }
 
     /**
+     * Whether {@code /cam stats} has anything to show: the statistics, or with
+     * them switched off the battery, while there is one. Only then is it
+     * offered in the tab completion, like every other command that is
+     * switched off.
+     */
+    public boolean showsAnything() {
+        return settings.isStatsEnabled() || settings.isBatteryEnabled();
+    }
+
+    /**
      * Whether a sender may look at the statistics of somebody else, after
      * {@code statistics.view-others}. The console always may, it is the
      * server.

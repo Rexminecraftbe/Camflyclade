@@ -93,6 +93,9 @@ public final class CamSettings {
     /** The longest {@code cam-trail.show-seconds} accepts: ten minutes. */
     private static final int MAX_TRAIL_SHOW_SECONDS = 600;
 
+    /** The most flights {@code cam-trail.flights} keeps of each player. */
+    private static final int MAX_TRAIL_FLIGHTS = 20;
+
     /**
      * Keys that are read although the config file built into the jar leaves
      * them out on purpose, so that they are not reported as unknown, see
@@ -270,6 +273,8 @@ public final class CamSettings {
     private boolean trailEnabled;
     /** How long {@code /cam trail} shows a flight, in seconds, {@code cam-trail.show-seconds}. */
     private int trailShowSeconds;
+    /** How many of his last flights are kept of each player, {@code cam-trail.flights}. */
+    private int trailFlights;
 
     /** Whether the end of a time limit or a battery is announced, {@code end-warning.enabled}. */
     private boolean endWarningEnabled;
@@ -526,6 +531,7 @@ public final class CamSettings {
         startDelaySeconds = config.getInt("start-delay.seconds", 3, 1, MAX_START_DELAY_SECONDS);
         trailEnabled = config.getBoolean("cam-trail.enabled", false);
         trailShowSeconds = config.getInt("cam-trail.show-seconds", 30, 1, MAX_TRAIL_SHOW_SECONDS);
+        trailFlights = config.getInt("cam-trail.flights", 5, 1, MAX_TRAIL_FLIGHTS);
         endWarningEnabled = config.getBoolean("end-warning.enabled", true);
         endWarningSeconds = readSeconds(config, "end-warning.seconds", List.of(30, 10));
         bodyAlarmMobs = config.getBoolean("body-alarm.mobs", true);
@@ -1203,6 +1209,10 @@ public final class CamSettings {
 
     public int getTrailShowSeconds() {
         return trailShowSeconds;
+    }
+
+    public int getTrailFlights() {
+        return trailFlights;
     }
 
     // ----------------------------------------------------- end-warning, body-alarm

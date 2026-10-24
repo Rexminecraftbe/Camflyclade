@@ -496,17 +496,24 @@ cam-ban:
   # false = die Befehle sind aus, und keine Sperre gilt (bans.yml bleibt, wie sie ist)
   enabled: false
 
-# /cam trail <Name> zeigt, wo die Kamera eines Spielers herumgeflogen ist: als Linie aus Partikeln, die nur
+# /cam trail zeigt, wo die Kamera eines Spielers herumgeflogen ist: als Linie aus Partikeln, die nur
 # der sieht, der fragt - von grün am Körper über gelb nach rot, wo die Kamera zuletzt war. Dazu stehen im
 # Chat Länge, Dauer, Start und Ende des Flugs (Texte: trail-...), auch für die Konsole, die keine Partikel sieht.
-# Ist der Spieler noch im Cam-Modus, ist es sein Flug bis jetzt, und die Linie wächst mit; sonst sein letzter.
+#   /cam trail <Name>           = sein letzter Flug. Ist er noch im Cam-Modus, sein Flug bis jetzt, und die
+#                                 Linie wächst mit.
+#   /cam trail <Name> <Nummer>  = einer der gemerkten Flüge (flights): 1 = der letzte, 2 = der davor ...
+#                                 Im Chat stehen dafür Knöpfe zum Anklicken (Texte: trail-button ...).
+#   /cam trail <Name> all       = alle gemerkten Flüge auf einmal
+#   /cam trail                  = die Linie wieder ausblenden
 # Wo die Kamera versetzt wurde (/cam back, Portal, Teleport), hat die Linie eine Lücke.
-# Gezeichnet wird bis 128 Blöcke um den, der zusieht. /cam trail ohne Namen blendet die Linie wieder aus.
-# Aufgezeichnet wird nur, solange enabled an ist, und nur im Arbeitsspeicher: der letzte Flug jedes Spielers,
-# bis zum Neustart (nach /cam reload bleibt er, mit enabled: false ist er weg).
+# Gezeichnet wird bis 128 Blöcke um den, der zusieht.
+# Aufgezeichnet wird nur, solange enabled an ist, und nur im Arbeitsspeicher, bis zum Neustart
+# (nach /cam reload bleiben die Flüge, mit enabled: false sind sie weg).
 # Benutzen dürfen es die Konsole und wer das Recht camplugin.trail hat (Operatoren haben es).
 cam-trail:
   enabled: false
+  # Wie viele seiner letzten Flüge von jedem Spieler gemerkt werden (1 bis 20)
+  flights: 5
   # Wie lange die Linie zu sehen ist, in Sekunden (1 bis 600)
   show-seconds: 30
 

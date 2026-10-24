@@ -1222,6 +1222,19 @@ async function handle(cmd) {
       return { packets: chatPackets.slice(cmd.since || 0), count: chatPackets.length };
     case 'particles':
       return { particles: particleLog.slice(cmd.since || 0), count: particleLog.length };
+    case 'tab': {
+      // Was der Server zur Tab-Vervollstaendigung vorschlaegt, fuer den Text
+      // samt dem Schraegstrich vorn, so wie der Client ihn schickt. Hat er
+      // nichts vorzuschlagen, antwortet er gar nicht: keine Antwort ist eine
+      // leere Liste.
+      let matches;
+      try {
+        matches = await bot.tabComplete(cmd.text, true, false, cmd.timeout || 2500);
+      } catch (e) {
+        return { matches: [], answered: false };
+      }
+      return { matches: (matches || []).map((m) => (typeof m === 'string' ? m : m.match)), answered: true };
+    }
     case 'wait_message': {
       const re = new RegExp(cmd.pattern, 'i');
       const since = cmd.since || 0;
@@ -4544,20 +4557,26 @@ SPUR_HOEHE = 1.0
 
 
 def flugspur_checks(env, bot):
-    """cam-trail: /cam trail <Name> zeigt, wo die Kamera eines Spielers geflogen
-    ist.
+    """cam-trail: /cam trail <Name> [Nummer|all] zeigt, wo die Kamera eines
+    Spielers geflogen ist.
 
-    Voreingestellt ist es aus - nachgesehen in der ausgelieferten Datei -, und
-    /cam trail sagt das. Eingeschaltet fliegt der Bot sechs hoch und sechs zur
-    Seite, geht mit /cam back zum Koerper zurueck und fliegt von dort schraeg
-    weiter. Mitten im Flug nennt /cam trail von der Konsole "still in cam
-    mode", danach die Strecke ohne den Sprung zurueck, den Platz des Koerpers
-    und den letzten der Kamera. Der Bot selbst bekommt die Linie als Partikel,
-    alle mit dem Flag fuer die Sichtweite und alle auf dem geflogenen Weg -
-    keiner auf der Linie quer zurueck, die /cam back nicht geflogen ist. /cam
-    trail ohne Namen blendet sie aus, und nach show-seconds hoert sie von
-    selbst auf. Ein Name ohne Flug wird gemeldet, ohne camplugin.trail fehlt
-    das Recht, und enabled: false vergisst die Fluege.
+    Voreingestellt ist es aus und merkt sich 5 Fluege - nachgesehen in der
+    ausgelieferten Datei -, und /cam trail sagt, dass es aus ist.
+    Eingeschaltet fliegt der Bot sechs hoch und sechs zur Seite, geht mit /cam
+    back zum Koerper zurueck und fliegt von dort schraeg weiter. Mitten im Flug
+    nennt /cam trail von der Konsole "still in cam mode", danach die Strecke
+    ohne den Sprung zurueck, den Platz des Koerpers und den letzten der
+    Kamera. Der Bot selbst bekommt die Linie als Partikel, alle mit dem Flag
+    fuer die Sichtweite und alle auf dem geflogenen Weg - keiner auf der Linie
+    quer zurueck, die /cam back nicht geflogen ist. /cam trail ohne Namen
+    blendet sie aus, und nach show-seconds hoert sie von selbst auf.
+
+    Nach einem zweiten Flug zeigt /cam trail <Name> nur den neuen, mit Knoepfen
+    fuer [1], [2] und [all], /cam trail <Name> 2 nur den alten, all beide; #3
+    gibt es nicht, und die Tab-Vervollstaendigung bietet 1, 2 und all an.
+    flights: 1 laesst nach dem Reload nur den letzten stehen. Ein Name ohne
+    Flug wird gemeldet, ohne camplugin.trail fehlt das Recht, und
+    enabled: false vergisst die Fluege.
     """
     def konsole(text):
         """Was die Konsole darauf sagt, ohne Farben - auch ohne die, die der
@@ -4574,8 +4593,9 @@ def flugspur_checks(env, bot):
 
     try:
         cam_off(bot)
-        FIND.test("Voreingestellt steht cam-trail.enabled: false da",
-                  re.search(r"(?m)^cam-trail:\s*\n\s*enabled:\s*false\s*$", ausgeliefert(env)) is not None, "")
+        FIND.test("Voreingestellt steht cam-trail.enabled: false da, mit flights: 5",
+                  re.search(r"(?m)^cam-trail:\s*\n\s*enabled:\s*false\s*\n(?:\s*#.*\n)*\s*flights:\s*5\s*$",
+                            ausgeliefert(env)) is not None, "")
         z = befehl(bot, f"/cam trail {BOT_NAME}")
         FIND.test("cam-trail.enabled: false - /cam trail ist abgeschaltet",
                   gesagt(z, r"/cam trail is switched off"), zeige(z))
@@ -4589,7 +4609,7 @@ def flugspur_checks(env, bot):
         oben = bot.server_pos()
         log = konsole(f"cam trail {BOT_NAME}")
         FIND.test("/cam trail mitten im Flug: \"still in cam mode\"",
-                  re.search(rf"Cam flight of {BOT_NAME}: \d+ blocks in .+, still in cam mode", log) is not None,
+                  re.search(rf"Cam flight #1 of {BOT_NAME}: \d+ blocks in .+, still in cam mode", log) is not None,
                   log.strip()[-200:] or "nichts im Log")
         bot.call("fly", wait=30, dx=6, timeout=15000)
         time.sleep(0.5)
@@ -4604,7 +4624,7 @@ def flugspur_checks(env, bot):
             return
 
         log = konsole(f"cam trail {BOT_NAME}")
-        strecke = re.search(rf"Cam flight of {BOT_NAME}: (\d+) blocks in .+, ended .+ ago", log)
+        strecke = re.search(rf"Cam flight #1 of {BOT_NAME}: (\d+) blocks in .+, ended .+ ago", log)
         FIND.test("/cam trail von der Konsole: die Strecke ohne den Sprung von /cam back",
                   strecke is not None and 14 <= int(strecke.group(1)) <= 19, log.strip()[-300:] or "nichts im Log")
         FIND.test("/cam trail von der Konsole: der Platz des Koerpers",
@@ -4615,7 +4635,7 @@ def flugspur_checks(env, bot):
         seit = partikel_marke(bot)
         z = befehl(bot, f"/cam trail {BOT_NAME}")
         FIND.test("/cam trail: der Bot bekommt die Zusammenfassung und wie lange die Linie steht",
-                  gesagt(z, rf"Cam flight of {BOT_NAME}: \d+ blocks") and gesagt(z, r"Shown for 4 seconds"), zeige(z))
+                  gesagt(z, rf"Cam flight #1 of {BOT_NAME}: \d+ blocks") and gesagt(z, r"Shown for 4 seconds"), zeige(z))
         teile = partikel_seit(bot, seit)
         FIND.test("/cam trail: die Linie kommt als Partikel an", len(teile) >= 20, f"{len(teile)} Partikel")
         FIND.test("/cam trail: alle mit dem Flag fuer die Sichtweite",
@@ -4645,6 +4665,59 @@ def flugspur_checks(env, bot):
         FIND.test("cam-trail.show-seconds: 4 - danach kommen keine Partikel mehr",
                   not partikel_seit(bot, seit), "")
 
+        # Ein zweiter Flug, schraeg hoch nach Norden: Seine Linie liegt weit
+        # weg von der Ecke des ersten.
+        if not FIND.test("Zweiter Cam-Modus fuer die Flugspur gestartet", cam_on(bot), ""):
+            return
+        bot.call("fly", wait=30, dy=3, dz=-5, timeout=15000)
+        time.sleep(0.5)
+        nord = bot.server_pos()
+        cam_off(bot)
+        if nord is None:
+            FIND.test("Position nach dem zweiten Flug lesbar", False, "")
+            return
+
+        def bei(teile, pos):
+            return any(math.dist(p["pos"], hoch(pos)) < 1.0 for p in teile)
+
+        def gezeigt(text):
+            """Erst ausblenden, was noch steht, dann zeigen lassen: was im
+            Chat kam, die Chatpakete mit den Knoepfen und die Partikel."""
+            befehl(bot, "/cam trail", warten=0.5)
+            seit = partikel_marke(bot)
+            pakete_seit = bot.call("chat_packets", since=10 ** 9).get("count", 0)
+            z = befehl(bot, text)
+            pakete = " ".join(p["text"] for p in bot.call("chat_packets", since=pakete_seit).get("packets", []))
+            return z, partikel_seit(bot, seit), pakete
+
+        z, teile, pakete = gezeigt(f"/cam trail {BOT_NAME}")
+        FIND.test("/cam trail <Name>: der neueste Flug, nur seine Linie",
+                  gesagt(z, rf"Cam flight #1 of {BOT_NAME}") and bei(teile, nord) and not bei(teile, ecke),
+                  zeige(z[:1]) + f" - {len(teile)} Partikel")
+        FIND.test("/cam trail: Knoepfe fuer die gemerkten Fluege und fuer alle",
+                  gesagt(z, r"Kept flights: \[1\] \[2\] \[all\]") and f"/cam trail {BOT_NAME} 2" in pakete
+                  and f"/cam trail {BOT_NAME} all" in pakete, zeige(z))
+        z, teile, _ = gezeigt(f"/cam trail {BOT_NAME} 2")
+        FIND.test("/cam trail <Name> 2: der Flug davor, nur seine Linie",
+                  gesagt(z, rf"Cam flight #2 of {BOT_NAME}") and bei(teile, ecke) and not bei(teile, nord),
+                  zeige(z[:1]) + f" - {len(teile)} Partikel")
+        z, teile, _ = gezeigt(f"/cam trail {BOT_NAME} all")
+        FIND.test("/cam trail <Name> all: beide Fluege im Chat und beide Linien",
+                  gesagt(z, rf"The last 2 cam flights of {BOT_NAME}") and gesagt(z, r"^#1: \d+ blocks")
+                  and gesagt(z, r"^#2: \d+ blocks") and bei(teile, ecke) and bei(teile, nord),
+                  zeige(z[:3]) + f" - {len(teile)} Partikel")
+        befehl(bot, "/cam trail", warten=0.5)
+        z = befehl(bot, f"/cam trail {BOT_NAME} 3")
+        FIND.test("/cam trail <Name> 3: den gibt es nicht",
+                  gesagt(z, rf"{BOT_NAME} has no cam flight #3, only 2 kept"), zeige(z))
+        vorschlag = bot.call("tab", text=f"/cam trail {BOT_NAME} ").get("matches", [])
+        FIND.test("Tab-Vervollstaendigung nach dem Namen: 1, 2 und all",
+                  sorted(vorschlag) == ["1", "2", "all"], str(vorschlag))
+        set_option(env, "flights", "1", "cam-trail")
+        log = konsole(f"cam trail {BOT_NAME} 2")
+        FIND.test("cam-trail.flights: 1 - nach dem Reload ist nur noch der letzte Flug da",
+                  f"{BOT_NAME} has no cam flight #2, only 1 kept" in log, log.strip()[-200:] or "nichts im Log")
+
         z = befehl(bot, "/cam trail Niemand")
         FIND.test("/cam trail: wer keinen Flug hat, wird gemeldet",
                   gesagt(z, r"Niemand has no recorded cam flight"), zeige(z))
@@ -4653,7 +4726,7 @@ def flugspur_checks(env, bot):
         z = befehl(bot, f"/cam trail {BOT_NAME}")
         console(env, f"op {BOT_NAME}", pause=1.5)
         FIND.test("/cam trail ohne camplugin.trail: keine Berechtigung",
-                  gesagt(z, r"permission") and not gesagt(z, r"Cam flight of"), zeige(z))
+                  gesagt(z, r"permission") and not gesagt(z, r"Cam flight"), zeige(z))
 
         set_option(env, "enabled", "false", "cam-trail")
         set_option(env, "enabled", "true", "cam-trail")
@@ -4663,7 +4736,56 @@ def flugspur_checks(env, bot):
     finally:
         console(env, f"op {BOT_NAME}", pause=1.0)
         cam_off(bot)
-        set_options(env, [("enabled", "false", "cam-trail"), ("show-seconds", "30", "cam-trail")])
+        set_options(env, [("enabled", "false", "cam-trail"), ("show-seconds", "30", "cam-trail"),
+                          ("flights", "5", "cam-trail")])
+
+
+def vorschlag_checks(env, bot):
+    """Was /cam zur Tab-Vervollstaendigung vorschlaegt: nur, was gerade etwas
+    tut.
+
+    Voreingestellt stehen stats und list da (der Bot ist op).
+    statistics.enabled: false nimmt stats heraus, und nach /cam stats kommt
+    weder reset noch player - mit flight-limit: battery zeigt /cam stats aber
+    den Akku und steht wieder da, mit player und ohne reset.
+    cam-list.access: false nimmt list heraus, und /cam list ist fuer Spieler
+    aus; die Konsole darf es weiter.
+    """
+    def tab(text):
+        return bot.call("tab", text=text).get("matches", [])
+
+    try:
+        cam_off(bot)
+        jetzt = tab("/cam ")
+        FIND.test("Voreingestellt schlaegt /cam stats und list vor", "stats" in jetzt and "list" in jetzt, str(jetzt))
+
+        set_option(env, "enabled", "false", "statistics")
+        jetzt = tab("/cam ")
+        worte = tab("/cam stats ")
+        FIND.test("statistics.enabled: false - stats wird nicht mehr vorgeschlagen",
+                  "stats" not in jetzt and "list" in jetzt, str(jetzt))
+        FIND.test("statistics.enabled: false - nach /cam stats weder reset noch player", not worte, str(worte))
+
+        set_option(env, "flight-limit", "battery")
+        jetzt = tab("/cam ")
+        worte = tab("/cam stats ")
+        FIND.test("statistics aus, flight-limit: battery - stats steht fuer den Akku wieder da, ohne reset",
+                  "stats" in jetzt and "player" in worte and "reset" not in worte, f"{jetzt} / {worte}")
+
+        set_options(env, [("flight-limit", "false"), ("enabled", "true", "statistics"),
+                          ("access", "false", "cam-list")])
+        jetzt = tab("/cam ")
+        z = befehl(bot, "/cam list")
+        vorher = len(server_log(env))
+        console(env, "cam list", pause=1.5)
+        log = strip_colors(server_log(env)[vorher:])
+        FIND.test("cam-list.access: false - list wird nicht vorgeschlagen und ist fuer Spieler aus",
+                  "list" not in jetzt and "stats" in jetzt and gesagt(z, r"permission"), f"{jetzt} / {zeige(z)}")
+        FIND.test("cam-list.access: false - die Konsole darf /cam list weiter",
+                  "Nobody is in cam mode" in log, log.strip()[-200:] or "nichts im Log")
+    finally:
+        set_options(env, [("flight-limit", "false"), ("enabled", "true", "statistics"),
+                          ("access", "admin", "cam-list")])
 
 
 def herzen_checks(env, bot):
@@ -9812,6 +9934,7 @@ def step_tests(env):
         # --- Die Wartezeit vor dem Start und die Flugspur fuer Admins ---
         startverzoegerung_checks(env, bot)
         flugspur_checks(env, bot)
+        vorschlag_checks(env, bot)
 
         # --- Geworfene Traenke und was den Koerper getroffen hat, mit beiden Koerpertypen ---
         fuer_beide_koerpertypen(env, bot, potion_checks, grund_checks)
