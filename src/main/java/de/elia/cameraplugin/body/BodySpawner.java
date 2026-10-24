@@ -358,7 +358,7 @@ public final class BodySpawner implements Listener {
         ONLY,
         /** Behind: the name, the background and an empty heart in every place. */
         BACK,
-        /** In front: the name once more and the hearts themselves. */
+        /** In front: the hearts themselves, without the name. */
         FRONT
     }
 
@@ -454,8 +454,14 @@ public final class BodySpawner implements Listener {
     /**
      * Writes the hearts of the player as the pictures of his bar, out of
      * {@code hud/heart/}, where the server can show pictures in a text
-     * display, see {@link SpriteText}. Every layer holds the name and a
-     * picture in every place, so that the places of both layers line up.
+     * display, see {@link SpriteText}. Both layers hold a picture in every
+     * place, so that the places line up.
+     *
+     * <p>The name stands in the back alone: drawn in both, a hair apart, it
+     * would stand there twice. Where the hearts stand over it, the front holds
+     * an empty line for every line of it instead - a text display stands on
+     * its lowest line, and without them the hearts in front would sink onto
+     * the name.</p>
      *
      * @return whether it did; if not, the letters of {@link #nameText} stand
      *         there
@@ -466,7 +472,7 @@ public final class BodySpawner implements Listener {
         }
         String name = styledName(player);
         SpriteText text = new SpriteText();
-        if (!name.isEmpty() && !settings.isBodyHealthAbove()) {
+        if (!name.isEmpty() && !settings.isBodyHealthAbove() && layer != Layer.FRONT) {
             text.text(name).line();
         }
         for (Heart heart : hearts(player, absorption)) {
@@ -484,7 +490,13 @@ public final class BodySpawner implements Listener {
             text.sprite(SpriteText.GUI_ATLAS, "minecraft:hud/heart/" + sprite);
         }
         if (!name.isEmpty() && settings.isBodyHealthAbove()) {
-            text.line().text(name);
+            if (layer == Layer.FRONT) {
+                for (int line = name.split("\n", -1).length; line > 0; line--) {
+                    text.line().text(" ");
+                }
+            } else {
+                text.line().text(name);
+            }
         }
         return text.writeTo(display);
     }

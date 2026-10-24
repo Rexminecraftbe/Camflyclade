@@ -4403,10 +4403,11 @@ def herzen_checks(env, bot):
     Herzen da.
 
     Mit health-show-missing steht jedes Herz wie in der Leiste auf einem
-    leeren: hinten ein TextDisplay mit dem Hintergrund und zehn leeren
-    Herzen (hud/heart/container), davor ein zweites ohne Hintergrund mit den
-    roten und, wo eins fehlt, einem leeren. Beide gehen mit dem Cam-Modus
-    wieder weg. Mit Absorption IV - zehn gelbe Herzen - stehen die gelben
+    leeren: hinten ein TextDisplay mit dem Namen, dem Hintergrund und zehn
+    leeren Herzen (hud/heart/container), davor ein zweites ohne Hintergrund
+    mit den roten und, wo eins fehlt, einem leeren - ohne den Namen, der
+    sonst doppelt dastuende, unter wie ueber den Herzen. Beide gehen mit dem
+    Cam-Modus wieder weg. Mit Absorption IV - zehn gelbe Herzen - stehen die gelben
     (hud/heart/absorbing_full) hinter den roten, und weil es mehr als zehn
     sind, stehen sie in einer zweiten Zeile: voreingestellt darueber, also
     im Text vorn, mit health-rows-upward: false darunter. Mit
@@ -4486,6 +4487,16 @@ def herzen_checks(env, bot):
                   and "hud/heart/full" not in hinten_text, hinten_text or "keine Antwort")
         FIND.test("body.health-show-missing: vorn die roten Herzen und ein leeres fuer jedes fehlende",
                   zeigt(vorn_text, danach, leer=fehlen), vorn_text or "keine Antwort")
+        FIND.test("body.health-show-missing: vorn steht der Name nicht noch einmal (Herzen unter dem Namen)",
+                  bool(vorn_text) and "'s Body" not in vorn_text and "'s Body" in (hinten_text or ""),
+                  vorn_text or "keine Antwort")
+        set_option(env, "health-position", "above")
+        cam_on(bot)
+        hinten_text = daten_von(bot, hinten, "text")
+        vorn_text = daten_von(bot, vorn, "text")
+        FIND.test("body.health-show-missing: vorn steht der Name nicht noch einmal (Herzen ueber dem Namen)",
+                  zeigt(vorn_text, danach, leer=fehlen) and "'s Body" not in vorn_text and oben(hinten_text),
+                  vorn_text or "keine Antwort")
         cam_off(bot)
         time.sleep(1.0)
         FIND.test("body.health-show-missing: beide TextDisplays gehen mit dem Cam-Modus", not name_da(bot), "")
