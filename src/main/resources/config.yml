@@ -297,6 +297,12 @@ sounds:
     sound: entity.warden.nearby_close
     volume: 1.0
     pitch: 1.0
+  # Jede Sekunde der Wartezeit vor dem Start (start-delay)
+  start-delay:
+    enabled: true
+    sound: block.note_block.hat
+    volume: 1.0
+    pitch: 1.0
 
 # Schutz bei einem Absturz. Was der Cam-Modus dem Spieler abnimmt (Inventar, Spielmodus, Effekte, Flug), steht,
 # solange der Cam-Modus läuft, auch in plugins/CamFly/playerdata/crash/<UUID>.yml. Beim Ende wird die Datei gelöscht.
@@ -490,6 +496,20 @@ cam-ban:
   # false = die Befehle sind aus, und keine Sperre gilt (bans.yml bleibt, wie sie ist)
   enabled: false
 
+# /cam trail <Name> zeigt, wo die Kamera eines Spielers herumgeflogen ist: als Linie aus Partikeln, die nur
+# der sieht, der fragt - von grün am Körper über gelb nach rot, wo die Kamera zuletzt war. Dazu stehen im
+# Chat Länge, Dauer, Start und Ende des Flugs (Texte: trail-...), auch für die Konsole, die keine Partikel sieht.
+# Ist der Spieler noch im Cam-Modus, ist es sein Flug bis jetzt, und die Linie wächst mit; sonst sein letzter.
+# Wo die Kamera versetzt wurde (/cam back, Portal, Teleport), hat die Linie eine Lücke.
+# Gezeichnet wird bis 128 Blöcke um den, der zusieht. /cam trail ohne Namen blendet die Linie wieder aus.
+# Aufgezeichnet wird nur, solange enabled an ist, und nur im Arbeitsspeicher: der letzte Flug jedes Spielers,
+# bis zum Neustart (nach /cam reload bleibt er, mit enabled: false ist er weg).
+# Benutzen dürfen es die Konsole und wer das Recht camplugin.trail hat (Operatoren haben es).
+cam-trail:
+  enabled: false
+  # Wie lange die Linie zu sehen ist, in Sekunden (1 bis 600)
+  show-seconds: 30
+
 # Der Cam-Modus endet, wenn der Spieler eine Weile gar nichts tut: nicht fliegt, sich nicht umsieht und nicht
 # am Mausrad dreht. So steht kein Körper stundenlang herum, und der Akku läuft nicht leer, während niemand fliegt.
 # Beim Ende kommt afk-ended und der Ton sounds.end-forced.
@@ -524,6 +544,19 @@ body-alarm:
   player-radius: 10.0
   # Sekunden zwischen zwei Alarmen
   cooldown: 5
+
+# Wartezeit vor dem Start: Nach /cam beginnt der Cam-Modus erst nach seconds, wie ein Teleport mit Wartezeit
+# auf vielen Servern. So lange muss der Spieler stehen bleiben (umsehen darf er sich) und darf keinen Schaden
+# nehmen - so flüchtet niemand mitten aus einem Kampf in den Cam-Modus.
+# Die Action-Bar zählt die Sekunden herunter (Text: start-delay-countdown), jede mit dem Ton sounds.start-delay.
+# Abgebrochen wird der Start, wenn er sich bewegt (start-delay-moved), Schaden nimmt (start-delay-damaged) oder
+# /cam noch einmal eingibt (start-delay-cancelled). Wer im Wasser treibt oder fällt, bewegt sich auch.
+# Ob er starten darf (cam-ban, Wartezeit, Akku, cam-area, cam-safety ...), wird vorher und am Ende noch einmal
+# geprüft. start-cost wird vorher nur nachgesehen und erst bezahlt, wenn der Cam-Modus wirklich beginnt.
+start-delay:
+  enabled: false
+  # Wie lange, in Sekunden (1 bis 60)
+  seconds: 3
 
 # Kein Cam-Modus direkt nach erlittenem Schaden
 cam-safety:

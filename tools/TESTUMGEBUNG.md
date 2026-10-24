@@ -105,8 +105,12 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
 * **`difficulty peaceful`** wird gesetzt, sonst erschlägt ein Zombie den Bot und
   das Plugin verweigert danach `/cam` wegen der `cam-safety`-Sperre.
 * **`camera-particles.particles-per-tick: 0`** wird in die Testkonfiguration
-  geschrieben. Sonst stirbt jeder Bot in Sichtweite eines Cam-Spielers am
-  Partikel-Paket: `minecraft-data` 26.1 kennt die 26.2-IDs nicht.
+  geschrieben. Die Partikel eines Cam-Spielers mischten sich sonst unter die,
+  die der Test von `/cam trail` beim Bot zählt.
+* **Das Partikelpaket liest der Bot nur bis vor den Partikel.** Ort, Menge und
+  das Flag für die Sichtweite stehen davor, dahinter die Nummer des Partikels
+  und seine Daten - und die Nummern vergibt 26.1 anders als 26.2. Früher starb
+  jeder Bot daran. Die Bot-Aktion `particles` gibt zurück, was angekommen ist.
 * **`teleports.command: false`** steht ebenso in der Testkonfiguration. Die
   Abschnitte stellen die Kamera mit `/tp` an ihren Platz, und mit der
   Voreinstellung `true` wäre sie danach keine Kamera mehr. Nur der
@@ -1232,6 +1236,20 @@ camera` und `body`, ohne `camplugin.teleport` und mit `teleport: false` nicht
 · `/cam tp ... body` stellt neben den Körper, nicht hinein · zur Kamera geht
 es im Überlebensmodus nicht, im Kreativmodus steht der Spieler danach bei
 ihr in der Luft · der Cam-Modus des anderen läuft dabei weiter ·
+voreingestellt ist `start-delay` aus, mit 3 Sekunden · eingeschaltet zählt
+die Action-Bar nach `/cam` 3, 2, 1 herunter, jede Sekunde mit dem Ton, und
+erst dann beginnt der Cam-Modus · ein Schritt, ein Treffer und ein zweites
+`/cam` brechen den Start ab · wer `start-cost` nicht zahlen kann, hört es
+gleich, bezahlt wird erst beim Start · mehr als 60 Sekunden werden gemeldet ·
+voreingestellt ist `cam-trail` aus, und `/cam trail` sagt das · mitten im Flug
+heißt es „still in cam mode“ · danach nennt `/cam trail` von der Konsole die
+Strecke ohne den Sprung von `/cam back`, den Platz des Körpers und den
+letzten der Kamera · der Spieler bekommt die Linie als Partikel, alle mit dem
+Flag für die Sichtweite und alle auf dem geflogenen Weg, keinen quer zurück,
+wo `/cam back` die Kamera versetzt hat · `/cam trail` ohne Namen blendet sie
+aus, nach `show-seconds` hört sie von selbst auf · ein Name ohne Flug wird
+gemeldet, ohne `camplugin.trail` fehlt das Recht, und `enabled: false`
+vergisst die Flüge ·
 Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im

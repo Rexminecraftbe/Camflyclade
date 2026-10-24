@@ -159,6 +159,11 @@ messages:
   reload-exit: "&cCamera mode ended due to plugin restart."
   reload-start: "&ePlugin is restarting..."
   reload-success: "&aPlugin reload successful."
+  # start-delay: the countdown in the action bar, {time} being the time left, and why the start was called off.
+  start-delay-cancelled: "&eCam mode start cancelled."
+  start-delay-countdown: "&eCam mode in {time} &7- stand still"
+  start-delay-damaged: "&cCam mode start cancelled: you took damage."
+  start-delay-moved: "&cCam mode start cancelled: you moved."
   startup-skins-failed: "Skins could not be preloaded at startup: {error}"
   startup-skins-loaded: "Skins loaded successfully."
   startup-skins-loading: "Loading skins..."
@@ -185,6 +190,20 @@ messages:
   teleport-arrival-ended: "&c{player} was teleported to you. Camera mode ended."
   teleport-ended: "&cYou were teleported. Camera mode ended."
   time-limit-expired: "&cCam mode ended: Time limit expired."
+  # /cam trail: {distance} in blocks, {time} how long the flight took, {when} trail-flying or trail-ago (with {time}
+  # how long ago it ended), {place} as trail-place has it, {world} the worlds of the flight in trail-elsewhere.
+  trail-ago: "ended {time} ago"
+  trail-elsewhere: "&eNone of the flight is in your world, it is in {world}."
+  trail-flying: "still in cam mode"
+  trail-from: "&7From the body at &f{place}"
+  trail-header: "&eCam flight of {player}: {distance} blocks in {time}, {when}"
+  trail-hidden: "&aThe flight is hidden again."
+  trail-none: "&e{player} has no recorded cam flight."
+  trail-off: "&c/cam trail is switched off."
+  trail-place: "{x} {y} {z} ({world})"
+  trail-shown: "&aShown for {time}, from green at the body to red at the camera. /cam trail hides it."
+  trail-to: "&7Camera last at &f{place}"
+  trail-usage: "&eUse /cam trail <player> to show the last cam flight of a player, /cam trail to hide it."
   unban-done: "&a{player} may use cam mode again."
   unban-everybody-done: "&aCam mode is open for everybody again."
   unban-everybody-none: "&eCam mode is not locked for everybody."
@@ -563,6 +582,10 @@ message-settings:
   reload-exit: true
   reload-start: true
   reload-success: true
+  start-delay-cancelled: true
+  start-delay-countdown: true
+  start-delay-damaged: true
+  start-delay-moved: true
   startup-skins-failed: true
   startup-skins-loaded: true
   startup-skins-loading: true
@@ -589,6 +612,15 @@ message-settings:
   teleport-arrival-ended: true
   teleport-ended: true
   time-limit-expired: true
+  trail-elsewhere: true
+  trail-from: true
+  trail-header: true
+  trail-hidden: true
+  trail-none: true
+  trail-off: true
+  trail-shown: true
+  trail-to: true
+  trail-usage: true
   unban-done: true
   unban-everybody-done: true
   unban-everybody-none: true

@@ -58,6 +58,12 @@ public class CamCommand implements CommandExecutor {
             plugin.getStop().command(sender, Arrays.copyOfRange(args, 1, args.length));
             return true;
         }
+        // From the console as well, which gets where the flight went, if
+        // not the line itself.
+        if (args.length > 0 && args[0].equalsIgnoreCase("trail")) {
+            plugin.getTrail().command(sender, Arrays.copyOfRange(args, 1, args.length));
+            return true;
+        }
         // The console can look at the statistics of a player, only not at
         // its own.
         if (args.length > 0 && args[0].equalsIgnoreCase("stats")) {

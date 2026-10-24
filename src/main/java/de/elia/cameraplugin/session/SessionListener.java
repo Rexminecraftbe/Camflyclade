@@ -30,6 +30,7 @@ public final class SessionListener implements Listener {
         plugin.getMovementGuard().forget(event.getPlayer().getUniqueId());
         plugin.getNoCollisionTeam().removePlayerFromNoCollisionTeam(event.getPlayer());
         plugin.getStartChecks().forget(event.getPlayer().getUniqueId());
+        plugin.getStartDelay().callOff(event.getPlayer(), null);
         // After the end above, which counted his last flight.
         plugin.getBattery().onQuit(event.getPlayer());
         plugin.getTimeLimit().onQuit(event.getPlayer());

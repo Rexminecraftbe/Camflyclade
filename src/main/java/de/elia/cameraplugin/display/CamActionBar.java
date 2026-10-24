@@ -223,6 +223,16 @@ public final class CamActionBar {
         show(player, text, WARN_MILLIS);
     }
 
+    /**
+     * Takes a line of {@link #flash} away before the client lets it fade,
+     * such as the countdown of {@code start-delay} once the wait is called
+     * off: it would go on counting next to the message that says so.
+     */
+    public void clear(Player player) {
+        flashUntil.remove(player.getUniqueId());
+        player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(""));
+    }
+
     private void show(Player player, String text, long millis) {
         if (text.isEmpty()) return;
         flashUntil.put(player.getUniqueId(), System.currentTimeMillis() + millis);

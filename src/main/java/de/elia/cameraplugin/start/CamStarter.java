@@ -11,6 +11,8 @@ import org.bukkit.entity.Player;
  * Starts and ends camera mode the way a player asks for it with
  * {@code /cam}: every check that can turn him away, in the order that tells
  * him the reason that really stands in the way, and the cost last of all.
+ * With {@code start-delay} he waits a few seconds in between, see
+ * {@link StartDelay}.
  */
 public final class CamStarter {
 
@@ -22,27 +24,53 @@ public final class CamStarter {
         this.messages = plugin.getMessages();
     }
 
-    /** Ends a running camera mode, or starts one. */
+    /** Ends a running camera mode, calls off a start he is waiting for, or starts one. */
     public void toggle(Player player) {
         if (plugin.isInCameraMode(player)) {
             plugin.exitCameraMode(player, EndReason.COMMAND);
             messages.sendConfiguredMessage(player, "camera-off");
-        } else {
-            start(player);
+        } else if (!plugin.getStartDelay().callOff(player, "start-delay-cancelled")) {
+            request(player);
         }
     }
 
     /**
-     * Starts camera mode, unless one of the checks stands in the way.
-     *
-     * <p>The ones that only ask him to wait come first, the ones about where
-     * he is and what he carries after them. The cost comes last of all: it is
-     * only taken once nothing else can turn him away, so that nobody pays for
-     * a start that does not happen.</p>
+     * Starts camera mode right away, or with {@code start-delay} after the
+     * wait. The checks come before the wait as well: whoever may not start
+     * hears it at once, instead of standing still for nothing.
+     */
+    private void request(Player player) {
+        if (!plugin.getSettings().isStartDelayEnabled()) {
+            start(player);
+        } else if (mayStart(player) && plugin.getStartCost().canPay(player)) {
+            plugin.getStartDelay().begin(player, () -> start(player));
+        }
+    }
+
+    /**
+     * Starts camera mode, unless one of the checks stands in the way. The
+     * cost comes last of all: it is only taken once nothing else can turn him
+     * away, so that nobody pays for a start that does not happen.
      *
      * @return whether camera mode started; if not, he has been told why
      */
     public boolean start(Player player) {
+        if (!mayStart(player) || !plugin.getStartCost().pay(player)) {
+            return false;
+        }
+        plugin.enterCameraMode(player);
+        messages.sendConfiguredMessage(player, "camera-on");
+        return true;
+    }
+
+    /**
+     * Whether the player may start camera mode right now, the cost left
+     * aside. The checks that only ask him to wait come first, the ones about
+     * where he is and what he carries after them.
+     *
+     * @return whether he may; if not, he has been told why
+     */
+    private boolean mayStart(Player player) {
         StartChecks checks = plugin.getStartChecks();
         // First of all: neither waiting nor going somewhere else helps a
         // banned player.
@@ -81,14 +109,6 @@ public final class CamStarter {
         if (!checks.checkCamEffects(player)) {
             return false;
         }
-        if (!checks.checkCamSafety(player)) {
-            return false;
-        }
-        if (!plugin.getStartCost().pay(player)) {
-            return false;
-        }
-        plugin.enterCameraMode(player);
-        messages.sendConfiguredMessage(player, "camera-on");
-        return true;
+        return checks.checkCamSafety(player);
     }
 }

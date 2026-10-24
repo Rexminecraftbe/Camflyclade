@@ -221,6 +221,7 @@ public final class CameraMode {
         plugin.getBattery().startFor(player);
         plugin.getAfk().startFor(player);
         plugin.getCamLog().started(player, cameraData);
+        plugin.getTrail().startFor(player, playerLocation);
 
         if (settings.isCameraHeadEnabled()) {
             new BukkitRunnable() {
@@ -284,6 +285,8 @@ public final class CameraMode {
         Mannequin hitbox = cameraData.getHitbox();
         // For the log, before he is put back at his body.
         Location cameraAt = player.getLocation();
+        // Before the teleport to the body as well, which is no part of the flight.
+        plugin.getTrail().stopFor(player, cameraAt);
 
         // The name comes off before the teleport: while it sits on the
         // player as a passenger, Spigot turns the teleport down.

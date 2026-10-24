@@ -85,6 +85,15 @@ public final class CamSettings {
     private static final int MIN_AFK_SECONDS = 10;
 
     /**
+     * The longest wait {@code start-delay.seconds} accepts. Longer than a
+     * minute, standing still is no longer a wait but a punishment.
+     */
+    private static final int MAX_START_DELAY_SECONDS = 60;
+
+    /** The longest {@code cam-trail.show-seconds} accepts: ten minutes. */
+    private static final int MAX_TRAIL_SHOW_SECONDS = 600;
+
+    /**
      * Keys that are read although the config file built into the jar leaves
      * them out on purpose, so that they are not reported as unknown, see
      * {@link ConfigReader#warnUnknownKeys}. Also sections whose keys are names
@@ -224,6 +233,7 @@ public final class CamSettings {
     private CamSound backSound;
     private CamSound endWarningSound;
     private CamSound bodyAlarmSound;
+    private CamSound startDelaySound;
 
     /** Whether camera mode leaves a file to recover from a crash, {@code crash-protection.enabled}. */
     private boolean crashProtectionEnabled;
@@ -250,6 +260,16 @@ public final class CamSettings {
 
     /** Whether {@code /cam back} takes the camera back to its body, {@code back-command.enabled}. */
     private boolean backCommandEnabled;
+
+    /** Whether the player waits before camera mode starts, {@code start-delay.enabled}. */
+    private boolean startDelayEnabled;
+    /** How long, in seconds, {@code start-delay.seconds}. */
+    private int startDelaySeconds;
+
+    /** Whether flights are recorded for {@code /cam trail}, {@code cam-trail.enabled}. */
+    private boolean trailEnabled;
+    /** How long {@code /cam trail} shows a flight, in seconds, {@code cam-trail.show-seconds}. */
+    private int trailShowSeconds;
 
     /** Whether the end of a time limit or a battery is announced, {@code end-warning.enabled}. */
     private boolean endWarningEnabled;
@@ -491,6 +511,7 @@ public final class CamSettings {
                 "item.lodestone_compass.lock", 1.0);
         bodyAlarmSound = CamSound.read(config, "sounds.body-alarm", allowedSounds,
                 "entity.warden.nearby_close", 1.0);
+        startDelaySound = CamSound.read(config, "sounds.start-delay", allowedSounds, "block.note_block.hat", 1.0);
         crashProtectionEnabled = config.getBoolean("crash-protection.enabled", true);
         camListAccess = readAccess(config, "cam-list.access");
         camListTeleport = config.getBoolean("cam-list.teleport", true);
@@ -501,6 +522,10 @@ public final class CamSettings {
         afkEndSeconds = config.getInt("afk-end.seconds", 300, MIN_AFK_SECONDS);
         afkWarningPercent = config.getInt("afk-end.warning-percent", 80, 0, 99);
         backCommandEnabled = config.getBoolean("back-command.enabled", true);
+        startDelayEnabled = config.getBoolean("start-delay.enabled", false);
+        startDelaySeconds = config.getInt("start-delay.seconds", 3, 1, MAX_START_DELAY_SECONDS);
+        trailEnabled = config.getBoolean("cam-trail.enabled", false);
+        trailShowSeconds = config.getInt("cam-trail.show-seconds", 30, 1, MAX_TRAIL_SHOW_SECONDS);
         endWarningEnabled = config.getBoolean("end-warning.enabled", true);
         endWarningSeconds = readSeconds(config, "end-warning.seconds", List.of(30, 10));
         bodyAlarmMobs = config.getBoolean("body-alarm.mobs", true);
@@ -1118,6 +1143,10 @@ public final class CamSettings {
         return bodyAlarmSound;
     }
 
+    public CamSound getStartDelaySound() {
+        return startDelaySound;
+    }
+
     public ListAccess getCamListAccess() {
         return camListAccess;
     }
@@ -1152,11 +1181,31 @@ public final class CamSettings {
         return afkWarningPercent;
     }
 
-    // ------------------------------------------- back-command, end-warning, body-alarm
+    // ---------------------------------------------------------------- back-command
 
     public boolean isBackCommandEnabled() {
         return backCommandEnabled;
     }
+
+    // ------------------------------------------------------ start-delay, cam-trail
+
+    public boolean isStartDelayEnabled() {
+        return startDelayEnabled;
+    }
+
+    public int getStartDelaySeconds() {
+        return startDelaySeconds;
+    }
+
+    public boolean isTrailEnabled() {
+        return trailEnabled;
+    }
+
+    public int getTrailShowSeconds() {
+        return trailShowSeconds;
+    }
+
+    // ----------------------------------------------------- end-warning, body-alarm
 
     public boolean isEndWarningEnabled() {
         return endWarningEnabled;

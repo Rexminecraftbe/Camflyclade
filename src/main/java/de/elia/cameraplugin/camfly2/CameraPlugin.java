@@ -51,6 +51,7 @@ import de.elia.cameraplugin.session.SessionTracker;
 import de.elia.cameraplugin.speed.CamFlightSpeed;
 import de.elia.cameraplugin.start.CamStarter;
 import de.elia.cameraplugin.start.StartChecks;
+import de.elia.cameraplugin.start.StartDelay;
 import de.elia.cameraplugin.stats.CamStats;
 import de.elia.cameraplugin.stop.CamStop;
 import de.elia.cameraplugin.storage.PlayerStore;
@@ -58,6 +59,7 @@ import de.elia.cameraplugin.sulfurcube.CamSulfurCubeGuard;
 import de.elia.cameraplugin.teleport.CamTeleportGuard;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import de.elia.cameraplugin.timelimit.EndWarning;
+import de.elia.cameraplugin.trail.CamTrail;
 import de.elia.cameraplugin.visibility.CamVisibility;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -118,7 +120,9 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamAfk afk = new CamAfk(this);
     private final CamBack back = new CamBack(this);
     private final StartChecks startChecks = new StartChecks(settings, messages, cameraPlayers);
+    private final StartDelay startDelay = new StartDelay(this);
     private final CamStarter starter = new CamStarter(this);
+    private final CamTrail trail = new CamTrail(this);
     private final CamMovementGuard movementGuard = new CamMovementGuard(this);
     private final CamBorderWall borderWall = new CamBorderWall(this);
     private final CamTeleportGuard teleportGuard = new CamTeleportGuard(this);
@@ -194,6 +198,7 @@ public final class CameraPlugin extends JavaPlugin {
                 mobTargeting,
                 new CamRegenGuard(cameraPlayers),
                 startChecks,
+                startDelay,
                 new SessionListener(this),
                 movementGuard,
                 // Before the wall: a teleport that ends camera mode takes the
@@ -208,6 +213,7 @@ public final class CameraPlugin extends JavaPlugin {
                 flightSpeed,
                 crashGuard,
                 new SessionTracker(cameraPlayers),
+                trail,
                 new ExitKey(this),
                 afk,
                 new CamSuggestionFilter(this));
@@ -307,6 +313,8 @@ public final class CameraPlugin extends JavaPlugin {
         timeLimit.onDisable();
         bodyAlarm.onDisable();
         afk.onDisable();
+        startDelay.onDisable();
+        trail.onDisable();
         // After camera mode has ended for everybody, which settled the
         // batteries in flight and counted the flights.
         battery.onDisable();
@@ -377,6 +385,8 @@ public final class CameraPlugin extends JavaPlugin {
                 exitCameraMode(camPlayer, EndReason.RELOAD);
             }
         }
+        // What the start asks for may change with the file.
+        startDelay.callOffAll("start-delay-cancelled");
         configFile.reportConfigWarnings(loadConfigValues(), initiator);
         ban.reload();
         noCollisionTeam.refreshNoCollisionTeam();
@@ -384,6 +394,7 @@ public final class CameraPlugin extends JavaPlugin {
         startCost.reset();
         camLog.reset();
         battery.onReload();
+        trail.onReload();
         return true;
     }
 
@@ -580,8 +591,16 @@ public final class CameraPlugin extends JavaPlugin {
         return startChecks;
     }
 
+    public StartDelay getStartDelay() {
+        return startDelay;
+    }
+
     public CamStarter getStarter() {
         return starter;
+    }
+
+    public CamTrail getTrail() {
+        return trail;
     }
 
     public PlayerStore getPlayerStore() {

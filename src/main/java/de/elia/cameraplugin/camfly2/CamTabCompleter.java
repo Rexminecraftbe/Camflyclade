@@ -6,6 +6,7 @@ import de.elia.cameraplugin.list.CamList;
 import de.elia.cameraplugin.list.CamListTeleport;
 import de.elia.cameraplugin.stats.CamStats;
 import de.elia.cameraplugin.stop.CamStop;
+import de.elia.cameraplugin.trail.CamTrail;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -26,6 +27,7 @@ public class CamTabCompleter implements TabCompleter {
     private final CamListTeleport listTeleport;
     private final CamStop stop;
     private final CamBan ban;
+    private final CamTrail trail;
 
     public CamTabCompleter(CameraPlugin plugin) {
         this.plugin = plugin;
@@ -35,6 +37,7 @@ public class CamTabCompleter implements TabCompleter {
         this.listTeleport = plugin.getListTeleport();
         this.stop = plugin.getStop();
         this.ban = plugin.getBan();
+        this.trail = plugin.getTrail();
     }
 
     @Override
@@ -90,6 +93,16 @@ public class CamTabCompleter implements TabCompleter {
             }
             return names;
         }
+        if (args.length == 2 && args[0].equalsIgnoreCase("trail") && trail.mayUse(sender)) {
+            String partial = args[1].toLowerCase(Locale.ROOT);
+            List<String> names = new ArrayList<>();
+            for (String name : trail.recordedNames()) {
+                if (name.toLowerCase(Locale.ROOT).startsWith(partial)) {
+                    names.add(name);
+                }
+            }
+            return names;
+        }
         if (args.length != 1) {
             return Collections.emptyList();
         }
@@ -119,6 +132,9 @@ public class CamTabCompleter implements TabCompleter {
         }
         if (listTeleport.mayUse(sender) && "tp".startsWith(partial)) {
             completions.add("tp");
+        }
+        if (trail.mayUse(sender) && "trail".startsWith(partial)) {
+            completions.add("trail");
         }
         return completions;
     }
