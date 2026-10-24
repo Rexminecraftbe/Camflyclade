@@ -4388,26 +4388,38 @@ def afk_checks(env, bot):
 def herzen_checks(env, bot):
     """body.health-visible: die Herzen des Spielers am Namen ueber dem Koerper.
 
-    Voreingestellt ist es aus und stuende ueber dem Namen - nachgesehen in
-    der ausgelieferten Datei -, und ueber dem Koerper steht nur der Name.
-    Eingeschaltet stehen dort so viele Herzen, wie der Server dem Bot gerade
-    gibt, als Bilder seiner Leiste: 11 Leben sind fuenf ganze
-    (hud/heart/full) und ein halbes (hud/heart/half). Voreingestellt stehen
-    sie ueber dem Namen, mit health-position: below darunter. Damit es
-    weniger als volle sind, nimmt /damage ihm vorher neun; cam-safety ist
-    dafuer aus, und die Regeneration steht still - aus der Saettigung des
-    Testservers waeren die neun Leben sonst in zwei, drei Sekunden wieder da,
-    noch ehe der Cam-Modus laeuft. Bekommt er im Cam-Modus Leben dazu - hier
-    mit dem Effekt Direktheilung, den das Plugin einem Kamera-Spieler laesst
-    -, stehen gleich darauf mehr Herzen da. Mit health-show-missing kommt
-    fuer jedes fehlende Herz bis zu den zehn seiner Leiste ein leeres dazu
-    (hud/heart/container), und mit body.name-visible: false stehen die
-    Herzen allein da.
+    Voreingestellt ist es aus, und es stuende ueber dem Namen, mit gelben
+    Herzen und weiteren Zeilen darueber - nachgesehen in der ausgelieferten
+    Datei -, und ueber dem Koerper steht nur der Name. Eingeschaltet stehen
+    dort so viele Herzen, wie der Server dem Bot gerade gibt, als Bilder
+    seiner Leiste: 11 Leben sind fuenf ganze (hud/heart/full) und ein
+    halbes (hud/heart/half). Voreingestellt stehen sie ueber dem Namen, mit
+    health-position: below darunter. Damit es weniger als volle sind, nimmt
+    /damage ihm vorher neun; cam-safety ist dafuer aus, und die Regeneration
+    steht still - aus der Saettigung des Testservers waeren die neun Leben
+    sonst in zwei, drei Sekunden wieder da, noch ehe der Cam-Modus laeuft.
+    Bekommt er im Cam-Modus Leben dazu - hier mit dem Effekt Direktheilung,
+    den das Plugin einem Kamera-Spieler laesst -, stehen gleich darauf mehr
+    Herzen da.
+
+    Mit health-show-missing steht jedes Herz wie in der Leiste auf einem
+    leeren: hinten ein TextDisplay mit dem Hintergrund und zehn leeren
+    Herzen (hud/heart/container), davor ein zweites ohne Hintergrund mit den
+    roten und, wo eins fehlt, einem leeren. Beide gehen mit dem Cam-Modus
+    wieder weg. Mit Absorption IV - zehn gelbe Herzen - stehen die gelben
+    (hud/heart/absorbing_full) hinter den roten, und weil es mehr als zehn
+    sind, stehen sie in einer zweiten Zeile: voreingestellt darueber, also
+    im Text vorn, mit health-rows-upward: false darunter. Mit
+    health-show-absorption: false gibt es keine gelben. Mit
+    body.name-visible: false stehen die Herzen allein da.
 
     Gezaehlt werden die Bilder im Text, den /data ausgibt; wo sie stehen,
     sagt ihre Stelle vor oder hinter dem Namen. Die Bilder gibt es nur auf
     Paper, das Plugin schreibt sie dort als Komponenten.
     """
+    vorn = "@e[type=minecraft:text_display,distance=..4,limit=1,sort=nearest,nbt={default_background:0b}]"
+    hinten = "@e[type=minecraft:text_display,distance=..4,limit=1,sort=nearest,nbt={default_background:1b}]"
+
     def halbe():
         text = daten_von(bot, "@s", "Health")
         m = re.search(r"(-?[\d.]+)f?\s*$", text or "")
@@ -4424,9 +4436,12 @@ def herzen_checks(env, bot):
     try:
         cam_off(bot)
         text = ausgeliefert(env)
-        FIND.test("Voreingestellt steht body.health-visible: false und health-position: above da",
-                  re.search(r"(?m)^\s*health-visible:\s*false\s*$", text) is not None
-                  and re.search(r"(?m)^\s*health-position:\s*above\s*$", text) is not None, "")
+        FIND.test("Voreingestellt steht body.health-visible: false, health-position: above, health-show-missing: "
+                  "false, health-show-absorption: true und health-rows-upward: true da",
+                  all(re.search(rf"(?m)^\s*{k}:\s*{v}\s*$", text) is not None
+                      for k, v in (("health-visible", "false"), ("health-position", "above"),
+                                   ("health-show-missing", "false"), ("health-show-absorption", "true"),
+                                   ("health-rows-upward", "true"))), "")
         set_options(env, [("enabled", "false", "cam-safety"), ("name-visible", "false", "camera-mode")])
         console(env, "gamerule natural_health_regeneration false", pause=0.3)
         spielmodus_setzen(bot, "survival")
@@ -4452,15 +4467,52 @@ def herzen_checks(env, bot):
         FIND.test("body.health-visible: bekommt er im Cam-Modus Leben dazu, stehen gleich mehr Herzen da",
                   danach != vorher and zeigt(text, danach), f"{vorher} -> {danach} halbe - {text or ''}")
 
-        set_options(env, [("health-position", "below"), ("health-show-missing", "true")])
+        set_option(env, "health-position", "below")
         cam_on(bot)
         text = daten_von(bot, NAME, "text")
         FIND.test("body.health-position: below - die Herzen stehen unter dem Namen",
                   bool(text) and "'s Body" in text and not oben(text), text or "keine Antwort")
-        FIND.test("body.health-show-missing - fuer jedes fehlende Herz bis zu den zehn ein leeres",
-                  danach is not None and zeigt(text, danach, leer=10 - (danach + 1) // 2), text or "")
 
-        set_options(env, [("name-visible", "false", "body"), ("health-show-missing", "false")])
+        set_option(env, "health-show-missing", "true")
+        cam_on(bot)
+        anzahl_namen = anzahl(bot, "@e[type=minecraft:text_display,distance=..4]")
+        hinten_text = daten_von(bot, hinten, "text")
+        vorn_text = daten_von(bot, vorn, "text")
+        fehlen = 10 - (danach + 1) // 2 if danach is not None else 0
+        FIND.test("body.health-show-missing: zwei TextDisplays, eins vor dem anderen", anzahl_namen == 2,
+                  f"{anzahl_namen} TextDisplays")
+        FIND.test("body.health-show-missing: hinten in jedem Platz ein leeres Herz",
+                  bool(hinten_text) and hinten_text.count("hud/heart/container") == 10
+                  and "hud/heart/full" not in hinten_text, hinten_text or "keine Antwort")
+        FIND.test("body.health-show-missing: vorn die roten Herzen und ein leeres fuer jedes fehlende",
+                  zeigt(vorn_text, danach, leer=fehlen), vorn_text or "keine Antwort")
+        cam_off(bot)
+        time.sleep(1.0)
+        FIND.test("body.health-show-missing: beide TextDisplays gehen mit dem Cam-Modus", not name_da(bot), "")
+
+        set_option(env, "health-show-missing", "false")
+        bot.chat("/effect give @s minecraft:absorption 120 4 true")
+        time.sleep(0.5)
+        cam_on(bot)
+        text = daten_von(bot, NAME, "text")
+        FIND.test("body.health-show-absorption: die zehn gelben Herzen der Absorption IV stehen da",
+                  bool(text) and text.count("hud/heart/absorbing_full") == 10, text or "keine Antwort")
+        FIND.test("body.health-rows-upward: true - die zweite Zeile steht ueber der ersten",
+                  bool(text) and -1 < text.find("absorbing") < text.find("hud/heart/full"), text or "")
+
+        set_option(env, "health-rows-upward", "false")
+        cam_on(bot)
+        text = daten_von(bot, NAME, "text")
+        FIND.test("body.health-rows-upward: false - die zweite Zeile steht unter der ersten",
+                  bool(text) and -1 < text.find("hud/heart/full") < text.find("absorbing"), text or "")
+
+        set_option(env, "health-show-absorption", "false")
+        cam_on(bot)
+        text = daten_von(bot, NAME, "text")
+        FIND.test("body.health-show-absorption: false - keine gelben Herzen",
+                  bool(text) and "absorbing" not in text and zeigt(text, danach), text or "keine Antwort")
+
+        set_option(env, "name-visible", "false", "body")
         cam_on(bot)
         text = daten_von(bot, NAME, "text")
         FIND.test("body.health-visible mit name-visible: false - die Herzen stehen allein da",
@@ -4468,7 +4520,8 @@ def herzen_checks(env, bot):
     finally:
         cam_off(bot)
         set_options(env, [("health-visible", "false"), ("health-position", "above"), ("name-visible", "true", "body"),
-                          ("health-show-missing", "false"),
+                          ("health-show-missing", "false"), ("health-show-absorption", "true"),
+                          ("health-rows-upward", "true"),
                           ("enabled", "true", "cam-safety"), ("name-visible", "true", "camera-mode")])
         console(env, "gamerule natural_health_regeneration true", pause=0.3)
         bot.chat(f"/effect clear {BOT_NAME}")

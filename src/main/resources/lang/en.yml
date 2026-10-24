@@ -21,7 +21,10 @@ messages:
   area-world: "the world {world}"
   # The hearts over or under the name of the body with body.health-visible: true, on Spigot only - Paper shows the
   # hearts of the bar instead, which letters cannot: health-full for each whole heart, health-half for a half one at
-  # the end, and with body.health-show-missing health-empty for each heart the player is missing.
+  # the end, with body.health-show-missing health-empty for each heart the player is missing, and with
+  # body.health-show-absorption the yellow ones of absorption.
+  armorstand.health-absorbing-full: "&e❤"
+  armorstand.health-absorbing-half: "&e❥"
   armorstand.health-empty: "&8❤"
   armorstand.health-full: "&c❤"
   armorstand.health-half: "&c❥"

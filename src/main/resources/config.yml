@@ -155,8 +155,18 @@ body:
   # Wo die Herzen stehen: above = über dem Namen, below = unter dem Namen
   health-position: above
 
-  # Auch die Herzen zeigen, die ihm bis zu seinem Maximum fehlen, als leere Herzen wie in der Leiste
+  # Auch die Herzen zeigen, die ihm bis zu seinem Maximum fehlen, als leere Herzen - und wie in der Leiste jedes Herz
+  # auf einem leeren, so dass ein halbes Herz auf der einen Seite rot und auf der anderen schwarz ist.
   health-show-missing: false
+
+  # Die gelben Herzen eines Goldapfels (Absorption) hinter den roten zeigen, wie in der Leiste. Der Cam-Modus pausiert
+  # den Effekt; gezeigt wird, was der Spieler beim Start hatte.
+  health-show-absorption: true
+
+  # Wohin die nächste Zeile Herzen kommt, wenn es mehr als zehn sind:
+  #   true  = darüber, wie in der Leiste
+  #   false = darunter
+  health-rows-upward: true
 
   # Aussehen des Namens (der Text steht in der Sprachdatei unter messages.armorstand.name-format, \n beginnt eine neue Zeile)
   name:

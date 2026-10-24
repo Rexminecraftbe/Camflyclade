@@ -74,6 +74,9 @@ public final class CameraMode {
         PlayerInventory playerInventory = player.getInventory();
         ItemStack[] originalInventory = playerInventory.getContents();
         ItemStack[] originalArmor = playerInventory.getArmorContents();
+        // Before the effects are paused: the absorption goes with its effect,
+        // and the yellow hearts over the body are to show what he had.
+        double absorption = player.getAbsorptionAmount();
         Collection<PotionEffect> pausedEffects = new ArrayList<>();
         for (PotionEffect effect : player.getActivePotionEffects()) {
             pausedEffects.add(effect);
@@ -123,7 +126,8 @@ public final class CameraMode {
         // armour, so leather keeps the frost off it as it keeps it off him.
         damageTarget.setRemainingAir(remainingAir);
         damageTarget.setFreezeTicks(freezeTicks);
-        TextDisplay nameDisplay = bodies.spawnNameDisplay(player, body);
+        TextDisplay nameDisplay = bodies.spawnNameDisplay(player, body, absorption);
+        TextDisplay heartsFront = bodies.spawnHeartsFront(player, body, absorption);
         Chunk bodyChunk = bodies.holdChunk(body);
 
         GameMode originalGameMode = player.getGameMode();
@@ -176,6 +180,7 @@ public final class CameraMode {
 
         // *** Hand the saved inventory to CameraData ***
         CameraData cameraData = new CameraData(body, hitbox, nameDisplay, bodyChunk, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects);
+        cameraData.setHeartsFront(heartsFront);
         cameraPlayers.put(player.getUniqueId(), cameraData);
         // Before the flight speed below: the file is to hold the one he had.
         plugin.getCrashGuard().save(player, cameraData);
@@ -203,7 +208,7 @@ public final class CameraMode {
         plugin.getBodyWatch().startBodyPin(player, body, hitbox);
         // After the pin: in the same tick the name then finds the body back in
         // its spot already, instead of following it away for that one tick.
-        plugin.getBodyWatch().keepNameOverBody(player, body, nameDisplay);
+        plugin.getBodyWatch().keepNameOverBody(player, body, nameDisplay, heartsFront, absorption);
         plugin.getMobTargeting().startMobTargeting(player, damageTarget);
         plugin.getBodyAlarm().startFor(player, damageTarget);
         // Creates the teams when needed and sets all members anew - the
@@ -360,6 +365,9 @@ public final class CameraMode {
         TextDisplay nameDisplay = cameraData.getNameDisplay();
         if (nameDisplay != null) {
             bodies.remove(nameDisplay);
+        }
+        if (cameraData.getHeartsFront() != null) {
+            bodies.remove(cameraData.getHeartsFront());
         }
         // Last: until the body is gone, its chunk has to stay.
         bodies.releaseChunk(cameraData.getBodyChunk());

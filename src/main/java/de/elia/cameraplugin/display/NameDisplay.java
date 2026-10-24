@@ -51,6 +51,13 @@ public final class NameDisplay {
     private static final Color NO_BACKGROUND = Color.fromARGB(0);
 
     /**
+     * How far a second name lies in front of the first one, towards whoever
+     * looks at it, in blocks: enough for the depth of the picture to tell the
+     * two apart, too little to be seen.
+     */
+    private static final float IN_FRONT = 0.02f;
+
+    /**
      * Colour codes at the very start of a text: the sixteen colours, a hex
      * colour and the reset, which takes the colour away as well.
      */
@@ -131,6 +138,22 @@ public final class NameDisplay {
             display.getPersistentDataContainer().set(mark, PersistentDataType.INTEGER, 1);
             setup.accept(display);
         });
+    }
+
+    /**
+     * Puts a name a hair in front of another one at the same spot, without a
+     * background of its own: what it shows is drawn over the other one, and
+     * where it shows nothing - the empty half of a half heart, say - the other
+     * one shows through. Turned towards whoever looks at it, a text display
+     * shows him its side towards positive z, so that is the way to the
+     * front.
+     */
+    public static void putInFront(TextDisplay display, NameStyle style) {
+        display.setDefaultBackground(false);
+        display.setBackgroundColor(NO_BACKGROUND);
+        float scale = (float) style.scale();
+        display.setTransformation(new Transformation(new Vector3f(0f, 0f, IN_FRONT), new AxisAngle4f(),
+                new Vector3f(scale), new AxisAngle4f()));
     }
 
     /**

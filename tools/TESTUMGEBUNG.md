@@ -233,7 +233,11 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   `{atlas: "minecraft:gui", sprite: "minecraft:hud/heart/full"}`. Der Test
   zählt deshalb `hud/heart/full`, `half` und `container` im Text. Die
   Zeichen aus der Sprachdatei kommen nur auf Spigot vor, und das prüft
-  der Testserver nicht.
+  der Testserver nicht. Mit `health-show-missing` stehen zwei TextDisplays
+  an derselben Stelle; der Test fragt sie über `default_background`
+  einzeln ab: Das hintere hat den Hintergrund, das vordere keinen. Ob das
+  vordere im Bild wirklich vor dem hinteren liegt, sieht der Bot nicht -
+  er zeichnet nichts.
 * **Für `afk-end` steht der Bot im Cam-Modus einfach still.** mineflayer
   schickt dann keine neue Position und keinen neuen Blick, und Paper meldet
   ohne Änderung kein `PlayerMoveEvent`. Bewegt sich der Bot, fliegt er alle

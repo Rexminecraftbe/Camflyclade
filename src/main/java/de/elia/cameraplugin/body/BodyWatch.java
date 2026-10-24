@@ -136,9 +136,13 @@ public final class BodyWatch {
      * that is mostly healing somebody hands him - an effect, another
      * plugin.</p>
      *
-     * @param name the name over the body, {@code null} when it carries none
+     * @param name       the name over the body, {@code null} when it carries none
+     * @param front      the front of its hearts, which goes along with it, or
+     *                   {@code null}, see {@link BodySpawner#spawnHeartsFront}
+     * @param absorption the yellow hearts he had when camera mode started
      */
-    public void keepNameOverBody(Player player, LivingEntity body, TextDisplay name) {
+    public void keepNameOverBody(Player player, LivingEntity body, TextDisplay name, TextDisplay front,
+                                 double absorption) {
         if (name == null) {
             return;
         }
@@ -160,10 +164,13 @@ public final class BodyWatch {
                 if (!current.getWorld().equals(target.getWorld())
                         || current.distanceSquared(target) > CamSettings.MIN_MOVE_THRESHOLD * CamSettings.MIN_MOVE_THRESHOLD) {
                     name.teleport(target);
+                    if (front != null && front.isValid()) {
+                        front.teleport(target);
+                    }
                 }
                 if (showsHealth && player.getHealth() != health) {
                     health = player.getHealth();
-                    bodies.refreshName(player, name);
+                    bodies.refreshName(player, name, front != null && front.isValid() ? front : null, absorption);
                 }
             }
         }.runTaskTimer(plugin, 1L, 1L);

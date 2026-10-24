@@ -136,6 +136,10 @@ public final class CamSettings {
     private boolean bodyHealthAbove;
     /** Whether the hearts he is missing stand there as empty ones, {@code body.health-show-missing}. */
     private boolean bodyHealthShowMissing;
+    /** Whether the yellow hearts of absorption stand there as well, {@code body.health-show-absorption}. */
+    private boolean bodyHealthShowAbsorption;
+    /** Whether every further line of hearts stands above the one before, {@code body.health-rows-upward}. */
+    private boolean bodyHealthRowsUpward;
     /** How the name over the body looks, the section {@code body.name}. */
     private NameStyle bodyNameStyle;
     private boolean bodyVisible;
@@ -430,6 +434,8 @@ public final class CamSettings {
         bodyHealthAbove = config.getChoice("body.health-position", "above", "above", "below")
                 .equalsIgnoreCase("above");
         bodyHealthShowMissing = config.getBoolean("body.health-show-missing", false);
+        bodyHealthShowAbsorption = config.getBoolean("body.health-show-absorption", true);
+        bodyHealthRowsUpward = config.getBoolean("body.health-rows-upward", true);
         bodyNameStyle = NameStyle.read(config, "body.name", ChatColor.YELLOW);
         bodyVisible = config.getBoolean("body.visible", true);
         bodyArmorVisible = config.getBoolean("body.armor-visible", true);
@@ -961,6 +967,14 @@ public final class CamSettings {
 
     public boolean isBodyHealthShowMissing() {
         return bodyHealthShowMissing;
+    }
+
+    public boolean isBodyHealthShowAbsorption() {
+        return bodyHealthShowAbsorption;
+    }
+
+    public boolean isBodyHealthRowsUpward() {
+        return bodyHealthRowsUpward;
     }
 
     public NameStyle getBodyNameStyle() {
