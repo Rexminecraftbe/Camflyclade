@@ -84,11 +84,28 @@ public final class NameDisplay {
      */
     public static TextDisplay spawn(Location location, String format, NameStyle style, NamespacedKey mark,
                                     Consumer<TextDisplay> setup) {
-        if (ChatColor.stripColor(format).isBlank()) {
+        return spawnStyled(location, styled(format, style), style, mark, setup);
+    }
+
+    /**
+     * Puts up a name whose text carries its colour already, see
+     * {@link #styled(String, NameStyle)} - one that is put together from more
+     * than the name, such as the hearts over the name of a body, which keep a
+     * colour of their own.
+     *
+     * @return the name, or {@code null} when the text says nothing
+     */
+    public static TextDisplay spawnStyled(Location location, String text, NameStyle style, NamespacedKey mark) {
+        return spawnStyled(location, text, style, mark, display -> {
+        });
+    }
+
+    private static TextDisplay spawnStyled(Location location, String text, NameStyle style, NamespacedKey mark,
+                                           Consumer<TextDisplay> setup) {
+        if (ChatColor.stripColor(text).isBlank()) {
             // An empty box would float there, saying nothing.
             return null;
         }
-        String text = text(format, style);
         return location.getWorld().spawn(location, TextDisplay.class, display -> {
             display.setText(text);
             // Turned towards whoever looks at it, like a name tag, and never
@@ -118,11 +135,6 @@ public final class NameDisplay {
         });
     }
 
-    /** Writes a new text into a name that is up already, such as one showing the hearts of a player. */
-    public static void setText(TextDisplay display, String format, NameStyle style) {
-        display.setText(text(format, style));
-    }
-
     /**
      * The text a name shows. The colour comes from the style. It takes the
      * place of a colour code at the very start of the text, where name-format
@@ -130,7 +142,7 @@ public final class NameDisplay {
      * file follows the setting as well; codes further on still colour what
      * comes after them.
      */
-    private static String text(String format, NameStyle style) {
+    public static String styled(String format, NameStyle style) {
         return style.color() + LEADING_COLOR.matcher(format).replaceFirst("");
     }
 }

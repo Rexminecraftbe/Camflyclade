@@ -132,6 +132,8 @@ public final class CamSettings {
     private boolean bodyNameVisible;
     /** Whether the name over the body shows the hearts of the player, {@code body.health-visible}. */
     private boolean bodyHealthVisible;
+    /** Whether they stand over the name rather than under it, {@code body.health-position}. */
+    private boolean bodyHealthAbove;
     /** How the name over the body looks, the section {@code body.name}. */
     private NameStyle bodyNameStyle;
     private boolean bodyVisible;
@@ -423,6 +425,8 @@ public final class CamSettings {
         bodyType = resolveBodyType(config, config.getString("body.type", BodyType.ARMOR_STAND.getConfigName()));
         bodyNameVisible = config.getBoolean("body.name-visible", true);
         bodyHealthVisible = config.getBoolean("body.health-visible", false);
+        bodyHealthAbove = config.getChoice("body.health-position", "above", "above", "below")
+                .equalsIgnoreCase("above");
         bodyNameStyle = NameStyle.read(config, "body.name", ChatColor.YELLOW);
         bodyVisible = config.getBoolean("body.visible", true);
         bodyArmorVisible = config.getBoolean("body.armor-visible", true);
@@ -946,6 +950,10 @@ public final class CamSettings {
 
     public boolean isBodyHealthVisible() {
         return bodyHealthVisible;
+    }
+
+    public boolean isBodyHealthAbove() {
+        return bodyHealthAbove;
     }
 
     public NameStyle getBodyNameStyle() {

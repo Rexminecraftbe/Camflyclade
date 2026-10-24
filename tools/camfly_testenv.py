@@ -4388,36 +4388,43 @@ def afk_checks(env, bot):
 def herzen_checks(env, bot):
     """body.health-visible: die Herzen des Spielers am Namen ueber dem Koerper.
 
-    Voreingestellt ist es aus - nachgesehen in der ausgelieferten Datei -, und
-    ueber dem Koerper steht nur der Name. Eingeschaltet steht hinter ihm so
-    viele Herzen, wie der Server dem Bot gerade gibt, in halben wie in seiner
-    Leiste: 11 Leben sind 5.5. Damit es weniger als volle sind, nimmt /damage
-    ihm vorher neun; cam-safety ist dafuer aus, und die Regeneration steht
-    still - aus der Saettigung des Testservers waeren die neun Leben sonst in
-    zwei, drei Sekunden wieder da, noch ehe der Cam-Modus laeuft. Bekommt er
-    im Cam-Modus Leben dazu - hier mit dem Effekt Direktheilung, den das
-    Plugin einem Kamera-Spieler laesst -, steht dort gleich darauf die neue
-    Zahl. Mit body.name-visible: false stehen die Herzen allein da.
+    Voreingestellt ist es aus und stuende ueber dem Namen - nachgesehen in
+    der ausgelieferten Datei -, und ueber dem Koerper steht nur der Name.
+    Eingeschaltet stehen dort so viele Herzen, wie der Server dem Bot gerade
+    gibt, ganze und halbe wie in seiner Leiste: 11 Leben sind fuenf ganze
+    (health-full, ❤) und ein halbes (health-half, ❥). Voreingestellt stehen
+    sie ueber dem Namen, mit health-position: below darunter. Damit es
+    weniger als volle sind, nimmt /damage ihm vorher neun; cam-safety ist
+    dafuer aus, und die Regeneration steht still - aus der Saettigung des
+    Testservers waeren die neun Leben sonst in zwei, drei Sekunden wieder da,
+    noch ehe der Cam-Modus laeuft. Bekommt er im Cam-Modus Leben dazu - hier
+    mit dem Effekt Direktheilung, den das Plugin einem Kamera-Spieler laesst
+    -, stehen gleich darauf mehr Herzen da. Mit health-empty bekommt jedes
+    fehlende Herz bis zu den zehn seiner Leiste ein Zeichen, und mit
+    body.name-visible: false stehen die Herzen allein da.
 
-    Die Zahl wird am Ende ihres Textteils gesucht, mit dem Anfuehrungszeichen
-    dahinter: Wie /data das Herz davor schreibt, haengt an der Ausgabe.
+    Gezaehlt werden die Herz-Zeichen im Text, den /data ausgibt; wo sie stehen,
+    sagt ihre Stelle vor oder hinter dem Namen.
     """
-    def herzen():
+    def halbe():
         text = daten_von(bot, "@s", "Health")
         m = re.search(r"(-?[\d.]+)f?\s*$", text or "")
-        if not m:
-            return None
-        halbe = math.ceil(float(m.group(1)))
-        return str(halbe // 2) if halbe % 2 == 0 else f"{halbe / 2:.1f}"
+        return math.ceil(float(m.group(1))) if m else None
 
-    def zeigt(text, zahl):
-        return bool(text) and zahl is not None and re.search(rf"[ ❤]{re.escape(zahl)}\"", text) is not None
+    def zeigt(text, halb, leer=0):
+        return (bool(text) and halb is not None and text.count("❤") == halb // 2 + leer
+                and text.count("❥") == halb % 2)
+
+    def oben(text):
+        return bool(text) and "'s Body" in text and text.find("❤") < text.find("'s Body")
 
     modus = next((m for m in ("survival", "creative") if spielmodus_ist(bot, m)), "survival")
     try:
         cam_off(bot)
-        FIND.test("Voreingestellt steht body.health-visible: false da",
-                  re.search(r"(?m)^\s*health-visible:\s*false\s*$", ausgeliefert(env)) is not None, "")
+        text = ausgeliefert(env)
+        FIND.test("Voreingestellt steht body.health-visible: false und health-position: above da",
+                  re.search(r"(?m)^\s*health-visible:\s*false\s*$", text) is not None
+                  and re.search(r"(?m)^\s*health-position:\s*above\s*$", text) is not None, "")
         set_options(env, [("enabled", "false", "cam-safety"), ("name-visible", "false", "camera-mode")])
         console(env, "gamerule natural_health_regeneration false", pause=0.3)
         spielmodus_setzen(bot, "survival")
@@ -4425,34 +4432,42 @@ def herzen_checks(env, bot):
         time.sleep(0.5)
         if not FIND.test("Cam-Modus fuer die Herzen gestartet", cam_on(bot), ""):
             return
-        erwartet = herzen()
+        vorher = halbe()
         text = daten_von(bot, NAME, "text")
         FIND.test("body.health-visible: false - ueber dem Koerper steht nur der Name",
-                  bool(text) and f"{BOT_NAME}'s Body" in text and not zeigt(text, erwartet),
-                  f"{erwartet} - {text or 'keine Antwort'}")
+                  bool(text) and f"{BOT_NAME}'s Body" in text and "❤" not in text and "❥" not in text,
+                  text or "keine Antwort")
 
         set_option(env, "health-visible", "true")
         cam_on(bot)
         text = daten_von(bot, NAME, "text")
-        FIND.test("body.health-visible: true - hinter dem Namen stehen die Herzen des Spielers",
-                  bool(text) and f"{BOT_NAME}'s Body" in text and zeigt(text, erwartet),
-                  f"erwartet {erwartet} - {text or 'keine Antwort'}")
+        FIND.test("body.health-visible: true - so viele ganze und halbe Herzen, wie er hat",
+                  zeigt(text, vorher), f"{vorher} halbe Herzen - {text or 'keine Antwort'}")
+        FIND.test("body.health-position: above - voreingestellt ueber dem Namen", oben(text), text or "")
         bot.chat("/effect give @s minecraft:instant_health 1 0 true")
         time.sleep(1.0)
-        danach = herzen()
+        danach = halbe()
         text = daten_von(bot, NAME, "text")
-        FIND.test("body.health-visible: bekommt er im Cam-Modus Leben dazu, steht gleich die neue Zahl da",
-                  danach != erwartet and zeigt(text, danach),
-                  f"{erwartet} -> {danach} - {text or 'keine Antwort'}")
+        FIND.test("body.health-visible: bekommt er im Cam-Modus Leben dazu, stehen gleich mehr Herzen da",
+                  danach != vorher and zeigt(text, danach), f"{vorher} -> {danach} halbe - {text or ''}")
 
-        set_option(env, "name-visible", "false", "body")
+        set_options(env, [("health-position", "below"), ("armorstand.health-empty", '"&8❤"', "messages")])
+        cam_on(bot)
+        text = daten_von(bot, NAME, "text")
+        FIND.test("body.health-position: below - die Herzen stehen unter dem Namen",
+                  bool(text) and "'s Body" in text and not oben(text), text or "keine Antwort")
+        FIND.test("armorstand.health-empty - jedes fehlende Herz bis zu den zehn bekommt ein Zeichen",
+                  danach is not None and zeigt(text, danach, leer=10 - (danach + 1) // 2), text or "")
+
+        set_options(env, [("name-visible", "false", "body"), ("armorstand.health-empty", '""', "messages")])
         cam_on(bot)
         text = daten_von(bot, NAME, "text")
         FIND.test("body.health-visible mit name-visible: false - die Herzen stehen allein da",
                   zeigt(text, danach) and "'s Body" not in (text or ""), text or "keine Antwort")
     finally:
         cam_off(bot)
-        set_options(env, [("health-visible", "false"), ("name-visible", "true", "body"),
+        set_options(env, [("health-visible", "false"), ("health-position", "above"), ("name-visible", "true", "body"),
+                          ("armorstand.health-empty", '""', "messages"),
                           ("enabled", "true", "cam-safety"), ("name-visible", "true", "camera-mode")])
         console(env, "gamerule natural_health_regeneration true", pause=0.3)
         bot.chat(f"/effect clear {BOT_NAME}")

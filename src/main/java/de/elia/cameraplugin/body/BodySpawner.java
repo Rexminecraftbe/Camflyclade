@@ -44,6 +44,12 @@ import java.util.logging.Level;
  */
 public final class BodySpawner implements Listener {
 
+    /** How many hearts a line over the body holds, like a row of the bar of hearts. */
+    private static final int HEARTS_PER_LINE = 10;
+
+    /** The health of a player whose attribute cannot be read: the game's own. */
+    private static final double DEFAULT_MAX_HEALTH = 20.0;
+
     /** Armour slots in the order of {@link org.bukkit.inventory.PlayerInventory#getArmorContents()}. */
     private static final EquipmentSlot[] ARMOR_SLOTS = {
             EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD
@@ -280,7 +286,8 @@ public final class BodySpawner implements Listener {
      * invisible mannequin shows no name tag.
      *
      * <p>With {@code body.health-visible} the hearts of the player stand there
-     * as well - on their own, when {@code name-visible} is off.</p>
+     * as well, over or under the name as {@code health-position} says - on
+     * their own, when {@code name-visible} is off.</p>
      *
      * @return the name, or {@code null} when the body carries none
      */
@@ -288,33 +295,57 @@ public final class BodySpawner implements Listener {
         if (!settings.isBodyNameVisible() && !settings.isBodyHealthVisible()) {
             return null;
         }
-        return NameDisplay.spawn(nameLocation(body), nameText(player), settings.getBodyNameStyle(), nameKey);
+        return NameDisplay.spawnStyled(nameLocation(body), nameText(player), settings.getBodyNameStyle(), nameKey);
     }
 
     /**
      * The text of the name over the body of a player: {@code name-format}
-     * with his name, and with {@code body.health-visible}
-     * {@code health-format} behind it with how many hearts he has - in
-     * halves, the way his bar of hearts shows them, so 19 health reads 9.5.
+     * with his name in the colour of {@code body.name}, and with
+     * {@code body.health-visible} his hearts in a line of their own over or
+     * under it. The hearts keep the colours of the language file.
      */
     private String nameText(Player player) {
-        String name = settings.isBodyNameVisible()
+        String format = settings.isBodyNameVisible()
                 ? messages.getMessage("armorstand.name-format").replace("{player}", player.getName())
                 : "";
-        if (!settings.isBodyHealthVisible()) {
-            return name;
+        String name = format.isEmpty() ? "" : NameDisplay.styled(format, settings.getBodyNameStyle());
+        String hearts = settings.isBodyHealthVisible() ? hearts(player) : "";
+        if (name.isEmpty() || hearts.isEmpty()) {
+            return name + hearts;
         }
-        double hearts = Math.ceil(player.getHealth()) / 2.0;
-        String health = messages.getMessage("armorstand.health-format").replace("{health}",
-                hearts == Math.rint(hearts) ? String.valueOf((long) hearts) : String.valueOf(hearts));
-        // Without a name in front, the gap that keeps the two apart would
-        // only push the hearts aside.
-        return name.isEmpty() ? health.stripLeading() : name + health;
+        return settings.isBodyHealthAbove() ? hearts + "\n" + name : name + "\n" + hearts;
+    }
+
+    /**
+     * The hearts of a player the way his bar shows them: {@code health-full}
+     * for every whole one, {@code health-half} for the half one at the end,
+     * and {@code health-empty} for those he is missing up to his maximum -
+     * none while that text is empty. Ten to a line, like the bar.
+     */
+    private String hearts(Player player) {
+        int halves = (int) Math.ceil(player.getHealth());
+        String full = messages.getMessage("armorstand.health-full");
+        String half = messages.getMessage("armorstand.health-half");
+        String empty = messages.getMessage("armorstand.health-empty");
+        int count = (halves + 1) / 2;
+        if (!empty.isEmpty()) {
+            AttributeInstance max = player.getAttribute(Attribute.MAX_HEALTH);
+            count = Math.max(count, (int) Math.ceil((max != null ? max.getValue() : DEFAULT_MAX_HEALTH) / 2.0));
+        }
+        StringBuilder hearts = new StringBuilder();
+        for (int heart = 0; heart < count; heart++) {
+            if (heart > 0 && heart % HEARTS_PER_LINE == 0) {
+                hearts.append('\n');
+            }
+            int upTo = 2 * heart + 2;
+            hearts.append(upTo <= halves ? full : upTo - 1 <= halves ? half : empty);
+        }
+        return hearts.toString();
     }
 
     /** Writes the text of a name over a body anew, when the hearts of the player have changed. */
     public void refreshName(Player player, TextDisplay name) {
-        NameDisplay.setText(name, nameText(player), settings.getBodyNameStyle());
+        name.setText(nameText(player));
     }
 
     /**

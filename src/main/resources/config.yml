@@ -145,10 +145,14 @@ body:
   # Name über dem Körper
   name-visible: true
 
-  # Die Herzen des Spielers hinter dem Namen über dem Körper zeigen, z. B. "Steve's Body ❤ 7.5"
-  # (Text: messages.armorstand.health-format in der Sprachdatei). Bei name-visible: false stehen sie allein da.
-  # Ändern sie sich im Cam-Modus, etwa durch einen Heiltrank, geht die Zahl mit.
+  # Die Herzen des Spielers in einer eigenen Zeile am Namen über dem Körper zeigen, so viele, wie er hat,
+  # mit ganzen und halben Herzen wie in seiner Leiste, z. B. ❤❤❤❤❤❤❤❥ für 7,5 Herzen (zehn pro Zeile).
+  # Die Zeichen stehen in der Sprachdatei: messages.armorstand.health-full, -half und -empty.
+  # Bei name-visible: false stehen sie allein da. Ändern sie sich im Cam-Modus, etwa durch einen Heiltrank, gehen sie mit.
   health-visible: false
+
+  # Wo die Herzen stehen: above = über dem Namen, below = unter dem Namen
+  health-position: above
 
   # Aussehen des Namens (der Text steht in der Sprachdatei unter messages.armorstand.name-format, \n beginnt eine neue Zeile)
   name:
