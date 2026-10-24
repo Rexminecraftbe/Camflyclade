@@ -19,10 +19,10 @@ messages:
   afk-ended: "&cCam mode ended: you did not move for {time}."
   # How {area} names a world of cam-area.forbidden-worlds, {world} being its name.
   area-world: "the world {world}"
-  # The hearts over or under the name of the body with body.health-visible: true, as many as the player has:
-  # health-full for each whole heart, health-half for a half one at the end, and health-empty for each heart he is
-  # missing up to his maximum ("" = none, e.g. "&8❤" for grey ones like an empty bar). Ten to a line.
-  armorstand.health-empty: ""
+  # The hearts over or under the name of the body with body.health-visible: true, on Spigot only - Paper shows the
+  # hearts of the bar instead, which letters cannot: health-full for each whole heart, health-half for a half one at
+  # the end, and with body.health-show-missing health-empty for each heart the player is missing.
+  armorstand.health-empty: "&8❤"
   armorstand.health-full: "&c❤"
   armorstand.health-half: "&c❥"
   armorstand.name-format: "{player}'s Body"

@@ -134,6 +134,8 @@ public final class CamSettings {
     private boolean bodyHealthVisible;
     /** Whether they stand over the name rather than under it, {@code body.health-position}. */
     private boolean bodyHealthAbove;
+    /** Whether the hearts he is missing stand there as empty ones, {@code body.health-show-missing}. */
+    private boolean bodyHealthShowMissing;
     /** How the name over the body looks, the section {@code body.name}. */
     private NameStyle bodyNameStyle;
     private boolean bodyVisible;
@@ -427,6 +429,7 @@ public final class CamSettings {
         bodyHealthVisible = config.getBoolean("body.health-visible", false);
         bodyHealthAbove = config.getChoice("body.health-position", "above", "above", "below")
                 .equalsIgnoreCase("above");
+        bodyHealthShowMissing = config.getBoolean("body.health-show-missing", false);
         bodyNameStyle = NameStyle.read(config, "body.name", ChatColor.YELLOW);
         bodyVisible = config.getBoolean("body.visible", true);
         bodyArmorVisible = config.getBoolean("body.armor-visible", true);
@@ -954,6 +957,10 @@ public final class CamSettings {
 
     public boolean isBodyHealthAbove() {
         return bodyHealthAbove;
+    }
+
+    public boolean isBodyHealthShowMissing() {
+        return bodyHealthShowMissing;
     }
 
     public NameStyle getBodyNameStyle() {

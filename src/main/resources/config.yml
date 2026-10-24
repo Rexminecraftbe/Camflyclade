@@ -145,14 +145,18 @@ body:
   # Name über dem Körper
   name-visible: true
 
-  # Die Herzen des Spielers in einer eigenen Zeile am Namen über dem Körper zeigen, so viele, wie er hat,
-  # mit ganzen und halben Herzen wie in seiner Leiste, z. B. ❤❤❤❤❤❤❤❥ für 7,5 Herzen (zehn pro Zeile).
-  # Die Zeichen stehen in der Sprachdatei: messages.armorstand.health-full, -half und -empty.
-  # Bei name-visible: false stehen sie allein da. Ändern sie sich im Cam-Modus, etwa durch einen Heiltrank, gehen sie mit.
+  # Die Herzen des Spielers in einer eigenen Zeile am Namen über dem Körper zeigen, so viele, wie er hat: die Bilder
+  # aus seiner Leiste, ganze und ein halbes, zehn pro Zeile. Ändern sie sich im Cam-Modus, etwa durch einen Heiltrank,
+  # gehen sie mit. Bei name-visible: false stehen sie allein da.
+  # Die Bilder gehen nur auf Paper. Auf Spigot stehen dort Zeichen, die in der Sprachdatei stehen
+  # (messages.armorstand.health-full, -half und -empty).
   health-visible: false
 
   # Wo die Herzen stehen: above = über dem Namen, below = unter dem Namen
   health-position: above
+
+  # Auch die Herzen zeigen, die ihm bis zu seinem Maximum fehlen, als leere Herzen wie in der Leiste
+  health-show-missing: false
 
   # Aussehen des Namens (der Text steht in der Sprachdatei unter messages.armorstand.name-format, \n beginnt eine neue Zeile)
   name:

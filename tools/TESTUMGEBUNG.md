@@ -227,6 +227,13 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   Server dafür auf `easy`. Ohne KI greift er niemanden an, und anders als
   ein Zombie brennt ein Wüstenzombie in der Mittagssonne nicht ab, ehe der
   Bot ihn schlägt.
+* **Die Herzen über dem Körper sind Bilder, keine Zeichen.** Auf Paper
+  schreibt das Plugin sie als Komponenten mit `atlas` und `sprite`, und
+  `/data get entity ... text` zeigt sie genau so,
+  `{atlas: "minecraft:gui", sprite: "minecraft:hud/heart/full"}`. Der Test
+  zählt deshalb `hud/heart/full`, `half` und `container` im Text. Die
+  Zeichen aus der Sprachdatei kommen nur auf Spigot vor, und das prüft
+  der Testserver nicht.
 * **Für `afk-end` steht der Bot im Cam-Modus einfach still.** mineflayer
   schickt dann keine neue Position und keinen neuen Blick, und Paper meldet
   ohne Änderung kein `PlayerMoveEvent`. Bewegt sich der Bot, fliegt er alle

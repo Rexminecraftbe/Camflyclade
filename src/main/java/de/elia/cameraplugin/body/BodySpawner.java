@@ -3,6 +3,7 @@ package de.elia.cameraplugin.body;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.display.NameDisplay;
+import de.elia.cameraplugin.display.SpriteText;
 import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.Bukkit;
@@ -33,6 +34,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.logging.Level;
 
@@ -287,7 +290,8 @@ public final class BodySpawner implements Listener {
      *
      * <p>With {@code body.health-visible} the hearts of the player stand there
      * as well, over or under the name as {@code health-position} says - on
-     * their own, when {@code name-visible} is off.</p>
+     * their own, when {@code name-visible} is off. See
+     * {@link #writeHearts}.</p>
      *
      * @return the name, or {@code null} when the body carries none
      */
@@ -295,57 +299,117 @@ public final class BodySpawner implements Listener {
         if (!settings.isBodyNameVisible() && !settings.isBodyHealthVisible()) {
             return null;
         }
-        return NameDisplay.spawnStyled(nameLocation(body), nameText(player), settings.getBodyNameStyle(), nameKey);
+        return NameDisplay.spawnStyled(nameLocation(body), nameText(player), settings.getBodyNameStyle(), nameKey,
+                display -> writeHearts(display, player));
+    }
+
+    /** Writes the text of a name over a body anew, when the hearts of the player have changed. */
+    public void refreshName(Player player, TextDisplay name) {
+        if (!writeHearts(name, player)) {
+            name.setText(nameText(player));
+        }
+    }
+
+    /** One heart of the bar: a whole one, the half one at the end, or one he is missing. */
+    private enum Heart { FULL, HALF, EMPTY }
+
+    /**
+     * The hearts of a player the way his bar shows them: every whole one, the
+     * half one at the end, and with {@code body.health-show-missing} those he
+     * is missing up to his maximum. {@code null} stands for the start of a
+     * new line, ten hearts to a line like the bar.
+     */
+    private List<Heart> hearts(Player player) {
+        int halves = (int) Math.ceil(player.getHealth());
+        int count = (halves + 1) / 2;
+        if (settings.isBodyHealthShowMissing()) {
+            AttributeInstance max = player.getAttribute(Attribute.MAX_HEALTH);
+            count = Math.max(count, (int) Math.ceil((max != null ? max.getValue() : DEFAULT_MAX_HEALTH) / 2.0));
+        }
+        List<Heart> hearts = new ArrayList<>();
+        for (int heart = 0; heart < count; heart++) {
+            if (heart > 0 && heart % HEARTS_PER_LINE == 0) {
+                hearts.add(null);
+            }
+            int upTo = 2 * heart + 2;
+            hearts.add(upTo <= halves ? Heart.FULL : upTo - 1 <= halves ? Heart.HALF : Heart.EMPTY);
+        }
+        return hearts;
     }
 
     /**
-     * The text of the name over the body of a player: {@code name-format}
-     * with his name in the colour of {@code body.name}, and with
-     * {@code body.health-visible} his hearts in a line of their own over or
-     * under it. The hearts keep the colours of the language file.
+     * The name over the body in letters: {@code name-format} with his name in
+     * the colour of {@code body.name}, and with {@code body.health-visible} his
+     * hearts in a line of their own over or under it, written with the
+     * letters of {@code armorstand.health-full}, {@code -half} and
+     * {@code -empty}. That is all Spigot can show; Paper shows the pictures
+     * of the bar instead, see {@link #writeHearts}.
      */
     private String nameText(Player player) {
-        String format = settings.isBodyNameVisible()
-                ? messages.getMessage("armorstand.name-format").replace("{player}", player.getName())
-                : "";
-        String name = format.isEmpty() ? "" : NameDisplay.styled(format, settings.getBodyNameStyle());
-        String hearts = settings.isBodyHealthVisible() ? hearts(player) : "";
-        if (name.isEmpty() || hearts.isEmpty()) {
-            return name + hearts;
+        String name = styledName(player);
+        if (!settings.isBodyHealthVisible()) {
+            return name;
+        }
+        String full = messages.getMessage("armorstand.health-full");
+        String half = messages.getMessage("armorstand.health-half");
+        String empty = messages.getMessage("armorstand.health-empty");
+        StringBuilder hearts = new StringBuilder();
+        for (Heart heart : hearts(player)) {
+            hearts.append(heart == null ? "\n" : switch (heart) {
+                case FULL -> full;
+                case HALF -> half;
+                case EMPTY -> empty;
+            });
+        }
+        if (name.isEmpty()) {
+            return hearts.toString();
         }
         return settings.isBodyHealthAbove() ? hearts + "\n" + name : name + "\n" + hearts;
     }
 
     /**
-     * The hearts of a player the way his bar shows them: {@code health-full}
-     * for every whole one, {@code health-half} for the half one at the end,
-     * and {@code health-empty} for those he is missing up to his maximum -
-     * none while that text is empty. Ten to a line, like the bar.
+     * {@code name-format} with his name in the colour of {@code body.name},
+     * or nothing with {@code name-visible: false}.
      */
-    private String hearts(Player player) {
-        int halves = (int) Math.ceil(player.getHealth());
-        String full = messages.getMessage("armorstand.health-full");
-        String half = messages.getMessage("armorstand.health-half");
-        String empty = messages.getMessage("armorstand.health-empty");
-        int count = (halves + 1) / 2;
-        if (!empty.isEmpty()) {
-            AttributeInstance max = player.getAttribute(Attribute.MAX_HEALTH);
-            count = Math.max(count, (int) Math.ceil((max != null ? max.getValue() : DEFAULT_MAX_HEALTH) / 2.0));
-        }
-        StringBuilder hearts = new StringBuilder();
-        for (int heart = 0; heart < count; heart++) {
-            if (heart > 0 && heart % HEARTS_PER_LINE == 0) {
-                hearts.append('\n');
-            }
-            int upTo = 2 * heart + 2;
-            hearts.append(upTo <= halves ? full : upTo - 1 <= halves ? half : empty);
-        }
-        return hearts.toString();
+    private String styledName(Player player) {
+        String format = settings.isBodyNameVisible()
+                ? messages.getMessage("armorstand.name-format").replace("{player}", player.getName())
+                : "";
+        return format.isEmpty() ? "" : NameDisplay.styled(format, settings.getBodyNameStyle());
     }
 
-    /** Writes the text of a name over a body anew, when the hearts of the player have changed. */
-    public void refreshName(Player player, TextDisplay name) {
-        name.setText(nameText(player));
+    /**
+     * Writes the hearts of the player as the pictures of his bar,
+     * {@code hud/heart/full}, {@code half} and {@code container}, where the
+     * server can show pictures in a text display, see {@link SpriteText}.
+     *
+     * @return whether it did; if not, the letters of {@link #nameText} stand
+     *         there
+     */
+    private boolean writeHearts(TextDisplay display, Player player) {
+        if (!settings.isBodyHealthVisible() || !SpriteText.available()) {
+            return false;
+        }
+        String name = styledName(player);
+        SpriteText text = new SpriteText();
+        if (!name.isEmpty() && !settings.isBodyHealthAbove()) {
+            text.text(name).line();
+        }
+        for (Heart heart : hearts(player)) {
+            if (heart == null) {
+                text.line();
+                continue;
+            }
+            text.sprite(SpriteText.GUI_ATLAS, switch (heart) {
+                case FULL -> "minecraft:hud/heart/full";
+                case HALF -> "minecraft:hud/heart/half";
+                case EMPTY -> "minecraft:hud/heart/container";
+            });
+        }
+        if (!name.isEmpty() && settings.isBodyHealthAbove()) {
+            text.line().text(name);
+        }
+        return text.writeTo(display);
     }
 
     /**

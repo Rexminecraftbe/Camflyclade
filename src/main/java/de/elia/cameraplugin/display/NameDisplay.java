@@ -93,15 +93,13 @@ public final class NameDisplay {
      * than the name, such as the hearts over the name of a body, which keep a
      * colour of their own.
      *
+     * @param setup whatever else the caller needs set before the name is sent
+     *              to anybody, such as a text with pictures, see
+     *              {@link SpriteText}
      * @return the name, or {@code null} when the text says nothing
      */
-    public static TextDisplay spawnStyled(Location location, String text, NameStyle style, NamespacedKey mark) {
-        return spawnStyled(location, text, style, mark, display -> {
-        });
-    }
-
-    private static TextDisplay spawnStyled(Location location, String text, NameStyle style, NamespacedKey mark,
-                                           Consumer<TextDisplay> setup) {
+    public static TextDisplay spawnStyled(Location location, String text, NameStyle style, NamespacedKey mark,
+                                          Consumer<TextDisplay> setup) {
         if (ChatColor.stripColor(text).isBlank()) {
             // An empty box would float there, saying nothing.
             return null;
