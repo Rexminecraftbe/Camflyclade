@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **765** - alle 765 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **779** - alle 779 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -190,12 +190,59 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   den er gerade hat.
 * **Die Bossbars liest der Bot aus den `boss_bar`-Paketen**, den Titel als
   Text des ganzen Titels wie bei den Tönen; die Bot-Aktion `bossbars` gibt
-  die zurück, die gerade zu sehen sind.
-* **Drei Tests melden den Bot ab und wieder an**: der Akku, der dazwischen
+  die zurück, die gerade zu sehen sind. Ihre Einteilung steht dort unter
+  `dividers`, als Nummer und nicht als Zahl der Abschnitte: 0 keine, 1
+  sechs, 2 zehn, 3 zwölf, 4 zwanzig - so steht es im Paket.
+* **Vier Tests melden den Bot ab und wieder an**: der Akku, der dazwischen
   die Datei des Bots unter `playerdata/stats/` löscht - solange er online
   ist, hält das Plugin sie im Speicher -, der Akku noch einmal für die
-  Bossbar nach dem Betreten, und die alte Absturzdatei, die nur beim
-  Betreten gelesen wird.
+  Bossbar nach dem Betreten, die Wartezeit von `time-limit`, deren Bossbar
+  nach dem Betreten wiederkommen muss, und die alte Absturzdatei, die nur
+  beim Betreten gelesen wird.
+* **Der Akku rechnet mit dem Laden, das gerade gilt.** Was er hält, steht
+  nur als Ladestand mit der Zeit dazu fest; was seither dazukam, rechnet
+  das Plugin bei jeder Frage mit `recharge-per-second` aus, wie es jetzt in
+  der Datei steht. Stellt der Test das Laden von 100 auf 0.01 um, gilt der
+  langsame Wert rückwirkend ab dem letzten Flug: Was danach übrig ist, sind
+  ein paar Sekunden, kein voller Akku. Der Test der Akku-Ablage braucht
+  deshalb für einen Start nur eine Sekunde.
+* **Einen Spieler nennt mineflayer nicht `player`.** Die Arten kommen aus
+  den Daten von 26.1, und dort steht unter der Nummer, die 26.2 einem
+  Spieler gibt, `fishing_bobber`. Wer einen Spieler schlagen will, zielt
+  deshalb nach dem Platz (`at` mit kleinem `radius`), nicht nach der Art.
+* **Die Herzen sind auf dem Testserver in zwei, drei Sekunden wieder voll.**
+  `peaceful` hält die Sättigung bei knapp 20, und aus ihr heilt der Server
+  ein halbes Herz alle paar Ticks. Der Test von `body.health-visible` stellt deshalb
+  `natural_health_regeneration` für sich ab, sonst stünde der Bot schon vor
+  dem Start des Cam-Modus wieder mit vollen Herzen da.
+* **Der Sperrtest löscht `plugins/CamFly/bans.yml`**, vorher und nachher.
+  Die Sperren bleiben sonst über einen Neustart hinweg stehen, und ein
+  abgebrochener Lauf ließe den zweiten Spieler gesperrt zurück.
+* **Der zweite Spieler meldet sich an, wo ihn der letzte Lauf zurückließ**,
+  auch in der Luft. Fällt er von dort, nimmt er Fallschaden, und
+  `cam-safety` sperrt `/cam` fünf Sekunden lang. `zuschauer_cam_an` stellt
+  ihn deshalb auf seinen Platz und versucht es nach dieser Zeit noch einmal.
+* **Der feindliche Mob im Angriffstest ist ein Wüstenzombie ohne KI.** In
+  `peaceful` verschwindet jeder feindliche Mob sofort, der Test stellt den
+  Server dafür auf `easy`. Ohne KI greift er niemanden an, und anders als
+  ein Zombie brennt ein Wüstenzombie in der Mittagssonne nicht ab, ehe der
+  Bot ihn schlägt.
+* **Die Herzen über dem Körper sind Bilder, keine Zeichen.** Auf Paper
+  schreibt das Plugin sie als Komponenten mit `atlas` und `sprite`, und
+  `/data get entity ... text` zeigt sie genau so,
+  `{atlas: "minecraft:gui", sprite: "minecraft:hud/heart/full"}`. Der Test
+  zählt deshalb `hud/heart/full`, `half` und `container` im Text. Die
+  Zeichen aus der Sprachdatei kommen nur auf Spigot vor, und das prüft
+  der Testserver nicht. Mit `health-show-missing` stehen zwei TextDisplays
+  an derselben Stelle; der Test fragt sie über `default_background`
+  einzeln ab: Das hintere hat den Hintergrund und den Namen, das vordere
+  keins von beiden. Ob das
+  vordere im Bild wirklich vor dem hinteren liegt, sieht der Bot nicht -
+  er zeichnet nichts.
+* **Für `afk-end` steht der Bot im Cam-Modus einfach still.** mineflayer
+  schickt dann keine neue Position und keinen neuen Blick, und Paper meldet
+  ohne Änderung kein `PlayerMoveEvent`. Bewegt sich der Bot, fliegt er alle
+  paar Sekunden einen halben Block auf und ab.
 * **Vom Happy Ghast herunter, bevor er weggeräumt wird.** Steht der Bot noch
   auf ihm, fällt er sechs Blöcke tief, und `cam-safety` sperrt `/cam` fünf
   Sekunden lang - im Interaktionstest fiel das nur nicht auf, solange der Bot

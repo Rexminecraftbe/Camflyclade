@@ -32,8 +32,12 @@ import java.util.UUID;
  * the places camera mode is not allowed in, {@code dimensions} names the
  * dimensions it is allowed in. That keeps every one of them short: there are
  * hundreds of biomes and dozens of structures but only three dimensions.
- * Biomes and structures have a switch of their own each, so a list can be laid
- * aside without being emptied.</p>
+ * Biomes, structures and worlds have a switch of their own each, so a list can
+ * be laid aside without being emptied.</p>
+ *
+ * <p>Worlds are named in {@code forbidden-worlds} by the name of their folder,
+ * for the worlds a server sets up itself - a lobby, a world for an event -,
+ * which no dimension tells apart from the others.</p>
  *
  * <p>Structures are named in two lists, which decide how closely they are
  * measured: {@code forbidden-structures-box} takes the whole box a structure
@@ -59,6 +63,9 @@ public final class CamAreaRules {
 
     /** The dimensions camera mode is allowed in out of the box. */
     private static final Set<String> ALLOWED_BY_DEFAULT = Set.of("overworld");
+
+    /** The example in the config file; the list is switched off out of the box. */
+    private static final List<String> DEFAULT_FORBIDDEN_WORLDS = List.of("lobby");
 
     /** The biomes forbidden out of the box: the caves nobody is meant to peek into. */
     private static final List<String> DEFAULT_FORBIDDEN_BIOMES =
@@ -94,6 +101,9 @@ public final class CamAreaRules {
     private int warningCooldown = DEFAULT_WARNING_COOLDOWN;
     private boolean biomesEnabled = true;
     private boolean structuresEnabled = false;
+    private boolean worldsEnabled = false;
+    /** The names of the forbidden worlds, in small letters: the server does not tell them apart by case. */
+    private final Set<String> forbiddenWorlds = new HashSet<>();
     private int rememberedChunks = DEFAULT_REMEMBERED_CHUNKS;
     private final Set<NamespacedKey> forbiddenBiomes = new HashSet<>();
     private final Set<NamespacedKey> boxStructures = new HashSet<>();
@@ -162,6 +172,25 @@ public final class CamAreaRules {
                 allowedDimensions.add(dimension.getKey());
             }
         }
+        worldsEnabled = config.getBoolean("cam-area.worlds-enabled", false);
+        readWorlds(config);
+    }
+
+    /**
+     * Reads {@code cam-area.forbidden-worlds}. The names are not looked up:
+     * a world may well be loaded only later, by another plugin, and is to be
+     * kept out all the same. Only an empty entry is reported, it names none.
+     */
+    private void readWorlds(ConfigReader config) {
+        forbiddenWorlds.clear();
+        for (String entry : config.getStringList("cam-area.forbidden-worlds", DEFAULT_FORBIDDEN_WORLDS)) {
+            String name = entry.trim();
+            if (name.isEmpty()) {
+                config.warnUnknownEntry("cam-area.forbidden-worlds", entry);
+                continue;
+            }
+            forbiddenWorlds.add(name.toLowerCase(Locale.ROOT));
+        }
     }
 
     public AreaRuleLevel getLevel() {
@@ -174,24 +203,25 @@ public final class CamAreaRules {
     }
 
     /**
-     * The area that keeps camera mode out of this spot. The dimension is asked
+     * The area that keeps camera mode out of this spot. The world is asked
      * first: whoever is not allowed to be in the Nether at all does not need to
      * hear which of its biomes or structures he is standing in. Of the other
      * two the biome comes first, as it does in the config file.
      *
-     * @return the name of the dimension, biome or structure, the way the
-     *         language file calls it under {@code dimension-names},
-     *         {@code biome-names} and {@code structure-names}, or {@code null}
-     *         when camera mode is allowed there
+     * @return the name of the world, dimension, biome or structure, the way
+     *         the language file calls it under {@code area-world},
+     *         {@code dimension-names}, {@code biome-names} and
+     *         {@code structure-names}, or {@code null} when camera mode is
+     *         allowed there
      */
     public String forbiddenArea(Location location) {
         World world = location == null ? null : location.getWorld();
         if (world == null) {
             return null;
         }
-        String dimension = forbiddenDimension(location);
-        if (dimension != null) {
-            return dimension;
+        String whole = forbiddenWorld(location);
+        if (whole != null) {
+            return whole;
         }
         String biome = forbiddenBiome(world, location.getBlockX(), location.getBlockY(), location.getBlockZ());
         return biome != null ? biome : forbiddenStructure(world, location);
@@ -216,19 +246,25 @@ public final class CamAreaRules {
     }
 
     /**
-     * The dimension of this spot, when camera mode is not allowed in it at all.
-     * Asked on its own by the portal rules: a portal into a forbidden dimension
-     * does not let a camera player through in the first place, while a portal
-     * standing in a forbidden biome or structure does and brings him back.
+     * The world of this spot, when camera mode is not allowed in it at all:
+     * by its name, {@code forbidden-worlds}, or by its dimension,
+     * {@code dimensions}. Asked on its own by the portal rules: a portal into
+     * a forbidden world does not let a camera player through in the first
+     * place, while a portal standing in a forbidden biome or structure does
+     * and brings him back.
      *
-     * @return the name of the dimension, the way the language file calls it
-     *         under {@code dimension-names}, or {@code null} when camera mode is
-     *         allowed in it
+     * @return the name of the world, the way {@code area-world} in the
+     *         language file puts it, or of its dimension, the way
+     *         {@code dimension-names} calls it, or {@code null} when camera
+     *         mode is allowed in it
      */
-    public String forbiddenDimension(Location location) {
+    public String forbiddenWorld(Location location) {
         World world = location == null ? null : location.getWorld();
         if (world == null) {
             return null;
+        }
+        if (worldsEnabled && forbiddenWorlds.contains(world.getName().toLowerCase(Locale.ROOT))) {
+            return messages.getMessage("area-world").replace("{world}", world.getName());
         }
         String dimension = DIMENSIONS.get(world.getEnvironment());
         // A world carrying a dimension of its own belongs to none of the three
@@ -454,7 +490,7 @@ public final class CamAreaRules {
      * with its feet in one either, and the feet are what
      * {@link #forbiddenArea} looks at.</p>
      *
-     * <p>The dimension is left out: whoever stands in a forbidden one is in a
+     * <p>The world is left out: whoever stands in a forbidden one is in a
      * forbidden area already, and the wall leaves the way out of it open.
      * What a cube of biome or a chunk said once is kept for the life of the
      * lookup, which is one look around the player - hundreds of blocks share

@@ -39,12 +39,15 @@ public final class CamStats {
     private final Messages messages;
     private final PlayerStore store;
     private final CamBattery battery;
+    private final CamTimeLimit timeLimit;
 
-    public CamStats(CamSettings settings, Messages messages, PlayerStore store, CamBattery battery) {
+    public CamStats(CamSettings settings, Messages messages, PlayerStore store, CamBattery battery,
+                    CamTimeLimit timeLimit) {
         this.settings = settings;
         this.messages = messages;
         this.store = store;
         this.battery = battery;
+        this.timeLimit = timeLimit;
     }
 
     /**
@@ -132,7 +135,10 @@ public final class CamStats {
         messages.sendConfiguredMessage(player, "stats-reset");
     }
 
-    /** Sends the statistics of one player, and his battery while there is one. */
+    /**
+     * Sends the statistics of one player, his battery while there is one,
+     * and his cooldown while it runs.
+     */
     private void show(CommandSender sender, UUID id, String name) {
         // With the statistics switched off the battery is still worth a look.
         if (!settings.isStatsEnabled() && !settings.isBatteryEnabled()) {
@@ -163,14 +169,19 @@ public final class CamStats {
                     "{charge}", CamTimeLimit.formatDuration((long) Math.floor(battery.charge(id))),
                     "{capacity}", CamTimeLimit.formatDuration(settings.getBatteryCapacity()));
         }
+        long cooldown = timeLimit.getCooldownRemaining(id);
+        if (cooldown > 0) {
+            messages.sendConfiguredMessage(sender, "stats-cooldown",
+                    "{time}", CamTimeLimit.formatDuration(cooldown));
+        }
     }
 
     /**
      * A player by his name: online, or once on this server. Only players the
      * server knows are looked through - a name nobody here has had is not
-     * looked up anywhere else.
+     * looked up anywhere else. For {@code /cam ban} as well.
      */
-    private static OfflinePlayer find(String name) {
+    public static OfflinePlayer find(String name) {
         Player online = Bukkit.getPlayerExact(name);
         if (online != null) {
             return online;

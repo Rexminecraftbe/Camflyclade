@@ -19,6 +19,7 @@ import de.elia.cameraplugin.session.CamGameMode;
 import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.sound.CamSound;
 import de.elia.cameraplugin.start.EffectStart;
+import de.elia.cameraplugin.storage.StorageMode;
 import de.elia.cameraplugin.timelimit.FlightLimit;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.ChatColor;
@@ -28,6 +29,7 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.MultipleFacing;
 import org.bukkit.boss.BarColor;
+import org.bukkit.boss.BarStyle;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -76,6 +78,13 @@ public final class CamSettings {
     private static final int MAX_LIGHT_LEVEL = 15;
 
     /**
+     * The shortest time {@code afk-end.seconds} accepts. Anything shorter
+     * would take camera mode off a player who only stops to look at
+     * something for a moment.
+     */
+    private static final int MIN_AFK_SECONDS = 10;
+
+    /**
      * Keys that are read although the config file built into the jar leaves
      * them out on purpose, so that they are not reported as unknown, see
      * {@link ConfigReader#warnUnknownKeys}. Also sections whose keys are names
@@ -121,6 +130,16 @@ public final class CamSettings {
      */
     private boolean bordersHold;
     private boolean bodyNameVisible;
+    /** Whether the name over the body shows the hearts of the player, {@code body.health-visible}. */
+    private boolean bodyHealthVisible;
+    /** Whether they stand over the name rather than under it, {@code body.health-position}. */
+    private boolean bodyHealthAbove;
+    /** Whether the hearts he is missing stand there as empty ones, {@code body.health-show-missing}. */
+    private boolean bodyHealthShowMissing;
+    /** Whether the yellow hearts of absorption stand there as well, {@code body.health-show-absorption}. */
+    private boolean bodyHealthShowAbsorption;
+    /** Whether every further line of hearts stands above the one before, {@code body.health-rows-upward}. */
+    private boolean bodyHealthRowsUpward;
     /** How the name over the body looks, the section {@code body.name}. */
     private NameStyle bodyNameStyle;
     private boolean bodyVisible;
@@ -213,6 +232,21 @@ public final class CamSettings {
     private ListAccess camListAccess;
     /** Whether the list offers to go to a camera or a body, {@code cam-list.teleport}. */
     private boolean camListTeleport;
+    /** Whether the list offers to end a camera mode, {@code cam-list.stop}. */
+    private boolean camListStop;
+
+    /** Whether {@code /cam stop} ends the camera mode of others, {@code stop-command.enabled}. */
+    private boolean stopCommandEnabled;
+
+    /** Whether {@code /cam ban} keeps players out of camera mode, {@code cam-ban.enabled}. */
+    private boolean camBanEnabled;
+
+    /** Whether camera mode ends after a while without moving, {@code afk-end.enabled}. */
+    private boolean afkEndEnabled;
+    /** How long that while is, in seconds, {@code afk-end.seconds}. */
+    private int afkEndSeconds;
+    /** After how much of that while the warning comes, in percent, 0 for none, {@code afk-end.warning-percent}. */
+    private int afkWarningPercent;
 
     /** Whether {@code /cam back} takes the camera back to its body, {@code back-command.enabled}. */
     private boolean backCommandEnabled;
@@ -255,11 +289,23 @@ public final class CamSettings {
     private int durationSeconds;
     private int cooldownSeconds;
     private boolean showBossbar;
+    /** Whether the cooldown shows as a bossbar until it is over, {@code time-limit.show-bossbar-cooldown}. */
+    private boolean cooldownBossbar;
     private BarColor bossbarColor;
+    /** The notches of both bossbars of the time limit, {@code time-limit.bossbar-notches}. */
+    private BarStyle bossbarStyle;
+    /** Where the cooldowns are kept, {@code time-limit.storage}. */
+    private StorageMode cooldownStorage;
 
     // Camera safety settings
     private boolean camSafetyEnabled;
     private int camSafetyDelay;
+    /** Whether a hit on another player makes him wait as well, {@code cam-safety.after-attack.players}. */
+    private boolean camSafetyAfterPlayers;
+    /** The same for a hit on a hostile mob, {@code cam-safety.after-attack.mobs}. */
+    private boolean camSafetyAfterMobs;
+    /** The same for a hit on anything friendly, {@code cam-safety.after-attack.friendly}. */
+    private boolean camSafetyAfterFriendly;
 
     /** Whether the key that swaps the hands ends camera mode, {@code exit-key.enabled}. */
     private boolean exitKeyEnabled;
@@ -276,6 +322,10 @@ public final class CamSettings {
     /** Whether the bossbar stays after camera mode until the battery is full, {@code show-bossbar-charging}. */
     private boolean batteryBossbarCharging;
     private BarColor batteryBossbarColor;
+    /** The notches of both bossbars of the battery, {@code battery.bossbar-notches}. */
+    private BarStyle batteryBossbarStyle;
+    /** Where the charge is kept, {@code battery.storage}. */
+    private StorageMode batteryStorage;
 
     /** Whether a start costs something, the section {@code start-cost}. */
     private boolean startCostEnabled;
@@ -380,6 +430,12 @@ public final class CamSettings {
         cameraHeadEnabled = config.getBoolean("camera-head.enabled", false);
         bodyType = resolveBodyType(config, config.getString("body.type", BodyType.ARMOR_STAND.getConfigName()));
         bodyNameVisible = config.getBoolean("body.name-visible", true);
+        bodyHealthVisible = config.getBoolean("body.health-visible", false);
+        bodyHealthAbove = config.getChoice("body.health-position", "above", "above", "below")
+                .equalsIgnoreCase("above");
+        bodyHealthShowMissing = config.getBoolean("body.health-show-missing", false);
+        bodyHealthShowAbsorption = config.getBoolean("body.health-show-absorption", true);
+        bodyHealthRowsUpward = config.getBoolean("body.health-rows-upward", true);
         bodyNameStyle = NameStyle.read(config, "body.name", ChatColor.YELLOW);
         bodyVisible = config.getBoolean("body.visible", true);
         bodyArmorVisible = config.getBoolean("body.armor-visible", true);
@@ -438,6 +494,12 @@ public final class CamSettings {
         crashProtectionEnabled = config.getBoolean("crash-protection.enabled", true);
         camListAccess = readAccess(config, "cam-list.access");
         camListTeleport = config.getBoolean("cam-list.teleport", true);
+        camListStop = config.getBoolean("cam-list.stop", true);
+        stopCommandEnabled = config.getBoolean("stop-command.enabled", false);
+        camBanEnabled = config.getBoolean("cam-ban.enabled", false);
+        afkEndEnabled = config.getBoolean("afk-end.enabled", false);
+        afkEndSeconds = config.getInt("afk-end.seconds", 300, MIN_AFK_SECONDS);
+        afkWarningPercent = config.getInt("afk-end.warning-percent", 80, 0, 99);
         backCommandEnabled = config.getBoolean("back-command.enabled", true);
         endWarningEnabled = config.getBoolean("end-warning.enabled", true);
         endWarningSeconds = readSeconds(config, "end-warning.seconds", List.of(30, 10));
@@ -457,9 +519,15 @@ public final class CamSettings {
         durationSeconds = config.getInt("time-limit.duration-seconds", 300, 1);
         cooldownSeconds = config.getInt("time-limit.cooldown-seconds", 120, 0);
         showBossbar = config.getBoolean("time-limit.show-bossbar", true);
+        cooldownBossbar = config.getBoolean("time-limit.show-bossbar-cooldown", true);
         bossbarColor = config.getEnum("time-limit.bossbar-color", BarColor.class, BarColor.BLUE);
+        bossbarStyle = readNotches(config, "time-limit.bossbar-notches", 0);
+        cooldownStorage = readStorage(config, "time-limit.storage");
         camSafetyEnabled = config.getBoolean("cam-safety.enabled", true);
         camSafetyDelay = config.getInt("cam-safety.delay", 5, 0);
+        camSafetyAfterPlayers = config.getBoolean("cam-safety.after-attack.players", false);
+        camSafetyAfterMobs = config.getBoolean("cam-safety.after-attack.mobs", false);
+        camSafetyAfterFriendly = config.getBoolean("cam-safety.after-attack.friendly", false);
         exitKeyEnabled = config.getBoolean("exit-key.enabled", true);
         readBattery(config);
         readStartCost(config);
@@ -543,6 +611,40 @@ public final class CamSettings {
         return List.copyOf(seconds);
     }
 
+    /**
+     * Reads how many notches a bossbar is divided into, such as
+     * {@code time-limit.bossbar-notches}: 0 for none, or 6, 10, 12 or 20 -
+     * the ones the game can draw, as {@code /bossbar} has them.
+     */
+    private static BarStyle readNotches(ConfigReader config, String path, int def) {
+        int notches = config.getInt(path, def);
+        BarStyle style = notchStyle(notches);
+        if (style == null) {
+            config.warnUnknownValue(path, notches, "0, 6, 10, 12, 20", String.valueOf(def));
+            return notchStyle(def);
+        }
+        return style;
+    }
+
+    /** The bossbar with this many notches, or {@code null} when the game has none. */
+    private static BarStyle notchStyle(int notches) {
+        return switch (notches) {
+            case 0 -> BarStyle.SOLID;
+            case 6 -> BarStyle.SEGMENTED_6;
+            case 10 -> BarStyle.SEGMENTED_10;
+            case 12 -> BarStyle.SEGMENTED_12;
+            case 20 -> BarStyle.SEGMENTED_20;
+            default -> null;
+        };
+    }
+
+    /** Reads where something is kept, the values file and memory. */
+    private static StorageMode readStorage(ConfigReader config, String path) {
+        return config.getChoice(path, "file", "file", "memory").equalsIgnoreCase("memory")
+                ? StorageMode.MEMORY
+                : StorageMode.FILE;
+    }
+
     /** Reads who may use something, the values admin, all and false. */
     private static ListAccess readAccess(ConfigReader config, String path) {
         String access = config.getChoice(path, "admin", "admin", "all", "false").toLowerCase(Locale.ROOT);
@@ -566,6 +668,8 @@ public final class CamSettings {
         batteryBossbar = config.getBoolean("battery.show-bossbar", true);
         batteryBossbarCharging = config.getBoolean("battery.show-bossbar-charging", true);
         batteryBossbarColor = config.getEnum("battery.bossbar-color", BarColor.class, BarColor.GREEN);
+        batteryBossbarStyle = readNotches(config, "battery.bossbar-notches", 10);
+        batteryStorage = readStorage(config, "battery.storage");
     }
 
     /**
@@ -853,6 +957,26 @@ public final class CamSettings {
         return bodyNameVisible;
     }
 
+    public boolean isBodyHealthVisible() {
+        return bodyHealthVisible;
+    }
+
+    public boolean isBodyHealthAbove() {
+        return bodyHealthAbove;
+    }
+
+    public boolean isBodyHealthShowMissing() {
+        return bodyHealthShowMissing;
+    }
+
+    public boolean isBodyHealthShowAbsorption() {
+        return bodyHealthShowAbsorption;
+    }
+
+    public boolean isBodyHealthRowsUpward() {
+        return bodyHealthRowsUpward;
+    }
+
     public NameStyle getBodyNameStyle() {
         return bodyNameStyle;
     }
@@ -1002,6 +1126,32 @@ public final class CamSettings {
         return camListTeleport;
     }
 
+    public boolean isCamListStop() {
+        return camListStop;
+    }
+
+    // --------------------------------------------- stop-command, cam-ban, afk-end
+
+    public boolean isStopCommandEnabled() {
+        return stopCommandEnabled;
+    }
+
+    public boolean isCamBanEnabled() {
+        return camBanEnabled;
+    }
+
+    public boolean isAfkEndEnabled() {
+        return afkEndEnabled;
+    }
+
+    public int getAfkEndSeconds() {
+        return afkEndSeconds;
+    }
+
+    public int getAfkWarningPercent() {
+        return afkWarningPercent;
+    }
+
     // ------------------------------------------- back-command, end-warning, body-alarm
 
     public boolean isBackCommandEnabled() {
@@ -1069,6 +1219,18 @@ public final class CamSettings {
         return bossbarColor;
     }
 
+    public boolean showsCooldownBossbar() {
+        return cooldownBossbar;
+    }
+
+    public BarStyle getBossbarStyle() {
+        return bossbarStyle;
+    }
+
+    public StorageMode getCooldownStorage() {
+        return cooldownStorage;
+    }
+
     // --------------------------------------------------------------- cam-safety
 
     public boolean isCamSafetyEnabled() {
@@ -1077,6 +1239,18 @@ public final class CamSettings {
 
     public int getCamSafetyDelay() {
         return camSafetyDelay;
+    }
+
+    public boolean waitsAfterHittingPlayers() {
+        return camSafetyAfterPlayers;
+    }
+
+    public boolean waitsAfterHittingMobs() {
+        return camSafetyAfterMobs;
+    }
+
+    public boolean waitsAfterHittingFriendly() {
+        return camSafetyAfterFriendly;
     }
 
     // --------------------------------------------------------------- exit-key
@@ -1118,6 +1292,14 @@ public final class CamSettings {
 
     public BarColor getBatteryBossbarColor() {
         return batteryBossbarColor;
+    }
+
+    public BarStyle getBatteryBossbarStyle() {
+        return batteryBossbarStyle;
+    }
+
+    public StorageMode getBatteryStorage() {
+        return batteryStorage;
     }
 
     // ------------------------------------------------------------- start-cost

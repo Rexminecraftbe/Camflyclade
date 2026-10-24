@@ -20,6 +20,11 @@ public class CameraData {
     private final Mannequin hitbox;
     /** The name standing over the body, or {@code null} when it carries none. */
     private final TextDisplay nameDisplay;
+    /**
+     * The front of the hearts in front of that name, or {@code null}, see
+     * {@link de.elia.cameraplugin.body.BodySpawner#spawnHeartsFront}.
+     */
+    private TextDisplay heartsFront;
     /** The chunk kept loaded for the body, see {@link de.elia.cameraplugin.body.BodySpawner#holdChunk}. */
     private final Chunk bodyChunk;
     private final GameMode originalGameMode;
@@ -69,6 +74,9 @@ public class CameraData {
     public LivingEntity getDamageTarget() { return hitbox != null ? hitbox : body; }
     /** The name over the body, or {@code null} when it carries none. */
     public TextDisplay getNameDisplay() { return nameDisplay; }
+    /** The front of its hearts, or {@code null} when there is none. */
+    public TextDisplay getHeartsFront() { return heartsFront; }
+    public void setHeartsFront(TextDisplay heartsFront) { this.heartsFront = heartsFront; }
     /** The chunk kept loaded for the body while camera mode runs. */
     public Chunk getBodyChunk() { return bodyChunk; }
     public GameMode getOriginalGameMode() { return originalGameMode; }

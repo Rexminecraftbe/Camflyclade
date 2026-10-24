@@ -205,7 +205,8 @@ public final class CamMovementGuard implements Listener {
      * other side.
      *
      * <p>Two things can shut a portal: the switch of its own kind under
-     * {@code portals}, and {@code cam-area} forbidding the dimension behind it -
+     * {@code portals}, and {@code cam-area} forbidding the world behind it, by
+     * its dimension or by its name -
      * but only on level 2, the level that keeps him out of such a place while he
      * flies, and only while {@code camera-mode.border-mode} has a border that
      * holds. A portal that is shut simply does not carry him anywhere; he keeps
@@ -236,10 +237,10 @@ public final class CamMovementGuard implements Listener {
         boolean open = portalRules.letsThrough(kind);
         String area = null;
         if (open) {
-            // The dimension behind the portal is known before the trip. A
+            // The world behind the portal is known before the trip. A
             // forbidden biome or structure only after it - so what counts here
             // is what an earlier trip turned up.
-            area = forbiddenPortalDimension(event.getTo());
+            area = forbiddenPortalWorld(event.getTo());
             if (area == null) {
                 area = portalRules.forbiddenAreaBehind(event.getFrom(),
                         this::forbiddenCamArea);
@@ -278,24 +279,24 @@ public final class CamMovementGuard implements Listener {
     }
 
     /**
-     * The dimension a portal leads into, when {@code cam-area} does not allow
-     * camera mode in it at all.
+     * The world a portal leads into, when {@code cam-area} does not allow
+     * camera mode in it at all, by its dimension or by its name.
      *
      * <p>Only level 2 keeps the player out of it: level 1 has a say over the
      * start alone and lets him fly wherever he likes afterwards, portals
      * included. So does a border that holds nobody back, see
      * {@link CamSettings#keepsOutOfAreas()}.</p>
      *
-     * @return the name of the dimension, or {@code null} when the portal may be
-     *         used
+     * @return the name of the world or dimension, or {@code null} when the
+     *         portal may be used
      */
-    private String forbiddenPortalDimension(Location to) {
-        return settings.keepsOutOfAreas() ? settings.getCamAreaRules().forbiddenDimension(to) : null;
+    private String forbiddenPortalWorld(Location to) {
+        return settings.keepsOutOfAreas() ? settings.getCamAreaRules().forbiddenWorld(to) : null;
     }
 
     /**
-     * The dimension, biome or structure that keeps camera mode out of this
-     * spot, gated by the same level as {@link #forbiddenPortalDimension}.
+     * The world, dimension, biome or structure that keeps camera mode out of
+     * this spot, gated by the same level as {@link #forbiddenPortalWorld}.
      *
      * <p>Asked at the far side of a portal twice: once when a trip comes out
      * there, and from then on every time that portal is stepped into again -

@@ -33,10 +33,29 @@ public class CamCommand implements CommandExecutor {
         // is flying around, without being in the game.
         if (args.length > 0 && args[0].equalsIgnoreCase("list")) {
             if (camList.mayUse(sender)) {
-                camList.show(sender, plugin.getListTeleport().mayUse(sender));
+                camList.show(sender, plugin.getListTeleport().mayUse(sender), plugin.getStop().showsButton(sender));
             } else {
                 messages.sendConfiguredMessage(sender, "no-permission");
             }
+            return true;
+        }
+        // From the console as well, like /cam stop.
+        if (args.length > 0 && args[0].equalsIgnoreCase("ban")) {
+            plugin.getBan().ban(sender, Arrays.copyOfRange(args, 1, args.length));
+            return true;
+        }
+        if (args.length > 0 && args[0].equalsIgnoreCase("unban")) {
+            plugin.getBan().unban(sender, Arrays.copyOfRange(args, 1, args.length));
+            return true;
+        }
+        if (args.length > 0 && args[0].equalsIgnoreCase("banlist")) {
+            plugin.getBan().list(sender);
+            return true;
+        }
+        // From the console as well: whoever restarts the server wants
+        // everybody back at his body first.
+        if (args.length > 0 && args[0].equalsIgnoreCase("stop")) {
+            plugin.getStop().command(sender, Arrays.copyOfRange(args, 1, args.length));
             return true;
         }
         // The console can look at the statistics of a player, only not at

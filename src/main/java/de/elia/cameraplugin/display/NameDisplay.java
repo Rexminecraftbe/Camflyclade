@@ -51,6 +51,13 @@ public final class NameDisplay {
     private static final Color NO_BACKGROUND = Color.fromARGB(0);
 
     /**
+     * How far a second name lies in front of the first one, towards whoever
+     * looks at it, in blocks: enough for the depth of the picture to tell the
+     * two apart, too little to be seen.
+     */
+    private static final float IN_FRONT = 0.02f;
+
+    /**
      * Colour codes at the very start of a text: the sixteen colours, a hex
      * colour and the reset, which takes the colour away as well.
      */
@@ -84,15 +91,26 @@ public final class NameDisplay {
      */
     public static TextDisplay spawn(Location location, String format, NameStyle style, NamespacedKey mark,
                                     Consumer<TextDisplay> setup) {
-        if (ChatColor.stripColor(format).isBlank()) {
+        return spawnStyled(location, styled(format, style), style, mark, setup);
+    }
+
+    /**
+     * Puts up a name whose text carries its colour already, see
+     * {@link #styled(String, NameStyle)} - one that is put together from more
+     * than the name, such as the hearts over the name of a body, which keep a
+     * colour of their own.
+     *
+     * @param setup whatever else the caller needs set before the name is sent
+     *              to anybody, such as a text with pictures, see
+     *              {@link SpriteText}
+     * @return the name, or {@code null} when the text says nothing
+     */
+    public static TextDisplay spawnStyled(Location location, String text, NameStyle style, NamespacedKey mark,
+                                          Consumer<TextDisplay> setup) {
+        if (ChatColor.stripColor(text).isBlank()) {
             // An empty box would float there, saying nothing.
             return null;
         }
-        // The colour comes from the style. It takes the place of a colour code
-        // at the very start of the text, where name-format carried it before
-        // the setting existed (&e), so an older config file follows the setting
-        // as well; codes further on still colour what comes after them.
-        String text = style.color() + LEADING_COLOR.matcher(format).replaceFirst("");
         return location.getWorld().spawn(location, TextDisplay.class, display -> {
             display.setText(text);
             // Turned towards whoever looks at it, like a name tag, and never
@@ -120,5 +138,32 @@ public final class NameDisplay {
             display.getPersistentDataContainer().set(mark, PersistentDataType.INTEGER, 1);
             setup.accept(display);
         });
+    }
+
+    /**
+     * Puts a name a hair in front of another one at the same spot, without a
+     * background of its own: what it shows is drawn over the other one, and
+     * where it shows nothing - the empty half of a half heart, say - the other
+     * one shows through. Turned towards whoever looks at it, a text display
+     * shows him its side towards positive z, so that is the way to the
+     * front.
+     */
+    public static void putInFront(TextDisplay display, NameStyle style) {
+        display.setDefaultBackground(false);
+        display.setBackgroundColor(NO_BACKGROUND);
+        float scale = (float) style.scale();
+        display.setTransformation(new Transformation(new Vector3f(0f, 0f, IN_FRONT), new AxisAngle4f(),
+                new Vector3f(scale), new AxisAngle4f()));
+    }
+
+    /**
+     * The text a name shows. The colour comes from the style. It takes the
+     * place of a colour code at the very start of the text, where name-format
+     * carried it before the setting existed ({@code &e}), so an older config
+     * file follows the setting as well; codes further on still colour what
+     * comes after them.
+     */
+    public static String styled(String format, NameStyle style) {
+        return style.color() + LEADING_COLOR.matcher(format).replaceFirst("");
     }
 }

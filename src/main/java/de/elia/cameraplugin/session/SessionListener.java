@@ -32,12 +32,14 @@ public final class SessionListener implements Listener {
         plugin.getStartChecks().forget(event.getPlayer().getUniqueId());
         // After the end above, which counted his last flight.
         plugin.getBattery().onQuit(event.getPlayer());
+        plugin.getTimeLimit().onQuit(event.getPlayer());
         plugin.getPlayerStore().unload(event.getPlayer().getUniqueId());
     }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         plugin.getBattery().onJoin(event.getPlayer());
+        plugin.getTimeLimit().onJoin(event.getPlayer());
         new BukkitRunnable() {
             @Override
             public void run() {

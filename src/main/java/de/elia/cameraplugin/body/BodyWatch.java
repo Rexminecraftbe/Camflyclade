@@ -131,14 +131,27 @@ public final class BodyWatch {
      * the body used to be. It is therefore put back over the body whenever the
      * two have come apart.</p>
      *
-     * @param name the name over the body, {@code null} when it carries none
+     * <p>With {@code body.health-visible} the name is written anew whenever
+     * the health of the player changes. A hit on the body ends camera mode, so
+     * that is mostly healing somebody hands him - an effect, another
+     * plugin.</p>
+     *
+     * @param name       the name over the body, {@code null} when it carries none
+     * @param front      the front of its hearts, which goes along with it, or
+     *                   {@code null}, see {@link BodySpawner#spawnHeartsFront}
+     * @param absorption the yellow hearts he had when camera mode started
      */
-    public void keepNameOverBody(Player player, LivingEntity body, TextDisplay name) {
+    public void keepNameOverBody(Player player, LivingEntity body, TextDisplay name, TextDisplay front,
+                                 double absorption) {
         if (name == null) {
             return;
         }
         BodySpawner bodies = plugin.getBodySpawner();
+        boolean showsHealth = settings.isBodyHealthVisible();
         new BukkitRunnable() {
+            /** The health the name shows. */
+            private double health = player.getHealth();
+
             @Override
             public void run() {
                 if (!cameraPlayers.contains(player.getUniqueId()) || !player.isOnline() || body.isDead()
@@ -151,6 +164,13 @@ public final class BodyWatch {
                 if (!current.getWorld().equals(target.getWorld())
                         || current.distanceSquared(target) > CamSettings.MIN_MOVE_THRESHOLD * CamSettings.MIN_MOVE_THRESHOLD) {
                     name.teleport(target);
+                    if (front != null && front.isValid()) {
+                        front.teleport(target);
+                    }
+                }
+                if (showsHealth && player.getHealth() != health) {
+                    health = player.getHealth();
+                    bodies.refreshName(player, name, front != null && front.isValid() ? front : null, absorption);
                 }
             }
         }.runTaskTimer(plugin, 1L, 1L);

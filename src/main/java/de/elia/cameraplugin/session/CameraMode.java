@@ -74,6 +74,9 @@ public final class CameraMode {
         PlayerInventory playerInventory = player.getInventory();
         ItemStack[] originalInventory = playerInventory.getContents();
         ItemStack[] originalArmor = playerInventory.getArmorContents();
+        // Before the effects are paused: the absorption goes with its effect,
+        // and the yellow hearts over the body are to show what he had.
+        double absorption = player.getAbsorptionAmount();
         Collection<PotionEffect> pausedEffects = new ArrayList<>();
         for (PotionEffect effect : player.getActivePotionEffects()) {
             pausedEffects.add(effect);
@@ -123,7 +126,8 @@ public final class CameraMode {
         // armour, so leather keeps the frost off it as it keeps it off him.
         damageTarget.setRemainingAir(remainingAir);
         damageTarget.setFreezeTicks(freezeTicks);
-        TextDisplay nameDisplay = bodies.spawnNameDisplay(player, body);
+        TextDisplay nameDisplay = bodies.spawnNameDisplay(player, body, absorption);
+        TextDisplay heartsFront = bodies.spawnHeartsFront(player, body, absorption);
         Chunk bodyChunk = bodies.holdChunk(body);
 
         GameMode originalGameMode = player.getGameMode();
@@ -176,6 +180,7 @@ public final class CameraMode {
 
         // *** Hand the saved inventory to CameraData ***
         CameraData cameraData = new CameraData(body, hitbox, nameDisplay, bodyChunk, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects);
+        cameraData.setHeartsFront(heartsFront);
         cameraPlayers.put(player.getUniqueId(), cameraData);
         // Before the flight speed below: the file is to hold the one he had.
         plugin.getCrashGuard().save(player, cameraData);
@@ -203,7 +208,7 @@ public final class CameraMode {
         plugin.getBodyWatch().startBodyPin(player, body, hitbox);
         // After the pin: in the same tick the name then finds the body back in
         // its spot already, instead of following it away for that one tick.
-        plugin.getBodyWatch().keepNameOverBody(player, body, nameDisplay);
+        plugin.getBodyWatch().keepNameOverBody(player, body, nameDisplay, heartsFront, absorption);
         plugin.getMobTargeting().startMobTargeting(player, damageTarget);
         plugin.getBodyAlarm().startFor(player, damageTarget);
         // Creates the teams when needed and sets all members anew - the
@@ -214,6 +219,7 @@ public final class CameraMode {
         plugin.getCamModeObjective().setScore(player, 1);
         plugin.getTimeLimit().startTimeLimit(player);
         plugin.getBattery().startFor(player);
+        plugin.getAfk().startFor(player);
         plugin.getCamLog().started(player, cameraData);
 
         if (settings.isCameraHeadEnabled()) {
@@ -264,12 +270,14 @@ public final class CameraMode {
             plugin.getFlightSpeed().stopFor(player);
             plugin.getNightVision().stopFor(player);
             plugin.getBattery().stopFor(player);
+            plugin.getAfk().stopFor(player);
             team.updateViewerTeam(player);
             plugin.getCamModeObjective().setScore(player, 0);
             return;
         }
         plugin.getTimeLimit().cancelTimeLimit(player);
         plugin.getBattery().stopFor(player);
+        plugin.getAfk().stopFor(player);
         plugin.getMobTargeting().stopMobTargeting(player);
         plugin.getBodyAlarm().stopFor(player);
         LivingEntity body = cameraData.getBody();
@@ -358,6 +366,9 @@ public final class CameraMode {
         if (nameDisplay != null) {
             bodies.remove(nameDisplay);
         }
+        if (cameraData.getHeartsFront() != null) {
+            bodies.remove(cameraData.getHeartsFront());
+        }
         // Last: until the body is gone, its chunk has to stay.
         bodies.releaseChunk(cameraData.getBodyChunk());
 
@@ -370,10 +381,13 @@ public final class CameraMode {
         plugin.getCrashGuard().delete(player);
         plugin.getStats().record(player, cameraData);
         plugin.getCamLog().ended(player, cameraData, reason, cameraAt);
-        // One write for both, the battery left over and the flight counted.
+        if (!plugin.isShuttingDown()) {
+            plugin.getTimeLimit().startCooldown(player, reason);
+        }
+        // One write for all three, the battery left over, the flight counted
+        // and the cooldown begun.
         plugin.getPlayerStore().save(player.getUniqueId());
         if (!plugin.isShuttingDown()) {
-            plugin.getTimeLimit().startCooldown(player);
             // Last, at his body: the sound says he is back, and why.
             settings.getEndSound(reason).play(player);
         }

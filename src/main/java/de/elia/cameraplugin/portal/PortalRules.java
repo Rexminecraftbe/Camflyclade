@@ -27,7 +27,7 @@ import java.util.UUID;
  * that is wanted.</p>
  *
  * <p>This class only says what the config file says. Whether a portal is shut
- * for a second reason - {@code cam-area} forbidding the dimension behind it -
+ * for a second reason - {@code cam-area} forbidding the world behind it -
  * and what happens on the other side is decided by the plugin, which has the
  * body and the area rules at hand.</p>
  *

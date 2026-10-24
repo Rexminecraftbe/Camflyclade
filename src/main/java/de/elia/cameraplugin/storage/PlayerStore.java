@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.storage;
 
 import de.elia.cameraplugin.log.ConsoleLog;
+import org.bukkit.Bukkit;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -43,8 +44,8 @@ public final class PlayerStore {
 
     /** What stands at the top of every file, for whoever finds one and wonders. */
     private static final List<String> HEADER = List.of(
-            "CamFly: statistics and battery charge of this player.",
-            "Deleting it starts the player from nothing: no statistics, a full battery.");
+            "CamFly: statistics, battery charge and cooldown of this player.",
+            "Deleting it starts the player from nothing: no statistics, a full battery, no cooldown.");
 
     private final JavaPlugin plugin;
     private final ConsoleLog log;
@@ -72,6 +73,16 @@ public final class PlayerStore {
     public PlayerRecord peek(UUID playerId) {
         PlayerRecord record = loaded.get(playerId);
         return record != null ? record : read(playerId);
+    }
+
+    /**
+     * The record of a player for a look at it, whether he is online or not:
+     * kept from then on while he is, like {@link #get(UUID)}, so that a look
+     * once a second does not read his file every time; read without being
+     * kept while he is not, like {@link #peek(UUID)}.
+     */
+    public PlayerRecord look(UUID playerId) {
+        return Bukkit.getPlayer(playerId) != null ? get(playerId) : peek(playerId);
     }
 
     /** Writes the record of a player, if anything in it has changed. */
@@ -114,6 +125,7 @@ public final class PlayerStore {
             return new PlayerRecord();
         }
         Double charge = file.isSet("battery.charge") ? file.getDouble("battery.charge") : null;
+        Long cooldown = file.isSet("cooldown.started") ? file.getLong("cooldown.started") : null;
         return new PlayerRecord(
                 file.getString("name"),
                 Math.max(0L, file.getLong("stats.sessions")),
@@ -122,7 +134,8 @@ public final class PlayerStore {
                 Math.max(0.0, file.getDouble("stats.distance-flown")),
                 Math.max(0.0, file.getDouble("stats.farthest-from-body")),
                 charge == null ? null : Math.max(0.0, charge),
-                file.getLong("battery.updated"));
+                file.getLong("battery.updated"),
+                cooldown);
     }
 
     private void write(UUID playerId, PlayerRecord record) {
@@ -139,6 +152,9 @@ public final class PlayerStore {
             file.set("battery.charge", record.getBatteryCharge());
             file.set("battery.updated", record.getBatteryUpdated());
         }
+        if (record.getCooldownStarted() != null) {
+            file.set("cooldown.started", record.getCooldownStarted());
+        }
         Path target = file(playerId);
         Path temp = target.resolveSibling(target.getFileName() + ".tmp");
         try {
@@ -151,7 +167,7 @@ public final class PlayerStore {
             }
             record.markSaved();
         } catch (IOException ex) {
-            log.log(Level.WARNING, "The statistics and battery of " + record.getName()
+            log.log(Level.WARNING, "The statistics, battery and cooldown of " + record.getName()
                     + " could not be written: " + ex);
         }
     }
@@ -164,7 +180,7 @@ public final class PlayerStore {
         } catch (IOException ex) {
             aside = path;
         }
-        log.log(Level.WARNING, "A file with statistics and battery could not be read and was put aside,"
+        log.log(Level.WARNING, "A file with statistics, battery and cooldown could not be read and was put aside,"
                 + " the player starts from nothing: " + aside + " (" + reason + ")");
     }
 }
