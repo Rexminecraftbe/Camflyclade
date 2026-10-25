@@ -997,6 +997,11 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
 * **Die Knöpfe von `/cam list` liest der Test aus dem Paket**, `system_chat`
   als Text des ganzen Pakets wie bei den Tönen. mineflayer gibt von einer
   Zeile nur den Text weiter, Klick und Hover fehlen darin.
+* **Die Zeile des Funksignals kommt als Paket `action_bar`.** Mit dem
+  Ping-Symbol darin schickt Paper sie über Adventure, nicht als
+  `system_chat` - und das Paket meldet mineflayer gar nicht. Der Bot hängt
+  sich selbst daran und legt es zu den Zeilen und den Paketen; das Symbol
+  (`icon/ping_1` bis `_5`) findet der Test im Text des ganzen Pakets.
 * **Der Akku für die Warnung lädt 100 Sekunden in der Sekunde.** Was er
   hält, rechnet das Plugin beim Start aus dem letzten Stand und der Zeit seit
   damals aus. Nach dem Akkutest steht er fast leer da, und mit dem schnellen

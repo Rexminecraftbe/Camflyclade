@@ -1147,6 +1147,17 @@ bot._client.on('world_particles', (packet) => particleLog.push(
 // Klick und Hover stehen nur dort, der Text der Zeile hat sie nicht mehr.
 const chatPackets = [];
 bot._client.on('system_chat', (packet) => chatPackets.push({ t: Date.now(), text: soundText(packet) }));
+// Was Paper ueber Adventure in die Action-Bar schickt - die Zeile mit dem
+// Ping-Symbol des Funksignals -, kommt als eigenes Paket action_bar und nicht
+// als system_chat, und mineflayer meldet es gar nicht. Hier landet es bei den
+// Zeilen und den Paketen wie die anderen.
+bot._client.on('action_bar', (packet) => {
+  chatPackets.push({ t: Date.now(), text: soundText(packet) });
+  let text = '';
+  try { text = require('prismarine-chat')(bot.registry).fromNotch(packet.text).toString(); }
+  catch (e) { text = soundText(packet); }
+  messages.push({ t: Date.now(), text });
+});
 // Die Bossbars, die gerade zu sehen sind, nach ihrer UUID: der Titel als Text
 // des ganzen Titels, wie bei den Toenen, der Fuellstand und die Einteilung
 // (dividers: 0 keine, 1 sechs, 2 zehn, 3 zwoelf, 4 zwanzig Abschnitte).
