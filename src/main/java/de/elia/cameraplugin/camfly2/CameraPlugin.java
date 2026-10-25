@@ -38,6 +38,7 @@ import de.elia.cameraplugin.mob.MobTargeting;
 import de.elia.cameraplugin.movement.CamBorderWall;
 import de.elia.cameraplugin.movement.CamMovementGuard;
 import de.elia.cameraplugin.nightvision.CamNightVision;
+import de.elia.cameraplugin.nudge.CamNudge;
 import de.elia.cameraplugin.potion.CamPotionGuard;
 import de.elia.cameraplugin.scoreboard.CamModeObjective;
 import de.elia.cameraplugin.scoreboard.NoCollisionTeam;
@@ -48,6 +49,7 @@ import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.session.ExitKey;
 import de.elia.cameraplugin.session.SessionListener;
 import de.elia.cameraplugin.session.SessionTracker;
+import de.elia.cameraplugin.signal.CamSignal;
 import de.elia.cameraplugin.speed.CamFlightSpeed;
 import de.elia.cameraplugin.start.CamStarter;
 import de.elia.cameraplugin.start.StartChecks;
@@ -117,6 +119,8 @@ public final class CameraPlugin extends JavaPlugin {
     private final BodyWatch bodyWatch = new BodyWatch(this);
     private final EndWarning endWarning = new EndWarning(this);
     private final BodyAlarm bodyAlarm = new BodyAlarm(this);
+    private final CamNudge nudge = new CamNudge(this);
+    private final CamSignal signal = new CamSignal(this);
     private final CamAfk afk = new CamAfk(this);
     private final CamBack back = new CamBack(this);
     private final StartChecks startChecks = new StartChecks(settings, messages, cameraPlayers);
@@ -312,6 +316,8 @@ public final class CameraPlugin extends JavaPlugin {
         nightVision.onDisable();
         timeLimit.onDisable();
         bodyAlarm.onDisable();
+        nudge.onDisable();
+        signal.onDisable();
         afk.onDisable();
         startDelay.onDisable();
         trail.onDisable();
@@ -577,6 +583,14 @@ public final class CameraPlugin extends JavaPlugin {
 
     public BodyAlarm getBodyAlarm() {
         return bodyAlarm;
+    }
+
+    public CamNudge getNudge() {
+        return nudge;
+    }
+
+    public CamSignal getSignal() {
+        return signal;
     }
 
     public CamAfk getAfk() {

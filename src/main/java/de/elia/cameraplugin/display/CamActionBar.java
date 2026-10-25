@@ -244,25 +244,32 @@ public final class CamActionBar {
      * which way it lies. In a world the body is not in, the portal he came out
      * of takes its place, the same spot {@code max-distance} is measured from.
      *
-     * @return the line, or {@code null} when its switch is off or nothing can
-     *         be measured against
+     * <p>Under {@code max-distance-mode: signal} the strength of the signal
+     * stands behind it, {@code actionbar-signal}. In a world neither the body
+     * nor that portal is in, it stands there alone: there is no distance to
+     * show, and the signal says that it is gone.</p>
+     *
+     * @return the line, or {@code null} when its switches are off or nothing
+     *         can be measured against
      */
     private String distanceLine(Player player) {
         CameraData data = cameraPlayers.get(player.getUniqueId());
         if (data == null) return null;
+        String signal = plugin.getSignal().actionBarPart(player);
         Location at = player.getLocation();
         Location anchor = plugin.getMovementGuard().distanceAnchor(data, at);
-        if (anchor == null) return null;
+        if (anchor == null) return signal == null ? null : signal.trim();
         boolean atBody = anchor.getWorld().equals(data.getBody().getWorld());
         String key = atBody ? "actionbar-distance" : "actionbar-distance-portal";
-        if (!messages.isMessageEnabled(key)) return null;
+        if (!messages.isMessageEnabled(key)) return signal == null ? null : signal.trim();
         double dx = anchor.getX() - at.getX();
         double dy = anchor.getY() - at.getY();
         double dz = anchor.getZ() - at.getZ();
         long blocks = Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz));
-        return messages.getMessage(key)
+        String line = messages.getMessage(key)
                 .replace("{distance}", String.valueOf(blocks))
                 .replace("{arrow}", arrow(dx, dy, dz, at.getYaw()));
+        return signal == null ? line : line + signal;
     }
 
     /**

@@ -211,6 +211,7 @@ public final class CameraMode {
         plugin.getBodyWatch().keepNameOverBody(player, body, nameDisplay, heartsFront, absorption);
         plugin.getMobTargeting().startMobTargeting(player, damageTarget);
         plugin.getBodyAlarm().startFor(player, damageTarget);
+        plugin.getSignal().startFor(player);
         // Creates the teams when needed and sets all members anew - the
         // player is in cameraPlayers already and so joins it as well, and
         // his body joins the one that keeps players and mobs from pushing it.
@@ -270,6 +271,7 @@ public final class CameraMode {
             plugin.getBorderWall().stopFor(player);
             plugin.getFlightSpeed().stopFor(player);
             plugin.getNightVision().stopFor(player);
+            plugin.getSignal().stopFor(player);
             plugin.getBattery().stopFor(player);
             plugin.getAfk().stopFor(player);
             team.updateViewerTeam(player);
@@ -281,6 +283,7 @@ public final class CameraMode {
         plugin.getAfk().stopFor(player);
         plugin.getMobTargeting().stopMobTargeting(player);
         plugin.getBodyAlarm().stopFor(player);
+        plugin.getNudge().stopFor(player);
         LivingEntity body = cameraData.getBody();
         Mannequin hitbox = cameraData.getHitbox();
         // For the log, before he is put back at his body.
@@ -319,8 +322,10 @@ public final class CameraMode {
 
         player.removePotionEffect(PotionEffectType.INVISIBILITY);
         // Before the paused effects come back: night vision among them would
-        // otherwise be taken off along with the one of camera mode.
+        // otherwise be taken off along with the one of camera mode, and so
+        // would darkness along with the noise of a weak signal.
         plugin.getNightVision().stopFor(player);
+        plugin.getSignal().stopFor(player);
 
         if (standingInFire) {
             player.setFireTicks(160);

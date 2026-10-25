@@ -15,6 +15,9 @@ messages:
   actionbar-hint: " &7- &f{key} &7or type &f/cam &7to leave"
   actionbar-hint-command: " &7- type &f/cam &7to leave"
   actionbar-on: "&aCam mode activated{hint}"
+  # With camera-mode.max-distance-mode: signal behind actionbar-distance: {bars} are four bars, as many of them lit
+  # as the signal is strong, {percent} how strong it is.
+  actionbar-signal: " &7| &fSignal {bars} &7{percent}%"
   # {time} is afk-end.seconds.
   afk-ended: "&cCam mode ended: you did not move for {time}."
   # How {area} names a world of cam-area.forbidden-worlds, {world} being its name.
@@ -152,6 +155,10 @@ messages:
   no-permission: "&cYou don't have permission to use this command."
   no-player: "&cThis command can only be used by players."
   no-projectiles: "&cYou cannot shoot projectiles in camera mode."
+  # nudge: nudge-received in the action bar of the player in cam mode, {player} being who clicked his body, and
+  # nudge-sent in the action bar of that one, {player} being whose body it is.
+  nudge-received: "&e{player} nudged your body!"
+  nudge-sent: "&7You nudged {player}, who is in cam mode."
   player.name-format: "{player}'s Cam"
   portal-blocked: "&cYou cannot go through {portal} portals in camera mode."
   portal-return-area: "&cCam mode is not allowed in {area}, you were brought back."
@@ -159,6 +166,12 @@ messages:
   reload-exit: "&cCamera mode ended due to plugin restart."
   reload-start: "&ePlugin is restarting..."
   reload-success: "&aPlugin reload successful."
+  # The signal of camera-mode.max-distance-mode: signal is gone: signal-lost counts down in the action bar, {time} being
+  # the time left to fly back into it. Then the camera is back at the body with signal-back-to-body, or cam mode ends
+  # with signal-ended.
+  signal-back-to-body: "&cSignal lost: back at your body"
+  signal-ended: "&cCam mode ended: the signal was lost."
+  signal-lost: "&cSignal lost! &7Fly back within {time}"
   # start-delay: the countdown in the action bar, {time} being the time left, and why the start was called off.
   start-delay-cancelled: "&eCam mode start cancelled."
   start-delay-countdown: "&eCam mode in {time} &7- stand still"
@@ -513,6 +526,7 @@ message-settings:
   actionbar-hint-command: true
   actionbar-off: true
   actionbar-on: true
+  actionbar-signal: true
   afk-ended: true
   back-not-in-cam: true
   back-off: true
@@ -586,12 +600,17 @@ message-settings:
   flight-speed: true
   no-permission: true
   no-projectiles: true
+  nudge-received: true
+  nudge-sent: true
   portal-blocked: true
   portal-return-area: true
   portal-return-distance: true
   reload-exit: true
   reload-start: true
   reload-success: true
+  signal-back-to-body: true
+  signal-ended: true
+  signal-lost: true
   start-delay-cancelled: true
   start-delay-countdown: true
   start-delay-damaged: true

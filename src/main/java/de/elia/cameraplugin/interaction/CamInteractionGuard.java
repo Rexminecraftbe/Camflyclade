@@ -28,7 +28,8 @@ import java.util.UUID;
 /**
  * The camera player has no hands out in the world: he clicks, breaks, places,
  * shoots, attacks and rides nothing. His own body is the one thing left to
- * him - clicking it ends camera mode.
+ * him - clicking it ends camera mode. Anybody else clicking it nudges him,
+ * see {@link de.elia.cameraplugin.nudge.CamNudge}.
  */
 public final class CamInteractionGuard implements Listener {
 
@@ -91,14 +92,17 @@ public final class CamInteractionGuard implements Listener {
             return;
         }
         // Only his own body is his to click, and that ends camera mode.
-        // Somebody else's is turned away without a word, the way a block is:
-        // the click simply does nothing.
+        // Somebody else's is turned away, the way a block is: the click does
+        // nothing to it. A player out in the world nudges its camera player
+        // with it, see CamNudge; a camera player has no hands for that either.
+        Player owner = Bukkit.getPlayer(ownerUUID);
         if (player.getUniqueId().equals(ownerUUID)) {
             messages.sendConfiguredMessage(player, "camera-off");
-            Player owner = Bukkit.getPlayer(ownerUUID);
             if (owner != null) {
                 plugin.exitCameraMode(owner, EndReason.COMMAND);
             }
+        } else if (owner != null && !cameraPlayers.contains(player.getUniqueId())) {
+            plugin.getNudge().nudge(player, owner);
         }
     }
 

@@ -4788,6 +4788,269 @@ def vorschlag_checks(env, bot):
                           ("access", "admin", "cam-list")])
 
 
+def anstups_checks(env, bot):
+    """nudge: Ein anderer Spieler klickt den Koerper mit rechts an, und der
+    Spieler im Cam-Modus erfaehrt, dass jemand an seinem Koerper wartet.
+
+    Voreingestellt ist es an, mit 5 Sekunden - nachgesehen in der
+    ausgelieferten Datei; fuer den Test sind es 2. Der zweite Spieler steht
+    anderthalb Bloecke neben dem Koerper und klickt ihn an: Beim Bot steht
+    "<Name> nudged your body!" in der Action-Bar, mit dem Ton von
+    sounds.nudge, beim zweiten Spieler "You nudged <Bot>". Der Cam-Modus
+    laeuft weiter. Ein zweiter Klick gleich danach stupst nicht noch einmal
+    an - beide gehen deshalb in einem Zug hinaus, sonst laege zwischen ihnen
+    schon die Zeit der Proben -, einer nach der Wartezeit schon. Mit
+    enabled: false kommt nichts, und
+    ein Spieler, der selbst im Cam-Modus ist, stupst auch nicht an.
+
+    Geklickt wird, was dem Koerper am naechsten steht - beim Koerpertyp
+    armorstand der Ruestungsstaender oder das Mannequin darin, beide gehoeren
+    zum Koerper. Nach der Art wird nicht gesucht: mineflayer nennt die Arten
+    mit den Daten von 26.1, und die stimmen fuer 26.2 nicht ueberall. Der
+    Abschnitt laeuft mit beiden Koerpertypen: Den Ruestungsstaender erreicht
+    der Klick ueber andere Ereignisse als das Mannequin.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test des Anstupsens aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    console(env, f"fill {_floor(x) - 2} {y} {_floor(z) - 2} {_floor(x) + 3} {y + 3} {_floor(z) + 2} minecraft:air",
+            pause=0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+
+    def anstupsen(mal=1):
+        """Den Koerper so oft gleich hintereinander anklicken und sagen, was
+        beim Bot und beim zweiten Spieler ankam: (Zeilen beim Bot, Zeilen beim
+        zweiten Spieler)."""
+        bei_bot = bot.mark()
+        bei_ihm = zuschauer.mark()
+        for _ in range(mal):
+            klicken(zuschauer, "activate_entity", at=[x, y, z], radius=2)
+        time.sleep(1.5)
+        return zeilen_seit(bot, bei_bot), zeilen_seit(zuschauer, bei_ihm)
+
+    def angestupst(zeilen):
+        return sum(1 for t in zeilen if re.search(rf"{ZUSCHAUER_NAME} nudged your body!", t))
+
+    try:
+        FIND.test("Voreingestellt steht nudge.enabled: true mit cooldown: 5 da",
+                  re.search(r"(?m)^nudge:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*cooldown:\s*5\s*$",
+                            ausgeliefert(env)) is not None, "")
+        set_option(env, "cooldown", "2", "nudge")
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer das Anstupsen kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 1.5} {y} {z} 90 0", pause=1.0)
+        hinstellen(bot, x, y, z)
+        if not FIND.test("Cam-Modus fuer das Anstupsen gestartet", cam_on(bot), ""):
+            return
+        bot.call("fly", wait=30, dy=6, timeout=15000)
+        time.sleep(1.0)
+
+        seit = toene_marke(bot)
+        beim_bot, beim_zuschauer = anstupsen(mal=2)
+        FIND.test("nudge: ein Klick auf den Koerper - \"<Name> nudged your body!\" in der Action-Bar",
+                  angestupst(beim_bot) >= 1, zeige(beim_bot))
+        FIND.test("nudge: ein zweiter Klick gleich danach stupst nicht noch einmal an",
+                  angestupst(beim_bot) == 1, zeige(beim_bot))
+        FIND.test("sounds.nudge - der Ton dazu", ton_da(bot, seit, "block.note_block.chime"), "")
+        FIND.test("nudge: wer anstupst, liest \"You nudged <Bot>\"",
+                  gesagt(beim_zuschauer, rf"You nudged {BOT_NAME}, who is in cam mode"), zeige(beim_zuschauer))
+        FIND.test("nudge: der Cam-Modus laeuft weiter", spielmodus_ist(bot, "adventure"), "")
+
+        time.sleep(2.0)
+        beim_bot, _ = anstupsen()
+        FIND.test("nudge: nach cooldown geht es wieder", angestupst(beim_bot) == 1, zeige(beim_bot))
+
+        # Der reload dabei beendet den Cam-Modus.
+        set_option(env, "enabled", "false", "nudge")
+        hinstellen(bot, x, y, z)
+        cam_on(bot)
+        bot.call("fly", wait=30, dy=6, timeout=15000)
+        time.sleep(1.0)
+        beim_bot, beim_zuschauer = anstupsen()
+        FIND.test("nudge.enabled: false - der Klick sagt keinem etwas, der Cam-Modus laeuft weiter",
+                  angestupst(beim_bot) == 0 and not gesagt(beim_zuschauer, r"You nudged")
+                  and spielmodus_ist(bot, "adventure"), f"{zeige(beim_bot)} / {zeige(beim_zuschauer)}")
+        set_option(env, "enabled", "true", "nudge")
+        hinstellen(bot, x, y, z)
+        cam_on(bot)
+        bot.call("fly", wait=30, dy=6, timeout=15000)
+        if FIND.test("Der zweite Spieler ist fuer das Anstupsen im Cam-Modus",
+                     zuschauer_cam_an(env, zuschauer, x + 1.5, y, z), ""):
+            time.sleep(2.0)
+            beim_bot, _ = anstupsen()
+            FIND.test("nudge: wer selbst im Cam-Modus ist, stupst nicht an", angestupst(beim_bot) == 0,
+                      zeige(beim_bot))
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                cam_off(zuschauer)
+                zuschauer.stop()
+            cam_off(bot)
+            set_options(env, [("enabled", "true", "nudge"), ("cooldown", "5", "nudge")])
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test des Anstupsens: {exc}")
+
+
+DUNKELHEIT = '{active_effects:[{id:"minecraft:darkness"}]}'
+
+
+def funk_werte(zeilen):
+    """Die Staerke des Signals aus den Zeilen "... | Signal ▂▄▆█ N%"."""
+    return [int(m.group(1)) for t in zeilen for m in [re.search(r"Signal \S+ (\d+)%", t)] if m]
+
+
+def funk_checks(env, bot):
+    """camera-mode.max-distance-mode: signal - die Kamera fliegt auf einem
+    Funksignal ihres Koerpers, und Bloecke dazwischen schwaechen es.
+
+    Voreingestellt ist fixed, wie bisher - nachgesehen in der ausgelieferten
+    Datei. Fuer den Test reicht das Signal 30 Bloecke (max-distance), jeder
+    Block dazwischen kostet 5, und nach dem Abreissen bleiben 2 Sekunden.
+    Gestellt wird die Kamera mit /tp auf den Boden, dort steht sie, und der
+    Abstand ist genau der, den der Test will.
+
+    Am Koerper zeigt die Action-Bar hinter dem Abstand 100 %, zehn Bloecke
+    daneben 67 %. Eine Mauer aus drei Bloecken Stein dazwischen nimmt 15 mehr:
+    17 %, und unter noise-below (25) wird es dunkel. Ohne Mauer ist es wieder
+    hell. Fuenf Bloecke Stein nehmen das ganze Signal: "Signal lost!" mit dem
+    Ton von sounds.signal-lost, und nach den zwei Sekunden steht die Kamera
+    wieder am Koerper, der Cam-Modus laeuft weiter. Wer in der Zeit zurueck
+    ins Signal kommt, bleibt, wo er ist. Mit lost: end endet der Cam-Modus.
+    Eine Grenze, an die man stoesst, gibt es nicht: In freier Luft fliegt die
+    Kamera ueber die 30 Bloecke hinaus, bis das Signal sie zurueckholt.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test des Funksignals aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    bx, by, bz = _floor(heim[0]), BODEN_Y + 1, _floor(heim[2])
+    x, y, z = bx + 0.5, by, bz + 0.5
+
+    def luft():
+        console(env, f"fill {bx - 2} {by} {bz - 3} {bx + 36} {by + 5} {bz + 3} minecraft:air", pause=0.5)
+
+    def mauer(von, bis):
+        console(env, f"fill {bx + von} {by - 1} {bz - 2} {bx + bis} {by + 4} {bz + 2} minecraft:stone", pause=0.3)
+
+    def kamera_bei(dx):
+        bot.chat(f"/tp {BOT_NAME} {x + dx} {y} {z}")
+        time.sleep(1.0)
+
+    def staerke():
+        since = bot.mark()
+        time.sleep(1.2)
+        werte = funk_werte(zeilen_seit(bot, since))
+        return werte[-1] if werte else None
+
+    def dunkel():
+        return nbt_frage(bot, "@s", DUNKELHEIT)
+
+    def am_koerper():
+        pos = bot.server_pos()
+        return pos is not None and math.dist(pos, (x, y, z)) < 1.5, pos
+
+    try:
+        FIND.test("Voreingestellt steht camera-mode.max-distance-mode: fixed da",
+                  re.search(r"(?m)^\s*max-distance-mode:\s*fixed\s*$", ausgeliefert(env)) is not None, "")
+        luft()
+        set_options(env, [("max-distance-mode", "signal"), ("max-distance", "30.0"),
+                          ("lost-seconds", "2", "signal")])
+        hinstellen(bot, x, y, z)
+        if not FIND.test("Cam-Modus mit Funksignal gestartet", cam_on(bot), ""):
+            return
+        time.sleep(3.0)
+        wert = staerke()
+        FIND.test("signal: am Koerper volles Signal hinter dem Abstand",
+                  wert is not None and wert >= 99, str(wert))
+
+        kamera_bei(10)
+        wert = staerke()
+        FIND.test("signal: zehn Bloecke daneben in freier Luft 67 % (30 Bloecke Reichweite)",
+                  wert is not None and 66 <= wert <= 68, str(wert))
+        FIND.test("signal: ueber noise-below kein Rauschen", not dunkel(), "")
+
+        mauer(4, 6)
+        wert = staerke()
+        FIND.test("signal: drei Bloecke Stein dazwischen kosten 15 mehr - 17 %",
+                  wert is not None and 16 <= wert <= 18, str(wert))
+        FIND.test("signal: unter noise-below rauscht das Bild - Dunkelheit", dunkel(), "")
+        luft()
+        wert = staerke()
+        FIND.test("signal: ohne Mauer wieder 67 % und kein Rauschen",
+                  wert is not None and 66 <= wert <= 68 and not dunkel(), str(wert))
+
+        seit = toene_marke(bot)
+        since = bot.mark()
+        mauer(3, 7)
+        weg = bot.expect(r"Signal lost! Fly back within", since, 4000)
+        FIND.test("signal: fuenf Bloecke Stein nehmen das ganze Signal - \"Signal lost!\" in der Action-Bar",
+                  bool(weg), zeige(zeilen_seit(bot, since)[-3:]))
+        FIND.test("sounds.signal-lost - der Ton dazu", ton_da(bot, seit, "block.conduit.deactivate"), "")
+        zurueck = bot.expect(r"Signal lost: back at your body", since, 5000)
+        da, pos = am_koerper()
+        FIND.test("signal.lost: back - nach lost-seconds steht die Kamera wieder am Koerper",
+                  bool(zurueck) and da, str(pos))
+        FIND.test("signal.lost: back - der Cam-Modus laeuft weiter, ohne Rauschen",
+                  spielmodus_ist(bot, "adventure") and not dunkel(), "")
+
+        set_option(env, "lost-seconds", "4", "signal")
+        cam_on(bot)
+        since = bot.mark()
+        kamera_bei(10)
+        bot.expect(r"Signal lost! Fly back within", since, 3000)
+        kamera_bei(1)
+        time.sleep(4.5)
+        pos = bot.server_pos()
+        z_ = zeilen_seit(bot, since)
+        FIND.test("signal: wer rechtzeitig zurueck ins Signal kommt, bleibt, wo er ist",
+                  not gesagt(z_, r"back at your body") and pos is not None and abs(pos[0] - (x + 1)) < 0.6,
+                  f"{pos} - {zeige(z_[-3:])}")
+
+        set_option(env, "lost", "end", "signal")
+        cam_on(bot)
+        seit = toene_marke(bot)
+        since = bot.mark()
+        kamera_bei(10)
+        ende = bot.expect(r"Cam mode ended: the signal was lost", since, 8000)
+        FIND.test("signal.lost: end - der Cam-Modus endet",
+                  bool(ende) and not spielmodus_ist(bot, "adventure"), zeige(zeilen_seit(bot, since)[-3:]))
+        FIND.test("signal.lost: end - mit dem Ton von sounds.end-forced",
+                  ton_da(bot, seit, "block.respawn_anchor.deplete"), "")
+
+        set_options(env, [("lost", "back", "signal"), ("lost-seconds", "2", "signal")])
+        luft()
+        hinstellen(bot, x, y, z)
+        cam_on(bot)
+        kamera_bei(25)
+        since = bot.mark()
+        bot.call("fly", wait=30, dx=8, timeout=5000)
+        draussen = bot.server_pos()
+        time.sleep(3.0)
+        z_ = zeilen_seit(bot, since)
+        FIND.test("signal: keine Grenze - in freier Luft ueber die 30 Bloecke hinaus",
+                  draussen is not None and draussen[0] - x > 30.5 and not gesagt(z_, r"cannot move further"),
+                  f"{draussen} - {zeige(z_[-3:])}")
+        FIND.test("signal: dort holt das Signal die Kamera zurueck", gesagt(z_, r"back at your body")
+                  and am_koerper()[0], zeige(z_[-3:]))
+    finally:
+        try:
+            cam_off(bot)
+            luft()
+            set_options(env, [("max-distance-mode", "fixed"), ("max-distance", "100.0"),
+                              ("lost", "back", "signal"), ("lost-seconds", "3", "signal")])
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test des Funksignals: {exc}")
+
+
 def herzen_checks(env, bot):
     """body.health-visible: die Herzen des Spielers am Namen ueber dem Koerper.
 
@@ -9935,6 +10198,10 @@ def step_tests(env):
         startverzoegerung_checks(env, bot)
         flugspur_checks(env, bot)
         vorschlag_checks(env, bot)
+
+        # --- Anstupsen, mit beiden Koerpertypen, und das Funksignal statt der festen Reichweite ---
+        fuer_beide_koerpertypen(env, bot, anstups_checks)
+        funk_checks(env, bot)
 
         # --- Geworfene Traenke und was den Koerper getroffen hat, mit beiden Koerpertypen ---
         fuer_beide_koerpertypen(env, bot, potion_checks, grund_checks)

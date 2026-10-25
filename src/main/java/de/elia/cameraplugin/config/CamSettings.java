@@ -12,11 +12,13 @@ import de.elia.cameraplugin.mirrordamage.ArmorDamageMode;
 import de.elia.cameraplugin.mirrordamage.DamageMode;
 import de.elia.cameraplugin.mob.MobTargeting;
 import de.elia.cameraplugin.movement.BorderMode;
+import de.elia.cameraplugin.movement.DistanceMode;
 import de.elia.cameraplugin.movement.FlightMedium;
 import de.elia.cameraplugin.nightvision.NightVisionMode;
 import de.elia.cameraplugin.portal.PortalRules;
 import de.elia.cameraplugin.session.CamGameMode;
 import de.elia.cameraplugin.session.EndReason;
+import de.elia.cameraplugin.signal.SignalLoss;
 import de.elia.cameraplugin.sound.CamSound;
 import de.elia.cameraplugin.start.EffectStart;
 import de.elia.cameraplugin.storage.StorageMode;
@@ -97,6 +99,20 @@ public final class CamSettings {
     private static final int MAX_TRAIL_FLIGHTS = 20;
 
     /**
+     * The longest {@code signal.lost-seconds} accepts. Longer than a minute,
+     * a camera without a signal is no longer looking for it but flying on
+     * without one.
+     */
+    private static final int MAX_SIGNAL_LOST_SECONDS = 60;
+
+    /**
+     * The shortest wait {@code nudge.cooldown} accepts. One click sets off
+     * several events, see {@link de.elia.cameraplugin.nudge.CamNudge}, and
+     * without a wait each of them would nudge on its own.
+     */
+    private static final int MIN_NUDGE_COOLDOWN = 1;
+
+    /**
      * Keys that are read although the config file built into the jar leaves
      * them out on purpose, so that they are not reported as unknown, see
      * {@link ConfigReader#warnUnknownKeys}. Also sections whose keys are names
@@ -117,6 +133,8 @@ public final class CamSettings {
     // Configurable values
     private boolean maxDistanceEnabled;
     private double maxDistance;
+    /** How max-distance holds the camera, {@code camera-mode.max-distance-mode}. */
+    private DistanceMode distanceMode;
     private int distanceWarningCooldown;
     /** What happens at the border of camera mode, {@code camera-mode.border-mode}. */
     private BorderMode borderMode;
@@ -237,6 +255,8 @@ public final class CamSettings {
     private CamSound endWarningSound;
     private CamSound bodyAlarmSound;
     private CamSound startDelaySound;
+    private CamSound nudgeSound;
+    private CamSound signalLostSound;
 
     /** Whether camera mode leaves a file to recover from a crash, {@code crash-protection.enabled}. */
     private boolean crashProtectionEnabled;
@@ -289,6 +309,20 @@ public final class CamSettings {
     private double bodyAlarmPlayerRadius;
     /** Seconds before the next alarm, {@code body-alarm.cooldown}. */
     private int bodyAlarmCooldown;
+
+    /** Whether a click on the body nudges its camera player, {@code nudge.enabled}. */
+    private boolean nudgeEnabled;
+    /** Seconds before the same camera player can be nudged again, {@code nudge.cooldown}. */
+    private int nudgeCooldown;
+
+    /** Blocks of range each block in the way takes off the signal, {@code signal.block-cost}. */
+    private double signalBlockCost;
+    /** Below how many percent the picture goes dark, 0 for never, {@code signal.noise-below}. */
+    private int signalNoiseBelow;
+    /** What happens once the signal is lost, {@code signal.lost}. */
+    private SignalLoss signalLoss;
+    /** How long the camera has to fly back into the signal, in seconds, {@code signal.lost-seconds}. */
+    private int signalLostSeconds;
 
     // Damage transfer settings
     private DamageMode damageMode;
@@ -388,6 +422,9 @@ public final class CamSettings {
     public void load(ConfigReader config) {
         maxDistanceEnabled = config.getBoolean("camera-mode.max-distance-enabled", true);
         maxDistance = config.getDouble("camera-mode.max-distance", 100.0, 0.0);
+        distanceMode = config.getChoice("camera-mode.max-distance-mode", "fixed", "fixed", "signal")
+                .equalsIgnoreCase("signal") ? DistanceMode.SIGNAL : DistanceMode.FIXED;
+        readSignal(config);
         distanceWarningCooldown = config.getInt("camera-mode.distance-warning-cooldown", 3, 0);
         String border = config.getChoice("camera-mode.border-mode", "barrier", "barrier", "push-back", "false")
                 .toLowerCase(Locale.ROOT);
@@ -517,6 +554,9 @@ public final class CamSettings {
         bodyAlarmSound = CamSound.read(config, "sounds.body-alarm", allowedSounds,
                 "entity.warden.nearby_close", 1.0);
         startDelaySound = CamSound.read(config, "sounds.start-delay", allowedSounds, "block.note_block.hat", 1.0);
+        nudgeSound = CamSound.read(config, "sounds.nudge", allowedSounds, "block.note_block.chime", 1.0);
+        signalLostSound = CamSound.read(config, "sounds.signal-lost", allowedSounds,
+                "block.conduit.deactivate", 1.0);
         crashProtectionEnabled = config.getBoolean("crash-protection.enabled", true);
         camListAccess = readAccess(config, "cam-list.access");
         camListTeleport = config.getBoolean("cam-list.teleport", true);
@@ -539,6 +579,8 @@ public final class CamSettings {
         bodyAlarmPlayerRadius = config.getDouble("body-alarm.player-radius", 10.0, 0.0,
                 MobTargeting.MAX_MOB_TARGET_RANGE);
         bodyAlarmCooldown = config.getInt("body-alarm.cooldown", 5, 0);
+        nudgeEnabled = config.getBoolean("nudge.enabled", true);
+        nudgeCooldown = config.getInt("nudge.cooldown", 5, MIN_NUDGE_COOLDOWN);
         String limit = config.getChoice("flight-limit", "false", "false", "time-limit", "battery")
                 .toLowerCase(Locale.ROOT);
         flightLimit = switch (limit) {
@@ -612,6 +654,20 @@ public final class CamSettings {
         flightSpeedStart = config.getDouble("flight-speed.start",
                 Math.min(Math.max(1.0, flightSpeedMin), flightSpeedMax), flightSpeedMin, flightSpeedMax);
         flightSpeedStep = config.getDouble("flight-speed.step", 0.5, 0.05, MAX_FLIGHT_SPEED);
+    }
+
+    /**
+     * Reads the section {@code signal}, for {@code max-distance-mode: signal}.
+     * Read whatever the mode, so that a value that does not fit is reported
+     * now and not only once somebody switches the signal on.
+     */
+    private void readSignal(ConfigReader config) {
+        signalBlockCost = config.getDouble("signal.block-cost", 5.0, 0.0);
+        signalNoiseBelow = config.getInt("signal.noise-below", 25, 0, 100);
+        signalLoss = config.getChoice("signal.lost", "back", "back", "end").equalsIgnoreCase("end")
+                ? SignalLoss.END
+                : SignalLoss.BACK;
+        signalLostSeconds = config.getInt("signal.lost-seconds", 3, 0, MAX_SIGNAL_LOST_SECONDS);
     }
 
     /**
@@ -907,9 +963,40 @@ public final class CamSettings {
         return borderMode == BorderMode.BARRIER && bordersHold;
     }
 
-    /** Whether {@code max-distance} holds the camera back: switched on, and a border that holds. */
+    /**
+     * Whether {@code max-distance} holds the camera back at a border: switched
+     * on, in the mode {@code fixed}, and a border that holds. Under
+     * {@code signal} it is the signal that holds it, see {@link #usesSignal()},
+     * and there is no border at the distance.
+     */
     public boolean limitsDistance() {
-        return maxDistanceEnabled && bordersHold;
+        return maxDistanceEnabled && distanceMode == DistanceMode.FIXED && bordersHold;
+    }
+
+    /**
+     * Whether the camera flies on a radio signal from its body,
+     * {@code max-distance-mode: signal} with {@code max-distance} switched on.
+     * Whatever {@code border-mode} says: the signal is no border, nothing is
+     * run into at its end.
+     */
+    public boolean usesSignal() {
+        return maxDistanceEnabled && distanceMode == DistanceMode.SIGNAL;
+    }
+
+    public double getSignalBlockCost() {
+        return signalBlockCost;
+    }
+
+    public int getSignalNoiseBelow() {
+        return signalNoiseBelow;
+    }
+
+    public SignalLoss getSignalLoss() {
+        return signalLoss;
+    }
+
+    public int getSignalLostSeconds() {
+        return signalLostSeconds;
     }
 
     /**
@@ -1153,6 +1240,14 @@ public final class CamSettings {
         return startDelaySound;
     }
 
+    public CamSound getNudgeSound() {
+        return nudgeSound;
+    }
+
+    public CamSound getSignalLostSound() {
+        return signalLostSound;
+    }
+
     public ListAccess getCamListAccess() {
         return camListAccess;
     }
@@ -1245,6 +1340,16 @@ public final class CamSettings {
 
     public int getBodyAlarmCooldown() {
         return bodyAlarmCooldown;
+    }
+
+    // ------------------------------------------------------------------- nudge
+
+    public boolean isNudgeEnabled() {
+        return nudgeEnabled;
+    }
+
+    public int getNudgeCooldown() {
+        return nudgeCooldown;
     }
 
     public boolean isCrashProtectionEnabled() {
