@@ -737,11 +737,12 @@ cam-safety:
     friendly: false
   # Kampfsperre nach Nähe: kein Start, solange ein anderer Spieler näher ist als nearby-radius - so flüchtet niemand
   # in den Cam-Modus, wenn ein Gegner neben ihm steht, auch bevor der erste Schlag gefallen ist.
-  # Die Meldung nennt den nächsten von ihnen (Text: cam-nearby-player). Es zählen keine Spieler im Cam-Modus, keine
+  # Die Meldung sagt, von wem man wie weit weg muss: nearby-radius und wie viele Blöcke noch fehlen
+  # (Text: cam-nearby-player). Es zählen keine Spieler im Cam-Modus, keine
   # Zuschauer, keine NPCs anderer Plugins (z. B. Citizens) und keine, die der Spieler nicht sehen kann (z. B. durch Vanish).
   # Gilt nur mit enabled: true oben; wer nur diese Sperre will, stellt delay auf 0.
   nearby-players: false
-  # Wie nah ein anderer Spieler sein muss, in Blöcken (höchstens 64, 0 = keine Sperre)
+  # Wie weit ein anderer Spieler mindestens weg sein muss, in Blöcken (höchstens 64, 0 = keine Sperre)
   nearby-radius: 16.0
 
 # Wo der Cam-Modus erlaubt ist

@@ -176,7 +176,12 @@ public final class StartChecks implements Listener {
      * vanish plugin hides from him - he could not tell what turns him
      * away.</p>
      *
-     * @return whether he may start; if not, he has been told who is too close
+     * <p>The message tells him how far he has to get from the nearest of
+     * them: {@code nearby-radius} in all, and how many blocks more that is.
+     * Exactly that far away he may start.</p>
+     *
+     * @return whether he may start; if not, he has been told whom to get away
+     *         from, and how far
      */
     public boolean checkCamNearby(Player player) {
         if (!settings.locksNearPlayers()) {
@@ -193,7 +198,7 @@ public final class StartChecks implements Listener {
                 continue;
             }
             double squared = other.getLocation().distanceSquared(at);
-            if (squared <= nearestSquared) {
+            if (squared < nearestSquared) {
                 nearest = other;
                 nearestSquared = squared;
             }
@@ -201,9 +206,12 @@ public final class StartChecks implements Listener {
         if (nearest == null) {
             return true;
         }
+        double distance = Math.sqrt(nearestSquared);
+        // Rounded up: a step short of the radius is still too close.
+        long more = Math.max(1L, (long) Math.ceil(radius - distance));
         messages.sendMessage(player, "cam-nearby-player", "{player}", nearest.getName(),
-                "{distance}", String.valueOf(Math.round(Math.sqrt(nearestSquared))),
-                "{radius}", blocks(radius));
+                "{radius}", blocks(radius), "{more}", String.valueOf(more),
+                "{distance}", String.valueOf(Math.round(distance)));
         return false;
     }
 

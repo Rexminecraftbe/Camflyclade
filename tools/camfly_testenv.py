@@ -5420,11 +5420,12 @@ def naehe_checks(env, bot):
 
     Voreingestellt ist die Sperre aus, mit 16 Bloecken - nachgesehen in der
     ausgelieferten Datei; ein zweiter Spieler drei Bloecke daneben haelt dann
-    niemanden auf. Eingeschaltet wird /cam abgelehnt, und die Meldung nennt
-    ihn und wie weit er weg ist. Zwanzig Bloecke weg haelt er nicht mehr auf,
-    mit nearby-radius: 25 schon. Fuer den zweiten Spieler gilt dasselbe
-    neben dem Bot. Ein Spieler im Cam-Modus zaehlt nicht, und ohne
-    cam-safety.enabled gibt es auch diese Sperre nicht.
+    niemanden auf. Eingeschaltet wird /cam abgelehnt, und die Meldung sagt,
+    von wem man wie weit weg muss: 16 Bloecke, 13 mehr. Zwanzig Bloecke weg
+    haelt er nicht mehr auf, mit nearby-radius: 25 schon - 5 mehr. Fuer den
+    zweiten Spieler gilt dasselbe neben dem Bot. Ein Spieler im Cam-Modus
+    zaehlt nicht, und ohne cam-safety.enabled gibt es auch diese Sperre
+    nicht.
     """
     if not FIND.test("Cam-Modus ist vor dem Test der Kampfsperre aus", cam_off(bot), ""):
         return
@@ -5462,15 +5463,17 @@ def naehe_checks(env, bot):
 
         set_option(env, "nearby-players", "true")
         an, zeilen = startet()
-        FIND.test("nearby-players: true - mit einem Spieler drei Bloecke daneben startet /cam nicht",
-                  not an and gesagt(zeilen, rf"with {ZUSCHAUER_NAME} this close to you \(3 blocks\)"), zeige(zeilen))
+        FIND.test("nearby-players: true - mit einem Spieler drei Bloecke daneben startet /cam nicht, "
+                  "die Meldung sagt, wie weit man weg muss",
+                  not an and gesagt(zeilen, rf"too close to {ZUSCHAUER_NAME} to start cam mode\. "
+                                            r"Get at least 16 blocks away \(13 more\)"), zeige(zeilen))
         zuschauer_bei(20)
         an, zeilen = startet()
         FIND.test("nearby-players: true - zwanzig Bloecke weg haelt er nicht mehr auf", an, zeige(zeilen))
         set_option(env, "nearby-radius", "25.0")
         an, zeilen = startet()
-        FIND.test("nearby-radius: 25 - zwanzig Bloecke weg haelt er auf", not an and gesagt(zeilen, r"\(20 blocks\)"),
-                  zeige(zeilen))
+        FIND.test("nearby-radius: 25 - zwanzig Bloecke weg haelt er auf",
+                  not an and gesagt(zeilen, r"Get at least 25 blocks away \(5 more\)"), zeige(zeilen))
         set_option(env, "nearby-radius", "16.0")
 
         # Die Sperre gilt fuer den zweiten Spieler genauso: Neben dem Bot kommt
@@ -5479,7 +5482,7 @@ def naehe_checks(env, bot):
         hinstellen(bot, x, y, z)
         zeilen = befehl(zuschauer, "/cam")
         FIND.test("nearby-players: true - auch der zweite Spieler startet nicht neben dem Bot",
-                  gesagt(zeilen, rf"with {BOT_NAME} this close to you"), zeige(zeilen))
+                  gesagt(zeilen, rf"too close to {BOT_NAME} to start cam mode"), zeige(zeilen))
         zuschauer_bei(20)
         cam_on(bot)
         if FIND.test("Der zweite Spieler ist fuer die Kampfsperre im Cam-Modus",

@@ -85,9 +85,9 @@ messages:
   cam-list-stop: "&c[Stop]"
   cam-list-stop-hover: "&7End the cam mode of {player}"
   cam-lava-start: "&cYou cannot start cam mode in lava."
-  # cam-safety.nearby-players: {player} is the nearest other player, {distance} how far away he is in blocks,
-  # {radius} cam-safety.nearby-radius.
-  cam-nearby-player: "&cYou cannot start cam mode with {player} this close to you ({distance} blocks)."
+  # cam-safety.nearby-players: {player} is the nearest other player, {radius} cam-safety.nearby-radius - how far
+  # away from him cam mode starts -, {more} how many blocks further that is, {distance} how far away he is now.
+  cam-nearby-player: "&cYou are too close to {player} to start cam mode. Get at least {radius} blocks away ({more} more)."
   cam-powder-snow-start: "&cYou cannot start cam mode in powder snow."
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
   cam-spectator-start: "&cYou cannot start cam mode in spectator mode."

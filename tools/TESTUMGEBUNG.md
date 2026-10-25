@@ -1331,8 +1331,8 @@ nächsten Flug und den danach, nach dem Ab- und Anmelden ist es vergessen · mit
 `player-choice: false` ist der Befehl aus, und eine Wahl von vorher gilt nicht ·
 voreingestellt ist `cam-safety.nearby-players` aus, mit `nearby-radius: 16.0` ·
 eingeschaltet startet `/cam` mit einem Spieler drei Blöcke daneben nicht, die
-Meldung nennt ihn und den Abstand, zwanzig Blöcke weg geht es, mit
-`nearby-radius: 25` nicht · für den anderen gilt dasselbe, ein Spieler im
+Meldung sagt, von wem man wie weit weg muss (16 Blöcke, 13 mehr), zwanzig
+Blöcke weg geht es, mit `nearby-radius: 25` nicht (25 Blöcke, 5 mehr) · für den anderen gilt dasselbe, ein Spieler im
 Cam-Modus zählt nicht, und mit `cam-safety.enabled: false` ist auch die
 Kampfsperre aus ·
 Server-Log ohne Fehler des Plugins.
