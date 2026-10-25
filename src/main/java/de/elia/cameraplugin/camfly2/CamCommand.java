@@ -85,6 +85,26 @@ public class CamCommand implements CommandExecutor {
             plugin.getBack().command(player);
             return true;
         }
+        if (args.length > 0 && args[0].equalsIgnoreCase("spot")) {
+            plugin.getSpots().command(player, Arrays.copyOfRange(args, 1, args.length));
+            return true;
+        }
+        if (args.length > 0 && args[0].equalsIgnoreCase("photo")) {
+            plugin.getPhotoMode().command(player);
+            return true;
+        }
+        if (args.length > 0 && args[0].equalsIgnoreCase("time")) {
+            plugin.getSky().timeCommand(player, Arrays.copyOfRange(args, 1, args.length));
+            return true;
+        }
+        if (args.length > 0 && args[0].equalsIgnoreCase("weather")) {
+            plugin.getSky().weatherCommand(player, Arrays.copyOfRange(args, 1, args.length));
+            return true;
+        }
+        if (args.length > 0 && args[0].equalsIgnoreCase("nightvision")) {
+            plugin.getNightVision().command(player, Arrays.copyOfRange(args, 1, args.length));
+            return true;
+        }
         // What the buttons of /cam list run.
         if (args.length > 0 && args[0].equalsIgnoreCase("tp")) {
             plugin.getListTeleport().command(player, Arrays.copyOfRange(args, 1, args.length));

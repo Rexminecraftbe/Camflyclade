@@ -1,10 +1,10 @@
 package de.elia.cameraplugin.visibility;
 
+import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.UUID;
 
@@ -13,11 +13,11 @@ import java.util.UUID;
  */
 public final class CamVisibility {
 
-    private final JavaPlugin plugin;
+    private final CameraPlugin plugin;
     private final CamSettings settings;
     private final CameraPlayers cameraPlayers;
 
-    public CamVisibility(JavaPlugin plugin, CamSettings settings, CameraPlayers cameraPlayers) {
+    public CamVisibility(CameraPlugin plugin, CamSettings settings, CameraPlayers cameraPlayers) {
         this.plugin = plugin;
         this.settings = settings;
         this.cameraPlayers = cameraPlayers;
@@ -39,9 +39,14 @@ public final class CamVisibility {
      * the client: {@code hidePlayer} would take him out of the tab list as well,
      * and he is supposed to stay in there. What that costs is worn equipment -
      * the camera head keeps being drawn on an invisible player.</p>
+     *
+     * <p>A viewer in photo mode is left alone: it keeps every player out of
+     * his picture, camera players as well, and hands him back to this when it
+     * ends, see {@link de.elia.cameraplugin.photo.CamPhotoMode}.</p>
      */
     private void applyVisibility(Player camPlayer, Player viewer) {
         if (camPlayer.equals(viewer)) return;
+        if (plugin.getPhotoMode().hidesPlayersFrom(viewer)) return;
         switch (settings.getPlayerVisibilityMode()) {
             case CAM -> {
                 if (cameraPlayers.contains(viewer.getUniqueId())) {

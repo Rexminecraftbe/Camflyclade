@@ -1,9 +1,16 @@
 package de.elia.cameraplugin.storage;
 
+import de.elia.cameraplugin.spot.Spot;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * What the plugin keeps about a player from one camera mode to the next: his
- * statistics, the charge of his battery and when his last cooldown began.
- * Kept in a file of its own by {@link PlayerStore}.
+ * statistics, the charge of his battery, when his last cooldown began and
+ * his spots of {@code /cam spot}. Kept in a file of its own by
+ * {@link PlayerStore}.
  */
 public final class PlayerRecord {
 
@@ -34,6 +41,8 @@ public final class PlayerRecord {
      * {@code cooldown-seconds} counts for a cooldown that is running as well.
      */
     private Long cooldownStarted;
+    /** His spots of {@code /cam spot}, by {@link Spot#key()}, in the order he saved them. */
+    private final Map<String, Spot> spots = new LinkedHashMap<>();
     /** Whether something has changed since the file was last written. */
     private boolean dirty;
 
@@ -93,6 +102,27 @@ public final class PlayerRecord {
         dirty = true;
     }
 
+    /** Saves a spot, in place of one of the same name. */
+    public void putSpot(String playerName, Spot spot) {
+        name = playerName;
+        spots.put(spot.key(), spot);
+        dirty = true;
+    }
+
+    /** Takes a spot away, by {@link Spot#key()}; whether there was one. */
+    public boolean removeSpot(String key) {
+        if (spots.remove(key) == null) {
+            return false;
+        }
+        dirty = true;
+        return true;
+    }
+
+    /** A spot read from the file, which changes nothing that would have to be written. */
+    void loadSpot(Spot spot) {
+        spots.put(spot.key(), spot);
+    }
+
     public String getName() { return name; }
     public long getSessions() { return sessions; }
     public long getTotalSeconds() { return totalSeconds; }
@@ -104,6 +134,8 @@ public final class PlayerRecord {
     public long getBatteryUpdated() { return batteryUpdated; }
     /** When the last cooldown began, or {@code null} for a player who never had one. */
     public Long getCooldownStarted() { return cooldownStarted; }
+    /** His spots, by {@link Spot#key()}, in the order he saved them; not to be changed. */
+    public Map<String, Spot> getSpots() { return Collections.unmodifiableMap(spots); }
 
     boolean isDirty() { return dirty; }
     void markSaved() { dirty = false; }

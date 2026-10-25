@@ -4,6 +4,10 @@ import de.elia.cameraplugin.back.CamBack;
 import de.elia.cameraplugin.ban.CamBan;
 import de.elia.cameraplugin.list.CamList;
 import de.elia.cameraplugin.list.CamListTeleport;
+import de.elia.cameraplugin.nightvision.CamNightVision;
+import de.elia.cameraplugin.photo.CamPhotoMode;
+import de.elia.cameraplugin.sky.CamSky;
+import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.stats.CamStats;
 import de.elia.cameraplugin.stop.CamStop;
 import de.elia.cameraplugin.trail.CamTrail;
@@ -28,6 +32,9 @@ public class CamTabCompleter implements TabCompleter {
     private final CamStop stop;
     private final CamBan ban;
     private final CamTrail trail;
+    private final CamSpots spots;
+    private final CamPhotoMode photoMode;
+    private final CamSky sky;
 
     public CamTabCompleter(CameraPlugin plugin) {
         this.plugin = plugin;
@@ -38,6 +45,9 @@ public class CamTabCompleter implements TabCompleter {
         this.stop = plugin.getStop();
         this.ban = plugin.getBan();
         this.trail = plugin.getTrail();
+        this.spots = plugin.getSpots();
+        this.photoMode = plugin.getPhotoMode();
+        this.sky = plugin.getSky();
     }
 
     @Override
@@ -107,15 +117,51 @@ public class CamTabCompleter implements TabCompleter {
         if (trailCommand && args.length == 3) {
             return startingWith(args[2].toLowerCase(Locale.ROOT), trail.choicesFor(args[1]).toArray(new String[0]));
         }
+        Player own = sender instanceof Player p && p.hasPermission("camplugin.use") ? p : null;
+        boolean spotCommand = args.length > 1 && args[0].equalsIgnoreCase("spot") && own != null && spots.isEnabled();
+        if (spotCommand && args.length == 2) {
+            List<String> words = new ArrayList<>(
+                    startingWith(args[1].toLowerCase(Locale.ROOT), "set", "delete", "list"));
+            words.addAll(spotNames(own, args[1]));
+            return words;
+        }
+        if (spotCommand && args.length == 3 && args[1].equalsIgnoreCase("delete")) {
+            return spotNames(own, args[2]);
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("time") && own != null && sky.mayUseTime(own)) {
+            return startingWith(args[1].toLowerCase(Locale.ROOT), CamSky.timeWords());
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("weather") && own != null && sky.mayUseWeather(own)) {
+            return startingWith(args[1].toLowerCase(Locale.ROOT), CamSky.weatherWords());
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("nightvision") && own != null
+                && plugin.getSettings().isNightVisionPlayerChoice()) {
+            return startingWith(args[1].toLowerCase(Locale.ROOT), CamNightVision.words());
+        }
         if (args.length != 1) {
             return Collections.emptyList();
         }
         String partial = args[0].toLowerCase();
         List<String> completions = new ArrayList<>();
-        // Only offered where it does something: to a player in camera mode.
-        if (sender instanceof Player player && player.hasPermission("camplugin.use") && back.mayUse(player)
-                && "back".startsWith(partial)) {
+        // Only offered where they do something: back, photo, time and weather
+        // to a player in camera mode, nightvision and spot while they are on.
+        if (own != null && back.mayUse(own) && "back".startsWith(partial)) {
             completions.add("back");
+        }
+        if (own != null && plugin.getSettings().isNightVisionPlayerChoice() && "nightvision".startsWith(partial)) {
+            completions.add("nightvision");
+        }
+        if (own != null && photoMode.mayUse(own) && "photo".startsWith(partial)) {
+            completions.add("photo");
+        }
+        if (own != null && spots.isEnabled() && "spot".startsWith(partial)) {
+            completions.add("spot");
+        }
+        if (own != null && sky.mayUseTime(own) && "time".startsWith(partial)) {
+            completions.add("time");
+        }
+        if (own != null && sky.mayUseWeather(own) && "weather".startsWith(partial)) {
+            completions.add("weather");
         }
         if (camList.mayUse(sender) && "list".startsWith(partial)) {
             completions.add("list");
@@ -151,6 +197,18 @@ public class CamTabCompleter implements TabCompleter {
             }
         }
         return matches;
+    }
+
+    /** The names of his own spots, for {@code /cam spot <name>} and {@code /cam spot delete <name>}. */
+    private List<String> spotNames(Player player, String partial) {
+        String start = partial.toLowerCase(Locale.ROOT);
+        List<String> names = new ArrayList<>();
+        for (String name : spots.names(player)) {
+            if (name.toLowerCase(Locale.ROOT).startsWith(start)) {
+                names.add(name);
+            }
+        }
+        return names;
     }
 
     /** The players in camera mode, for {@code /cam tp <name>} - nobody's own. */

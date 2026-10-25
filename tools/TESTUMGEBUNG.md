@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **788** - alle 788 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **802** - alle 802 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -1012,6 +1012,36 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
 * **Zur Kamera fliegt der Bot vorher einen Block hoch.** Der Flug nimmt ihm
   auf seiner Seite die Schwerkraft. Mit ihr fiele er nach dem Teleport sofort
   wieder herunter, und die Frage, ob er bei der Kamera steht, käme zu spät.
+* **Die Tageszeit des Clients steht in den Uhren des Zeitpakets.** Seit 26.x
+  trägt `update_time` die Zeit als `clockUpdates`, und nur, wenn sich eine
+  Uhr ändert; die Pakete dazwischen kommen mit einer leeren Liste. mineflayer
+  merkt sich die Uhren und rechnet daraus `bot.time.timeOfDay`, und genau das
+  gibt die Bot-Aktion `sky` zurück. Eine eigene Zeit von `/cam time` kommt mit
+  dem nächsten Zeitpaket an, der Test wartet deshalb zwei Sekunden.
+  `/time query daytime` gibt es in 26.x nicht mehr; die Zeit der Welt liest
+  der Test am zweiten Spieler ab, der keine eigene hat.
+* **Ob es beim Client regnet, sagt nicht `bot.isRaining`.** mineflayer nimmt
+  die Ereignisse 1 und 2 beim Namen (`start_raining`, `stop_raining`), der
+  Client aber setzt mit 1 den Regen auf 0 und mit 2 auf 1, und von dort
+  lassen ihn die Ereignisse 7 steigen oder fallen. Bukkit schickt für das
+  eigene Wetter eines Spielers die beiden genau verkehrt herum: Nach
+  `/cam weather reset` stünde bei mineflayer Regen, obwohl der Client ihn auf
+  0 hat. Die Bot-Aktion `sky` rechnet die Stärke deshalb wie der Client, voll
+  ist sie nach den fünf Sekunden, in denen der Regen einsetzt.
+* **Den zweiten Spieler sucht der Foto-Test dort, wo der Server ihn hat.**
+  mineflayer liest die Entitäten mit den Daten von 26.1 und hält einen Spieler
+  für etwas anderes, ohne Namen. Gezählt wird deshalb, was der Client an der
+  Stelle sieht, die `/data get entity <Name> Pos` meldet, und für einen
+  Körper, was um seine Stelle steht: Rüstungsständer, Mannequin und Name.
+* **Die Kampfsperre gilt in beide Richtungen.** Mit `nearby-players: true`
+  kommt auch der zweite Spieler neben dem Bot nicht in den Cam-Modus. Für die
+  Probe, dass ein Spieler im Cam-Modus nicht zählt, ist der Bot deshalb erst
+  selbst Kamera, während der andere startet, und der andere steht dabei
+  zwanzig Blöcke weg, bis der Bot es ist.
+* **Die Aussichtspunkte des Bots bleiben zwischen zwei Läufen stehen**, in
+  seiner Datei unter `playerdata/stats/`. Solange er online ist, hält das
+  Plugin sie im Speicher; in der Datei zu löschen hieße, nichts zu löschen.
+  Der Test löscht sie deshalb vorher und nachher mit `/cam spot delete`.
 
 ## Was die Tests abdecken
 
@@ -1266,6 +1296,45 @@ dem Reload nur den letzten stehen · mit `statistics.enabled: false` schlägt
 `flight-limit: battery` steht es für den Akku wieder da, ohne `reset` ·
 `cam-list.access: false` nimmt `list` aus den Vorschlägen, und `/cam list` ist
 für Spieler aus, die Konsole darf es weiter ·
+voreingestellt ist `viewpoints` an, mit 10 Punkten und `storage: file` ·
+`/cam spot set` merkt sich die Stelle mit der Blickrichtung, als Kamera und zu
+Fuß, und `/cam spot <Name>` setzt die Kamera dorthin, groß und klein egal, mit
+`sounds.spot` und der Zeile in der Action-Bar, der Cam-Modus läuft weiter ·
+ohne Cam-Modus springt sie nicht · `/cam spot list` zeigt die Punkte mit den
+Klicks zum Hinspringen und zum Löschen, und in der Datei stehen sie unter
+`spots` · zu weit mit `max-distance: 6`, in einem verbotenen Biom, mit einem
+Stein an der Stelle und unter `max-distance-mode: signal` hinter Grundgestein
+springt sie nicht, die Meldung sagt warum · ein falscher Name, ein Wort des
+Befehls, ein unbekannter Punkt und ein voller Platz werden abgewiesen, ein
+Name, den es gibt, wandert trotzdem, und gelöscht ist gelöscht · die
+Tab-Vervollständigung bietet `set`, `delete`, `list` und die Namen an · mit
+`storage: memory` steht nichts in der Datei, und nach dem Reload ist der Punkt
+weg · voreingestellt ist `photo-mode` an und blendet Spieler und Körper aus ·
+`/cam photo` nimmt dem Bot den zweiten Spieler und den eigenen Körper mit Namen
+aus dem Bild, der zweite Spieler sieht den Körper weiter, und sein Anstupsen
+kommt trotzdem an · ein neuer Kamera-Spieler und sein Körper bleiben
+unsichtbar · ein zweites `/cam photo` und das Ende des Cam-Modus zeigen alles
+wieder, und wer im Foto-Modus geht und wiederkommt, ist wieder zu sehen · mit
+`hide-players: false` bleibt der Spieler im Bild · ohne Cam-Modus und mit
+`enabled: false` geht `/cam photo` nicht, vorgeschlagen wird es nur im
+Cam-Modus · voreingestellt sind `cam-time` und `cam-weather` an · `/cam time
+sunset` zeigt dem Bot 12000, eine Zahl gilt in Ticks, 24000 wird abgewiesen,
+`reset` gibt die Zeit der Welt zurück, und der zweite Spieler sieht die ganze
+Zeit die der Welt · `/cam weather rain` lässt es beim Bot voll regnen und beim
+zweiten Spieler nicht, ein Gewitter gibt es nicht · das Ende des Cam-Modus gibt
+Zeit und Wetter zurück · ohne Cam-Modus und mit `enabled: false` geht keins von
+beiden, vorgeschlagen werden sie nur im Cam-Modus · voreingestellt ist
+`night-vision.player-choice` an · `/cam nightvision on` gibt auch am Tag
+Nachtsicht, `off` nimmt sie auch um Mitternacht, allein schaltet es wieder an,
+`reset` gibt `dark` zurück · vor dem Cam-Modus gewählt, gilt es für den
+nächsten Flug und den danach, nach dem Ab- und Anmelden ist es vergessen · mit
+`player-choice: false` ist der Befehl aus, und eine Wahl von vorher gilt nicht ·
+voreingestellt ist `cam-safety.nearby-players` aus, mit `nearby-radius: 16.0` ·
+eingeschaltet startet `/cam` mit einem Spieler drei Blöcke daneben nicht, die
+Meldung nennt ihn und den Abstand, zwanzig Blöcke weg geht es, mit
+`nearby-radius: 25` nicht · für den anderen gilt dasselbe, ein Spieler im
+Cam-Modus zählt nicht, und mit `cam-safety.enabled: false` ist auch die
+Kampfsperre aus ·
 Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im

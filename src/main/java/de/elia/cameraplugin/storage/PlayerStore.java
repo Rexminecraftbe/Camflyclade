@@ -1,7 +1,9 @@
 package de.elia.cameraplugin.storage;
 
 import de.elia.cameraplugin.log.ConsoleLog;
+import de.elia.cameraplugin.spot.Spot;
 import org.bukkit.Bukkit;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -44,8 +46,8 @@ public final class PlayerStore {
 
     /** What stands at the top of every file, for whoever finds one and wonders. */
     private static final List<String> HEADER = List.of(
-            "CamFly: statistics, battery charge and cooldown of this player.",
-            "Deleting it starts the player from nothing: no statistics, a full battery, no cooldown.");
+            "CamFly: statistics, battery charge, cooldown and spots of /cam spot of this player.",
+            "Deleting it starts the player from nothing: no statistics, a full battery, no cooldown, no spots.");
 
     private final JavaPlugin plugin;
     private final ConsoleLog log;
@@ -126,7 +128,7 @@ public final class PlayerStore {
         }
         Double charge = file.isSet("battery.charge") ? file.getDouble("battery.charge") : null;
         Long cooldown = file.isSet("cooldown.started") ? file.getLong("cooldown.started") : null;
-        return new PlayerRecord(
+        PlayerRecord record = new PlayerRecord(
                 file.getString("name"),
                 Math.max(0L, file.getLong("stats.sessions")),
                 Math.max(0L, file.getLong("stats.total-seconds")),
@@ -136,6 +138,31 @@ public final class PlayerStore {
                 charge == null ? null : Math.max(0.0, charge),
                 file.getLong("battery.updated"),
                 cooldown);
+        readSpots(file, record);
+        return record;
+    }
+
+    /**
+     * Reads the spots of a file. Each goes by the name written inside it and
+     * not by the key above it, which YAML may have turned into something else
+     * - a name like {@code 1e3} reads back as a number. One without a name or
+     * a world is left out.
+     */
+    private static void readSpots(YamlConfiguration file, PlayerRecord record) {
+        ConfigurationSection section = file.getConfigurationSection("spots");
+        if (section == null) {
+            return;
+        }
+        for (String key : section.getKeys(false)) {
+            ConfigurationSection spot = section.getConfigurationSection(key);
+            String name = spot == null ? null : spot.getString("name");
+            String world = spot == null ? null : spot.getString("world");
+            if (name == null || name.isEmpty() || world == null) {
+                continue;
+            }
+            record.loadSpot(new Spot(name, world, spot.getDouble("x"), spot.getDouble("y"), spot.getDouble("z"),
+                    (float) spot.getDouble("yaw"), (float) spot.getDouble("pitch")));
+        }
     }
 
     private void write(UUID playerId, PlayerRecord record) {
@@ -155,6 +182,16 @@ public final class PlayerStore {
         if (record.getCooldownStarted() != null) {
             file.set("cooldown.started", record.getCooldownStarted());
         }
+        for (Spot spot : record.getSpots().values()) {
+            String path = "spots." + spot.key();
+            file.set(path + ".name", spot.name());
+            file.set(path + ".world", spot.world());
+            file.set(path + ".x", spot.x());
+            file.set(path + ".y", spot.y());
+            file.set(path + ".z", spot.z());
+            file.set(path + ".yaw", (double) spot.yaw());
+            file.set(path + ".pitch", (double) spot.pitch());
+        }
         Path target = file(playerId);
         Path temp = target.resolveSibling(target.getFileName() + ".tmp");
         try {
@@ -167,7 +204,7 @@ public final class PlayerStore {
             }
             record.markSaved();
         } catch (IOException ex) {
-            log.log(Level.WARNING, "The statistics, battery and cooldown of " + record.getName()
+            log.log(Level.WARNING, "The statistics, battery, cooldown and spots of " + record.getName()
                     + " could not be written: " + ex);
         }
     }
@@ -180,7 +217,7 @@ public final class PlayerStore {
         } catch (IOException ex) {
             aside = path;
         }
-        log.log(Level.WARNING, "A file with statistics, battery and cooldown could not be read and was put aside,"
-                + " the player starts from nothing: " + aside + " (" + reason + ")");
+        log.log(Level.WARNING, "A file with statistics, battery, cooldown and spots could not be read and was put"
+                + " aside, the player starts from nothing: " + aside + " (" + reason + ")");
     }
 }
