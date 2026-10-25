@@ -50,6 +50,26 @@ public final class StartCost {
      *         not, he has been told what he is missing
      */
     public boolean pay(Player player) {
+        return settle(player, true);
+    }
+
+    /**
+     * Whether the player carries all a start costs, without taking any of it:
+     * before the wait of {@code start-delay}, so that nobody waits it out only
+     * to hear that he cannot pay. Paid is at the start itself, with
+     * {@link #pay}.
+     *
+     * @return whether he could pay; if not, he has been told what he is
+     *         missing
+     */
+    public boolean canPay(Player player) {
+        return settle(player, false);
+    }
+
+    /**
+     * @param take whether to take the cost, or only to see that he has it
+     */
+    private boolean settle(Player player, boolean take) {
         if (!settings.hasStartCost()) {
             return true;
         }
@@ -91,6 +111,9 @@ public final class StartCost {
             messages.sendMessage(player, "cost-missing",
                     "{cost}", String.join(", ", cost), "{missing}", String.join(", ", missing));
             return false;
+        }
+        if (!take) {
+            return true;
         }
         // The money first: it is the one part that can still fail, and then
         // nothing else has been taken yet.

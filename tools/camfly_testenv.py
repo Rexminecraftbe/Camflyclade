@@ -949,8 +949,10 @@ def prepare_server_files(env):
     # Zu holen gibt es dort ohnehin nichts: Maven kopiert die Datei nur.
     source = env.repo / "src" / "main" / "resources" / "config.yml"
     text = source.read_text(encoding="utf-8")
-    # Partikel aus. Sonst stirbt jeder Bot in Sichtweite eines Cam-Spielers am
-    # Partikel-Paket: minecraft-data 26.1 kennt die 26.2-IDs nicht.
+    # Partikel aus. Der Bot liest ein Partikelpaket nur bis vor den Partikel -
+    # minecraft-data 26.1 kennt die 26.2-IDs nicht, und frueher starb er daran -,
+    # aber die eines Cam-Spielers mischten sich sonst unter die, die der Test
+    # von /cam trail zaehlt.
     text, n = re.subn(r"(?m)^(\s*particles-per-tick:\s*).*$", r"\g<1>0", text)
     if n == 0:
         Log.warn("particles-per-tick nicht in der Konfiguration gefunden")
@@ -1069,6 +1071,17 @@ if (protoVersion.supportedVersions && !protoVersion.supportedVersions.includes(M
         explosion[1].slice(0, cut).concat([{ name: 'rest', type: 'restBuffer' }])];
     }
   }
+  // Das Partikelpaket ebenso: An den Daten des Partikels, nach seiner Nummer,
+  // verschluckt sich der Bot. Gelesen wird bis vor den Partikel - Ort, Menge
+  // und das Flag fuer die Sichtweite -, der Rest bleibt ein ungelesener Puffer.
+  const particles = play && play.packet_world_particles;
+  if (particles && particles[0] === 'container') {
+    const cut = particles[1].findIndex((f) => f.name === 'particle');
+    if (cut > 0) {
+      play.packet_world_particles = ['container',
+        particles[1].slice(0, cut).concat([{ name: 'rest', type: 'restBuffer' }])];
+    }
+  }
 }
 // mineflayer/lib/version.js ist schon auf der Platte geflickt - loader.js
 // liest den Wert genau einmal beim Laden.
@@ -1094,7 +1107,10 @@ const bot = mineflayer.createBot({
   username: NAME,
   auth: 'offline',
   version: MC,
-  checkTimeoutInterval: 120 * 1000
+  checkTimeoutInterval: 120 * 1000,
+  // Das Plugin fuer Partikel liest den Partikel, den das geflickte Paket
+  // ungelesen laesst, und stuerzte daran ab. Gezaehlt wird unten selbst.
+  plugins: { particle: false }
 });
 
 bot.on('message', (msg) => {
@@ -1115,6 +1131,11 @@ function soundText(packet) {
 for (const name of ['sound_effect', 'entity_sound_effect']) {
   bot._client.on(name, (packet) => sounds.push({ t: Date.now(), text: soundText(packet) }));
 }
+// Die Partikel, die beim Bot ankommen: wo und ob mit dem Flag fuer die
+// Sichtweite, das sie auch von weit weg zeigt. Fuer /cam trail.
+const particleLog = [];
+bot._client.on('world_particles', (packet) => particleLog.push(
+  { t: Date.now(), pos: [packet.x, packet.y, packet.z], far: !!packet.longDistance }));
 // Die Chatzeilen des Servers als Text des ganzen Pakets, wie bei den Toenen:
 // Klick und Hover stehen nur dort, der Text der Zeile hat sie nicht mehr.
 const chatPackets = [];
@@ -1199,6 +1220,21 @@ async function handle(cmd) {
       return { sounds: sounds.slice(cmd.since || 0), count: sounds.length };
     case 'chat_packets':
       return { packets: chatPackets.slice(cmd.since || 0), count: chatPackets.length };
+    case 'particles':
+      return { particles: particleLog.slice(cmd.since || 0), count: particleLog.length };
+    case 'tab': {
+      // Was der Server zur Tab-Vervollstaendigung vorschlaegt, fuer den Text
+      // samt dem Schraegstrich vorn, so wie der Client ihn schickt. Hat er
+      // nichts vorzuschlagen, antwortet er gar nicht: keine Antwort ist eine
+      // leere Liste.
+      let matches;
+      try {
+        matches = await bot.tabComplete(cmd.text, true, false, cmd.timeout || 2500);
+      } catch (e) {
+        return { matches: [], answered: false };
+      }
+      return { matches: (matches || []).map((m) => (typeof m === 'string' ? m : m.match)), answered: true };
+    }
     case 'wait_message': {
       const re = new RegExp(cmd.pattern, 'i');
       const since = cmd.since || 0;
@@ -4383,6 +4419,373 @@ def afk_checks(env, bot):
         cam_off(bot)
         set_options(env, [("enabled", "false", "afk-end"), ("seconds", "300", "afk-end"),
                           ("warning-percent", "80", "afk-end")])
+
+
+def startverzoegerung_checks(env, bot):
+    """start-delay: Nach /cam beginnt der Cam-Modus erst, wenn der Spieler ein
+    paar Sekunden still gestanden hat.
+
+    Voreingestellt ist es aus, mit 3 Sekunden - nachgesehen in der
+    ausgelieferten Datei. Eingeschaltet kommt nach /cam nicht gleich "Cam mode
+    activated", sondern "Cam mode in 3 seconds - stand still" in der
+    Action-Bar, dann 2 und 1, jede Sekunde mit dem Ton von sounds.start-delay,
+    und erst nach den drei Sekunden der Cam-Modus. Ein Schritt bricht den Start
+    ab ("you moved"), ebenso ein Treffer ("you took damage") und ein zweites
+    /cam ("cancelled"); danach laeuft kein Cam-Modus. Fehlt, was start-cost
+    verlangt, hoert er das gleich und wartet nicht erst; kann er zahlen, wird
+    erst beim Start bezahlt. Mehr als 60 Sekunden werden gemeldet und auf 60
+    gesenkt.
+    """
+    def hinstellen_auf_boden():
+        pos = bot.server_pos()
+        if pos is not None:
+            bot.chat(f"/execute in minecraft:overworld run tp @s {_floor(pos[0]) + 0.5} {BODEN_Y + 1} "
+                     f"{_floor(pos[2]) + 0.5}")
+            time.sleep(1.0)
+
+    def kein_cam(zeilen):
+        return not gesagt(zeilen, r"[Cc]am mode activated") and not spielmodus_ist(bot, "adventure")
+
+    try:
+        cam_off(bot)
+        FIND.test("Voreingestellt steht start-delay.enabled: false mit seconds: 3 da",
+                  re.search(r"(?m)^start-delay:\s*\n\s*enabled:\s*false\s*\n(?:\s*#.*\n)*\s*seconds:\s*3\s*$",
+                            ausgeliefert(env)) is not None, "")
+        set_option(env, "enabled", "true", "start-delay")
+        hinstellen_auf_boden()
+
+        seit = toene_marke(bot)
+        since = bot.mark()
+        start = time.time()
+        bot.chat("/cam")
+        zaehlt = bot.expect(r"Cam mode in 3 seconds - stand still", since, 3000)
+        an = bot.expect(r"[Cc]am mode activated", since, 8000)
+        dauer = time.time() - start
+        z = zeilen_seit(bot, since)
+        FIND.test("start-delay: nach /cam steht \"Cam mode in 3 seconds - stand still\" in der Action-Bar",
+                  bool(zaehlt), zeige(z[:3]))
+        FIND.test("start-delay: der Cam-Modus beginnt erst nach den drei Sekunden",
+                  bool(an) and 2.7 <= dauer <= 5.0, f"nach {dauer:.1f} s")
+        FIND.test("start-delay: die Action-Bar zaehlt 3, 2, 1",
+                  all(gesagt(z, rf"Cam mode in {n} seconds") for n in (3, 2, 1)), zeige(z))
+        ticks = sum("block.note_block.hat" in t["text"] for t in bot.call("sounds", since=seit).get("sounds", []))
+        FIND.test("sounds.start-delay - jede Sekunde der Ton", ticks >= 3, f"{ticks} Mal")
+        cam_off(bot)
+        hinstellen_auf_boden()
+
+        since = bot.mark()
+        bot.chat("/cam")
+        time.sleep(1.0)
+        bot.call("fly", wait=30, dx=2, timeout=5000)
+        time.sleep(3.0)
+        z = zeilen_seit(bot, since)
+        FIND.test("start-delay: ein Schritt bricht den Start ab",
+                  gesagt(z, r"Cam mode start cancelled: you moved") and kein_cam(z), zeige(z))
+        hinstellen_auf_boden()
+
+        since = bot.mark()
+        bot.chat("/cam")
+        time.sleep(1.0)
+        console(env, f"damage {BOT_NAME} 1", pause=0.5)
+        time.sleep(3.0)
+        z = zeilen_seit(bot, since)
+        FIND.test("start-delay: ein Treffer bricht den Start ab",
+                  gesagt(z, r"Cam mode start cancelled: you took damage") and kein_cam(z), zeige(z))
+        # Die Sperre von cam-safety nach dem Treffer abwarten.
+        time.sleep(CAM_SAFETY_SEKUNDEN + 0.5)
+
+        since = bot.mark()
+        bot.chat("/cam")
+        time.sleep(1.0)
+        bot.chat("/cam")
+        time.sleep(3.5)
+        z = zeilen_seit(bot, since)
+        FIND.test("start-delay: ein zweites /cam bricht den Start ab",
+                  gesagt(z, r"Cam mode start cancelled\.") and kein_cam(z), zeige(z))
+
+        bot.chat("/clear @s")
+        time.sleep(0.5)
+        set_options(env, [("enabled", "true", "start-cost"), ("items", "{diamond: 3}", "start-cost")])
+        z = befehl(bot, "/cam", warten=1.5)
+        FIND.test("start-delay mit start-cost: wer nicht zahlen kann, hoert es gleich und wartet nicht",
+                  gesagt(z, r"You are missing 3x diamond") and not gesagt(z, r"Cam mode in"), zeige(z))
+        bot.chat("/give @s minecraft:diamond 3")
+        time.sleep(0.5)
+        since = bot.mark()
+        bot.chat("/cam")
+        time.sleep(1.5)
+        vorher = zeilen_seit(bot, since)
+        an = bot.expect(r"[Cc]am mode activated", since, 6000)
+        z = zeilen_seit(bot, since)
+        FIND.test("start-delay mit start-cost: bezahlt wird erst beim Start",
+                  not gesagt(vorher, r"cost you") and bool(an) and gesagt(z, r"cost you 3x diamond"), zeige(z))
+        cam_off(bot)
+
+        vorher = len(server_log(env))
+        set_option(env, "seconds", "100", "start-delay")
+        log = strip_colors(server_log(env)[vorher:])
+        FIND.test("start-delay.seconds: mehr als 60 wird gemeldet und auf 60 gesenkt",
+                  "start-delay.seconds is too large: 100. Using 60" in log, log.strip()[-200:] or "nichts im Log")
+    finally:
+        set_options(env, [("enabled", "false", "start-delay"), ("seconds", "3", "start-delay"),
+                          ("enabled", "false", "start-cost"), ("items", "{}", "start-cost")])
+        cam_off(bot)
+        bot.chat("/clear @s")
+        time.sleep(0.5)
+
+
+def partikel_marke(bot):
+    """Wie viele Partikel bisher beim Bot ankamen, als Marke fuer partikel_seit."""
+    return bot.call("particles", since=10 ** 9).get("count", 0)
+
+
+def partikel_seit(bot, seit):
+    """Die Partikel seit der Marke: Ort und ob mit dem Flag fuer die Sichtweite."""
+    return bot.call("particles", since=seit).get("particles", [])
+
+
+def abstand_zur_strecke(p, a, b):
+    """Wie weit ein Punkt von der Strecke zwischen a und b weg ist."""
+    ab = [b[i] - a[i] for i in range(3)]
+    lang = sum(c * c for c in ab)
+    t = 0.0 if lang == 0 else max(0.0, min(1.0, sum((p[i] - a[i]) * ab[i] for i in range(3)) / lang))
+    return math.dist(p, [a[i] + ab[i] * t for i in range(3)])
+
+
+# So hoch ueber den Fuessen zeichnet /cam trail die Linie, CamTrail.HEIGHT.
+SPUR_HOEHE = 1.0
+
+
+def flugspur_checks(env, bot):
+    """cam-trail: /cam trail <Name> [Nummer|all] zeigt, wo die Kamera eines
+    Spielers geflogen ist.
+
+    Voreingestellt ist es aus und merkt sich 5 Fluege - nachgesehen in der
+    ausgelieferten Datei -, und /cam trail sagt, dass es aus ist.
+    Eingeschaltet fliegt der Bot sechs hoch und sechs zur Seite, geht mit /cam
+    back zum Koerper zurueck und fliegt von dort schraeg weiter. Mitten im Flug
+    nennt /cam trail von der Konsole "still in cam mode", danach die Strecke
+    ohne den Sprung zurueck, den Platz des Koerpers und den letzten der
+    Kamera. Der Bot selbst bekommt die Linie als Partikel, alle mit dem Flag
+    fuer die Sichtweite und alle auf dem geflogenen Weg - keiner auf der Linie
+    quer zurueck, die /cam back nicht geflogen ist. /cam trail ohne Namen
+    blendet sie aus, und nach show-seconds hoert sie von selbst auf.
+
+    Nach einem zweiten Flug zeigt /cam trail <Name> nur den neuen, mit Knoepfen
+    fuer [1], [2] und [all], /cam trail <Name> 2 nur den alten, all beide; #3
+    gibt es nicht, und die Tab-Vervollstaendigung bietet 1, 2 und all an.
+    flights: 1 laesst nach dem Reload nur den letzten stehen. Ein Name ohne
+    Flug wird gemeldet, ohne camplugin.trail fehlt das Recht, und
+    enabled: false vergisst die Fluege.
+    """
+    def konsole(text):
+        """Was die Konsole darauf sagt, ohne Farben - auch ohne die, die der
+        Server mitten in eine Zeile setzt, wo der Text die Farbe wechselt."""
+        vorher = len(server_log(env))
+        console(env, text, pause=1.5)
+        return re.sub(r"\x1b\[[0-9;]*m", "", strip_colors(server_log(env)[vorher:]))
+
+    def block(pos):
+        return f"{_floor(pos[0])} {_floor(pos[1])} {_floor(pos[2])}"
+
+    def hoch(pos):
+        return [pos[0], pos[1] + SPUR_HOEHE, pos[2]]
+
+    try:
+        cam_off(bot)
+        FIND.test("Voreingestellt steht cam-trail.enabled: false da, mit flights: 5",
+                  re.search(r"(?m)^cam-trail:\s*\n\s*enabled:\s*false\s*\n(?:\s*#.*\n)*\s*flights:\s*5\s*$",
+                            ausgeliefert(env)) is not None, "")
+        z = befehl(bot, f"/cam trail {BOT_NAME}")
+        FIND.test("cam-trail.enabled: false - /cam trail ist abgeschaltet",
+                  gesagt(z, r"/cam trail is switched off"), zeige(z))
+
+        set_options(env, [("enabled", "true", "cam-trail"), ("show-seconds", "4", "cam-trail")])
+        heim = bot.server_pos()
+        if not FIND.test("Cam-Modus fuer die Flugspur gestartet", heim is not None and cam_on(bot), ""):
+            return
+        bot.call("fly", wait=30, dy=6, timeout=15000)
+        time.sleep(0.5)
+        oben = bot.server_pos()
+        log = konsole(f"cam trail {BOT_NAME}")
+        FIND.test("/cam trail mitten im Flug: \"still in cam mode\"",
+                  re.search(rf"Cam flight #1 of {BOT_NAME}: \d+ blocks in .+, still in cam mode", log) is not None,
+                  log.strip()[-200:] or "nichts im Log")
+        bot.call("fly", wait=30, dx=6, timeout=15000)
+        time.sleep(0.5)
+        ecke = bot.server_pos()
+        befehl(bot, "/cam back")
+        bot.call("fly", wait=30, dy=2, dz=4, timeout=15000)
+        time.sleep(0.5)
+        ende = bot.server_pos()
+        cam_off(bot)
+        if None in (oben, ecke, ende):
+            FIND.test("Positionen fuer die Flugspur lesbar", False, f"{oben} {ecke} {ende}")
+            return
+
+        log = konsole(f"cam trail {BOT_NAME}")
+        strecke = re.search(rf"Cam flight #1 of {BOT_NAME}: (\d+) blocks in .+, ended .+ ago", log)
+        FIND.test("/cam trail von der Konsole: die Strecke ohne den Sprung von /cam back",
+                  strecke is not None and 14 <= int(strecke.group(1)) <= 19, log.strip()[-300:] or "nichts im Log")
+        FIND.test("/cam trail von der Konsole: der Platz des Koerpers",
+                  f"From the body at {block(heim)} (world)" in log, log.strip()[-300:] or "nichts im Log")
+        FIND.test("/cam trail von der Konsole: der letzte Platz der Kamera",
+                  f"Camera last at {block(ende)} (world)" in log, log.strip()[-300:] or "nichts im Log")
+
+        seit = partikel_marke(bot)
+        z = befehl(bot, f"/cam trail {BOT_NAME}")
+        FIND.test("/cam trail: der Bot bekommt die Zusammenfassung und wie lange die Linie steht",
+                  gesagt(z, rf"Cam flight #1 of {BOT_NAME}: \d+ blocks") and gesagt(z, r"Shown for 4 seconds"), zeige(z))
+        teile = partikel_seit(bot, seit)
+        FIND.test("/cam trail: die Linie kommt als Partikel an", len(teile) >= 20, f"{len(teile)} Partikel")
+        FIND.test("/cam trail: alle mit dem Flag fuer die Sichtweite",
+                  bool(teile) and all(p["far"] for p in teile), "")
+        wege = [(hoch(heim), hoch(oben)), (hoch(oben), hoch(ecke)), (hoch(heim), hoch(ende))]
+        daneben = max((min(abstand_zur_strecke(p["pos"], a, b) for a, b in wege) for p in teile), default=99.0)
+        FIND.test("/cam trail: jeder Partikel liegt auf dem geflogenen Weg",
+                  daneben < 0.6, f"bis {daneben:.2f} Bloecke daneben")
+        quer = [(ecke[i] + heim[i]) / 2 for i in range(3)]
+        naechster = min((math.dist(p["pos"], hoch(quer)) for p in teile), default=99.0)
+        FIND.test("/cam trail: keine Linie quer zurueck, wo /cam back die Kamera versetzt hat",
+                  naechster > 1.5, f"der naechste {naechster:.2f} Bloecke von der Mitte")
+
+        z = befehl(bot, "/cam trail", warten=0.5)
+        seit = partikel_marke(bot)
+        time.sleep(1.5)
+        FIND.test("/cam trail ohne Namen blendet die Linie aus",
+                  gesagt(z, r"The flight is hidden again") and not partikel_seit(bot, seit), zeige(z))
+        z = befehl(bot, "/cam trail")
+        FIND.test("/cam trail ohne Namen und ohne Linie sagt, wie es geht",
+                  gesagt(z, r"Use /cam trail <player>"), zeige(z))
+
+        befehl(bot, f"/cam trail {BOT_NAME}", warten=0.5)
+        time.sleep(4.5)
+        seit = partikel_marke(bot)
+        time.sleep(1.5)
+        FIND.test("cam-trail.show-seconds: 4 - danach kommen keine Partikel mehr",
+                  not partikel_seit(bot, seit), "")
+
+        # Ein zweiter Flug, schraeg hoch nach Norden: Seine Linie liegt weit
+        # weg von der Ecke des ersten.
+        if not FIND.test("Zweiter Cam-Modus fuer die Flugspur gestartet", cam_on(bot), ""):
+            return
+        bot.call("fly", wait=30, dy=3, dz=-5, timeout=15000)
+        time.sleep(0.5)
+        nord = bot.server_pos()
+        cam_off(bot)
+        if nord is None:
+            FIND.test("Position nach dem zweiten Flug lesbar", False, "")
+            return
+
+        def bei(teile, pos):
+            return any(math.dist(p["pos"], hoch(pos)) < 1.0 for p in teile)
+
+        def gezeigt(text):
+            """Erst ausblenden, was noch steht, dann zeigen lassen: was im
+            Chat kam, die Chatpakete mit den Knoepfen und die Partikel."""
+            befehl(bot, "/cam trail", warten=0.5)
+            seit = partikel_marke(bot)
+            pakete_seit = bot.call("chat_packets", since=10 ** 9).get("count", 0)
+            z = befehl(bot, text)
+            pakete = " ".join(p["text"] for p in bot.call("chat_packets", since=pakete_seit).get("packets", []))
+            return z, partikel_seit(bot, seit), pakete
+
+        z, teile, pakete = gezeigt(f"/cam trail {BOT_NAME}")
+        FIND.test("/cam trail <Name>: der neueste Flug, nur seine Linie",
+                  gesagt(z, rf"Cam flight #1 of {BOT_NAME}") and bei(teile, nord) and not bei(teile, ecke),
+                  zeige(z[:1]) + f" - {len(teile)} Partikel")
+        FIND.test("/cam trail: Knoepfe fuer die gemerkten Fluege und fuer alle",
+                  gesagt(z, r"Kept flights: \[1\] \[2\] \[all\]") and f"/cam trail {BOT_NAME} 2" in pakete
+                  and f"/cam trail {BOT_NAME} all" in pakete, zeige(z))
+        z, teile, _ = gezeigt(f"/cam trail {BOT_NAME} 2")
+        FIND.test("/cam trail <Name> 2: der Flug davor, nur seine Linie",
+                  gesagt(z, rf"Cam flight #2 of {BOT_NAME}") and bei(teile, ecke) and not bei(teile, nord),
+                  zeige(z[:1]) + f" - {len(teile)} Partikel")
+        z, teile, _ = gezeigt(f"/cam trail {BOT_NAME} all")
+        FIND.test("/cam trail <Name> all: beide Fluege im Chat und beide Linien",
+                  gesagt(z, rf"The last 2 cam flights of {BOT_NAME}") and gesagt(z, r"^#1: \d+ blocks")
+                  and gesagt(z, r"^#2: \d+ blocks") and bei(teile, ecke) and bei(teile, nord),
+                  zeige(z[:3]) + f" - {len(teile)} Partikel")
+        befehl(bot, "/cam trail", warten=0.5)
+        z = befehl(bot, f"/cam trail {BOT_NAME} 3")
+        FIND.test("/cam trail <Name> 3: den gibt es nicht",
+                  gesagt(z, rf"{BOT_NAME} has no cam flight #3, only 2 kept"), zeige(z))
+        vorschlag = bot.call("tab", text=f"/cam trail {BOT_NAME} ").get("matches", [])
+        FIND.test("Tab-Vervollstaendigung nach dem Namen: 1, 2 und all",
+                  sorted(vorschlag) == ["1", "2", "all"], str(vorschlag))
+        set_option(env, "flights", "1", "cam-trail")
+        log = konsole(f"cam trail {BOT_NAME} 2")
+        FIND.test("cam-trail.flights: 1 - nach dem Reload ist nur noch der letzte Flug da",
+                  f"{BOT_NAME} has no cam flight #2, only 1 kept" in log, log.strip()[-200:] or "nichts im Log")
+
+        z = befehl(bot, "/cam trail Niemand")
+        FIND.test("/cam trail: wer keinen Flug hat, wird gemeldet",
+                  gesagt(z, r"Niemand has no recorded cam flight"), zeige(z))
+
+        console(env, f"deop {BOT_NAME}", pause=1.5)
+        z = befehl(bot, f"/cam trail {BOT_NAME}")
+        console(env, f"op {BOT_NAME}", pause=1.5)
+        FIND.test("/cam trail ohne camplugin.trail: keine Berechtigung",
+                  gesagt(z, r"permission") and not gesagt(z, r"Cam flight"), zeige(z))
+
+        set_option(env, "enabled", "false", "cam-trail")
+        set_option(env, "enabled", "true", "cam-trail")
+        log = konsole(f"cam trail {BOT_NAME}")
+        FIND.test("cam-trail.enabled: false vergisst die Fluege",
+                  f"{BOT_NAME} has no recorded cam flight" in log, log.strip()[-200:] or "nichts im Log")
+    finally:
+        console(env, f"op {BOT_NAME}", pause=1.0)
+        cam_off(bot)
+        set_options(env, [("enabled", "false", "cam-trail"), ("show-seconds", "30", "cam-trail"),
+                          ("flights", "5", "cam-trail")])
+
+
+def vorschlag_checks(env, bot):
+    """Was /cam zur Tab-Vervollstaendigung vorschlaegt: nur, was gerade etwas
+    tut.
+
+    Voreingestellt stehen stats und list da (der Bot ist op).
+    statistics.enabled: false nimmt stats heraus, und nach /cam stats kommt
+    weder reset noch player - mit flight-limit: battery zeigt /cam stats aber
+    den Akku und steht wieder da, mit player und ohne reset.
+    cam-list.access: false nimmt list heraus, und /cam list ist fuer Spieler
+    aus; die Konsole darf es weiter.
+    """
+    def tab(text):
+        return bot.call("tab", text=text).get("matches", [])
+
+    try:
+        cam_off(bot)
+        jetzt = tab("/cam ")
+        FIND.test("Voreingestellt schlaegt /cam stats und list vor", "stats" in jetzt and "list" in jetzt, str(jetzt))
+
+        set_option(env, "enabled", "false", "statistics")
+        jetzt = tab("/cam ")
+        worte = tab("/cam stats ")
+        FIND.test("statistics.enabled: false - stats wird nicht mehr vorgeschlagen",
+                  "stats" not in jetzt and "list" in jetzt, str(jetzt))
+        FIND.test("statistics.enabled: false - nach /cam stats weder reset noch player", not worte, str(worte))
+
+        set_option(env, "flight-limit", "battery")
+        jetzt = tab("/cam ")
+        worte = tab("/cam stats ")
+        FIND.test("statistics aus, flight-limit: battery - stats steht fuer den Akku wieder da, ohne reset",
+                  "stats" in jetzt and "player" in worte and "reset" not in worte, f"{jetzt} / {worte}")
+
+        set_options(env, [("flight-limit", "false"), ("enabled", "true", "statistics"),
+                          ("access", "false", "cam-list")])
+        jetzt = tab("/cam ")
+        z = befehl(bot, "/cam list")
+        vorher = len(server_log(env))
+        console(env, "cam list", pause=1.5)
+        log = strip_colors(server_log(env)[vorher:])
+        FIND.test("cam-list.access: false - list wird nicht vorgeschlagen und ist fuer Spieler aus",
+                  "list" not in jetzt and "stats" in jetzt and gesagt(z, r"permission"), f"{jetzt} / {zeige(z)}")
+        FIND.test("cam-list.access: false - die Konsole darf /cam list weiter",
+                  "Nobody is in cam mode" in log, log.strip()[-200:] or "nichts im Log")
+    finally:
+        set_options(env, [("flight-limit", "false"), ("enabled", "true", "statistics"),
+                          ("access", "admin", "cam-list")])
 
 
 def herzen_checks(env, bot):
@@ -9527,6 +9930,11 @@ def step_tests(env):
         herzen_checks(env, bot)
         wartezeit_checks(env, bot)
         akku_speicher_checks(env, bot)
+
+        # --- Die Wartezeit vor dem Start und die Flugspur fuer Admins ---
+        startverzoegerung_checks(env, bot)
+        flugspur_checks(env, bot)
+        vorschlag_checks(env, bot)
 
         # --- Geworfene Traenke und was den Koerper getroffen hat, mit beiden Koerpertypen ---
         fuer_beide_koerpertypen(env, bot, potion_checks, grund_checks)

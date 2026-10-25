@@ -10,7 +10,7 @@ softdepend: [Vault]
 commands:
   cam:
     description: Enables or disables camera mode
-    usage: /<command> [back|list|reload|stats [reset|player <name>]|stop <name>|all|ban <name>|all [time] [reason]|unban <name>|all|banlist|tp <name> camera|body]
+    usage: /<command> [back|list|reload|stats [reset|player <name>]|stop <name>|all|ban <name>|all [time] [reason]|unban <name>|all|banlist|tp <name> camera|body|trail [name [number|all]]]
     permission: camplugin.use
     permission-message: "You do not have permission for this command.!"
 
@@ -35,4 +35,7 @@ permissions:
     default: op
   camplugin.ban.bypass:
     description: Lets a player use cam mode while /cam ban all keeps everybody else out
+    default: op
+  camplugin.trail:
+    description: Allows /cam trail, to see where the camera of a player flew, while cam-trail is on
     default: op
