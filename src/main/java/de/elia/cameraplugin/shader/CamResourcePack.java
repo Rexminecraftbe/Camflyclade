@@ -15,14 +15,18 @@ import org.bukkit.event.player.PlayerResourcePackStatusEvent;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 /**
@@ -32,16 +36,23 @@ import java.util.logging.Level;
  * <p>The pack is put together out of {@code signal.shader} whenever the
  * config file is read, and written to {@code plugins/CamFly/resourcepack/CamFly.zip}
  * for whoever wants to hand it out himself. With {@code send: built-in}
- * CamFly serves it from a web server of its own and sends every player the
- * address when he joins; with {@code url} it sends the address written
- * there; with {@code false} it sends nothing and takes for granted that the
- * players have the shader some other way.</p>
+ * CamFly serves it itself and sends every player the address when he joins:
+ * over the port of the Minecraft server with {@code port: game}, see
+ * {@link GamePortServer}, or from a web server on a port of its own; with
+ * {@code url} it sends the address written there; with {@code false} it
+ * sends nothing and takes for granted that the players have the shader some
+ * other way.</p>
  *
  * <p>Whether a player can show the shader is known only from his client: it
  * says when it has loaded the pack, or that it would not have it. Until it
  * has, the noise of a weak signal falls back to {@code signal.noise-fallback},
  * see {@link #hasShader(Player)} - an effect the client does not know would
  * show nothing at all.</p>
+ *
+ * <p>A client that could not download the pack says only that, not why. So
+ * the console is told which address it was sent, and whether a request from
+ * that player ever reached CamFly: one that never did means the address
+ * cannot be reached from where the player is.</p>
  */
 public final class CamResourcePack implements Listener {
 
@@ -58,6 +69,13 @@ public final class CamResourcePack implements Listener {
     /** {@code Player#getVirtualHost()} of Paper, the address the player connected with; {@code null} on Spigot. */
     private static final Method VIRTUAL_HOST = virtualHost();
 
+    /**
+     * How many addresses {@link #answers} keeps before it starts over: enough
+     * for everybody joining at once, and no more than that, whoever sends the
+     * web server requests.
+     */
+    private static final int MAX_ANSWERS = 1000;
+
     private final CameraPlugin plugin;
     private final CamSettings settings;
     private final Messages messages;
@@ -68,10 +86,21 @@ public final class CamResourcePack implements Listener {
     private PackServer server;
     /** The port {@link #server} listens on. */
     private int serverPort;
+    /** What hands the pack out over the port of the game, {@code port: game}, or {@code null}. */
+    private GamePortServer gamePort;
+    /** Why the pack cannot go out over the port of the game, or {@code null} while it can. */
+    private String gamePortMissing;
     /** The players the pack was sent to, so that they can be told when it changes or is gone. */
     private final Set<UUID> offered = new HashSet<>();
     /** The players whose client said it has loaded the pack. */
     private final Set<UUID> loaded = new HashSet<>();
+    /** The address each player was sent, for the console when the download fails. */
+    private final Map<UUID, String> sentUrls = new HashMap<>();
+    /**
+     * Who asked CamFly for the pack lately, and with which status the request
+     * was answered - written from the threads that answer them.
+     */
+    private final Map<InetAddress, Integer> answers = new ConcurrentHashMap<>();
     /** Whether the console has been told already that there is no address to send. */
     private boolean warnedAddress;
     /**
@@ -97,7 +126,7 @@ public final class CamResourcePack implements Listener {
         if (!settings.usesCamflyShader()) {
             pack = null;
             sentAs = "";
-            stopServer();
+            stopServing();
             withdraw();
             return;
         }
@@ -109,19 +138,23 @@ public final class CamResourcePack implements Listener {
             log.log(Level.WARNING, "The resource pack with the shader of CamFly could not be put together: " + ex);
             pack = null;
             sentAs = "";
-            stopServer();
+            stopServing();
             withdraw();
             return;
         }
         boolean changed = pack == null || !pack.sha1().equals(built.sha1());
         pack = built;
-        if (settings.getPackSending() == PackSending.BUILT_IN) {
+        if (settings.getPackSending() != PackSending.BUILT_IN) {
+            stopServing();
+        } else if (settings.isPackOnGamePort()) {
+            stopServer();
+            serveOnGamePort();
+        } else {
+            stopGamePort();
             if (changed || server == null || serverPort != settings.getPackPort()) {
                 stopServer();
                 startServer();
             }
-        } else {
-            stopServer();
         }
         if (settings.getPackSending() == PackSending.OFF) {
             sentAs = "";
@@ -129,20 +162,22 @@ public final class CamResourcePack implements Listener {
             return;
         }
         String now = String.join("|", pack.sha1(), settings.getPackSending().name(),
-                String.valueOf(settings.getPackPort()), settings.getPackAddress(), settings.getPackUrl(),
+                String.valueOf(settings.getPackPort()), settings.getPackHost(),
+                String.valueOf(settings.getPackHostPort()), settings.getPackUrl(),
                 String.valueOf(settings.isPackRequired()));
         if (!now.equals(sentAs)) {
             sentAs = now;
             loaded.clear();
+            answers.clear();
             for (Player player : Bukkit.getOnlinePlayers()) {
                 send(player);
             }
         }
     }
 
-    /** Stops the web server, when the plugin is switched off. */
+    /** Stops handing out the pack, when the plugin is switched off. */
     public void onDisable() {
-        stopServer();
+        stopServing();
     }
 
     /**
@@ -165,6 +200,7 @@ public final class CamResourcePack implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         offered.remove(event.getPlayer().getUniqueId());
         loaded.remove(event.getPlayer().getUniqueId());
+        sentUrls.remove(event.getPlayer().getUniqueId());
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -172,14 +208,66 @@ public final class CamResourcePack implements Listener {
         if (!PACK_ID.equals(event.getID())) {
             return;
         }
-        UUID id = event.getPlayer().getUniqueId();
+        Player player = event.getPlayer();
+        UUID id = player.getUniqueId();
         switch (event.getStatus()) {
-            case SUCCESSFULLY_LOADED -> loaded.add(id);
+            case SUCCESSFULLY_LOADED -> {
+                loaded.add(id);
+                answerTo(player);
+            }
             case ACCEPTED, DOWNLOADED -> {
                 // On its way, not there yet.
             }
+            case FAILED_DOWNLOAD, INVALID_URL, FAILED_RELOAD -> {
+                loaded.remove(id);
+                reportFailure(player, event.getStatus());
+            }
             default -> loaded.remove(id);
         }
+    }
+
+    /**
+     * Tells the console why the pack did not reach a player, as far as it can
+     * be told from here.
+     */
+    private void reportFailure(Player player, PlayerResourcePackStatusEvent.Status status) {
+        String url = sentUrls.getOrDefault(player.getUniqueId(), "?");
+        Integer answer = answerTo(player);
+        String why;
+        if (status == PlayerResourcePackStatusEvent.Status.FAILED_RELOAD) {
+            why = "the game downloaded it but could not load it - is it older than 26.3?";
+        } else if (status == PlayerResourcePackStatusEvent.Status.INVALID_URL) {
+            why = "the game does not take " + url + " for an address. Check resource-pack."
+                    + (settings.getPackSending() == PackSending.URL ? "url" : "address") + ".";
+        } else if (settings.getPackSending() == PackSending.URL) {
+            why = "the game could not download it from " + url + ". Can that address be opened in a browser?";
+        } else if (answer == null) {
+            why = "the game could not download it from " + url + ", and no request from that player ever reached"
+                    + " CamFly - that address cannot be reached from where the player is. " + (settings.isPackOnGamePort()
+                    ? "Set resource-pack.address to the address the players join with. Behind BungeeCord or Velocity"
+                    + " the pack needs a port of its own (resource-pack.port) or send: url."
+                    : "Open or forward port " + serverPort + " like the port of the server, or set"
+                    + " resource-pack.port: game.");
+        } else if (answer == 200) {
+            why = "CamFly sent the file from " + url + ", but the game says the download failed.";
+        } else {
+            why = "the request for " + url + " was answered with " + answer + ".";
+        }
+        log.log(Level.WARNING, "The resource pack of CamFly did not reach " + player.getName() + ": " + why);
+    }
+
+    /** How the last request from the address of this player was answered, forgotten with that. */
+    private Integer answerTo(Player player) {
+        InetSocketAddress address = player.getAddress();
+        return address == null || address.getAddress() == null ? null : answers.remove(address.getAddress());
+    }
+
+    /** Notes how a request for the pack was answered; called from the threads that answer them. */
+    private void answered(InetAddress from, int status) {
+        if (answers.size() >= MAX_ANSWERS) {
+            answers.clear();
+        }
+        answers.put(from, status);
     }
 
     /** Sends the pack to one player, under the address it can be fetched from. */
@@ -198,6 +286,7 @@ public final class CamResourcePack implements Listener {
                 : "";
         player.addResourcePack(PACK_ID, url, hash, prompt.isEmpty() ? null : prompt, settings.isPackRequired());
         offered.add(player.getUniqueId());
+        sentUrls.put(player.getUniqueId(), url);
     }
 
     /** Takes the pack off everybody it was sent to, now that it is not wanted any more. */
@@ -210,15 +299,18 @@ public final class CamResourcePack implements Listener {
         }
         offered.clear();
         loaded.clear();
+        sentUrls.clear();
     }
 
     /**
      * Where this player fetches the pack: the address of {@code send: url},
-     * or that of the web server of {@code built-in} - under
-     * {@code resource-pack.address}, or else the address he connected with,
-     * or else {@code server-ip} of the server.
+     * or with {@code built-in} the address in {@code resource-pack.address},
+     * or else the one the player connected with, or else {@code server-ip} of
+     * the server. The port is the one after that address if it names one,
+     * else that of the web server - or with {@code port: game} the one the
+     * player connected to, and else that of the server.
      *
-     * @return the address, or {@code null} when there is none to give him
+     * @return the address, or {@code null} when there is none to give
      */
     private String url(Player player) {
         if (settings.getPackSending() == PackSending.URL) {
@@ -229,13 +321,15 @@ public final class CamResourcePack implements Listener {
             }
             return url;
         }
-        if (server == null) {
-            warnAddress("its web server is not running, see above");
+        boolean onGamePort = settings.isPackOnGamePort();
+        if (onGamePort ? gamePort == null : server == null) {
+            warnAddress(onGamePort ? gamePortMissing : "its web server is not running, see above");
             return null;
         }
-        String host = settings.getPackAddress();
-        if (host.isEmpty()) {
-            host = connectedWith(player);
+        InetSocketAddress joined = connectedWith(player);
+        String host = settings.getPackHost();
+        if (host.isEmpty() && joined != null) {
+            host = joined.getHostString();
         }
         if (host.isEmpty()) {
             host = Bukkit.getIp();
@@ -248,19 +342,23 @@ public final class CamResourcePack implements Listener {
         if (host.contains(":") && !host.startsWith("[")) {
             host = "[" + host + "]";
         }
-        return "http://" + host + ":" + serverPort + PackServer.path(pack);
+        int port = settings.getPackHostPort();
+        if (port == 0) {
+            port = !onGamePort ? serverPort : joined != null && joined.getPort() > 0 ? joined.getPort() : Bukkit.getPort();
+        }
+        return "http://" + host + ":" + port + PackServer.path(pack);
     }
 
-    /** The address the player typed to connect, as far as the server knows it - on Paper only. */
-    private static String connectedWith(Player player) {
+    /** The address and port the player typed to connect, as far as the server knows them - on Paper only. */
+    private static InetSocketAddress connectedWith(Player player) {
         if (VIRTUAL_HOST == null) {
-            return "";
+            return null;
         }
         try {
             Object address = VIRTUAL_HOST.invoke(player);
-            return address instanceof InetSocketAddress socket ? socket.getHostString() : "";
+            return address instanceof InetSocketAddress socket && !socket.getHostString().isEmpty() ? socket : null;
         } catch (ReflectiveOperationException | RuntimeException ex) {
-            return "";
+            return null;
         }
     }
 
@@ -280,16 +378,51 @@ public final class CamResourcePack implements Listener {
         }
     }
 
+    /**
+     * Hands the pack out over the port of the game, {@code port: game}: has
+     * Paper show CamFly the connections of the server unless it does
+     * already.
+     */
+    private void serveOnGamePort() {
+        if (gamePort == null) {
+            try {
+                gamePort = GamePortServer.install(this::answered);
+                gamePortMissing = null;
+                log.log(Level.INFO, "The resource pack with the shader of CamFly is handed out over the port of"
+                        + " the server.");
+            } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
+                gamePortMissing = "resource-pack.port: game needs Paper, which shows CamFly the connections of"
+                        + " the server - give the pack a port of its own, such as resource-pack.port: 8164, or use"
+                        + " send: url";
+                warnAddress(gamePortMissing);
+                return;
+            }
+        }
+        gamePort.serve(pack);
+    }
+
+    private void stopGamePort() {
+        if (gamePort != null) {
+            gamePort.uninstall();
+            gamePort = null;
+        }
+    }
+
+    private void stopServing() {
+        stopServer();
+        stopGamePort();
+    }
+
     private void startServer() {
         int port = settings.getPackPort();
         try {
-            server = PackServer.start(port, pack);
+            server = PackServer.start(port, pack, this::answered);
             serverPort = port;
             log.log(Level.INFO, "The resource pack with the shader of CamFly is served on port " + port + ".");
         } catch (IOException | RuntimeException | LinkageError ex) {
             server = null;
             log.log(Level.WARNING, "The web server for the resource pack of CamFly could not start on port " + port
-                    + ": " + ex + ". Use another port, or resource-pack.send: url.");
+                    + ": " + ex + ". Use another port, resource-pack.port: game, or resource-pack.send: url.");
         }
     }
 

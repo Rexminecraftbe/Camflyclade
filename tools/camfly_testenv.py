@@ -41,11 +41,13 @@ import os
 import re
 import shutil
 import signal
+import socket
 import struct
 import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -98,6 +100,12 @@ PAPER_API_DEPS = [
     ("net.kyori", "adventure-text-logger-slf4j", "5.2.0", CENTRAL),
     ("net.kyori", "examination-api", "1.3.0", CENTRAL),
     ("org.slf4j", "slf4j-api", "2.0.17", CENTRAL),
+    # Netty bringt der Server mit; resource-pack.port: game liest damit die
+    # Verbindungen auf dem Port des Spiels.
+    ("io.netty", "netty-codec-base", "4.2.16.Final", CENTRAL),
+    ("io.netty", "netty-transport", "4.2.16.Final", CENTRAL),
+    ("io.netty", "netty-buffer", "4.2.16.Final", CENTRAL),
+    ("io.netty", "netty-common", "4.2.16.Final", CENTRAL),
 ]
 
 # Sollmarke aus der Anleitung. Weicht die Zahl ab, ist das kein Fehler - nur
@@ -1424,13 +1432,14 @@ async function handle(cmd) {
     case 'resource_pack_answer': {
       // Antwortet auf das zuletzt geschickte Paket: angenommen und geladen
       // (3, dann 0), oder abgelehnt (1) - wie ein Spieler, der im Fenster Ja
-      // oder Nein klickt. Selbst geschrieben und nicht ueber
+      // oder Nein klickt. Mit results genau diese Antworten, etwa 3 und 2
+      // fuer einen Download, der fehlschlaegt. Selbst geschrieben und nicht ueber
       // acceptResourcePack: mineflayer reicht die Id dort als Objekt weiter,
       // und das schreibt das Protokoll als lauter Nullen - der Server bekam
       // die Antwort fuer ein Paket, das es nicht gibt.
       const last = resourcePacks[resourcePacks.length - 1];
       if (!last) return { done: false, reason: 'kein Paket bekommen' };
-      for (const result of (cmd.accept ? [3, 0] : [1])) {
+      for (const result of (cmd.results || (cmd.accept ? [3, 0] : [1]))) {
         bot._client.write('resource_pack_receive', { uuid: last.uuid, result });
       }
       return { done: true, uuid: last.uuid };
@@ -5338,6 +5347,76 @@ def funk_checks(env, bot):
             FIND.problem(f"Aufraeumen nach dem Test des Funksignals: {exc}")
 
 
+def _varint(zahl):
+    """Eine Zahl, wie das Protokoll von Minecraft sie schreibt."""
+    aus = b""
+    while True:
+        teil = zahl & 0x7F
+        zahl >>= 7
+        aus += bytes([teil | (0x80 if zahl else 0)])
+        if not zahl:
+            return aus
+
+
+def roh_an_spielport(teile, pause=0.3):
+    """Schickt Bytes in Stuecken an den Port des Spiels und liest, was
+    zurueckkommt, bis der Server die Verbindung schliesst."""
+    with socket.create_connection((SERVER_HOST, SERVER_PORT), timeout=5) as s:
+        for i, teil in enumerate(teile):
+            if i:
+                time.sleep(pause)
+            s.sendall(teil)
+        daten = b""
+        try:
+            while True:
+                stueck = s.recv(65536)
+                if not stueck:
+                    break
+                daten += stueck
+        except socket.timeout:
+            pass
+        return daten
+
+
+def serverliste_ping():
+    """Fragt den Server, wie ihn die Serverliste fragt: Handshake mit
+    Absicht 1, dann die Statusanfrage. Gibt den JSON-Text der Antwort."""
+    host = SERVER_HOST.encode()
+    handshake = b"\x00" + _varint(BOT_PROTOCOL) + _varint(len(host)) + host + struct.pack(">H", SERVER_PORT) + _varint(1)
+    with socket.create_connection((SERVER_HOST, SERVER_PORT), timeout=5) as s:
+        s.sendall(_varint(len(handshake)) + handshake + b"\x01\x00")
+        daten = b""
+        while True:
+            stueck = s.recv(65536)
+            if not stueck:
+                break
+            daten += stueck
+            try:
+                return _status_text(daten)
+            except (IndexError, ValueError):
+                continue
+    return ""
+
+
+def _status_text(daten):
+    """Der JSON-Text aus der Statusantwort; ValueError, solange sie nicht ganz da ist."""
+    def lies(pos):
+        zahl, schieben = 0, 0
+        while True:
+            b = daten[pos]
+            pos += 1
+            zahl |= (b & 0x7F) << schieben
+            schieben += 7
+            if not b & 0x80:
+                return zahl, pos
+    laenge, pos = lies(0)
+    if len(daten) < pos + laenge:
+        raise ValueError("noch nicht ganz da")
+    _, pos = lies(pos)          # Paket-Id 0
+    textlaenge, pos = lies(pos)
+    return daten[pos:pos + textlaenge].decode("utf-8")
+
+
 def paket_checks(env, bot):
     """resource-pack: das Ressourcenpaket mit dem Shader von CamFly.
 
@@ -5345,22 +5424,27 @@ def paket_checks(env, bot):
     nicht gebraucht, und niemand soll nach einem Paket gefragt werden. Mit
     signal baut CamFly es aus signal.shader, legt es als
     plugins/CamFly/resourcepack/CamFly.zip ab und schickt es jedem, der online
-    ist: von seinem eigenen Webserver auf Port 8164, unter der Adresse, mit
-    der sich der Bot verbunden hat, mit der Pruefsumme, nicht verpflichtend.
-    Der Webserver gibt genau diese Datei heraus, jeder andere Pfad gibt 404.
-    Darin stehen pack.mcmeta, der Shader und vier Post-Effekte; die letzte
-    Stufe traegt die Werte von signal.shader, die erste ein Viertel davon.
-    Ein geaendertes Aussehen gibt ein neues Paket unter einer neuen Adresse.
-    Mit send: url geht die Adresse aus url hinaus, ohne Pruefsumme; mit
-    send: false gar nichts - und der Shader gilt dann als da: Bei schwachem
-    Signal liegt seine Stufe ueber dem Bild, ohne dass der Bot je ein Paket
-    angenommen haette.
+    ist: voreingestellt mit port: game ueber den Port des Spiels selbst, unter
+    der Adresse und dem Port, mit denen sich der Bot verbunden hat, mit der
+    Pruefsumme, nicht verpflichtend. Auf dem Port des Spiels gibt CamFly genau
+    diese Datei heraus, jeder andere Pfad gibt 404 - und die Serverliste und
+    ein neuer Spieler kommen weiter ans Spiel. Mit einer Zahl in port geht das
+    Paket von einem eigenen Webserver auf diesem Port hinaus. Darin stehen
+    pack.mcmeta, der Shader und vier Post-Effekte; die letzte Stufe traegt die
+    Werte von signal.shader, die erste ein Viertel davon. Ein geaendertes
+    Aussehen gibt ein neues Paket unter einer neuen Adresse. Meldet der Client,
+    dass der Download fehlschlug, sagt die Konsole, an welcher Adresse und ob
+    seine Anfrage CamFly je erreicht hat. Mit send: url geht die Adresse aus
+    url hinaus, ohne Pruefsumme; mit send: false gar nichts - und der Shader
+    gilt dann als da: Bei schwachem Signal liegt seine Stufe ueber dem Bild,
+    ohne dass der Bot je ein Paket angenommen haette.
     """
     zip_datei = env.server / "plugins" / "CamFly" / "resourcepack" / "CamFly.zip"
     heim = bot.server_pos()
     if heim is None:
         return
     bx, by, bz = _floor(heim[0]), BODEN_Y + 1, _floor(heim[2])
+    spielport = f"http://{SERVER_HOST}:{SERVER_PORT}"
 
     def marke():
         return bot.call("resource_packs", since=10 ** 9).get("count", 0)
@@ -5369,24 +5453,35 @@ def paket_checks(env, bot):
         time.sleep(1.0)
         return bot.call("resource_packs", since=seit).get("packs", [])
 
-    def holen(url):
+    def holen(url, methode="GET"):
         try:
-            with urllib.request.urlopen(url, timeout=5) as antwort:
-                return antwort.status, antwort.read()
+            anfrage = urllib.request.Request(url, method=methode)
+            with urllib.request.urlopen(anfrage, timeout=5) as antwort:
+                return antwort.status, antwort.read(), antwort.headers.get("Content-Length")
         except urllib.error.HTTPError as fehler:
-            return fehler.code, b""
+            return fehler.code, b"", None
         except Exception as fehler:
-            return f"{type(fehler).__name__}: {fehler}", b""
+            return f"{type(fehler).__name__}: {fehler}", b"", None
 
     def stufe(inhalt, nummer):
         with zipfile.ZipFile(io.BytesIO(inhalt)) as z:
             daten = json.loads(z.read(f"assets/camfly/post_effect/signal_{nummer}.json"))
         return {u["name"]: u["value"] for u in daten["passes"][0]["uniforms"]["SignalConfig"]}
 
+    def fehlschlag():
+        """Der Bot meldet: angenommen, Download fehlgeschlagen. Gibt die
+        Warnung der Konsole dazu."""
+        vorher = len(server_log(env))
+        bot.call("resource_pack_answer", results=[3, 2])
+        time.sleep(1.0)
+        zeilen = [z for z in strip_colors(server_log(env)[vorher:]).splitlines()
+                  if "did not reach" in z]
+        return zeilen[-1] if zeilen else ""
+
     try:
         cam_off(bot)
-        FIND.test("Voreingestellt steht resource-pack.send: built-in mit port: 8164 da",
-                  re.search(r"(?m)^resource-pack:\s*\n(?:\s*#.*\n)*\s*send:\s*built-in\s*\n(?:\s*#.*\n)*\s*port:\s*8164\s*$",
+        FIND.test("Voreingestellt steht resource-pack.send: built-in mit port: game da",
+                  re.search(r"(?m)^resource-pack:\s*\n(?:\s*#.*\n)*\s*send:\s*built-in\s*\n(?:\s*#.*\n)*\s*port:\s*game\s*$",
                             ausgeliefert(env)) is not None, "")
         zip_datei.unlink(missing_ok=True)
         seit = marke()
@@ -5395,24 +5490,77 @@ def paket_checks(env, bot):
                   not zip_datei.exists() and pakete_seit(seit) == [], "")
 
         seit = marke()
+        vorher = len(server_log(env))
         set_options(env, [("max-distance-mode", "signal"), ("max-distance", "30.0")])
         pakete = pakete_seit(seit)
         FIND.test("max-distance-mode: signal - CamFly legt plugins/CamFly/resourcepack/CamFly.zip ab",
                   zip_datei.is_file(), "")
         FIND.test("max-distance-mode: signal - der Bot bekommt das Paket geschickt", len(pakete) == 1, str(pakete))
+        FIND.test("port: game - die Konsole sagt, dass es ueber den Port des Servers hinausgeht",
+                  "handed out over the port of the server" in strip_colors(server_log(env)[vorher:]), "")
         paket = pakete[-1] if pakete else {}
         inhalt = zip_datei.read_bytes() if zip_datei.is_file() else b""
         sha1 = hashlib.sha1(inhalt).hexdigest()
         url = paket.get("url", "")
-        FIND.test("resource-pack.send: built-in - vom Webserver auf 8164, unter der Adresse, mit der er verbunden ist",
-                  url == f"http://127.0.0.1:8164/CamFly-{sha1}.zip", url)
+        FIND.test("port: game - ueber den Port des Spiels, unter Adresse und Port, mit denen er verbunden ist",
+                  url == f"{spielport}/CamFly-{sha1}.zip", url)
         FIND.test("resource-pack.send: built-in - mit der Pruefsumme der Datei, nicht verpflichtend",
                   paket.get("hash") == sha1 and not paket.get("forced"), str(paket))
-        status, geholt = holen(url)
-        FIND.test("Der Webserver gibt genau diese Datei heraus", status == 200 and geholt == inhalt,
+        status, geholt, _ = holen(url)
+        FIND.test("port: game - der Port des Spiels gibt genau diese Datei heraus", status == 200 and geholt == inhalt,
                   f"{status}, {len(geholt)} von {len(inhalt)} Bytes")
-        status, _ = holen("http://127.0.0.1:8164/irgendwas.zip")
-        FIND.test("Jeder andere Pfad gibt 404", status == 404, str(status))
+        status, geholt, laenge = holen(url, "HEAD")
+        FIND.test("port: game - HEAD nennt nur die Laenge", status == 200 and geholt == b"" and laenge == str(len(inhalt)),
+                  f"{status}, {laenge}")
+        status, _, _ = holen(f"{spielport}/irgendwas.zip")
+        FIND.test("port: game - jeder andere Pfad gibt 404", status == 404, str(status))
+        pfad = urllib.parse.urlparse(url).path.encode()
+        antwort = roh_an_spielport([b"GE", b"T " + pfad + b" HTTP/1.1\r\nHost: x\r\n", b"\r\n"])
+        FIND.test("port: game - auch eine Anfrage, die in Stuecken kommt",
+                  antwort.startswith(b"HTTP/1.1 200 OK") and antwort.endswith(inhalt), antwort[:40].decode("latin-1"))
+        try:
+            status_text = serverliste_ping()
+        except Exception as fehler:
+            status_text = f"{type(fehler).__name__}: {fehler}"
+        FIND.test("port: game - die Serverliste bekommt ihre Antwort wie immer",
+                  '"version"' in status_text and '"players"' in status_text, status_text[:120])
+        antwort = roh_an_spielport([b"\xfe\x01"])
+        FIND.test("port: game - die alte Serverliste (0xFE) auch", antwort.startswith(b"\xff"), repr(antwort[:20]))
+
+        warnung = fehlschlag()
+        FIND.test("Download fehlgeschlagen, nachdem CamFly die Datei geschickt hat - die Konsole sagt es",
+                  f"did not reach {BOT_NAME}: CamFly sent the file from {url}" in warnung, warnung)
+        seit = marke()
+        set_option(env, "address", f'"{SERVER_HOST}:{SERVER_PORT + 7}"', "resource-pack")
+        neu = pakete_seit(seit)
+        FIND.test("resource-pack.address mit Port - das Paket geht unter genau dieser Adresse hinaus",
+                  len(neu) == 1 and neu[-1]["url"] == f"http://{SERVER_HOST}:{SERVER_PORT + 7}/CamFly-{sha1}.zip",
+                  str(neu))
+        warnung = fehlschlag()
+        FIND.test("Download fehlgeschlagen ohne eine Anfrage - die Konsole sagt, dass keine ankam, und was zu tun ist",
+                  "no request from that player ever reached CamFly" in warnung
+                  and "Set resource-pack.address" in warnung, warnung)
+        seit = marke()
+        set_option(env, "address", '""', "resource-pack")
+        pakete_seit(seit)
+
+        seit = marke()
+        set_option(env, "port", "8164", "resource-pack")
+        neu = pakete_seit(seit)
+        url = neu[-1]["url"] if neu else ""
+        FIND.test("port: 8164 - vom eigenen Webserver auf 8164, unter der Adresse, mit der er verbunden ist",
+                  url == f"http://{SERVER_HOST}:8164/CamFly-{sha1}.zip", str(neu))
+        status, geholt, _ = holen(url)
+        FIND.test("port: 8164 - der Webserver gibt genau diese Datei heraus", status == 200 and geholt == inhalt,
+                  f"{status}, {len(geholt)} von {len(inhalt)} Bytes")
+        status, _, _ = holen(f"http://{SERVER_HOST}:8164/irgendwas.zip")
+        FIND.test("port: 8164 - jeder andere Pfad gibt 404", status == 404, str(status))
+        # Geladen gemeldet: Das vergisst die Anfragen von eben.
+        bot.call("resource_pack_answer", results=[3, 0])
+        warnung = fehlschlag()
+        FIND.test("port: 8164 - ohne Anfrage sagt die Konsole, dass der Port erreichbar sein muss",
+                  "no request from that player ever reached CamFly" in warnung
+                  and "Open or forward port 8164" in warnung, warnung)
 
         namen = []
         if inhalt:
@@ -5444,8 +5592,16 @@ def paket_checks(env, bot):
             stufen = sorted(n for n in z.namelist() if "/post_effect/" in n)
         FIND.test("signal.shader.stages: 3 - drei Stufen, die letzte mit static 0.8",
                   len(stufen) == 3 and stufe(inhalt2, 3)["Static"] == 0.8, str(stufen))
-        status, _ = holen(url)
+        status, _, _ = holen(url)
         FIND.test("Das alte Paket gibt es danach nicht mehr", status == 404, str(status))
+
+        seit = marke()
+        set_option(env, "port", "game", "resource-pack")
+        neu = pakete_seit(seit)
+        FIND.test("Zurueck auf port: game - das Paket geht wieder ueber den Port des Spiels hinaus",
+                  len(neu) == 1 and neu[-1]["url"] == f"{spielport}/CamFly-{sha2}.zip", str(neu))
+        status, _, _ = holen(f"http://{SERVER_HOST}:8164/CamFly-{sha2}.zip")
+        FIND.test("Zurueck auf port: game - der eigene Webserver ist aus", not isinstance(status, int), str(status))
 
         seit = marke()
         set_options(env, [("send", "url", "resource-pack"), ("url", "http://example.invalid/CamFly.zip", "resource-pack")])
@@ -5474,7 +5630,8 @@ def paket_checks(env, bot):
             cam_off(bot)
             set_options(env, [("max-distance-mode", "fixed"), ("max-distance", "100.0"),
                               ("static", "0.55", "signal"), ("stages", "4", "signal"),
-                              ("send", "built-in", "resource-pack"), ("url", '""', "resource-pack")])
+                              ("send", "built-in", "resource-pack"), ("url", '""', "resource-pack"),
+                              ("port", "game", "resource-pack"), ("address", '""', "resource-pack")])
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test des Ressourcenpakets: {exc}")

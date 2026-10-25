@@ -205,15 +205,22 @@ signal:
 # anderen signal.noise-fallback.
 resource-pack:
   # Wie die Spieler es bekommen, jeder beim Betreten des Servers:
-  #   built-in = von einem eigenen kleinen Webserver von CamFly auf port, der nur diese eine Datei herausgibt
+  #   built-in = CamFly gibt es selbst heraus, über port
   #   url      = von url: CamFly.zip selbst irgendwo hochladen, wo jeder es herunterladen kann
   #   false    = CamFly schickt nichts, z. B. wenn der Inhalt von CamFly.zip schon im Ressourcenpaket des Servers steckt
   send: built-in
-  # Port des Webservers (built-in). Er muss von außen erreichbar sein wie der Port des Servers selbst - bei vielen
-  # Hostern ist das ein zusätzlicher Port, der erst freigegeben werden muss.
-  port: 8164
-  # Adresse, unter der die Spieler den Webserver erreichen, z. B. mc.example.com (leer = die, mit der sie sich
-  # verbunden haben - das geht nur auf Paper -, sonst server-ip aus der server.properties)
+  # Über welchen Port CamFly das Paket bei built-in herausgibt:
+  #   game = über den Port des Minecraft-Servers selbst. Es muss nichts freigegeben oder weitergeleitet werden: Wer
+  #          den Server erreicht, bekommt auch das Paket. Geht nur auf Paper. Hinter BungeeCord oder Velocity
+  #          landet der Download beim Proxy - dort eine Zahl nehmen oder url.
+  #   eine Zahl, z. B. 8164 = ein eigener kleiner Webserver auf diesem Port. Er muss von außen erreichbar sein wie
+  #          der Port des Servers selbst: bei vielen Hostern ein zusätzlicher Port, der erst freigegeben werden muss,
+  #          zu Hause eine Portweiterleitung im Router.
+  # Schlägt der Download bei einem Spieler fehl, steht in der Konsole, an welcher Adresse und warum.
+  port: game
+  # Adresse, unter der die Spieler das Paket abholen, z. B. mc.example.com, mit Port mc.example.com:25565 (leer = die,
+  # mit der sie sich verbunden haben - das geht nur auf Paper -, sonst server-ip aus der server.properties). Ohne
+  # Port gilt bei game der Port, mit dem sich der Spieler verbunden hat, sonst port.
   address: ""
   # Adresse der Datei bei send: url, z. B. https://example.com/CamFly.zip
   url: ""

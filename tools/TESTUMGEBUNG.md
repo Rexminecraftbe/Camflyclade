@@ -67,6 +67,13 @@ Testserver **ViaVersion** und **ViaBackwards** (von Hangar, mit Prüfsumme, sieh
   Effekt auf ihm liegt, fragt der Test mit `/posteffect list @s` beim Server.
 * **Alte Jars in `paper-api/`** werden vor dem Holen weggeräumt: Zwei
   paper-api verschiedener Versionen nebeneinander, und `javac` nimmt die erste.
+* **Netty liegt mit in `paper-api/`**: `resource-pack.port: game` liest die
+  Verbindungen auf dem Port des Spiels mit Netty, das der Server mitbringt.
+  Der Test holt das Paket dort mit `urllib`, schickt eine Anfrage in Stücken
+  über einen rohen Socket und prüft, dass die Serverliste (auch die alte mit
+  `0xFE`) weiter ihre Antwort bekommt. Einen fehlgeschlagenen Download meldet
+  der Bot mit `resource_pack_answer` und `results=[3, 2]`; die Konsole muss
+  dann sagen, an welcher Adresse und ob seine Anfrage ankam.
 
 ## Der Shader
 
@@ -104,7 +111,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **800** - alle 800 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **805** - alle 805 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 

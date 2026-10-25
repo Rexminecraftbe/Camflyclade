@@ -107,6 +107,9 @@ public final class CamSettings {
     /** The highest port there is, for {@code resource-pack.port}. */
     private static final int MAX_PORT = 65535;
 
+    /** The value of {@code resource-pack.port} for the port of the game itself. */
+    private static final String GAME_PORT = "game";
+
     /**
      * The longest {@code signal.lost-seconds} accepts. Longer than a minute,
      * a camera without a signal is no longer looking for it but flying on
@@ -340,10 +343,19 @@ public final class CamSettings {
     private ShaderLook shaderLook;
     /** How the players get CamFly's resource pack, {@code resource-pack.send}. */
     private PackSending packSending;
-    /** The port of the web server of {@code send: built-in}, {@code resource-pack.port}. */
+    /**
+     * The port of the web server of {@code send: built-in},
+     * {@code resource-pack.port}, or 0 for {@code game}: the port of the
+     * Minecraft server itself.
+     */
     private int packPort;
-    /** The address players reach that web server under, empty for the one they connected with. */
-    private String packAddress;
+    /**
+     * The address players fetch the pack under, {@code resource-pack.address}
+     * without its port, empty for the one they connected with.
+     */
+    private String packHost;
+    /** The port written after that address, or 0 for none. */
+    private int packHostPort;
     /** Where the pack lies with {@code send: url}, {@code resource-pack.url}. */
     private String packUrl;
     /** Whether a player has to take the pack, {@code resource-pack.required}. */
@@ -705,14 +717,57 @@ public final class CamSettings {
             case "false" -> PackSending.OFF;
             default -> PackSending.BUILT_IN;
         };
-        packPort = config.getInt("resource-pack.port", 8164, 1, MAX_PORT);
-        packAddress = config.getString("resource-pack.address", "").trim();
+        packPort = readPackPort(config);
+        readPackAddress(config);
         packUrl = config.getString("resource-pack.url", "").trim();
         packRequired = config.getBoolean("resource-pack.required", false);
         signalLoss = config.getChoice("signal.lost", "back", "back", "end").equalsIgnoreCase("end")
                 ? SignalLoss.END
                 : SignalLoss.BACK;
         signalLostSeconds = config.getInt("signal.lost-seconds", 3, 0, MAX_SIGNAL_LOST_SECONDS);
+    }
+
+    /**
+     * Reads {@code resource-pack.port}: {@code game}, or a port of a web
+     * server of its own.
+     *
+     * @return the port, or 0 for {@code game}
+     */
+    private int readPackPort(ConfigReader config) {
+        String path = "resource-pack.port";
+        if (config.isNumber(path)) {
+            return config.getInt(path, 8164, 1, MAX_PORT);
+        }
+        String raw = config.getString(path, GAME_PORT).trim();
+        if (!raw.equalsIgnoreCase(GAME_PORT)) {
+            config.warnUnknownValue(path, raw, messages.configMessage("config-allowed-pack-port"), GAME_PORT);
+        }
+        return 0;
+    }
+
+    /**
+     * Reads {@code resource-pack.address}: a host, perhaps with a port after
+     * it, such as {@code mc.example.com:25565} or {@code [2001:db8::1]:25565}.
+     * An IPv6 address without brackets has colons of its own and no port.
+     */
+    private void readPackAddress(ConfigReader config) {
+        String path = "resource-pack.address";
+        String raw = config.getString(path, "").trim();
+        packHost = raw;
+        packHostPort = 0;
+        int colon = raw.lastIndexOf(':');
+        boolean withPort = raw.startsWith("[") ? colon > raw.indexOf(']') : colon > 0 && colon == raw.indexOf(':');
+        if (!withPort) {
+            return;
+        }
+        packHost = raw.substring(0, colon);
+        String port = raw.substring(colon + 1);
+        int value = port.matches("[0-9]{1,5}") ? Integer.parseInt(port) : 0;
+        if (value < 1 || value > MAX_PORT) {
+            config.warnUnknownValue(path, raw, messages.configMessage("config-allowed-pack-address"), packHost);
+            return;
+        }
+        packHostPort = value;
     }
 
     /**
@@ -1104,12 +1159,24 @@ public final class CamSettings {
         return packSending;
     }
 
+    /** The port of the web server of {@code send: built-in}, or 0 for the port of the game itself. */
     public int getPackPort() {
         return packPort;
     }
 
-    public String getPackAddress() {
-        return packAddress;
+    /** Whether the pack goes out over the port of the game itself, {@code resource-pack.port: game}. */
+    public boolean isPackOnGamePort() {
+        return packPort == 0;
+    }
+
+    /** The address of {@code resource-pack.address} without its port, empty for none. */
+    public String getPackHost() {
+        return packHost;
+    }
+
+    /** The port of {@code resource-pack.address}, or 0 where it names none. */
+    public int getPackHostPort() {
+        return packHostPort;
     }
 
     public String getPackUrl() {

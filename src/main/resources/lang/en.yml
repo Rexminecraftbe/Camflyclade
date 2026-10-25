@@ -101,6 +101,8 @@ messages:
   cant-fly-in-water: "&cYou cannot fly into water in camera mode."
   config-allowed-blocks: "any block, e.g. barrier or glass"
   config-allowed-colors: "a colour as \"#RRGGBB\", e.g. \"#9fffb0\""
+  config-allowed-pack-address: "an address such as mc.example.com, or with a port such as mc.example.com:25565"
+  config-allowed-pack-port: "game, or a port from 1 to 65535"
   config-allowed-particles: "a particle without extra data, e.g. soul_fire_flame, flame or end_rod"
   config-allowed-post-effects: "false, or a post effect such as minecraft:blur or mypack:noise (signal.noise also camfly)"
   config-allowed-sounds: "a sound as /playsound names it, e.g. block.beacon.activate"
