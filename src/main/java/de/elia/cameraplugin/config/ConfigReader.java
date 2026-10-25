@@ -46,6 +46,7 @@ public final class ConfigReader {
     private static final String TOO_SMALL = "config-too-small";
     private static final String TOO_LARGE = "config-too-large";
     private static final String OUT_OF_RANGE = "config-out-of-range";
+    private static final String NOT_DESCENDING = "config-not-descending";
 
     private final FileConfiguration config;
     private final List<ConfigIssue> warnings = new ArrayList<>();
@@ -424,6 +425,20 @@ public final class ConfigReader {
      *
      * @param other the other list the entry stands in
      */
+    /**
+     * Notes values that have to go down from one to the next and do not,
+     * such as the levels of {@code signal.levels}.
+     *
+     * @param value the values as the file has them, in their order
+     * @param used  what is used in their place
+     */
+    public void warnNotDescending(String path, Object value, String used) {
+        warnings.add(ConfigIssue.of(NOT_DESCENDING)
+                .with("path", path)
+                .with("value", value)
+                .with("used", used));
+    }
+
     public void warnEntryInBothLists(String path, String other, Object value) {
         warnings.add(ConfigIssue.of(ENTRY_IN_BOTH_LISTS)
                 .with("path", path)

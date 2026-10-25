@@ -140,7 +140,7 @@ public final class CamSignal {
         return messages.getMessage("actionbar-signal")
                 .replace("{bars}", bars(link.strength))
                 .replace("{quality}", messages.getMessage(QUALITIES[level(link.strength)]))
-                .replace("{percent}", String.valueOf((int) Math.ceil(link.strength * 100.0)));
+                .replace("{percent}", String.valueOf(percent(link.strength)));
     }
 
     /**
@@ -166,10 +166,27 @@ public final class CamSignal {
 
     /**
      * How strong a signal is in steps, as the icons and words go: 0 when it is
-     * gone, 1 below 20 %, then a step for every 20 % more, 5 from 80 %.
+     * gone, 5 from the percent {@code signal.levels.excellent} names, 4 from
+     * {@code good}, 3 from {@code medium}, 2 from {@code weak}, and 1 below.
+     * Measured on the percent {@code {percent}} shows, so that both agree.
      */
-    static int level(double strength) {
-        return strength <= 0.0 ? 0 : Math.min(ICONS.length - 1, (int) (strength * 5.0) + 1);
+    private int level(double strength) {
+        if (strength <= 0.0) {
+            return 0;
+        }
+        int percent = percent(strength);
+        double[] levels = settings.getSignalLevels();
+        for (int i = 0; i < levels.length; i++) {
+            if (percent >= levels[i]) {
+                return ICONS.length - 1 - i;
+            }
+        }
+        return 1;
+    }
+
+    /** The strength in whole percent, rounded up: a signal that is there at all shows at least 1. */
+    private static int percent(double strength) {
+        return (int) Math.ceil(strength * 100.0);
     }
 
     /** Four bars, as many of them lit as the signal is strong, green, yellow or red. */

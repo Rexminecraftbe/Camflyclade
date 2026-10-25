@@ -99,6 +99,12 @@ public final class CamSettings {
     /** The most flights {@code cam-trail.flights} keeps of each player. */
     private static final int MAX_TRAIL_FLIGHTS = 20;
 
+    /** The levels of {@code signal.levels}, from the most bars down, as the config file names them. */
+    private static final String[] SIGNAL_LEVEL_NAMES = {"excellent", "good", "medium", "weak"};
+
+    /** From how many percent each of {@link #SIGNAL_LEVEL_NAMES} counts out of the box. */
+    private static final double[] DEFAULT_SIGNAL_LEVELS = {80.0, 60.0, 40.0, 20.0};
+
     /**
      * The longest {@code signal.lost-seconds} accepts. Longer than a minute,
      * a camera without a signal is no longer looking for it but flying on
@@ -320,6 +326,11 @@ public final class CamSettings {
 
     /** Blocks of range each block in the way takes off the signal, {@code signal.block-cost} and {@code -costs}. */
     private SignalCosts signalCosts;
+    /**
+     * From how many percent each level of the signal display counts,
+     * {@code signal.levels}: excellent, good, medium and weak, going down.
+     */
+    private double[] signalLevels;
     /** What happens once the signal is lost, {@code signal.lost}. */
     private SignalLoss signalLoss;
     /** How long the camera has to fly back into the signal, in seconds, {@code signal.lost-seconds}. */
@@ -666,10 +677,44 @@ public final class CamSettings {
      */
     private void readSignal(ConfigReader config) {
         signalCosts = SignalCosts.read(config, messages.configMessage("config-allowed-signal-costs"));
+        readSignalLevels(config);
         signalLoss = config.getChoice("signal.lost", "back", "back", "end").equalsIgnoreCase("end")
                 ? SignalLoss.END
                 : SignalLoss.BACK;
         signalLostSeconds = config.getInt("signal.lost-seconds", 3, 0, MAX_SIGNAL_LOST_SECONDS);
+    }
+
+    /**
+     * Reads {@code signal.levels}: from how many percent the signal display
+     * shows which level. Each has to be lower than the one before; if one is
+     * not, they are reported together and all of them keep their defaults.
+     */
+    private void readSignalLevels(ConfigReader config) {
+        double[] levels = new double[SIGNAL_LEVEL_NAMES.length];
+        for (int i = 0; i < levels.length; i++) {
+            levels[i] = config.getDouble("signal.levels." + SIGNAL_LEVEL_NAMES[i], DEFAULT_SIGNAL_LEVELS[i],
+                    0.0, 100.0);
+        }
+        for (int i = 1; i < levels.length; i++) {
+            if (levels[i] >= levels[i - 1]) {
+                config.warnNotDescending("signal.levels", signalLevelsText(levels),
+                        signalLevelsText(DEFAULT_SIGNAL_LEVELS));
+                levels = DEFAULT_SIGNAL_LEVELS.clone();
+                break;
+            }
+        }
+        signalLevels = levels;
+    }
+
+    /** The levels as the note names them, e.g. {@code excellent 80, good 60, medium 40, weak 20}. */
+    private static String signalLevelsText(double[] levels) {
+        List<String> parts = new ArrayList<>();
+        for (int i = 0; i < levels.length; i++) {
+            double level = levels[i];
+            parts.add(SIGNAL_LEVEL_NAMES[i] + " "
+                    + (level == Math.rint(level) ? String.valueOf((long) level) : String.valueOf(level)));
+        }
+        return String.join(", ", parts);
     }
 
     /**
@@ -987,6 +1032,15 @@ public final class CamSettings {
 
     public SignalCosts getSignalCosts() {
         return signalCosts;
+    }
+
+    /**
+     * From how many percent each level of the signal display counts,
+     * {@code signal.levels}: excellent, good, medium and weak, each lower
+     * than the one before. Not to be changed.
+     */
+    public double[] getSignalLevels() {
+        return signalLevels;
     }
 
     public SignalLoss getSignalLoss() {

@@ -4965,6 +4965,11 @@ def funk_checks(env, bot):
     ohne ihn.
     Eine Grenze, an die man stoesst, gibt es nicht: In freier Luft fliegt die
     Kamera ueber die 30 Bloecke hinaus, bis das Signal sie zurueckholt.
+
+    signal.levels (voreingestellt 80, 60, 40, 20) legt fest, ab wie viel
+    Prozent welche Stufe gilt: Mit 95, 85, 50, 10 sind 90 % "good", 67 %
+    "medium" und 17 % "weak". Mit 85, 67, 90, 20 ist medium nicht kleiner
+    als good: /cam reload meldet das, und es gelten wieder die voreingestellten.
     """
     if not FIND.test("Cam-Modus ist vor dem Test des Funksignals aus", cam_off(bot), ""):
         return
@@ -5130,13 +5135,51 @@ def funk_checks(env, bot):
                   f"{draussen} - {zeige(z_[-3:])}")
         FIND.test("signal: dort holt das Signal die Kamera zurueck", gesagt(z_, r"back at your body")
                   and am_koerper()[0], zeige(z_[-3:]))
+
+        # --- signal.levels: ab wie viel Prozent welche Stufe ---
+        FIND.test("Voreingestellt stehen signal.levels mit 80, 60, 40 und 20 da",
+                  re.search(r"(?m)^  levels:\n    excellent: 80\n    good: 60\n    medium: 40\n    weak: 20$",
+                            ausgeliefert(env)) is not None, "")
+        set_options(env, [("excellent", "95", "signal"), ("good", "85", "signal"), ("medium", "50", "signal"),
+                          ("weak", "10", "signal")])
+        luft()
+        hinstellen(bot, x, y, z)
+        cam_on(bot)
+        kamera_bei(3)
+        wort, symbole = anzeige()
+        FIND.test("signal.levels 95/85/50/10: bei 90 % \"good\" mit icon/ping_4",
+                  wort == "good" and symbole == ["icon/ping_4"], f"{wort} {symbole}")
+        kamera_bei(10)
+        wort, symbole = anzeige()
+        FIND.test("signal.levels 95/85/50/10: bei 67 % \"medium\" mit icon/ping_3",
+                  wort == "medium" and symbole == ["icon/ping_3"], f"{wort} {symbole}")
+        mauer(4, 6)
+        wort, symbole = anzeige()
+        FIND.test("signal.levels 95/85/50/10: bei 17 % \"weak\" mit icon/ping_2",
+                  wort == "weak" and symbole == ["icon/ping_2"], f"{wort} {symbole}")
+        luft()
+        vorher = len(server_log(env))
+        set_options(env, [("excellent", "85", "signal"), ("good", "67", "signal"), ("medium", "90", "signal"),
+                          ("weak", "20", "signal")])
+        log = strip_colors(server_log(env)[vorher:])
+        FIND.test("signal.levels 85/67/90/20: medium nicht kleiner als good - /cam reload meldet den Fehler",
+                  "The values of signal.levels have to go down" in log
+                  and "excellent 85, good 67, medium 90, weak 20" in log, log.strip()[-300:])
+        hinstellen(bot, x, y, z)
+        cam_on(bot)
+        kamera_bei(10)
+        wort, symbole = anzeige()
+        FIND.test("signal.levels 85/67/90/20: es gelten 80, 60, 40, 20 - bei 67 % \"good\"",
+                  wort == "good" and symbole == ["icon/ping_4"], f"{wort} {symbole}")
     finally:
         try:
             cam_off(bot)
             luft()
             set_options(env, [("max-distance-mode", "fixed"), ("max-distance", "100.0"),
                               ("lost", "back", "signal"), ("lost-seconds", "3", "signal"),
-                              ("actionbar-signal", '" &7| {icon} &7Signal: {quality}"', "messages")])
+                              ("actionbar-signal", '" &7| {icon} &7Signal: {quality}"', "messages"),
+                              ("excellent", "80", "signal"), ("good", "60", "signal"), ("medium", "40", "signal"),
+                              ("weak", "20", "signal")])
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test des Funksignals: {exc}")

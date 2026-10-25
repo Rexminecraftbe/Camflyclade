@@ -182,6 +182,16 @@ signal:
     lodestone: 15.0
     # Getöntes Glas lässt kein Licht durch und auch das Signal nur schwer
     tinted_glass: 5.0
+  # Ab wie viel Prozent die Anzeige des Signals welche Stufe zeigt, mit Symbol und Wort (Texte signal-quality-...):
+  #   excellent = fünf Balken, good = vier, medium = drei, weak = zwei. Darunter very weak mit einem Balken, und ist
+  #   das Signal ganz weg, none mit dem roten Kreuz.
+  # Jede Zahl muss kleiner sein als die davor (0 bis 100). Ist sie es nicht, meldet /cam reload einen Fehler, und es
+  # gelten 80, 60, 40, 20.
+  levels:
+    excellent: 80
+    good: 60
+    medium: 40
+    weak: 20
   # Was passiert, wenn das Signal weg bleibt:
   #   back = die Kamera springt zurück zum Körper (Ton sounds.back, Text signal-back-to-body), der Cam-Modus läuft weiter
   #   end  = der Cam-Modus endet (Ton sounds.end-forced, Text signal-ended)
