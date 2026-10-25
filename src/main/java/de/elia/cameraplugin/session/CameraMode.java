@@ -322,8 +322,7 @@ public final class CameraMode {
 
         player.removePotionEffect(PotionEffectType.INVISIBILITY);
         // Before the paused effects come back: night vision among them would
-        // otherwise be taken off along with the one of camera mode, and so
-        // would darkness along with the noise of a weak signal.
+        // otherwise be taken off along with the one of camera mode.
         plugin.getNightVision().stopFor(player);
         plugin.getSignal().stopFor(player);
 

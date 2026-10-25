@@ -18,6 +18,8 @@ import de.elia.cameraplugin.nightvision.NightVisionMode;
 import de.elia.cameraplugin.portal.PortalRules;
 import de.elia.cameraplugin.session.CamGameMode;
 import de.elia.cameraplugin.session.EndReason;
+import de.elia.cameraplugin.shader.PackSending;
+import de.elia.cameraplugin.shader.ShaderLook;
 import de.elia.cameraplugin.signal.SignalLoss;
 import de.elia.cameraplugin.sound.CamSound;
 import de.elia.cameraplugin.start.EffectStart;
@@ -26,6 +28,7 @@ import de.elia.cameraplugin.timelimit.FlightLimit;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
@@ -97,6 +100,12 @@ public final class CamSettings {
 
     /** The most flights {@code cam-trail.flights} keeps of each player. */
     private static final int MAX_TRAIL_FLIGHTS = 20;
+
+    /** The value of {@code signal.noise} that stands for CamFly's own shader. */
+    public static final String CAMFLY_NOISE = "camfly";
+
+    /** The highest port there is, for {@code resource-pack.port}. */
+    private static final int MAX_PORT = 65535;
 
     /**
      * The longest {@code signal.lost-seconds} accepts. Longer than a minute,
@@ -317,8 +326,28 @@ public final class CamSettings {
 
     /** Blocks of range each block in the way takes off the signal, {@code signal.block-cost}. */
     private double signalBlockCost;
-    /** Below how many percent the picture goes dark, 0 for never, {@code signal.noise-below}. */
+    /** Below how many percent the picture is disturbed, 0 for never, {@code signal.noise-below}. */
     private int signalNoiseBelow;
+    /**
+     * The post effect of a weak signal, {@code signal.noise}: a key such as
+     * {@code minecraft:blur}, {@link #CAMFLY_NOISE} for CamFly's own shader,
+     * or {@code null} for none.
+     */
+    private String signalNoise;
+    /** The post effect for a player without CamFly's shader, {@code signal.noise-fallback}, or {@code null}. */
+    private String signalNoiseFallback;
+    /** What CamFly's own shader looks like, the section {@code signal.shader}. */
+    private ShaderLook shaderLook;
+    /** How the players get CamFly's resource pack, {@code resource-pack.send}. */
+    private PackSending packSending;
+    /** The port of the web server of {@code send: built-in}, {@code resource-pack.port}. */
+    private int packPort;
+    /** The address players reach that web server under, empty for the one they connected with. */
+    private String packAddress;
+    /** Where the pack lies with {@code send: url}, {@code resource-pack.url}. */
+    private String packUrl;
+    /** Whether a player has to take the pack, {@code resource-pack.required}. */
+    private boolean packRequired;
     /** What happens once the signal is lost, {@code signal.lost}. */
     private SignalLoss signalLoss;
     /** How long the camera has to fly back into the signal, in seconds, {@code signal.lost-seconds}. */
@@ -664,10 +693,60 @@ public final class CamSettings {
     private void readSignal(ConfigReader config) {
         signalBlockCost = config.getDouble("signal.block-cost", 5.0, 0.0);
         signalNoiseBelow = config.getInt("signal.noise-below", 25, 0, 100);
+        String allowedEffects = messages.configMessage("config-allowed-post-effects");
+        signalNoise = readPostEffect(config, "signal.noise", CAMFLY_NOISE, allowedEffects, true);
+        signalNoiseFallback = readPostEffect(config, "signal.noise-fallback", "minecraft:blur", allowedEffects,
+                false);
+        shaderLook = ShaderLook.read(config, "signal.shader", messages.configMessage("config-allowed-colors"));
+        String sending = config.getChoice("resource-pack.send", "built-in", "built-in", "url", "false")
+                .toLowerCase(Locale.ROOT);
+        packSending = switch (sending) {
+            case "url" -> PackSending.URL;
+            case "false" -> PackSending.OFF;
+            default -> PackSending.BUILT_IN;
+        };
+        packPort = config.getInt("resource-pack.port", 8164, 1, MAX_PORT);
+        packAddress = config.getString("resource-pack.address", "").trim();
+        packUrl = config.getString("resource-pack.url", "").trim();
+        packRequired = config.getBoolean("resource-pack.required", false);
         signalLoss = config.getChoice("signal.lost", "back", "back", "end").equalsIgnoreCase("end")
                 ? SignalLoss.END
                 : SignalLoss.BACK;
         signalLostSeconds = config.getInt("signal.lost-seconds", 3, 0, MAX_SIGNAL_LOST_SECONDS);
+    }
+
+    /**
+     * Reads a post effect such as {@code signal.noise}: {@code false} for
+     * none, a key such as {@code minecraft:blur} or {@code meinpaket:stoerung}
+     * - without a namespace it is one of the game's -, and where
+     * {@code ownShader} allows it {@code camfly} for CamFly's own shader. A key
+     * is not checked against anything: the effects live on the client, and the
+     * server does not know them.
+     *
+     * @return the key, {@link #CAMFLY_NOISE}, or {@code null} for none
+     */
+    private static String readPostEffect(ConfigReader config, String path, String def, String allowed,
+                                         boolean ownShader) {
+        String raw = config.getString(path, def).trim().toLowerCase(Locale.ROOT);
+        if (raw.equals("false")) {
+            return null;
+        }
+        if (raw.equals(CAMFLY_NOISE)) {
+            if (ownShader) {
+                return CAMFLY_NOISE;
+            }
+            // Not taken for minecraft:camfly, which is what it would be read
+            // as: whoever writes it means the shader, and that is the one
+            // thing this effect stands in for.
+            config.warnUnknownValue(path, raw, allowed, def);
+            return def;
+        }
+        NamespacedKey key = raw.isEmpty() ? null : NamespacedKey.fromString(raw);
+        if (key == null) {
+            config.warnUnknownValue(path, raw, allowed, def);
+            return def.equals("false") ? null : def;
+        }
+        return key.toString();
     }
 
     /**
@@ -997,6 +1076,48 @@ public final class CamSettings {
 
     public int getSignalLostSeconds() {
         return signalLostSeconds;
+    }
+
+    /** The post effect of a weak signal: a key, {@link #CAMFLY_NOISE}, or {@code null} for none. */
+    public String getSignalNoise() {
+        return signalNoise;
+    }
+
+    /** The post effect for a player without CamFly's shader, or {@code null} for none. */
+    public String getSignalNoiseFallback() {
+        return signalNoiseFallback;
+    }
+
+    /**
+     * Whether CamFly's own shader is in use: the signal holds the camera, its
+     * noise is {@code camfly}, and there is a weak signal to show it at.
+     */
+    public boolean usesCamflyShader() {
+        return usesSignal() && CAMFLY_NOISE.equals(signalNoise) && signalNoiseBelow > 0;
+    }
+
+    public ShaderLook getShaderLook() {
+        return shaderLook;
+    }
+
+    public PackSending getPackSending() {
+        return packSending;
+    }
+
+    public int getPackPort() {
+        return packPort;
+    }
+
+    public String getPackAddress() {
+        return packAddress;
+    }
+
+    public String getPackUrl() {
+        return packUrl;
+    }
+
+    public boolean isPackRequired() {
+        return packRequired;
     }
 
     /**

@@ -155,14 +155,70 @@ signal:
   # Es zählen volle, undurchsichtige Blöcke wie Stein, Erde und Holz; Glas, Laub, Wasser, Stufen und Zäune nicht.
   # Bei 5 und max-distance 100 kommt das Signal durch 20 Blöcke Fels gar nicht mehr durch.
   block-cost: 5.0
-  # Unter wie viel Prozent das Bild rauscht: Es wird in Wellen dunkel wie beim Wärter (0 = nie, höchstens 100)
+  # Unter wie viel Prozent das Bild gestört wird (0 = nie, höchstens 100) - wie, sagt noise
   noise-below: 25
+  # Die Störung: ein Shader über dem Bildschirm des Spielers (Post-Effekt, neu mit Minecraft 26.3):
+  #   camfly = der eigene Shader von CamFly: Schnee wie bei einem alten Fernseher, Bildzeilen, verrutschende Zeilen,
+  #            Farbversatz und Aussetzer - umso stärker, je schwächer das Signal (Aussehen: shader). Er steckt im
+  #            Ressourcenpaket von CamFly (Abschnitt resource-pack).
+  #   minecraft:blur, minecraft:creeper, minecraft:invert oder minecraft:spider = eingebaut, ohne Ressourcenpaket
+  #            (blur ist so stark wie die Menü-Unschärfe in den Einstellungen des Spielers)
+  #   ein anderer Name mit Namensraum, z. B. meinpaket:stoerung = ein Effekt aus deinem eigenen Ressourcenpaket
+  #   false  = keine Störung
+  noise: camfly
+  # Für Spieler ohne den Shader von CamFly (Ressourcenpaket abgelehnt oder noch nicht geladen): ein eingebauter
+  # oder eigener Effekt wie bei noise, oder false = keine Störung
+  noise-fallback: minecraft:blur
+  # Aussehen des Shaders von CamFly (noise: camfly). Jeder Wert gilt, wenn das Signal weg ist; darüber nimmt die
+  # Störung in stages Stufen ab. Werte von 0 (aus) bis 1. Nach einer Änderung und /cam reload bekommen die
+  # Spieler das Ressourcenpaket neu.
+  shader:
+    # In wie vielen Stufen die Störung zunimmt, je schwächer das Signal wird (1 bis 8)
+    stages: 4
+    # Schnee: Rauschen über dem Bild
+    static: 0.55
+    # Dunkle Bildzeilen wie bei einem Röhrenbildschirm
+    scanlines: 0.35
+    # Zeilen, die seitlich verrutschen, und ein Riss, der langsam durchs Bild läuft
+    line-jitter: 0.5
+    # Rot und Blau laufen auseinander
+    color-split: 0.4
+    # Streifen, in denen das Bild kurz ausfällt
+    dropouts: 0.3
+    # Blasse Farben (1 = schwarz-weiß)
+    desaturate: 0.6
+    # Dunkle Ränder
+    vignette: 0.45
+    # Wie schnell es flimmert (1 = jeden Tick ein neues Rauschen, 0 = es steht still, höchstens 4)
+    speed: 1.0
+    # Farbstich des Bildes als #RRGGBB, in Anführungszeichen ("#ffffff" = keiner)
+    tint: "#9fffb0"
   # Was passiert, wenn das Signal weg bleibt:
   #   back = die Kamera springt zurück zum Körper (Ton sounds.back, Text signal-back-to-body), der Cam-Modus läuft weiter
   #   end  = der Cam-Modus endet (Ton sounds.end-forced, Text signal-ended)
   lost: back
   # Wie viele Sekunden die Kamera Zeit hat, wieder ins Signal zu fliegen (0 = sofort, höchstens 60)
   lost-seconds: 3
+
+# Das Ressourcenpaket mit dem Shader von CamFly (signal.noise: camfly). CamFly baut es selbst aus signal.shader und
+# legt es als plugins/CamFly/resourcepack/CamFly.zip ab. Wer es angenommen und geladen hat, sieht den Shader, alle
+# anderen signal.noise-fallback.
+resource-pack:
+  # Wie die Spieler es bekommen, jeder beim Betreten des Servers:
+  #   built-in = von einem eigenen kleinen Webserver von CamFly auf port, der nur diese eine Datei herausgibt
+  #   url      = von url: CamFly.zip selbst irgendwo hochladen, wo jeder es herunterladen kann
+  #   false    = CamFly schickt nichts, z. B. wenn der Inhalt von CamFly.zip schon im Ressourcenpaket des Servers steckt
+  send: built-in
+  # Port des Webservers (built-in). Er muss von außen erreichbar sein wie der Port des Servers selbst - bei vielen
+  # Hostern ist das ein zusätzlicher Port, der erst freigegeben werden muss.
+  port: 8164
+  # Adresse, unter der die Spieler den Webserver erreichen, z. B. mc.example.com (leer = die, mit der sie sich
+  # verbunden haben - das geht nur auf Paper -, sonst server-ip aus der server.properties)
+  address: ""
+  # Adresse der Datei bei send: url, z. B. https://example.com/CamFly.zip
+  url: ""
+  # Ob ein Spieler das Paket annehmen muss (true = wer es ablehnt, fliegt vom Server)
+  required: false
 
 # Körper, der im Cam-Modus an der Stelle des Spielers bleibt
 body:

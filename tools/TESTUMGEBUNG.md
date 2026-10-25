@@ -28,7 +28,7 @@ Läuft der Server weiter, gehen Konsolenbefehle über die FIFO:
 echo "say hallo" > ~/camfly-testenv/server/console.fifo
 ```
 
-## Die neun Schritte
+## Die zehn Schritte
 
 | Schritt      | Was passiert |
 |--------------|--------------|
@@ -38,9 +38,55 @@ echo "say hallo" > ~/camfly-testenv/server/console.fifo
 | `crosscheck` | Denselben Quelltext noch einmal mit `javac` gegen `paper-api` übersetzen. |
 | `apicheck`   | Jeden Aufruf auf `org/bukkit`, `net/md_5`, `io/papermc` aus `target/classes` gegen `paper-api` auflösen. |
 | `names`      | Die Namenslisten der Sprachdatei gegen die Daten des Spiels prüfen, siehe unten. |
-| `server`     | Paper-Server holen, einrichten, starten, Konsole an eine FIFO hängen. |
-| `bot`        | `mineflayer` holen, auf Protokoll 26.2 flicken und seine Kollision wie im echten Client rechnen lassen. |
+| `shader`     | Den Shader von CamFly in Software-OpenGL übersetzen und jede Stufe auf einem Testbild rechnen, siehe unten. |
+| `server`     | Paper-Server 26.3 holen, einrichten, starten, Konsole an eine FIFO hängen; dazu ViaVersion und ViaBackwards. |
+| `bot`        | `mineflayer` holen, `tick_end` schicken lassen und seine Kollision wie im echten Client rechnen lassen. |
 | `tests`      | Der Bot spielt die Testfälle im laufenden Server durch. |
+
+## 26.3: der Bot spricht 26.1
+
+minecraft-data hat Paketdaten nur bis 26.1. Auf 26.2 lief der Bot noch mit
+diesen Daten und einer Handvoll Flicken; 26.3 aber packt die Bewegung der
+Entitäten anders, schickt bei der Bestätigung eines Teleports die Position mit
+und hat Pakete dazubekommen. Statt den Bot daran anzupassen, liegen auf dem
+Testserver **ViaVersion** und **ViaBackwards** (von Hangar, mit Prüfsumme, siehe
+`VIA_PLUGINS`): Der Bot meldet sich als echter 26.1-Client an, und Via übersetzt.
+
+* **`tick_end`.** Seit 26.3 nimmt der Server zwischen zwei
+  `client_tick_end` nur ein Positionspaket an und wirft beim zweiten hinaus
+  („Invalid move player packet received“). mineflayer schickt das Paket nie;
+  der Schritt `bot` flickt `physics.js`, dass es nach jedem Tick hinausgeht.
+  Ohne das flog der Bot eine Sekunde nach dem Betreten.
+* **Die Whitelist ist an**, wenn `server.properties` nichts sagt - seit 26.3.
+  Das Skript schreibt `white-list=false` hinein.
+* **Ressourcenpakete beantwortet der Bot selbst** (`resource_pack_answer`):
+  `acceptResourcePack` von mineflayer reicht die Id als Objekt weiter, und das
+  Protokoll schreibt daraus lauter Nullen - der Server bekam die Antwort für
+  ein Paket, das es nicht gibt.
+* **Post-Effekte sieht der Bot nicht**, Via lässt sie für 26.1 fallen. Welcher
+  Effekt auf ihm liegt, fragt der Test mit `/posteffect list @s` beim Server.
+* **Alte Jars in `paper-api/`** werden vor dem Holen weggeräumt: Zwei
+  paper-api verschiedener Versionen nebeneinander, und `javac` nimmt die erste.
+
+## Der Shader
+
+Der Schritt `shader` übersetzt `signal_noise.fsh` mit moderngl in
+Software-OpenGL (Mesa llvmpipe, über EGL oder ein X-Display) und rechnet jede
+Stufe von `signal.shader` aus der ausgelieferten `config.yml` auf einem
+Testbild mit Farbbalken. Jede Stufe muss das Bild stärker stören als die
+vorige. Die Vorschau liegt danach als `shader-vorschau.png` im Arbeitsordner.
+Fehlen moderngl, Pillow oder OpenGL, wird der Schritt mit einem Hinweis
+übersprungen:
+
+```bash
+pip install moderngl pillow
+python3 tools/camfly_testenv.py --steps shader
+```
+
+Was dieser Schritt nicht sieht, ist der Client selbst: ob er die Post-Effekte
+annimmt und wie es im Spiel aussieht. Das ging beim Einbau mit dem echten
+26.3-Client, gestartet mit Mesa-EGL unter Xvfb (`SDL_VIDEO_FORCE_EGL=1`, unter
+GLX fand er kein Fensterformat mit sRGB), in einer Welt dieses Testservers.
 
 ## Warum gegen beide APIs geprüft wird
 
@@ -58,7 +104,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **788** - alle 788 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **800** - alle 800 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 

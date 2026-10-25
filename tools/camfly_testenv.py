@@ -8,10 +8,13 @@ Das Skript macht alles, was sonst von Hand gemacht wurde:
   2. Plugin bauen (mvn -B clean package gegen spigot-api)
   3. Zusaetzlich gegen paper-api uebersetzen (die APIs sind nicht deckungsgleich)
   4. ApiCheck: jeden Bukkit-Aufruf im fertigen Jar gegen paper-api aufloesen
-  5. Namen: die Namenslisten der Sprachdatei gegen die Daten des Spiels
-  6. Paper-Testserver holen, einrichten und starten (mit FIFO fuer die Konsole)
-  7. mineflayer holen, auf Protokoll 26.2 flicken, seine Kollision wie im
-     echten Client rechnen lassen, Bot verbinden
+  5. Namen: die Namenslisten der Sprachdatei gegen die Daten des Spiels,
+     Shader: den Shader von CamFly in Software-OpenGL uebersetzen und eine
+     Vorschau jeder Stufe rechnen
+  6. Paper-Testserver holen, einrichten und starten (mit FIFO fuer die Konsole),
+     dazu ViaVersion und ViaBackwards, die den Bot als 26.1 hereinlassen
+  7. mineflayer holen, seine Kollision wie im echten Client rechnen lassen,
+     Bot verbinden
   8. Tests im laufenden Spiel fahren
   9. Aufraeumen: Server und Bot beenden
 
@@ -30,6 +33,7 @@ Alles, was es herunterlaedt, liegt unter --workdir (Standard:
 import argparse
 import contextlib
 import gzip
+import hashlib
 import io
 import json
 import math
@@ -41,6 +45,8 @@ import struct
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 import zipfile
 from pathlib import Path
 
@@ -48,11 +54,26 @@ from pathlib import Path
 # Feste Werte. Alles, was eine Version hat, steht hier an einer Stelle.
 # ---------------------------------------------------------------------------
 
-MC_VERSION = "26.2"
-PAPER_BUILD = 121
+MC_VERSION = "26.3"
+PAPER_BUILD = 222
 PAPER_API_VERSION = f"{MC_VERSION}.build.{PAPER_BUILD}-stable"
-PROTOCOL_VERSION = 776          # 26.2; minecraft-data kennt nur 775 (26.1)
-FALLBACK_DATA_VERSION = "26.1"  # von dort borgen wir die Paketdaten
+
+# Der Bot spricht 26.1: minecraft-data hat Paketdaten nur bis dorthin. 26.3
+# hat nicht nur Pakete dazubekommen, es packt auch die Bewegung der Entitaeten
+# anders und schickt bei der Bestaetigung eines Teleports die Position mit -
+# mit geborgten Daten von 26.1 liefe der Bot daran auf. ViaVersion und
+# ViaBackwards auf dem Testserver uebersetzen stattdessen zwischen beiden,
+# und der Bot liest Pakete, die zu seinen Daten passen.
+BOT_VERSION = "26.1"
+BOT_PROTOCOL = 775
+FALLBACK_DATA_VERSION = "26.1"  # falls minecraft-data die Version des Bots nicht kennt
+
+# ViaVersion und ViaBackwards von Hangar: Name, Version, SHA-256 der Datei.
+VIA_PLUGINS = [
+    ("ViaVersion", "5.12.1", "bab94b846e1d2bf516c070562d0271b32382afd41870bf0d3a7993b73a36f791"),
+    ("ViaBackwards", "5.12.1", "4b9dd5cb7662f532b44627f8491255bf96f586cbd00280d1480442590ad4450d"),
+]
+HANGAR_CDN = "https://hangarcdn.papermc.io/plugins/ViaVersion"
 
 JDK_URL = ("https://api.adoptium.net/v3/binary/latest/25/ga/linux/x64/"
            "jdk/hotspot/normal/eclipse")
@@ -93,7 +114,7 @@ BOT_NAME = "CamFlyTester"
 SERVER_HOST = "127.0.0.1"
 SERVER_PORT = 25565
 
-STEPS = ["jdk", "build", "paperapi", "crosscheck", "apicheck", "names",
+STEPS = ["jdk", "build", "paperapi", "crosscheck", "apicheck", "names", "shader",
          "server", "bot", "tests"]
 
 # ---------------------------------------------------------------------------
@@ -334,6 +355,13 @@ def step_build(env):
 def step_paperapi(env):
     Log.step("3. paper-api und Abhaengigkeiten")
     env.paperapi.mkdir(parents=True, exist_ok=True)
+    # Was ein frueherer Lauf fuer eine andere Version hingelegt hat, muss weg:
+    # Zwei paper-api nebeneinander auf dem Klassenpfad, und javac nimmt sich,
+    # was es zuerst findet.
+    gewollt = {f"{artifact}-{version}.jar" for _, artifact, version, _ in PAPER_API_DEPS}
+    for alt in env.paperapi.glob("*.jar"):
+        if alt.name not in gewollt:
+            alt.unlink()
     for group, artifact, version, repo in PAPER_API_DEPS:
         name = f"{artifact}-{version}.jar"
         cached = download(maven_url(group, artifact, version, repo),
@@ -758,6 +786,150 @@ def step_names(env):
 
 
 # ---------------------------------------------------------------------------
+# Der Shader von CamFly
+# ---------------------------------------------------------------------------
+
+SHADER_QUELLE = Path("src") / "main" / "resources" / "resourcepack" / "assets" / "camfly" / "shaders" / "post" / "signal_noise.fsh"
+
+# Der Uniform-Block Globals, wie ihn der Client von 26.3 jedem Post-Shader
+# mitgibt (assets/minecraft/shaders/include/globals.glsl im Client). Der Shader
+# bindet ihn mit #include ein; fuer die Probe steht er an dessen Stelle.
+GLOBALS_GLSL = """layout(std140) uniform Globals {
+    ivec3 CameraBlockPos;
+    float GlintAlpha;
+    vec3 CameraOffset;
+    float GameTime;
+    vec2 ScreenSize;
+    int MenuBlurRadius;
+    int UseRgss;
+};"""
+
+# Der Vertex-Shader der Probe: ein Dreieck ueber den ganzen Schirm, wie
+# minecraft:core/screenquad - nur mit gl_VertexID, das OpenGL kennt.
+SHADER_VERTEX = """#version 330
+#extension GL_ARB_separate_shader_objects : require
+layout(location = 0) out vec2 texCoord;
+void main() {
+    vec2 uv = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+    gl_Position = vec4(uv * 2.0 - 1.0, 0.0, 1.0);
+    texCoord = uv;
+}
+"""
+
+
+def shader_aussehen(config_text):
+    """Die Werte von signal.shader aus der config.yml, als Zeichenketten."""
+    signal = re.search(r"(?ms)^signal:\n(.*?)(?=^\S)", config_text)
+    shader = re.search(r"(?ms)^  shader:\n((?:    .*\n|\s*\n)*)", signal.group(1)) if signal else None
+    if shader is None:
+        return {}
+    # Kommentare stehen dort in eigenen Zeilen; ein # im Wert ist der der Farbe.
+    return dict(re.findall(r'(?m)^    ([a-z-]+):\s*"?([^"\n]+?)"?\s*$', shader.group(1)))
+
+
+def step_shader(env):
+    """Den Shader von CamFly uebersetzen und jede Stufe einmal rechnen.
+
+    In Software-OpenGL (Mesa llvmpipe), ohne Grafikkarte und ohne Minecraft:
+    Was hier nicht uebersetzt, laedt auch kein Client. Gerechnet wird auf
+    einem Testbild mit Farbbalken, mit den Werten von signal.shader aus der
+    ausgelieferten config.yml, so wie das Plugin sie in die Post-Effekte
+    schreibt. Jede Stufe muss das Bild staerker stoeren als die vorige. Die
+    Vorschau landet als shader-vorschau.png im Arbeitsordner - wer am Aussehen
+    dreht, sieht dort, was daraus wird.
+
+    Braucht moderngl und Pillow (pip install moderngl pillow) und ein OpenGL
+    ab 3.3, ueber EGL oder ein X-Display. Fehlt etwas davon, wird der Schritt
+    mit einem Hinweis uebersprungen.
+    """
+    Log.step("6b. Der Shader von CamFly")
+    try:
+        import moderngl
+        from PIL import Image
+    except ImportError:
+        Log.warn("moderngl oder Pillow fehlen (pip install moderngl pillow) - der Shader wird nicht geprueft")
+        return True
+    ctx, grund = None, ""
+    for backend in ("egl", None):
+        try:
+            ctx = moderngl.create_standalone_context(require=330, **({"backend": backend} if backend else {}))
+            break
+        except Exception as exc:
+            grund = f"{type(exc).__name__}: {exc}"
+    if ctx is None:
+        Log.warn(f"Kein OpenGL ab 3.3 zu haben ({grund}) - der Shader wird nicht geprueft")
+        return True
+    quelle = (env.repo / SHADER_QUELLE).read_text(encoding="utf-8")
+    if not FIND.test("Der Shader bindet globals.glsl ein, wie die des Spiels",
+                     "#include <minecraft:globals.glsl>" in quelle, ""):
+        return False
+    try:
+        prog = ctx.program(vertex_shader=SHADER_VERTEX,
+                           fragment_shader=quelle.replace("#include <minecraft:globals.glsl>", GLOBALS_GLSL))
+    except Exception as exc:
+        FIND.test("Der Shader laesst sich uebersetzen", False, str(exc).strip()[-400:])
+        return False
+    FIND.test("Der Shader laesst sich uebersetzen", True, ctx.info.get("GL_RENDERER", ""))
+
+    werte = shader_aussehen((env.repo / "src" / "main" / "resources" / "config.yml").read_text(encoding="utf-8"))
+    try:
+        stufen = int(werte["stages"])
+        tint = int(werte["tint"].lstrip("#"), 16)
+        zahlen = [float(werte[k]) for k in ("static", "scanlines", "line-jitter", "color-split",
+                                              "dropouts", "desaturate", "vignette")]
+        tempo = float(werte["speed"])
+    except (KeyError, ValueError) as exc:
+        FIND.test("signal.shader steht vollstaendig in der config.yml", False, f"{exc}: {werte}")
+        return False
+
+    breite, hoehe = 480, 270
+    farben = [(255, 255, 255), (255, 255, 0), (0, 255, 255), (0, 255, 0), (255, 0, 255), (255, 0, 0), (0, 0, 255)]
+    testbild = Image.new("RGB", (breite, hoehe))
+    for x in range(breite):
+        for y in range(hoehe):
+            if y < hoehe * 2 // 3:
+                farbe = farben[x * len(farben) // breite]
+            else:
+                farbe = (230, 230, 230) if (x // 20 + y // 20) % 2 else (25, 25, 25)
+            testbild.putpixel((x, y), farbe)
+    textur = ctx.texture((breite, hoehe), 3, testbild.transpose(Image.FLIP_TOP_BOTTOM).tobytes())
+    textur.filter = (moderngl.LINEAR, moderngl.LINEAR)
+    ziel = ctx.simple_framebuffer((breite, hoehe))
+    vao = ctx.vertex_array(prog, [])
+
+    def block(name, daten, nummer):
+        puffer = ctx.buffer(daten)
+        prog[name].binding = nummer
+        puffer.bind_to_uniform_block(nummer)
+
+    block("SamplerInfo", struct.pack("4f", breite, hoehe, breite, hoehe), 0)
+    block("Globals", struct.pack("3i f 3f f 2f 2i", 0, 0, 0, 1.0, 0, 0, 0, 0.3141, breite, hoehe, 0, 0), 1)
+    bilder, abweichung = [testbild], []
+    for stufe in range(1, stufen + 1):
+        anteil = stufe / stufen
+        block("SignalConfig", struct.pack("4f 8f", (tint >> 16 & 255) / 255, (tint >> 8 & 255) / 255,
+                                          (tint & 255) / 255, anteil, *[z * anteil for z in zahlen], tempo), 2)
+        prog["InSampler"].value = 0
+        textur.use(0)
+        ziel.use()
+        ziel.clear()
+        vao.render(moderngl.TRIANGLES, vertices=3)
+        bild = Image.frombytes("RGB", (breite, hoehe), ziel.read(components=3)).transpose(Image.FLIP_TOP_BOTTOM)
+        bilder.append(bild)
+        roh, vorher = bild.tobytes(), testbild.tobytes()
+        abweichung.append(sum(abs(a - b) for a, b in zip(roh, vorher)) / len(roh))
+    FIND.test(f"Jede der {stufen} Stufen stoert das Bild staerker als die vorige",
+              all(b > a for a, b in zip([0.0] + abweichung, abweichung)),
+              ", ".join(f"{a:.1f}" for a in abweichung))
+    vorschau = Image.new("RGB", (breite * len(bilder), hoehe))
+    for i, bild in enumerate(bilder):
+        vorschau.paste(bild, (i * breite, 0))
+    vorschau.save(env.work / "shader-vorschau.png")
+    Log.detail(f"Vorschau: {env.work / 'shader-vorschau.png'} - links das Testbild, dann Stufe 1 bis {stufen}")
+    return True
+
+
+# ---------------------------------------------------------------------------
 # 7. Paper-Testserver
 # ---------------------------------------------------------------------------
 
@@ -776,6 +948,7 @@ sync-chunk-writes=false
 allow-nether=true
 spawn-monsters=false
 allow-flight=true
+white-list=false
 """
 
 
@@ -930,6 +1103,23 @@ def tpa_helfer_bauen(env, plugins):
             jar.write(datei, datei.relative_to(klassen).as_posix())
 
 
+def via_plugins_holen(env, plugins):
+    """ViaVersion und ViaBackwards holen, pruefen und zu den Plugins legen.
+
+    Ohne sie kaeme der Bot nicht herein: Er spricht 26.1, der Server 26.3,
+    siehe BOT_VERSION. Eine Datei, deren Pruefsumme nicht stimmt, wird nicht
+    genommen - es ist fremder Code, der auf dem Testserver laeuft.
+    """
+    for name, version, sha256 in VIA_PLUGINS:
+        datei = f"{name}-{version}.jar"
+        jar = download(f"{HANGAR_CDN}/{name}/versions/{version}/PAPER/{datei}", env.cache / datei, datei)
+        summe = hashlib.sha256(jar.read_bytes()).hexdigest()
+        if summe != sha256:
+            jar.unlink(missing_ok=True)
+            raise RuntimeError(f"{datei}: Pruefsumme {summe} statt {sha256}")
+        shutil.copy2(jar, plugins / f"{name}.jar")
+
+
 def prepare_server_files(env):
     env.server.mkdir(parents=True, exist_ok=True)
     (env.server / "eula.txt").write_text("eula=true\n", encoding="utf-8")
@@ -941,6 +1131,7 @@ def prepare_server_files(env):
         raise RuntimeError("Kein gebautes Jar in artifacts/ - erst Schritt 'build'")
     shutil.copy2(env.plugin_jar, plugins / "CamFly.jar")
     tpa_helfer_bauen(env, plugins)
+    via_plugins_holen(env, plugins)
 
     # Die Konfiguration kommt aus dem Quellordner. Aus target/classes zu lesen
     # waere eine Falle: Ein Lauf ohne den Schritt build faende dort die
@@ -1034,13 +1225,15 @@ def step_server(env):
 BOT_JS = r'''
 // Wird vom Python-Skript geschrieben. Nimmt JSON-Zeilen auf stdin entgegen
 // und antwortet mit JSON-Zeilen auf stdout.
-const MC = process.env.CAMFLY_MC || '26.2';
+const MC = process.env.CAMFLY_MC || '26.1';
 const FALLBACK = process.env.CAMFLY_FALLBACK || '26.1';
-const PROTO = parseInt(process.env.CAMFLY_PROTO || '776', 10);
+const PROTO = parseInt(process.env.CAMFLY_PROTO || '775', 10);
 const NAME = process.env.CAMFLY_BOT || 'CamFlyTester';
 
 // --- Alles vor dem require von mineflayer: minecraft-data hat Paketdaten nur
-// --- bis 26.1 (Protokoll 775), der Server spricht 26.2 (776).
+// --- bis 26.1 (Protokoll 775). Der Server spricht 26.3, ViaVersion und
+// --- ViaBackwards uebersetzen dazwischen. Kennt minecraft-data die Version
+// --- des Bots nicht, borgt er die Daten von FALLBACK.
 const rawData = require('minecraft-data/data.js');
 if (!rawData.pc[MC]) rawData.pc[MC] = rawData.pc[FALLBACK];
 const md = require('minecraft-data');
@@ -1056,10 +1249,11 @@ const protoVersion = require('minecraft-protocol/src/version.js');
 if (protoVersion.supportedVersions && !protoVersion.supportedVersions.includes(MC)) {
   protoVersion.supportedVersions.push(MC);
 }
-// Das Explosionspaket von 26.2 traegt Partikel mit Nummern, die 26.1 anders
-// vergibt. mineflayer verschluckt sich daran und wirft das ganze Paket weg,
-// samt dem Rueckstoss darin. Gelesen wird deshalb nur bis zum Rueckstoss, der
-// Rest bleibt ein ungelesener Puffer.
+// Das Explosionspaket traegt Partikel, an deren Daten sich mineflayer schon
+// verschluckt hat - mit den geborgten Daten von 26.1 auf einem 26.2-Server -
+// und dann das ganze Paket wegwarf, samt dem Rueckstoss darin. Gelesen wird
+// deshalb nur bis zum Rueckstoss, der Rest bleibt ein ungelesener Puffer; was
+// dahinter steht, braucht kein Test.
 {
   const play = idx && idx.protocol && idx.protocol.play && idx.protocol.play.toClient
     && idx.protocol.play.toClient.types;
@@ -1140,6 +1334,11 @@ bot._client.on('world_particles', (packet) => particleLog.push(
 // Klick und Hover stehen nur dort, der Text der Zeile hat sie nicht mehr.
 const chatPackets = [];
 bot._client.on('system_chat', (packet) => chatPackets.push({ t: Date.now(), text: soundText(packet) }));
+// Die Ressourcenpakete, die der Server schickt: Id, Adresse, Pruefsumme und ob
+// es Pflicht ist. Angenommen oder abgelehnt wird nur auf Zuruf, resource_pack_answer.
+const resourcePacks = [];
+bot._client.on('add_resource_pack', (packet) => resourcePacks.push({
+  t: Date.now(), uuid: String(packet.uuid), url: packet.url, hash: packet.hash, forced: !!packet.forced }));
 // Die Bossbars, die gerade zu sehen sind, nach ihrer UUID: der Titel als Text
 // des ganzen Titels, wie bei den Toenen, der Fuellstand und die Einteilung
 // (dividers: 0 keine, 1 sechs, 2 zehn, 3 zwoelf, 4 zwanzig Abschnitte).
@@ -1220,6 +1419,22 @@ async function handle(cmd) {
       return { sounds: sounds.slice(cmd.since || 0), count: sounds.length };
     case 'chat_packets':
       return { packets: chatPackets.slice(cmd.since || 0), count: chatPackets.length };
+    case 'resource_packs':
+      return { packs: resourcePacks.slice(cmd.since || 0), count: resourcePacks.length };
+    case 'resource_pack_answer': {
+      // Antwortet auf das zuletzt geschickte Paket: angenommen und geladen
+      // (3, dann 0), oder abgelehnt (1) - wie ein Spieler, der im Fenster Ja
+      // oder Nein klickt. Selbst geschrieben und nicht ueber
+      // acceptResourcePack: mineflayer reicht die Id dort als Objekt weiter,
+      // und das schreibt das Protokoll als lauter Nullen - der Server bekam
+      // die Antwort fuer ein Paket, das es nicht gibt.
+      const last = resourcePacks[resourcePacks.length - 1];
+      if (!last) return { done: false, reason: 'kein Paket bekommen' };
+      for (const result of (cmd.accept ? [3, 0] : [1])) {
+        bot._client.write('resource_pack_receive', { uuid: last.uuid, result });
+      }
+      return { done: true, uuid: last.uuid };
+    }
     case 'particles':
       return { particles: particleLog.slice(cmd.since || 0), count: particleLog.length };
     case 'tab': {
@@ -1670,29 +1885,30 @@ readline.createInterface({ input: process.stdin }).on('line', async (line) => {
 
 
 def patch_mineflayer(env):
-    """mineflayer/lib/version.js kennt 26.2 nicht. Der Wert wird beim Laden
-    von loader.js genau einmal gelesen, deshalb muss die Datei selbst weg."""
+    """mineflayer/lib/version.js muss die Version des Bots kennen, BOT_VERSION.
+    Der Wert wird beim Laden von loader.js genau einmal gelesen, deshalb wird
+    die Datei selbst geflickt, wenn sie die Version noch nicht hat."""
     version_js = env.bot / "node_modules" / "mineflayer" / "lib" / "version.js"
     if not version_js.exists():
         FIND.problem("mineflayer/lib/version.js nicht gefunden - Bot laeuft vielleicht nicht")
         return False
     text = version_js.read_text(encoding="utf-8")
-    if f"'{MC_VERSION}'" in text:
+    if f"'{BOT_VERSION}'" in text:
         return True
     # In neueren Fassungen wird latestSupportedVersion aus der Liste
     # testedVersions abgeleitet - dann muss die Version dort hinein.
     patched, n = re.subn(r"(const testedVersions = \[)(.*?)(\])",
-                         rf"\g<1>\g<2>, '{MC_VERSION}'\g<3>", text, flags=re.S)
+                         rf"\g<1>\g<2>, '{BOT_VERSION}'\g<3>", text, flags=re.S)
     if n == 0:
         patched, n = re.subn(r"(latestSupportedVersion\s*[:=]\s*)['\"][\d.]+['\"]",
-                             rf"\g<1>'{MC_VERSION}'", text)
+                             rf"\g<1>'{BOT_VERSION}'", text)
     if n == 0:
         FIND.problem("In mineflayer/lib/version.js ist weder testedVersions noch "
-                     "latestSupportedVersion zu finden - der Bot kennt 26.2 nicht")
+                     f"latestSupportedVersion zu finden - der Bot kennt {BOT_VERSION} nicht")
         return False
     if patched != text:
         version_js.write_text(patched, encoding="utf-8")
-        Log.detail(f"mineflayer/lib/version.js auf {MC_VERSION} gesetzt")
+        Log.detail(f"mineflayer/lib/version.js auf {BOT_VERSION} gesetzt")
     return True
 
 
@@ -1734,6 +1950,44 @@ def patch_physics(env):
     return True
 
 
+# Woran der Flicken in physics.js zu erkennen ist.
+TICK_ENDE_MARKE = "CamFly-Testumgebung: tick_end"
+
+
+def patch_tick_end(env):
+    """mineflayer am Ende jedes seiner Ticks client_tick_end schicken lassen,
+    wie es der echte Client tut.
+
+    Seit 26.3 nimmt der Server zwischen zwei solchen Paketen nur noch ein
+    Positionspaket an; beim zweiten wirft er den Spieler hinaus ("Invalid move
+    player packet received"). mineflayer kennt das Paket - in seinen Daten
+    heisst es tick_end -, schickt es aber nie, und so flog der Bot eine
+    Sekunde nach dem Betreten. Geschickt wird es nach updatePosition, also
+    hinter dem Positionspaket desselben Ticks.
+    """
+    physics_js = env.bot / "node_modules" / "mineflayer" / "lib" / "plugins" / "physics.js"
+    if not physics_js.exists():
+        FIND.problem("mineflayer/lib/plugins/physics.js nicht gefunden - der Bot fliegt womoeglich vom Server")
+        return False
+    text = physics_js.read_text(encoding="utf-8")
+    if TICK_ENDE_MARKE in text:
+        return True
+    alt = """    if (shouldUsePhysics) {
+      updatePosition(now)
+    }
+  }"""
+    if text.count(alt) != 1:
+        FIND.problem("In mineflayer/lib/plugins/physics.js steht tickPhysics nicht wie erwartet - "
+                     "der Bot schickt kein tick_end und fliegt vom Server")
+        return False
+    neu = alt[:-4] + f"""
+    bot._client.write('tick_end', {{}}) // {TICK_ENDE_MARKE}
+  }}"""
+    physics_js.write_text(text.replace(alt, neu), encoding="utf-8")
+    Log.detail("mineflayer schickt am Ende jedes Ticks tick_end")
+    return True
+
+
 def step_bot(env):
     Log.step("8. Bot (mineflayer)")
     env.bot.mkdir(parents=True, exist_ok=True)
@@ -1746,9 +2000,9 @@ def step_bot(env):
             cwd=env.bot, timeout=1200)
     else:
         Log.detail("mineflayer liegt schon im Arbeitsordner")
-    ok = patch_mineflayer(env) and patch_physics(env)
+    ok = patch_mineflayer(env) and patch_physics(env) and patch_tick_end(env)
     (env.bot / "bot.js").write_text(BOT_JS, encoding="utf-8")
-    FIND.test("mineflayer bereit", ok, f"{MC_VERSION} / Protokoll {PROTOCOL_VERSION}")
+    FIND.test("mineflayer bereit", ok, f"{BOT_VERSION} / Protokoll {BOT_PROTOCOL}, Server {MC_VERSION}")
     return ok
 
 
@@ -1773,8 +2027,8 @@ class BotClient:
         import threading
         botenv = dict(os.environ)
         botenv.update({
-            "CAMFLY_MC": MC_VERSION, "CAMFLY_FALLBACK": FALLBACK_DATA_VERSION,
-            "CAMFLY_PROTO": str(PROTOCOL_VERSION), "CAMFLY_BOT": self.name,
+            "CAMFLY_MC": BOT_VERSION, "CAMFLY_FALLBACK": FALLBACK_DATA_VERSION,
+            "CAMFLY_PROTO": str(BOT_PROTOCOL), "CAMFLY_BOT": self.name,
             "CAMFLY_HOST": SERVER_HOST, "CAMFLY_PORT": str(SERVER_PORT)})
         self.proc = subprocess.Popen(
             ["node", "bot.js"], cwd=str(self.env.bot), env=botenv,
@@ -4898,7 +5152,16 @@ def anstups_checks(env, bot):
             FIND.problem(f"Aufraeumen nach dem Test des Anstupsens: {exc}")
 
 
-DUNKELHEIT = '{active_effects:[{id:"minecraft:darkness"}]}'
+def nacheffekte(bot):
+    """Die Post-Effekte auf dem Bildschirm des Bots, wie /posteffect list sie
+    nennt, oder None, wenn keine Antwort kam."""
+    for zeile in reversed(befehl(bot, "/posteffect list @s", warten=1.0)):
+        if re.search(r"does not have any post effects", zeile):
+            return []
+        treffer = re.search(r"has \d+ post effects?: (.*)$", zeile)
+        if treffer:
+            return [e.strip() for e in treffer.group(1).split(",") if e.strip()]
+    return None
 
 
 def funk_werte(zeilen):
@@ -4912,16 +5175,21 @@ def funk_checks(env, bot):
 
     Voreingestellt ist fixed, wie bisher - nachgesehen in der ausgelieferten
     Datei. Fuer den Test reicht das Signal 30 Bloecke (max-distance), jeder
-    Block dazwischen kostet 5, und nach dem Abreissen bleiben 2 Sekunden.
+    Block dazwischen kostet 5, und nach dem Abreissen bleiben 3 Sekunden.
     Gestellt wird die Kamera mit /tp auf den Boden, dort steht sie, und der
     Abstand ist genau der, den der Test will.
 
     Am Koerper zeigt die Action-Bar hinter dem Abstand 100 %, zehn Bloecke
     daneben 67 %. Eine Mauer aus drei Bloecken Stein dazwischen nimmt 15 mehr:
-    17 %, und unter noise-below (25) wird es dunkel. Ohne Mauer ist es wieder
-    hell. Fuenf Bloecke Stein nehmen das ganze Signal: "Signal lost!" mit dem
-    Ton von sounds.signal-lost, und nach den zwei Sekunden steht die Kamera
-    wieder am Koerper, der Cam-Modus laeuft weiter. Wer in der Zeit zurueck
+    17 %, und unter noise-below (25) liegt die Stoerung ueber dem Bild, ein
+    Post-Effekt: Der Bot hat das Ressourcenpaket mit dem Shader von CamFly
+    nicht angenommen, also der Ausweich-Effekt minecraft:blur; hat er es
+    geladen, Stufe 2 von 4 des Shaders, camfly:signal_2. Gelegt wird er ueber
+    Paper und nicht ueber den Befehl, der eine Zeile ins Log schriebe. Ohne
+    Mauer ist das Bild wieder ungestoert. Fuenf Bloecke Stein nehmen das ganze
+    Signal: "Signal lost!" mit dem Ton von sounds.signal-lost, die letzte
+    Stufe des Shaders, und nach den zwei Sekunden steht die Kamera wieder am
+    Koerper, der Cam-Modus laeuft weiter, die Stoerung ist weg. Wer in der Zeit zurueck
     ins Signal kommt, bleibt, wo er ist. Mit lost: end endet der Cam-Modus.
     Eine Grenze, an die man stoesst, gibt es nicht: In freier Luft fliegt die
     Kamera ueber die 30 Bloecke hinaus, bis das Signal sie zurueckholt.
@@ -4950,8 +5218,8 @@ def funk_checks(env, bot):
         werte = funk_werte(zeilen_seit(bot, since))
         return werte[-1] if werte else None
 
-    def dunkel():
-        return nbt_frage(bot, "@s", DUNKELHEIT)
+    def gestoert():
+        return nacheffekte(bot)
 
     def am_koerper():
         pos = bot.server_pos()
@@ -4962,7 +5230,7 @@ def funk_checks(env, bot):
                   re.search(r"(?m)^\s*max-distance-mode:\s*fixed\s*$", ausgeliefert(env)) is not None, "")
         luft()
         set_options(env, [("max-distance-mode", "signal"), ("max-distance", "30.0"),
-                          ("lost-seconds", "2", "signal")])
+                          ("lost-seconds", "3", "signal")])
         hinstellen(bot, x, y, z)
         if not FIND.test("Cam-Modus mit Funksignal gestartet", cam_on(bot), ""):
             return
@@ -4975,17 +5243,30 @@ def funk_checks(env, bot):
         wert = staerke()
         FIND.test("signal: zehn Bloecke daneben in freier Luft 67 % (30 Bloecke Reichweite)",
                   wert is not None and 66 <= wert <= 68, str(wert))
-        FIND.test("signal: ueber noise-below kein Rauschen", not dunkel(), "")
+        effekte = gestoert()
+        FIND.test("signal: ueber noise-below keine Stoerung", effekte == [], str(effekte))
 
+        log_vorher = len(server_log(env))
         mauer(4, 6)
         wert = staerke()
         FIND.test("signal: drei Bloecke Stein dazwischen kosten 15 mehr - 17 %",
                   wert is not None and 16 <= wert <= 18, str(wert))
-        FIND.test("signal: unter noise-below rauscht das Bild - Dunkelheit", dunkel(), "")
+        effekte = gestoert()
+        FIND.test("signal: unter noise-below ohne Ressourcenpaket der Ausweich-Effekt minecraft:blur",
+                  effekte == ["minecraft:blur"], str(effekte))
+        bot.call("resource_pack_answer", accept=True)
+        time.sleep(1.0)
+        effekte = gestoert()
+        FIND.test("signal: mit geladenem Ressourcenpaket der Shader von CamFly, Stufe 2 von 4 bei 17 %",
+                  effekte == ["camfly:signal_2"], str(effekte))
+        log = strip_colors(server_log(env)[log_vorher:])
+        FIND.test("signal: der Post-Effekt kommt ueber Paper, nicht ueber den Befehl der Konsole",
+                  "Added post effect" not in log, log.strip()[-200:])
         luft()
         wert = staerke()
-        FIND.test("signal: ohne Mauer wieder 67 % und kein Rauschen",
-                  wert is not None and 66 <= wert <= 68 and not dunkel(), str(wert))
+        effekte = gestoert()
+        FIND.test("signal: ohne Mauer wieder 67 % und keine Stoerung",
+                  wert is not None and 66 <= wert <= 68 and effekte == [], f"{wert} {effekte}")
 
         seit = toene_marke(bot)
         since = bot.mark()
@@ -4994,12 +5275,16 @@ def funk_checks(env, bot):
         FIND.test("signal: fuenf Bloecke Stein nehmen das ganze Signal - \"Signal lost!\" in der Action-Bar",
                   bool(weg), zeige(zeilen_seit(bot, since)[-3:]))
         FIND.test("sounds.signal-lost - der Ton dazu", ton_da(bot, seit, "block.conduit.deactivate"), "")
+        effekte = gestoert()
+        FIND.test("signal: ohne Signal die letzte Stufe des Shaders", effekte == ["camfly:signal_4"], str(effekte))
         zurueck = bot.expect(r"Signal lost: back at your body", since, 5000)
         da, pos = am_koerper()
         FIND.test("signal.lost: back - nach lost-seconds steht die Kamera wieder am Koerper",
                   bool(zurueck) and da, str(pos))
-        FIND.test("signal.lost: back - der Cam-Modus laeuft weiter, ohne Rauschen",
-                  spielmodus_ist(bot, "adventure") and not dunkel(), "")
+        time.sleep(0.5)
+        effekte = gestoert()
+        FIND.test("signal.lost: back - der Cam-Modus laeuft weiter, ohne Stoerung",
+                  spielmodus_ist(bot, "adventure") and effekte == [], str(effekte))
 
         set_option(env, "lost-seconds", "4", "signal")
         cam_on(bot)
@@ -5049,6 +5334,148 @@ def funk_checks(env, bot):
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test des Funksignals: {exc}")
+
+
+def paket_checks(env, bot):
+    """resource-pack: das Ressourcenpaket mit dem Shader von CamFly.
+
+    Voreingestellt - max-distance-mode: fixed - gibt es keins: Der Shader wird
+    nicht gebraucht, und niemand soll nach einem Paket gefragt werden. Mit
+    signal baut CamFly es aus signal.shader, legt es als
+    plugins/CamFly/resourcepack/CamFly.zip ab und schickt es jedem, der online
+    ist: von seinem eigenen Webserver auf Port 8164, unter der Adresse, mit
+    der sich der Bot verbunden hat, mit der Pruefsumme, nicht verpflichtend.
+    Der Webserver gibt genau diese Datei heraus, jeder andere Pfad gibt 404.
+    Darin stehen pack.mcmeta, der Shader und vier Post-Effekte; die letzte
+    Stufe traegt die Werte von signal.shader, die erste ein Viertel davon.
+    Ein geaendertes Aussehen gibt ein neues Paket unter einer neuen Adresse.
+    Mit send: url geht die Adresse aus url hinaus, ohne Pruefsumme; mit
+    send: false gar nichts - und der Shader gilt dann als da: Bei schwachem
+    Signal liegt seine Stufe ueber dem Bild, ohne dass der Bot je ein Paket
+    angenommen haette.
+    """
+    zip_datei = env.server / "plugins" / "CamFly" / "resourcepack" / "CamFly.zip"
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    bx, by, bz = _floor(heim[0]), BODEN_Y + 1, _floor(heim[2])
+
+    def marke():
+        return bot.call("resource_packs", since=10 ** 9).get("count", 0)
+
+    def pakete_seit(seit):
+        time.sleep(1.0)
+        return bot.call("resource_packs", since=seit).get("packs", [])
+
+    def holen(url):
+        try:
+            with urllib.request.urlopen(url, timeout=5) as antwort:
+                return antwort.status, antwort.read()
+        except urllib.error.HTTPError as fehler:
+            return fehler.code, b""
+        except Exception as fehler:
+            return f"{type(fehler).__name__}: {fehler}", b""
+
+    def stufe(inhalt, nummer):
+        with zipfile.ZipFile(io.BytesIO(inhalt)) as z:
+            daten = json.loads(z.read(f"assets/camfly/post_effect/signal_{nummer}.json"))
+        return {u["name"]: u["value"] for u in daten["passes"][0]["uniforms"]["SignalConfig"]}
+
+    try:
+        cam_off(bot)
+        FIND.test("Voreingestellt steht resource-pack.send: built-in mit port: 8164 da",
+                  re.search(r"(?m)^resource-pack:\s*\n(?:\s*#.*\n)*\s*send:\s*built-in\s*\n(?:\s*#.*\n)*\s*port:\s*8164\s*$",
+                            ausgeliefert(env)) is not None, "")
+        zip_datei.unlink(missing_ok=True)
+        seit = marke()
+        set_option(env, "max-distance-mode", "fixed")
+        FIND.test("max-distance-mode: fixed - kein Ressourcenpaket, keins geschickt",
+                  not zip_datei.exists() and pakete_seit(seit) == [], "")
+
+        seit = marke()
+        set_options(env, [("max-distance-mode", "signal"), ("max-distance", "30.0")])
+        pakete = pakete_seit(seit)
+        FIND.test("max-distance-mode: signal - CamFly legt plugins/CamFly/resourcepack/CamFly.zip ab",
+                  zip_datei.is_file(), "")
+        FIND.test("max-distance-mode: signal - der Bot bekommt das Paket geschickt", len(pakete) == 1, str(pakete))
+        paket = pakete[-1] if pakete else {}
+        inhalt = zip_datei.read_bytes() if zip_datei.is_file() else b""
+        sha1 = hashlib.sha1(inhalt).hexdigest()
+        url = paket.get("url", "")
+        FIND.test("resource-pack.send: built-in - vom Webserver auf 8164, unter der Adresse, mit der er verbunden ist",
+                  url == f"http://127.0.0.1:8164/CamFly-{sha1}.zip", url)
+        FIND.test("resource-pack.send: built-in - mit der Pruefsumme der Datei, nicht verpflichtend",
+                  paket.get("hash") == sha1 and not paket.get("forced"), str(paket))
+        status, geholt = holen(url)
+        FIND.test("Der Webserver gibt genau diese Datei heraus", status == 200 and geholt == inhalt,
+                  f"{status}, {len(geholt)} von {len(inhalt)} Bytes")
+        status, _ = holen("http://127.0.0.1:8164/irgendwas.zip")
+        FIND.test("Jeder andere Pfad gibt 404", status == 404, str(status))
+
+        namen = []
+        if inhalt:
+            with zipfile.ZipFile(io.BytesIO(inhalt)) as z:
+                namen = sorted(z.namelist())
+                meta = json.loads(z.read("pack.mcmeta"))
+        erwartet = sorted(["pack.mcmeta", "assets/camfly/shaders/post/signal_noise.fsh"]
+                          + [f"assets/camfly/post_effect/signal_{n}.json" for n in range(1, 5)])
+        FIND.test("Im Paket: pack.mcmeta, der Shader und vier Post-Effekte", namen == erwartet, str(namen))
+        if namen == erwartet:
+            FIND.test("pack.mcmeta: fuer das Format von 26.3, 97.1",
+                      meta["pack"].get("min_format") == [97, 1], str(meta))
+            letzte, erste = stufe(inhalt, 4), stufe(inhalt, 1)
+            FIND.test("Die letzte Stufe traegt die Werte von signal.shader",
+                      letzte["Static"] == 0.55 and letzte["Scanlines"] == 0.35 and letzte["Speed"] == 1.0
+                      and letzte["Tint"] == [0.6235, 1.0, 0.6902, 1.0], str(letzte))
+            FIND.test("Die erste Stufe traegt ein Viertel davon, die Geschwindigkeit bleibt",
+                      erste["Static"] == 0.1375 and erste["Tint"][3] == 0.25 and erste["Speed"] == 1.0, str(erste))
+
+        seit = marke()
+        set_options(env, [("static", "0.8", "signal"), ("stages", "3", "signal")])
+        neu = pakete_seit(seit)
+        inhalt2 = zip_datei.read_bytes() if zip_datei.is_file() else b""
+        sha2 = hashlib.sha1(inhalt2).hexdigest()
+        FIND.test("Ein geaendertes Aussehen gibt ein neues Paket unter einer neuen Adresse",
+                  len(neu) == 1 and neu[-1]["url"] == f"http://127.0.0.1:8164/CamFly-{sha2}.zip" and sha2 != sha1,
+                  str(neu))
+        with zipfile.ZipFile(io.BytesIO(inhalt2)) as z:
+            stufen = sorted(n for n in z.namelist() if "/post_effect/" in n)
+        FIND.test("signal.shader.stages: 3 - drei Stufen, die letzte mit static 0.8",
+                  len(stufen) == 3 and stufe(inhalt2, 3)["Static"] == 0.8, str(stufen))
+        status, _ = holen(url)
+        FIND.test("Das alte Paket gibt es danach nicht mehr", status == 404, str(status))
+
+        seit = marke()
+        set_options(env, [("send", "url", "resource-pack"), ("url", "http://example.invalid/CamFly.zip", "resource-pack")])
+        neu = pakete_seit(seit)
+        FIND.test("resource-pack.send: url - die Adresse aus url, ohne Pruefsumme",
+                  len(neu) == 1 and neu[-1]["url"] == "http://example.invalid/CamFly.zip" and not neu[-1]["hash"],
+                  str(neu))
+
+        seit = marke()
+        set_option(env, "send", "false", "resource-pack")
+        FIND.test("resource-pack.send: false - es geht kein Paket hinaus", pakete_seit(seit) == [], "")
+        console(env, f"fill {bx - 1} {by} {bz - 2} {bx + 27} {by + 4} {bz + 2} minecraft:air", pause=0.5)
+        hinstellen(bot, bx + 0.5, by, bz + 0.5)
+        if FIND.test("Cam-Modus fuer send: false gestartet", cam_on(bot), ""):
+            bot.chat(f"/tp {BOT_NAME} {bx + 24.5} {by} {bz + 0.5}")
+            time.sleep(1.5)
+            effekte = nacheffekte(bot)
+            FIND.test("resource-pack.send: false - der Shader gilt als da: bei 20 % Stufe 1 von 3",
+                      effekte == ["camfly:signal_1"], str(effekte))
+            cam_off(bot)
+            time.sleep(0.5)
+            effekte = nacheffekte(bot)
+            FIND.test("Nach dem Cam-Modus ist die Stoerung weg", effekte == [], str(effekte))
+    finally:
+        try:
+            cam_off(bot)
+            set_options(env, [("max-distance-mode", "fixed"), ("max-distance", "100.0"),
+                              ("static", "0.55", "signal"), ("stages", "4", "signal"),
+                              ("send", "built-in", "resource-pack"), ("url", '""', "resource-pack")])
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test des Ressourcenpakets: {exc}")
 
 
 def herzen_checks(env, bot):
@@ -10202,6 +10629,7 @@ def step_tests(env):
         # --- Anstupsen, mit beiden Koerpertypen, und das Funksignal statt der festen Reichweite ---
         fuer_beide_koerpertypen(env, bot, anstups_checks)
         funk_checks(env, bot)
+        paket_checks(env, bot)
 
         # --- Geworfene Traenke und was den Koerper getroffen hat, mit beiden Koerpertypen ---
         fuer_beide_koerpertypen(env, bot, potion_checks, grund_checks)
