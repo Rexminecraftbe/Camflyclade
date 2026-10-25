@@ -48,6 +48,9 @@ public final class CamActionBar {
     /** Where {@code actionbar-hint} names the key that ends camera mode. */
     private static final String KEY = "{key}";
 
+    /** Where {@code actionbar-signal} shows the ping icon of the signal. */
+    private static final String ICON = "{icon}";
+
     /**
      * The key that swaps the hands, as the client names it. Not
      * {@code Keybinds.SWAP_HANDS} of the chat library: that one says
@@ -148,7 +151,7 @@ public final class CamActionBar {
                     line = now % TEXT_INTERVAL == 0 ? onLine() : null;
                 } else {
                     String text = distanceLine(player);
-                    line = text == null ? null : TextComponent.fromLegacyText(text);
+                    line = text == null ? null : withIcon(player, text);
                 }
                 if (line != null) {
                     player.spigot().sendMessage(ChatMessageType.ACTION_BAR, line);
@@ -200,6 +203,41 @@ public final class CamActionBar {
         }
         parts.addAll(Arrays.asList(TextComponent.fromLegacyText(colors + text.substring(from))));
         return parts.toArray(new BaseComponent[0]);
+    }
+
+    /**
+     * Fills in {@code {icon}} of {@code actionbar-signal}: on Paper with the
+     * ping icon of the game's gui, a picture colour codes cannot write - the
+     * line is then sent right here, see {@link SpriteText} -, elsewhere with
+     * the bars of the signal in letters. The text after the icon goes on in
+     * the colour it had before it.
+     *
+     * @return the line still to be sent, or {@code null} when it has been
+     *         sent already
+     */
+    @SuppressWarnings("deprecation")
+    private BaseComponent[] withIcon(Player player, String text) {
+        if (!text.contains(ICON)) {
+            return TextComponent.fromLegacyText(text);
+        }
+        String sprite = plugin.getSignal().icon(player);
+        if (sprite != null && SpriteText.available()) {
+            SpriteText line = new SpriteText();
+            String colors = "";
+            int from = 0;
+            int at;
+            while ((at = text.indexOf(ICON, from)) >= 0) {
+                String piece = colors + text.substring(from, at);
+                line.text(piece).sprite(SpriteText.GUI_ATLAS, sprite);
+                colors = ChatColor.getLastColors(piece);
+                from = at + ICON.length();
+            }
+            line.text(colors + text.substring(from));
+            if (line.sendActionBar(player)) {
+                return null;
+            }
+        }
+        return TextComponent.fromLegacyText(text.replace(ICON, plugin.getSignal().iconLetters(player)));
     }
 
     /**

@@ -26,7 +26,8 @@ import java.util.UUID;
  * camera takes {@code signal.block-cost} blocks of that away, see
  * {@link SignalPath} - under the ground and behind walls the camera gets
  * nowhere near as far as in the open air. The action bar shows how strong it
- * is.</p>
+ * is, the way the game shows a connection: the ping icon of the tab list, one
+ * bar to five or a red cross, and a word for it.</p>
  *
  * <p>Once it is gone, the camera has {@code signal.lost-seconds} to fly back
  * into it, counted down in the action bar. After that it goes back to its
@@ -43,6 +44,18 @@ public final class CamSignal {
 
     /** The bars of {@code {bars}} in the action bar, one for each quarter of the signal. */
     private static final String[] BARS = {"▂", "▄", "▆", "█"};
+
+    /**
+     * The pictures of {@code {icon}}, by {@link #level}: the ping icons of the
+     * game's gui, which the tab list shows for a connection - the red cross
+     * for none, then one bar to five.
+     */
+    private static final String[] ICONS = {"icon/ping_unknown", "icon/ping_1", "icon/ping_2", "icon/ping_3",
+            "icon/ping_4", "icon/ping_5"};
+
+    /** The words of {@code {quality}}, by {@link #level}, as the language file names them. */
+    private static final String[] QUALITIES = {"signal-quality-none", "signal-quality-very-weak",
+            "signal-quality-weak", "signal-quality-medium", "signal-quality-good", "signal-quality-excellent"};
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
@@ -110,7 +123,9 @@ public final class CamSignal {
 
     /**
      * The part of the action bar that shows the signal, {@code actionbar-signal},
-     * to go behind the distance to the body.
+     * to go behind the distance to the body. {@code {icon}} is left in it:
+     * a picture, which only the action bar itself can put in, see
+     * {@link #icon(Player)}.
      *
      * @return the part, or {@code null} when there is no signal to show or
      *         its switch is off
@@ -120,16 +135,50 @@ public final class CamSignal {
         if (link == null || !messages.isMessageEnabled("actionbar-signal")) {
             return null;
         }
-        double strength = link.strength;
+        return messages.getMessage("actionbar-signal")
+                .replace("{bars}", bars(link.strength))
+                .replace("{quality}", messages.getMessage(QUALITIES[level(link.strength)]))
+                .replace("{percent}", String.valueOf((int) Math.ceil(link.strength * 100.0)));
+    }
+
+    /**
+     * The picture of {@code {icon}}: the ping icon of the game's gui for how
+     * strong the signal is, out of the atlas {@code minecraft:gui}.
+     *
+     * @return its name, e.g. {@code icon/ping_3}, or {@code null} when there
+     *         is no signal to show
+     */
+    public String icon(Player player) {
+        Link link = links.get(player.getUniqueId());
+        return link == null ? null : ICONS[level(link.strength)];
+    }
+
+    /**
+     * {@code {icon}} written in letters, where the server cannot show a
+     * picture in the action bar - on Spigot: the bars of {@code {bars}}.
+     */
+    public String iconLetters(Player player) {
+        Link link = links.get(player.getUniqueId());
+        return link == null ? "" : bars(link.strength);
+    }
+
+    /**
+     * How strong a signal is in steps, as the icons and words go: 0 when it is
+     * gone, 1 below 20 %, then a step for every 20 % more, 5 from 80 %.
+     */
+    static int level(double strength) {
+        return strength <= 0.0 ? 0 : Math.min(ICONS.length - 1, (int) (strength * 5.0) + 1);
+    }
+
+    /** Four bars, as many of them lit as the signal is strong, green, yellow or red. */
+    private static String bars(double strength) {
         int lit = (int) Math.ceil(strength * BARS.length);
         ChatColor color = strength >= 0.5 ? ChatColor.GREEN : strength >= 0.25 ? ChatColor.YELLOW : ChatColor.RED;
         StringBuilder bars = new StringBuilder();
         for (int i = 0; i < BARS.length; i++) {
             bars.append(i < lit ? color : ChatColor.DARK_GRAY).append(BARS[i]);
         }
-        return messages.getMessage("actionbar-signal")
-                .replace("{bars}", bars)
-                .replace("{percent}", String.valueOf((int) Math.ceil(strength * 100.0)));
+        return bars.toString();
     }
 
     /** One measurement, and what follows from it: the countdown, the end of the flight. */

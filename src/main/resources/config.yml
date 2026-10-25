@@ -147,7 +147,10 @@ camera-mode:
 
 # Funksignal (bei camera-mode.max-distance-mode: signal). Es reicht in freier Luft max-distance Blöcke weit,
 # gemessen von den Augen des Körpers bis zu denen der Kamera - in einer anderen Welt vom Portal aus, aus dem sie
-# kam, wie bei max-distance. Wie stark es ist, zeigt die Action-Bar mit vier Balken (Text: actionbar-signal).
+# kam, wie bei max-distance. Wie stark es ist, zeigt die Action-Bar wie das Spiel eine Verbindung: mit dem
+# Verbindungssymbol aus der Tab-Liste (ein bis fünf Balken, ein rotes Kreuz, wenn es weg ist) und einem Wort dazu
+# (Texte: actionbar-signal, signal-quality-...). Das Symbol geht nur auf Paper, auf Spigot stehen dort vier Balken
+# aus Zeichen.
 # Reißt es ab, zählt die Action-Bar lost-seconds herunter (signal-lost), mit dem Ton sounds.signal-lost:
 # So lange hat die Kamera Zeit, zurück ins Signal zu fliegen.
 signal:

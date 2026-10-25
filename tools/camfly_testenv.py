@@ -4908,9 +4908,20 @@ def anstups_checks(env, bot):
 DUNKELHEIT = '{active_effects:[{id:"minecraft:darkness"}]}'
 
 
+# actionbar-signal fuer den Test: wie ausgeliefert, und dahinter die Prozent,
+# an denen der Test die Staerke misst.
+FUNK_ZEILE = '" &7| {icon} &7Signal: {quality} &7{percent}%"'
+
+
 def funk_werte(zeilen):
-    """Die Staerke des Signals aus den Zeilen "... | Signal ▂▄▆█ N%"."""
-    return [int(m.group(1)) for t in zeilen for m in [re.search(r"Signal \S+ (\d+)%", t)] if m]
+    """Die Staerke des Signals aus den Zeilen "... | Signal: good 67%"."""
+    return [int(m.group(1)) for t in zeilen for m in [re.search(r"Signal: [a-z ]+? (\d+)%", t)] if m]
+
+
+def funk_wort(zeilen):
+    """Das Wort fuer die Staerke aus der letzten Zeile "... | Signal: good 67%"."""
+    worte = [m.group(1) for t in zeilen for m in [re.search(r"Signal: ([a-z ]+?) \d+%", t)] if m]
+    return worte[-1] if worte else None
 
 
 def funk_checks(env, bot):
@@ -4924,7 +4935,12 @@ def funk_checks(env, bot):
     Abstand ist genau der, den der Test will.
 
     Am Koerper zeigt die Action-Bar hinter dem Abstand 100 %, zehn Bloecke
-    daneben 67 %. Eine Mauer aus drei Bloecken Stein dazwischen nimmt 15 mehr:
+    daneben 67 %. Wie das Spiel eine Verbindung zeigt: mit dem Symbol der
+    Tab-Liste, ueber Paper als Bild aus dem Atlas gui (icon/ping_5 am Koerper,
+    icon/ping_4 bei 67 %, icon/ping_1 bei 17 %), und einem Wort (excellent,
+    good, very weak). Ausgeliefert steht actionbar-signal ohne Prozent da;
+    der Test haengt sie an, um daran zu messen. Eine Mauer aus drei Bloecken
+    Stein dazwischen nimmt 15 mehr:
     17 % - und das Bild bleibt, wie es ist: Das Signal legt keinen Effekt
     darauf, auch keine Dunkelheit. Ohne Mauer sind es wieder 67 %. Fuenf
     Bloecke Stein nehmen das ganze Signal: "Signal lost!" mit dem
@@ -4958,6 +4974,14 @@ def funk_checks(env, bot):
         werte = funk_werte(zeilen_seit(bot, since))
         return werte[-1] if werte else None
 
+    def anzeige():
+        """Das Wort und die Symbole, die in der Zeit in der Action-Bar standen."""
+        since = bot.mark()
+        seit = bot.call("chat_packets", since=10 ** 9).get("count", 0)
+        time.sleep(1.2)
+        pakete = " ".join(p["text"] for p in bot.call("chat_packets", since=seit).get("packets", []))
+        return funk_wort(zeilen_seit(bot, since)), sorted(set(re.findall(r"icon/ping_\w+", pakete)))
+
     def dunkel():
         return nbt_frage(bot, "@s", DUNKELHEIT)
 
@@ -4968,9 +4992,13 @@ def funk_checks(env, bot):
     try:
         FIND.test("Voreingestellt steht camera-mode.max-distance-mode: fixed da",
                   re.search(r"(?m)^\s*max-distance-mode:\s*fixed\s*$", ausgeliefert(env)) is not None, "")
+        sprache = (env.server / "plugins" / "CamFly" / SPRACHDATEI).read_text(encoding="utf-8")
+        FIND.test("Voreingestellt steht actionbar-signal mit Symbol und Wort da, ohne Prozent",
+                  re.search(r'(?m)^  actionbar-signal: " &7\| \{icon\} &7Signal: \{quality\}"$', sprache) is not None,
+                  "")
         luft()
         set_options(env, [("max-distance-mode", "signal"), ("max-distance", "30.0"),
-                          ("lost-seconds", "2", "signal")])
+                          ("lost-seconds", "2", "signal"), ("actionbar-signal", FUNK_ZEILE, "messages")])
         hinstellen(bot, x, y, z)
         if not FIND.test("Cam-Modus mit Funksignal gestartet", cam_on(bot), ""):
             return
@@ -4978,16 +5006,25 @@ def funk_checks(env, bot):
         wert = staerke()
         FIND.test("signal: am Koerper volles Signal hinter dem Abstand",
                   wert is not None and wert >= 99, str(wert))
+        wort, symbole = anzeige()
+        FIND.test("signal: am Koerper \"excellent\" mit dem Symbol icon/ping_5",
+                  wort == "excellent" and symbole == ["icon/ping_5"], f"{wort} {symbole}")
 
         kamera_bei(10)
         wert = staerke()
         FIND.test("signal: zehn Bloecke daneben in freier Luft 67 % (30 Bloecke Reichweite)",
                   wert is not None and 66 <= wert <= 68, str(wert))
+        wort, symbole = anzeige()
+        FIND.test("signal: bei 67 % \"good\" mit icon/ping_4", wort == "good" and symbole == ["icon/ping_4"],
+                  f"{wort} {symbole}")
 
         mauer(4, 6)
         wert = staerke()
         FIND.test("signal: drei Bloecke Stein dazwischen kosten 15 mehr - 17 %",
                   wert is not None and 16 <= wert <= 18, str(wert))
+        wort, symbole = anzeige()
+        FIND.test("signal: bei 17 % \"very weak\" mit icon/ping_1", wort == "very weak" and symbole == ["icon/ping_1"],
+                  f"{wort} {symbole}")
         FIND.test("signal: auch bei 17 % kein Effekt auf dem Bild - keine Dunkelheit", not dunkel(), "")
         luft()
         wert = staerke()
@@ -5050,7 +5087,8 @@ def funk_checks(env, bot):
             cam_off(bot)
             luft()
             set_options(env, [("max-distance-mode", "fixed"), ("max-distance", "100.0"),
-                              ("lost", "back", "signal"), ("lost-seconds", "3", "signal")])
+                              ("lost", "back", "signal"), ("lost-seconds", "3", "signal"),
+                              ("actionbar-signal", '" &7| {icon} &7Signal: {quality}"', "messages")])
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test des Funksignals: {exc}")

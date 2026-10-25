@@ -15,9 +15,11 @@ messages:
   actionbar-hint: " &7- &f{key} &7or type &f/cam &7to leave"
   actionbar-hint-command: " &7- type &f/cam &7to leave"
   actionbar-on: "&aCam mode activated{hint}"
-  # With camera-mode.max-distance-mode: signal behind actionbar-distance: {bars} are four bars, as many of them lit
-  # as the signal is strong, {percent} how strong it is.
-  actionbar-signal: " &7| &fSignal {bars} &7{percent}%"
+  # With camera-mode.max-distance-mode: signal behind actionbar-distance. {icon} is the ping icon of the game, as the
+  # tab list shows a connection: one bar to five, or a red cross once the signal is gone - on Spigot, which cannot show
+  # it, the bars of {bars} instead. {quality} says it in a word (signal-quality-excellent to signal-quality-none),
+  # {bars} are four bars, as many of them lit as the signal is strong, {percent} how strong it is.
+  actionbar-signal: " &7| {icon} &7Signal: {quality}"
   # {time} is afk-end.seconds.
   afk-ended: "&cCam mode ended: you did not move for {time}."
   # How {area} names a world of cam-area.forbidden-worlds, {world} being its name.
@@ -172,6 +174,14 @@ messages:
   signal-back-to-body: "&cSignal lost: back at your body"
   signal-ended: "&cCam mode ended: the signal was lost."
   signal-lost: "&cSignal lost! &7Fly back within {time}"
+  # {quality} in actionbar-signal, each with the ping icon of as many bars: from 80 % excellent (five), from 60 % good,
+  # from 40 % medium, from 20 % weak, below that very weak (one), and none once the signal is gone (the red cross).
+  signal-quality-excellent: "&aexcellent"
+  signal-quality-good: "&agood"
+  signal-quality-medium: "&emedium"
+  signal-quality-none: "&4none"
+  signal-quality-very-weak: "&cvery weak"
+  signal-quality-weak: "&6weak"
   # start-delay: the countdown in the action bar, {time} being the time left, and why the start was called off.
   start-delay-cancelled: "&eCam mode start cancelled."
   start-delay-countdown: "&eCam mode in {time} &7- stand still"
