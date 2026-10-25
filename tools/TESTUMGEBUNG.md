@@ -34,7 +34,7 @@ echo "say hallo" > ~/camfly-testenv/server/console.fifo
 |--------------|--------------|
 | `jdk`        | JDK 25 von Adoptium holen. Das System hat meist nur 21, `paper-api` hat aber Klassendateien der Version 69. |
 | `build`      | `mvn -B clean package` gegen `spigot-api`. Maven holt die API selbst. |
-| `paperapi`   | `paper-api` und die zwölf Abhängigkeiten, die zum Übersetzen nötig sind. |
+| `paperapi`   | `paper-api` und die zwölf Abhängigkeiten, die zum Übersetzen nötig sind; Jars einer anderen Version räumt er vorher weg. |
 | `crosscheck` | Denselben Quelltext noch einmal mit `javac` gegen `paper-api` übersetzen. |
 | `apicheck`   | Jeden Aufruf auf `org/bukkit`, `net/md_5`, `io/papermc` aus `target/classes` gegen `paper-api` auflösen. |
 | `names`      | Die Namenslisten der Sprachdatei gegen die Daten des Spiels prüfen, siehe unten. |
@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **783** - alle 783 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **788** - alle 788 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -997,6 +997,11 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
 * **Die Knöpfe von `/cam list` liest der Test aus dem Paket**, `system_chat`
   als Text des ganzen Pakets wie bei den Tönen. mineflayer gibt von einer
   Zeile nur den Text weiter, Klick und Hover fehlen darin.
+* **Die Zeile des Funksignals kommt als Paket `action_bar`.** Mit dem
+  Ping-Symbol darin schickt Paper sie über Adventure, nicht als
+  `system_chat` - und das Paket meldet mineflayer gar nicht. Der Bot hängt
+  sich selbst daran und legt es zu den Zeilen und den Paketen; das Symbol
+  (`icon/ping_1` bis `_5`) findet der Test im Text des ganzen Pakets.
 * **Der Akku für die Warnung lädt 100 Sekunden in der Sekunde.** Was er
   hält, rechnet das Plugin beim Start aus dem letzten Stand und der Zeit seit
   damals aus. Nach dem Akkutest steht er fast leer da, und mit dem schnellen

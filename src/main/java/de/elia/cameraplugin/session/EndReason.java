@@ -27,6 +27,8 @@ public enum EndReason {
     BAN(Kind.FORCED),
     /** The camera stood still for too long, {@code afk-end}. */
     AFK(Kind.FORCED),
+    /** The radio signal of {@code max-distance-mode: signal} was lost, with {@code signal.lost: end}. */
+    SIGNAL(Kind.FORCED),
     /** He died. */
     DEATH(Kind.SILENT),
     /** He left the server. */

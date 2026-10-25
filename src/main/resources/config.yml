@@ -16,6 +16,7 @@ action-bar:
   #              Der Pfeil zeigt von der Blickrichtung aus. ▲/▼ = der Körper liegt steiler als 60° über/unter dir,
   #              ● = du bist höchstens 2 Blöcke von ihm weg.
   #              In einer anderen Welt zeigt er zum Portal, aus dem man kam (actionbar-distance-portal).
+  #              Bei camera-mode.max-distance-mode: signal steht dahinter, wie stark das Funksignal ist (actionbar-signal).
   #   text     = der feste Text actionbar-on, die ganze Zeit
   #   false    = nur zu Beginn actionbar-on mit dem Hinweis, für on-duration; danach verblasst die Zeile
   #              wie actionbar-off und es kommt nichts mehr
@@ -34,13 +35,22 @@ camera-mode:
   # Entfernung zum Körper begrenzen
   max-distance-enabled: true
 
-  # Maximale Entfernung zum Körper in Blöcken
+  # Maximale Entfernung zum Körper in Blöcken (bei max-distance-mode: signal die Reichweite des Funks in freier Luft)
   max-distance: 100.0
+
+  # Wie max-distance die Kamera hält:
+  #   fixed  = fest: bis max-distance und keinen Block weiter, an der Grenze wie border-mode sagt (wie bisher)
+  #   signal = über Funk: Die Kamera ist eine Drohne, ihr Körper sendet das Signal. Blöcke zwischen beiden schwächen es,
+  #            unter der Erde und hinter Mauern kommt sie nicht so weit wie in freier Luft (Abschnitt signal).
+  #            Eine Grenze, an die man stößt, gibt es dafür nicht: border-mode gilt nur noch für cam-area und
+  #            gesperrte Lava, Wasser, Pulverschnee.
+  max-distance-mode: fixed
 
   # Sekunden zwischen zwei Warnungen an der Grenze (auch an Lava, Wasser und Pulverschnee)
   distance-warning-cooldown: 3
 
-  # Was an der Grenze von max-distance, cam-area (Stufe 2) und gesperrter Lava, Wasser, Pulverschnee passiert:
+  # Was an der Grenze von max-distance (bei max-distance-mode: fixed), cam-area (Stufe 2) und gesperrter Lava, Wasser,
+  # Pulverschnee passiert:
   #   barrier   = eine Wand, die nur der Spieler im Cam-Modus hat
   #   push-back = der Schritt wird abgebrochen, zurück auf die letzte Position
   #   false     = keine Grenze, auch hinter Portalen wird niemand zurückgeholt (gesperrte Lava, Wasser, Pulverschnee halten wie bei push-back)
@@ -134,6 +144,60 @@ camera-mode:
   #   false    = mit keinem
   #   positive = nur mit unschädlichen, z. B. Schnelligkeit, Leuchten
   start-with-effects: positive
+
+# Funksignal (bei camera-mode.max-distance-mode: signal). Es reicht in freier Luft max-distance Blöcke weit,
+# gemessen von den Augen des Körpers bis zu denen der Kamera - in einer anderen Welt vom Portal aus, aus dem sie
+# kam, wie bei max-distance. Wie stark es ist, zeigt die Action-Bar wie das Spiel eine Verbindung: mit dem
+# Verbindungssymbol aus der Tab-Liste (ein bis fünf Balken, ein rotes Kreuz, wenn es weg ist) und einem Wort dazu
+# (Texte: actionbar-signal, signal-quality-...). Das Symbol geht nur auf Paper, auf Spigot stehen dort vier Balken
+# aus Zeichen.
+# Reißt es ab, zählt die Action-Bar lost-seconds herunter (signal-lost), mit dem Ton sounds.signal-lost:
+# So lange hat die Kamera Zeit, zurück ins Signal zu fliegen. Schafft sie es, kommt der Ton sounds.signal-back.
+signal:
+  # Wie viele Blöcke Reichweite jeder Block zwischen Körper und Kamera kostet (0 = Blöcke kosten nichts).
+  # Es zählen volle, undurchsichtige Blöcke wie Stein, Erde und Holz; Glas, Laub, Wasser, Stufen und Zäune nicht.
+  # Bei 5 und max-distance 100 kommt das Signal durch 20 Blöcke Fels gar nicht mehr durch.
+  block-cost: 5.0
+  # Blöcke, die das Signal anders kosten als block-cost, je eine Zeile Name: Wert. Der Wert ist eine Zahl - so viele
+  # Blöcke Reichweite kostet jeder dieser Blöcke auf dem Weg (0 = gar nichts) - oder stop = durch diesen Block kommt
+  # gar kein Signal. Es geht jeder Block, auch einer, der sonst nichts kostet (z. B. tinted_glass oder water).
+  # Ein * im Namen steht für beliebige Zeichen, z. B. "*copper" für alle Kupferblöcke - solche Namen in
+  # Anführungszeichen. Ein Name ohne * geht vor einem mit *. Alle anderen Blöcke kosten block-cost. {} = keine.
+  block-costs:
+    # Gar kein Signal: unzerstörbares Gestein
+    bedrock: stop
+    reinforced_deepslate: stop
+    # Stark: Obsidian und Netherit
+    obsidian: 25.0
+    crying_obsidian: 25.0
+    netherite_block: 40.0
+    ancient_debris: 20.0
+    # Metall schirmt ab
+    iron_block: 15.0
+    raw_iron_block: 15.0
+    gold_block: 15.0
+    raw_gold_block: 15.0
+    "*copper_block": 12.0
+    "*copper": 12.0
+    lodestone: 15.0
+    # Getöntes Glas lässt kein Licht durch und auch das Signal nur schwer
+    tinted_glass: 5.0
+  # Ab wie viel Prozent die Anzeige des Signals welche Stufe zeigt, mit Symbol und Wort (Texte signal-quality-...):
+  #   excellent = fünf Balken, good = vier, medium = drei, weak = zwei. Darunter very weak mit einem Balken, und ist
+  #   das Signal ganz weg, none mit dem roten Kreuz.
+  # Jede Zahl muss kleiner sein als die davor (0 bis 100). Ist sie es nicht, meldet /cam reload einen Fehler, und es
+  # gelten 80, 60, 40, 20.
+  levels:
+    excellent: 80
+    good: 60
+    medium: 40
+    weak: 20
+  # Was passiert, wenn das Signal weg bleibt:
+  #   back = die Kamera springt zurück zum Körper (Ton sounds.back, Text signal-back-to-body), der Cam-Modus läuft weiter
+  #   end  = der Cam-Modus endet (Ton sounds.end-forced, Text signal-ended)
+  lost: back
+  # Wie viele Sekunden die Kamera Zeit hat, wieder ins Signal zu fliegen (0 = sofort, höchstens 60)
+  lost-seconds: 3
 
 # Körper, der im Cam-Modus an der Stelle des Spielers bleibt
 body:
@@ -265,7 +329,8 @@ sounds:
     sound: entity.illusioner.mirror_move
     volume: 1.0
     pitch: 1.0
-  # Beim Ende von außen: /cam reload, /cam stop, /cam ban, Zeitlimit abgelaufen, Akku leer, afk-end, Teleport
+  # Beim Ende von außen: /cam reload, /cam stop, /cam ban, Zeitlimit abgelaufen, Akku leer, afk-end, Teleport,
+  # Funksignal weg (signal.lost: end)
   # (beim Tod, beim Verlassen des Servers und beim Herunterfahren gibt es keinen Ton)
   end-forced:
     enabled: true
@@ -279,7 +344,7 @@ sounds:
     sound: block.note_block.bass
     volume: 1.0
     pitch: 0.5
-  # Beim Sprung zurück zum Körper mit /cam back (back-command)
+  # Beim Sprung zurück zum Körper mit /cam back (back-command) und wenn das Funksignal weg bleibt (signal.lost: back)
   back:
     enabled: true
     sound: entity.enderman.teleport
@@ -301,6 +366,25 @@ sounds:
   start-delay:
     enabled: true
     sound: block.note_block.hat
+    volume: 1.0
+    pitch: 1.0
+  # Wenn ein anderer Spieler den Körper anstupst (nudge)
+  nudge:
+    enabled: true
+    sound: block.note_block.chime
+    volume: 1.0
+    pitch: 1.0
+  # Wenn das Funksignal abreißt (camera-mode.max-distance-mode: signal)
+  signal-lost:
+    enabled: true
+    sound: block.conduit.deactivate
+    volume: 1.0
+    pitch: 1.0
+  # Wenn die Kamera rechtzeitig zurück ins Funksignal fliegt, es also von null wieder auf einen Balken kommt -
+  # nicht beim Sprung zurück zum Körper (signal.lost: back) und nicht beim Ende (signal.lost: end)
+  signal-back:
+    enabled: true
+    sound: block.conduit.activate
     volume: 1.0
     pitch: 1.0
 
@@ -550,6 +634,15 @@ body-alarm:
   # Wie nah ein Spieler kommen muss, in Blöcken (höchstens 64)
   player-radius: 10.0
   # Sekunden zwischen zwei Alarmen
+  cooldown: 5
+
+# Anstupsen: Ein anderer Spieler klickt den Körper mit der rechten Maustaste an. Der Spieler im Cam-Modus hört dann
+# sounds.nudge und liest in der Action-Bar, wer an seinem Körper wartet (Text: nudge-received); wer anstupst, liest in
+# seiner, dass es angekommen ist (nudge-sent). Spieler im Cam-Modus stupsen nicht an, und wer für den Spieler im
+# Cam-Modus unsichtbar ist (z. B. durch Vanish), auch nicht. Ein Klick mit links bleibt ein Treffer auf den Körper.
+nudge:
+  enabled: true
+  # Sekunden, bis derselbe Spieler im Cam-Modus wieder angestupst werden kann, von wem auch immer (mindestens 1)
   cooldown: 5
 
 # Wartezeit vor dem Start: Nach /cam beginnt der Cam-Modus erst nach seconds, wie ein Teleport mit Wartezeit

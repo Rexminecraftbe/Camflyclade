@@ -15,6 +15,11 @@ messages:
   actionbar-hint: " &7- &f{key} &7or type &f/cam &7to leave"
   actionbar-hint-command: " &7- type &f/cam &7to leave"
   actionbar-on: "&aCam mode activated{hint}"
+  # With camera-mode.max-distance-mode: signal behind actionbar-distance. {icon} is the ping icon of the game, as the
+  # tab list shows a connection: one bar to five, or a red cross once the signal is gone - on Spigot, which cannot show
+  # it, the bars of {bars} instead. {quality} says it in a word (signal-quality-excellent to signal-quality-none),
+  # {bars} are four bars, as many of them lit as the signal is strong, {percent} how strong it is.
+  actionbar-signal: " &7| {icon} &7Signal: {quality}"
   # {time} is afk-end.seconds.
   afk-ended: "&cCam mode ended: you did not move for {time}."
   # How {area} names a world of cam-area.forbidden-worlds, {world} being its name.
@@ -98,6 +103,7 @@ messages:
   cant-fly-in-water: "&cYou cannot fly into water in camera mode."
   config-allowed-blocks: "any block, e.g. barrier or glass"
   config-allowed-particles: "a particle without extra data, e.g. soul_fire_flame, flame or end_rod"
+  config-allowed-signal-costs: "a number of blocks of at least 0, or stop"
   config-allowed-sounds: "a sound as /playsound names it, e.g. block.beacon.activate"
   config-broken: "&cThe configuration has an error in {file} and was not applied, the previous settings stay in effect: {error}"
   config-broken-startup: "&cThe configuration has an error in {file}: {error}"
@@ -112,6 +118,7 @@ messages:
   config-expected-number: "&cWrong value for {path}: '{value}'. Expected a number. Using {used} instead."
   config-expected-text: "&cWrong value for {path}: '{value}'. Expected text. Using {used} instead."
   config-expected-whole-number: "&cWrong value for {path}: '{value}'. Expected a whole number. Using {used} instead."
+  config-not-descending: "&cThe values of {path} have to go down, each lower than the one before: {value}. Using {used} instead."
   config-out-of-range: "&cValue for {path} is out of range: {value}. Using {used} instead."
   config-syntax-extra-colon: 'there is one ":" too many here, or the value belongs in quotes'
   config-syntax-indentation: "the indentation here does not match the lines above"
@@ -152,6 +159,10 @@ messages:
   no-permission: "&cYou don't have permission to use this command."
   no-player: "&cThis command can only be used by players."
   no-projectiles: "&cYou cannot shoot projectiles in camera mode."
+  # nudge: nudge-received in the action bar of the player in cam mode, {player} being who clicked his body, and
+  # nudge-sent in the action bar of that one, {player} being whose body it is.
+  nudge-received: "&e{player} nudged your body!"
+  nudge-sent: "&7You nudged {player}, who is in cam mode."
   player.name-format: "{player}'s Cam"
   portal-blocked: "&cYou cannot go through {portal} portals in camera mode."
   portal-return-area: "&cCam mode is not allowed in {area}, you were brought back."
@@ -159,6 +170,21 @@ messages:
   reload-exit: "&cCamera mode ended due to plugin restart."
   reload-start: "&ePlugin is restarting..."
   reload-success: "&aPlugin reload successful."
+  # The signal of camera-mode.max-distance-mode: signal is gone: signal-lost counts down in the action bar, {time} being
+  # the time left to fly back into it. Then the camera is back at the body with signal-back-to-body, or cam mode ends
+  # with signal-ended.
+  signal-back-to-body: "&cSignal lost: back at your body"
+  signal-ended: "&cCam mode ended: the signal was lost."
+  signal-lost: "&cSignal lost! &7Fly back within {time}"
+  # {quality} in actionbar-signal, each with the ping icon of as many bars: excellent (five), good, medium, weak from the
+  # percent signal.levels in config.yml names for them, below that very weak (one), and none once the signal is gone
+  # (the red cross).
+  signal-quality-excellent: "&aexcellent"
+  signal-quality-good: "&agood"
+  signal-quality-medium: "&emedium"
+  signal-quality-none: "&4none"
+  signal-quality-very-weak: "&cvery weak"
+  signal-quality-weak: "&6weak"
   # start-delay: the countdown in the action bar, {time} being the time left, and why the start was called off.
   start-delay-cancelled: "&eCam mode start cancelled."
   start-delay-countdown: "&eCam mode in {time} &7- stand still"
@@ -513,6 +539,7 @@ message-settings:
   actionbar-hint-command: true
   actionbar-off: true
   actionbar-on: true
+  actionbar-signal: true
   afk-ended: true
   back-not-in-cam: true
   back-off: true
@@ -586,12 +613,17 @@ message-settings:
   flight-speed: true
   no-permission: true
   no-projectiles: true
+  nudge-received: true
+  nudge-sent: true
   portal-blocked: true
   portal-return-area: true
   portal-return-distance: true
   reload-exit: true
   reload-start: true
   reload-success: true
+  signal-back-to-body: true
+  signal-ended: true
+  signal-lost: true
   start-delay-cancelled: true
   start-delay-countdown: true
   start-delay-damaged: true

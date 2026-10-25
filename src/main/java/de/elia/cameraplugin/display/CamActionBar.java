@@ -48,6 +48,9 @@ public final class CamActionBar {
     /** Where {@code actionbar-hint} names the key that ends camera mode. */
     private static final String KEY = "{key}";
 
+    /** Where {@code actionbar-signal} shows the ping icon of the signal. */
+    private static final String ICON = "{icon}";
+
     /**
      * The key that swaps the hands, as the client names it. Not
      * {@code Keybinds.SWAP_HANDS} of the chat library: that one says
@@ -148,7 +151,7 @@ public final class CamActionBar {
                     line = now % TEXT_INTERVAL == 0 ? onLine() : null;
                 } else {
                     String text = distanceLine(player);
-                    line = text == null ? null : TextComponent.fromLegacyText(text);
+                    line = text == null ? null : withIcon(player, text);
                 }
                 if (line != null) {
                     player.spigot().sendMessage(ChatMessageType.ACTION_BAR, line);
@@ -203,6 +206,41 @@ public final class CamActionBar {
     }
 
     /**
+     * Fills in {@code {icon}} of {@code actionbar-signal}: on Paper with the
+     * ping icon of the game's gui, a picture colour codes cannot write - the
+     * line is then sent right here, see {@link SpriteText} -, elsewhere with
+     * the bars of the signal in letters. The text after the icon goes on in
+     * the colour it had before it.
+     *
+     * @return the line still to be sent, or {@code null} when it has been
+     *         sent already
+     */
+    @SuppressWarnings("deprecation")
+    private BaseComponent[] withIcon(Player player, String text) {
+        if (!text.contains(ICON)) {
+            return TextComponent.fromLegacyText(text);
+        }
+        String sprite = plugin.getSignal().icon(player);
+        if (sprite != null && SpriteText.available()) {
+            SpriteText line = new SpriteText();
+            String colors = "";
+            int from = 0;
+            int at;
+            while ((at = text.indexOf(ICON, from)) >= 0) {
+                String piece = colors + text.substring(from, at);
+                line.text(piece).sprite(SpriteText.GUI_ATLAS, sprite);
+                colors = ChatColor.getLastColors(piece);
+                from = at + ICON.length();
+            }
+            line.text(colors + text.substring(from));
+            if (line.sendActionBar(player)) {
+                return null;
+            }
+        }
+        return TextComponent.fromLegacyText(text.replace(ICON, plugin.getSignal().iconLetters(player)));
+    }
+
+    /**
      * Shows a line for a moment in place of the regular one, such as the new
      * speed after a turn of the mouse wheel. Shown even with
      * {@code action-bar.enabled: false}: it answers something the player has
@@ -244,25 +282,32 @@ public final class CamActionBar {
      * which way it lies. In a world the body is not in, the portal he came out
      * of takes its place, the same spot {@code max-distance} is measured from.
      *
-     * @return the line, or {@code null} when its switch is off or nothing can
-     *         be measured against
+     * <p>Under {@code max-distance-mode: signal} the strength of the signal
+     * stands behind it, {@code actionbar-signal}. In a world neither the body
+     * nor that portal is in, it stands there alone: there is no distance to
+     * show, and the signal says that it is gone.</p>
+     *
+     * @return the line, or {@code null} when its switches are off or nothing
+     *         can be measured against
      */
     private String distanceLine(Player player) {
         CameraData data = cameraPlayers.get(player.getUniqueId());
         if (data == null) return null;
+        String signal = plugin.getSignal().actionBarPart(player);
         Location at = player.getLocation();
         Location anchor = plugin.getMovementGuard().distanceAnchor(data, at);
-        if (anchor == null) return null;
+        if (anchor == null) return signal == null ? null : signal.trim();
         boolean atBody = anchor.getWorld().equals(data.getBody().getWorld());
         String key = atBody ? "actionbar-distance" : "actionbar-distance-portal";
-        if (!messages.isMessageEnabled(key)) return null;
+        if (!messages.isMessageEnabled(key)) return signal == null ? null : signal.trim();
         double dx = anchor.getX() - at.getX();
         double dy = anchor.getY() - at.getY();
         double dz = anchor.getZ() - at.getZ();
         long blocks = Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz));
-        return messages.getMessage(key)
+        String line = messages.getMessage(key)
                 .replace("{distance}", String.valueOf(blocks))
                 .replace("{arrow}", arrow(dx, dy, dz, at.getYaw()));
+        return signal == null ? line : line + signal;
     }
 
     /**
