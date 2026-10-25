@@ -8,6 +8,7 @@ import de.elia.cameraplugin.display.ActionBarDisplay;
 import de.elia.cameraplugin.display.GlowMode;
 import de.elia.cameraplugin.display.NameMode;
 import de.elia.cameraplugin.list.ListAccess;
+import de.elia.cameraplugin.menu.MenuAccess;
 import de.elia.cameraplugin.mirrordamage.ArmorDamageMode;
 import de.elia.cameraplugin.mirrordamage.DamageMode;
 import de.elia.cameraplugin.mob.MobTargeting;
@@ -16,6 +17,7 @@ import de.elia.cameraplugin.movement.DistanceMode;
 import de.elia.cameraplugin.movement.FlightMedium;
 import de.elia.cameraplugin.nightvision.NightVisionMode;
 import de.elia.cameraplugin.portal.PortalRules;
+import de.elia.cameraplugin.scout.ScoutAnchor;
 import de.elia.cameraplugin.session.CamGameMode;
 import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.signal.SignalCosts;
@@ -125,6 +127,13 @@ public final class CamSettings {
      * without a wait each of them would nudge on its own.
      */
     private static final int MIN_NUDGE_COOLDOWN = 1;
+
+    /**
+     * The farthest {@code anti-scouting.radius} reaches. The server sends
+     * players to a client no further than about this anyway, so beyond it
+     * nothing is left to hide.
+     */
+    private static final double MAX_SCOUT_RADIUS = 256.0;
 
     /**
      * Keys that are read although the config file built into the jar leaves
@@ -309,6 +318,34 @@ public final class CamSettings {
     private int viewpointsMax;
     /** Where the spots are kept, {@code viewpoints.storage}. */
     private StorageMode viewpointsStorage;
+    /** Whether a player may share his spots with others, {@code viewpoints.sharing}. */
+    private boolean viewpointsSharing;
+    /** Whether {@code /cam visit} takes the camera to a spot shared with him, {@code visitor-camera.enabled}. */
+    private boolean visitorCameraEnabled;
+
+    /** Whether {@code /cam resume} goes on where the last flight ended, {@code resume-command.enabled}. */
+    private boolean resumeEnabled;
+    /** Where the end of the last flight is kept, {@code resume-command.storage}. */
+    private StorageMode resumeStorage;
+
+    /** Where the settings players pick for themselves are kept, {@code player-settings.storage}. */
+    private StorageMode playerSettingsStorage;
+    /** Whether the speed he last flew at is kept, {@code player-settings.flight-speed}. */
+    private boolean playerSettingsFlightSpeed;
+    /** Whether his time of {@code /cam time} is kept, {@code player-settings.time}. */
+    private boolean playerSettingsTime;
+    /** Whether his weather of {@code /cam weather} is kept, {@code player-settings.weather}. */
+    private boolean playerSettingsWeather;
+
+    /** Whether players far away are hidden from a camera player, {@code anti-scouting.enabled}. */
+    private boolean antiScoutingEnabled;
+    /** How far he still sees the others, in blocks, {@code anti-scouting.radius}. */
+    private double antiScoutingRadius;
+    /** Where that is measured from, {@code anti-scouting.measured-from}. */
+    private ScoutAnchor antiScoutingFrom;
+
+    /** How the players get at back, spot, photo and the rest, {@code menu.access}. */
+    private MenuAccess menuAccess;
 
     /** Whether {@code /cam photo} is there, {@code photo-mode.enabled}. */
     private boolean photoModeEnabled;
@@ -619,6 +656,26 @@ public final class CamSettings {
         viewpointsEnabled = config.getBoolean("viewpoints.enabled", true);
         viewpointsMax = config.getInt("viewpoints.max-per-player", 10, 1, MAX_VIEWPOINTS);
         viewpointsStorage = readStorage(config, "viewpoints.storage");
+        viewpointsSharing = config.getBoolean("viewpoints.sharing", true);
+        visitorCameraEnabled = config.getBoolean("visitor-camera.enabled", true);
+        resumeEnabled = config.getBoolean("resume-command.enabled", true);
+        resumeStorage = readStorage(config, "resume-command.storage");
+        playerSettingsStorage = readStorage(config, "player-settings.storage");
+        playerSettingsFlightSpeed = config.getBoolean("player-settings.flight-speed", true);
+        playerSettingsTime = config.getBoolean("player-settings.time", false);
+        playerSettingsWeather = config.getBoolean("player-settings.weather", false);
+        antiScoutingEnabled = config.getBoolean("anti-scouting.enabled", false);
+        antiScoutingRadius = config.getDouble("anti-scouting.radius", 32.0, 0.0, MAX_SCOUT_RADIUS);
+        antiScoutingFrom = config.getChoice("anti-scouting.measured-from", "body", "body", "camera")
+                .equalsIgnoreCase("camera") ? ScoutAnchor.CAMERA : ScoutAnchor.BODY;
+        String access = config.getChoice("menu.access", "both", "both", "menu", "command", "false")
+                .toLowerCase(Locale.ROOT);
+        menuAccess = switch (access) {
+            case "menu" -> MenuAccess.MENU;
+            case "command" -> MenuAccess.COMMAND;
+            case "false" -> MenuAccess.OFF;
+            default -> MenuAccess.BOTH;
+        };
         photoModeEnabled = config.getBoolean("photo-mode.enabled", true);
         photoHidePlayers = config.getBoolean("photo-mode.hide-players", true);
         photoHideBodies = config.getBoolean("photo-mode.hide-bodies", true);
@@ -1411,6 +1468,58 @@ public final class CamSettings {
 
     public StorageMode getViewpointsStorage() {
         return viewpointsStorage;
+    }
+
+    /** Whether spots may be shared, which only goes while there are spots at all. */
+    public boolean isViewpointsSharing() {
+        return viewpointsEnabled && viewpointsSharing;
+    }
+
+    /** Whether {@code /cam visit} goes, which only goes while spots may be shared. */
+    public boolean isVisitorCameraEnabled() {
+        return isViewpointsSharing() && visitorCameraEnabled;
+    }
+
+    public boolean isResumeEnabled() {
+        return resumeEnabled;
+    }
+
+    public StorageMode getResumeStorage() {
+        return resumeStorage;
+    }
+
+    // ------------------------------------------- player-settings, anti-scouting, menu
+
+    public StorageMode getPlayerSettingsStorage() {
+        return playerSettingsStorage;
+    }
+
+    public boolean isPlayerSettingsFlightSpeed() {
+        return playerSettingsFlightSpeed;
+    }
+
+    public boolean isPlayerSettingsTime() {
+        return playerSettingsTime;
+    }
+
+    public boolean isPlayerSettingsWeather() {
+        return playerSettingsWeather;
+    }
+
+    public boolean isAntiScoutingEnabled() {
+        return antiScoutingEnabled;
+    }
+
+    public double getAntiScoutingRadius() {
+        return antiScoutingRadius;
+    }
+
+    public ScoutAnchor getAntiScoutingFrom() {
+        return antiScoutingFrom;
+    }
+
+    public MenuAccess getMenuAccess() {
+        return menuAccess;
     }
 
     public boolean isPhotoModeEnabled() {

@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **802** - alle 802 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **846** - alle 846 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -1042,6 +1042,19 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   seiner Datei unter `playerdata/stats/`. Solange er online ist, hält das
   Plugin sie im Speicher; in der Datei zu löschen hieße, nichts zu löschen.
   Der Test löscht sie deshalb vorher und nachher mit `/cam spot delete`.
+* **Auch die eigenen Einstellungen des Bots bleiben stehen**, unter
+  `settings` in seiner Datei. Ein Tempo, das ein Abschnitt am Mausrad
+  eingestellt hat, verschöbe die festen Flugzeiten aller späteren - bis in den
+  nächsten Lauf. Der Testserver startet deshalb mit
+  `player-settings.flight-speed: false`, und nur der Test der eigenen
+  Einstellungen schaltet es für sich ein. Die eigene Nachtsicht setzt der
+  Test vorher und nachher mit `/cam nightvision reset` zurück.
+* **Im Menü klickt der Bot nach Plätzen, nicht nach Items.** mineflayer kennt
+  die Arten nur aus den Daten von 26.1. Der Server weist jeden Klick ins Menü
+  ab und schickt das Fenster neu; eine Antwort, auf die mineflayer warten
+  könnte, gibt es nicht, deshalb geht `click_window` nach drei Sekunden weiter.
+* **Beim Ausspähen schaut der zweite Spieler durch die Kamera.** Der Bot hat
+  op und damit `camplugin.antiscout.bypass`; er sähe jeden.
 
 ## Was die Tests abdecken
 
@@ -1334,7 +1347,51 @@ eingeschaltet startet `/cam` mit einem Spieler drei Blöcke daneben nicht, die
 Meldung sagt, von wem man wie weit weg muss (16 Blöcke, 13 mehr), zwanzig
 Blöcke weg geht es, mit `nearby-radius: 25` nicht (25 Blöcke, 5 mehr) · für den anderen gilt dasselbe, ein Spieler im
 Cam-Modus zählt nicht, und mit `cam-safety.enabled: false` ist auch die
-Kampfsperre aus ·
+Kampfsperre aus · die eigene Nachtsicht gilt voreingestellt
+(`player-settings.storage: file`) auch nach dem Ab- und Anmelden und steht in
+der Datei des Bots unter `settings`, mit `storage: memory` sagt die Meldung,
+dass sie bis zum Verlassen gilt, und danach ist sie vergessen ·
+voreingestellt steht `player-settings` mit `storage: file`, `flight-speed:
+true`, `time: false` und `weather: false` da (der Testserver schaltet
+`flight-speed` für alle anderen Abschnitte ab) · mit `flight-speed: true`
+beginnt der nächste Flug so schnell, wie der letzte aufhörte, auch nach dem
+Ab- und Anmelden, mit `false` wieder mit `flight-speed.start` · mit `time:
+true` und `weather: true` beginnt der nächste Flug mit dem Sonnenuntergang
+und dem Regen von vorher, `reset` nimmt beides zurück, voreingestellt endet
+beides mit dem Cam-Modus · voreingestellt sind `viewpoints.sharing` und
+`visitor-camera` an · `/cam spot share` teilt einen Punkt mit dem zweiten
+Spieler, der es mit einem Knopf auf `/cam visit` erfährt, ihn in `/cam spot
+list` und in der Tab-Vervollständigung findet, und er steht in
+`playerdata/shared-spots.yml` · zweihundert Blöcke weg springt `/cam spot
+Besitzer:Name` nicht, `/cam visit` aber schon, im Cam-Modus und ohne, die
+Action-Bar zeigt den Abstand zum Punkt, `max-distance` hält die Kamera am
+Punkt fest, und `/cam back` bringt sie zum Körper · nimmt der Besitzer das
+Teilen zurück, ist die Kamera des Besuchers wieder beim Körper, und der Punkt
+ist für ihn weg · `all` teilt mit allen, ein unbekannter und der eigene Name
+werden abgewiesen, die Tab-Vervollständigung bietet `all` und die Spieler an
+· ein verbotenes Biom am Punkt sperrt den Besuch, ohne dass der Cam-Modus
+startet · mit `visitor-camera.enabled: false` ist `/cam visit` aus, mit
+`viewpoints.sharing: false` das Teilen, und ein gelöschter Punkt ist für
+niemanden mehr geteilt · voreingestellt ist `resume-command` an, mit
+`storage: file` · `/cam resume` startet den Cam-Modus, und die Kamera steht,
+wo der letzte Flug aufhörte, und schaut dorthin, mit `sounds.spot` und der
+Zeile in der Action-Bar, im Cam-Modus springt sie gleich zurück, und das Ende
+steht in der Datei unter `last-flight` · mit `max-distance: 2` und mit einem
+Stein an der Stelle startet der Cam-Modus dafür nicht, die Meldung sagt warum
+· mit `enabled: false` ist der Befehl aus, mit `storage: memory` ist nach dem
+Reload kein Flug da · voreingestellt ist `anti-scouting` aus, mit `radius:
+32.0` und `measured-from: body` · eingeschaltet mit `radius: 6` sieht der
+zweite Spieler im Cam-Modus den Bot zehn Blöcke weit nicht, drei Blöcke
+daneben schon, mit der Kamera neben dem Bot unter `body` nicht und unter
+`camera` schon · den Körper des Bots im Cam-Modus zehn Blöcke weit sieht er
+nicht, nach dem Cam-Modus wieder · der Bot mit op und damit
+`camplugin.antiscout.bypass` sieht ihn trotzdem · voreingestellt steht
+`menu.access: both` da · `/cam menu` öffnet das Menü mit den Knöpfen auf ihren
+Plätzen, auch im Cam-Modus, und der erste startet den Cam-Modus · Zeit und
+Sonnenuntergang geben dem Bot 12000, nichts kommt ins Inventar · „Save a spot
+here“ fragt im Chat nach dem Namen, ein Linksklick springt zum Punkt, ein
+Klick mit Umschalt löscht ihn · `access: menu` lässt nur das Menü, `command`
+nur die Befehle, `false` keins von beiden, `/cam` selbst aber schon ·
 Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im

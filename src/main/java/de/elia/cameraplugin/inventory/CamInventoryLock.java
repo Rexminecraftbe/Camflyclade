@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.inventory;
 
+import de.elia.cameraplugin.menu.CamMenu;
 import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -38,6 +39,11 @@ public final class CamInventoryLock implements Listener {
         }
     }
 
+    /**
+     * No click in a window gets anything in or out. That holds for the
+     * window of {@code /cam menu} as well, which reads the click for the
+     * button it hit, see {@link CamMenu}.
+     */
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         if (event.getWhoClicked() instanceof Player &&
@@ -54,11 +60,15 @@ public final class CamInventoryLock implements Listener {
      * that hang on an entity instead of on a block - the trade of a villager,
      * the inventory of a chest minecart or of a horse - and it shuts them before
      * they are seen, rather than only keeping his hands out of them.</p>
+     *
+     * <p>Only the window of {@code /cam menu} opens: it holds nobody's items,
+     * only buttons.</p>
      */
     @EventHandler
     public void onCameraInventoryOpen(InventoryOpenEvent event) {
         if (event.getPlayer() instanceof Player player
-                && cameraPlayers.contains(player.getUniqueId())) {
+                && cameraPlayers.contains(player.getUniqueId())
+                && !CamMenu.isMenu(event.getInventory())) {
             event.setCancelled(true);
         }
     }

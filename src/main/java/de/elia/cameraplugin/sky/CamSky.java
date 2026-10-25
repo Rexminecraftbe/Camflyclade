@@ -3,6 +3,7 @@ package de.elia.cameraplugin.sky;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.preferences.CamPreferences;
 import org.bukkit.WeatherType;
 import org.bukkit.entity.Player;
 
@@ -23,9 +24,11 @@ import java.util.UUID;
  * on his feet, a night of his own would be a way to look through the dark of
  * the server.</p>
  *
- * <p>None of it is written anywhere. It ends with camera mode, and he sees
- * what he saw before it again: the time and weather of the world, or one
- * another plugin gave him.</p>
+ * <p>It ends with camera mode, and he sees what he saw before it again: the
+ * time and weather of the world, or one another plugin gave him. With
+ * {@code player-settings.time} and {@code player-settings.weather} the next
+ * flight starts with them once more, until he resets them, see
+ * {@link de.elia.cameraplugin.preferences.CamPreferences}.</p>
  */
 public final class CamSky {
 
@@ -111,8 +114,10 @@ public final class CamSky {
             return;
         }
         String word = args[0].toLowerCase(Locale.ROOT);
+        CamPreferences preferences = plugin.getPreferences();
         if (word.equals("reset")) {
             resetTime(player);
+            preferences.setTime(player, null);
             messages.sendConfiguredMessage(player, "time-reset");
             return;
         }
@@ -124,6 +129,14 @@ public final class CamSky {
             messages.sendConfiguredMessage(player, "time-usage");
             return;
         }
+        showTime(player, ticks);
+        preferences.setTime(player, ticks);
+        messages.sendConfiguredMessage(player, preferences.keepsTime() ? "time-set-kept" : "time-set",
+                "{time}", word);
+    }
+
+    /** Shows him a time of his own, standing still, after noting what he saw before. */
+    private void showTime(Player player, long ticks) {
         Before was = before.computeIfAbsent(player.getUniqueId(), id -> new Before());
         if (!was.time) {
             was.time = true;
@@ -131,7 +144,6 @@ public final class CamSky {
             was.timeRelative = player.isPlayerTimeRelative();
         }
         player.setPlayerTime(ticks, false);
-        messages.sendConfiguredMessage(player, "time-set", "{time}", word);
     }
 
     /** A time in ticks of the day, or {@code null} when the word is none. */
@@ -163,8 +175,10 @@ public final class CamSky {
             return;
         }
         String word = args[0].toLowerCase(Locale.ROOT);
+        CamPreferences preferences = plugin.getPreferences();
         if (word.equals("reset")) {
             resetWeather(player);
+            preferences.setWeather(player, null);
             messages.sendConfiguredMessage(player, "weather-reset");
             return;
         }
@@ -177,13 +191,37 @@ public final class CamSky {
             messages.sendConfiguredMessage(player, "weather-usage");
             return;
         }
+        showWeather(player, type);
+        preferences.setWeather(player, type);
+        messages.sendConfiguredMessage(player, preferences.keepsWeather() ? "weather-set-kept" : "weather-set",
+                "{weather}", word);
+    }
+
+    /** Shows him a weather of his own, after noting what he saw before. */
+    private void showWeather(Player player, WeatherType type) {
         Before was = before.computeIfAbsent(player.getUniqueId(), id -> new Before());
         if (!was.weather) {
             was.weather = true;
             was.weatherType = player.getPlayerWeather();
         }
         player.setPlayerWeather(type);
-        messages.sendConfiguredMessage(player, "weather-set", "{weather}", word);
+    }
+
+    /**
+     * At the start of camera mode: the time and the weather he picked in an
+     * earlier flight, while they are kept and {@code /cam time} and
+     * {@code /cam weather} are there at all.
+     */
+    public void startFor(Player player) {
+        CamPreferences preferences = plugin.getPreferences();
+        Long ticks = settings.isCamTimeEnabled() ? preferences.time(player) : null;
+        if (ticks != null && ticks >= 0 && ticks < DAY) {
+            showTime(player, ticks);
+        }
+        WeatherType weather = settings.isCamWeatherEnabled() ? preferences.weather(player) : null;
+        if (weather != null) {
+            showWeather(player, weather);
+        }
     }
 
     /** Gives him back the time he saw before his first {@code /cam time}. */

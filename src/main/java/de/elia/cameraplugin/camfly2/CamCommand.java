@@ -2,14 +2,24 @@ package de.elia.cameraplugin.camfly2;
 
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.list.CamList;
+import de.elia.cameraplugin.menu.MenuAccess;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 import java.util.Arrays;
+import java.util.Locale;
+import java.util.Set;
 
 public class CamCommand implements CommandExecutor {
+
+    /**
+     * The words after {@code /cam} for what {@code /cam menu} offers as
+     * well, which {@code menu.access} may keep to the menu.
+     */
+    public static final Set<String> MENU_WORDS = Set.of("back", "resume", "spot", "visit", "photo", "time",
+            "weather", "nightvision");
 
     private final CameraPlugin plugin;
     private final Messages messages;
@@ -81,6 +91,25 @@ public class CamCommand implements CommandExecutor {
             return true;
         }
 
+        if (args.length > 0 && args[0].equalsIgnoreCase("menu")) {
+            plugin.getMenu().command(player);
+            return true;
+        }
+        // What the menu offers as well goes through the commands only while
+        // menu.access lets it.
+        MenuAccess access = plugin.getSettings().getMenuAccess();
+        if (args.length > 0 && MENU_WORDS.contains(args[0].toLowerCase(Locale.ROOT)) && !access.allowsCommands()) {
+            messages.sendConfiguredMessage(player, access.allowsMenu() ? "menu-only" : "menu-features-off");
+            return true;
+        }
+        if (args.length > 0 && args[0].equalsIgnoreCase("resume")) {
+            plugin.getResume().command(player);
+            return true;
+        }
+        if (args.length > 0 && args[0].equalsIgnoreCase("visit")) {
+            plugin.getVisit().command(player, Arrays.copyOfRange(args, 1, args.length));
+            return true;
+        }
         if (args.length > 0 && args[0].equalsIgnoreCase("back")) {
             plugin.getBack().command(player);
             return true;

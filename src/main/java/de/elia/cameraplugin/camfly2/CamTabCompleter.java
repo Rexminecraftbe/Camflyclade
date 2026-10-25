@@ -117,16 +117,41 @@ public class CamTabCompleter implements TabCompleter {
         if (trailCommand && args.length == 3) {
             return startingWith(args[2].toLowerCase(Locale.ROOT), trail.choicesFor(args[1]).toArray(new String[0]));
         }
-        Player own = sender instanceof Player p && p.hasPermission("camplugin.use") ? p : null;
+        Player player = sender instanceof Player p && p.hasPermission("camplugin.use") ? p : null;
+        // What the menu offers as well is only offered as a command while
+        // menu.access lets the commands through.
+        Player own = player != null && plugin.getSettings().getMenuAccess().allowsCommands() ? player : null;
+        boolean sharing = plugin.getSettings().isViewpointsSharing();
         boolean spotCommand = args.length > 1 && args[0].equalsIgnoreCase("spot") && own != null && spots.isEnabled();
         if (spotCommand && args.length == 2) {
             List<String> words = new ArrayList<>(
                     startingWith(args[1].toLowerCase(Locale.ROOT), "set", "delete", "list"));
+            if (sharing) {
+                words.addAll(startingWith(args[1].toLowerCase(Locale.ROOT), "share", "unshare"));
+            }
             words.addAll(spotNames(own, args[1]));
+            words.addAll(matching(spots.sharedLabels(own), args[1]));
             return words;
         }
-        if (spotCommand && args.length == 3 && args[1].equalsIgnoreCase("delete")) {
+        if (spotCommand && args.length == 3 && (args[1].equalsIgnoreCase("delete")
+                || (sharing && (args[1].equalsIgnoreCase("share") || args[1].equalsIgnoreCase("unshare"))))) {
             return spotNames(own, args[2]);
+        }
+        if (spotCommand && args.length == 4 && sharing && args[1].equalsIgnoreCase("share")) {
+            List<String> names = new ArrayList<>(startingWith(args[3].toLowerCase(Locale.ROOT), "all"));
+            for (Player other : Bukkit.getOnlinePlayers()) {
+                if (!other.equals(own) && own.canSee(other)) {
+                    names.add(other.getName());
+                }
+            }
+            return matching(names, args[3]);
+        }
+        if (spotCommand && args.length == 4 && sharing && args[1].equalsIgnoreCase("unshare")) {
+            return matching(spots.sharedNames(own, args[2]), args[3]);
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("visit") && own != null
+                && plugin.getSettings().isVisitorCameraEnabled()) {
+            return matching(spots.sharedLabels(own), args[1]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("time") && own != null && sky.mayUseTime(own)) {
             return startingWith(args[1].toLowerCase(Locale.ROOT), CamSky.timeWords());
@@ -163,6 +188,16 @@ public class CamTabCompleter implements TabCompleter {
         if (own != null && sky.mayUseWeather(own) && "weather".startsWith(partial)) {
             completions.add("weather");
         }
+        if (own != null && plugin.getResume().hasFlight(own) && "resume".startsWith(partial)) {
+            completions.add("resume");
+        }
+        if (own != null && plugin.getSettings().isVisitorCameraEnabled() && !spots.sharedWith(own).isEmpty()
+                && "visit".startsWith(partial)) {
+            completions.add("visit");
+        }
+        if (player != null && plugin.getMenu().isOpenable() && "menu".startsWith(partial)) {
+            completions.add("menu");
+        }
         if (camList.mayUse(sender) && "list".startsWith(partial)) {
             completions.add("list");
         }
@@ -193,6 +228,18 @@ public class CamTabCompleter implements TabCompleter {
         List<String> matches = new ArrayList<>();
         for (String word : words) {
             if (word.startsWith(partial)) {
+                matches.add(word);
+            }
+        }
+        return matches;
+    }
+
+    /** The words that begin like the partial one, capitals not counting. */
+    private static List<String> matching(List<String> words, String partial) {
+        String start = partial.toLowerCase(Locale.ROOT);
+        List<String> matches = new ArrayList<>();
+        for (String word : words) {
+            if (word.toLowerCase(Locale.ROOT).startsWith(start)) {
                 matches.add(word);
             }
         }

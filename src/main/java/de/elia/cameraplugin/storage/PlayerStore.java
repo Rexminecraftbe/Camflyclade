@@ -1,8 +1,11 @@
 package de.elia.cameraplugin.storage;
 
 import de.elia.cameraplugin.log.ConsoleLog;
+import de.elia.cameraplugin.nightvision.NightVisionMode;
+import de.elia.cameraplugin.resume.LastFlight;
 import de.elia.cameraplugin.spot.Spot;
 import org.bukkit.Bukkit;
+import org.bukkit.WeatherType;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -17,6 +20,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -46,8 +50,10 @@ public final class PlayerStore {
 
     /** What stands at the top of every file, for whoever finds one and wonders. */
     private static final List<String> HEADER = List.of(
-            "CamFly: statistics, battery charge, cooldown and spots of /cam spot of this player.",
-            "Deleting it starts the player from nothing: no statistics, a full battery, no cooldown, no spots.");
+            "CamFly: statistics, battery charge, cooldown, spots of /cam spot, own settings and the end of the last",
+            "flight (/cam resume) of this player.",
+            "Deleting it starts the player from nothing: no statistics, a full battery, no cooldown, no spots, the",
+            "settings of the server.");
 
     private final JavaPlugin plugin;
     private final ConsoleLog log;
@@ -139,7 +145,66 @@ public final class PlayerStore {
                 file.getLong("battery.updated"),
                 cooldown);
         readSpots(file, record);
+        record.load(readNightVision(file.getString("settings.night-vision")),
+                file.isSet("settings.flight-speed") ? file.getDouble("settings.flight-speed") : null,
+                file.isSet("settings.time") ? file.getLong("settings.time") : null,
+                readWeather(file.getString("settings.weather")),
+                readLastFlight(file.getConfigurationSection("last-flight")));
         return record;
+    }
+
+    /** What {@code settings.night-vision} says: on, off or dark, {@code null} for anything else. */
+    private static NightVisionMode readNightVision(String word) {
+        if (word == null) {
+            return null;
+        }
+        return switch (word.toLowerCase(Locale.ROOT)) {
+            case "on" -> NightVisionMode.ALWAYS;
+            case "off" -> NightVisionMode.OFF;
+            case "dark" -> NightVisionMode.DARK;
+            default -> null;
+        };
+    }
+
+    /** How {@code settings.night-vision} writes a mode. */
+    private static String nightVisionWord(NightVisionMode mode) {
+        return switch (mode) {
+            case ALWAYS -> "on";
+            case OFF -> "off";
+            case DARK -> "dark";
+        };
+    }
+
+    /** What {@code settings.weather} says: clear or rain, {@code null} for anything else. */
+    private static WeatherType readWeather(String word) {
+        if (word == null) {
+            return null;
+        }
+        return switch (word.toLowerCase(Locale.ROOT)) {
+            case "clear" -> WeatherType.CLEAR;
+            case "rain" -> WeatherType.DOWNFALL;
+            default -> null;
+        };
+    }
+
+    /** The end of the last flight, or {@code null} for none or one without a world. */
+    private static LastFlight readLastFlight(ConfigurationSection section) {
+        String world = section == null ? null : section.getString("world");
+        if (world == null || world.isEmpty()) {
+            return null;
+        }
+        String owner = section.getString("visit-owner");
+        UUID visitOwner = null;
+        if (owner != null) {
+            try {
+                visitOwner = UUID.fromString(owner);
+            } catch (IllegalArgumentException ex) {
+                // A visit nobody can be found for is no visit.
+            }
+        }
+        return new LastFlight(world, section.getDouble("x"), section.getDouble("y"), section.getDouble("z"),
+                (float) section.getDouble("yaw"), (float) section.getDouble("pitch"),
+                visitOwner, section.getString("visit-spot"));
     }
 
     /**
@@ -192,6 +257,31 @@ public final class PlayerStore {
             file.set(path + ".yaw", (double) spot.yaw());
             file.set(path + ".pitch", (double) spot.pitch());
         }
+        if (record.getNightVision() != null) {
+            file.set("settings.night-vision", nightVisionWord(record.getNightVision()));
+        }
+        if (record.getFlightSpeed() != null) {
+            file.set("settings.flight-speed", record.getFlightSpeed());
+        }
+        if (record.getCamTime() != null) {
+            file.set("settings.time", record.getCamTime());
+        }
+        if (record.getCamWeather() != null) {
+            file.set("settings.weather", record.getCamWeather() == WeatherType.CLEAR ? "clear" : "rain");
+        }
+        LastFlight flight = record.getLastFlight();
+        if (flight != null) {
+            file.set("last-flight.world", flight.world());
+            file.set("last-flight.x", flight.x());
+            file.set("last-flight.y", flight.y());
+            file.set("last-flight.z", flight.z());
+            file.set("last-flight.yaw", (double) flight.yaw());
+            file.set("last-flight.pitch", (double) flight.pitch());
+            if (flight.wasVisit()) {
+                file.set("last-flight.visit-owner", flight.visitOwner().toString());
+                file.set("last-flight.visit-spot", flight.visitSpot());
+            }
+        }
         Path target = file(playerId);
         Path temp = target.resolveSibling(target.getFileName() + ".tmp");
         try {
@@ -204,7 +294,7 @@ public final class PlayerStore {
             }
             record.markSaved();
         } catch (IOException ex) {
-            log.log(Level.WARNING, "The statistics, battery, cooldown and spots of " + record.getName()
+            log.log(Level.WARNING, "The statistics, battery, cooldown, spots and settings of " + record.getName()
                     + " could not be written: " + ex);
         }
     }
@@ -217,7 +307,7 @@ public final class PlayerStore {
         } catch (IOException ex) {
             aside = path;
         }
-        log.log(Level.WARNING, "A file with statistics, battery, cooldown and spots could not be read and was put"
-                + " aside, the player starts from nothing: " + aside + " (" + reason + ")");
+        log.log(Level.WARNING, "A file with statistics, battery, cooldown, spots and settings could not be read and"
+                + " was put aside, the player starts from nothing: " + aside + " (" + reason + ")");
     }
 }

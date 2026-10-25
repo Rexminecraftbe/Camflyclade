@@ -182,8 +182,10 @@ public final class CameraMode {
         CameraData cameraData = new CameraData(body, hitbox, nameDisplay, bodyChunk, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects);
         cameraData.setHeartsFront(heartsFront);
         cameraPlayers.put(player.getUniqueId(), cameraData);
-        // Out of the picture of whoever takes one, from the start.
+        // Out of the picture of whoever takes one, from the start, and out
+        // of sight of whoever is too far away to see it.
         plugin.getPhotoMode().hideNewBody(cameraData);
+        plugin.getScoutGuard().hideNewBody(player, cameraData);
         // Before the flight speed below: the file is to hold the one he had.
         plugin.getCrashGuard().save(player, cameraData);
         cameraPlayers.addBody(body.getUniqueId(), player.getUniqueId());
@@ -197,6 +199,7 @@ public final class CameraMode {
         plugin.getActionBar().startActionBar(player);
         plugin.getFlightSpeed().startFor(player);
         plugin.getNightVision().startFor(player);
+        plugin.getSky().startFor(player);
         plugin.getFireGuard().startFor(player);
         plugin.getHungerGuard().startFor(player);
         plugin.getGhastGuard().startFor(player);
@@ -219,6 +222,9 @@ public final class CameraMode {
         // his body joins the one that keeps players and mobs from pushing it.
         plugin.getNoCollisionTeam().refreshNoCollisionTeam();
         plugin.getVisibility().updateVisibilityForAll();
+        // After the visibility of camera mode, which shows him the other
+        // camera players: then it is known whom he would see.
+        plugin.getScoutGuard().startFor(player);
         plugin.getCamModeObjective().setScore(player, 1);
         plugin.getTimeLimit().startTimeLimit(player);
         plugin.getBattery().startFor(player);
@@ -277,6 +283,7 @@ public final class CameraMode {
             plugin.getBattery().stopFor(player);
             plugin.getAfk().stopFor(player);
             plugin.getPhotoMode().stopFor(player);
+            plugin.getScoutGuard().stopFor(player);
             plugin.getSky().stopFor(player);
             team.updateViewerTeam(player);
             plugin.getCamModeObjective().setScore(player, 0);
@@ -292,11 +299,14 @@ public final class CameraMode {
         // back to the visibility of camera mode, which the end of camera mode
         // sets anew further down.
         plugin.getPhotoMode().stopFor(player);
+        plugin.getScoutGuard().stopFor(player);
         plugin.getSky().stopFor(player);
         LivingEntity body = cameraData.getBody();
         Mannequin hitbox = cameraData.getHitbox();
         // For the log, before he is put back at his body.
         Location cameraAt = player.getLocation();
+        // Where /cam resume goes on, and the visit it goes on with.
+        plugin.getResume().remember(player, cameraData, cameraAt);
         // Before the teleport to the body as well, which is no part of the flight.
         plugin.getTrail().stopFor(player, cameraAt);
 
@@ -389,8 +399,9 @@ public final class CameraMode {
         bodies.releaseChunk(cameraData.getBodyChunk());
 
         for (Player other : Bukkit.getOnlinePlayers()) {
-            // Not to whoever photo mode keeps him out of the picture for.
-            if (!plugin.getPhotoMode().hides(other, player)) {
+            // Not to whoever photo mode keeps him out of the picture for, nor
+            // to a camera player he is too far away from.
+            if (!plugin.getPhotoMode().hides(other, player) && !plugin.getScoutGuard().hides(other, player)) {
                 other.showPlayer(plugin, player);
             }
         }

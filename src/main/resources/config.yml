@@ -308,9 +308,27 @@ night-vision:
   #   /cam nightvision on | off | dark  = immer, nie, nur im Dunkeln (dark mit light-level wie oben)
   #   /cam nightvision reset            = wieder wie mode
   #   /cam nightvision                  = an oder aus: aus, wenn gerade on oder dark gilt, sonst an
-  # Geht im Cam-Modus (sofort) und davor (für den nächsten Flug). Gespeichert wird es nicht: Es gilt, bis der Spieler
-  # den Server verlässt, danach wieder mode. Texte: nightvision-set, nightvision-reset.
+  # Geht im Cam-Modus (sofort) und davor (für den nächsten Flug). Wie lange die Wahl gilt, sagt player-settings.storage:
+  # für immer oder bis der Spieler den Server verlässt. Texte: nightvision-set, nightvision-set-memory, nightvision-reset.
   player-choice: true
+
+# Eigene Einstellungen der Spieler: was jeder für sich im Cam-Modus wählt, gilt auch für seine nächsten Flüge.
+# Die Nachtsicht von /cam nightvision (bei night-vision.player-choice: true) wird immer gemerkt, der Rest nach den
+# Schaltern hier. Ist ein Schalter aus, beginnt jeder Flug wieder wie vorher: mit flight-speed.start, der Zeit und dem
+# Wetter der Welt.
+player-settings:
+  # Wo die Einstellungen liegen:
+  #   file   = in plugins/CamFly/playerdata/stats/<UUID>.yml - sie bleiben nach dem Verlassen, /cam reload und einem
+  #            Neustart
+  #   memory = nur im Arbeitsspeicher - bis der Spieler den Server verlässt
+  storage: file
+  # Die Fluggeschwindigkeit vom Mausrad merken: Der nächste Flug beginnt so schnell, wie der letzte aufgehört hat
+  # (zwischen flight-speed.min und max)
+  flight-speed: true
+  # Die eigene Zeit von /cam time merken, bis /cam time reset (Text: time-set-kept statt time-set)
+  time: false
+  # Das eigene Wetter von /cam weather merken, bis /cam weather reset (Text: weather-set-kept statt weather-set)
+  weather: false
 
 # Töne im Cam-Modus. Nur der Spieler selbst hört sie, sonst würden sie einen unsichtbaren Spieler verraten.
 #   enabled = Ton an (true) oder aus (false)
@@ -395,7 +413,8 @@ sounds:
     sound: block.conduit.activate
     volume: 1.0
     pitch: 1.0
-  # Beim Sprung an einen Aussichtspunkt mit /cam spot <Name> (viewpoints)
+  # Beim Sprung an einen Aussichtspunkt mit /cam spot <Name> (viewpoints), zu einem Besuch mit /cam visit
+  # (visitor-camera) und dorthin, wo der letzte Flug aufhörte, mit /cam resume (resume-command)
   spot:
     enabled: true
     sound: item.chorus_fruit.teleport
@@ -434,7 +453,8 @@ cam-list:
 #   /cam stats reset           = die eigene auf null setzen (der Akku bleibt, wie er ist)
 #   /cam stats player <Name>   = die eines anderen (wer das darf, sagt view-others)
 # Gezählt wird ein Cam-Modus, wenn er endet. Gespeichert wird in plugins/CamFly/playerdata/stats/<UUID>.yml,
-# zusammen mit dem Ladestand des Akkus, der Wartezeit von time-limit und den Aussichtspunkten (bei storage: file).
+# zusammen mit dem Ladestand des Akkus, der Wartezeit von time-limit, den Aussichtspunkten, den eigenen Einstellungen
+# und dem Ende des letzten Flugs für /cam resume (jeweils bei storage: file).
 # /cam stats zeigt auch den Akku und eine Wartezeit, die noch läuft.
 statistics:
   enabled: true
@@ -560,6 +580,21 @@ fireguard:
 camera-head:
   enabled: false
 
+# /cam menu: ein Menü zum Anklicken statt Befehlen zum Tippen - Cam-Modus an und aus, back, resume, die Aussichtspunkte
+# (auch teilen und besuchen), photo, time, weather und nightvision. Jeder Knopf tut, was sein Befehl tut, mit denselben
+# Prüfungen und Meldungen; was in dieser Datei aus ist, fehlt im Menü. Den Namen eines neuen Aussichtspunkts schreibt
+# man nach dem Klick in den Chat (abbrechen mit cancel), lesen tut ihn niemand sonst. Im Menü landet nichts im Inventar
+# und nichts kommt heraus, auch nicht im Cam-Modus, wo sonst jedes Fenster zu bleibt. Texte: menu-... in der Sprachdatei.
+menu:
+  # Wie die Spieler an back, resume, spot, visit, photo, time, weather und nightvision kommen:
+  #   both    = über das Menü und über die Befehle
+  #   menu    = nur über das Menü - die Befehle sagen, dass es dafür /cam menu gibt (Text: menu-only)
+  #   command = nur über die Befehle, /cam menu ist aus
+  #   false   = gar nicht, weder über das Menü noch über die Befehle (Text: menu-features-off) - nur /cam selbst,
+  #             an und aus
+  # Befehle für Admins wie list, stats, stop, ban, trail und reload gehen immer.
+  access: both
+
 # Den Cam-Modus mit der Taste zum Tauschen der Hände beenden (voreingestellt F), wie mit /cam.
 # Geht mit leeren Händen. Hat ein Spieler die Taste anders belegt, gilt seine - und der Hinweis
 # in der Action-Bar nennt auch seine.
@@ -572,13 +607,33 @@ exit-key:
 back-command:
   enabled: true
 
+# /cam resume: Die Kamera macht dort weiter, wo der letzte Flug aufgehört hat, und schaut in dieselbe Richtung - für einen
+# Bau, den man sich Stück für Stück ansieht. Ohne Cam-Modus startet er dafür erst (mit allem, was ein Start mit /cam
+# prüft und kostet), im Cam-Modus springt die Kamera gleich. Gemerkt wird das Ende jedes Flugs, egal wodurch er endete.
+# War der letzte Flug ein Besuch (/cam visit), geht der Besuch weiter, solange der Punkt noch geteilt ist.
+# Gesprungen wird nur, wohin die Kamera auch fliegen dürfte - wie bei /cam spot, gemessen vom Körper, wo er jetzt steht
+# (oder vom besuchten Punkt). Sonst sagt eine Meldung, warum nicht, und ohne Cam-Modus startet er dann gar nicht erst.
+# Ton: sounds.spot, Texte: resume-...
+resume-command:
+  enabled: true
+  # Wo das Ende des letzten Flugs liegt:
+  #   file   = in plugins/CamFly/playerdata/stats/<UUID>.yml - es bleibt nach /cam reload und einem Neustart
+  #   memory = nur im Arbeitsspeicher - nach einem Neustart ist es weg
+  storage: file
+
 # Aussichtspunkte: Stellen mit Blickrichtung, an die die Kamera springt - für einen Bau, den man sich immer wieder von
 # derselben Stelle aus ansieht.
 #   /cam spot set <Name>     = die Stelle, an der man gerade ist (als Kamera oder zu Fuß), mit der Blickrichtung.
 #                              Gibt es den Namen schon, wandert er hierher.
 #   /cam spot <Name>         = die Kamera springt dorthin (nur im Cam-Modus, Ton: sounds.spot, Text: spot-jumped)
 #   /cam spot delete <Name>  = den Punkt löschen
-#   /cam spot list           = alle eigenen, mit Knöpfen zum Hinspringen und Löschen (auch /cam spot allein)
+#   /cam spot list           = alle eigenen, mit Knöpfen zum Hinspringen, Teilen und Löschen, darunter die, die andere
+#                              mit einem teilen (auch /cam spot allein)
+#   /cam spot share <Name> <Spieler|all>    = den Punkt mit einem Spieler teilen (auch mit einem, der gerade nicht
+#                                             online ist) oder mit allen; wer online ist, erfährt es mit einem Knopf
+#   /cam spot unshare <Name> <Spieler|all>  = das Teilen zurücknehmen (all nimmt nur das Teilen mit allen zurück)
+#   /cam spot <Spieler>:<Name>              = zu einem Punkt springen, den ein anderer mit einem teilt - nach denselben
+#                                             Regeln wie zu einem eigenen, gemessen vom eigenen Körper
 # Ein Name hat 1 bis 16 Buchstaben, Ziffern, - und _; groß oder klein zählt nicht.
 # Gesprungen wird nur, wohin die Kamera auch fliegen dürfte: in der Welt des Körpers, nicht weiter als max-distance
 # (bei max-distance-mode: signal nur, wohin das Signal reicht), nicht in ein Gebiet, das cam-area auf Stufe 2 verbietet,
@@ -590,8 +645,26 @@ viewpoints:
   max-per-player: 10
   # Wo die Punkte liegen:
   #   file   = in plugins/CamFly/playerdata/stats/<UUID>.yml - sie bleiben nach /cam reload und einem Neustart
-  #   memory = nur im Arbeitsspeicher - nach /cam reload oder einem Neustart sind sie weg
+  #            (die geteilten zusätzlich in plugins/CamFly/playerdata/shared-spots.yml)
+  #   memory = nur im Arbeitsspeicher - nach /cam reload oder einem Neustart sind sie weg, auch das Teilen
   storage: file
+  # Ob Spieler ihre Punkte mit anderen teilen dürfen (/cam spot share). Verschiebt der Besitzer einen geteilten Punkt,
+  # wandert er für alle mit, löscht er ihn, ist er auch für alle weg.
+  sharing: true
+
+# Besucher-Kamera: /cam visit <Spieler>:<Name> - die Kamera geht zu einem Punkt, den ein anderer mit einem teilt, von
+# überall aus, z. B. um sich den Bau eines Freundes zeigen zu lassen. Ohne Cam-Modus startet er dafür erst (mit allem,
+# was ein Start mit /cam prüft und kostet). Der Körper bleibt, wo man steht. Solange der Besuch dauert, tritt der Punkt
+# an die Stelle des Körpers: max-distance, das Funksignal und die Wand gehen von ihm aus - die Kamera sieht sich also
+# den Bau an, der ihr gezeigt wird, und kommt nicht weiter als vom eigenen Körper aus. /cam back beendet den Besuch und
+# bringt die Kamera zum Körper zurück.
+# Fair bleibt es so: nur Punkte, die der Besitzer selbst geteilt und dort gesetzt hat, wo er selbst war; nur in der Welt
+# des Körpers; nur, wo die Kamera überhaupt sein darf (nicht in einem Gebiet, das cam-area auf Stufe 2 verbietet, nicht
+# in gesperrter Lava, Wasser oder Pulverschnee, nicht in einem Block). Nimmt der Besitzer das Teilen zurück oder löscht
+# er den Punkt, geht die Kamera jedes Besuchers zu ihrem Körper zurück (Text: visit-ended).
+# Geht nur mit viewpoints.enabled und viewpoints.sharing. Ton: sounds.spot, Texte: visit-...
+visitor-camera:
+  enabled: true
 
 # /cam photo: der Foto-Modus, an und wieder aus, nur im Cam-Modus. Für Bilder und Videos der eigenen Bauten blendet er
 # nur für den Spieler selbst aus, was im Bild stört - alle anderen sehen weiter alles wie vorher, und an der Welt ändert
@@ -611,15 +684,33 @@ photo-mode:
 #   /cam time <Zahl>                                             = in Ticks, 0 bis 23999
 #   /cam time reset                                              = wieder die Zeit der Welt
 # Die Zeit steht still. Nur der Spieler selbst sieht sie, die Welt läuft mit ihrer eigenen Zeit weiter.
-# Gespeichert wird sie nicht: Mit dem Ende des Cam-Modus sieht er wieder, was er vorher sah (Texte: time-set, time-reset).
+# Mit dem Ende des Cam-Modus sieht er wieder, was er vorher sah (Texte: time-set, time-reset). Mit
+# player-settings.time: true beginnt der nächste Flug wieder mit ihr, bis /cam time reset.
 cam-time:
   enabled: true
 
 # /cam weather: ein eigenes Wetter im Cam-Modus, wie /cam time nur für ihn und nur bis zum Ende des Cam-Modus.
 #   /cam weather clear | rain | reset   = klar, Regen (Schnee, wo es schneit), wieder das Wetter der Welt
-# Ein Gewitter für einen einzelnen Spieler kennt das Spiel nicht. Texte: weather-set, weather-reset.
+# Ein Gewitter für einen einzelnen Spieler kennt das Spiel nicht. Texte: weather-set, weather-reset. Mit
+# player-settings.weather: true beginnt der nächste Flug wieder mit ihm, bis /cam weather reset.
 cam-weather:
   enabled: true
+
+# Kein Ausspähen: Die Kamera taugt nicht dazu, andere Spieler zu suchen. Wer im Cam-Modus ist, sieht andere Spieler nur
+# bis radius Blöcke weit - und die Körper anderer im Cam-Modus, die ja dort stehen, wo diese Spieler wirklich sind, auch
+# nur so weit. Nur er sieht sie nicht mehr, alle anderen sehen weiter alles. Spieler in einer anderen Welt als die
+# Kamera bleiben, wie sie sind. Wie im Foto-Modus fehlen ausgeblendete Spieler solange auch in seiner Tab-Liste: Anders
+# lässt der Server einen Spieler nicht ausblenden. Wer das Recht camplugin.antiscout.bypass hat, sieht alle
+# (Operatoren haben es).
+anti-scouting:
+  enabled: false
+  # Bis wie weit andere Spieler zu sehen sind, in Blöcken (0 bis 256)
+  radius: 32.0
+  # Von wo aus gemessen wird:
+  #   body   = vom Körper (oder vom besuchten Punkt, in einer anderen Welt vom Portal) - man sieht, wen man auch ohne
+  #            Cam-Modus sähe, egal wo die Kamera ist
+  #   camera = von der Kamera aus
+  measured-from: body
 
 # /cam stop <Name> beendet den Cam-Modus eines anderen Spielers, /cam stop all den von allen - z. B. vor einem
 # Event oder einem Neustart. Er kommt zurück zu seinem Körper und erfährt, wer es war (Text: stopped-by).

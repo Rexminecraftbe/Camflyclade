@@ -1,6 +1,9 @@
 package de.elia.cameraplugin.storage;
 
+import de.elia.cameraplugin.nightvision.NightVisionMode;
+import de.elia.cameraplugin.resume.LastFlight;
 import de.elia.cameraplugin.spot.Spot;
+import org.bukkit.WeatherType;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -8,9 +11,9 @@ import java.util.Map;
 
 /**
  * What the plugin keeps about a player from one camera mode to the next: his
- * statistics, the charge of his battery, when his last cooldown began and
- * his spots of {@code /cam spot}. Kept in a file of its own by
- * {@link PlayerStore}.
+ * statistics, the charge of his battery, when his last cooldown began, his
+ * spots of {@code /cam spot}, the settings he picked for himself and where
+ * his last flight ended. Kept in a file of its own by {@link PlayerStore}.
  */
 public final class PlayerRecord {
 
@@ -43,6 +46,20 @@ public final class PlayerRecord {
     private Long cooldownStarted;
     /** His spots of {@code /cam spot}, by {@link Spot#key()}, in the order he saved them. */
     private final Map<String, Spot> spots = new LinkedHashMap<>();
+    /**
+     * The night vision he picked with {@code /cam nightvision}, or
+     * {@code null} while he has picked none and {@code night-vision.mode}
+     * holds for him, see {@link de.elia.cameraplugin.preferences.CamPreferences}.
+     */
+    private NightVisionMode nightVision;
+    /** The speed he last flew at, 1 being the speed of the game, or {@code null}. */
+    private Double flightSpeed;
+    /** The time of {@code /cam time} he last picked, in ticks of the day, or {@code null}. */
+    private Long camTime;
+    /** The weather of {@code /cam weather} he last picked, or {@code null}. */
+    private WeatherType camWeather;
+    /** Where his last flight ended, for {@code /cam resume}, or {@code null}. */
+    private LastFlight lastFlight;
     /** Whether something has changed since the file was last written. */
     private boolean dirty;
 
@@ -123,6 +140,46 @@ public final class PlayerRecord {
         spots.put(spot.key(), spot);
     }
 
+    /** Sets the night vision he picked, {@code null} for none. */
+    public void setNightVision(NightVisionMode mode) {
+        nightVision = mode;
+        dirty = true;
+    }
+
+    /** Sets the speed he last flew at, {@code null} for none. */
+    public void setFlightSpeed(Double speed) {
+        flightSpeed = speed;
+        dirty = true;
+    }
+
+    /** Sets the time he last picked, {@code null} for none. */
+    public void setCamTime(Long ticks) {
+        camTime = ticks;
+        dirty = true;
+    }
+
+    /** Sets the weather he last picked, {@code null} for none. */
+    public void setCamWeather(WeatherType weather) {
+        camWeather = weather;
+        dirty = true;
+    }
+
+    /** Notes where his last flight ended, {@code null} for nowhere. */
+    public void setLastFlight(LastFlight flight) {
+        lastFlight = flight;
+        dirty = true;
+    }
+
+    /** His own settings and his last flight as read from the file, which changes nothing to be written. */
+    void load(NightVisionMode nightVision, Double flightSpeed, Long camTime, WeatherType camWeather,
+              LastFlight lastFlight) {
+        this.nightVision = nightVision;
+        this.flightSpeed = flightSpeed;
+        this.camTime = camTime;
+        this.camWeather = camWeather;
+        this.lastFlight = lastFlight;
+    }
+
     public String getName() { return name; }
     public long getSessions() { return sessions; }
     public long getTotalSeconds() { return totalSeconds; }
@@ -136,6 +193,16 @@ public final class PlayerRecord {
     public Long getCooldownStarted() { return cooldownStarted; }
     /** His spots, by {@link Spot#key()}, in the order he saved them; not to be changed. */
     public Map<String, Spot> getSpots() { return Collections.unmodifiableMap(spots); }
+    /** The night vision he picked, or {@code null} for none. */
+    public NightVisionMode getNightVision() { return nightVision; }
+    /** The speed he last flew at, or {@code null} for none. */
+    public Double getFlightSpeed() { return flightSpeed; }
+    /** The time he last picked, or {@code null} for none. */
+    public Long getCamTime() { return camTime; }
+    /** The weather he last picked, or {@code null} for none. */
+    public WeatherType getCamWeather() { return camWeather; }
+    /** Where his last flight ended, or {@code null} for nowhere known. */
+    public LastFlight getLastFlight() { return lastFlight; }
 
     boolean isDirty() { return dirty; }
     void markSaved() { dirty = false; }

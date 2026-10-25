@@ -31,6 +31,8 @@ import de.elia.cameraplugin.list.CamList;
 import de.elia.cameraplugin.list.CamListTeleport;
 import de.elia.cameraplugin.log.CamLog;
 import de.elia.cameraplugin.log.ConsoleLog;
+import de.elia.cameraplugin.menu.CamMenu;
+import de.elia.cameraplugin.menu.MenuAccess;
 import de.elia.cameraplugin.mirrordamage.DamageMirror;
 import de.elia.cameraplugin.mirrordamage.SwingStrength;
 import de.elia.cameraplugin.mob.MobGaze;
@@ -41,8 +43,11 @@ import de.elia.cameraplugin.nightvision.CamNightVision;
 import de.elia.cameraplugin.nudge.CamNudge;
 import de.elia.cameraplugin.photo.CamPhotoMode;
 import de.elia.cameraplugin.potion.CamPotionGuard;
+import de.elia.cameraplugin.preferences.CamPreferences;
+import de.elia.cameraplugin.resume.CamResume;
 import de.elia.cameraplugin.scoreboard.CamModeObjective;
 import de.elia.cameraplugin.scoreboard.NoCollisionTeam;
+import de.elia.cameraplugin.scout.CamScoutGuard;
 import de.elia.cameraplugin.session.CameraHead;
 import de.elia.cameraplugin.session.CameraMode;
 import de.elia.cameraplugin.session.CameraPlayers;
@@ -54,6 +59,8 @@ import de.elia.cameraplugin.signal.CamSignal;
 import de.elia.cameraplugin.sky.CamSky;
 import de.elia.cameraplugin.speed.CamFlightSpeed;
 import de.elia.cameraplugin.spot.CamSpots;
+import de.elia.cameraplugin.spot.JumpCheck;
+import de.elia.cameraplugin.spot.SharedSpots;
 import de.elia.cameraplugin.start.CamStarter;
 import de.elia.cameraplugin.start.StartChecks;
 import de.elia.cameraplugin.start.StartDelay;
@@ -65,6 +72,7 @@ import de.elia.cameraplugin.teleport.CamTeleportGuard;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import de.elia.cameraplugin.timelimit.EndWarning;
 import de.elia.cameraplugin.trail.CamTrail;
+import de.elia.cameraplugin.visit.CamVisit;
 import de.elia.cameraplugin.visibility.CamVisibility;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -105,13 +113,15 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamNameTag nameTag = new CamNameTag(this, settings, messages, cameraPlayers);
     private final CamActionBar actionBar = new CamActionBar(this);
     private final CamFlightSpeed flightSpeed = new CamFlightSpeed(this);
-    private final CamNightVision nightVision = new CamNightVision(this, settings, messages, cameraPlayers);
+    private final PlayerStore playerStore = new PlayerStore(this, log);
+    private final CamPreferences preferences = new CamPreferences(settings, playerStore);
+    private final CamNightVision nightVision = new CamNightVision(this, settings, messages, cameraPlayers,
+            preferences);
     private final CamList camList = new CamList(settings, messages, cameraPlayers);
     private final CamListTeleport listTeleport = new CamListTeleport(this);
     private final CamStop stop = new CamStop(this);
     private final CamBan ban = new CamBan(this, new BanList(this, log));
     private final CamCrashGuard crashGuard = new CamCrashGuard(this, log);
-    private final PlayerStore playerStore = new PlayerStore(this, log);
     private final CamBattery battery = new CamBattery(this, playerStore);
     private final CamTimeLimit timeLimit = new CamTimeLimit(this, playerStore);
     private final CamStats stats = new CamStats(settings, messages, playerStore, battery, timeLimit);
@@ -126,7 +136,13 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamSignal signal = new CamSignal(this);
     private final CamAfk afk = new CamAfk(this);
     private final CamBack back = new CamBack(this);
-    private final CamSpots spots = new CamSpots(this, playerStore);
+    private final SharedSpots sharedSpots = new SharedSpots(this, log, settings);
+    private final JumpCheck jumpCheck = new JumpCheck(this);
+    private final CamSpots spots = new CamSpots(this, playerStore, sharedSpots, jumpCheck);
+    private final CamVisit visit = new CamVisit(this, sharedSpots, jumpCheck);
+    private final CamResume resume = new CamResume(this, playerStore, sharedSpots, jumpCheck);
+    private final CamScoutGuard scoutGuard = new CamScoutGuard(this);
+    private final CamMenu menu = new CamMenu(this);
     private final CamPhotoMode photoMode = new CamPhotoMode(this);
     private final CamSky sky = new CamSky(this);
     private final StartChecks startChecks = new StartChecks(settings, messages, cameraPlayers);
@@ -175,6 +191,7 @@ public final class CameraPlugin extends JavaPlugin {
         camInventoryGuard = new CamInventoryGuard(this, this::isInCameraMode);
         configFile.reportConfigWarnings(loadConfigValues(), null);
         ban.reload();
+        sharedSpots.load();
         bodySpawner = new BodySpawner(this, settings, messages, log, cameraPlayers);
         camModeObjective.setUp();
         bodySpawner.removeLeftoverEntities();
@@ -227,6 +244,8 @@ public final class CameraPlugin extends JavaPlugin {
                 new ExitKey(this),
                 afk,
                 photoMode,
+                scoutGuard,
+                menu,
                 new CamSuggestionFilter(this));
         for (Listener listener : listeners) {
             pluginManager.registerEvents(listener, this);
@@ -327,12 +346,15 @@ public final class CameraPlugin extends JavaPlugin {
         signal.onDisable();
         afk.onDisable();
         photoMode.onDisable();
+        scoutGuard.onDisable();
         startDelay.onDisable();
         trail.onDisable();
         // After camera mode has ended for everybody, which settled the
         // batteries in flight and counted the flights.
         battery.onDisable();
         playerStore.saveAll();
+        preferences.onDisable();
+        resume.onDisable();
         // No player left in camera mode -> remove the team.
         noCollisionTeam.deleteNoCollisionTeam();
         bodySpawner.removeLeftoverEntities();
@@ -410,6 +432,7 @@ public final class CameraPlugin extends JavaPlugin {
         battery.onReload();
         trail.onReload();
         spots.onReload();
+        sharedSpots.load();
         return true;
     }
 
@@ -612,6 +635,39 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamSpots getSpots() {
         return spots;
+    }
+
+    public CamVisit getVisit() {
+        return visit;
+    }
+
+    public CamResume getResume() {
+        return resume;
+    }
+
+    public CamScoutGuard getScoutGuard() {
+        return scoutGuard;
+    }
+
+    public CamMenu getMenu() {
+        return menu;
+    }
+
+    public CamPreferences getPreferences() {
+        return preferences;
+    }
+
+    /**
+     * The command a button in the chat runs: itself while
+     * {@code menu.access} lets the commands through, {@code /cam menu} while
+     * only the menu goes, and {@code null} for no button at all.
+     */
+    public String commandOrMenu(String command) {
+        MenuAccess access = settings.getMenuAccess();
+        if (access.allowsCommands()) {
+            return command;
+        }
+        return access.allowsMenu() ? "/cam menu" : null;
     }
 
     public CamPhotoMode getPhotoMode() {

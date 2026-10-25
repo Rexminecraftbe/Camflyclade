@@ -8,6 +8,8 @@
 messages:
   actionbar-distance: "&aBody: &f{distance} blocks &e{arrow}"
   actionbar-distance-portal: "&aPortal: &f{distance} blocks &e{arrow}"
+  # On a visit of /cam visit: how far the camera is from the spot it visits, which takes the place of the body.
+  actionbar-distance-visit: "&aSpot: &f{distance} blocks &e{arrow}"
   actionbar-off: "&cCam mode ended"
   # {hint} is replaced by actionbar-hint while exit-key is on, and {key} there by the key that swaps
   # the hands - the one the player has bound it to, F unless changed. While exit-key is off it is
@@ -152,6 +154,7 @@ messages:
   cost-paid: "&7Cam mode cost you {cost}."
   distance-from-body: "your body"
   distance-from-portal: "the portal you came out of"
+  distance-from-visit: "the spot you visit"
   distance-limit: "&cYou cannot move further than {distance} blocks from {from}!"
   # {time} is the time left; end-warning-afk comes at afk-end.warning-percent.
   end-warning-afk: "&eYou are not moving: cam mode ends in {time}"
@@ -159,14 +162,81 @@ messages:
   end-warning-time-limit: "&eCam mode ends in {time}"
   flight-speed: "&bFlight speed: &f{speed}x"
   hitbox.name-format: "&c[HITBOX] {player}"
+  # /cam menu (menu): the names of the buttons, and under each the text of the same name with -lore after it (\n
+  # begins a new line). menu-only is what the commands say under menu.access: menu, menu-features-off under false.
+  # menu-spot-name asks for the name of a new spot in the chat, {cancel} being the word that calls it off.
+  menu-back: "&bBack to your body"
+  menu-back-lore: "&7The camera goes back to your body,\n&7cam mode goes on."
+  menu-end: "&cEnd cam mode"
+  menu-end-lore: "&7Back to your body."
+  menu-features-off: "&cThat is switched off on this server."
+  menu-new-spot: "&aSave a spot here"
+  menu-new-spot-lore: "&7Where you are, looking the way you look.\n&7Then type its name in the chat."
+  menu-next: "&7Next page »"
+  menu-nightvision: "&eNight vision"
+  menu-nightvision-dark: "&eOnly in the dark"
+  menu-nightvision-lore: "&7When you see in the dark in cam mode."
+  menu-nightvision-off: "&7Never"
+  menu-nightvision-on: "&aAlways"
+  menu-nightvision-reset: "&cAs the server has it"
+  menu-nightvision-title: "&8Night vision"
+  menu-off: "&c/cam menu is switched off."
+  menu-only: "&eThat goes through /cam menu on this server."
+  menu-photo: "&dPhoto mode"
+  menu-photo-lore: "&7The other players and the bodies\n&7out of the picture, on and off."
+  menu-previous: "&7« Previous page"
+  menu-resume: "&bResume the last flight"
+  menu-resume-lore: "&7The camera goes on where\n&7your last flight ended."
+  menu-share-everybody: "&eEverybody"
+  menu-share-off-lore: "&7Not shared - click to share."
+  menu-share-on-lore: "&aShared - click to take it back."
+  menu-share-player: "&f{player}"
+  menu-share-player-on: "&a{player}"
+  menu-share-title: "&8Share {spot}"
+  menu-shared-spot: "&b{owner}:{spot}"
+  menu-shared-spot-actions: "&eLeft-click: jump there"
+  menu-shared-spot-actions-visit: "&eLeft-click: jump there\n&dRight-click: visit it"
+  menu-spot: "&f{spot}"
+  menu-spot-actions: "&eLeft-click: jump there\n&cShift-click: delete"
+  menu-spot-actions-share: "&eLeft-click: jump there\n&aRight-click: share\n&cShift-click: delete"
+  menu-spot-lore: "&7{x} {y} {z} ({world})"
+  menu-spot-name: "&eType the name of the new spot in the chat, or {cancel}."
+  menu-spot-name-cancelled: "&7No spot saved."
+  menu-spot-shared-lore: "&7Shared with: {players}"
+  menu-spots: "&aSpots"
+  menu-spots-lore: "&7Your spots and those\n&7shared with you."
+  menu-spots-title: "&8Spots"
+  menu-start: "&aStart cam mode"
+  menu-start-lore: "&7Fly as a camera, your body stays here."
+  menu-time: "&eTime of day"
+  menu-time-day: "&eDay"
+  menu-time-lore: "&7A time of your own, only you see it."
+  menu-time-midnight: "&8Midnight"
+  menu-time-night: "&9Night"
+  menu-time-noon: "&eNoon"
+  menu-time-reset: "&cThe time of the world"
+  menu-time-sunrise: "&6Sunrise"
+  menu-time-sunset: "&6Sunset"
+  menu-time-title: "&8Time of day"
+  menu-title: "&8Cam"
+  menu-to-main: "&7« Back"
+  menu-to-spots: "&7« Back to the spots"
+  menu-weather: "&bWeather"
+  menu-weather-clear: "&eClear"
+  menu-weather-lore: "&7A weather of your own, only you see it."
+  menu-weather-rain: "&9Rain"
+  menu-weather-reset: "&cThe weather of the world"
+  menu-weather-title: "&8Weather"
   # /cam nightvision (night-vision.player-choice): {mode} in nightvision-set and nightvision-reset is
-  # nightvision-always, nightvision-never or nightvision-dark.
+  # nightvision-always, nightvision-never or nightvision-dark. nightvision-set with player-settings.storage: file,
+  # nightvision-set-memory with memory.
   nightvision-always: "always"
   nightvision-dark: "only in the dark"
   nightvision-never: "never"
   nightvision-off: "&c/cam nightvision is switched off."
   nightvision-reset: "&aNight vision in cam mode: {mode}, as the server has it."
-  nightvision-set: "&aNight vision in cam mode: {mode}. Holds until you leave the server."
+  nightvision-set: "&aNight vision in cam mode: {mode}. Kept for your next flights."
+  nightvision-set-memory: "&aNight vision in cam mode: {mode}. Holds until you leave the server."
   nightvision-usage: "&eUse /cam nightvision on, off, dark or reset."
   no-permission: "&cYou don't have permission to use this command."
   no-player: "&cThis command can only be used by players."
@@ -186,12 +256,24 @@ messages:
   portal-return-area: "&cCam mode is not allowed in {area}, you were brought back."
   portal-return-distance: "&cYou ended up more than {distance} blocks away from {from} and were brought back."
   reload-exit: "&cCamera mode ended due to plugin restart."
+  # /cam resume (resume-command): resume-jumped comes in the action bar; {distance} is camera-mode.max-distance, {area}
+  # as in cam-area-limit. resume-visit-gone: the last flight was a visit, and the spot is no longer shared with him.
+  resume-area: "&cWhere your last flight ended lies in {area}, cam mode is not allowed there."
+  resume-blocked: "&cSomething has been built where your last flight ended, the camera cannot go there."
+  resume-jumped: "&aBack where your last flight ended"
+  resume-no-signal: "&cThe signal does not reach where your last flight ended."
+  resume-none: "&eYou have no flight to resume yet."
+  resume-off: "&c/cam resume is switched off."
+  resume-other-world: "&cYour last flight did not end in the world you are in."
+  resume-too-far: "&cYour last flight ended more than {distance} blocks from here."
+  resume-visit-gone: "&cYour last flight was a visit to a spot that is no longer shared with you."
   reload-start: "&ePlugin is restarting..."
   reload-success: "&aPlugin reload successful."
   # The signal of camera-mode.max-distance-mode: signal is gone: signal-lost counts down in the action bar, {time} being
   # the time left to fly back into it. Then the camera is back at the body with signal-back-to-body, or cam mode ends
   # with signal-ended.
   signal-back-to-body: "&cSignal lost: back at your body"
+  signal-back-to-visit: "&cSignal lost: back at the spot you visit"
   signal-ended: "&cCam mode ended: the signal was lost."
   signal-lost: "&cSignal lost! &7Fly back within {time}"
   # {quality} in actionbar-signal, each with the ping icon of as many bars: excellent (five), good, medium, weak from the
@@ -203,30 +285,54 @@ messages:
   signal-quality-none: "&4none"
   signal-quality-very-weak: "&cvery weak"
   signal-quality-weak: "&6weak"
-  # /cam spot (viewpoints): {spot} is the name of the spot, {max} viewpoints.max-per-player, {area} as in
-  # cam-area-limit, {distance} camera-mode.max-distance. spot-jumped comes in the action bar. Behind each line of
-  # spot-list-entry stand the buttons spot-button-go and spot-button-delete, and what hovering over them says.
+  # /cam spot (viewpoints): {spot} is the name of the spot - Owner:spot for one shared with him -, {max}
+  # viewpoints.max-per-player, {area} as in cam-area-limit, {distance} camera-mode.max-distance. spot-jumped comes in
+  # the action bar. Behind each line of spot-list-entry stand spot-list-shared while it is shared, {players} being
+  # whom with (spot-share-everybody for everybody), and the buttons spot-button-go, spot-button-share and
+  # spot-button-delete, and what hovering over them says. Below them spot-list-shared-header and a line
+  # spot-list-shared-entry for each spot shared with him, {owner} being whose it is, with spot-button-go and
+  # spot-button-visit. spot-shared-with-you tells a player online that a spot was shared with him, with
+  # spot-button-visit behind it.
   spot-area: "&cSpot {spot} lies in {area}, cam mode is not allowed there."
-  spot-bad-name: "&cA spot name has 1 to 16 letters, digits, - or _, and is not set, delete or list."
+  spot-bad-name: "&cA spot name has 1 to 16 letters, digits, - or _, and is not set, delete, list, share or unshare."
   spot-blocked: "&cSomething has been built at spot {spot} since, the camera cannot go there."
   spot-button-delete: "&c[Delete]"
   spot-button-delete-hover: "&7Delete {spot}: click, then press Enter"
   spot-button-go: "&b[Go]"
   spot-button-go-hover: "&7Jump to {spot}, in cam mode"
+  spot-button-share: "&a[Share]"
+  spot-button-share-hover: "&7Share {spot}: click, add a name or all, then press Enter"
+  spot-button-visit: "&d[Visit]"
+  spot-button-visit-hover: "&7Visit {spot} with your camera, from wherever you are"
   spot-deleted: "&aSpot {spot} deleted."
   spot-full: "&cYou have {max} spots already, the most there may be. Delete one first with /cam spot delete <name>."
   spot-jumped: "&aAt spot {spot}"
   spot-list-empty: "&eYou have no spots yet. /cam spot set <name> saves one where you are."
   spot-list-entry: "&7- &f{spot}&7: {x} {y} {z} ({world})"
   spot-list-header: "&eYour spots ({count} of {max}):"
+  spot-list-shared: " &7(shared with {players})"
+  spot-list-shared-entry: "&7- &f{owner}:{spot}&7: {x} {y} {z} ({world})"
+  spot-list-shared-header: "&eShared with you ({count}):"
   spot-moved: "&aSpot {spot} moved here, looking the way you look now."
   spot-no-signal: "&cThe signal does not reach spot {spot}."
+  spot-not-shared: "&eSpot {spot} is not shared with {player}."
+  spot-not-shared-all: "&eSpot {spot} is not shared with everybody."
   spot-off: "&c/cam spot is switched off."
   spot-other-world: "&cSpot {spot} is not in the world of your body."
   spot-saved: "&aSpot {spot} saved here, looking the way you look now."
+  spot-share-everybody: "everybody"
+  spot-share-off: "&cSharing spots is switched off."
+  spot-share-self: "&cYour own spots are yours already."
+  spot-share-unknown-player: "&cNobody called {player} has been on this server."
+  spot-shared: "&aSpot {spot} is shared with {player} now."
+  spot-shared-all: "&aSpot {spot} is shared with everybody now."
+  spot-shared-unknown: "&cNobody shares a spot called {spot} with you."
+  spot-shared-with-you: "&e{owner} shared the spot {spot} with you."
   spot-too-far: "&cSpot {spot} is more than {distance} blocks from your body."
   spot-unknown: "&cYou have no spot called {spot}."
-  spot-usage: "&eUse /cam spot set <name>, /cam spot <name>, /cam spot delete <name> or /cam spot list."
+  spot-unshared: "&aSpot {spot} is no longer shared with {player}."
+  spot-unshared-all: "&aSpot {spot} is no longer shared with everybody."
+  spot-usage: "&eUse /cam spot set <name>, /cam spot <name>, /cam spot delete <name>, /cam spot share <name> <player|all>, /cam spot unshare <name> <player|all> or /cam spot list."
   # start-delay: the countdown in the action bar, {time} being the time left, and why the start was called off.
   start-delay-cancelled: "&eCam mode start cancelled."
   start-delay-countdown: "&eCam mode in {time} &7- stand still"
@@ -258,10 +364,12 @@ messages:
   teleport-arrival-ended: "&c{player} was teleported to you. Camera mode ended."
   teleport-ended: "&cYou were teleported. Camera mode ended."
   time-limit-expired: "&cCam mode ended: Time limit expired."
-  # /cam time (cam-time) and /cam weather (cam-weather): {time} and {weather} as the player typed them.
+  # /cam time (cam-time) and /cam weather (cam-weather): {time} and {weather} as the player typed them. time-set-kept
+  # and weather-set-kept with player-settings.time and player-settings.weather.
   time-off: "&c/cam time is switched off."
   time-reset: "&aYou see the time of the world again."
   time-set: "&aYour own time: {time}. Only you see it, until cam mode ends."
+  time-set-kept: "&aYour own time: {time}. Only you see it, in every flight until /cam time reset."
   time-usage: "&eUse /cam time day, noon, sunset, night, midnight, sunrise or a time in ticks from 0 to 23999, or /cam time reset."
   # /cam trail: {number} which of the kept flights (1 the newest), {distance} in blocks, {time} how long the flight
   # took, {when} trail-flying or trail-ago (with {time} how long ago it ended), {place} as trail-place has it, {world}
@@ -293,9 +401,20 @@ messages:
   unban-not-banned: "&e{player} is not banned from cam mode."
   unbanned-everybody-now: "&aCam mode is open for everybody again."
   unbanned-now: "&aYou may use cam mode again."
+  # /cam visit (visitor-camera): {spot} is Owner:spot, or in visit-started and visit-ended the spot alone, {owner} whose
+  # it is; {area} as in cam-area-limit. visit-started comes in the action bar, visit-ended when the owner takes the
+  # share back or deletes the spot and the camera goes back to its body.
+  visit-area: "&cSpot {spot} lies in {area}, cam mode is not allowed there."
+  visit-blocked: "&cSomething has been built at spot {spot} since, the camera cannot go there."
+  visit-ended: "&e{owner} no longer shares the spot {spot} with you: back at your body."
+  visit-off: "&c/cam visit is switched off."
+  visit-other-world: "&cSpot {spot} is not in the world you are in."
+  visit-started: "&aVisiting {owner}'s spot {spot}"
+  visit-usage: "&eUse /cam visit <player>:<spot>. /cam spot list shows what is shared with you."
   weather-off: "&c/cam weather is switched off."
   weather-reset: "&aYou see the weather of the world again."
   weather-set: "&aYour own weather: {weather}. Only you see it, until cam mode ends."
+  weather-set-kept: "&aYour own weather: {weather}. Only you see it, in every flight until /cam weather reset."
   weather-usage: "&eUse /cam weather clear, rain or reset."
 
 # Names the texts above fill in for things of the game: damage types, mobs, effects, biomes,
@@ -586,6 +705,7 @@ portal-names:
 message-settings:
   actionbar-distance: true
   actionbar-distance-portal: true
+  actionbar-distance-visit: true
   actionbar-hint: true
   actionbar-hint-command: true
   actionbar-off: true
@@ -663,9 +783,15 @@ message-settings:
   end-warning-time-limit: true
   enabled: true
   flight-speed: true
+  menu-features-off: true
+  menu-off: true
+  menu-only: true
+  menu-spot-name: true
+  menu-spot-name-cancelled: true
   nightvision-off: true
   nightvision-reset: true
   nightvision-set: true
+  nightvision-set-memory: true
   nightvision-usage: true
   no-permission: true
   no-projectiles: true
@@ -681,7 +807,17 @@ message-settings:
   reload-exit: true
   reload-start: true
   reload-success: true
+  resume-area: true
+  resume-blocked: true
+  resume-jumped: true
+  resume-no-signal: true
+  resume-none: true
+  resume-off: true
+  resume-other-world: true
+  resume-too-far: true
+  resume-visit-gone: true
   signal-back-to-body: true
+  signal-back-to-visit: true
   signal-ended: true
   signal-lost: true
   spot-area: true
@@ -689,19 +825,35 @@ message-settings:
   spot-blocked: true
   spot-button-delete: true
   spot-button-go: true
+  spot-button-share: true
+  spot-button-visit: true
   spot-deleted: true
   spot-full: true
   spot-jumped: true
   spot-list-empty: true
   spot-list-entry: true
   spot-list-header: true
+  spot-list-shared: true
+  spot-list-shared-entry: true
+  spot-list-shared-header: true
   spot-moved: true
   spot-no-signal: true
+  spot-not-shared: true
+  spot-not-shared-all: true
   spot-off: true
   spot-other-world: true
   spot-saved: true
+  spot-share-off: true
+  spot-share-self: true
+  spot-share-unknown-player: true
+  spot-shared: true
+  spot-shared-all: true
+  spot-shared-unknown: true
+  spot-shared-with-you: true
   spot-too-far: true
   spot-unknown: true
+  spot-unshared: true
+  spot-unshared-all: true
   spot-usage: true
   start-delay-cancelled: true
   start-delay-countdown: true
@@ -736,6 +888,7 @@ message-settings:
   time-off: true
   time-reset: true
   time-set: true
+  time-set-kept: true
   time-usage: true
   trail-all-entry: true
   trail-all-header: true
@@ -758,7 +911,15 @@ message-settings:
   unban-not-banned: true
   unbanned-everybody-now: true
   unbanned-now: true
+  visit-area: true
+  visit-blocked: true
+  visit-ended: true
+  visit-off: true
+  visit-other-world: true
+  visit-started: true
+  visit-usage: true
   weather-off: true
   weather-reset: true
   weather-set: true
+  weather-set-kept: true
   weather-usage: true

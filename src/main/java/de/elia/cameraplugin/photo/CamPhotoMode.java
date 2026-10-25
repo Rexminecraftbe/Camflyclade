@@ -244,7 +244,9 @@ public final class CamPhotoMode implements Listener {
             player.showEntity(plugin, part);
         }
         // Shown again is everybody photo mode hid, and camera mode decides
-        // once more which of them he is to see.
+        // once more which of them he is to see - anti-scouting at once, before
+        // anybody too far away is seen for a moment.
+        plugin.getScoutGuard().refresh(player);
         plugin.getVisibility().updateVisibilityForAll();
         if (active.isEmpty()) {
             stopTask();

@@ -969,6 +969,14 @@ def prepare_server_files(env):
     text, n = replace_option(text, "command", "false", "teleports")
     if n != 1:
         Log.warn("teleports.command nicht in der Konfiguration gefunden")
+    # Jeder Flug beginnt mit flight-speed.start. Die Abschnitte fliegen mit
+    # festen Zeiten, und ein Tempo, das ein frueherer Abschnitt am Mausrad
+    # eingestellt hat, haette sie sonst verschoben - bis in den naechsten Lauf,
+    # die Datei des Bots bleibt stehen. Nur einstellungen_checks schaltet es
+    # fuer sich ein.
+    text, n = replace_option(text, "flight-speed", "false", "player-settings")
+    if n != 1:
+        Log.warn("player-settings.flight-speed nicht in der Konfiguration gefunden")
     data_dir = plugins / "CamFly"
     data_dir.mkdir(exist_ok=True)
     (data_dir / "config.yml").write_text(text, encoding="utf-8")
@@ -1686,6 +1694,40 @@ async function handle(cmd) {
     case 'close_window':
       try { if (bot.currentWindow) bot.closeWindow(bot.currentWindow); } catch (e) { /* egal */ }
       return { open: !!bot.currentWindow };
+    case 'click_window': {
+      // Ein Klick in das offene Fenster: button 0 links, 1 rechts, mode 1
+      // mit gedrueckter Umschalttaste. Der Server weist jeden Klick in das
+      // Menue ab und schickt das Fenster neu - eine Antwort, auf die
+      // mineflayer warten koennte, gibt es nicht, deshalb nach drei Sekunden
+      // weiter.
+      if (!bot.currentWindow) return { clicked: false, reason: 'kein Fenster' };
+      try {
+        await Promise.race([
+          bot.clickWindow(cmd.slot, cmd.button || 0, cmd.mode || 0),
+          new Promise((r) => setTimeout(r, 3000))]);
+      } catch (e) {
+        return { clicked: false, reason: String(e && e.message || e) };
+      }
+      return { clicked: true };
+    }
+    case 'window_slots': {
+      // Was in den Plaetzen des offenen Fensters liegt, ohne das eigene
+      // Inventar darunter. Die Namen der Arten kennt mineflayer nur aus den
+      // Daten von 26.1, verlassen wird sich darauf nicht: Es zaehlt, wo etwas
+      // liegt.
+      const w = bot.currentWindow;
+      if (!w) return { open: false, title: null, slots: {} };
+      // Der Titel kommt bei 26.x als Textbaustein, nicht als Zeichenkette:
+      // als JSON steht der Text darin.
+      const title = typeof w.title === 'string' ? w.title : JSON.stringify(w.title);
+      const slots = {};
+      const end = w.inventoryStart !== undefined ? w.inventoryStart : w.slots.length;
+      for (let i = 0; i < end; i++) {
+        const it = w.slots[i];
+        if (it) slots[i] = { name: it.name, count: it.count };
+      }
+      return { open: true, title: title || '', slots };
+    }
     case 'inventory': {
       const items = bot.inventory ? bot.inventory.items() : [];
       return { count: items.length, names: items.map((i) => i.name) };
@@ -5324,17 +5366,19 @@ def zeit_wetter_checks(env, bot):
 
 def nachtsicht_wahl_checks(env, bot):
     """night-vision.player-choice: /cam nightvision, die Nachtsicht, die jeder
-    Spieler fuer sich selbst einstellt - gespeichert wird sie nicht, sie gilt,
-    bis er den Server verlaesst.
+    Spieler fuer sich selbst einstellt - mit player-settings.storage: file in
+    seiner Datei, mit memory, bis er den Server verlaesst.
 
     Voreingestellt ist es an - nachgesehen in der ausgelieferten Datei. mode
     bleibt dark: am hellen Tag keine Nachtsicht, um Mitternacht schon. on
     gibt sie auch am Tag, off nimmt sie auch um Mitternacht, /cam nightvision
     allein schaltet von off wieder an, reset gibt dark zurueck. Vor dem
     Cam-Modus gewaehlt, gilt es fuer den naechsten Flug und auch fuer den
-    danach; nach dem Ab- und Anmelden ist es vergessen. Mit
-    player-choice: false sagt der Befehl, dass er aus ist, und eine Wahl von
-    vorher gilt nicht mehr.
+    danach; voreingestellt (storage: file) auch nach dem Ab- und Anmelden, und
+    es steht in der Datei des Bots unter settings. Mit storage: memory sagt
+    die Meldung, dass es bis zum Verlassen gilt, und nach dem Ab- und Anmelden
+    ist es vergessen. Mit player-choice: false sagt der Befehl, dass er aus
+    ist, und eine Wahl von vorher gilt nicht mehr.
     """
     def hat():
         return nbt_frage(bot, "@s", NACHTSICHT)
@@ -5352,6 +5396,8 @@ def nachtsicht_wahl_checks(env, bot):
                   re.search(r"(?m)^\s*player-choice:\s*true\s*$", ausgeliefert(env)) is not None, "")
         bot.chat("/effect clear @s")
         bot.chat("/weather clear")
+        # Eine Wahl, die ein abgebrochener Lauf in der Datei liess.
+        bot.chat("/cam nightvision reset")
         zeit("noon")
         tabs = tab("/cam nightvision ")
         FIND.test("Tab nach /cam nightvision: on, off, dark und reset",
@@ -5384,7 +5430,8 @@ def nachtsicht_wahl_checks(env, bot):
         cam_on(bot)
         time.sleep(1.0)
         FIND.test("Vor dem Cam-Modus gewaehlt, gilt es fuer den naechsten Flug",
-                  gesagt(zeilen, r"Night vision in cam mode: always") and hat(), zeige(zeilen))
+                  gesagt(zeilen, r"Night vision in cam mode: always\. Kept for your next flights") and hat(),
+                  zeige(zeilen))
         cam_off(bot)
         cam_on(bot)
         time.sleep(1.0)
@@ -5393,8 +5440,29 @@ def nachtsicht_wahl_checks(env, bot):
         if FIND.test("Neu angemeldet fuer die eigene Nachtsicht", neu_anmelden(bot), ""):
             cam_on(bot)
             time.sleep(1.0)
-            FIND.test("Nach dem Ab- und Anmelden ist die Wahl vergessen: am Tag wieder ohne", not hat(), "")
+            FIND.test("player-settings.storage: file - nach dem Ab- und Anmelden gilt die Wahl weiter: am Tag mit",
+                      hat(), "")
             cam_off(bot)
+        datei = spielerdatei(env)
+        text = datei.read_text(encoding="utf-8") if datei else ""
+        FIND.test("storage: file - die Wahl steht in der Datei des Bots unter settings",
+                  re.search(r"(?m)^settings:\s*\n(?:\s+.*\n)*?\s+night-vision:\s*'?on'?\s*$", text) is not None,
+                  text[-300:] or "keine Datei")
+
+        set_option(env, "storage", "memory", "player-settings")
+        zeilen = befehl(bot, "/cam nightvision off")
+        befehl(bot, "/cam nightvision on")
+        FIND.test("storage: memory - die Meldung sagt, dass es bis zum Verlassen gilt",
+                  gesagt(zeilen, r"Night vision in cam mode: never\. Holds until you leave the server"),
+                  zeige(zeilen))
+        if FIND.test("Neu angemeldet fuer die eigene Nachtsicht im Speicher", neu_anmelden(bot), ""):
+            cam_on(bot)
+            time.sleep(1.0)
+            FIND.test("storage: memory - nach dem Ab- und Anmelden ist die Wahl vergessen: am Tag wieder ohne",
+                      not hat(), "")
+            cam_off(bot)
+        set_option(env, "storage", "file", "player-settings")
+        befehl(bot, "/cam nightvision reset")
 
         befehl(bot, "/cam nightvision on")
         set_option(env, "player-choice", "false")
@@ -5407,11 +5475,678 @@ def nachtsicht_wahl_checks(env, bot):
                   "")
     finally:
         cam_off(bot)
-        set_option(env, "player-choice", "true")
+        set_options(env, [("player-choice", "true"), ("storage", "file", "player-settings")])
         bot.chat("/cam nightvision reset")
         bot.chat("/time set noon")
         bot.chat("/effect clear @s")
         time.sleep(0.5)
+
+
+def einstellungen_checks(env, bot):
+    """player-settings: was jeder fuer sich im Cam-Modus waehlt, gilt auch fuer
+    seine naechsten Fluege - in seiner Datei, oder bis er geht.
+
+    Voreingestellt stehen storage: file, flight-speed: true, time: false und
+    weather: false da - nachgesehen in der Datei, die das Plugin mitbringt:
+    der Testserver schaltet flight-speed fuer alle anderen Abschnitte ab. Mit
+    flight-speed: true beginnt der naechste Flug so schnell, wie der letzte
+    aufhoerte, auch nach dem Ab- und Anmelden, und in der Datei des Bots steht
+    es unter settings; mit false wieder mit flight-speed.start. Voreingestellt
+    endet die eigene Zeit mit dem Cam-Modus; mit time: true und weather: true
+    sagt die Meldung, dass sie bleiben, der naechste Flug beginnt mit dem
+    Sonnenuntergang und dem Regen von vorher, und reset nimmt beides auch fuer
+    den naechsten Flug zurueck.
+    """
+    def tempo():
+        return bot.server_data("abilities.flySpeed")
+
+    def gleich(wert, soll):
+        return wert is not None and abs(wert - soll) < 0.001
+
+    def drehen(hoch):
+        bot.call("hotbar", slot=0)
+        time.sleep(0.3)
+        bot.call("hotbar", slot=8 if hoch else 1)
+        time.sleep(0.8)
+
+    def zeit():
+        return bot.call("sky").get("timeOfDay")
+
+    def regen():
+        return bot.call("sky").get("rain") or 0
+
+    quelle = (env.repo / "src" / "main" / "resources" / "config.yml").read_text(encoding="utf-8")
+    FIND.test("Voreingestellt steht player-settings mit storage: file, flight-speed: true, time und weather: false da",
+              re.search(r"(?m)^player-settings:\s*\n(?:\s*#.*\n)*\s*storage:\s*file\s*\n(?:\s*#.*\n)*"
+                        r"\s*flight-speed:\s*true\s*\n(?:\s*#.*\n)*\s*time:\s*false\s*\n(?:\s*#.*\n)*"
+                        r"\s*weather:\s*false\s*$", quelle) is not None, "")
+    try:
+        cam_off(bot)
+        console(env, "weather clear", pause=0.5)
+        console(env, "time set day", pause=1.0)
+        bot.call("hotbar", slot=0)
+        set_option(env, "flight-speed", "true", "player-settings")
+        if not FIND.test("Cam-Modus fuer die eigenen Einstellungen gestartet", cam_on(bot), ""):
+            return
+        # Erst ganz hinunter, dann zwei Stufen hinauf: 1.5, was immer ein
+        # frueherer Lauf in der Datei liess.
+        for _ in range(8):
+            drehen(False)
+        drehen(True)
+        drehen(True)
+        FIND.test("Mausrad: 1.5", gleich(tempo(), 0.075), str(tempo()))
+        cam_off(bot)
+        cam_on(bot)
+        FIND.test("flight-speed: true - der naechste Flug beginnt so schnell, wie der letzte aufhoerte",
+                  gleich(tempo(), 0.075), str(tempo()))
+        cam_off(bot)
+        datei = spielerdatei(env)
+        text = datei.read_text(encoding="utf-8") if datei else ""
+        FIND.test("flight-speed: true - das Tempo steht in der Datei des Bots unter settings",
+                  re.search(r"(?m)^\s+flight-speed:\s*1\.5\s*$", text) is not None, text[-300:] or "keine Datei")
+        if FIND.test("Neu angemeldet fuer das eigene Tempo", neu_anmelden(bot), ""):
+            cam_on(bot)
+            FIND.test("flight-speed: true - auch nach dem Ab- und Anmelden", gleich(tempo(), 0.075), str(tempo()))
+            cam_off(bot)
+        set_option(env, "flight-speed", "false", "player-settings")
+        cam_on(bot)
+        FIND.test("flight-speed: false - jeder Flug beginnt wieder mit flight-speed.start", gleich(tempo(), 0.05),
+                  str(tempo()))
+        cam_off(bot)
+
+        cam_on(bot)
+        zeilen = befehl(bot, "/cam time sunset", warten=2.0)
+        FIND.test("time: false - die Meldung sagt: bis der Cam-Modus endet",
+                  gesagt(zeilen, r"Your own time: sunset\. Only you see it, until cam mode ends"), zeige(zeilen))
+        cam_off(bot)
+        cam_on(bot)
+        time.sleep(1.5)
+        FIND.test("time: false - der naechste Flug hat wieder die Zeit der Welt", zeit() == 1000, str(zeit()))
+        cam_off(bot)
+
+        set_options(env, [("time", "true", "player-settings"), ("weather", "true", "player-settings")])
+        cam_on(bot)
+        zeilen = befehl(bot, "/cam time sunset", warten=2.0)
+        wetter = befehl(bot, "/cam weather rain", warten=2.0)
+        FIND.test("time und weather: true - die Meldungen sagen, dass sie bleiben",
+                  gesagt(zeilen, r"in every flight until /cam time reset")
+                  and gesagt(wetter, r"in every flight until /cam weather reset"), f"{zeige(zeilen)} / {zeige(wetter)}")
+        cam_off(bot)
+        time.sleep(6.5)
+        FIND.test("Das Ende des Cam-Modus gibt Zeit und Wetter der Welt trotzdem zurueck",
+                  zeit() == 1000 and regen() == 0, f"{zeit()} / {regen()}")
+        cam_on(bot)
+        time.sleep(6.5)
+        FIND.test("time und weather: true - der naechste Flug beginnt mit Sonnenuntergang und Regen",
+                  zeit() == 12000 and regen() > 0.99, f"{zeit()} / {regen()}")
+        befehl(bot, "/cam time reset")
+        befehl(bot, "/cam weather reset")
+        cam_off(bot)
+        cam_on(bot)
+        time.sleep(6.5)
+        FIND.test("reset nimmt beides zurueck, auch fuer den naechsten Flug", zeit() == 1000 and regen() == 0,
+                  f"{zeit()} / {regen()}")
+        cam_off(bot)
+    finally:
+        try:
+            cam_off(bot)
+            set_options(env, [("flight-speed", "false", "player-settings"), ("time", "false", "player-settings"),
+                              ("weather", "false", "player-settings")])
+            bot.call("hotbar", slot=0)
+            console(env, "weather clear", pause=0.5)
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der eigenen Einstellungen: {exc}")
+
+
+def geteilte_datei(env):
+    """Der Text von playerdata/shared-spots.yml des Testservers, oder ''."""
+    datei = env.server / "plugins" / "CamFly" / "playerdata" / "shared-spots.yml"
+    return datei.read_text(encoding="utf-8") if datei.exists() else ""
+
+
+def im_cam_modus(bot, name):
+    """Ob der Server diesen Spieler im Abenteuermodus fuehrt, dem des
+    Cam-Modus - gefragt vom Bot, der dafuer op hat."""
+    return server_says(bot, f"/execute if entity @a[name={name},gamemode=adventure] run say {{marke}}")
+
+
+def teilen_checks(env, bot):
+    """viewpoints.sharing und visitor-camera: Aussichtspunkte teilen und die
+    eines anderen besuchen.
+
+    Voreingestellt sind beide an - nachgesehen in der ausgelieferten Datei.
+    Der Bot setzt den Punkt "Haus" sechs Bloecke neben seinem Platz und teilt
+    ihn mit dem zweiten Spieler, der zweihundert Bloecke weiter steht: Der
+    erfaehrt es mit einem Knopf, der /cam visit CamFlyTester:Haus schickt, in
+    /cam spot list steht der Punkt unter "Shared with you", die
+    Tab-Vervollstaendigung bietet ihn nach /cam visit an, und in
+    playerdata/shared-spots.yml steht er. Springen wie zu einem eigenen
+    Punkt geht von dort nicht, er ist mehr als max-distance vom eigenen
+    Koerper weg.
+
+    /cam visit setzt die Kamera an den Punkt - im Cam-Modus und ohne ihn,
+    dann startet er erst -, die Action-Bar zeigt den Abstand zum Punkt, und
+    mit max-distance: 4 haelt die Kamera am Punkt fest statt am Koerper. /cam
+    back beendet den Besuch beim Koerper. Nimmt der Bot das Teilen zurueck,
+    waehrend der zweite Spieler zu Besuch ist, ist dessen Kamera wieder beim
+    Koerper, mit der Meldung, und der Punkt ist fuer ihn weg.
+
+    Mit all teilt der Bot mit allen, seine Liste sagt "shared with
+    everybody", die Tab-Vervollstaendigung bietet all und die Spieler an.
+    Ein unbekannter Name und der eigene werden abgewiesen. Ein verbotenes
+    Biom am Punkt sperrt den Besuch, und der Cam-Modus startet dafuer nicht.
+    Mit visitor-camera.enabled: false ist /cam visit aus, mit
+    viewpoints.sharing: false das Teilen. Ein geloeschter Punkt ist fuer
+    niemanden mehr geteilt.
+    """
+    def tab(client, text):
+        return client.call("tab", text=text).get("matches", [])
+
+    def zuschauer_pos():
+        return bot.call("server_pos", selector=ZUSCHAUER_NAME).get("pos")
+
+    def nahe(a, b, weit=1.0):
+        return a is not None and b is not None and math.dist(a, b) < weit
+
+    if not FIND.test("Cam-Modus ist vor dem Test des Teilens aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    punkt = (x + 6, y, z)
+    fern = (x + 200, y, z)
+    label = f"{BOT_NAME}:Haus"
+    biom = f"{_floor(punkt[0]) - 2} {y - 2} {_floor(z) - 2} {_floor(punkt[0]) + 2} {y + 4} {_floor(z) + 2}"
+    console(env, f"fill {_floor(x) - 2} {y} {_floor(z) - 3} {_floor(punkt[0]) + 8} {y + 6} {_floor(z) + 3} "
+                 f"minecraft:air", pause=0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    try:
+        aus = ausgeliefert(env)
+        FIND.test("Voreingestellt stehen viewpoints.sharing und visitor-camera.enabled auf true da",
+                  re.search(r"(?m)^\s+sharing:\s*true\s*$", aus) is not None
+                  and re.search(r"(?m)^visitor-camera:\s*\n\s*enabled:\s*true\s*$", aus) is not None, "")
+        spots_loeschen(bot, "Haus")
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer das Teilen kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        console(env, f"tp {ZUSCHAUER_NAME} {fern[0]} {y} {z}", pause=1.5)
+        bot.chat(f"/tp {BOT_NAME} {punkt[0]} {y} {z} -90 0")
+        time.sleep(1.0)
+        befehl(bot, "/cam spot set Haus")
+        hinstellen(bot, x, y, z)
+
+        seit = zuschauer.mark()
+        pakete_seit = zuschauer.call("chat_packets", since=10 ** 9).get("count", 0)
+        zeilen = befehl(bot, f"/cam spot share Haus {ZUSCHAUER_NAME}")
+        FIND.test("/cam spot share Haus <Spieler> - geteilt",
+                  gesagt(zeilen, rf"Spot Haus is shared with {ZUSCHAUER_NAME} now"), zeige(zeilen))
+        dort = zeilen_seit(zuschauer, seit)
+        pakete = " ".join(p["text"] for p in zuschauer.call("chat_packets", since=pakete_seit).get("packets", []))
+        FIND.test("Wer online ist, erfaehrt es - mit einem Knopf, der den Punkt besucht",
+                  gesagt(dort, rf"{BOT_NAME} shared the spot Haus with you") and f"/cam visit {label}" in pakete,
+                  f"{zeige(dort)} / {pakete[-300:]}")
+        text = geteilte_datei(env)
+        FIND.test("storage: file - der geteilte Punkt steht in playerdata/shared-spots.yml",
+                  re.search(r"name:\s*Haus", text) is not None and ZUSCHAUER_NAME in text, text[-300:] or "keine Datei")
+        dort = befehl(zuschauer, "/cam spot list")
+        FIND.test("/cam spot list beim anderen: der Punkt unter \"Shared with you\"",
+                  gesagt(dort, r"Shared with you \(1\)") and gesagt(dort, rf"- {label}: "), zeige(dort))
+        tabs = tab(zuschauer, "/cam visit ")
+        FIND.test("Tab nach /cam visit: der geteilte Punkt", tabs == [label], str(tabs))
+
+        if not FIND.test("Der zweite Spieler ist weit weg im Cam-Modus",
+                         zuschauer_cam_an(env, zuschauer, fern[0], y, z), ""):
+            return
+        dort = befehl(zuschauer, f"/cam spot {label}")
+        FIND.test("/cam spot Besitzer:Name springt nur wie zu einem eigenen Punkt: zu weit vom eigenen Koerper",
+                  gesagt(dort, rf"Spot {label} is more than 100\.0 blocks from your body")
+                  and nahe(zuschauer_pos(), fern, 1.5), zeige(dort))
+        dort = befehl(zuschauer, f"/cam visit {label}", warten=2.0)
+        FIND.test("/cam visit im Cam-Modus - die Kamera steht am geteilten Punkt",
+                  gesagt(dort, rf"Visiting {BOT_NAME}'s spot Haus") and nahe(zuschauer_pos(), punkt),
+                  f"{zeige(dort)} / {zuschauer_pos()}")
+        seit = zuschauer.mark()
+        time.sleep(2.5)
+        dort = zeilen_seit(zuschauer, seit)
+        FIND.test("Beim Besuch zeigt die Action-Bar den Abstand zum Punkt", gesagt(dort, r"Spot: \d+ blocks"),
+                  zeige(dort))
+
+        # Jeder Reload beendet den Cam-Modus: der Besuch beginnt danach ohne ihn.
+        set_option(env, "max-distance", "4.0")
+        dort = befehl(zuschauer, f"/cam visit {label}", warten=3.0)
+        FIND.test("/cam visit ohne Cam-Modus - er startet, und die Kamera steht am geteilten Punkt",
+                  gesagt(dort, r"Cam mode activated") and nahe(zuschauer_pos(), punkt),
+                  f"{zeige(dort)} / {zuschauer_pos()}")
+        zuschauer.call("fly", wait=30, dx=10, timeout=6000)
+        time.sleep(1.5)
+        wo = zuschauer_pos()
+        FIND.test("Beim Besuch haelt max-distance die Kamera am Punkt fest, nicht am Koerper",
+                  wo is not None and math.dist(wo, punkt) <= 5.0, str(wo))
+        dort = befehl(zuschauer, "/cam back", warten=2.0)
+        FIND.test("/cam back beendet den Besuch: die Kamera ist beim Koerper",
+                  gesagt(dort, r"Back at your body") and nahe(zuschauer_pos(), fern, 1.5),
+                  f"{zeige(dort)} / {zuschauer_pos()}")
+        set_option(env, "max-distance", "100.0")
+
+        befehl(zuschauer, f"/cam visit {label}", warten=3.0)
+        seit = zuschauer.mark()
+        zeilen = befehl(bot, f"/cam spot unshare Haus {ZUSCHAUER_NAME}", warten=2.0)
+        dort = zeilen_seit(zuschauer, seit)
+        FIND.test("/cam spot unshare waehrend des Besuchs - seine Kamera ist wieder beim Koerper",
+                  gesagt(zeilen, rf"no longer shared with {ZUSCHAUER_NAME}")
+                  and gesagt(dort, rf"{BOT_NAME} no longer shares the spot Haus") and nahe(zuschauer_pos(), fern, 1.5),
+                  f"{zeige(zeilen)} / {zeige(dort)} / {zuschauer_pos()}")
+        dort = befehl(zuschauer, f"/cam visit {label}")
+        FIND.test("Danach ist der Punkt fuer ihn weg", gesagt(dort, rf"Nobody shares a spot called {label}"),
+                  zeige(dort))
+        cam_off(zuschauer)
+
+        zeilen = befehl(bot, "/cam spot share Haus all")
+        dort = befehl(zuschauer, "/cam spot list")
+        eigene = befehl(bot, "/cam spot list")
+        FIND.test("/cam spot share Haus all - mit allen geteilt, auch er sieht ihn",
+                  gesagt(zeilen, r"Spot Haus is shared with everybody now") and gesagt(dort, rf"- {label}: ")
+                  and gesagt(eigene, r"- Haus: .*\(shared with everybody\)"),
+                  f"{zeige(zeilen)} / {zeige(dort)} / {zeige(eigene)}")
+        for name, eingabe, muster in (
+                ("Ein unbekannter Name wird abgewiesen", "/cam spot share Haus Niemand123",
+                 r"Nobody called Niemand123 has been on this server"),
+                ("Mit sich selbst teilt keiner", f"/cam spot share Haus {BOT_NAME}", r"Your own spots are yours")):
+            zeilen = befehl(bot, eingabe)
+            FIND.test(name, gesagt(zeilen, muster), zeige(zeilen))
+        tabs = tab(bot, "/cam spot share Haus ")
+        FIND.test("Tab nach /cam spot share Haus: all und die Spieler",
+                  "all" in tabs and ZUSCHAUER_NAME in tabs, str(tabs))
+        tabs = tab(bot, "/cam spot unshare Haus ")
+        FIND.test("Tab nach /cam spot unshare Haus: mit wem er geteilt ist", tabs == ["all"], str(tabs))
+
+        bot.chat(f"/fillbiome {biom} minecraft:lush_caves")
+        time.sleep(1.5)
+        dort = befehl(zuschauer, f"/cam visit {label}", warten=2.0)
+        FIND.test("Ein verbotenes Biom am Punkt sperrt den Besuch, und der Cam-Modus startet dafuer nicht",
+                  gesagt(dort, rf"Spot {label} lies in Lush Caves") and not im_cam_modus(bot, ZUSCHAUER_NAME),
+                  zeige(dort))
+        bot.chat(f"/fillbiome {biom} minecraft:plains")
+        time.sleep(1.5)
+
+        set_option(env, "enabled", "false", "visitor-camera")
+        dort = befehl(zuschauer, f"/cam visit {label}")
+        FIND.test("visitor-camera.enabled: false - /cam visit ist aus", gesagt(dort, r"/cam visit is switched off"),
+                  zeige(dort))
+        set_options(env, [("enabled", "true", "visitor-camera"), ("sharing", "false", "viewpoints")])
+        zeilen = befehl(bot, f"/cam spot share Haus {ZUSCHAUER_NAME}")
+        dort = befehl(zuschauer, "/cam spot list")
+        FIND.test("viewpoints.sharing: false - kein Teilen, und geteilte Punkte sind nicht zu sehen",
+                  gesagt(zeilen, r"Sharing spots is switched off") and not gesagt(dort, r"Shared with you"),
+                  f"{zeige(zeilen)} / {zeige(dort)}")
+        set_option(env, "sharing", "true", "viewpoints")
+
+        befehl(bot, "/cam spot delete Haus")
+        dort = befehl(zuschauer, f"/cam visit {label}")
+        FIND.test("Ein geloeschter Punkt ist fuer niemanden mehr geteilt",
+                  gesagt(dort, rf"Nobody shares a spot called {label}")
+                  and re.search(r"name:\s*Haus", geteilte_datei(env)) is None, zeige(dort))
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                cam_off(zuschauer)
+                zuschauer.stop()
+            cam_off(bot)
+            set_options(env, [("max-distance", "100.0"), ("enabled", "true", "visitor-camera"),
+                              ("sharing", "true", "viewpoints")])
+            spots_loeschen(bot, "Haus")
+            bot.chat(f"/fillbiome {biom} minecraft:plains")
+            time.sleep(1.0)
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test des Teilens: {exc}")
+
+
+def weiter_checks(env, bot):
+    """resume-command: /cam resume macht dort weiter, wo der letzte Flug
+    aufhoerte.
+
+    Voreingestellt ist es an, mit storage: file - nachgesehen in der
+    ausgelieferten Datei. Der Bot fliegt hoch und zur Seite, schaut nach
+    Osten und beendet den Cam-Modus; in seiner Datei steht das Ende unter
+    last-flight. /cam resume startet den Cam-Modus, und die Kamera steht dort
+    und schaut wieder nach Osten, mit sounds.spot und der Zeile in der
+    Action-Bar. Im Cam-Modus springt sie gleich dorthin zurueck. Mit
+    max-distance: 2 ist es zu weit, und mit einem Stein an der Stelle ist sie
+    verstellt - beide Male mit der Meldung, warum, und ohne dass der
+    Cam-Modus startet. Die Tab-Vervollstaendigung bietet resume an. Mit
+    enabled: false ist der Befehl aus, und mit storage: memory ist nach
+    /cam reload kein Flug da.
+    """
+    def tab(text):
+        return bot.call("tab", text=text).get("matches", [])
+
+    def bleibt(vorher, nachher):
+        return vorher is not None and nachher is not None and math.dist(vorher, nachher) < 0.5
+
+    if not FIND.test("Cam-Modus ist vor dem Test von /cam resume aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    console(env, f"fill {_floor(x) - 3} {y} {_floor(z) - 3} {_floor(x) + 6} {y + 8} {_floor(z) + 3} minecraft:air",
+            pause=0.5)
+    stein = None
+    try:
+        FIND.test("Voreingestellt steht resume-command mit enabled: true und storage: file da",
+                  re.search(r"(?m)^resume-command:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*storage:\s*file\s*$",
+                            ausgeliefert(env)) is not None, "")
+        hinstellen(bot, x, y, z)
+        if not FIND.test("Cam-Modus fuer /cam resume gestartet", cam_on(bot), ""):
+            return
+        bot.call("fly", wait=30, dy=4, dx=3, timeout=15000)
+        time.sleep(1.0)
+        bot.chat("/tp @s ~ ~ ~ -90 20")
+        time.sleep(1.0)
+        ende = bot.server_pos()
+        cam_off(bot)
+        datei = spielerdatei(env)
+        text = datei.read_text(encoding="utf-8") if datei else ""
+        FIND.test("storage: file - das Ende des Flugs steht in der Datei des Bots unter last-flight",
+                  re.search(r"(?m)^last-flight:\s*$", text) is not None, text[-300:] or "keine Datei")
+        FIND.test("Nach einem Flug schlaegt /cam resume vor", "resume" in tab("/cam "), "")
+
+        seit = toene_marke(bot)
+        zeilen = befehl(bot, "/cam resume", warten=2.5)
+        da = bot.server_pos()
+        blick = bot.server_data("Rotation[0]")
+        FIND.test("/cam resume ohne Cam-Modus - er startet, und die Kamera steht, wo der letzte Flug aufhoerte",
+                  gesagt(zeilen, r"Cam mode activated") and bleibt(ende, da), f"{ende} -> {da}: {zeige(zeilen)}")
+        FIND.test("/cam resume: \"Back where your last flight ended\" in der Action-Bar",
+                  gesagt(zeilen, r"Back where your last flight ended"), zeige(zeilen))
+        FIND.test("/cam resume: die Kamera schaut wieder, wohin sie zuletzt schaute",
+                  blick is not None and abs(blick + 90.0) < 1.0, str(blick))
+        FIND.test("/cam resume: der Ton von sounds.spot", ton_da(bot, seit, "item.chorus_fruit.teleport"), "")
+        bot.call("fly", wait=30, dx=-4, timeout=15000)
+        time.sleep(1.0)
+        zeilen = befehl(bot, "/cam resume")
+        FIND.test("/cam resume im Cam-Modus - die Kamera springt gleich zurueck", bleibt(ende, bot.server_pos()),
+                  zeige(zeilen))
+        cam_off(bot)
+
+        set_option(env, "max-distance", "2.0")
+        hinstellen(bot, x, y, z)
+        zeilen = befehl(bot, "/cam resume", warten=2.0)
+        FIND.test("max-distance: 2 - zu weit, und der Cam-Modus startet nicht",
+                  gesagt(zeilen, r"Your last flight ended more than 2\.0 blocks from here")
+                  and not spielmodus_ist(bot, "adventure"), zeige(zeilen))
+        set_option(env, "max-distance", "100.0")
+        stein = (_floor(ende[0]), _floor(ende[1]) + 1, _floor(ende[2]))
+        bot.chat(f"/setblock {stein[0]} {stein[1]} {stein[2]} minecraft:stone")
+        time.sleep(0.5)
+        zeilen = befehl(bot, "/cam resume", warten=2.0)
+        FIND.test("Ein Stein an der Stelle - verstellt, und der Cam-Modus startet nicht",
+                  gesagt(zeilen, r"Something has been built where your last flight ended")
+                  and not spielmodus_ist(bot, "adventure"), zeige(zeilen))
+        bot.chat(f"/setblock {stein[0]} {stein[1]} {stein[2]} minecraft:air")
+        time.sleep(0.5)
+
+        set_option(env, "enabled", "false", "resume-command")
+        zeilen = befehl(bot, "/cam resume")
+        FIND.test("resume-command.enabled: false - /cam resume ist aus",
+                  gesagt(zeilen, r"/cam resume is switched off") and "resume" not in tab("/cam "), zeige(zeilen))
+        set_options(env, [("enabled", "true", "resume-command"), ("storage", "memory", "resume-command")])
+        zeilen = befehl(bot, "/cam resume")
+        FIND.test("storage: memory - nach /cam reload ist kein Flug da", gesagt(zeilen, r"no flight to resume"),
+                  zeige(zeilen))
+    finally:
+        try:
+            cam_off(bot)
+            set_options(env, [("max-distance", "100.0"), ("enabled", "true", "resume-command"),
+                              ("storage", "file", "resume-command")])
+            if stein is not None:
+                bot.chat(f"/setblock {stein[0]} {stein[1]} {stein[2]} minecraft:air")
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test von /cam resume: {exc}")
+
+
+def ausspaeh_checks(env, bot):
+    """anti-scouting: wer im Cam-Modus ist, sieht andere Spieler und die
+    Koerper anderer im Cam-Modus nur bis radius Bloecke weit.
+
+    Voreingestellt ist es aus, mit radius: 32.0 und measured-from: body -
+    nachgesehen in der ausgelieferten Datei. Hier schaut der zweite Spieler
+    durch die Kamera, er hat kein op; der Bot steht zehn Bloecke daneben.
+    Voreingestellt sieht er ihn. Mit enabled: true und radius: 6 nicht mehr,
+    drei Bloecke daneben wieder. Fliegt seine Kamera nah an den Bot heran,
+    sieht er ihn mit measured-from: body trotzdem nicht, mit camera schon.
+    Der Koerper des Bots im Cam-Modus, zehn Bloecke weit, ist fuer ihn
+    ebenso weg. Nach dem Cam-Modus sieht er wieder alles. Der Bot hat op und
+    damit camplugin.antiscout.bypass: er sieht den zweiten Spieler auch
+    zehn Bloecke weit.
+    """
+    def entitaeten(client):
+        return client.call("entities", radius=24).get("entities", [])
+
+    def sieht_bei(client, wo):
+        return wo is not None and any(math.dist(e["pos"], wo) < 0.5 for e in entitaeten(client))
+
+    def koerper_bei(client, wo):
+        return sum(1 for e in entitaeten(client)
+                   if math.dist((e["pos"][0], e["pos"][2]), (wo[0], wo[2])) < 1.0
+                   and wo[1] - 0.5 <= e["pos"][1] <= wo[1] + 3.0)
+
+    def zuschauer_pos():
+        return bot.call("server_pos", selector=ZUSCHAUER_NAME).get("pos")
+
+    if not FIND.test("Cam-Modus ist vor dem Test des Ausspaehens aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    weit = (x + 10, y, z)
+    console(env, f"fill {_floor(x) - 2} {y} {_floor(z) - 2} {_floor(x) + 12} {y + 6} {_floor(z) + 2} minecraft:air",
+            pause=0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    try:
+        FIND.test("Voreingestellt steht anti-scouting mit enabled: false, radius: 32.0 und measured-from: body da",
+                  re.search(r"(?m)^anti-scouting:\s*\n\s*enabled:\s*false\s*\n(?:\s*#.*\n)*\s*radius:\s*32\.0\s*\n"
+                            r"(?:\s*#.*\n)*\s*measured-from:\s*body\s*$", ausgeliefert(env)) is not None, "")
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer das Ausspaehen kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        hinstellen(bot, *weit)
+        if not FIND.test("Der zweite Spieler ist im Cam-Modus", zuschauer_cam_an(env, zuschauer, x, y, z), ""):
+            return
+        time.sleep(1.0)
+        FIND.test("Voreingestellt sieht er den Bot zehn Bloecke weit", sieht_bei(zuschauer, bot.server_pos()), "")
+
+        set_options(env, [("enabled", "true", "anti-scouting"), ("radius", "6.0", "anti-scouting")])
+        zuschauer_cam_an(env, zuschauer, x, y, z)
+        time.sleep(1.5)
+        FIND.test("enabled: true, radius: 6 - zehn Bloecke weit sieht er den Bot nicht mehr",
+                  not sieht_bei(zuschauer, bot.server_pos()), "")
+        hinstellen(bot, x + 3, y, z)
+        time.sleep(1.0)
+        FIND.test("radius: 6 - drei Bloecke daneben sieht er ihn wieder", sieht_bei(zuschauer, bot.server_pos()), "")
+        hinstellen(bot, *weit)
+        time.sleep(1.0)
+        zuschauer.call("fly", wait=30, dx=8, timeout=10000)
+        time.sleep(1.5)
+        FIND.test("measured-from: body - auch mit der Kamera daneben sieht er den Bot nicht",
+                  not sieht_bei(zuschauer, bot.server_pos()), str(zuschauer_pos()))
+
+        set_option(env, "measured-from", "camera", "anti-scouting")
+        zuschauer_cam_an(env, zuschauer, x, y, z)
+        time.sleep(1.0)
+        zuschauer.call("fly", wait=30, dx=8, timeout=10000)
+        time.sleep(1.5)
+        FIND.test("measured-from: camera - mit der Kamera daneben sieht er ihn",
+                  sieht_bei(zuschauer, bot.server_pos()), str(zuschauer_pos()))
+        set_option(env, "measured-from", "body", "anti-scouting")
+
+        hinstellen(bot, *weit)
+        if FIND.test("Der Bot ist zehn Bloecke weiter im Cam-Modus", cam_on(bot), ""):
+            bot.call("fly", wait=30, dy=4, timeout=15000)
+            zuschauer_cam_an(env, zuschauer, x, y, z)
+            time.sleep(1.5)
+            FIND.test("Der Koerper des Bots, zehn Bloecke weit, ist fuer ihn weg", koerper_bei(zuschauer, weit) == 0,
+                      str(koerper_bei(zuschauer, weit)))
+            FIND.test("camplugin.antiscout.bypass - der Bot mit op sieht ihn trotzdem",
+                      sieht_bei(bot, zuschauer_pos()), "")
+            cam_off(zuschauer)
+            time.sleep(1.5)
+            FIND.test("Nach dem Cam-Modus sieht er den Koerper des Bots wieder", koerper_bei(zuschauer, weit) >= 2,
+                      str(koerper_bei(zuschauer, weit)))
+            cam_off(bot)
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                cam_off(zuschauer)
+                zuschauer.stop()
+            cam_off(bot)
+            set_options(env, [("enabled", "false", "anti-scouting"), ("radius", "32.0", "anti-scouting"),
+                              ("measured-from", "body", "anti-scouting")])
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test des Ausspaehens: {exc}")
+
+
+def menue_checks(env, bot):
+    """menu: /cam menu, ein Fenster zum Anklicken statt Befehlen.
+
+    Voreingestellt steht access: both da - nachgesehen in der ausgelieferten
+    Datei. Ohne Cam-Modus oeffnet /cam menu das Menue mit den Knoepfen auf
+    ihren Plaetzen; der auf Platz 10 startet den Cam-Modus und schliesst das
+    Fenster. Im Cam-Modus oeffnet es trotzdem, wo jedes andere Fenster zu
+    bleibt, und nichts kommt dabei ins Inventar. Zeit, dann Sonnenuntergang
+    gibt dem Bot 12000. Aussichtspunkte, "Save a spot here" fragt im Chat
+    nach dem Namen, und die naechste Zeile speichert ihn; ein Linksklick auf
+    den Punkt springt hin, ein Klick mit Umschalt loescht ihn.
+
+    access: menu laesst nur das Menue: /cam spot sagt, dass es dafuer
+    /cam menu gibt, und die Tab-Vervollstaendigung bietet menu an, spot
+    nicht. access: command laesst nur die Befehle, /cam menu ist aus. Mit
+    false geht keins von beiden, /cam selbst aber schon.
+    """
+    def fenster():
+        return bot.call("window_slots", wait=10)
+
+    def klick(slot, button=0, mode=0, warten=1.5):
+        bot.call("click_window", wait=15, slot=slot, button=button, mode=mode)
+        time.sleep(warten)
+
+    def tab(text):
+        return bot.call("tab", text=text).get("matches", [])
+
+    def menue():
+        befehl(bot, "/cam menu", warten=1.0)
+        return fenster()
+
+    if not FIND.test("Cam-Modus ist vor dem Test des Menues aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    console(env, f"fill {_floor(x) - 6} {y} {_floor(z) - 2} {_floor(x) + 2} {y + 6} {_floor(z) + 2} minecraft:air",
+            pause=0.5)
+    try:
+        FIND.test("Voreingestellt steht menu.access: both da",
+                  re.search(r"(?m)^menu:\s*\n(?:\s*#.*\n)*\s*access:\s*both\s*$", ausgeliefert(env)) is not None, "")
+        spots_loeschen(bot, "Menue")
+        console(env, "time set day", pause=1.0)
+        hinstellen(bot, x, y, z)
+        f = menue()
+        FIND.test("/cam menu oeffnet das Menue", f.get("open") and "Cam" in (f.get("title") or ""), str(f)[:300])
+        FIND.test("Die Knoepfe stehen auf ihren Plaetzen",
+                  all(str(i) in f.get("slots", {}) for i in (10, 11, 12, 13, 14, 15, 16, 22)),
+                  str(sorted(f.get("slots", {})))[:200])
+        klick(10, warten=2.0)
+        FIND.test("Der Knopf auf Platz 10 startet den Cam-Modus und schliesst das Fenster",
+                  spielmodus_ist(bot, "adventure") and not fenster().get("open"), "")
+
+        f = menue()
+        FIND.test("Im Cam-Modus oeffnet das Menue trotzdem", f.get("open") and "Cam" in (f.get("title") or ""),
+                  str(f)[:300])
+        klick(15)
+        f = fenster()
+        FIND.test("Zeit - die Seite mit den Tageszeiten", f.get("open") and "Time of day" in (f.get("title") or ""),
+                  str(f)[:300])
+        klick(12, warten=2.0)
+        FIND.test("Sonnenuntergang - der Bot sieht 12000, und das Fenster ist zu",
+                  bot.call("sky").get("timeOfDay") == 12000 and not fenster().get("open"),
+                  str(bot.call("sky").get("timeOfDay")))
+        FIND.test("Im Menue kommt nichts ins Inventar", bot.call("inventory").get("count") == 0,
+                  str(bot.call("inventory")))
+
+        menue()
+        klick(13)
+        f = fenster()
+        FIND.test("Aussichtspunkte - die Seite der Punkte", f.get("open") and "Spots" in (f.get("title") or ""),
+                  str(f)[:300])
+        seit = bot.mark()
+        klick(49)
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Save a spot here - das Fenster ist zu, und der Chat fragt nach dem Namen",
+                  gesagt(zeilen, r"Type the name of the new spot in the chat") and not fenster().get("open"),
+                  zeige(zeilen))
+        punkt = bot.server_pos()
+        zeilen = befehl(bot, "Menue")
+        FIND.test("Die naechste Zeile im Chat ist der Name", gesagt(zeilen, r"Spot Menue saved here"), zeige(zeilen))
+        bot.call("fly", wait=30, dx=-5, timeout=15000)
+        time.sleep(1.0)
+        menue()
+        klick(13)
+        klick(0, warten=2.0)
+        da = bot.server_pos()
+        FIND.test("Linksklick auf den Punkt springt hin",
+                  punkt is not None and da is not None and math.dist(punkt, da) < 0.5, f"{punkt} / {da}")
+        menue()
+        klick(13)
+        seit = bot.mark()
+        klick(0, mode=1)
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Ein Klick mit Umschalt loescht den Punkt", gesagt(zeilen, r"Spot Menue deleted"), zeige(zeilen))
+        bot.call("close_window", wait=10)
+        cam_off(bot)
+
+        set_option(env, "access", "menu", "menu")
+        zeilen = befehl(bot, "/cam spot list")
+        jetzt = tab("/cam ")
+        f = menue()
+        FIND.test("access: menu - /cam spot verweist auf das Menue, und das Menue geht",
+                  gesagt(zeilen, r"That goes through /cam menu") and f.get("open"), zeige(zeilen))
+        FIND.test("access: menu - vorgeschlagen wird menu, aber nicht spot", "menu" in jetzt and "spot" not in jetzt,
+                  str(jetzt))
+        bot.call("close_window", wait=10)
+        set_option(env, "access", "command", "menu")
+        zeilen = befehl(bot, "/cam menu")
+        spots = befehl(bot, "/cam spot list")
+        FIND.test("access: command - /cam menu ist aus, /cam spot geht",
+                  gesagt(zeilen, r"/cam menu is switched off") and gesagt(spots, r"You have no spots yet")
+                  and "menu" not in tab("/cam "), f"{zeige(zeilen)} / {zeige(spots)}")
+        set_option(env, "access", "false", "menu")
+        zeilen = befehl(bot, "/cam menu")
+        foto = befehl(bot, "/cam photo")
+        FIND.test("access: false - weder das Menue noch /cam photo",
+                  gesagt(zeilen, r"/cam menu is switched off") and gesagt(foto, r"That is switched off on this server"),
+                  f"{zeige(zeilen)} / {zeige(foto)}")
+        FIND.test("access: false - /cam selbst geht weiter", cam_on(bot) and cam_off(bot), "")
+    finally:
+        try:
+            bot.call("close_window", wait=10)
+            cam_off(bot)
+            set_option(env, "access", "both", "menu")
+            spots_loeschen(bot, "Menue")
+            console(env, "time set day", pause=0.5)
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test des Menues: {exc}")
 
 
 def naehe_checks(env, bot):
@@ -11043,6 +11778,14 @@ def step_tests(env):
         zeit_wetter_checks(env, bot)
         nachtsicht_wahl_checks(env, bot)
         naehe_checks(env, bot)
+
+        # --- Eigene Einstellungen, Aussichtspunkte teilen und besuchen, /cam resume, kein Ausspaehen
+        # --- und /cam menu ---
+        einstellungen_checks(env, bot)
+        teilen_checks(env, bot)
+        weiter_checks(env, bot)
+        ausspaeh_checks(env, bot)
+        menue_checks(env, bot)
 
         # --- Anstupsen, mit beiden Koerpertypen, und das Funksignal statt der festen Reichweite ---
         fuer_beide_koerpertypen(env, bot, anstups_checks)

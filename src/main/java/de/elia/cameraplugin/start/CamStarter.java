@@ -35,15 +35,34 @@ public final class CamStarter {
     }
 
     /**
+     * Starts camera mode for a player who is not in it, and then does what
+     * started it - takes the camera to a visit of {@code /cam visit}, or to
+     * where {@code /cam resume} goes on. Like {@code /cam}: right away, or
+     * after the wait of {@code start-delay}, which a second command calls
+     * off.
+     *
+     * @param then what follows once camera mode has started
+     */
+    public void startThen(Player player, Runnable then) {
+        if (!plugin.getStartDelay().callOff(player, "start-delay-cancelled")) {
+            request(player, then);
+        }
+    }
+
+    /**
      * Starts camera mode right away, or with {@code start-delay} after the
      * wait. The checks come before the wait as well: whoever may not start
      * hears it at once, instead of standing still for nothing.
      */
     private void request(Player player) {
+        request(player, null);
+    }
+
+    private void request(Player player, Runnable then) {
         if (!plugin.getSettings().isStartDelayEnabled()) {
-            start(player);
+            start(player, then);
         } else if (mayStart(player) && plugin.getStartCost().canPay(player)) {
-            plugin.getStartDelay().begin(player, () -> start(player));
+            plugin.getStartDelay().begin(player, () -> start(player, then));
         }
     }
 
@@ -55,11 +74,18 @@ public final class CamStarter {
      * @return whether camera mode started; if not, he has been told why
      */
     public boolean start(Player player) {
+        return start(player, null);
+    }
+
+    private boolean start(Player player, Runnable then) {
         if (!mayStart(player) || !plugin.getStartCost().pay(player)) {
             return false;
         }
         plugin.enterCameraMode(player);
         messages.sendConfiguredMessage(player, "camera-on");
+        if (then != null) {
+            then.run();
+        }
         return true;
     }
 
