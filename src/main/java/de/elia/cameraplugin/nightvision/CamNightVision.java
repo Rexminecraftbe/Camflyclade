@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.nightvision;
 
 import de.elia.cameraplugin.config.CamSettings;
+import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -10,6 +11,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -27,6 +29,11 @@ import java.util.UUID;
  * the player already had is paused with his other effects when camera mode
  * starts and comes back when it ends; one somebody hands him in between, with
  * {@code /effect} say, is left alone.</p>
+ *
+ * <p>With {@code night-vision.player-choice} each player picks the mode for
+ * himself, {@code /cam nightvision}. It is not written anywhere: the choice
+ * holds until he leaves the server, for every flight until then, and after
+ * that the mode of the file is his again.</p>
  */
 public final class CamNightVision {
 
@@ -45,15 +52,28 @@ public final class CamNightVision {
 
     private final JavaPlugin plugin;
     private final CamSettings settings;
+    private final Messages messages;
     private final CameraPlayers cameraPlayers;
     private final Map<UUID, BukkitRunnable> tasks = new HashMap<>();
     /** The players wearing the night vision of this class right now. */
     private final Set<UUID> given = new HashSet<>();
+    /** The mode each player picked with {@code /cam nightvision}, until he leaves the server. */
+    private final Map<UUID, NightVisionMode> chosen = new HashMap<>();
 
-    public CamNightVision(JavaPlugin plugin, CamSettings settings, CameraPlayers cameraPlayers) {
+    public CamNightVision(JavaPlugin plugin, CamSettings settings, Messages messages, CameraPlayers cameraPlayers) {
         this.plugin = plugin;
         this.settings = settings;
+        this.messages = messages;
         this.cameraPlayers = cameraPlayers;
+    }
+
+    /**
+     * The mode that holds for this player: the one he picked, while
+     * {@code player-choice} lets him, otherwise {@code night-vision.mode}.
+     */
+    public NightVisionMode modeFor(Player player) {
+        NightVisionMode own = settings.isNightVisionPlayerChoice() ? chosen.get(player.getUniqueId()) : null;
+        return own != null ? own : settings.getNightVisionMode();
     }
 
     /**
@@ -62,7 +82,7 @@ public final class CamNightVision {
      * comes back after an {@code /effect clear}.
      */
     public void startFor(Player player) {
-        NightVisionMode mode = settings.getNightVisionMode();
+        NightVisionMode mode = modeFor(player);
         if (mode == NightVisionMode.OFF) {
             return;
         }
@@ -125,11 +145,88 @@ public final class CamNightVision {
         }
     }
 
+    /**
+     * {@code /cam nightvision}: {@code on}, {@code off} or {@code dark} picks
+     * the mode, {@code reset} gives him the one of the file again, and on its
+     * own it switches between on and off - off if anything else holds now.
+     * Allowed before camera mode as well, for the next flight; in camera mode
+     * it holds at once.
+     */
+    public void command(Player player, String[] args) {
+        if (!settings.isNightVisionPlayerChoice()) {
+            messages.sendConfiguredMessage(player, "nightvision-off");
+            return;
+        }
+        if (args.length > 1) {
+            messages.sendConfiguredMessage(player, "nightvision-usage");
+            return;
+        }
+        UUID id = player.getUniqueId();
+        String word = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
+        if (word.equals("reset")) {
+            chosen.remove(id);
+            restart(player);
+            messages.sendConfiguredMessage(player, "nightvision-reset", "{mode}", name(modeFor(player)));
+            return;
+        }
+        NightVisionMode mode = switch (word) {
+            case "" -> modeFor(player) == NightVisionMode.OFF ? NightVisionMode.ALWAYS : NightVisionMode.OFF;
+            case "on" -> NightVisionMode.ALWAYS;
+            case "off" -> NightVisionMode.OFF;
+            case "dark" -> NightVisionMode.DARK;
+            default -> null;
+        };
+        if (mode == null) {
+            messages.sendConfiguredMessage(player, "nightvision-usage");
+            return;
+        }
+        chosen.put(id, mode);
+        restart(player);
+        messages.sendConfiguredMessage(player, "nightvision-set", "{mode}", name(mode));
+    }
+
+    /** The words of {@code /cam nightvision} that come after it, for the tab completion. */
+    public static String[] words() {
+        return new String[]{"on", "off", "dark", "reset"};
+    }
+
+    /** What the messages call a mode, {@code nightvision-always}, {@code -never} or {@code -dark}. */
+    private String name(NightVisionMode mode) {
+        return messages.getMessage(switch (mode) {
+            case ALWAYS -> "nightvision-always";
+            case OFF -> "nightvision-never";
+            case DARK -> "nightvision-dark";
+        });
+    }
+
+    /**
+     * Lets a new mode hold at once for a player in camera mode. The task is
+     * replaced, the effect itself is left to it: a night vision that is still
+     * wanted stays on without a flicker, and one that is no longer wanted the
+     * next look takes off - off as a mode has no task, so that one goes here.
+     */
+    private void restart(Player player) {
+        if (!cameraPlayers.contains(player.getUniqueId())) {
+            return;
+        }
+        if (modeFor(player) == NightVisionMode.OFF) {
+            stopFor(player);
+        } else {
+            startFor(player);
+        }
+    }
+
+    /** Forgets the choice of a player who left the server. */
+    public void forget(UUID playerId) {
+        chosen.remove(playerId);
+    }
+
     public void onDisable() {
         for (BukkitRunnable task : tasks.values()) {
             task.cancel();
         }
         tasks.clear();
         given.clear();
+        chosen.clear();
     }
 }

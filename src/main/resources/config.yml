@@ -302,7 +302,15 @@ night-vision:
   mode: dark
   # Bis zu welcher Helligkeit es als dunkel gilt, 0 bis 15 (Fackel direkt daneben: 14, Nacht unter freiem Himmel: 4).
   # Aus geht die Nachtsicht erst wieder, wenn es 2 Stufen heller ist, damit sie an der Grenze nicht flackert.
+  # Gemessen wird mit der Tageszeit der Welt, nicht mit einer eigenen von /cam time.
   light-level: 7
+  # Ob jeder Spieler selbst einstellt, wann er im Cam-Modus Nachtsicht hat (false = für alle gilt mode):
+  #   /cam nightvision on | off | dark  = immer, nie, nur im Dunkeln (dark mit light-level wie oben)
+  #   /cam nightvision reset            = wieder wie mode
+  #   /cam nightvision                  = an oder aus: aus, wenn gerade on oder dark gilt, sonst an
+  # Geht im Cam-Modus (sofort) und davor (für den nächsten Flug). Gespeichert wird es nicht: Es gilt, bis der Spieler
+  # den Server verlässt, danach wieder mode. Texte: nightvision-set, nightvision-reset.
+  player-choice: true
 
 # Töne im Cam-Modus. Nur der Spieler selbst hört sie, sonst würden sie einen unsichtbaren Spieler verraten.
 #   enabled = Ton an (true) oder aus (false)
@@ -387,6 +395,12 @@ sounds:
     sound: block.conduit.activate
     volume: 1.0
     pitch: 1.0
+  # Beim Sprung an einen Aussichtspunkt mit /cam spot <Name> (viewpoints)
+  spot:
+    enabled: true
+    sound: item.chorus_fruit.teleport
+    volume: 1.0
+    pitch: 1.0
 
 # Schutz bei einem Absturz. Was der Cam-Modus dem Spieler abnimmt (Inventar, Spielmodus, Effekte, Flug), steht,
 # solange der Cam-Modus läuft, auch in plugins/CamFly/playerdata/crash/<UUID>.yml. Beim Ende wird die Datei gelöscht.
@@ -420,7 +434,7 @@ cam-list:
 #   /cam stats reset           = die eigene auf null setzen (der Akku bleibt, wie er ist)
 #   /cam stats player <Name>   = die eines anderen (wer das darf, sagt view-others)
 # Gezählt wird ein Cam-Modus, wenn er endet. Gespeichert wird in plugins/CamFly/playerdata/stats/<UUID>.yml,
-# zusammen mit dem Ladestand des Akkus und der Wartezeit von time-limit (bei storage: file).
+# zusammen mit dem Ladestand des Akkus, der Wartezeit von time-limit und den Aussichtspunkten (bei storage: file).
 # /cam stats zeigt auch den Akku und eine Wartezeit, die noch läuft.
 statistics:
   enabled: true
@@ -558,6 +572,55 @@ exit-key:
 back-command:
   enabled: true
 
+# Aussichtspunkte: Stellen mit Blickrichtung, an die die Kamera springt - für einen Bau, den man sich immer wieder von
+# derselben Stelle aus ansieht.
+#   /cam spot set <Name>     = die Stelle, an der man gerade ist (als Kamera oder zu Fuß), mit der Blickrichtung.
+#                              Gibt es den Namen schon, wandert er hierher.
+#   /cam spot <Name>         = die Kamera springt dorthin (nur im Cam-Modus, Ton: sounds.spot, Text: spot-jumped)
+#   /cam spot delete <Name>  = den Punkt löschen
+#   /cam spot list           = alle eigenen, mit Knöpfen zum Hinspringen und Löschen (auch /cam spot allein)
+# Ein Name hat 1 bis 16 Buchstaben, Ziffern, - und _; groß oder klein zählt nicht.
+# Gesprungen wird nur, wohin die Kamera auch fliegen dürfte: in der Welt des Körpers, nicht weiter als max-distance
+# (bei max-distance-mode: signal nur, wohin das Signal reicht), nicht in ein Gebiet, das cam-area auf Stufe 2 verbietet,
+# nicht in gesperrte Lava, Wasser oder Pulverschnee und nicht in einen Block, der dort inzwischen steht. Sonst sagt
+# eine Meldung, warum nicht. Wie bei /cam back zählt der Sprung nicht als geflogen, und /cam trail hat dort eine Lücke.
+viewpoints:
+  enabled: true
+  # Wie viele Punkte jeder Spieler höchstens hat (1 bis 100)
+  max-per-player: 10
+  # Wo die Punkte liegen:
+  #   file   = in plugins/CamFly/playerdata/stats/<UUID>.yml - sie bleiben nach /cam reload und einem Neustart
+  #   memory = nur im Arbeitsspeicher - nach /cam reload oder einem Neustart sind sie weg
+  storage: file
+
+# /cam photo: der Foto-Modus, an und wieder aus, nur im Cam-Modus. Für Bilder und Videos der eigenen Bauten blendet er
+# nur für den Spieler selbst aus, was im Bild stört - alle anderen sehen weiter alles wie vorher, und an der Welt ändert
+# sich nichts. Er endet mit dem Cam-Modus, gespeichert wird nichts (Texte: photo-started, photo-ended).
+# Was am Bildschirm steht (Action-Bar, Bossbar, Hotbar), blendet F1 aus - das kann der Server nicht.
+# Wer einen Spieler anstupst oder dem Körper nahe kommt (nudge, body-alarm), zählt auch im Foto-Modus.
+photo-mode:
+  enabled: true
+  # Die anderen Spieler ausblenden, mit dem Namen, den Partikeln und dem Umriss derer im Cam-Modus. Für ihn sind sie
+  # solange auch nicht in der Tab-Liste: Anders lässt der Server einen Spieler nicht ausblenden.
+  hide-players: true
+  # Die Körper aller Spieler im Cam-Modus ausblenden, auch den eigenen, mit ihrem Namen und den Herzen
+  hide-bodies: true
+
+# /cam time: eine eigene Tageszeit im Cam-Modus - z. B. den eigenen Bau im Sonnenuntergang ansehen.
+#   /cam time day | noon | sunset | night | midnight | sunrise   = 1000, 6000, 12000, 13000, 18000, 23000
+#   /cam time <Zahl>                                             = in Ticks, 0 bis 23999
+#   /cam time reset                                              = wieder die Zeit der Welt
+# Die Zeit steht still. Nur der Spieler selbst sieht sie, die Welt läuft mit ihrer eigenen Zeit weiter.
+# Gespeichert wird sie nicht: Mit dem Ende des Cam-Modus sieht er wieder, was er vorher sah (Texte: time-set, time-reset).
+cam-time:
+  enabled: true
+
+# /cam weather: ein eigenes Wetter im Cam-Modus, wie /cam time nur für ihn und nur bis zum Ende des Cam-Modus.
+#   /cam weather clear | rain | reset   = klar, Regen (Schnee, wo es schneit), wieder das Wetter der Welt
+# Ein Gewitter für einen einzelnen Spieler kennt das Spiel nicht. Texte: weather-set, weather-reset.
+cam-weather:
+  enabled: true
+
 # /cam stop <Name> beendet den Cam-Modus eines anderen Spielers, /cam stop all den von allen - z. B. vor einem
 # Event oder einem Neustart. Er kommt zurück zu seinem Körper und erfährt, wer es war (Text: stopped-by).
 # Benutzen dürfen es die Konsole und wer das Recht camplugin.stop hat (Operatoren haben es). Ton: sounds.end-forced.
@@ -658,7 +721,7 @@ start-delay:
   # Wie lange, in Sekunden (1 bis 60)
   seconds: 3
 
-# Kein Cam-Modus direkt nach erlittenem Schaden
+# Kein Cam-Modus direkt nach erlittenem Schaden (und mit nearby-players nicht neben einem anderen Spieler)
 cam-safety:
   enabled: true
   # Wartezeit nach dem letzten Schaden in Sekunden
@@ -672,6 +735,15 @@ cam-safety:
     mobs: false
     # Nach einem Treffer auf etwas Friedliches: Tiere, Dorfbewohner, Golems und NPCs anderer Plugins (z. B. Citizens)
     friendly: false
+  # Kampfsperre nach Nähe: kein Start, solange ein anderer Spieler näher ist als nearby-radius - so flüchtet niemand
+  # in den Cam-Modus, wenn ein Gegner neben ihm steht, auch bevor der erste Schlag gefallen ist.
+  # Die Meldung sagt, von wem man wie weit weg muss: nearby-radius und wie viele Blöcke noch fehlen
+  # (Text: cam-nearby-player). Es zählen keine Spieler im Cam-Modus, keine
+  # Zuschauer, keine NPCs anderer Plugins (z. B. Citizens) und keine, die der Spieler nicht sehen kann (z. B. durch Vanish).
+  # Gilt nur mit enabled: true oben; wer nur diese Sperre will, stellt delay auf 0.
+  nearby-players: false
+  # Wie weit ein anderer Spieler mindestens weg sein muss, in Blöcken (höchstens 64, 0 = keine Sperre)
+  nearby-radius: 16.0
 
 # Wo der Cam-Modus erlaubt ist
 cam-area:

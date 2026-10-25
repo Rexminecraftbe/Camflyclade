@@ -127,7 +127,8 @@ public final class BodyAlarm {
             Location at = body.getLocation();
             for (Player other : body.getWorld().getPlayers()) {
                 if (other.equals(player) || other.getGameMode() == GameMode.SPECTATOR
-                        || cameraPlayers.contains(other.getUniqueId()) || !player.canSee(other)) {
+                        || cameraPlayers.contains(other.getUniqueId())
+                        || !plugin.getPhotoMode().sees(player, other)) {
                     continue;
                 }
                 if (other.getLocation().distanceSquared(at) <= radius * radius) {

@@ -48,7 +48,7 @@ public final class CamNudge {
      * @param owner  the camera player whose body it is
      */
     public void nudge(Player nudger, Player owner) {
-        if (!settings.isNudgeEnabled() || !owner.canSee(nudger)) {
+        if (!settings.isNudgeEnabled() || !plugin.getPhotoMode().sees(owner, nudger)) {
             return;
         }
         long now = System.currentTimeMillis();

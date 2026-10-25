@@ -85,6 +85,9 @@ messages:
   cam-list-stop: "&c[Stop]"
   cam-list-stop-hover: "&7End the cam mode of {player}"
   cam-lava-start: "&cYou cannot start cam mode in lava."
+  # cam-safety.nearby-players: {player} is the nearest other player, {radius} cam-safety.nearby-radius - how far
+  # away from him cam mode starts -, {more} how many blocks further that is, {distance} how far away he is now.
+  cam-nearby-player: "&cYou are too close to {player} to start cam mode. Get at least {radius} blocks away ({more} more)."
   cam-powder-snow-start: "&cYou cannot start cam mode in powder snow."
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
   cam-spectator-start: "&cYou cannot start cam mode in spectator mode."
@@ -156,13 +159,28 @@ messages:
   end-warning-time-limit: "&eCam mode ends in {time}"
   flight-speed: "&bFlight speed: &f{speed}x"
   hitbox.name-format: "&c[HITBOX] {player}"
+  # /cam nightvision (night-vision.player-choice): {mode} in nightvision-set and nightvision-reset is
+  # nightvision-always, nightvision-never or nightvision-dark.
+  nightvision-always: "always"
+  nightvision-dark: "only in the dark"
+  nightvision-never: "never"
+  nightvision-off: "&c/cam nightvision is switched off."
+  nightvision-reset: "&aNight vision in cam mode: {mode}, as the server has it."
+  nightvision-set: "&aNight vision in cam mode: {mode}. Holds until you leave the server."
+  nightvision-usage: "&eUse /cam nightvision on, off, dark or reset."
   no-permission: "&cYou don't have permission to use this command."
   no-player: "&cThis command can only be used by players."
   no-projectiles: "&cYou cannot shoot projectiles in camera mode."
+  # What /cam photo, /cam time, /cam weather and the jump of /cam spot say outside cam mode.
+  not-in-cam: "&cThat only works in cam mode."
   # nudge: nudge-received in the action bar of the player in cam mode, {player} being who clicked his body, and
   # nudge-sent in the action bar of that one, {player} being whose body it is.
   nudge-received: "&e{player} nudged your body!"
   nudge-sent: "&7You nudged {player}, who is in cam mode."
+  # /cam photo (photo-mode).
+  photo-ended: "&aPhoto mode off: you see everything again."
+  photo-off: "&c/cam photo is switched off."
+  photo-started: "&aPhoto mode on: the other players and the bodies are out of the picture for you. F1 hides the rest, /cam photo ends it."
   player.name-format: "{player}'s Cam"
   portal-blocked: "&cYou cannot go through {portal} portals in camera mode."
   portal-return-area: "&cCam mode is not allowed in {area}, you were brought back."
@@ -185,6 +203,30 @@ messages:
   signal-quality-none: "&4none"
   signal-quality-very-weak: "&cvery weak"
   signal-quality-weak: "&6weak"
+  # /cam spot (viewpoints): {spot} is the name of the spot, {max} viewpoints.max-per-player, {area} as in
+  # cam-area-limit, {distance} camera-mode.max-distance. spot-jumped comes in the action bar. Behind each line of
+  # spot-list-entry stand the buttons spot-button-go and spot-button-delete, and what hovering over them says.
+  spot-area: "&cSpot {spot} lies in {area}, cam mode is not allowed there."
+  spot-bad-name: "&cA spot name has 1 to 16 letters, digits, - or _, and is not set, delete or list."
+  spot-blocked: "&cSomething has been built at spot {spot} since, the camera cannot go there."
+  spot-button-delete: "&c[Delete]"
+  spot-button-delete-hover: "&7Delete {spot}: click, then press Enter"
+  spot-button-go: "&b[Go]"
+  spot-button-go-hover: "&7Jump to {spot}, in cam mode"
+  spot-deleted: "&aSpot {spot} deleted."
+  spot-full: "&cYou have {max} spots already, the most there may be. Delete one first with /cam spot delete <name>."
+  spot-jumped: "&aAt spot {spot}"
+  spot-list-empty: "&eYou have no spots yet. /cam spot set <name> saves one where you are."
+  spot-list-entry: "&7- &f{spot}&7: {x} {y} {z} ({world})"
+  spot-list-header: "&eYour spots ({count} of {max}):"
+  spot-moved: "&aSpot {spot} moved here, looking the way you look now."
+  spot-no-signal: "&cThe signal does not reach spot {spot}."
+  spot-off: "&c/cam spot is switched off."
+  spot-other-world: "&cSpot {spot} is not in the world of your body."
+  spot-saved: "&aSpot {spot} saved here, looking the way you look now."
+  spot-too-far: "&cSpot {spot} is more than {distance} blocks from your body."
+  spot-unknown: "&cYou have no spot called {spot}."
+  spot-usage: "&eUse /cam spot set <name>, /cam spot <name>, /cam spot delete <name> or /cam spot list."
   # start-delay: the countdown in the action bar, {time} being the time left, and why the start was called off.
   start-delay-cancelled: "&eCam mode start cancelled."
   start-delay-countdown: "&eCam mode in {time} &7- stand still"
@@ -216,6 +258,11 @@ messages:
   teleport-arrival-ended: "&c{player} was teleported to you. Camera mode ended."
   teleport-ended: "&cYou were teleported. Camera mode ended."
   time-limit-expired: "&cCam mode ended: Time limit expired."
+  # /cam time (cam-time) and /cam weather (cam-weather): {time} and {weather} as the player typed them.
+  time-off: "&c/cam time is switched off."
+  time-reset: "&aYou see the time of the world again."
+  time-set: "&aYour own time: {time}. Only you see it, until cam mode ends."
+  time-usage: "&eUse /cam time day, noon, sunset, night, midnight, sunrise or a time in ticks from 0 to 23999, or /cam time reset."
   # /cam trail: {number} which of the kept flights (1 the newest), {distance} in blocks, {time} how long the flight
   # took, {when} trail-flying or trail-ago (with {time} how long ago it ended), {place} as trail-place has it, {world}
   # the worlds of the flight in trail-elsewhere. trail-flights is followed by a button for each kept flight,
@@ -246,6 +293,10 @@ messages:
   unban-not-banned: "&e{player} is not banned from cam mode."
   unbanned-everybody-now: "&aCam mode is open for everybody again."
   unbanned-now: "&aYou may use cam mode again."
+  weather-off: "&c/cam weather is switched off."
+  weather-reset: "&aYou see the weather of the world again."
+  weather-set: "&aYour own weather: {weather}. Only you see it, until cam mode ends."
+  weather-usage: "&eUse /cam weather clear, rain or reset."
 
 # Names the texts above fill in for things of the game: damage types, mobs, effects, biomes,
 # structures, dimensions and portals. Each list goes by the key of the game without the part up to
@@ -582,6 +633,7 @@ message-settings:
   cam-list-entry-away: true
   cam-list-header: true
   cam-list-stop: true
+  cam-nearby-player: true
   cam-powder-snow-start: true
   cam-safety: true
   cam-spectator-start: true
@@ -611,10 +663,18 @@ message-settings:
   end-warning-time-limit: true
   enabled: true
   flight-speed: true
+  nightvision-off: true
+  nightvision-reset: true
+  nightvision-set: true
+  nightvision-usage: true
   no-permission: true
   no-projectiles: true
+  not-in-cam: true
   nudge-received: true
   nudge-sent: true
+  photo-ended: true
+  photo-off: true
+  photo-started: true
   portal-blocked: true
   portal-return-area: true
   portal-return-distance: true
@@ -624,6 +684,25 @@ message-settings:
   signal-back-to-body: true
   signal-ended: true
   signal-lost: true
+  spot-area: true
+  spot-bad-name: true
+  spot-blocked: true
+  spot-button-delete: true
+  spot-button-go: true
+  spot-deleted: true
+  spot-full: true
+  spot-jumped: true
+  spot-list-empty: true
+  spot-list-entry: true
+  spot-list-header: true
+  spot-moved: true
+  spot-no-signal: true
+  spot-off: true
+  spot-other-world: true
+  spot-saved: true
+  spot-too-far: true
+  spot-unknown: true
+  spot-usage: true
   start-delay-cancelled: true
   start-delay-countdown: true
   start-delay-damaged: true
@@ -654,6 +733,10 @@ message-settings:
   teleport-arrival-ended: true
   teleport-ended: true
   time-limit-expired: true
+  time-off: true
+  time-reset: true
+  time-set: true
+  time-usage: true
   trail-all-entry: true
   trail-all-header: true
   trail-button: true
@@ -675,3 +758,7 @@ message-settings:
   unban-not-banned: true
   unbanned-everybody-now: true
   unbanned-now: true
+  weather-off: true
+  weather-reset: true
+  weather-set: true
+  weather-usage: true

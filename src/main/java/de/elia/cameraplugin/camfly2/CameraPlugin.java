@@ -39,6 +39,7 @@ import de.elia.cameraplugin.movement.CamBorderWall;
 import de.elia.cameraplugin.movement.CamMovementGuard;
 import de.elia.cameraplugin.nightvision.CamNightVision;
 import de.elia.cameraplugin.nudge.CamNudge;
+import de.elia.cameraplugin.photo.CamPhotoMode;
 import de.elia.cameraplugin.potion.CamPotionGuard;
 import de.elia.cameraplugin.scoreboard.CamModeObjective;
 import de.elia.cameraplugin.scoreboard.NoCollisionTeam;
@@ -50,7 +51,9 @@ import de.elia.cameraplugin.session.ExitKey;
 import de.elia.cameraplugin.session.SessionListener;
 import de.elia.cameraplugin.session.SessionTracker;
 import de.elia.cameraplugin.signal.CamSignal;
+import de.elia.cameraplugin.sky.CamSky;
 import de.elia.cameraplugin.speed.CamFlightSpeed;
+import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.start.CamStarter;
 import de.elia.cameraplugin.start.StartChecks;
 import de.elia.cameraplugin.start.StartDelay;
@@ -102,7 +105,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamNameTag nameTag = new CamNameTag(this, settings, messages, cameraPlayers);
     private final CamActionBar actionBar = new CamActionBar(this);
     private final CamFlightSpeed flightSpeed = new CamFlightSpeed(this);
-    private final CamNightVision nightVision = new CamNightVision(this, settings, cameraPlayers);
+    private final CamNightVision nightVision = new CamNightVision(this, settings, messages, cameraPlayers);
     private final CamList camList = new CamList(settings, messages, cameraPlayers);
     private final CamListTeleport listTeleport = new CamListTeleport(this);
     private final CamStop stop = new CamStop(this);
@@ -123,6 +126,9 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamSignal signal = new CamSignal(this);
     private final CamAfk afk = new CamAfk(this);
     private final CamBack back = new CamBack(this);
+    private final CamSpots spots = new CamSpots(this, playerStore);
+    private final CamPhotoMode photoMode = new CamPhotoMode(this);
+    private final CamSky sky = new CamSky(this);
     private final StartChecks startChecks = new StartChecks(settings, messages, cameraPlayers);
     private final StartDelay startDelay = new StartDelay(this);
     private final CamStarter starter = new CamStarter(this);
@@ -220,6 +226,7 @@ public final class CameraPlugin extends JavaPlugin {
                 trail,
                 new ExitKey(this),
                 afk,
+                photoMode,
                 new CamSuggestionFilter(this));
         for (Listener listener : listeners) {
             pluginManager.registerEvents(listener, this);
@@ -319,6 +326,7 @@ public final class CameraPlugin extends JavaPlugin {
         nudge.onDisable();
         signal.onDisable();
         afk.onDisable();
+        photoMode.onDisable();
         startDelay.onDisable();
         trail.onDisable();
         // After camera mode has ended for everybody, which settled the
@@ -401,6 +409,7 @@ public final class CameraPlugin extends JavaPlugin {
         camLog.reset();
         battery.onReload();
         trail.onReload();
+        spots.onReload();
         return true;
     }
 
@@ -599,6 +608,18 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamBack getBack() {
         return back;
+    }
+
+    public CamSpots getSpots() {
+        return spots;
+    }
+
+    public CamPhotoMode getPhotoMode() {
+        return photoMode;
+    }
+
+    public CamSky getSky() {
+        return sky;
     }
 
     public StartChecks getStartChecks() {

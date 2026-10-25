@@ -99,6 +99,13 @@ public final class CamSettings {
     /** The most flights {@code cam-trail.flights} keeps of each player. */
     private static final int MAX_TRAIL_FLIGHTS = 20;
 
+    /**
+     * The most spots {@code viewpoints.max-per-player} lets each player keep.
+     * {@code /cam spot list} sends a line for each of them, and more than this
+     * no longer fits into the chat a player scrolls back through.
+     */
+    private static final int MAX_VIEWPOINTS = 100;
+
     /** The levels of {@code signal.levels}, from the most bars down, as the config file names them. */
     private static final String[] SIGNAL_LEVEL_NAMES = {"excellent", "good", "medium", "weak"};
 
@@ -252,6 +259,8 @@ public final class CamSettings {
     private NightVisionMode nightVisionMode;
     /** Up to which light level it counts as dark, {@code night-vision.light-level}. */
     private int nightVisionLightLevel;
+    /** Whether each player picks his own with {@code /cam nightvision}, {@code night-vision.player-choice}. */
+    private boolean nightVisionPlayerChoice;
 
     /** The sounds of {@code sounds}, {@link CamSound#OFF} for one that is switched off. */
     private CamSound startSound;
@@ -266,6 +275,7 @@ public final class CamSettings {
     private CamSound nudgeSound;
     private CamSound signalLostSound;
     private CamSound signalBackSound;
+    private CamSound spotSound;
 
     /** Whether camera mode leaves a file to recover from a crash, {@code crash-protection.enabled}. */
     private boolean crashProtectionEnabled;
@@ -292,6 +302,25 @@ public final class CamSettings {
 
     /** Whether {@code /cam back} takes the camera back to its body, {@code back-command.enabled}. */
     private boolean backCommandEnabled;
+
+    /** Whether {@code /cam spot} keeps spots to jump to, {@code viewpoints.enabled}. */
+    private boolean viewpointsEnabled;
+    /** How many spots each player may keep, {@code viewpoints.max-per-player}. */
+    private int viewpointsMax;
+    /** Where the spots are kept, {@code viewpoints.storage}. */
+    private StorageMode viewpointsStorage;
+
+    /** Whether {@code /cam photo} is there, {@code photo-mode.enabled}. */
+    private boolean photoModeEnabled;
+    /** Whether it hides the other players, {@code photo-mode.hide-players}. */
+    private boolean photoHidePlayers;
+    /** Whether it hides the bodies, {@code photo-mode.hide-bodies}. */
+    private boolean photoHideBodies;
+
+    /** Whether {@code /cam time} gives the camera player a time of his own, {@code cam-time.enabled}. */
+    private boolean camTimeEnabled;
+    /** Whether {@code /cam weather} gives him a weather of his own, {@code cam-weather.enabled}. */
+    private boolean camWeatherEnabled;
 
     /** Whether the player waits before camera mode starts, {@code start-delay.enabled}. */
     private boolean startDelayEnabled;
@@ -377,6 +406,10 @@ public final class CamSettings {
     private boolean camSafetyAfterMobs;
     /** The same for a hit on anything friendly, {@code cam-safety.after-attack.friendly}. */
     private boolean camSafetyAfterFriendly;
+    /** Whether another player close by keeps camera mode from starting, {@code cam-safety.nearby-players}. */
+    private boolean camSafetyNearbyPlayers;
+    /** How close he has to be for that, in blocks, {@code cam-safety.nearby-radius}. */
+    private double camSafetyNearbyRadius;
 
     /** Whether the key that swaps the hands ends camera mode, {@code exit-key.enabled}. */
     private boolean exitKeyEnabled;
@@ -552,6 +585,7 @@ public final class CamSettings {
             default -> NightVisionMode.DARK;
         };
         nightVisionLightLevel = config.getInt("night-vision.light-level", 7, 0, MAX_LIGHT_LEVEL);
+        nightVisionPlayerChoice = config.getBoolean("night-vision.player-choice", true);
         String allowedSounds = messages.configMessage("config-allowed-sounds");
         startSound = CamSound.read(config, "sounds.start", allowedSounds, "block.beacon.activate", 1.0);
         endSound = CamSound.read(config, "sounds.end", allowedSounds, "block.beacon.deactivate", 1.0);
@@ -571,6 +605,7 @@ public final class CamSettings {
                 "block.conduit.deactivate", 1.0);
         signalBackSound = CamSound.read(config, "sounds.signal-back", allowedSounds,
                 "block.conduit.activate", 1.0);
+        spotSound = CamSound.read(config, "sounds.spot", allowedSounds, "item.chorus_fruit.teleport", 1.0);
         crashProtectionEnabled = config.getBoolean("crash-protection.enabled", true);
         camListAccess = readAccess(config, "cam-list.access");
         camListTeleport = config.getBoolean("cam-list.teleport", true);
@@ -581,6 +616,14 @@ public final class CamSettings {
         afkEndSeconds = config.getInt("afk-end.seconds", 300, MIN_AFK_SECONDS);
         afkWarningPercent = config.getInt("afk-end.warning-percent", 80, 0, 99);
         backCommandEnabled = config.getBoolean("back-command.enabled", true);
+        viewpointsEnabled = config.getBoolean("viewpoints.enabled", true);
+        viewpointsMax = config.getInt("viewpoints.max-per-player", 10, 1, MAX_VIEWPOINTS);
+        viewpointsStorage = readStorage(config, "viewpoints.storage");
+        photoModeEnabled = config.getBoolean("photo-mode.enabled", true);
+        photoHidePlayers = config.getBoolean("photo-mode.hide-players", true);
+        photoHideBodies = config.getBoolean("photo-mode.hide-bodies", true);
+        camTimeEnabled = config.getBoolean("cam-time.enabled", true);
+        camWeatherEnabled = config.getBoolean("cam-weather.enabled", true);
         startDelayEnabled = config.getBoolean("start-delay.enabled", false);
         startDelaySeconds = config.getInt("start-delay.seconds", 3, 1, MAX_START_DELAY_SECONDS);
         trailEnabled = config.getBoolean("cam-trail.enabled", false);
@@ -615,6 +658,9 @@ public final class CamSettings {
         camSafetyAfterPlayers = config.getBoolean("cam-safety.after-attack.players", false);
         camSafetyAfterMobs = config.getBoolean("cam-safety.after-attack.mobs", false);
         camSafetyAfterFriendly = config.getBoolean("cam-safety.after-attack.friendly", false);
+        camSafetyNearbyPlayers = config.getBoolean("cam-safety.nearby-players", false);
+        camSafetyNearbyRadius = config.getDouble("cam-safety.nearby-radius", 16.0, 0.0,
+                MobTargeting.MAX_MOB_TARGET_RANGE);
         exitKeyEnabled = config.getBoolean("exit-key.enabled", true);
         readBattery(config);
         readStartCost(config);
@@ -1252,6 +1298,11 @@ public final class CamSettings {
         return nightVisionLightLevel;
     }
 
+    /** Whether a player may pick his own night vision with {@code /cam nightvision}. */
+    public boolean isNightVisionPlayerChoice() {
+        return nightVisionPlayerChoice;
+    }
+
     // ------------------------------------------------------- sounds, cam-list
 
     public CamSound getStartSound() {
@@ -1304,6 +1355,10 @@ public final class CamSettings {
         return signalBackSound;
     }
 
+    public CamSound getSpotSound() {
+        return spotSound;
+    }
+
     public ListAccess getCamListAccess() {
         return camListAccess;
     }
@@ -1342,6 +1397,40 @@ public final class CamSettings {
 
     public boolean isBackCommandEnabled() {
         return backCommandEnabled;
+    }
+
+    // ------------------------------------------- viewpoints, photo-mode, cam-time, cam-weather
+
+    public boolean isViewpointsEnabled() {
+        return viewpointsEnabled;
+    }
+
+    public int getViewpointsMax() {
+        return viewpointsMax;
+    }
+
+    public StorageMode getViewpointsStorage() {
+        return viewpointsStorage;
+    }
+
+    public boolean isPhotoModeEnabled() {
+        return photoModeEnabled;
+    }
+
+    public boolean photoHidesPlayers() {
+        return photoHidePlayers;
+    }
+
+    public boolean photoHidesBodies() {
+        return photoHideBodies;
+    }
+
+    public boolean isCamTimeEnabled() {
+        return camTimeEnabled;
+    }
+
+    public boolean isCamWeatherEnabled() {
+        return camWeatherEnabled;
     }
 
     // ------------------------------------------------------ start-delay, cam-trail
@@ -1471,6 +1560,19 @@ public final class CamSettings {
 
     public boolean waitsAfterHittingFriendly() {
         return camSafetyAfterFriendly;
+    }
+
+    /**
+     * Whether another player close by keeps camera mode from starting: the
+     * safety switched on, {@code nearby-players} as well, and a radius anybody
+     * can stand inside of.
+     */
+    public boolean locksNearPlayers() {
+        return camSafetyEnabled && camSafetyNearbyPlayers && camSafetyNearbyRadius > 0.0;
+    }
+
+    public double getCamSafetyNearbyRadius() {
+        return camSafetyNearbyRadius;
     }
 
     // --------------------------------------------------------------- exit-key

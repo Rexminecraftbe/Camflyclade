@@ -257,6 +257,24 @@ public final class CamSignal {
     }
 
     /**
+     * Whether the signal reaches a spot the camera is to be put down at, a
+     * spot of {@code /cam spot}: measured the way {@link #measure} measures
+     * it at the camera, from the eyes of the body to the eyes of the camera
+     * there. Only in the world of the body, the one a spot is jumped to.
+     *
+     * @param feet where the feet of the camera would be
+     */
+    public boolean reaches(Player player, CameraData data, Location feet) {
+        LivingEntity body = data.getBody();
+        if (!body.getWorld().equals(feet.getWorld())) {
+            return false;
+        }
+        Location eyes = feet.clone().add(0.0, player.getEyeHeight(), 0.0);
+        return SignalPath.strength(body.getEyeLocation(), eyes, settings.getMaxDistance(),
+                settings.getSignalCosts()) > 0.0;
+    }
+
+    /**
      * The signal has been gone for {@code lost-seconds}: back to the body, or
      * the end of camera mode.
      */

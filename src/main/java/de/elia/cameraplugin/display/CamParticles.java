@@ -63,7 +63,7 @@ public final class CamParticles {
                 double spread = settings.getParticleSpread();
                 for (Player viewer : Bukkit.getOnlinePlayers()) {
                     if (viewer.equals(player)) continue;
-                    if (shouldShowParticlesTo(viewer, particleLoc)) {
+                    if (shouldShowParticlesTo(viewer, player, particleLoc)) {
                         viewer.spawnParticle(settings.getParticleType(), particleLoc,
                                 count, spread, spread, spread, 0);
                     }
@@ -80,9 +80,13 @@ public final class CamParticles {
      * <p>The world is asked first: a camera player who went through a portal is
      * a world away, and the particles carry only coordinates, so everybody over
      * here would see them floating at the same spot in his own world.</p>
+     *
+     * <p>Nobody gets them who does not see the camera player himself: they
+     * would show where he is to a viewer he is hidden from - in photo mode,
+     * say, or by a vanish plugin.</p>
      */
-    private boolean shouldShowParticlesTo(Player viewer, Location particleLoc) {
-        if (!viewer.getWorld().equals(particleLoc.getWorld())) {
+    private boolean shouldShowParticlesTo(Player viewer, Player camPlayer, Location particleLoc) {
+        if (!viewer.getWorld().equals(particleLoc.getWorld()) || !viewer.canSee(camPlayer)) {
             return false;
         }
         return switch (settings.getPlayerVisibilityMode()) {

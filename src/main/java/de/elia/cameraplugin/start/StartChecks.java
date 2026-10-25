@@ -7,6 +7,7 @@ import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.ChatColor;
 import org.bukkit.FluidCollisionMode;
 import org.bukkit.GameMode;
+import org.bukkit.Location;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.ArmorStand;
@@ -34,7 +35,8 @@ import java.util.UUID;
 
 /**
  * Whether a player may start camera mode right now: not straight after a hit -
- * taken, or with {@code cam-safety.after-attack} handed out -, not as a
+ * taken, or with {@code cam-safety.after-attack} handed out -, not with another
+ * player close by while {@code cam-safety.nearby-players} is on, not as a
  * spectator, not with the wrong effects on him, not in a forbidden area, not
  * in lava, water or powder snow that camera mode is kept out of and not in the
  * middle of a fall.
@@ -160,6 +162,62 @@ public final class StartChecks implements Listener {
             player.sendMessage(ChatColor.RED + msg);
         }
         return false;
+    }
+
+    /**
+     * Checks whether another player stands close by, as
+     * {@code cam-safety.nearby-players} and {@code nearby-radius} have it.
+     * With somebody right next to him, camera mode would be the way out of a
+     * fight before its first blow - the wait after a hit only comes once a
+     * blow has fallen.
+     *
+     * <p>Counted is whoever he can see and could fight: nobody in camera mode,
+     * no spectator, no NPC of another plugin such as Citizens, and nobody a
+     * vanish plugin hides from him - he could not tell what turns him
+     * away.</p>
+     *
+     * <p>The message tells him how far he has to get from the nearest of
+     * them: {@code nearby-radius} in all, and how many blocks more that is.
+     * Exactly that far away he may start.</p>
+     *
+     * @return whether he may start; if not, he has been told whom to get away
+     *         from, and how far
+     */
+    public boolean checkCamNearby(Player player) {
+        if (!settings.locksNearPlayers()) {
+            return true;
+        }
+        double radius = settings.getCamSafetyNearbyRadius();
+        Location at = player.getLocation();
+        Player nearest = null;
+        double nearestSquared = radius * radius;
+        for (Player other : player.getWorld().getPlayers()) {
+            if (other.equals(player) || other.getGameMode() == GameMode.SPECTATOR
+                    || cameraPlayers.contains(other.getUniqueId()) || other.hasMetadata("NPC")
+                    || !player.canSee(other)) {
+                continue;
+            }
+            double squared = other.getLocation().distanceSquared(at);
+            if (squared < nearestSquared) {
+                nearest = other;
+                nearestSquared = squared;
+            }
+        }
+        if (nearest == null) {
+            return true;
+        }
+        double distance = Math.sqrt(nearestSquared);
+        // Rounded up: a step short of the radius is still too close.
+        long more = Math.max(1L, (long) Math.ceil(radius - distance));
+        messages.sendMessage(player, "cam-nearby-player", "{player}", nearest.getName(),
+                "{radius}", blocks(radius), "{more}", String.valueOf(more),
+                "{distance}", String.valueOf(Math.round(distance)));
+        return false;
+    }
+
+    /** A number of blocks as the file has it, without ".0" behind a whole one. */
+    private static String blocks(double value) {
+        return value == Math.rint(value) ? String.valueOf((long) value) : String.valueOf(value);
     }
 
     /**

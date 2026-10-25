@@ -1177,6 +1177,30 @@ bot._client.on('boss_bar', (packet) => {
     bossbars[id].dividers = packet.dividers;
   }
 });
+// Die Tageszeit und das Wetter, wie der Server sie diesem Client schickt, fuer
+// /cam time und /cam weather: Die geben einem Spieler eine eigene, und die
+// sieht nur sein Client. Das Zeitpaket als Text des ganzen Pakets, wie bei den
+// Toenen, dazu was mineflayer daraus liest.
+let skyTime = null;
+bot._client.on('update_time', (packet) => { skyTime = soundText(packet); });
+// Wie stark es regnet, so wie der echte Client es rechnet: Ereignis 1
+// (START_RAINING) setzt den Regen auf 0, von wo ihn die Ereignisse 7 steigen
+// lassen, Ereignis 2 (STOP_RAINING) auf 1, von wo sie ihn fallen lassen.
+// bot.isRaining nimmt die Namen woertlich und sagt nach /cam weather reset
+// "Regen", obwohl der Client ihn auf 0 hat: Bukkit schickt fuer eigenes
+// Wetter die beiden Ereignisse genau verkehrt herum, und der Client zeigt,
+// was die Staerke sagt.
+const RAIN_EVENTS = ['no_respawn_block_available', 'start_raining', 'stop_raining', 'change_game_mode',
+  'win_game', 'demo_event', 'play_arrow_hit_sound', 'rain_level_change'];
+let rainLevel = 0;
+const rainEvents = [];
+bot._client.on('game_state_change', (packet) => {
+  const reason = typeof packet.reason === 'number' ? packet.reason : RAIN_EVENTS.indexOf(packet.reason);
+  if (reason === 1) rainLevel = 0;
+  else if (reason === 2) rainLevel = 1;
+  else if (reason === 7) rainLevel = packet.gameMode;
+  if (reason === 1 || reason === 2 || reason === 7) rainEvents.push([reason, packet.gameMode]);
+});
 bot.on('blockUpdate', (alt, neu) => {
   if (!watched || !neu || !neu.position) return;
   const folge = watched[`${neu.position.x},${neu.position.y},${neu.position.z}`];
@@ -1299,6 +1323,9 @@ async function handle(cmd) {
       }, cmd.timeout || 5000);
       return { value: hit ? parseFloat(hit[1]) : null };
     }
+    case 'sky':
+      return { timeOfDay: bot.time ? bot.time.timeOfDay : null, rain: rainLevel, packet: skyTime,
+               events: rainEvents.slice(-6) };
     case 'state':
       return {
         gameMode: bot.game && bot.game.gameMode,
@@ -4804,6 +4831,682 @@ def vorschlag_checks(env, bot):
     finally:
         set_options(env, [("flight-limit", "false"), ("enabled", "true", "statistics"),
                           ("access", "admin", "cam-list")])
+
+
+def spots_loeschen(bot, *namen):
+    """Die Aussichtspunkte des Bots loeschen, die ein frueherer Lauf
+    hinterlassen haben kann. Die Datei des Bots bleibt zwischen zwei Laeufen
+    stehen, und solange er online ist, haelt das Plugin sie im Speicher - in
+    der Datei zu loeschen hiesse, nichts zu loeschen."""
+    for name in namen:
+        bot.chat(f"/cam spot delete {name}")
+        time.sleep(0.3)
+    time.sleep(0.5)
+
+
+def aussichtspunkt_checks(env, bot):
+    """viewpoints: /cam spot merkt sich Stellen mit Blickrichtung, und die
+    Kamera springt dorthin - nur, wohin sie auch fliegen duerfte.
+
+    Voreingestellt ist es an, mit 10 Punkten je Spieler, in der Datei -
+    nachgesehen in der ausgelieferten Datei. Der Bot fliegt hoch und zur
+    Seite, schaut nach Osten und merkt sich die Stelle als "Turm". Von
+    woanders springt er mit "/cam spot turm" zurueck - gross und klein zaehlt
+    nicht -, im Cam-Modus, mit dem Ton von sounds.spot und "At spot Turm" in
+    der Action-Bar, und schaut danach wieder nach Osten. Ohne Cam-Modus
+    springt er nicht. /cam spot list zeigt den Punkt mit einem Klick auf
+    "/cam spot Turm" und einem, der "/cam spot delete Turm" in die Zeile
+    legt, und in der Datei des Bots steht er unter spots.
+
+    Ein Punkt, den der Bot zu Fuss zehn Bloecke weiter gesetzt hat, geht mit
+    max-distance 100. Mit max-distance: 6 ist er zu weit, in einem verbotenen
+    Biom gesperrt, mit einem Stein an seiner Stelle verstellt, und unter
+    max-distance-mode: signal kommt das Signal durch eine Wand aus
+    Grundgestein dazwischen nicht hin - jedes Mal mit der Meldung, warum, und
+    die Kamera bleibt, wo sie ist.
+
+    Ein falscher Name, ein voller Platz, ein unbekannter Punkt und das
+    Loeschen sagen, was los ist; ein Name, den es schon gibt, wandert, auch
+    wenn kein Platz mehr frei ist. Die Tab-Vervollstaendigung bietet nach
+    /cam spot set, delete, list und die Namen an, nach /cam spot delete die
+    Namen. Mit storage: memory steht der Punkt nicht in der Datei, und nach
+    /cam reload ist er weg.
+    """
+    def tab(text):
+        return bot.call("tab", text=text).get("matches", [])
+
+    def bleibt(vorher, nachher):
+        return vorher is not None and nachher is not None and math.dist(vorher, nachher) < 0.5
+
+    def datei_text():
+        datei = spielerdatei(env)
+        return datei.read_text(encoding="utf-8") if datei else ""
+
+    if not FIND.test("Cam-Modus ist vor dem Test der Aussichtspunkte aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    bx, bz = _floor(x) + 10, _floor(z)
+    # Luft ueber dem Platz und bis zum Punkt zehn Bloecke weiter, falls dort
+    # ein Haus eines Dorfes steht.
+    console(env, f"fill {_floor(x) - 3} {y} {bz - 3} {bx + 2} {y + 8} {bz + 3} minecraft:air", pause=0.5)
+    biom = f"{bx - 4} {max(-64, y - 4)} {bz - 4} {bx + 4} {min(320, y + 4)} {bz + 4}"
+    wand = f"{_floor(x) + 5} {y} {bz - 3} {_floor(x) + 5} {y + 4} {bz + 3}"
+    try:
+        FIND.test("Voreingestellt steht viewpoints mit enabled: true, max-per-player: 10 und storage: file da",
+                  re.search(r"(?m)^viewpoints:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*max-per-player:\s*10\s*\n"
+                            r"(?:\s*#.*\n)*\s*storage:\s*file\s*$", ausgeliefert(env)) is not None, "")
+        spots_loeschen(bot, "Turm", "Weit", "Mem")
+        zeilen = befehl(bot, "/cam spot")
+        FIND.test("/cam spot ohne Punkte sagt, wie man einen setzt", gesagt(zeilen, r"You have no spots yet"),
+                  zeige(zeilen))
+
+        hinstellen(bot, x, y, z)
+        if not FIND.test("Cam-Modus fuer die Aussichtspunkte gestartet", cam_on(bot), ""):
+            return
+        bot.call("fly", wait=30, dy=4, dx=3, timeout=15000)
+        time.sleep(1.0)
+        # Nach Osten, ohne die Stelle zu aendern; teleports.command: false
+        # laesst den Cam-Modus dabei laufen.
+        bot.chat("/tp @s ~ ~ ~ -90 20")
+        time.sleep(1.0)
+        punkt = bot.server_pos()
+        zeilen = befehl(bot, "/cam spot set Turm")
+        FIND.test("/cam spot set Turm - der Punkt ist gemerkt", gesagt(zeilen, r"Spot Turm saved here"), zeige(zeilen))
+        bot.chat("/tp @s ~ ~ ~ 90 0")
+        time.sleep(0.5)
+        bot.call("fly", wait=30, dy=-2, dx=-5, timeout=15000)
+        time.sleep(1.0)
+        weg = bot.server_pos()
+        seit = toene_marke(bot)
+        zeilen = befehl(bot, "/cam spot turm")
+        da = bot.server_pos()
+        blick = bot.server_data("Rotation[0]")
+        FIND.test("/cam spot turm - die Kamera steht wieder am Punkt, gross und klein zaehlt nicht",
+                  punkt is not None and weg is not None and math.dist(weg, punkt) > 3 and bleibt(punkt, da),
+                  f"{punkt} -> {weg} -> {da}")
+        FIND.test("/cam spot: der Cam-Modus laeuft weiter", spielmodus_ist(bot, "adventure"), "")
+        FIND.test("/cam spot: die Kamera schaut wieder, wohin sie beim Setzen schaute",
+                  blick is not None and abs(blick + 90.0) < 1.0, str(blick))
+        FIND.test("/cam spot: \"At spot Turm\" in der Action-Bar", gesagt(zeilen, r"At spot Turm"), zeige(zeilen))
+        FIND.test("sounds.spot - der Ton beim Sprung", ton_da(bot, seit, "item.chorus_fruit.teleport"), "")
+
+        cam_off(bot)
+        zeilen = befehl(bot, "/cam spot Turm")
+        FIND.test("/cam spot ohne Cam-Modus springt nicht", gesagt(zeilen, r"only works in cam mode"), zeige(zeilen))
+        seit = bot.call("chat_packets", since=10 ** 9).get("count", 0)
+        zeilen = befehl(bot, "/cam spot list")
+        pakete = " ".join(p["text"] for p in bot.call("chat_packets", since=seit).get("packets", []))
+        FIND.test("/cam spot list - der Punkt, mit Knoepfen zum Hinspringen und zum Loeschen",
+                  gesagt(zeilen, r"Your spots \(1 of 10\)") and gesagt(zeilen, r"- Turm: ")
+                  and "/cam spot Turm" in pakete and "/cam spot delete Turm" in pakete,
+                  f"{zeige(zeilen)} / {pakete[-300:]}")
+        text = datei_text()
+        FIND.test("storage: file - der Punkt steht in der Datei des Bots unter spots",
+                  re.search(r"(?m)^spots:\s*$", text) is not None and re.search(r"name:\s*Turm", text) is not None,
+                  text[-300:] or "keine Datei")
+
+        hinstellen(bot, bx + 0.5, y, z)
+        zeilen = befehl(bot, "/cam spot set Weit")
+        FIND.test("/cam spot set geht auch zu Fuss", gesagt(zeilen, r"Spot Weit saved here"), zeige(zeilen))
+        weit = (bx + 0.5, y, z)
+        hinstellen(bot, x, y, z)
+        cam_on(bot)
+        zeilen = befehl(bot, "/cam spot Weit")
+        FIND.test("/cam spot Weit - zehn Bloecke weg, mit max-distance 100", bleibt(weit, bot.server_pos()),
+                  zeige(zeilen))
+        tabs = tab("/cam spot ")
+        FIND.test("Tab nach /cam spot: set, delete, list und die Namen",
+                  all(w in tabs for w in ("set", "delete", "list", "Turm", "Weit")), str(tabs))
+        tabs = tab("/cam spot delete W")
+        FIND.test("Tab nach /cam spot delete: die Namen", tabs == ["Weit"], str(tabs))
+
+        def gesperrt(name, muster, wann):
+            """Vom Koerper aus zum Punkt Weit springen: Er ist gesperrt, die
+            Meldung sagt warum, und die Kamera bleibt am Koerper."""
+            hinstellen(bot, x, y, z)
+            cam_on(bot)
+            vorher = bot.server_pos()
+            zeilen = befehl(bot, "/cam spot Weit")
+            FIND.test(name, gesagt(zeilen, muster) and bleibt(vorher, bot.server_pos()),
+                      f"{wann}: {zeige(zeilen)}")
+
+        # Jeder reload beendet den Cam-Modus, gesperrt() startet ihn neu.
+        set_option(env, "max-distance", "6.0")
+        gesperrt("max-distance: 6 - der Punkt ist zu weit, die Kamera bleibt",
+                 r"Spot Weit is more than 6\.0 blocks from your body", "max-distance 6")
+        set_option(env, "max-distance", "100.0")
+
+        bot.chat(f"/fillbiome {biom} minecraft:lush_caves")
+        time.sleep(1.5)
+        gesperrt("cam-area: der Punkt liegt in einem verbotenen Biom, die Kamera bleibt",
+                 r"Spot Weit lies in Lush Caves", "Biom")
+        bot.chat(f"/fillbiome {biom} minecraft:plains")
+        time.sleep(1.5)
+
+        bot.chat(f"/setblock {bx} {y} {bz} minecraft:stone")
+        time.sleep(0.5)
+        gesperrt("Ein Stein an der Stelle - der Punkt ist verstellt, die Kamera bleibt",
+                 r"Something has been built at spot Weit", "Stein")
+        bot.chat(f"/setblock {bx} {y} {bz} minecraft:air")
+        time.sleep(0.5)
+
+        set_option(env, "max-distance-mode", "signal")
+        bot.chat(f"/fill {wand} minecraft:bedrock")
+        time.sleep(0.5)
+        gesperrt("max-distance-mode: signal - durch Grundgestein reicht das Signal nicht zum Punkt",
+                 r"The signal does not reach spot Weit", "Signal")
+        bot.chat(f"/fill {wand} minecraft:air")
+        time.sleep(0.5)
+        set_option(env, "max-distance-mode", "fixed")
+
+        cam_off(bot)
+        for name, eingabe, muster in (
+                ("/cam spot set mit einem Punkt im Namen", "/cam spot set a.b", r"A spot name has 1 to 16"),
+                ("/cam spot set list - ein Wort des Befehls ist kein Name", "/cam spot set list",
+                 r"A spot name has 1 to 16"),
+                ("/cam spot delete eines unbekannten Punkts", "/cam spot delete Nix", r"You have no spot called Nix")):
+            zeilen = befehl(bot, eingabe)
+            FIND.test(name, gesagt(zeilen, muster), zeige(zeilen))
+        set_option(env, "max-per-player", "2")
+        zeilen = befehl(bot, "/cam spot set Dritter")
+        FIND.test("max-per-player: 2 - ein dritter Punkt hat keinen Platz",
+                  gesagt(zeilen, r"You have 2 spots already"), zeige(zeilen))
+        zeilen = befehl(bot, "/cam spot set turm")
+        FIND.test("max-per-player: 2 - ein Name, den es schon gibt, wandert trotzdem",
+                  gesagt(zeilen, r"Spot turm moved here"), zeige(zeilen))
+        set_option(env, "max-per-player", "10")
+        zeilen = befehl(bot, "/cam spot delete Turm")
+        FIND.test("/cam spot delete Turm - der Punkt ist geloescht", gesagt(zeilen, r"Spot turm deleted"),
+                  zeige(zeilen))
+        cam_on(bot)
+        zeilen = befehl(bot, "/cam spot Turm")
+        FIND.test("Ein geloeschter Punkt ist weg", gesagt(zeilen, r"You have no spot called Turm"), zeige(zeilen))
+        cam_off(bot)
+
+        set_option(env, "storage", "memory", "viewpoints")
+        zeilen = befehl(bot, "/cam spot set Mem")
+        text = datei_text()
+        FIND.test("storage: memory - der Punkt ist gemerkt, aber nicht in der Datei",
+                  gesagt(zeilen, r"Spot Mem saved here") and re.search(r"name:\s*Mem", text) is None, zeige(zeilen))
+        console(env, "cam reload", pause=2)
+        zeilen = befehl(bot, "/cam spot list")
+        FIND.test("storage: memory - nach /cam reload ist der Punkt weg", gesagt(zeilen, r"You have no spots yet"),
+                  zeige(zeilen))
+        set_option(env, "storage", "file", "viewpoints")
+        zeilen = befehl(bot, "/cam spot list")
+        FIND.test("storage: file - der Punkt aus der Datei ist wieder da", gesagt(zeilen, r"- Weit: "), zeige(zeilen))
+    finally:
+        try:
+            cam_off(bot)
+            set_options(env, [("max-distance", "100.0"), ("max-distance-mode", "fixed"),
+                              ("max-per-player", "10"), ("storage", "file", "viewpoints")])
+            spots_loeschen(bot, "Turm", "Weit", "Mem", "Dritter")
+            bot.chat(f"/fill {wand} minecraft:air")
+            bot.chat(f"/setblock {bx} {y} {bz} minecraft:air")
+            bot.chat(f"/fillbiome {biom} minecraft:plains")
+            time.sleep(1.0)
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Aussichtspunkte: {exc}")
+
+
+def foto_checks(env, bot):
+    """photo-mode: /cam photo blendet fuer den Kamera-Spieler aus, was im Bild
+    stoert - und nur fuer ihn.
+
+    Voreingestellt ist er an und blendet Spieler und Koerper aus -
+    nachgesehen in der ausgelieferten Datei. Ein zweiter Spieler steht drei
+    Bloecke neben dem Koerper des Bots. Im Foto-Modus ist er beim Bot nicht
+    mehr da, und der Koerper des Bots mit seinem Namen auch nicht; beim
+    zweiten Spieler steht der Koerper weiter. Stupst er den Koerper an,
+    erfaehrt der Bot es trotzdem. Geht er selbst in den Cam-Modus, bleiben er
+    und sein neuer Koerper beim Bot unsichtbar. Ein zweites /cam photo zeigt
+    alles wieder, ebenso das Ende des Cam-Modus. Wer waehrend des Foto-Modus
+    geht und danach wiederkommt, ist wieder zu sehen. Mit hide-players: false
+    bleibt der zweite Spieler im Bild, nur der Koerper geht. Ohne Cam-Modus
+    geht /cam photo nicht, mit enabled: false gar nicht, und die
+    Tab-Vervollstaendigung bietet es nur im Cam-Modus an.
+
+    Wo ein Koerper steht, zaehlt der Test an den Entitaeten um seine Stelle:
+    Ruestungsstaender, Mannequin und Name. Den zweiten Spieler sucht er dort,
+    wo der Server ihn hat. Nach Art und Name wird nicht gesucht, mineflayer
+    nennt die Arten mit den Daten von 26.1 und haelt einen Spieler fuer etwas
+    anderes.
+    """
+    def entitaeten(client):
+        return client.call("entities", radius=24).get("entities", [])
+
+    def sieht_spieler(client, name):
+        """Ob der Client eine Entitaet dort sieht, wo der Server den Spieler
+        hat. Nach dem Namen geht es nicht: mineflayer haelt einen Spieler von
+        26.2 fuer etwas anderes und gibt ihm keinen."""
+        wo = bot.call("server_pos", selector=name).get("pos")
+        return wo is not None and any(math.dist(e["pos"], wo) < 0.5 for e in entitaeten(client))
+
+    def koerper_bei(client, wo):
+        """Wie viele Entitaeten der Client dort sieht, wo ein Koerper steht."""
+        return sum(1 for e in entitaeten(client)
+                   if math.dist((e["pos"][0], e["pos"][2]), (wo[0], wo[2])) < 1.0
+                   and wo[1] - 0.5 <= e["pos"][1] <= wo[1] + 3.0)
+
+    def tab(text):
+        return bot.call("tab", text=text).get("matches", [])
+
+    if not FIND.test("Cam-Modus ist vor dem Test des Foto-Modus aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    koerper = (x, y, z)
+    sein_koerper = (x + 3, y, z)
+    console(env, f"fill {_floor(x) - 2} {y} {_floor(z) - 2} {_floor(x) + 5} {y + 6} {_floor(z) + 2} minecraft:air",
+            pause=0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+
+    def zuschauer_hin():
+        console(env, f"tp {ZUSCHAUER_NAME} {sein_koerper[0]} {y} {z} 90 0", pause=1.0)
+
+    def bot_kamera():
+        """Den Bot am Platz in den Cam-Modus bringen und ueber den Koerper fliegen lassen."""
+        hinstellen(bot, x, y, z)
+        ok = cam_on(bot)
+        bot.call("fly", wait=30, dy=4, timeout=15000)
+        time.sleep(1.0)
+        return ok
+
+    try:
+        FIND.test("Voreingestellt steht photo-mode mit enabled, hide-players und hide-bodies auf true da",
+                  re.search(r"(?m)^photo-mode:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*hide-players:\s*true\s*\n"
+                            r"(?:\s*#.*\n)*\s*hide-bodies:\s*true\s*$", ausgeliefert(env)) is not None, "")
+        zeilen = befehl(bot, "/cam photo")
+        FIND.test("/cam photo ohne Cam-Modus geht nicht", gesagt(zeilen, r"only works in cam mode"), zeige(zeilen))
+        FIND.test("Ohne Cam-Modus schlaegt /cam kein photo vor", "photo" not in tab("/cam "), "")
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer den Foto-Modus kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        zuschauer_hin()
+        if not FIND.test("Cam-Modus fuer den Foto-Modus gestartet", bot_kamera(), ""):
+            return
+        FIND.test("Im Cam-Modus schlaegt /cam photo vor", "photo" in tab("/cam "), "")
+        FIND.test("Vor dem Foto-Modus sieht der Bot den zweiten Spieler und seinen Koerper",
+                  sieht_spieler(bot, ZUSCHAUER_NAME) and koerper_bei(bot, koerper) >= 2,
+                  f"Koerper: {koerper_bei(bot, koerper)}")
+
+        zeilen = befehl(bot, "/cam photo")
+        FIND.test("/cam photo - \"Photo mode on\"", gesagt(zeilen, r"Photo mode on"), zeige(zeilen))
+        FIND.test("photo-mode: der zweite Spieler ist fuer den Bot nicht mehr da",
+                  not sieht_spieler(bot, ZUSCHAUER_NAME), "")
+        FIND.test("photo-mode: der eigene Koerper mit seinem Namen ist fuer den Bot nicht mehr da",
+                  koerper_bei(bot, koerper) == 0, str(koerper_bei(bot, koerper)))
+        FIND.test("photo-mode: der zweite Spieler sieht den Koerper weiter",
+                  koerper_bei(zuschauer, koerper) >= 2, str(koerper_bei(zuschauer, koerper)))
+        FIND.test("photo-mode: der Cam-Modus laeuft weiter", spielmodus_ist(bot, "adventure"), "")
+
+        bei_bot = bot.mark()
+        klicken(zuschauer, "activate_entity", at=list(koerper), radius=2)
+        time.sleep(1.5)
+        zeilen = zeilen_seit(bot, bei_bot)
+        FIND.test("photo-mode: wer den Koerper anstupst, zaehlt trotzdem",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} nudged your body!"), zeige(zeilen))
+
+        if FIND.test("Der zweite Spieler ist im Cam-Modus, waehrend der Bot im Foto-Modus ist",
+                     zuschauer_cam_an(env, zuschauer, sein_koerper[0], y, z), ""):
+            time.sleep(1.0)
+            FIND.test("photo-mode: ein neuer Kamera-Spieler und sein Koerper bleiben fuer den Bot unsichtbar",
+                      not sieht_spieler(bot, ZUSCHAUER_NAME) and koerper_bei(bot, sein_koerper) == 0,
+                      f"Koerper: {koerper_bei(bot, sein_koerper)}")
+        zeilen = befehl(bot, "/cam photo")
+        FIND.test("/cam photo noch einmal - \"Photo mode off\"", gesagt(zeilen, r"Photo mode off"), zeige(zeilen))
+        FIND.test("Nach dem Foto-Modus sieht der Bot den zweiten Spieler, dessen Koerper und den eigenen wieder",
+                  sieht_spieler(bot, ZUSCHAUER_NAME) and koerper_bei(bot, sein_koerper) >= 2
+                  and koerper_bei(bot, koerper) >= 2,
+                  f"{koerper_bei(bot, sein_koerper)} / {koerper_bei(bot, koerper)}")
+        cam_off(zuschauer)
+        zuschauer_hin()
+
+        befehl(bot, "/cam photo")
+        cam_off(bot)
+        time.sleep(1.0)
+        FIND.test("Das Ende des Cam-Modus beendet den Foto-Modus: der zweite Spieler ist wieder zu sehen",
+                  sieht_spieler(bot, ZUSCHAUER_NAME), "")
+
+        bot_kamera()
+        befehl(bot, "/cam photo")
+        zuschauer.stop()
+        time.sleep(2.0)
+        cam_off(bot)
+        zuschauer.start()
+        da = zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned")
+        time.sleep(1.5)
+        zuschauer_hin()
+        FIND.test("Wer waehrend des Foto-Modus geht und danach wiederkommt, ist wieder zu sehen",
+                  bool(da) and sieht_spieler(bot, ZUSCHAUER_NAME), "")
+
+        set_option(env, "hide-players", "false", "photo-mode")
+        bot_kamera()
+        befehl(bot, "/cam photo")
+        FIND.test("hide-players: false - der zweite Spieler bleibt im Bild, nur der Koerper ist weg",
+                  sieht_spieler(bot, ZUSCHAUER_NAME) and koerper_bei(bot, koerper) == 0,
+                  str(koerper_bei(bot, koerper)))
+        set_options(env, [("hide-players", "true", "photo-mode"), ("enabled", "false", "photo-mode")])
+        bot_kamera()
+        zeilen = befehl(bot, "/cam photo")
+        FIND.test("photo-mode.enabled: false - /cam photo ist abgeschaltet",
+                  gesagt(zeilen, r"/cam photo is switched off") and sieht_spieler(bot, ZUSCHAUER_NAME), zeige(zeilen))
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                cam_off(zuschauer)
+                zuschauer.stop()
+            cam_off(bot)
+            set_options(env, [("enabled", "true", "photo-mode"), ("hide-players", "true", "photo-mode")])
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test des Foto-Modus: {exc}")
+
+
+def zeit_wetter_checks(env, bot):
+    """cam-time und cam-weather: /cam time und /cam weather geben dem
+    Kamera-Spieler eine eigene Tageszeit und ein eigenes Wetter, nur fuer ihn
+    und nur bis zum Ende des Cam-Modus.
+
+    Voreingestellt sind beide an - nachgesehen in der ausgelieferten Datei.
+    Die Welt steht am Tag still (advance_time: false, 1000), ohne Regen. Was
+    der Client sieht, fragt der Test bei ihm nach: die Tageszeit, wie
+    mineflayer sie aus den Uhren des Zeitpakets liest, und den Regen, wie der
+    Client ihn aus den Ereignissen rechnet, siehe die Bot-Aktion sky. Ein
+    zweiter Spieler daneben sieht die ganze Zeit Tag ohne Regen.
+
+    sunset ist 12000, eine Zahl gilt in Ticks, 24000 ist keine Tageszeit mehr,
+    reset gibt die Zeit der Welt zurueck. Regen ist nach den fuenf Sekunden,
+    in denen er einsetzt, voll da; ein Gewitter gibt es nicht. Das Ende des
+    Cam-Modus gibt beides zurueck. Ohne Cam-Modus geht keins von beiden, mit
+    enabled: false gar nicht, und die Tab-Vervollstaendigung bietet die Worte
+    nur im Cam-Modus an.
+    """
+    def zeit(client):
+        return client.call("sky").get("timeOfDay")
+
+    def regen(client):
+        return client.call("sky").get("rain") or 0
+
+    def tab(text):
+        return bot.call("tab", text=text).get("matches", [])
+
+    if not FIND.test("Cam-Modus ist vor dem Test der eigenen Zeit aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    try:
+        FIND.test("Voreingestellt stehen cam-time.enabled und cam-weather.enabled auf true da",
+                  re.search(r"(?m)^cam-time:\s*\n\s*enabled:\s*true\s*$", ausgeliefert(env)) is not None
+                  and re.search(r"(?m)^cam-weather:\s*\n\s*enabled:\s*true\s*$", ausgeliefert(env)) is not None, "")
+        console(env, "weather clear", pause=0.5)
+        console(env, "time set day", pause=1.5)
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die eigene Zeit kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 3} {y} {z}", pause=1.0)
+        hinstellen(bot, x, y, z)
+
+        zeilen = befehl(bot, "/cam time sunset", warten=2.0)
+        FIND.test("/cam time ohne Cam-Modus geht nicht, die Zeit bleibt",
+                  gesagt(zeilen, r"only works in cam mode") and zeit(bot) == 1000, f"{zeige(zeilen)} / {zeit(bot)}")
+        jetzt = tab("/cam ")
+        FIND.test("Ohne Cam-Modus schlaegt /cam weder time noch weather vor",
+                  "time" not in jetzt and "weather" not in jetzt, str(jetzt))
+        if not FIND.test("Cam-Modus fuer die eigene Zeit gestartet", cam_on(bot), ""):
+            return
+        jetzt = tab("/cam ")
+        worte = tab("/cam time ")
+        wetter = tab("/cam weather ")
+        FIND.test("Im Cam-Modus schlaegt /cam time und weather vor, mit ihren Worten",
+                  "time" in jetzt and "weather" in jetzt and "sunset" in worte and "reset" in worte
+                  and sorted(wetter) == ["clear", "rain", "reset"], f"{jetzt} / {worte} / {wetter}")
+
+        zeilen = befehl(bot, "/cam time sunset", warten=2.0)
+        FIND.test("/cam time sunset - der Bot sieht 12000", gesagt(zeilen, r"Your own time: sunset")
+                  and zeit(bot) == 12000, f"{zeige(zeilen)} / {zeit(bot)}")
+        FIND.test("/cam time: der zweite Spieler sieht weiter die Zeit der Welt", zeit(zuschauer) == 1000,
+                  str(zeit(zuschauer)))
+        befehl(bot, "/cam time 18000", warten=2.0)
+        FIND.test("/cam time 18000 - eine Zahl gilt in Ticks", zeit(bot) == 18000, str(zeit(bot)))
+        zeilen = befehl(bot, "/cam time 24000", warten=2.0)
+        FIND.test("/cam time 24000 - keine Tageszeit, sie bleibt", gesagt(zeilen, r"Use /cam time")
+                  and zeit(bot) == 18000, f"{zeige(zeilen)} / {zeit(bot)}")
+        zeilen = befehl(bot, "/cam time reset", warten=2.0)
+        FIND.test("/cam time reset - wieder die Zeit der Welt", gesagt(zeilen, r"time of the world again")
+                  and zeit(bot) == 1000, f"{zeige(zeilen)} / {zeit(bot)}")
+
+        befehl(bot, "/cam time sunset")
+        zeilen = befehl(bot, "/cam weather rain", warten=6.5)
+        FIND.test("/cam weather rain - beim Bot regnet es voll", gesagt(zeilen, r"Your own weather: rain")
+                  and regen(bot) > 0.99, f"{zeige(zeilen)} / {regen(bot)}")
+        FIND.test("/cam weather: beim zweiten Spieler regnet es nicht", regen(zuschauer) == 0,
+                  str(regen(zuschauer)))
+        zeilen = befehl(bot, "/cam weather thunder")
+        FIND.test("/cam weather thunder - ein Gewitter gibt es nicht", gesagt(zeilen, r"Use /cam weather"),
+                  zeige(zeilen))
+        cam_off(bot)
+        time.sleep(2.0)
+        FIND.test("Das Ende des Cam-Modus gibt Zeit und Wetter der Welt zurueck",
+                  zeit(bot) == 1000 and regen(bot) == 0, f"{zeit(bot)} / {regen(bot)}")
+
+        set_options(env, [("enabled", "false", "cam-time"), ("enabled", "false", "cam-weather")])
+        cam_on(bot)
+        zeit_aus = befehl(bot, "/cam time sunset", warten=2.0)
+        wetter_aus = befehl(bot, "/cam weather rain")
+        FIND.test("cam-time.enabled: false - /cam time ist abgeschaltet",
+                  gesagt(zeit_aus, r"/cam time is switched off") and zeit(bot) == 1000, zeige(zeit_aus))
+        FIND.test("cam-weather.enabled: false - /cam weather ist abgeschaltet",
+                  gesagt(wetter_aus, r"/cam weather is switched off"), zeige(wetter_aus))
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                zuschauer.stop()
+            cam_off(bot)
+            set_options(env, [("enabled", "true", "cam-time"), ("enabled", "true", "cam-weather")])
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der eigenen Zeit: {exc}")
+
+
+def nachtsicht_wahl_checks(env, bot):
+    """night-vision.player-choice: /cam nightvision, die Nachtsicht, die jeder
+    Spieler fuer sich selbst einstellt - gespeichert wird sie nicht, sie gilt,
+    bis er den Server verlaesst.
+
+    Voreingestellt ist es an - nachgesehen in der ausgelieferten Datei. mode
+    bleibt dark: am hellen Tag keine Nachtsicht, um Mitternacht schon. on
+    gibt sie auch am Tag, off nimmt sie auch um Mitternacht, /cam nightvision
+    allein schaltet von off wieder an, reset gibt dark zurueck. Vor dem
+    Cam-Modus gewaehlt, gilt es fuer den naechsten Flug und auch fuer den
+    danach; nach dem Ab- und Anmelden ist es vergessen. Mit
+    player-choice: false sagt der Befehl, dass er aus ist, und eine Wahl von
+    vorher gilt nicht mehr.
+    """
+    def hat():
+        return nbt_frage(bot, "@s", NACHTSICHT)
+
+    def zeit(wann):
+        bot.chat(f"/time set {wann}")
+        time.sleep(1.5)
+
+    def tab(text):
+        return bot.call("tab", text=text).get("matches", [])
+
+    try:
+        cam_off(bot)
+        FIND.test("Voreingestellt steht night-vision.player-choice: true da",
+                  re.search(r"(?m)^\s*player-choice:\s*true\s*$", ausgeliefert(env)) is not None, "")
+        bot.chat("/effect clear @s")
+        bot.chat("/weather clear")
+        zeit("noon")
+        tabs = tab("/cam nightvision ")
+        FIND.test("Tab nach /cam nightvision: on, off, dark und reset",
+                  sorted(tabs) == ["dark", "off", "on", "reset"] and "nightvision" in tab("/cam "), str(tabs))
+        if not FIND.test("Cam-Modus fuer die eigene Nachtsicht gestartet", cam_on(bot), ""):
+            return
+        time.sleep(1.0)
+        FIND.test("/cam nightvision: vorher am hellen Tag keine Nachtsicht (mode: dark)", not hat(), "")
+        zeilen = befehl(bot, "/cam nightvision on")
+        FIND.test("/cam nightvision on - auch am hellen Tag",
+                  gesagt(zeilen, r"Night vision in cam mode: always") and hat(), zeige(zeilen))
+        zeit("midnight")
+        zeilen = befehl(bot, "/cam nightvision off")
+        FIND.test("/cam nightvision off - auch um Mitternacht keine",
+                  gesagt(zeilen, r"Night vision in cam mode: never") and not hat(), zeige(zeilen))
+        zeilen = befehl(bot, "/cam nightvision")
+        FIND.test("/cam nightvision allein schaltet von off wieder an",
+                  gesagt(zeilen, r"Night vision in cam mode: always") and hat(), zeige(zeilen))
+        zeilen = befehl(bot, "/cam nightvision reset")
+        FIND.test("/cam nightvision reset - wieder dark: um Mitternacht mit",
+                  gesagt(zeilen, r"only in the dark, as the server has it") and hat(), zeige(zeilen))
+        zeit("noon")
+        FIND.test("/cam nightvision reset - wieder dark: am Tag ohne", not hat(), "")
+        zeilen = befehl(bot, "/cam nightvision bunt")
+        FIND.test("/cam nightvision mit einem unbekannten Wort sagt, wie es geht",
+                  gesagt(zeilen, r"Use /cam nightvision"), zeige(zeilen))
+
+        cam_off(bot)
+        zeilen = befehl(bot, "/cam nightvision on")
+        cam_on(bot)
+        time.sleep(1.0)
+        FIND.test("Vor dem Cam-Modus gewaehlt, gilt es fuer den naechsten Flug",
+                  gesagt(zeilen, r"Night vision in cam mode: always") and hat(), zeige(zeilen))
+        cam_off(bot)
+        cam_on(bot)
+        time.sleep(1.0)
+        FIND.test("... und fuer den danach", hat(), "")
+        cam_off(bot)
+        if FIND.test("Neu angemeldet fuer die eigene Nachtsicht", neu_anmelden(bot), ""):
+            cam_on(bot)
+            time.sleep(1.0)
+            FIND.test("Nach dem Ab- und Anmelden ist die Wahl vergessen: am Tag wieder ohne", not hat(), "")
+            cam_off(bot)
+
+        befehl(bot, "/cam nightvision on")
+        set_option(env, "player-choice", "false")
+        zeilen = befehl(bot, "/cam nightvision on")
+        cam_on(bot)
+        time.sleep(1.0)
+        FIND.test("player-choice: false - /cam nightvision ist aus, und die Wahl von vorher gilt nicht",
+                  gesagt(zeilen, r"/cam nightvision is switched off") and not hat(), zeige(zeilen))
+        FIND.test("player-choice: false - /cam schlaegt nightvision nicht mehr vor", "nightvision" not in tab("/cam "),
+                  "")
+    finally:
+        cam_off(bot)
+        set_option(env, "player-choice", "true")
+        bot.chat("/cam nightvision reset")
+        bot.chat("/time set noon")
+        bot.chat("/effect clear @s")
+        time.sleep(0.5)
+
+
+def naehe_checks(env, bot):
+    """cam-safety.nearby-players: kein Start des Cam-Modus, solange ein anderer
+    Spieler naeher ist als nearby-radius.
+
+    Voreingestellt ist die Sperre aus, mit 16 Bloecken - nachgesehen in der
+    ausgelieferten Datei; ein zweiter Spieler drei Bloecke daneben haelt dann
+    niemanden auf. Eingeschaltet wird /cam abgelehnt, und die Meldung sagt,
+    von wem man wie weit weg muss: 16 Bloecke, 13 mehr. Zwanzig Bloecke weg
+    haelt er nicht mehr auf, mit nearby-radius: 25 schon - 5 mehr. Fuer den
+    zweiten Spieler gilt dasselbe neben dem Bot. Ein Spieler im Cam-Modus
+    zaehlt nicht, und ohne cam-safety.enabled gibt es auch diese Sperre
+    nicht.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test der Kampfsperre aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    console(env, f"fill {_floor(x) - 1} {y} {_floor(z) - 1} {_floor(x) + 21} {y + 3} {_floor(z) + 1} minecraft:air",
+            pause=0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+
+    def zuschauer_bei(abstand):
+        console(env, f"tp {ZUSCHAUER_NAME} {x + abstand} {y} {z}", pause=1.0)
+
+    def startet():
+        """Ob /cam den Bot jetzt in den Cam-Modus bringt, und was es dazu sagt."""
+        hinstellen(bot, x, y, z)
+        zeilen = befehl(bot, "/cam")
+        an = spielmodus_ist(bot, "adventure")
+        cam_off(bot)
+        return an, zeilen
+
+    try:
+        FIND.test("Voreingestellt steht cam-safety.nearby-players: false mit nearby-radius: 16.0 da",
+                  re.search(r"(?m)^\s*nearby-players:\s*false\s*\n(?:\s*#.*\n)*\s*nearby-radius:\s*16\.0\s*$",
+                            ausgeliefert(env)) is not None, "")
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Kampfsperre kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        zuschauer_bei(3)
+        an, zeilen = startet()
+        FIND.test("Voreingestellt haelt ein Spieler drei Bloecke daneben niemanden auf", an, zeige(zeilen))
+
+        set_option(env, "nearby-players", "true")
+        an, zeilen = startet()
+        FIND.test("nearby-players: true - mit einem Spieler drei Bloecke daneben startet /cam nicht, "
+                  "die Meldung sagt, wie weit man weg muss",
+                  not an and gesagt(zeilen, rf"too close to {ZUSCHAUER_NAME} to start cam mode\. "
+                                            r"Get at least 16 blocks away \(13 more\)"), zeige(zeilen))
+        zuschauer_bei(20)
+        an, zeilen = startet()
+        FIND.test("nearby-players: true - zwanzig Bloecke weg haelt er nicht mehr auf", an, zeige(zeilen))
+        set_option(env, "nearby-radius", "25.0")
+        an, zeilen = startet()
+        FIND.test("nearby-radius: 25 - zwanzig Bloecke weg haelt er auf",
+                  not an and gesagt(zeilen, r"Get at least 25 blocks away \(5 more\)"), zeige(zeilen))
+        set_option(env, "nearby-radius", "16.0")
+
+        # Die Sperre gilt fuer den zweiten Spieler genauso: Neben dem Bot kommt
+        # er nur in den Cam-Modus, solange der Bot selbst Kamera ist.
+        zuschauer_bei(3)
+        hinstellen(bot, x, y, z)
+        zeilen = befehl(zuschauer, "/cam")
+        FIND.test("nearby-players: true - auch der zweite Spieler startet nicht neben dem Bot",
+                  gesagt(zeilen, rf"too close to {BOT_NAME} to start cam mode"), zeige(zeilen))
+        zuschauer_bei(20)
+        cam_on(bot)
+        if FIND.test("Der zweite Spieler ist fuer die Kampfsperre im Cam-Modus",
+                     zuschauer_cam_an(env, zuschauer, x + 3, y, z), ""):
+            cam_off(bot)
+            an, zeilen = startet()
+            FIND.test("nearby-players: true - ein Spieler im Cam-Modus zaehlt nicht", an, zeige(zeilen))
+            cam_off(zuschauer)
+        cam_off(bot)
+        zuschauer_bei(3)
+        set_option(env, "enabled", "false", "cam-safety")
+        an, zeilen = startet()
+        FIND.test("cam-safety.enabled: false - auch die Kampfsperre ist aus", an, zeige(zeilen))
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                cam_off(zuschauer)
+                zuschauer.stop()
+            cam_off(bot)
+            set_options(env, [("nearby-players", "false"), ("nearby-radius", "16.0"),
+                              ("enabled", "true", "cam-safety")])
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Kampfsperre: {exc}")
 
 
 def anstups_checks(env, bot):
@@ -10332,6 +11035,14 @@ def step_tests(env):
         startverzoegerung_checks(env, bot)
         flugspur_checks(env, bot)
         vorschlag_checks(env, bot)
+
+        # --- Aussichtspunkte, der Foto-Modus, die eigene Zeit und das eigene Wetter, die eigene
+        # --- Nachtsicht und die Kampfsperre nach Naehe ---
+        aussichtspunkt_checks(env, bot)
+        foto_checks(env, bot)
+        zeit_wetter_checks(env, bot)
+        nachtsicht_wahl_checks(env, bot)
+        naehe_checks(env, bot)
 
         # --- Anstupsen, mit beiden Koerpertypen, und das Funksignal statt der festen Reichweite ---
         fuer_beide_koerpertypen(env, bot, anstups_checks)

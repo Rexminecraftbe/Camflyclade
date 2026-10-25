@@ -428,6 +428,28 @@ public final class CamMovementGuard implements Listener {
     }
 
     /**
+     * Puts the camera down at a spot of {@code /cam spot}, as camera mode's
+     * own teleport, and lets camera mode run on. Whether it may go there is
+     * for {@link de.elia.cameraplugin.spot.CamSpots} to say beforehand: the
+     * same as where it may fly.
+     *
+     * @return whether the server carried the teleport out
+     */
+    public boolean jumpTo(Player player, CameraData data, Location target) {
+        return putDown(player, data, target);
+    }
+
+    /**
+     * Whether this spot lies further from the body than
+     * {@code camera-mode.max-distance} lets the camera fly, under
+     * {@code max-distance-mode: fixed} with a border that holds - for a spot
+     * of {@code /cam spot} in the world of the body.
+     */
+    public boolean beyondFlightDistance(CameraData data, Location location) {
+        return settings.limitsDistance() && beyondMaxDistance(data, location);
+    }
+
+    /**
      * Teleports the camera to a spot camera mode holds it at, as camera mode's
      * own teleport, and keeps it flying there.
      *

@@ -109,6 +109,12 @@ public final class CamStarter {
         if (!checks.checkCamEffects(player)) {
             return false;
         }
+        // Before the safety check as well: whoever stands close by is
+        // usually the one he fights, and "wait five more seconds" does not
+        // help while he stays there.
+        if (!checks.checkCamNearby(player)) {
+            return false;
+        }
         return checks.checkCamSafety(player);
     }
 }
