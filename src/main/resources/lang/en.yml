@@ -103,6 +103,7 @@ messages:
   cant-fly-in-water: "&cYou cannot fly into water in camera mode."
   config-allowed-blocks: "any block, e.g. barrier or glass"
   config-allowed-particles: "a particle without extra data, e.g. soul_fire_flame, flame or end_rod"
+  config-allowed-signal-costs: "a number of blocks of at least 0, or stop"
   config-allowed-sounds: "a sound as /playsound names it, e.g. block.beacon.activate"
   config-broken: "&cThe configuration has an error in {file} and was not applied, the previous settings stay in effect: {error}"
   config-broken-startup: "&cThe configuration has an error in {file}: {error}"

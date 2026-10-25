@@ -18,6 +18,7 @@ import de.elia.cameraplugin.nightvision.NightVisionMode;
 import de.elia.cameraplugin.portal.PortalRules;
 import de.elia.cameraplugin.session.CamGameMode;
 import de.elia.cameraplugin.session.EndReason;
+import de.elia.cameraplugin.signal.SignalCosts;
 import de.elia.cameraplugin.signal.SignalLoss;
 import de.elia.cameraplugin.sound.CamSound;
 import de.elia.cameraplugin.start.EffectStart;
@@ -119,7 +120,8 @@ public final class CamSettings {
      * the file chooses itself, such as the items of {@code start-cost.items}:
      * everything below them is checked when it is read instead.
      */
-    public static final Set<String> UNLISTED_KEYS = Set.of("mirror-damage.debug", "start-cost.items");
+    public static final Set<String> UNLISTED_KEYS = Set.of("mirror-damage.debug", "start-cost.items",
+            "signal.block-costs");
 
     /**
      * The most of one item {@code start-cost.items} accepts: a full inventory
@@ -316,8 +318,8 @@ public final class CamSettings {
     /** Seconds before the same camera player can be nudged again, {@code nudge.cooldown}. */
     private int nudgeCooldown;
 
-    /** Blocks of range each block in the way takes off the signal, {@code signal.block-cost}. */
-    private double signalBlockCost;
+    /** Blocks of range each block in the way takes off the signal, {@code signal.block-cost} and {@code -costs}. */
+    private SignalCosts signalCosts;
     /** What happens once the signal is lost, {@code signal.lost}. */
     private SignalLoss signalLoss;
     /** How long the camera has to fly back into the signal, in seconds, {@code signal.lost-seconds}. */
@@ -663,7 +665,7 @@ public final class CamSettings {
      * now and not only once somebody switches the signal on.
      */
     private void readSignal(ConfigReader config) {
-        signalBlockCost = config.getDouble("signal.block-cost", 5.0, 0.0);
+        signalCosts = SignalCosts.read(config, messages.configMessage("config-allowed-signal-costs"));
         signalLoss = config.getChoice("signal.lost", "back", "back", "end").equalsIgnoreCase("end")
                 ? SignalLoss.END
                 : SignalLoss.BACK;
@@ -983,8 +985,8 @@ public final class CamSettings {
         return maxDistanceEnabled && distanceMode == DistanceMode.SIGNAL;
     }
 
-    public double getSignalBlockCost() {
-        return signalBlockCost;
+    public SignalCosts getSignalCosts() {
+        return signalCosts;
     }
 
     public SignalLoss getSignalLoss() {

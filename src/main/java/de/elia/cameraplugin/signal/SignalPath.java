@@ -17,17 +17,17 @@ final class SignalPath {
      * How strong the signal arrives at the camera, from 0 (gone) to 1 (full).
      *
      * <p>Each block of distance takes one block off the range, each block in
-     * between {@code blockCost} more. What is left of the range, out of all of
-     * it, is the strength: right at the body it is full, at the end of the
-     * range in the open it is gone, and so it is behind a wall that eats up
-     * what was left.</p>
+     * between what it costs, see {@link SignalCosts}. What is left of the
+     * range, out of all of it, is the strength: right at the body it is full,
+     * at the end of the range in the open it is gone, and so it is behind a
+     * wall that eats up what was left.</p>
      *
-     * @param from      the eyes of the body, in the same world as {@code to}
-     * @param to        the eyes of the camera
-     * @param range     {@code camera-mode.max-distance}
-     * @param blockCost {@code signal.block-cost}
+     * @param from  the eyes of the body, in the same world as {@code to}
+     * @param to    the eyes of the camera
+     * @param range {@code camera-mode.max-distance}
+     * @param costs what each block costs, {@code signal.block-cost} and {@code -costs}
      */
-    static double strength(Location from, Location to, double range, double blockCost) {
+    static double strength(Location from, Location to, double range, SignalCosts costs) {
         if (range <= 0.0) {
             return 0.0;
         }
@@ -35,20 +35,19 @@ final class SignalPath {
         if (left <= 0.0) {
             return 0.0;
         }
-        if (blockCost > 0.0) {
-            // Counting stops once the blocks have used up what is left: any
-            // more would not make the signal weaker than gone.
-            long most = (long) Math.floor(left / blockCost) + 1L;
-            left -= blocksBetween(from, to, (int) Math.min(Integer.MAX_VALUE, most)) * blockCost;
+        if (!costs.free()) {
+            left -= costBetween(from, to, costs, left);
         }
         return Math.max(0.0, left / range);
     }
 
     /**
-     * How many blocks on the straight line between the two spots keep the
-     * signal back: full blocks that cannot be seen through, such as stone,
-     * earth or planks. Glass, leaves, water, slabs and fences let it through,
-     * and so does the wall of {@code border-mode: barrier}, made of barriers.
+     * What the blocks on the straight line between the two spots cost the
+     * signal together, in blocks of range: out of the box the full blocks
+     * that cannot be seen through, such as stone, earth or planks, while
+     * glass, leaves, water, slabs and fences let it through - and so does the
+     * wall of {@code border-mode: barrier}, made of barriers -, and whatever
+     * {@code signal.block-costs} says otherwise.
      *
      * <p>The two blocks the line starts and ends in do not count; they hold
      * the eyes of the body and of the camera. Neither does a block in a chunk
@@ -59,9 +58,11 @@ final class SignalPath {
      * from one block to the next on whichever side it leaves the block on
      * first - a block it only grazes at a corner included.</p>
      *
-     * @param limit how many blocks to count at the most
+     * @param limit how much to add up at the most: once the blocks have used
+     *              up what is left of the range, more would not make the
+     *              signal weaker than gone
      */
-    static int blocksBetween(Location from, Location to, int limit) {
+    static double costBetween(Location from, Location to, SignalCosts costs, double limit) {
         World world = from.getWorld();
         double fromX = from.getX();
         double fromY = from.getY();
@@ -89,10 +90,10 @@ final class SignalPath {
         int chunkX = Integer.MIN_VALUE;
         int chunkZ = Integer.MIN_VALUE;
         boolean loaded = false;
-        int count = 0;
+        double cost = 0.0;
         // One step less than it takes to get there: the last one lands in the
         // block of the camera.
-        for (int i = 1; i < steps && count < limit; i++) {
+        for (int i = 1; i < steps && cost < limit; i++) {
             if (nextX < nextY && nextX < nextZ) {
                 x += stepX;
                 nextX += acrossX;
@@ -111,14 +112,14 @@ final class SignalPath {
                 chunkZ = z >> 4;
                 loaded = world.isChunkLoaded(chunkX, chunkZ);
             }
-            if (loaded && world.getType(x, y, z).isOccluding()) {
-                count++;
+            if (loaded) {
+                cost += costs.of(world.getType(x, y, z));
             }
         }
-        return count;
+        return cost;
     }
 
-    /** How far along the line the next side of the block lies on one axis, see {@link #blocksBetween}. */
+    /** How far along the line the next side of the block lies on one axis, see {@link #costBetween}. */
     private static double nextSide(double start, int block, int step, double across) {
         if (step > 0) {
             return (block + 1 - start) * across;

@@ -158,6 +158,30 @@ signal:
   # Es zählen volle, undurchsichtige Blöcke wie Stein, Erde und Holz; Glas, Laub, Wasser, Stufen und Zäune nicht.
   # Bei 5 und max-distance 100 kommt das Signal durch 20 Blöcke Fels gar nicht mehr durch.
   block-cost: 5.0
+  # Blöcke, die das Signal anders kosten als block-cost, je eine Zeile Name: Wert. Der Wert ist eine Zahl - so viele
+  # Blöcke Reichweite kostet jeder dieser Blöcke auf dem Weg (0 = gar nichts) - oder stop = durch diesen Block kommt
+  # gar kein Signal. Es geht jeder Block, auch einer, der sonst nichts kostet (z. B. tinted_glass oder water).
+  # Ein * im Namen steht für beliebige Zeichen, z. B. "*copper" für alle Kupferblöcke - solche Namen in
+  # Anführungszeichen. Ein Name ohne * geht vor einem mit *. Alle anderen Blöcke kosten block-cost. {} = keine.
+  block-costs:
+    # Gar kein Signal: unzerstörbares Gestein
+    bedrock: stop
+    reinforced_deepslate: stop
+    # Stark: Obsidian und Netherit
+    obsidian: 25.0
+    crying_obsidian: 25.0
+    netherite_block: 40.0
+    ancient_debris: 20.0
+    # Metall schirmt ab
+    iron_block: 15.0
+    raw_iron_block: 15.0
+    gold_block: 15.0
+    raw_gold_block: 15.0
+    "*copper_block": 12.0
+    "*copper": 12.0
+    lodestone: 15.0
+    # Getöntes Glas lässt kein Licht durch und auch das Signal nur schwer
+    tinted_glass: 5.0
   # Was passiert, wenn das Signal weg bleibt:
   #   back = die Kamera springt zurück zum Körper (Ton sounds.back, Text signal-back-to-body), der Cam-Modus läuft weiter
   #   end  = der Cam-Modus endet (Ton sounds.end-forced, Text signal-ended)

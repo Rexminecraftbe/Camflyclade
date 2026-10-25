@@ -296,6 +296,40 @@ public final class ConfigReader {
         return amounts;
     }
 
+    /**
+     * Reads a section of entries such as {@code name: number}, the way
+     * {@link #getAmounts} does, where a number of at least 0 may also be
+     * the word {@code word}: that is read as
+     * {@link Double#POSITIVE_INFINITY}. An entry that is neither is reported
+     * and left out.
+     *
+     * @param allowed what the note names as allowed for an entry
+     * @param used    what the note names as used in its place
+     */
+    public Map<String, Double> getCosts(String path, String word, String allowed, String used) {
+        Map<String, Double> costs = new LinkedHashMap<>();
+        Object raw = config.get(path);
+        if (raw == null) {
+            return costs;
+        }
+        if (!(raw instanceof ConfigurationSection section)) {
+            warnWrongType(path, raw, EXPECTED_AMOUNTS, "{}");
+            return costs;
+        }
+        for (String key : section.getKeys(false)) {
+            Object value = section.get(key);
+            if (value instanceof String text && text.trim().equalsIgnoreCase(word)) {
+                costs.put(key, Double.POSITIVE_INFINITY);
+            } else if (value instanceof Number number && number.doubleValue() >= 0.0
+                    && Double.isFinite(number.doubleValue())) {
+                costs.put(key, number.doubleValue());
+            } else {
+                warnUnknownValue(path + "." + key, value, allowed, used);
+            }
+        }
+        return costs;
+    }
+
     /** Reads the name of an enum constant, ignoring case. */
     public <T extends Enum<T>> T getEnum(String path, Class<T> type, T def) {
         String value = getString(path, def.name());

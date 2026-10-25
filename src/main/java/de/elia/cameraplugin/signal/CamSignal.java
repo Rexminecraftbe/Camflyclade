@@ -23,9 +23,10 @@ import java.util.UUID;
  *
  * <p>How far the signal reaches is {@code max-distance} in the open. Every
  * block it has to get through on the straight way from the body to the
- * camera takes {@code signal.block-cost} blocks of that away, see
- * {@link SignalPath} - under the ground and behind walls the camera gets
- * nowhere near as far as in the open air. The action bar shows how strong it
+ * camera takes {@code signal.block-cost} blocks of that away, or what
+ * {@code signal.block-costs} says for it, see {@link SignalPath} and
+ * {@link SignalCosts} - under the ground and behind walls the camera gets
+ * nowhere near as far as in the open air, and through bedrock not at all. The action bar shows how strong it
  * is, the way the game shows a connection: the ping icon of the tab list, one
  * bar to five or a red cross, and a word for it.</p>
  *
@@ -235,7 +236,7 @@ public final class CamSignal {
         Location from = body.getWorld().equals(eyes.getWorld())
                 ? body.getEyeLocation()
                 : anchor.clone().add(0.0, player.getEyeHeight(), 0.0);
-        return SignalPath.strength(from, eyes, settings.getMaxDistance(), settings.getSignalBlockCost());
+        return SignalPath.strength(from, eyes, settings.getMaxDistance(), settings.getSignalCosts());
     }
 
     /**

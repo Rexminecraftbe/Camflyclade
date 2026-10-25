@@ -4942,7 +4942,10 @@ def funk_checks(env, bot):
     der Test haengt sie an, um daran zu messen. Eine Mauer aus drei Bloecken
     Stein dazwischen nimmt 15 mehr:
     17 % - und das Bild bleibt, wie es ist: Das Signal legt keinen Effekt
-    darauf, auch keine Dunkelheit. Ohne Mauer sind es wieder 67 %. Fuenf
+    darauf, auch keine Dunkelheit. Ohne Mauer sind es wieder 67 %. Drei
+    Bloecke vor dem Koerper kostet ein einziger Block Obsidian 25 (signal.
+    block-costs): 7 %; einer aus oxidiertem geschnittenem Kupfer, ueber
+    "*copper", 12: 50 %; und durch Grundgestein kommt gar nichts (stop). Fuenf
     Bloecke Stein nehmen das ganze Signal: "Signal lost!" mit dem
     Ton von sounds.signal-lost, und nach den zwei Sekunden steht die Kamera
     wieder am Koerper, der Cam-Modus laeuft weiter - ohne den Ton von
@@ -4963,8 +4966,8 @@ def funk_checks(env, bot):
     def luft():
         console(env, f"fill {bx - 2} {by} {bz - 3} {bx + 36} {by + 5} {bz + 3} minecraft:air", pause=0.5)
 
-    def mauer(von, bis):
-        console(env, f"fill {bx + von} {by - 1} {bz - 2} {bx + bis} {by + 4} {bz + 2} minecraft:stone", pause=0.3)
+    def mauer(von, bis, block="stone"):
+        console(env, f"fill {bx + von} {by - 1} {bz - 2} {bx + bis} {by + 4} {bz + 2} minecraft:{block}", pause=0.3)
 
     def kamera_bei(dx):
         bot.chat(f"/tp {BOT_NAME} {x + dx} {y} {z}")
@@ -5031,6 +5034,31 @@ def funk_checks(env, bot):
         luft()
         wert = staerke()
         FIND.test("signal: ohne Mauer wieder 67 %", wert is not None and 66 <= wert <= 68, str(wert))
+
+        # --- signal.block-costs: drei Bloecke vor dem Koerper, einer dazwischen ---
+        text = ausgeliefert(env)
+        FIND.test("Voreingestellt kosten in signal.block-costs bedrock stop, obsidian 25 und \"*copper\" 12",
+                  all(re.search(muster, text) for muster in (r"(?m)^    bedrock: stop$", r"(?m)^    obsidian: 25\.0$",
+                                                              r'(?m)^    "\*copper": 12\.0$')), "")
+        kamera_bei(3)
+        mauer(1, 1, "obsidian")
+        wert = staerke()
+        FIND.test("signal.block-costs: ein Block Obsidian kostet 25 statt 5 - 7 %",
+                  wert is not None and 6 <= wert <= 8, str(wert))
+        luft()
+        mauer(1, 1, "oxidized_cut_copper")
+        wert = staerke()
+        FIND.test("signal.block-costs: \"*copper\" - ein Block oxidiertes geschnittenes Kupfer kostet 12 - 50 %",
+                  wert is not None and 49 <= wert <= 51, str(wert))
+        luft()
+        since = bot.mark()
+        mauer(1, 1, "bedrock")
+        weg = bot.expect(r"Signal lost! Fly back within", since, 3000)
+        luft()
+        FIND.test("signal.block-costs: bedrock: stop - durch einen einzigen Block kommt gar kein Signal", bool(weg),
+                  zeige(zeilen_seit(bot, since)[-3:]))
+        time.sleep(1.5)
+        kamera_bei(10)
 
         seit = toene_marke(bot)
         since = bot.mark()
