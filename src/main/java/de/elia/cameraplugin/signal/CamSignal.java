@@ -6,9 +6,6 @@ import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.session.EndReason;
-import de.elia.cameraplugin.shader.PostEffects;
-import de.elia.cameraplugin.shader.ShaderLook;
-import de.elia.cameraplugin.shader.ShaderPack;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -18,7 +15,6 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -30,11 +26,7 @@ import java.util.UUID;
  * camera takes {@code signal.block-cost} blocks of that away, see
  * {@link SignalPath} - under the ground and behind walls the camera gets
  * nowhere near as far as in the open air. The action bar shows how strong it
- * is, and below {@code signal.noise-below} percent a post effect disturbs the
- * picture, {@code signal.noise}: CamFly's own shader, which grows worse in
- * stages the weaker the signal gets, see
- * {@link de.elia.cameraplugin.shader.ShaderPack} - or any other effect, one
- * of the game's or one of a resource pack.</p>
+ * is.</p>
  *
  * <p>Once it is gone, the camera has {@code signal.lost-seconds} to fly back
  * into it, counted down in the action bar. After that it goes back to its
@@ -49,23 +41,8 @@ public final class CamSignal {
     /** How often the signal is measured, in ticks: as often as the action bar shows the distance. */
     private static final long INTERVAL = 4L;
 
-    /**
-     * How much stronger than {@code noise-below} the signal has to get again,
-     * in percent, before the noise stops. Without that margin it would come
-     * and go over and over while the camera flies along the edge.
-     */
-    private static final double NOISE_MARGIN = 5.0;
-
     /** The bars of {@code {bars}} in the action bar, one for each quarter of the signal. */
     private static final String[] BARS = {"▂", "▄", "▆", "█"};
-
-    /**
-     * How far past the border to the next stage of the shader the signal has
-     * to get, in percent, before the stage changes. Without it the picture
-     * would jump between two stages while the camera hovers at the border,
-     * and every jump is a new list of effects sent to the client.
-     */
-    private static final double STAGE_MARGIN = 1.5;
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
@@ -83,10 +60,6 @@ public final class CamSignal {
         long lostSince;
         /** The seconds the countdown showed last, -1 when it has not shown any. */
         long shownSeconds = -1L;
-        /** The post effect of this class he wears, or {@code null}. */
-        String effect;
-        /** The stage of CamFly's shader he sees, 0 while he sees none. */
-        int stage;
     }
 
     public CamSignal(CameraPlugin plugin) {
@@ -110,9 +83,7 @@ public final class CamSignal {
                 CameraData data = cameraPlayers.get(id);
                 if (!player.isOnline() || data == null) {
                     this.cancel();
-                    if (links.remove(id, link)) {
-                        quiet(player, link);
-                    }
+                    links.remove(id, link);
                     return;
                 }
                 update(player, data, link);
@@ -122,12 +93,11 @@ public final class CamSignal {
         link.task.runTaskTimer(plugin, INTERVAL, INTERVAL);
     }
 
-    /** Stops measuring for a player leaving camera mode, and takes the noise off his screen. */
+    /** Stops measuring for a player leaving camera mode. */
     public void stopFor(Player player) {
         Link link = links.remove(player.getUniqueId());
         if (link != null) {
             link.task.cancel();
-            quiet(player, link);
         }
     }
 
@@ -162,10 +132,9 @@ public final class CamSignal {
                 .replace("{percent}", String.valueOf((int) Math.ceil(strength * 100.0)));
     }
 
-    /** One measurement, and what follows from it: the noise, the countdown, the end of the flight. */
+    /** One measurement, and what follows from it: the countdown, the end of the flight. */
     private void update(Player player, CameraData data, Link link) {
         link.strength = measure(player, data);
-        noise(player, link, link.strength * 100.0);
         if (link.strength > 0.0) {
             if (link.lostSince != 0L) {
                 link.lostSince = 0L;
@@ -195,92 +164,6 @@ public final class CamSignal {
                 plugin.getActionBar().warn(player, messages.getMessage("signal-lost")
                         .replace("{time}", CamTimeLimit.formatDuration(seconds)));
             }
-        }
-    }
-
-    /**
-     * Lays the noise over his screen, changes its stage, or takes it off:
-     * below {@code noise-below} percent it comes, and it goes again only once
-     * the signal is {@link #NOISE_MARGIN} stronger than that.
-     */
-    private void noise(Player player, Link link, double percent) {
-        int below = settings.getSignalNoiseBelow();
-        boolean on = link.effect != null
-                ? percent < Math.min(below + NOISE_MARGIN, 100.0)
-                : percent < below;
-        String wanted = on ? noiseEffect(player, link, percent, below) : null;
-        if (Objects.equals(wanted, link.effect)) {
-            return;
-        }
-        if (link.effect != null) {
-            PostEffects.remove(player, link.effect);
-        }
-        if (wanted != null) {
-            PostEffects.add(player, wanted);
-        }
-        link.effect = wanted;
-        if (wanted == null) {
-            link.stage = 0;
-        }
-    }
-
-    /**
-     * The effect of {@code signal.noise} for him: the one written there, or a
-     * stage of CamFly's shader - as long as his client has the shader at
-     * all, and {@code noise-fallback} otherwise, which it does know.
-     */
-    private String noiseEffect(Player player, Link link, double percent, int below) {
-        String noise = settings.getSignalNoise();
-        if (!CamSettings.CAMFLY_NOISE.equals(noise)) {
-            return noise;
-        }
-        if (!plugin.getResourcePack().hasShader(player)) {
-            link.stage = 0;
-            return settings.getSignalNoiseFallback();
-        }
-        link.stage = stage(link.stage, percent, below, settings.getShaderLook().stages());
-        return ShaderPack.effectKey(link.stage);
-    }
-
-    /**
-     * The stage of the shader for this strength: 1 just under
-     * {@code noise-below}, the last one when the signal is gone. A stage is
-     * kept until the signal is {@link #STAGE_MARGIN} past the border to the
-     * next one.
-     *
-     * @param current the stage he sees now, 0 for none
-     */
-    static int stage(int current, double percent, int below, int stages) {
-        int next = stageAt(percent, below, stages);
-        if (current < 1 || next == current) {
-            return next;
-        }
-        int held = stageAt(next > current ? percent + STAGE_MARGIN : percent - STAGE_MARGIN, below, stages);
-        return held == current ? current : next;
-    }
-
-    private static int stageAt(double percent, int below, int stages) {
-        // 0 at noise-below, 1 with no signal at all.
-        double depth = 1.0 - Math.max(0.0, percent) / below;
-        return Math.max(1, Math.min(stages, (int) Math.ceil(depth * stages)));
-    }
-
-    /**
-     * Takes every post effect this class may have laid over his screen off
-     * him, whatever it was: for a player coming back from a crash in camera
-     * mode, whose saved list still holds the noise, see
-     * {@link de.elia.cameraplugin.crash.CamCrashGuard}.
-     */
-    public void forgetNoise(Player player) {
-        for (int stage = 1; stage <= ShaderLook.MAX_STAGES; stage++) {
-            PostEffects.remove(player, ShaderPack.effectKey(stage));
-        }
-        String noise = settings.getSignalNoise();
-        if (noise != null && !noise.equals(CamSettings.CAMFLY_NOISE)) {
-            PostEffects.remove(player, noise);
-        }
-        if (settings.getSignalNoiseFallback() != null) {
-            PostEffects.remove(player, settings.getSignalNoiseFallback());
         }
     }
 
@@ -319,18 +202,5 @@ public final class CamSignal {
         // camera would otherwise stay out there without a signal for good.
         plugin.exitCameraMode(player, EndReason.SIGNAL);
         messages.sendMessage(player, "signal-ended");
-    }
-
-    /** Takes the noise of this class off his screen, if he has it. */
-    private static void quiet(Player player, Link link) {
-        if (link.effect != null) {
-            // Nobody to send it to when he is gone: he left camera mode on
-            // his way out, and that took it off already.
-            if (player.isOnline()) {
-                PostEffects.remove(player, link.effect);
-            }
-            link.effect = null;
-            link.stage = 0;
-        }
     }
 }

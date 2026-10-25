@@ -234,7 +234,6 @@ public final class CameraMode {
             }.runTaskLater(plugin, 2L); // delay to ensure armour is restored
         }
         settings.getStartSound().play(player);
-        plugin.getEffects().startFor(player);
     }
 
     public void exitCameraMode(Player player, EndReason reason) {
@@ -273,16 +272,12 @@ public final class CameraMode {
             plugin.getFlightSpeed().stopFor(player);
             plugin.getNightVision().stopFor(player);
             plugin.getSignal().stopFor(player);
-            plugin.getEffects().stopFor(player);
             plugin.getBattery().stopFor(player);
             plugin.getAfk().stopFor(player);
             team.updateViewerTeam(player);
             plugin.getCamModeObjective().setScore(player, 0);
             return;
         }
-        // First, before anything changes: the first picture of the camera
-        // switching off already lies over the move back to the body.
-        plugin.getEffects().ending(player, reason);
         plugin.getTimeLimit().cancelTimeLimit(player);
         plugin.getBattery().stopFor(player);
         plugin.getAfk().stopFor(player);
@@ -330,7 +325,6 @@ public final class CameraMode {
         // otherwise be taken off along with the one of camera mode.
         plugin.getNightVision().stopFor(player);
         plugin.getSignal().stopFor(player);
-        plugin.getEffects().stopFor(player);
 
         if (standingInFire) {
             player.setFireTicks(160);

@@ -46,15 +46,7 @@
         <dependency>
             <groupId>org.spigotmc</groupId>
             <artifactId>spigot-api</artifactId>
-            <version>26.3-R0.1-SNAPSHOT</version>
-            <scope>provided</scope>
-        </dependency>
-        <!-- The server brings Netty along; resource-pack.port: game reads the
-             connections of the game port with it. -->
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-codec-base</artifactId>
-            <version>4.2.16.Final</version>
+            <version>26.2-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>

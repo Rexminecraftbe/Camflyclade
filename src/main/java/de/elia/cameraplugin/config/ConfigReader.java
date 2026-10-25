@@ -94,11 +94,6 @@ public final class ConfigReader {
 
     // ----------------------------------------------------------------- numbers
 
-    /** Whether the value is written as a number, for a key that takes a number or a word. */
-    public boolean isNumber(String path) {
-        return config.get(path) instanceof Number;
-    }
-
     public int getInt(String path, int def) {
         Long value = readWholeNumber(path, def, Integer.MIN_VALUE, Integer.MAX_VALUE);
         return value == null ? def : value.intValue();

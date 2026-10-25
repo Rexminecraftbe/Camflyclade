@@ -18,11 +18,6 @@ import de.elia.cameraplugin.nightvision.NightVisionMode;
 import de.elia.cameraplugin.portal.PortalRules;
 import de.elia.cameraplugin.session.CamGameMode;
 import de.elia.cameraplugin.session.EndReason;
-import de.elia.cameraplugin.shader.EffectSettings;
-import de.elia.cameraplugin.shader.PackSending;
-import de.elia.cameraplugin.shader.PostEffects;
-import de.elia.cameraplugin.shader.ShaderEffect;
-import de.elia.cameraplugin.shader.ShaderLook;
 import de.elia.cameraplugin.signal.SignalLoss;
 import de.elia.cameraplugin.sound.CamSound;
 import de.elia.cameraplugin.start.EffectStart;
@@ -31,7 +26,6 @@ import de.elia.cameraplugin.timelimit.FlightLimit;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
@@ -103,28 +97,6 @@ public final class CamSettings {
 
     /** The most flights {@code cam-trail.flights} keeps of each player. */
     private static final int MAX_TRAIL_FLIGHTS = 20;
-
-    /** The value of {@code signal.noise} that stands for CamFly's own shader. */
-    public static final String CAMFLY_NOISE = "camfly";
-
-    /** The highest port there is, for {@code resource-pack.port}. */
-    private static final int MAX_PORT = 65535;
-
-    /** The value of {@code resource-pack.port} for the port of the game itself. */
-    private static final String GAME_PORT = "game";
-
-    /** The longest {@code shader-effects.end-warning.seconds}: ten minutes of warning are a whole flight. */
-    private static final int MAX_EFFECT_WARNING_SECONDS = 600;
-
-    /** The most {@code shader-effects.low-health.below-hearts}: as many as a player can have. */
-    private static final double MAX_EFFECT_HEARTS = 1024.0;
-
-    /**
-     * The most {@code shader-effects.border.within-blocks}: the border is
-     * looked for in every block that far around the camera, four times a
-     * second.
-     */
-    private static final double MAX_EFFECT_BORDER_BLOCKS = 16.0;
 
     /**
      * The longest {@code signal.lost-seconds} accepts. Longer than a minute,
@@ -345,49 +317,10 @@ public final class CamSettings {
 
     /** Blocks of range each block in the way takes off the signal, {@code signal.block-cost}. */
     private double signalBlockCost;
-    /** Below how many percent the picture is disturbed, 0 for never, {@code signal.noise-below}. */
-    private int signalNoiseBelow;
-    /**
-     * The post effect of a weak signal, {@code signal.noise}: a key such as
-     * {@code minecraft:blur}, {@link #CAMFLY_NOISE} for CamFly's own shader,
-     * or {@code null} for none.
-     */
-    private String signalNoise;
-    /** The post effect for a player without CamFly's shader, {@code signal.noise-fallback}, or {@code null}. */
-    private String signalNoiseFallback;
-    /** What CamFly's own shader looks like, the section {@code signal.shader}. */
-    private ShaderLook shaderLook;
-    /** How the players get CamFly's resource pack, {@code resource-pack.send}. */
-    private PackSending packSending;
-    /**
-     * The port of the web server of {@code send: built-in},
-     * {@code resource-pack.port}, or 0 for {@code game}: the port of the
-     * Minecraft server itself.
-     */
-    private int packPort;
-    /**
-     * The address players fetch the pack under, {@code resource-pack.address}
-     * without its port, empty for the one they connected with.
-     */
-    private String packHost;
-    /** The port written after that address, or 0 for none. */
-    private int packHostPort;
-    /** Where the pack lies with {@code send: url}, {@code resource-pack.url}. */
-    private String packUrl;
-    /** Whether a player has to take the pack, {@code resource-pack.required}. */
-    private boolean packRequired;
     /** What happens once the signal is lost, {@code signal.lost}. */
     private SignalLoss signalLoss;
     /** How long the camera has to fly back into the signal, in seconds, {@code signal.lost-seconds}. */
     private int signalLostSeconds;
-    /** The effects of {@code shader-effects}, each with its section. */
-    private final Map<ShaderEffect, EffectSettings> shaderEffects = new EnumMap<>(ShaderEffect.class);
-    /** How many seconds before the end {@code shader-effects.end-warning} starts, {@code seconds}. */
-    private int effectWarningSeconds;
-    /** Below how many hearts {@code shader-effects.low-health} starts, {@code below-hearts}. */
-    private double effectLowHealthBelow;
-    /** How many blocks before the border {@code shader-effects.border} starts, {@code within-blocks}. */
-    private double effectBorderWithin;
 
     // Damage transfer settings
     private DamageMode damageMode;
@@ -490,7 +423,6 @@ public final class CamSettings {
         distanceMode = config.getChoice("camera-mode.max-distance-mode", "fixed", "fixed", "signal")
                 .equalsIgnoreCase("signal") ? DistanceMode.SIGNAL : DistanceMode.FIXED;
         readSignal(config);
-        readShaderEffects(config);
         distanceWarningCooldown = config.getInt("camera-mode.distance-warning-cooldown", 3, 0);
         String border = config.getChoice("camera-mode.border-mode", "barrier", "barrier", "push-back", "false")
                 .toLowerCase(Locale.ROOT);
@@ -729,120 +661,10 @@ public final class CamSettings {
      */
     private void readSignal(ConfigReader config) {
         signalBlockCost = config.getDouble("signal.block-cost", 5.0, 0.0);
-        signalNoiseBelow = config.getInt("signal.noise-below", 25, 0, 100);
-        String allowedEffects = messages.configMessage("config-allowed-post-effects");
-        signalNoise = readPostEffect(config, "signal.noise", CAMFLY_NOISE, allowedEffects, true);
-        signalNoiseFallback = readPostEffect(config, "signal.noise-fallback", "minecraft:blur", allowedEffects,
-                false);
-        shaderLook = ShaderLook.read(config, "signal.shader", messages.configMessage("config-allowed-colors"));
-        String sending = config.getChoice("resource-pack.send", "built-in", "built-in", "url", "false")
-                .toLowerCase(Locale.ROOT);
-        packSending = switch (sending) {
-            case "url" -> PackSending.URL;
-            case "false" -> PackSending.OFF;
-            default -> PackSending.BUILT_IN;
-        };
-        packPort = readPackPort(config);
-        readPackAddress(config);
-        packUrl = config.getString("resource-pack.url", "").trim();
-        packRequired = config.getBoolean("resource-pack.required", false);
         signalLoss = config.getChoice("signal.lost", "back", "back", "end").equalsIgnoreCase("end")
                 ? SignalLoss.END
                 : SignalLoss.BACK;
         signalLostSeconds = config.getInt("signal.lost-seconds", 3, 0, MAX_SIGNAL_LOST_SECONDS);
-    }
-
-    /**
-     * Reads the section {@code shader-effects}: one section for each effect,
-     * and what sets off the ones that come in stages.
-     */
-    private void readShaderEffects(ConfigReader config) {
-        String allowedColors = messages.configMessage("config-allowed-colors");
-        for (ShaderEffect effect : ShaderEffect.values()) {
-            shaderEffects.put(effect, EffectSettings.read(config, effect, allowedColors));
-        }
-        effectWarningSeconds = config.getInt("shader-effects.end-warning.seconds", 10, 1, MAX_EFFECT_WARNING_SECONDS);
-        effectLowHealthBelow = config.getDouble("shader-effects.low-health.below-hearts", 4.0, 0.5,
-                MAX_EFFECT_HEARTS);
-        effectBorderWithin = config.getDouble("shader-effects.border.within-blocks", 5.0, 1.0,
-                MAX_EFFECT_BORDER_BLOCKS);
-    }
-
-    /**
-     * Reads {@code resource-pack.port}: {@code game}, or a port of a web
-     * server of its own.
-     *
-     * @return the port, or 0 for {@code game}
-     */
-    private int readPackPort(ConfigReader config) {
-        String path = "resource-pack.port";
-        if (config.isNumber(path)) {
-            return config.getInt(path, 8164, 1, MAX_PORT);
-        }
-        String raw = config.getString(path, GAME_PORT).trim();
-        if (!raw.equalsIgnoreCase(GAME_PORT)) {
-            config.warnUnknownValue(path, raw, messages.configMessage("config-allowed-pack-port"), GAME_PORT);
-        }
-        return 0;
-    }
-
-    /**
-     * Reads {@code resource-pack.address}: a host, perhaps with a port after
-     * it, such as {@code mc.example.com:25565} or {@code [2001:db8::1]:25565}.
-     * An IPv6 address without brackets has colons of its own and no port.
-     */
-    private void readPackAddress(ConfigReader config) {
-        String path = "resource-pack.address";
-        String raw = config.getString(path, "").trim();
-        packHost = raw;
-        packHostPort = 0;
-        int colon = raw.lastIndexOf(':');
-        boolean withPort = raw.startsWith("[") ? colon > raw.indexOf(']') : colon > 0 && colon == raw.indexOf(':');
-        if (!withPort) {
-            return;
-        }
-        packHost = raw.substring(0, colon);
-        String port = raw.substring(colon + 1);
-        int value = port.matches("[0-9]{1,5}") ? Integer.parseInt(port) : 0;
-        if (value < 1 || value > MAX_PORT) {
-            config.warnUnknownValue(path, raw, messages.configMessage("config-allowed-pack-address"), packHost);
-            return;
-        }
-        packHostPort = value;
-    }
-
-    /**
-     * Reads a post effect such as {@code signal.noise}: {@code false} for
-     * none, a key such as {@code minecraft:blur} or {@code meinpaket:stoerung}
-     * - without a namespace it is one of the game's -, and where
-     * {@code ownShader} allows it {@code camfly} for CamFly's own shader. A key
-     * is not checked against anything: the effects live on the client, and the
-     * server does not know them.
-     *
-     * @return the key, {@link #CAMFLY_NOISE}, or {@code null} for none
-     */
-    private static String readPostEffect(ConfigReader config, String path, String def, String allowed,
-                                         boolean ownShader) {
-        String raw = config.getString(path, def).trim().toLowerCase(Locale.ROOT);
-        if (raw.equals("false")) {
-            return null;
-        }
-        if (raw.equals(CAMFLY_NOISE)) {
-            if (ownShader) {
-                return CAMFLY_NOISE;
-            }
-            // Not taken for minecraft:camfly, which is what it would be read
-            // as: whoever writes it means the shader, and that is the one
-            // thing this effect stands in for.
-            config.warnUnknownValue(path, raw, allowed, def);
-            return def;
-        }
-        NamespacedKey key = raw.isEmpty() ? null : NamespacedKey.fromString(raw);
-        if (key == null) {
-            config.warnUnknownValue(path, raw, allowed, def);
-            return def.equals("false") ? null : def;
-        }
-        return key.toString();
     }
 
     /**
@@ -1162,116 +984,12 @@ public final class CamSettings {
         return signalBlockCost;
     }
 
-    public int getSignalNoiseBelow() {
-        return signalNoiseBelow;
-    }
-
     public SignalLoss getSignalLoss() {
         return signalLoss;
     }
 
     public int getSignalLostSeconds() {
         return signalLostSeconds;
-    }
-
-    /** The post effect of a weak signal: a key, {@link #CAMFLY_NOISE}, or {@code null} for none. */
-    public String getSignalNoise() {
-        return signalNoise;
-    }
-
-    /** The post effect for a player without CamFly's shader, or {@code null} for none. */
-    public String getSignalNoiseFallback() {
-        return signalNoiseFallback;
-    }
-
-    /**
-     * Whether CamFly's own shader is in use: the signal holds the camera, its
-     * noise is {@code camfly}, and there is a weak signal to show it at.
-     */
-    public boolean usesCamflyShader() {
-        return usesSignal() && CAMFLY_NOISE.equals(signalNoise) && signalNoiseBelow > 0;
-    }
-
-    /**
-     * Whether any effect of {@code shader-effects} is switched on - and can
-     * be shown at all: they need Paper, see {@link PostEffects#direct()}.
-     */
-    public boolean usesShaderEffects() {
-        if (!PostEffects.direct()) {
-            return false;
-        }
-        for (EffectSettings effect : shaderEffects.values()) {
-            if (effect.enabled()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** Whether CamFly's resource pack is needed: for its shader of the signal, or for one of its effects. */
-    public boolean needsResourcePack() {
-        return usesCamflyShader() || usesShaderEffects();
-    }
-
-    /** The effects of {@code shader-effects}, each with its section. */
-    public Map<ShaderEffect, EffectSettings> getShaderEffects() {
-        return Collections.unmodifiableMap(shaderEffects);
-    }
-
-    /** The section of one effect of {@code shader-effects}; switched off where Paper is missing. */
-    public EffectSettings getShaderEffect(ShaderEffect effect) {
-        EffectSettings settings = shaderEffects.get(effect);
-        return PostEffects.direct() ? settings
-                : new EffectSettings(false, settings.style(), settings.steps(), settings.tint(), settings.strength());
-    }
-
-    public int getEffectWarningSeconds() {
-        return effectWarningSeconds;
-    }
-
-    /** Below how many points of health {@code shader-effects.low-health} starts, two to a heart. */
-    public double getEffectLowHealthBelow() {
-        return effectLowHealthBelow * 2.0;
-    }
-
-    public double getEffectBorderWithin() {
-        return effectBorderWithin;
-    }
-
-    public ShaderLook getShaderLook() {
-        return shaderLook;
-    }
-
-    public PackSending getPackSending() {
-        return packSending;
-    }
-
-    /** The port of the web server of {@code send: built-in}, or 0 for the port of the game itself. */
-    public int getPackPort() {
-        return packPort;
-    }
-
-    /** Whether the pack goes out over the port of the game itself, {@code resource-pack.port: game}. */
-    public boolean isPackOnGamePort() {
-        return packPort == 0;
-    }
-
-    /** The address of {@code resource-pack.address} without its port, empty for none. */
-    public String getPackHost() {
-        return packHost;
-    }
-
-    /** The port of {@code resource-pack.address}, or 0 where it names none. */
-    public int getPackHostPort() {
-        return packHostPort;
-    }
-
-    public String getPackUrl() {
-        return packUrl;
-    }
-
-    public boolean isPackRequired() {
-        return packRequired;
     }
 
     /**

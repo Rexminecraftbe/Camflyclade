@@ -209,7 +209,7 @@ public final class CamCrashGuard implements Listener {
      * twice: if the server never saved him in camera mode, he simply gets the
      * same things again. The effects go the same way - the ones of camera
      * mode, invisibility and night vision, are taken off with whatever else
-     * he wears -, and so does the noise of a weak signal over his screen.</p>
+     * he wears.</p>
      *
      * <p>A file that cannot be read is moved aside instead of deleted, so that
      * nothing in it is lost and somebody can still look into it.</p>
@@ -253,9 +253,6 @@ public final class CamCrashGuard implements Listener {
                 player.addPotionEffect(effect);
             }
         }
-        // The server saves the post effects along with him, the noise of a
-        // weak signal among them.
-        plugin.getSignal().forgetNoise(player);
         player.getInventory().setContents(contents);
         player.updateInventory();
         GameMode gameMode;

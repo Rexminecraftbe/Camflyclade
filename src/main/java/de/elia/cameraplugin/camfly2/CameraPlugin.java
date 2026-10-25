@@ -49,8 +49,6 @@ import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.session.ExitKey;
 import de.elia.cameraplugin.session.SessionListener;
 import de.elia.cameraplugin.session.SessionTracker;
-import de.elia.cameraplugin.shader.CamEffects;
-import de.elia.cameraplugin.shader.CamResourcePack;
 import de.elia.cameraplugin.signal.CamSignal;
 import de.elia.cameraplugin.speed.CamFlightSpeed;
 import de.elia.cameraplugin.start.CamStarter;
@@ -123,8 +121,6 @@ public final class CameraPlugin extends JavaPlugin {
     private final BodyAlarm bodyAlarm = new BodyAlarm(this);
     private final CamNudge nudge = new CamNudge(this);
     private final CamSignal signal = new CamSignal(this);
-    private final CamResourcePack resourcePack = new CamResourcePack(this, log);
-    private final CamEffects effects = new CamEffects(this);
     private final CamAfk afk = new CamAfk(this);
     private final CamBack back = new CamBack(this);
     private final StartChecks startChecks = new StartChecks(settings, messages, cameraPlayers);
@@ -173,7 +169,6 @@ public final class CameraPlugin extends JavaPlugin {
         camInventoryGuard = new CamInventoryGuard(this, this::isInCameraMode);
         configFile.reportConfigWarnings(loadConfigValues(), null);
         ban.reload();
-        resourcePack.reload();
         bodySpawner = new BodySpawner(this, settings, messages, log, cameraPlayers);
         camModeObjective.setUp();
         bodySpawner.removeLeftoverEntities();
@@ -223,8 +218,6 @@ public final class CameraPlugin extends JavaPlugin {
                 crashGuard,
                 new SessionTracker(cameraPlayers),
                 trail,
-                resourcePack,
-                effects,
                 new ExitKey(this),
                 afk,
                 new CamSuggestionFilter(this));
@@ -325,8 +318,6 @@ public final class CameraPlugin extends JavaPlugin {
         bodyAlarm.onDisable();
         nudge.onDisable();
         signal.onDisable();
-        effects.onDisable();
-        resourcePack.onDisable();
         afk.onDisable();
         startDelay.onDisable();
         trail.onDisable();
@@ -404,7 +395,6 @@ public final class CameraPlugin extends JavaPlugin {
         startDelay.callOffAll("start-delay-cancelled");
         configFile.reportConfigWarnings(loadConfigValues(), initiator);
         ban.reload();
-        resourcePack.reload();
         noCollisionTeam.refreshNoCollisionTeam();
         timeLimit.onReload();
         startCost.reset();
@@ -601,14 +591,6 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamSignal getSignal() {
         return signal;
-    }
-
-    public CamResourcePack getResourcePack() {
-        return resourcePack;
-    }
-
-    public CamEffects getEffects() {
-        return effects;
     }
 
     public CamAfk getAfk() {
