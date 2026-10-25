@@ -2599,9 +2599,11 @@ def grund_checks(env, bot):
 
     def amboss(x, y, z, mannequin):
         # CancelDrop: Er bleibt nicht als Block liegen, genau dort, wohin der
-        # Bot beim Ende des Cam-Modus zurueckkommt.
+        # Bot beim Ende des Cam-Modus zurueckkommt. Der Block steht seit 26.3
+        # als Text da; {Name:...} lehnt der Server ab und laesst Sand fallen,
+        # der niemanden verletzt.
         console(env, f"summon minecraft:falling_block {x} {y + AMBOSS_HOEHE} {z} "
-                     '{BlockState:{Name:"minecraft:anvil"},CancelDrop:1b,'
+                     '{BlockState:"minecraft:anvil",CancelDrop:1b,'
                      "HurtEntities:1b,FallHurtAmount:2.0f,FallHurtMax:40}", pause=0)
 
     def schaden(art, von=None):
