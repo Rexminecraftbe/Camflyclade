@@ -797,7 +797,7 @@ def step_names(env):
 # Der Shader von CamFly
 # ---------------------------------------------------------------------------
 
-SHADER_QUELLE = Path("src") / "main" / "resources" / "resourcepack" / "assets" / "camfly" / "shaders" / "post" / "signal_noise.fsh"
+SHADER_QUELLE = Path("src") / "main" / "resources" / "resourcepack" / "assets" / "camfly" / "shaders" / "post" / "effect.fsh"
 
 # Der Uniform-Block Globals, wie ihn der Client von 26.3 jedem Post-Shader
 # mitgibt (assets/minecraft/shaders/include/globals.glsl im Client). Der Shader
@@ -825,26 +825,96 @@ void main() {
 """
 
 
-def shader_aussehen(config_text):
-    """Die Werte von signal.shader aus der config.yml, als Zeichenketten."""
-    signal = re.search(r"(?ms)^signal:\n(.*?)(?=^\S)", config_text)
-    shader = re.search(r"(?ms)^  shader:\n((?:    .*\n|\s*\n)*)", signal.group(1)) if signal else None
-    if shader is None:
-        return {}
-    # Kommentare stehen dort in eigenen Zeilen; ein # im Wert ist der der Farbe.
-    return dict(re.findall(r'(?m)^    ([a-z-]+):\s*"?([^"\n]+?)"?\s*$', shader.group(1)))
+# Baut das Ressourcenpaket mit dem Code des Plugins selbst, aus der
+# ausgelieferten config.yml: ShaderLook.read und EffectSettings.read lesen sie
+# wie auf dem Server, ShaderPack.build packt. So rechnet der Schritt shader
+# genau die Post-Effekte, die ein Client bekaeme.
+PAKETBAU_JAVA = r"""
+import de.elia.cameraplugin.config.ConfigReader;
+import de.elia.cameraplugin.shader.EffectSettings;
+import de.elia.cameraplugin.shader.ShaderEffect;
+import de.elia.cameraplugin.shader.ShaderLook;
+import de.elia.cameraplugin.shader.ShaderPack;
+import org.bukkit.configuration.file.YamlConfiguration;
+
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.EnumMap;
+import java.util.Map;
+
+public final class PaketBau {
+    public static void main(String[] args) throws Exception {
+        ConfigReader reader = new ConfigReader(YamlConfiguration.loadConfiguration(new File(args[0])));
+        ShaderLook signal = ShaderLook.read(reader, "signal.shader", "#RRGGBB");
+        Map<ShaderEffect, EffectSettings> effects = new EnumMap<>(ShaderEffect.class);
+        for (ShaderEffect effect : ShaderEffect.values()) {
+            effects.put(effect, EffectSettings.read(reader, effect, "#RRGGBB"));
+        }
+        Files.write(Path.of(args[1]), ShaderPack.build(signal, effects).bytes());
+        System.out.println("Hinweise: " + reader.getWarnings().size());
+        reader.getWarnings().forEach(w -> System.out.println("  " + w));
+    }
+}
+"""
+
+
+def paket_bauen(env):
+    """Das Ressourcenpaket, wie das Plugin es aus der ausgelieferten
+    config.yml baut - mit target/classes und paper-api. Gibt die Bytes und
+    die Ausgabe zurueck."""
+    ordner = clean_dir(env.work / "paketbau")
+    (ordner / "PaketBau.java").write_text(PAKETBAU_JAVA, encoding="utf-8")
+    pfad = os.pathsep.join([str(env.repo / "target" / "classes"), env.paper_api_cp])
+    run([str(env.javac), "-nowarn", "-cp", pfad, "-d", str(ordner), str(ordner / "PaketBau.java")])
+    ziel = ordner / "CamFly.zip"
+    proc = run([str(env.java), "-cp", os.pathsep.join([str(ordner), pfad]), "PaketBau",
+                str(env.repo / "src" / "main" / "resources" / "config.yml"), str(ziel)], check=False)
+    return (ziel.read_bytes() if ziel.exists() else b""), (proc.stdout or "")
+
+
+def shader_bloecke(quelle):
+    """Die Namen der Werte im Block EffectConfig des Shaders, in ihrer Reihenfolge."""
+    block = re.search(r"(?s)uniform EffectConfig \{(.*?)\};", quelle)
+    return re.findall(r"(?m)^\s*(?:vec4|float)\s+(\w+);", block.group(1)) if block else []
+
+
+def paket_effekte(inhalt):
+    """Die Post-Effekte im Paket: Name (signal_1, start_7 ...) -> Werte von
+    EffectConfig in der Reihenfolge, in der sie dort stehen."""
+    effekte = {}
+    with zipfile.ZipFile(io.BytesIO(inhalt)) as z:
+        for name in z.namelist():
+            m = re.fullmatch(r"assets/camfly/post_effect/(\w+)\.json", name)
+            if m:
+                daten = json.loads(z.read(name))
+                effekte[m.group(1)] = [(u["name"], u["value"]) for u in daten["passes"][0]["uniforms"]["EffectConfig"]]
+    return effekte
+
+
+def _nummer(name):
+    """Name und Nummer eines Post-Effekts: start_7 -> (start, 7)."""
+    basis, _, zahl = name.rpartition("_")
+    return basis, int(zahl)
 
 
 def step_shader(env):
-    """Den Shader von CamFly uebersetzen und jede Stufe einmal rechnen.
+    """Den Shader von CamFly uebersetzen und jeden seiner Post-Effekte rechnen.
 
     In Software-OpenGL (Mesa llvmpipe), ohne Grafikkarte und ohne Minecraft:
-    Was hier nicht uebersetzt, laedt auch kein Client. Gerechnet wird auf
-    einem Testbild mit Farbbalken, mit den Werten von signal.shader aus der
-    ausgelieferten config.yml, so wie das Plugin sie in die Post-Effekte
-    schreibt. Jede Stufe muss das Bild staerker stoeren als die vorige. Die
-    Vorschau landet als shader-vorschau.png im Arbeitsordner - wer am Aussehen
-    dreht, sieht dort, was daraus wird.
+    Was hier nicht uebersetzt, laedt auch kein Client. Das Paket baut das
+    Plugin selbst, aus der ausgelieferten config.yml (paket_bauen); gerechnet
+    wird jeder Post-Effekt darin - jede Stufe der Stoerung bei schwachem
+    Signal, jede Stufe der shader-effects und jedes Bild ihrer Animationen -
+    auf einem Testbild mit Farbbalken. Die Werte muessen genau die des
+    Blocks EffectConfig im Shader sein, in seiner Reihenfolge: in der schreibt
+    der Client sie hinein.
+
+    Geprueft wird, was man sehen soll: Jede Stufe stoert staerker als die
+    vorige. Die Kamera geht mit crt aus dem Schwarzen an und am Ende wieder
+    in eine Linie aus, danach kommt das Bild zurueck. Die anderen Animationen
+    fangen stark an und klingen ab. Die Vorschau landet als
+    shader-vorschau.png im Arbeitsordner, eine Zeile je Effekt.
 
     Braucht moderngl und Pillow (pip install moderngl pillow) und ein OpenGL
     ab 3.3, ueber EGL oder ein X-Display. Fehlt etwas davon, wird der Schritt
@@ -853,7 +923,7 @@ def step_shader(env):
     Log.step("6b. Der Shader von CamFly")
     try:
         import moderngl
-        from PIL import Image
+        from PIL import Image, ImageDraw
     except ImportError:
         Log.warn("moderngl oder Pillow fehlen (pip install moderngl pillow) - der Shader wird nicht geprueft")
         return True
@@ -879,18 +949,21 @@ def step_shader(env):
         return False
     FIND.test("Der Shader laesst sich uebersetzen", True, ctx.info.get("GL_RENDERER", ""))
 
-    werte = shader_aussehen((env.repo / "src" / "main" / "resources" / "config.yml").read_text(encoding="utf-8"))
-    try:
-        stufen = int(werte["stages"])
-        tint = int(werte["tint"].lstrip("#"), 16)
-        zahlen = [float(werte[k]) for k in ("static", "scanlines", "line-jitter", "color-split",
-                                              "dropouts", "desaturate", "vignette")]
-        tempo = float(werte["speed"])
-    except (KeyError, ValueError) as exc:
-        FIND.test("signal.shader steht vollstaendig in der config.yml", False, f"{exc}: {werte}")
+    if not (env.repo / "target" / "classes").exists() or not env.paper_api_jars:
+        FIND.test("Paket mit dem Code des Plugins gebaut", False, "erst die Schritte build und paperapi")
+        return False
+    inhalt, ausgabe = paket_bauen(env)
+    effekte = paket_effekte(inhalt) if inhalt else {}
+    if not FIND.test("Paket mit dem Code des Plugins gebaut, aus der ausgelieferten config.yml",
+                     bool(effekte) and "Hinweise: 0" in ausgabe, ausgabe.strip()[-300:]):
+        return False
+    namen = shader_bloecke(quelle)
+    falsch = [n for n, werte in effekte.items() if [w[0] for w in werte] != namen]
+    if not FIND.test(f"Alle {len(effekte)} Post-Effekte reichen die Werte von EffectConfig in seiner Reihenfolge",
+                     not falsch and len(namen) == 16, ", ".join(falsch[:5]) or ", ".join(namen)):
         return False
 
-    breite, hoehe = 480, 270
+    breite, hoehe = 320, 180
     farben = [(255, 255, 255), (255, 255, 0), (0, 255, 255), (0, 255, 0), (255, 0, 255), (255, 0, 0), (0, 0, 255)]
     testbild = Image.new("RGB", (breite, hoehe))
     for x in range(breite):
@@ -900,6 +973,7 @@ def step_shader(env):
             else:
                 farbe = (230, 230, 230) if (x // 20 + y // 20) % 2 else (25, 25, 25)
             testbild.putpixel((x, y), farbe)
+    vorher = testbild.tobytes()
     textur = ctx.texture((breite, hoehe), 3, testbild.transpose(Image.FLIP_TOP_BOTTOM).tobytes())
     textur.filter = (moderngl.LINEAR, moderngl.LINEAR)
     ziel = ctx.simple_framebuffer((breite, hoehe))
@@ -911,30 +985,80 @@ def step_shader(env):
         puffer.bind_to_uniform_block(nummer)
 
     block("SamplerInfo", struct.pack("4f", breite, hoehe, breite, hoehe), 0)
-    block("Globals", struct.pack("3i f 3f f 2f 2i", 0, 0, 0, 1.0, 0, 0, 0, 0.3141, breite, hoehe, 0, 0), 1)
-    bilder, abweichung = [testbild], []
-    for stufe in range(1, stufen + 1):
-        anteil = stufe / stufen
-        block("SignalConfig", struct.pack("4f 8f", (tint >> 16 & 255) / 255, (tint >> 8 & 255) / 255,
-                                          (tint & 255) / 255, anteil, *[z * anteil for z in zahlen], tempo), 2)
+    groesse = prog["EffectConfig"].size
+
+    def rechnen(werte, zeit):
+        """Ein Bild mit diesen Werten zu dieser Tageszeit (GameTime)."""
+        block("Globals", struct.pack("3i f 3f f 2f 2i", 0, 0, 0, 1.0, 0, 0, 0, zeit, breite, hoehe, 0, 0), 1)
+        zahlen = []
+        for _, wert in werte:
+            zahlen.extend(wert if isinstance(wert, list) else [wert])
+        daten = struct.pack(f"{len(zahlen)}f", *zahlen)
+        block("EffectConfig", daten + bytes(groesse - len(daten)), 2)
         prog["InSampler"].value = 0
         textur.use(0)
         ziel.use()
         ziel.clear()
         vao.render(moderngl.TRIANGLES, vertices=3)
-        bild = Image.frombytes("RGB", (breite, hoehe), ziel.read(components=3)).transpose(Image.FLIP_TOP_BOTTOM)
-        bilder.append(bild)
-        roh, vorher = bild.tobytes(), testbild.tobytes()
-        abweichung.append(sum(abs(a - b) for a, b in zip(roh, vorher)) / len(roh))
-    FIND.test(f"Jede der {stufen} Stufen stoert das Bild staerker als die vorige",
-              all(b > a for a, b in zip([0.0] + abweichung, abweichung)),
-              ", ".join(f"{a:.1f}" for a in abweichung))
-    vorschau = Image.new("RGB", (breite * len(bilder), hoehe))
-    for i, bild in enumerate(bilder):
-        vorschau.paste(bild, (i * breite, 0))
+        return Image.frombytes("RGB", (breite, hoehe), ziel.read(components=3)).transpose(Image.FLIP_TOP_BOTTOM)
+
+    # Ein Herzschlag dauert bei Speed 1 eine Sekunde, 20 Ticks, und ist schnell
+    # vorbei: alle halbe Tick darin gerechnet, sieht man auch, was nur beim
+    # Schlag kommt.
+    zeiten = [0.3141 + i * 0.5 / 24000.0 for i in range(40)]
+
+    def abweichung(bild):
+        roh = bild.tobytes()
+        return sum(abs(a - b) for a, b in zip(roh, vorher)) / len(roh)
+
+    def hell(bild):
+        roh = bild.tobytes()
+        return sum(roh) / len(roh)
+
+    gruppen = {}
+    for name in effekte:
+        basis, nummer = _nummer(name)
+        gruppen.setdefault(basis, []).append(nummer)
+    zeilen, gut = [], True
+    for basis in sorted(gruppen, key=lambda b: (b != "signal", b)):
+        nummern = sorted(gruppen[basis])
+        bilder = []
+        for nummer in nummern:
+            werte = effekte[f"{basis}_{nummer}"]
+            reihe = [rechnen(werte, z) for z in zeiten]
+            # Das Bild, das am weitesten vom Testbild weg ist, fuer Vorschau und Pruefung.
+            bilder.append(max(reihe, key=abweichung))
+        stark = [abweichung(b) for b in bilder]
+        anzeige = "signal.shader" if basis == "signal" else f"shader-effects.{basis.replace('_', '-')}"
+        if basis in ("start", "end", "end_body", "end_forced", "nudge"):
+            if dict(effekte[f"{basis}_1"])["Collapse"] > 0:
+                # crt: das erste Bild ist schwarz bis auf die Linie, das letzte fast schon das Bild.
+                schwarz = hell(bilder[0]) < 0.08 * hell(testbild)
+                zurueck = stark[-1] < 0.25 * max(stark)
+                gut &= FIND.test(f"{anzeige}: crt - erst nur die Linie, am Ende wieder das Bild",
+                                 schwarz and zurueck, f"Helligkeit {hell(bilder[0]):.1f}, Abweichung "
+                                 + " ".join(f"{a:.0f}" for a in stark))
+            else:
+                gut &= FIND.test(f"{anzeige}: setzt stark ein und klingt ab",
+                                 stark[0] > 2.0 * stark[-1], " ".join(f"{a:.0f}" for a in stark))
+        else:
+            gut &= FIND.test(f"{anzeige}: jede der {len(nummern)} Stufen stoert staerker als die vorige",
+                             all(b > a for a, b in zip([0.0] + stark, stark)), " ".join(f"{a:.1f}" for a in stark))
+        zeilen.append((basis, bilder))
+
+    rand = 18
+    spalten = max(len(b) for _, b in zeilen) + 1
+    vorschau = Image.new("RGB", (spalten * breite // 2, len(zeilen) * (hoehe // 2 + rand)), (18, 18, 18))
+    stift = ImageDraw.Draw(vorschau)
+    for zeile, (basis, bilder) in enumerate(zeilen):
+        oben = zeile * (hoehe // 2 + rand)
+        stift.text((4, oben + 3), basis, fill=(235, 235, 235))
+        for spalte, bild in enumerate([testbild] + bilder):
+            vorschau.paste(bild.resize((breite // 2, hoehe // 2)), (spalte * breite // 2, oben + rand))
     vorschau.save(env.work / "shader-vorschau.png")
-    Log.detail(f"Vorschau: {env.work / 'shader-vorschau.png'} - links das Testbild, dann Stufe 1 bis {stufen}")
-    return True
+    Log.detail(f"Vorschau: {env.work / 'shader-vorschau.png'} - je Zeile links das Testbild, dann Stufe fuer Stufe"
+               " oder Bild fuer Bild")
+    return gut
 
 
 # ---------------------------------------------------------------------------
@@ -5240,8 +5364,9 @@ def funk_checks(env, bot):
         FIND.test("Voreingestellt steht camera-mode.max-distance-mode: fixed da",
                   re.search(r"(?m)^\s*max-distance-mode:\s*fixed\s*$", ausgeliefert(env)) is not None, "")
         luft()
+        # Ohne shader-effects: deren eigene Effekte prueft effekt_checks.
         set_options(env, [("max-distance-mode", "signal"), ("max-distance", "30.0"),
-                          ("lost-seconds", "3", "signal")])
+                          ("lost-seconds", "3", "signal"), ("enabled", "false", "shader-effects")])
         hinstellen(bot, x, y, z)
         if not FIND.test("Cam-Modus mit Funksignal gestartet", cam_on(bot), ""):
             return
@@ -5341,7 +5466,8 @@ def funk_checks(env, bot):
             cam_off(bot)
             luft()
             set_options(env, [("max-distance-mode", "fixed"), ("max-distance", "100.0"),
-                              ("lost", "back", "signal"), ("lost-seconds", "3", "signal")])
+                              ("lost", "back", "signal"), ("lost-seconds", "3", "signal"),
+                              ("enabled", "true", "shader-effects")])
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test des Funksignals: {exc}")
@@ -5420,9 +5546,10 @@ def _status_text(daten):
 def paket_checks(env, bot):
     """resource-pack: das Ressourcenpaket mit dem Shader von CamFly.
 
-    Voreingestellt - max-distance-mode: fixed - gibt es keins: Der Shader wird
-    nicht gebraucht, und niemand soll nach einem Paket gefragt werden. Mit
-    signal baut CamFly es aus signal.shader, legt es als
+    Mit max-distance-mode: fixed und ohne shader-effects gibt es keins: Der
+    Shader wird nicht gebraucht, und niemand soll nach einem Paket gefragt
+    werden. Der Test laeuft ganz ohne shader-effects. Mit signal baut CamFly
+    es aus signal.shader, legt es als
     plugins/CamFly/resourcepack/CamFly.zip ab und schickt es jedem, der online
     ist: voreingestellt mit port: game ueber den Port des Spiels selbst, unter
     der Adresse und dem Port, mit denen sich der Bot verbunden hat, mit der
@@ -5466,7 +5593,7 @@ def paket_checks(env, bot):
     def stufe(inhalt, nummer):
         with zipfile.ZipFile(io.BytesIO(inhalt)) as z:
             daten = json.loads(z.read(f"assets/camfly/post_effect/signal_{nummer}.json"))
-        return {u["name"]: u["value"] for u in daten["passes"][0]["uniforms"]["SignalConfig"]}
+        return {u["name"]: u["value"] for u in daten["passes"][0]["uniforms"]["EffectConfig"]}
 
     def fehlschlag():
         """Der Bot meldet: angenommen, Download fehlgeschlagen. Gibt die
@@ -5485,8 +5612,9 @@ def paket_checks(env, bot):
                             ausgeliefert(env)) is not None, "")
         zip_datei.unlink(missing_ok=True)
         seit = marke()
-        set_option(env, "max-distance-mode", "fixed")
-        FIND.test("max-distance-mode: fixed - kein Ressourcenpaket, keins geschickt",
+        # Ohne shader-effects, die das Paket sonst auch bei fixed brauchen.
+        set_options(env, [("max-distance-mode", "fixed"), ("enabled", "false", "shader-effects")])
+        FIND.test("max-distance-mode: fixed, shader-effects aus - kein Ressourcenpaket, keins geschickt",
                   not zip_datei.exists() and pakete_seit(seit) == [], "")
 
         seit = marke()
@@ -5567,7 +5695,7 @@ def paket_checks(env, bot):
             with zipfile.ZipFile(io.BytesIO(inhalt)) as z:
                 namen = sorted(z.namelist())
                 meta = json.loads(z.read("pack.mcmeta"))
-        erwartet = sorted(["pack.mcmeta", "assets/camfly/shaders/post/signal_noise.fsh"]
+        erwartet = sorted(["pack.mcmeta", "assets/camfly/shaders/post/effect.fsh"]
                           + [f"assets/camfly/post_effect/signal_{n}.json" for n in range(1, 5)])
         FIND.test("Im Paket: pack.mcmeta, der Shader und vier Post-Effekte", namen == erwartet, str(namen))
         if namen == erwartet:
@@ -5631,10 +5759,266 @@ def paket_checks(env, bot):
             set_options(env, [("max-distance-mode", "fixed"), ("max-distance", "100.0"),
                               ("static", "0.55", "signal"), ("stages", "4", "signal"),
                               ("send", "built-in", "resource-pack"), ("url", '""', "resource-pack"),
-                              ("port", "game", "resource-pack"), ("address", '""', "resource-pack")])
+                              ("port", "game", "resource-pack"), ("address", '""', "resource-pack"),
+                              ("enabled", "true", "shader-effects")])
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test des Ressourcenpakets: {exc}")
+
+
+def effekt_checks(env, bot):
+    """shader-effects: die Shader-Effekte von CamFly ausser der Stoerung bei
+    schwachem Signal - Kamera an und aus, Anstupsen, Warnung vor dem Ende,
+    Koerper mit wenig Leben, Grenze.
+
+    Voreingestellt sind alle acht an, und das Paket traegt ihre Post-Effekte:
+    ein Bild je Tick der Animationen, eine Datei je Stufe der uebrigen. Damit
+    die Probe sie zu fassen bekommt, dauern die Animationen hier zwei Sekunden
+    (ticks: 40). Solange der Bot das Paket nicht geladen hat, kommt nichts; hat
+    er es angenommen, liegt beim Start camfly:start_N auf ihm, Bild fuer Bild
+    weiter, und danach nichts mehr. Das Ende zeigt den Effekt seines Grundes,
+    wie beim Ton: /cam end, ein Treffer auf den Koerper end_body, /cam reload
+    end_forced. Ein Stups des zweiten Spielers gibt nudge. Mit time-limit von
+    zehn Sekunden kommt end_warning in den letzten acht, immer staerker, und
+    am Ende end_forced. Mit sieben halben Herzen kommt low_health in Stufe 1,
+    mit zwei in Stufe 3, mit vollem Leben nichts. Drei Bloecke vor
+    max-distance kommt border, zehn Bloecke weg nicht; ebenso vor einem
+    verbotenen Biom. Was der Test umstellt, stellt er am Ende zurueck - auch
+    die Dauer, so dass das Paket danach neu hinausgeht und der Bot es nicht
+    mehr geladen hat.
+    """
+    zip_datei = env.server / "plugins" / "CamFly" / "resourcepack" / "CamFly.zip"
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    bx, bz = _floor(x), _floor(z)
+    modus = next((m for m in ("survival", "creative") if spielmodus_ist(bot, m)), "survival")
+    zuschauer = None
+    biom_flaeche = None
+
+    def von(effekte, name):
+        """Die Bilder oder Stufen dieses Effekts in der Liste, als Nummern."""
+        return [int(e.rsplit("_", 1)[1]) for e in (effekte or []) if re.fullmatch(rf"camfly:{name}_\d+", e)]
+
+    def zeige(effekte):
+        return "keine Antwort" if effekte is None else ", ".join(effekte) or "keine"
+
+    def gleich_danach(text):
+        """Den Befehl schicken und gleich dahinter /posteffect list: Der
+        Server beantwortet beides im selben Tick oder dem naechsten, die
+        Liste zeigt also das erste Bild einer Animation. Gibt die Liste."""
+        seit = bot.mark()
+        bot.chat(text)
+        bot.chat("/posteffect list @s")
+        time.sleep(1.0)
+        for zeile in reversed(zeilen_seit(bot, seit)):
+            if re.search(r"does not have any post effects", zeile):
+                return []
+            treffer = re.search(r"has \d+ post effects?: (.*)$", zeile)
+            if treffer:
+                return [e.strip() for e in treffer.group(1).split(",") if e.strip()]
+        return None
+
+    try:
+        cam_off(bot)
+        text = ausgeliefert(env)
+        block = re.search(r"(?ms)^shader-effects:\n(.*?)(?=^\S)", text)
+        abschnitte = re.findall(r"(?m)^  ([a-z-]+):\s*\n\s*enabled:\s*true\s*$", block.group(1)) if block else []
+        FIND.test("Voreingestellt sind alle acht shader-effects an",
+                  sorted(abschnitte) == sorted(["start", "end", "end-body", "end-forced", "nudge", "end-warning",
+                                                 "low-health", "border"]), ", ".join(abschnitte))
+        namen = []
+        if zip_datei.is_file():
+            with zipfile.ZipFile(zip_datei) as paket:
+                namen = [n.rsplit("/", 1)[1][:-5] for n in paket.namelist()
+                         if n.startswith("assets/camfly/post_effect/")]
+        anzahl = {basis: sum(1 for n in namen if re.fullmatch(rf"{basis}_\d+", n))
+                  for basis in ("start", "end", "end_body", "end_forced", "nudge", "end_warning", "low_health",
+                                "border")}
+        FIND.test("Das Paket traegt ein Bild je Tick der Animationen und eine Datei je Stufe der uebrigen",
+                  anzahl == {"start": 12, "end": 14, "end_body": 14, "end_forced": 16, "nudge": 8,
+                             "end_warning": 4, "low_health": 4, "border": 4}, str(anzahl))
+
+        seit = bot.call("resource_packs", since=10 ** 9).get("count", 0)
+        set_option(env, "ticks", "40", "shader-effects")
+        time.sleep(1.0)
+        neu = bot.call("resource_packs", since=seit).get("packs", [])
+        FIND.test("ticks: 40 - ein neues Paket geht hinaus", len(neu) == 1, str(neu))
+        hinstellen(bot, x, y, z)
+        if FIND.test("Cam-Modus ohne geladenes Paket gestartet", cam_on(bot), ""):
+            effekte = nacheffekte(bot)
+            FIND.test("Ohne geladenes Paket kein Effekt beim Start", effekte == [], zeige(effekte))
+            cam_off(bot)
+        bot.call("resource_pack_answer", accept=True)
+        time.sleep(1.0)
+
+        # --- Kamera an ---
+        erst = gleich_danach("/cam")
+        dann = nacheffekte(bot)
+        FIND.test("start: beim Start liegt camfly:start_N auf ihm, gleich das erste Bild, dann eins je Tick",
+                  von(erst, "start") in ([1], [2]) and len(von(dann, "start")) == 1
+                  and von(dann, "start")[0] > von(erst, "start")[0], f"{zeige(erst)} / {zeige(dann)}")
+        time.sleep(2.0)
+        effekte = nacheffekte(bot)
+        FIND.test("start: nach der Animation liegt nichts mehr auf ihm", effekte == [], zeige(effekte))
+
+        # --- Kamera aus, je nach Grund ---
+        effekte = gleich_danach("/cam")
+        FIND.test("end: beim Ende mit /cam camfly:end_N, gleich das erste Bild", von(effekte, "end") in ([1], [2]),
+                  zeige(effekte))
+        time.sleep(2.0)
+        effekte = nacheffekte(bot)
+        FIND.test("end: danach nichts mehr", effekte == [], zeige(effekte))
+
+        bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
+        set_option(env, "enabled", "false", "cam-safety")
+        hinstellen(bot, x, y, z)
+        if cam_on(bot):
+            time.sleep(2.0)
+            hinstellen(bot, x - 6, y, z)
+            console(env, f"damage @e[type=minecraft:mannequin,x={x},y={y},z={z},distance=..1,limit=1] "
+                         f"1 minecraft:cactus", pause=0.3)
+            effekte = nacheffekte(bot)
+            FIND.test("end-body: beim Ende durch einen Treffer auf den Koerper camfly:end_body_N",
+                      len(von(effekte, "end_body")) == 1 and not von(effekte, "end"), zeige(effekte))
+        bot.chat(f"/effect clear {BOT_NAME}")
+        time.sleep(2.0)
+
+        hinstellen(bot, x, y, z)
+        if cam_on(bot):
+            time.sleep(2.0)
+            console(env, "cam reload", pause=0.3)
+            effekte = nacheffekte(bot)
+            FIND.test("end-forced: beim Ende durch /cam reload camfly:end_forced_N",
+                      len(von(effekte, "end_forced")) == 1, zeige(effekte))
+        time.sleep(2.0)
+
+        # --- Anstupsen ---
+        zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+        zuschauer.start()
+        if FIND.test("Zweiter Spieler fuer das Anstupsen kommt herein",
+                     zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            time.sleep(1.5)
+            console(env, f"tp {ZUSCHAUER_NAME} {x + 1.5} {y} {z} 90 0", pause=1.0)
+            hinstellen(bot, x, y, z)
+            if cam_on(bot):
+                bot.call("fly", wait=30, dy=6, timeout=15000)
+                time.sleep(2.0)
+                klicken(zuschauer, "activate_entity", at=[x, y, z], radius=2)
+                effekte = nacheffekte(bot)
+                FIND.test("nudge: ein Stups gibt camfly:nudge_N", len(von(effekte, "nudge")) == 1, zeige(effekte))
+                cam_off(bot)
+        zuschauer.stop()
+        zuschauer = None
+        time.sleep(2.0)
+
+        # --- Warnung vor dem Ende ---
+        set_options(env, [("flight-limit", "time-limit"), ("duration-seconds", "10", "time-limit"),
+                          ("seconds", "8", "shader-effects")])
+        hinstellen(bot, x, y, z)
+        if cam_on(bot):
+            beginn = time.time()
+            time.sleep(2.5)
+            frueh = nacheffekte(bot)
+            time.sleep(max(0.0, 7.5 - (time.time() - beginn)))
+            seit = bot.mark()
+            spaet = nacheffekte(bot)
+            FIND.test("end-warning: in den letzten acht Sekunden camfly:end_warning_N, immer staerker",
+                      len(von(frueh, "end_warning")) == 1 and len(von(spaet, "end_warning")) == 1
+                      and von(spaet, "end_warning")[0] > von(frueh, "end_warning")[0],
+                      f"{zeige(frueh)} / {zeige(spaet)}")
+            bot.expect("Time limit expired", seit, 8000)
+            effekte = nacheffekte(bot)
+            FIND.test("end-warning: am Ende durch das Zeitlimit end_forced statt der Warnung",
+                      len(von(effekte, "end_forced")) == 1 and not von(effekte, "end_warning"), zeige(effekte))
+        set_options(env, [("flight-limit", "false"), ("duration-seconds", "300", "time-limit"),
+                          ("seconds", "10", "shader-effects")])
+        time.sleep(2.0)
+
+        # --- Koerper mit wenig Leben ---
+        console(env, "gamerule natural_health_regeneration false", pause=0.3)
+        spielmodus_setzen(bot, "survival")
+        for schaden, erwartet, wie in ((13, [1], "sieben halbe Herzen - Stufe 1"),
+                                       (5, [3], "zwei halbe Herzen - Stufe 3")):
+            bot.chat(f"/damage @s {schaden}")
+            time.sleep(0.5)
+            hinstellen(bot, x, y, z)
+            if cam_on(bot):
+                time.sleep(2.5)
+                effekte = nacheffekte(bot)
+                FIND.test(f"low-health: {wie}", von(effekte, "low_health") == erwartet, zeige(effekte))
+                cam_off(bot)
+                time.sleep(2.0)
+        bot.chat(f"/effect give {BOT_NAME} minecraft:instant_health 1 5")
+        time.sleep(0.5)
+        hinstellen(bot, x, y, z)
+        if cam_on(bot):
+            time.sleep(2.5)
+            effekte = nacheffekte(bot)
+            FIND.test("low-health: mit vollem Leben nichts", effekte == [], zeige(effekte))
+            cam_off(bot)
+            time.sleep(2.0)
+        console(env, "gamerule natural_health_regeneration true", pause=0.3)
+        spielmodus_setzen(bot, modus)
+
+        # --- Grenze: max-distance ---
+        console(env, f"fill {bx - 2} {y} {bz - 2} {bx + 32} {y + 4} {bz + 2} minecraft:air", pause=0.5)
+        set_option(env, "max-distance", "30.0")
+        hinstellen(bot, x, y, z)
+        if cam_on(bot):
+            time.sleep(2.0)
+            bot.chat(f"/tp {BOT_NAME} {x + 27} {y} {z}")
+            time.sleep(1.0)
+            nah = nacheffekte(bot)
+            bot.chat(f"/tp {BOT_NAME} {x + 10} {y} {z}")
+            time.sleep(1.0)
+            weit = nacheffekte(bot)
+            FIND.test("border: drei Bloecke vor max-distance camfly:border_N, zehn Bloecke weg nichts",
+                      len(von(nah, "border")) == 1 and weit == [], f"{zeige(nah)} / {zeige(weit)}")
+            cam_off(bot)
+        set_option(env, "max-distance", "100.0")
+        time.sleep(2.0)
+
+        # --- Grenze: verbotenes Biom ---
+        anfang = (bx + 12) // 4 * 4
+        biom_flaeche = f"{anfang} {y - 4} {bz - 8} {anfang + 7} {y + 7} {bz + 8}"
+        bot.chat(f"/fillbiome {biom_flaeche} minecraft:lush_caves")
+        time.sleep(1.5)
+        hinstellen(bot, x, y, z)
+        if cam_on(bot):
+            time.sleep(2.0)
+            weit = nacheffekte(bot)
+            bot.chat(f"/tp {BOT_NAME} {anfang - 3.5} {y} {z}")
+            time.sleep(1.0)
+            nah = nacheffekte(bot)
+            FIND.test("border: drei Bloecke vor einem verbotenen Biom camfly:border_N, weiter weg nichts",
+                      len(von(nah, "border")) == 1 and weit == [], f"{zeige(nah)} / {zeige(weit)}")
+            cam_off(bot)
+    finally:
+        try:
+            if zuschauer is not None and zuschauer.proc is not None:
+                zuschauer.stop()
+            cam_off(bot)
+            if biom_flaeche:
+                bot.chat(f"/fillbiome {biom_flaeche} minecraft:plains")
+            bot.chat(f"/effect clear {BOT_NAME}")
+            console(env, "gamerule natural_health_regeneration true", pause=0.3)
+            spielmodus_setzen(bot, modus)
+            # Der ganze Abschnitt shader-effects wie ausgeliefert: ticks stehen
+            # dort nicht ueberall gleich.
+            ausgeliefert_text = (env.repo / "src" / "main" / "resources" / "config.yml").read_text(encoding="utf-8")
+            zurueck = re.search(r"(?ms)^shader-effects:\n.*?(?=^\S)", ausgeliefert_text)
+            datei = env.server / "plugins" / "CamFly" / "config.yml"
+            jetzt = datei.read_text(encoding="utf-8")
+            if zurueck:
+                jetzt = re.sub(r"(?ms)^shader-effects:\n.*?(?=^\S)", lambda _: zurueck.group(0), jetzt)
+                datei.write_text(jetzt, encoding="utf-8")
+            set_options(env, [("enabled", "true", "cam-safety"), ("flight-limit", "false"),
+                              ("duration-seconds", "300", "time-limit"), ("max-distance", "100.0")])
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Shader-Effekte: {exc}")
 
 
 def herzen_checks(env, bot):
@@ -10789,6 +11173,7 @@ def step_tests(env):
         fuer_beide_koerpertypen(env, bot, anstups_checks)
         funk_checks(env, bot)
         paket_checks(env, bot)
+        effekt_checks(env, bot)
 
         # --- Geworfene Traenke und was den Koerper getroffen hat, mit beiden Koerpertypen ---
         fuer_beide_koerpertypen(env, bot, potion_checks, grund_checks)

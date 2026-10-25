@@ -4,6 +4,8 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Lays a post effect over the screen of a player and takes it off again: a
@@ -21,6 +23,12 @@ import java.lang.reflect.Method;
  * not know shows nothing. The server keeps the list with the player and
  * saves it along with him, so an effect stays on him until it is taken off -
  * after a crash as well, see {@link de.elia.cameraplugin.crash.CamCrashGuard}.</p>
+ *
+ * <p>Paper sends the list to the client once a tick, whatever changed in it
+ * during the tick: taking one effect off and laying the next one on is one
+ * packet. That is what makes an animation of one post effect a tick cheap -
+ * through the command, though, each would be a line in the console, see
+ * {@link #direct()}.</p>
  */
 public final class PostEffects {
 
@@ -32,18 +40,26 @@ public final class PostEffects {
     private static final Method REMOVE;
     /** {@code Key#key(String)}, the key of Adventure. */
     private static final Method KEY;
+    /** {@code PlayerPostEffects#values()}. */
+    private static final Method VALUES;
+    /** {@code Key#asString()}. */
+    private static final Method AS_STRING;
 
     static {
         Method postEffects = null;
         Method add = null;
         Method remove = null;
         Method key = null;
+        Method values = null;
+        Method asString = null;
         try {
             Class<?> keyClass = Class.forName("net.kyori.adventure.key.Key");
             Class<?> effects = Class.forName("io.papermc.paper.entity.PlayerPostEffects");
             key = keyClass.getMethod("key", String.class);
             add = effects.getMethod("add", keyClass);
             remove = effects.getMethod("remove", keyClass);
+            values = effects.getMethod("values");
+            asString = keyClass.getMethod("asString");
             // Last: only once everything else is there can it be used.
             postEffects = Player.class.getMethod("postEffects");
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
@@ -53,9 +69,19 @@ public final class PostEffects {
         ADD = add;
         REMOVE = remove;
         KEY = key;
+        VALUES = values;
+        AS_STRING = asString;
     }
 
     private PostEffects() {
+    }
+
+    /**
+     * Whether the effects go straight to Paper, and not through the command
+     * and the console. Only then are animations shown at all.
+     */
+    public static boolean direct() {
+        return POST_EFFECTS != null;
     }
 
     /**
@@ -71,6 +97,32 @@ public final class PostEffects {
     /** Takes the effect off the screen of the player, if he has it. */
     public static void remove(Player player, String key) {
         apply(player, key, false);
+    }
+
+    /**
+     * Takes every effect of this namespace off the player, e.g. all of
+     * CamFly's own, {@code camfly}. Only on Paper, which says which ones the
+     * player has; the command has nothing to say it with but a line in the
+     * console.
+     */
+    public static void removeAll(Player player, String namespace) {
+        if (POST_EFFECTS == null) {
+            return;
+        }
+        try {
+            Object effects = POST_EFFECTS.invoke(player);
+            List<Object> own = new ArrayList<>();
+            for (Object key : (List<?>) VALUES.invoke(effects)) {
+                if (((String) AS_STRING.invoke(key)).startsWith(namespace + ":")) {
+                    own.add(key);
+                }
+            }
+            for (Object key : own) {
+                REMOVE.invoke(effects, key);
+            }
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            // Nothing that could be done about it: they stay.
+        }
     }
 
     private static void apply(Player player, String key, boolean add) {

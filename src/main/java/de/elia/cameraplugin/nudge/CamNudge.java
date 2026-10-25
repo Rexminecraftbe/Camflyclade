@@ -57,6 +57,7 @@ public final class CamNudge {
         }
         quietUntil.put(owner.getUniqueId(), now + settings.getNudgeCooldown() * 1000L);
         settings.getNudgeSound().play(owner);
+        plugin.getEffects().nudged(owner);
         if (messages.isMessageEnabled("nudge-received")) {
             plugin.getActionBar().warn(owner, messages.getMessage("nudge-received")
                     .replace("{player}", nudger.getName()));

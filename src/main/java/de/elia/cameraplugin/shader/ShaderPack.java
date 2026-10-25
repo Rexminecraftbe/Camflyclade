@@ -9,19 +9,24 @@ import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.Locale;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
- * CamFly's resource pack: the shader for a weak signal, and one post effect
- * for each stage of it, {@code camfly:signal_1} up to the number of
- * {@code signal.shader.stages}.
+ * CamFly's resource pack: its shader, and the post effects that use it - one
+ * for each stage of the noise of a weak signal, {@code camfly:signal_1} up to
+ * the number of {@code signal.shader.stages}, and those of the effects of
+ * {@code shader-effects} that are switched on: one for each stage, such as
+ * {@code camfly:low_health_2}, or for each tick of an animation, such as
+ * {@code camfly:start_7}.
  *
  * <p>The shader is the same for all of them, it comes out of the jar. What
- * tells the stages apart are the values each post effect hands it: the last
- * stage gets those of {@code signal.shader} as they are, every stage before
- * it its share of them - stage 2 of 4 half of each. The tint goes along with
- * them, and the speed stays the same throughout.</p>
+ * tells them apart are the values each post effect hands it. For the signal
+ * the last stage gets those of {@code signal.shader} as they are, every stage
+ * before it its share of them - stage 2 of 4 half of each. The tint goes along
+ * with them, and the speed stays the same throughout. What the others hand
+ * it comes from their style, see {@link EffectStyle}.</p>
  *
  * <p>Put together the same way every time - the same entries in the same
  * order and with the same date -, so that the same settings give the very
@@ -36,7 +41,10 @@ public final class ShaderPack {
     /** Where the shader lies in the jar, under the path it has in the pack. */
     private static final String SOURCE = "resourcepack/";
 
-    private static final String SHADER = "assets/camfly/shaders/post/signal_noise.fsh";
+    private static final String SHADER = "assets/camfly/shaders/post/effect.fsh";
+
+    /** Where the post effects lie in the pack. */
+    private static final String POST_EFFECTS = "assets/camfly/post_effect/";
 
     /**
      * The format of resource packs of 26.3, 97.1, as the lowest; any 97
@@ -45,7 +53,7 @@ public final class ShaderPack {
     private static final String PACK_META = """
             {
               "pack": {
-                "description": "CamFly: the picture of a camera with a weak signal",
+                "description": "CamFly: the picture of the camera",
                 "min_format": [97, 1],
                 "max_format": 97
               }
@@ -67,28 +75,61 @@ public final class ShaderPack {
         this.sha1 = HexFormat.of().formatHex(sha1(bytes));
     }
 
-    /** The key of the post effect of a stage, 1 being the weakest noise. */
+    /** The key of the post effect of a stage of the signal, 1 being the weakest noise. */
     public static String effectKey(int stage) {
         return NAMESPACE + ":signal_" + stage;
     }
 
     /**
+     * The key of the post effect of a stage of this effect, 1 being the
+     * weakest, or of a tick of its animation, 1 being the first.
+     */
+    public static String effectKey(ShaderEffect effect, int step) {
+        return NAMESPACE + ":" + effect.fileName() + "_" + step;
+    }
+
+    /**
      * Puts the pack together.
      *
+     * @param signal  the look of the noise of a weak signal, {@code signal.shader}
+     * @param effects the effects of {@code shader-effects}; only those
+     *                switched on go into the pack
      * @throws IOException when the shader is missing from the jar
      */
-    public static ShaderPack build(ShaderLook look) throws IOException {
+    public static ShaderPack build(ShaderLook signal, Map<ShaderEffect, EffectSettings> effects) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(out, StandardCharsets.UTF_8)) {
             put(zip, "pack.mcmeta", PACK_META.getBytes(StandardCharsets.UTF_8));
             put(zip, SHADER, readShader());
-            for (int stage = 1; stage <= look.stages(); stage++) {
-                double share = (double) stage / look.stages();
-                put(zip, "assets/camfly/post_effect/signal_" + stage + ".json",
-                        postEffect(look, share).getBytes(StandardCharsets.UTF_8));
+            for (int stage = 1; stage <= signal.stages(); stage++) {
+                double share = (double) stage / signal.stages();
+                put(zip, POST_EFFECTS + "signal_" + stage + ".json", postEffect(ShaderValues.signal(signal, share)));
+            }
+            for (ShaderEffect effect : ShaderEffect.values()) {
+                EffectSettings settings = effects.get(effect);
+                if (settings == null || !settings.enabled()) {
+                    continue;
+                }
+                for (int step = 1; step <= settings.steps(); step++) {
+                    put(zip, POST_EFFECTS + effect.fileName() + "_" + step + ".json",
+                            postEffect(values(effect, settings, step)));
+                }
             }
         }
         return new ShaderPack(out.toByteArray());
+    }
+
+    /**
+     * What one post effect of an effect hands the shader: its stage's share
+     * of the look, or the picture of an animation at its tick - the first at
+     * the very start, the last a tick before it is over.
+     */
+    static ShaderValues values(ShaderEffect effect, EffectSettings settings, int step) {
+        if (effect.isAnimation()) {
+            double t = (step - 1.0) / settings.steps();
+            return settings.style().frame(settings.tint(), settings.strength(), t, effect == ShaderEffect.START);
+        }
+        return settings.style().look(settings.tint(), settings.strength() * step / settings.steps());
     }
 
     public byte[] bytes() {
@@ -123,19 +164,17 @@ public final class ShaderPack {
     }
 
     /**
-     * The post effect of one stage: the shader from the picture of the world
-     * into a buffer of its own, and from there back unchanged - the way the
-     * game's own {@code minecraft:invert} does it.
+     * One post effect: the shader from the picture of the world into a buffer
+     * of its own, and from there back unchanged - the way the game's own
+     * {@code minecraft:invert} does it.
      *
-     * <p>The values of {@code SignalConfig} stand in the order the shader
+     * <p>The values of {@code EffectConfig} stand in the order the shader
      * declares them: that is the order the client writes them in.</p>
-     *
-     * @param share how much of each value of {@code signal.shader}, 0 to 1
      */
-    static String postEffect(ShaderLook look, double share) {
-        int tint = look.tint();
+    static byte[] postEffect(ShaderValues values) {
+        int tint = values.tint;
         String tintValue = number((tint >> 16 & 0xFF) / 255.0) + ", " + number((tint >> 8 & 0xFF) / 255.0)
-                + ", " + number((tint & 0xFF) / 255.0) + ", " + number(share);
+                + ", " + number((tint & 0xFF) / 255.0) + ", " + number(values.tintAmount);
         return """
                 {
                   "targets": {
@@ -144,13 +183,13 @@ public final class ShaderPack {
                   "passes": [
                     {
                       "vertex_shader": "minecraft:core/screenquad",
-                      "fragment_shader": "camfly:post/signal_noise",
+                      "fragment_shader": "camfly:post/effect",
                       "inputs": [
                         { "sampler_name": "In", "target": "minecraft:main" }
                       ],
                       "output": "swap",
                       "uniforms": {
-                        "SignalConfig": [
+                        "EffectConfig": [
                           { "name": "Tint", "type": "vec4", "value": [ %s ] },
                           { "name": "Static", "type": "float", "value": %s },
                           { "name": "Scanlines", "type": "float", "value": %s },
@@ -159,7 +198,14 @@ public final class ShaderPack {
                           { "name": "Dropouts", "type": "float", "value": %s },
                           { "name": "Desaturate", "type": "float", "value": %s },
                           { "name": "Vignette", "type": "float", "value": %s },
-                          { "name": "Speed", "type": "float", "value": %s }
+                          { "name": "Speed", "type": "float", "value": %s },
+                          { "name": "Flash", "type": "float", "value": %s },
+                          { "name": "Glow", "type": "float", "value": %s },
+                          { "name": "Pulse", "type": "float", "value": %s },
+                          { "name": "Shake", "type": "float", "value": %s },
+                          { "name": "Black", "type": "float", "value": %s },
+                          { "name": "Collapse", "type": "float", "value": %s },
+                          { "name": "Shrink", "type": "float", "value": %s }
                         ]
                       }
                     },
@@ -178,10 +224,11 @@ public final class ShaderPack {
                     }
                   ]
                 }
-                """.formatted(tintValue, number(look.staticSnow() * share), number(look.scanlines() * share),
-                number(look.lineJitter() * share), number(look.colorSplit() * share),
-                number(look.dropouts() * share), number(look.desaturate() * share),
-                number(look.vignette() * share), number(look.speed()));
+                """.formatted(tintValue, number(values.staticSnow), number(values.scanlines),
+                number(values.lineJitter), number(values.colorSplit), number(values.dropouts),
+                number(values.desaturate), number(values.vignette), number(values.speed), number(values.flash),
+                number(values.glow), number(values.pulse), number(values.shake), number(values.black),
+                number(values.collapse), number(values.shrink)).getBytes(StandardCharsets.UTF_8);
     }
 
     /** A number as JSON writes it, a point and not a comma whatever the language of the server. */

@@ -49,6 +49,7 @@ import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.session.ExitKey;
 import de.elia.cameraplugin.session.SessionListener;
 import de.elia.cameraplugin.session.SessionTracker;
+import de.elia.cameraplugin.shader.CamEffects;
 import de.elia.cameraplugin.shader.CamResourcePack;
 import de.elia.cameraplugin.signal.CamSignal;
 import de.elia.cameraplugin.speed.CamFlightSpeed;
@@ -123,6 +124,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamNudge nudge = new CamNudge(this);
     private final CamSignal signal = new CamSignal(this);
     private final CamResourcePack resourcePack = new CamResourcePack(this, log);
+    private final CamEffects effects = new CamEffects(this);
     private final CamAfk afk = new CamAfk(this);
     private final CamBack back = new CamBack(this);
     private final StartChecks startChecks = new StartChecks(settings, messages, cameraPlayers);
@@ -222,6 +224,7 @@ public final class CameraPlugin extends JavaPlugin {
                 new SessionTracker(cameraPlayers),
                 trail,
                 resourcePack,
+                effects,
                 new ExitKey(this),
                 afk,
                 new CamSuggestionFilter(this));
@@ -322,6 +325,7 @@ public final class CameraPlugin extends JavaPlugin {
         bodyAlarm.onDisable();
         nudge.onDisable();
         signal.onDisable();
+        effects.onDisable();
         resourcePack.onDisable();
         afk.onDisable();
         startDelay.onDisable();
@@ -601,6 +605,10 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamResourcePack getResourcePack() {
         return resourcePack;
+    }
+
+    public CamEffects getEffects() {
+        return effects;
     }
 
     public CamAfk getAfk() {

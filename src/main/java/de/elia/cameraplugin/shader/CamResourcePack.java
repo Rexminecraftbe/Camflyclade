@@ -30,12 +30,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 /**
- * Gets CamFly's resource pack with the shader of {@code signal.noise: camfly}
- * to the players, the section {@code resource-pack}.
+ * Gets CamFly's resource pack with its shader to the players, the section
+ * {@code resource-pack}: for {@code signal.noise: camfly} and the effects of
+ * {@code shader-effects}.
  *
- * <p>The pack is put together out of {@code signal.shader} whenever the
- * config file is read, and written to {@code plugins/CamFly/resourcepack/CamFly.zip}
- * for whoever wants to hand it out himself. With {@code send: built-in}
+ * <p>The pack is put together out of {@code signal.shader} and
+ * {@code shader-effects} whenever the config file is read, and written to
+ * {@code plugins/CamFly/resourcepack/CamFly.zip} for whoever wants to hand it
+ * out himself. With {@code send: built-in}
  * CamFly serves it itself and sends every player the address when he joins:
  * over the port of the Minecraft server with {@code port: game}, see
  * {@link GamePortServer}, or from a web server on a port of its own; with
@@ -123,7 +125,7 @@ public final class CamResourcePack implements Listener {
      */
     public void reload() {
         warnedAddress = false;
-        if (!settings.usesCamflyShader()) {
+        if (!settings.needsResourcePack()) {
             pack = null;
             sentAs = "";
             stopServing();
@@ -132,7 +134,8 @@ public final class CamResourcePack implements Listener {
         }
         ShaderPack built;
         try {
-            built = ShaderPack.build(settings.getShaderLook());
+            built = ShaderPack.build(settings.getShaderLook(),
+                    settings.usesShaderEffects() ? settings.getShaderEffects() : Map.of());
             write(built);
         } catch (IOException ex) {
             log.log(Level.WARNING, "The resource pack with the shader of CamFly could not be put together: " + ex);

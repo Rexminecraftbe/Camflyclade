@@ -77,23 +77,44 @@ Testserver **ViaVersion** und **ViaBackwards** (von Hangar, mit Prüfsumme, sieh
 
 ## Der Shader
 
-Der Schritt `shader` übersetzt `signal_noise.fsh` mit moderngl in
-Software-OpenGL (Mesa llvmpipe, über EGL oder ein X-Display) und rechnet jede
-Stufe von `signal.shader` aus der ausgelieferten `config.yml` auf einem
-Testbild mit Farbbalken. Jede Stufe muss das Bild stärker stören als die
-vorige. Die Vorschau liegt danach als `shader-vorschau.png` im Arbeitsordner.
-Fehlen moderngl, Pillow oder OpenGL, wird der Schritt mit einem Hinweis
-übersprungen:
+Der Schritt `shader` übersetzt `effect.fsh` mit moderngl in Software-OpenGL
+(Mesa llvmpipe, über EGL oder ein X-Display). Das Ressourcenpaket baut er mit
+dem Code des Plugins selbst (`paket_bauen`): ein kleines Java-Programm liest
+die ausgelieferte `config.yml` mit `ShaderLook.read` und `EffectSettings.read`
+und packt mit `ShaderPack.build` - genau die Post-Effekte, die ein Client
+bekäme. Jeder davon wird auf einem Testbild mit Farbbalken gerechnet, jede
+Stufe der Störung bei schwachem Signal, jede Stufe der `shader-effects` und
+jedes Bild ihrer Animationen, über einen ganzen Herzschlag verteilt.
+
+Geprüft wird:
+
+* Jeder Post-Effekt reicht die Werte des Blocks `EffectConfig` in genau der
+  Reihenfolge, in der der Shader sie deklariert - in der schreibt der Client
+  sie in den Puffer.
+* Jede Stufe stört stärker als die vorige.
+* `crt` beginnt schwarz bis auf die Linie und endet fast beim Bild.
+* Die übrigen Animationen setzen stark ein und klingen ab.
+
+Die Vorschau liegt danach als `shader-vorschau.png` im Arbeitsordner, eine
+Zeile je Effekt. Fehlen moderngl, Pillow oder OpenGL, wird der Schritt mit
+einem Hinweis übersprungen:
 
 ```bash
 pip install moderngl pillow
-python3 tools/camfly_testenv.py --steps shader
+python3 tools/camfly_testenv.py --steps build,paperapi,shader
 ```
 
 Was dieser Schritt nicht sieht, ist der Client selbst: ob er die Post-Effekte
 annimmt und wie es im Spiel aussieht. Das ging beim Einbau mit dem echten
 26.3-Client, gestartet mit Mesa-EGL unter Xvfb (`SDL_VIDEO_FORCE_EGL=1`, unter
 GLX fand er kein Fensterformat mit sRGB), in einer Welt dieses Testservers.
+
+Auf dem Server prüft `effekt_checks`, wann welcher Effekt auf dem Bot liegt,
+mit `/posteffect list`. Die Animationen dauern dafür zwei Sekunden
+(`ticks: 40`), und wo es auf das erste Bild ankommt, geht `/posteffect list`
+gleich hinter dem Befehl hinaus: Der Server beantwortet beides im selben
+Tick oder im nächsten. `funk_checks` und `paket_checks` laufen ohne
+`shader-effects`, damit ihre Listen nur das zeigen, was sie prüfen.
 
 ## Warum gegen beide APIs geprüft wird
 

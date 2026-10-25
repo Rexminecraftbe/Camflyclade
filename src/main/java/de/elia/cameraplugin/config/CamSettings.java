@@ -18,7 +18,10 @@ import de.elia.cameraplugin.nightvision.NightVisionMode;
 import de.elia.cameraplugin.portal.PortalRules;
 import de.elia.cameraplugin.session.CamGameMode;
 import de.elia.cameraplugin.session.EndReason;
+import de.elia.cameraplugin.shader.EffectSettings;
 import de.elia.cameraplugin.shader.PackSending;
+import de.elia.cameraplugin.shader.PostEffects;
+import de.elia.cameraplugin.shader.ShaderEffect;
 import de.elia.cameraplugin.shader.ShaderLook;
 import de.elia.cameraplugin.signal.SignalLoss;
 import de.elia.cameraplugin.sound.CamSound;
@@ -109,6 +112,19 @@ public final class CamSettings {
 
     /** The value of {@code resource-pack.port} for the port of the game itself. */
     private static final String GAME_PORT = "game";
+
+    /** The longest {@code shader-effects.end-warning.seconds}: ten minutes of warning are a whole flight. */
+    private static final int MAX_EFFECT_WARNING_SECONDS = 600;
+
+    /** The most {@code shader-effects.low-health.below-hearts}: as many as a player can have. */
+    private static final double MAX_EFFECT_HEARTS = 1024.0;
+
+    /**
+     * The most {@code shader-effects.border.within-blocks}: the border is
+     * looked for in every block that far around the camera, four times a
+     * second.
+     */
+    private static final double MAX_EFFECT_BORDER_BLOCKS = 16.0;
 
     /**
      * The longest {@code signal.lost-seconds} accepts. Longer than a minute,
@@ -364,6 +380,14 @@ public final class CamSettings {
     private SignalLoss signalLoss;
     /** How long the camera has to fly back into the signal, in seconds, {@code signal.lost-seconds}. */
     private int signalLostSeconds;
+    /** The effects of {@code shader-effects}, each with its section. */
+    private final Map<ShaderEffect, EffectSettings> shaderEffects = new EnumMap<>(ShaderEffect.class);
+    /** How many seconds before the end {@code shader-effects.end-warning} starts, {@code seconds}. */
+    private int effectWarningSeconds;
+    /** Below how many hearts {@code shader-effects.low-health} starts, {@code below-hearts}. */
+    private double effectLowHealthBelow;
+    /** How many blocks before the border {@code shader-effects.border} starts, {@code within-blocks}. */
+    private double effectBorderWithin;
 
     // Damage transfer settings
     private DamageMode damageMode;
@@ -466,6 +490,7 @@ public final class CamSettings {
         distanceMode = config.getChoice("camera-mode.max-distance-mode", "fixed", "fixed", "signal")
                 .equalsIgnoreCase("signal") ? DistanceMode.SIGNAL : DistanceMode.FIXED;
         readSignal(config);
+        readShaderEffects(config);
         distanceWarningCooldown = config.getInt("camera-mode.distance-warning-cooldown", 3, 0);
         String border = config.getChoice("camera-mode.border-mode", "barrier", "barrier", "push-back", "false")
                 .toLowerCase(Locale.ROOT);
@@ -725,6 +750,22 @@ public final class CamSettings {
                 ? SignalLoss.END
                 : SignalLoss.BACK;
         signalLostSeconds = config.getInt("signal.lost-seconds", 3, 0, MAX_SIGNAL_LOST_SECONDS);
+    }
+
+    /**
+     * Reads the section {@code shader-effects}: one section for each effect,
+     * and what sets off the ones that come in stages.
+     */
+    private void readShaderEffects(ConfigReader config) {
+        String allowedColors = messages.configMessage("config-allowed-colors");
+        for (ShaderEffect effect : ShaderEffect.values()) {
+            shaderEffects.put(effect, EffectSettings.read(config, effect, allowedColors));
+        }
+        effectWarningSeconds = config.getInt("shader-effects.end-warning.seconds", 10, 1, MAX_EFFECT_WARNING_SECONDS);
+        effectLowHealthBelow = config.getDouble("shader-effects.low-health.below-hearts", 4.0, 0.5,
+                MAX_EFFECT_HEARTS);
+        effectBorderWithin = config.getDouble("shader-effects.border.within-blocks", 5.0, 1.0,
+                MAX_EFFECT_BORDER_BLOCKS);
     }
 
     /**
@@ -1149,6 +1190,52 @@ public final class CamSettings {
      */
     public boolean usesCamflyShader() {
         return usesSignal() && CAMFLY_NOISE.equals(signalNoise) && signalNoiseBelow > 0;
+    }
+
+    /**
+     * Whether any effect of {@code shader-effects} is switched on - and can
+     * be shown at all: they need Paper, see {@link PostEffects#direct()}.
+     */
+    public boolean usesShaderEffects() {
+        if (!PostEffects.direct()) {
+            return false;
+        }
+        for (EffectSettings effect : shaderEffects.values()) {
+            if (effect.enabled()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether CamFly's resource pack is needed: for its shader of the signal, or for one of its effects. */
+    public boolean needsResourcePack() {
+        return usesCamflyShader() || usesShaderEffects();
+    }
+
+    /** The effects of {@code shader-effects}, each with its section. */
+    public Map<ShaderEffect, EffectSettings> getShaderEffects() {
+        return Collections.unmodifiableMap(shaderEffects);
+    }
+
+    /** The section of one effect of {@code shader-effects}; switched off where Paper is missing. */
+    public EffectSettings getShaderEffect(ShaderEffect effect) {
+        EffectSettings settings = shaderEffects.get(effect);
+        return PostEffects.direct() ? settings
+                : new EffectSettings(false, settings.style(), settings.steps(), settings.tint(), settings.strength());
+    }
+
+    public int getEffectWarningSeconds() {
+        return effectWarningSeconds;
+    }
+
+    /** Below how many points of health {@code shader-effects.low-health} starts, two to a heart. */
+    public double getEffectLowHealthBelow() {
+        return effectLowHealthBelow * 2.0;
+    }
+
+    public double getEffectBorderWithin() {
+        return effectBorderWithin;
     }
 
     public ShaderLook getShaderLook() {

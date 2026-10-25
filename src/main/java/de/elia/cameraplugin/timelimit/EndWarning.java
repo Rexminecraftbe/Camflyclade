@@ -11,7 +11,9 @@ import org.bukkit.entity.Player;
  * of {@code end-warning.seconds}. For the time limit and for the battery
  * alike, so that neither takes him back to his body without a word.
  * {@code afk-end} warns with the same sound and line, but at a point of its
- * own, see {@link #warn}.
+ * own, see {@link #warn}. The time left goes on to
+ * {@code shader-effects.end-warning} as well, see
+ * {@link de.elia.cameraplugin.shader.CamEffects#timeLeft}.
  *
  * <p>Only a mark the time passes on the way down counts. A battery that holds
  * twenty seconds at the start has nothing to say at thirty: that is in the
@@ -39,6 +41,9 @@ public final class EndWarning {
      *               {@code end-warning-battery}
      */
     public void check(Player player, double before, double left, String key) {
+        // Whatever end-warning.enabled says: shader-effects.end-warning has a
+        // switch of its own.
+        plugin.getEffects().timeLeft(player, left);
         if (!settings.isEndWarningEnabled() || left <= 0.0) {
             return;
         }

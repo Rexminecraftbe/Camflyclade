@@ -52,7 +52,7 @@ public record ShaderLook(int stages, double staticSnow, double scanlines, double
      * Reads a colour written as {@code #RRGGBB}, the hash being optional. One
      * that is none is reported and the default is used.
      */
-    private static int readColor(ConfigReader config, String path, String def, String allowed) {
+    static int readColor(ConfigReader config, String path, String def, String allowed) {
         String raw = config.getString(path, def);
         Integer color = parseColor(raw);
         if (color == null) {
