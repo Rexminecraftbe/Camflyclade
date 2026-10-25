@@ -4945,8 +4945,10 @@ def funk_checks(env, bot):
     darauf, auch keine Dunkelheit. Ohne Mauer sind es wieder 67 %. Fuenf
     Bloecke Stein nehmen das ganze Signal: "Signal lost!" mit dem
     Ton von sounds.signal-lost, und nach den zwei Sekunden steht die Kamera
-    wieder am Koerper, der Cam-Modus laeuft weiter. Wer in der Zeit zurueck
-    ins Signal kommt, bleibt, wo er ist. Mit lost: end endet der Cam-Modus.
+    wieder am Koerper, der Cam-Modus laeuft weiter - ohne den Ton von
+    sounds.signal-back, der nur kommt, wer in der Zeit zurueck ins Signal
+    kommt; der bleibt, wo er ist. Mit lost: end endet der Cam-Modus, auch
+    ohne ihn.
     Eine Grenze, an die man stoesst, gibt es nicht: In freier Luft fliegt die
     Kamera ueber die 30 Bloecke hinaus, bis das Signal sie zurueckholt.
     """
@@ -5041,6 +5043,9 @@ def funk_checks(env, bot):
         da, pos = am_koerper()
         FIND.test("signal.lost: back - nach lost-seconds steht die Kamera wieder am Koerper",
                   bool(zurueck) and da, str(pos))
+        time.sleep(1.0)
+        FIND.test("signal.lost: back - am Koerper ist das Signal wieder da, aber ohne sounds.signal-back",
+                  not ton_da(bot, seit, "block.conduit.activate"), "")
         FIND.test("signal.lost: back - der Cam-Modus laeuft weiter", spielmodus_ist(bot, "adventure"), "")
 
         set_option(env, "lost-seconds", "4", "signal")
@@ -5048,6 +5053,7 @@ def funk_checks(env, bot):
         since = bot.mark()
         kamera_bei(10)
         bot.expect(r"Signal lost! Fly back within", since, 3000)
+        seit = toene_marke(bot)
         kamera_bei(1)
         time.sleep(4.5)
         pos = bot.server_pos()
@@ -5055,6 +5061,8 @@ def funk_checks(env, bot):
         FIND.test("signal: wer rechtzeitig zurueck ins Signal kommt, bleibt, wo er ist",
                   not gesagt(z_, r"back at your body") and pos is not None and abs(pos[0] - (x + 1)) < 0.6,
                   f"{pos} - {zeige(z_[-3:])}")
+        FIND.test("sounds.signal-back - der Ton, wenn das Signal rechtzeitig wieder da ist",
+                  ton_da(bot, seit, "block.conduit.activate"), "")
 
         set_option(env, "lost", "end", "signal")
         cam_on(bot)
@@ -5064,8 +5072,9 @@ def funk_checks(env, bot):
         ende = bot.expect(r"Cam mode ended: the signal was lost", since, 8000)
         FIND.test("signal.lost: end - der Cam-Modus endet",
                   bool(ende) and not spielmodus_ist(bot, "adventure"), zeige(zeilen_seit(bot, since)[-3:]))
-        FIND.test("signal.lost: end - mit dem Ton von sounds.end-forced",
-                  ton_da(bot, seit, "block.respawn_anchor.deplete"), "")
+        FIND.test("signal.lost: end - mit dem Ton von sounds.end-forced, ohne sounds.signal-back",
+                  ton_da(bot, seit, "block.respawn_anchor.deplete") and not ton_da(bot, seit, "block.conduit.activate"),
+                  "")
 
         set_options(env, [("lost", "back", "signal"), ("lost-seconds", "2", "signal")])
         luft()

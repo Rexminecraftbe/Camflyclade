@@ -30,8 +30,9 @@ import java.util.UUID;
  * bar to five or a red cross, and a word for it.</p>
  *
  * <p>Once it is gone, the camera has {@code signal.lost-seconds} to fly back
- * into it, counted down in the action bar. After that it goes back to its
- * body, or camera mode ends - {@code signal.lost}.</p>
+ * into it, counted down in the action bar, with {@code sounds.signal-lost} as
+ * it goes and {@code sounds.signal-back} should it come back in time. After
+ * that it goes back to its body, or camera mode ends - {@code signal.lost}.</p>
  *
  * <p>In a world the body is not in, the signal comes from the portal the
  * camera came out of there, the spot {@code max-distance} is measured from
@@ -186,7 +187,10 @@ public final class CamSignal {
         link.strength = measure(player, data);
         if (link.strength > 0.0) {
             if (link.lostSince != 0L) {
+                // Back in the signal within lost-seconds. Not after going
+                // back to the body, which starts afresh, see lose().
                 link.lostSince = 0L;
+                settings.getSignalBackSound().play(player);
                 if (link.shownSeconds >= 0L) {
                     // The countdown would otherwise stand for its three
                     // seconds next to a signal that is back.

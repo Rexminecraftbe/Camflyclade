@@ -257,6 +257,7 @@ public final class CamSettings {
     private CamSound startDelaySound;
     private CamSound nudgeSound;
     private CamSound signalLostSound;
+    private CamSound signalBackSound;
 
     /** Whether camera mode leaves a file to recover from a crash, {@code crash-protection.enabled}. */
     private boolean crashProtectionEnabled;
@@ -555,6 +556,8 @@ public final class CamSettings {
         nudgeSound = CamSound.read(config, "sounds.nudge", allowedSounds, "block.note_block.chime", 1.0);
         signalLostSound = CamSound.read(config, "sounds.signal-lost", allowedSounds,
                 "block.conduit.deactivate", 1.0);
+        signalBackSound = CamSound.read(config, "sounds.signal-back", allowedSounds,
+                "block.conduit.activate", 1.0);
         crashProtectionEnabled = config.getBoolean("crash-protection.enabled", true);
         camListAccess = readAccess(config, "cam-list.access");
         camListTeleport = config.getBoolean("cam-list.teleport", true);
@@ -1239,6 +1242,10 @@ public final class CamSettings {
 
     public CamSound getSignalLostSound() {
         return signalLostSound;
+    }
+
+    public CamSound getSignalBackSound() {
+        return signalBackSound;
     }
 
     public ListAccess getCamListAccess() {
