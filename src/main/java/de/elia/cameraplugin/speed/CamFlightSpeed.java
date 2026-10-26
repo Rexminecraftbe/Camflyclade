@@ -28,6 +28,11 @@ import java.util.UUID;
  * <p>The server cannot tell the wheel from the number keys, both only change
  * the slot. A number key therefore changes the speed by one step as well, in
  * the direction of the shorter way round the hotbar.</p>
+ *
+ * <p>With {@code player-settings.flight-speed} the next flight starts at the
+ * speed the last one ended with, see
+ * {@link de.elia.cameraplugin.preferences.CamPreferences} - held to
+ * {@code min} and {@code max} as they are now, in case they changed since.</p>
  */
 public final class CamFlightSpeed implements Listener {
 
@@ -51,10 +56,15 @@ public final class CamFlightSpeed implements Listener {
         this.messages = plugin.getMessages();
     }
 
-    /** Sets the speed of {@code flight-speed.start} on a player entering camera mode. */
+    /**
+     * Sets the speed of {@code flight-speed.start} on a player entering camera
+     * mode, or the one he flew at last, while that is kept.
+     */
     public void startFor(Player player) {
         originalSpeeds.putIfAbsent(player.getUniqueId(), player.getFlySpeed());
-        setSpeed(player, settings.getFlightSpeedStart());
+        Double own = plugin.getPreferences().flightSpeed(player);
+        setSpeed(player, own == null ? settings.getFlightSpeedStart()
+                : Math.min(settings.getFlightSpeedMax(), Math.max(settings.getFlightSpeedMin(), own)));
     }
 
     /** Gives a player leaving camera mode the fly speed back that he had before. */
@@ -85,6 +95,7 @@ public final class CamFlightSpeed implements Listener {
         double speed = Math.min(settings.getFlightSpeedMax(),
                 Math.max(settings.getFlightSpeedMin(), round(current + step)));
         setSpeed(player, speed);
+        plugin.getPreferences().setFlightSpeed(player, speed);
         if (messages.isMessageEnabled("flight-speed")) {
             plugin.getActionBar().flash(player,
                     messages.getMessage("flight-speed").replace("{speed}", format(speed)));

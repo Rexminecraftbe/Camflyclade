@@ -251,27 +251,27 @@ public final class CamSignal {
         }
         LivingEntity body = data.getBody();
         Location from = body.getWorld().equals(eyes.getWorld())
-                ? body.getEyeLocation()
+                ? plugin.getMovementGuard().homeEyes(player, data)
                 : anchor.clone().add(0.0, player.getEyeHeight(), 0.0);
         return SignalPath.strength(from, eyes, settings.getMaxDistance(), settings.getSignalCosts());
     }
 
     /**
-     * Whether the signal reaches a spot the camera is to be put down at, a
-     * spot of {@code /cam spot}: measured the way {@link #measure} measures
-     * it at the camera, from the eyes of the body to the eyes of the camera
-     * there. Only in the world of the body, the one a spot is jumped to.
+     * Whether the signal reaches a spot the camera is to be put down at - a
+     * spot of {@code /cam spot}, or where {@code /cam resume} takes it -:
+     * measured the way {@link #measure} measures it at the camera, from the
+     * eyes it goes out from to the eyes of the camera there.
      *
+     * @param from where the signal goes out from: the eyes of the body, or of
+     *             a camera at the spot it visits
      * @param feet where the feet of the camera would be
      */
-    public boolean reaches(Player player, CameraData data, Location feet) {
-        LivingEntity body = data.getBody();
-        if (!body.getWorld().equals(feet.getWorld())) {
+    public boolean reaches(Player player, Location from, Location feet) {
+        if (!from.getWorld().equals(feet.getWorld())) {
             return false;
         }
         Location eyes = feet.clone().add(0.0, player.getEyeHeight(), 0.0);
-        return SignalPath.strength(body.getEyeLocation(), eyes, settings.getMaxDistance(),
-                settings.getSignalCosts()) > 0.0;
+        return SignalPath.strength(from, eyes, settings.getMaxDistance(), settings.getSignalCosts()) > 0.0;
     }
 
     /**
@@ -280,10 +280,12 @@ public final class CamSignal {
      */
     private void lose(Player player, CameraData data, Link link) {
         link.lostSince = 0L;
-        if (settings.getSignalLoss() == SignalLoss.BACK && plugin.getMovementGuard().returnToBody(player, data)) {
+        // On a visit back to the spot, which the signal goes out from then.
+        String back = data.getVisit() != null ? "signal-back-to-visit" : "signal-back-to-body";
+        if (settings.getSignalLoss() == SignalLoss.BACK && plugin.getMovementGuard().returnHome(player, data)) {
             settings.getBackSound().play(player);
-            if (messages.isMessageEnabled("signal-back-to-body")) {
-                plugin.getActionBar().flash(player, messages.getMessage("signal-back-to-body"));
+            if (messages.isMessageEnabled(back)) {
+                plugin.getActionBar().flash(player, messages.getMessage(back));
             }
             return;
         }

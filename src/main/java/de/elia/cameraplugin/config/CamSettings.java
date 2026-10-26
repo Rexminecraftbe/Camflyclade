@@ -8,6 +8,11 @@ import de.elia.cameraplugin.display.ActionBarDisplay;
 import de.elia.cameraplugin.display.GlowMode;
 import de.elia.cameraplugin.display.NameMode;
 import de.elia.cameraplugin.list.ListAccess;
+import de.elia.cameraplugin.menu.AdminButton;
+import de.elia.cameraplugin.menu.MenuAccess;
+import de.elia.cameraplugin.menu.MenuButton;
+import de.elia.cameraplugin.menu.MenuIcon;
+import de.elia.cameraplugin.menu.MenuSlot;
 import de.elia.cameraplugin.mirrordamage.ArmorDamageMode;
 import de.elia.cameraplugin.mirrordamage.DamageMode;
 import de.elia.cameraplugin.mob.MobTargeting;
@@ -16,6 +21,7 @@ import de.elia.cameraplugin.movement.DistanceMode;
 import de.elia.cameraplugin.movement.FlightMedium;
 import de.elia.cameraplugin.nightvision.NightVisionMode;
 import de.elia.cameraplugin.portal.PortalRules;
+import de.elia.cameraplugin.scout.ScoutAnchor;
 import de.elia.cameraplugin.session.CamGameMode;
 import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.signal.SignalCosts;
@@ -125,6 +131,16 @@ public final class CamSettings {
      * without a wait each of them would nudge on its own.
      */
     private static final int MIN_NUDGE_COOLDOWN = 1;
+
+    /**
+     * The farthest {@code anti-scouting.radius} reaches. The server sends
+     * players to a client no further than about this anyway, so beyond it
+     * nothing is left to hide.
+     */
+    private static final double MAX_SCOUT_RADIUS = 256.0;
+
+    /** The most {@code menu.ban-shift-step} takes. */
+    private static final int MAX_BAN_SHIFT_STEP = 100;
 
     /**
      * Keys that are read although the config file built into the jar leaves
@@ -309,6 +325,48 @@ public final class CamSettings {
     private int viewpointsMax;
     /** Where the spots are kept, {@code viewpoints.storage}. */
     private StorageMode viewpointsStorage;
+    /** Whether a player may share his spots with others, {@code viewpoints.sharing}. */
+    private boolean viewpointsSharing;
+    /** Whether {@code /cam visit} takes the camera to a spot shared with him, {@code visitor-camera.enabled}. */
+    private boolean visitorCameraEnabled;
+
+    /** Whether {@code /cam resume} goes on where the last flight ended, {@code resume-command.enabled}. */
+    private boolean resumeEnabled;
+    /** Where the end of the last flight is kept, {@code resume-command.storage}. */
+    private StorageMode resumeStorage;
+
+    /** Where the settings players pick for themselves are kept, {@code player-settings.storage}. */
+    private StorageMode playerSettingsStorage;
+    /** Whether the speed he last flew at is kept, {@code player-settings.flight-speed}. */
+    private boolean playerSettingsFlightSpeed;
+    /** Whether his time of {@code /cam time} is kept, {@code player-settings.time}. */
+    private boolean playerSettingsTime;
+    /** Whether his weather of {@code /cam weather} is kept, {@code player-settings.weather}. */
+    private boolean playerSettingsWeather;
+
+    /** Whether players far away are hidden from a camera player, {@code anti-scouting.enabled}. */
+    private boolean antiScoutingEnabled;
+    /** How far he still sees the others, in blocks, {@code anti-scouting.radius}. */
+    private double antiScoutingRadius;
+    /** Where that is measured from, {@code anti-scouting.measured-from}. */
+    private ScoutAnchor antiScoutingFrom;
+
+    /** How the players get at back, spot, photo and the rest, {@code menu.access}. */
+    private MenuAccess menuAccess;
+    /** How admins get at list, stop, ban, trail and the rest, {@code menu.admin-access}. */
+    private MenuAccess adminAccess;
+    /** What each button of the main page of the menu shows, {@code menu.buttons.<button>.item}. */
+    private final Map<MenuButton, MenuIcon> menuIcons = new EnumMap<>(MenuButton.class);
+    /** Where it stands, {@code menu.buttons.<button>.slot}. */
+    private final Map<MenuButton, Integer> menuSlots = new EnumMap<>(MenuButton.class);
+    /** The same for the admin page, {@code menu.admin-buttons}. */
+    private final Map<AdminButton, MenuIcon> adminIcons = new EnumMap<>(AdminButton.class);
+    /**
+     * How many days, hours or minutes a click with shift adds to a ban on its
+     * page or takes away, {@code menu.ban-shift-step}.
+     */
+    private int banShiftStep;
+    private final Map<AdminButton, Integer> adminSlots = new EnumMap<>(AdminButton.class);
 
     /** Whether {@code /cam photo} is there, {@code photo-mode.enabled}. */
     private boolean photoModeEnabled;
@@ -610,8 +668,8 @@ public final class CamSettings {
         camListAccess = readAccess(config, "cam-list.access");
         camListTeleport = config.getBoolean("cam-list.teleport", true);
         camListStop = config.getBoolean("cam-list.stop", true);
-        stopCommandEnabled = config.getBoolean("stop-command.enabled", false);
-        camBanEnabled = config.getBoolean("cam-ban.enabled", false);
+        stopCommandEnabled = config.getBoolean("stop-command.enabled", true);
+        camBanEnabled = config.getBoolean("cam-ban.enabled", true);
         afkEndEnabled = config.getBoolean("afk-end.enabled", false);
         afkEndSeconds = config.getInt("afk-end.seconds", 300, MIN_AFK_SECONDS);
         afkWarningPercent = config.getInt("afk-end.warning-percent", 80, 0, 99);
@@ -619,6 +677,23 @@ public final class CamSettings {
         viewpointsEnabled = config.getBoolean("viewpoints.enabled", true);
         viewpointsMax = config.getInt("viewpoints.max-per-player", 10, 1, MAX_VIEWPOINTS);
         viewpointsStorage = readStorage(config, "viewpoints.storage");
+        viewpointsSharing = config.getBoolean("viewpoints.sharing", true);
+        visitorCameraEnabled = config.getBoolean("visitor-camera.enabled", true);
+        resumeEnabled = config.getBoolean("resume-command.enabled", true);
+        resumeStorage = readStorage(config, "resume-command.storage");
+        playerSettingsStorage = readStorage(config, "player-settings.storage");
+        playerSettingsFlightSpeed = config.getBoolean("player-settings.flight-speed", true);
+        playerSettingsTime = config.getBoolean("player-settings.time", false);
+        playerSettingsWeather = config.getBoolean("player-settings.weather", false);
+        antiScoutingEnabled = config.getBoolean("anti-scouting.enabled", false);
+        antiScoutingRadius = config.getDouble("anti-scouting.radius", 32.0, 0.0, MAX_SCOUT_RADIUS);
+        antiScoutingFrom = config.getChoice("anti-scouting.measured-from", "body", "body", "camera")
+                .equalsIgnoreCase("camera") ? ScoutAnchor.CAMERA : ScoutAnchor.BODY;
+        menuAccess = readMenuAccess(config, "menu.access");
+        adminAccess = readMenuAccess(config, "menu.admin-access");
+        readButtons(config, "menu.buttons", MenuButton.values(), menuIcons, menuSlots);
+        readButtons(config, "menu.admin-buttons", AdminButton.values(), adminIcons, adminSlots);
+        banShiftStep = config.getInt("menu.ban-shift-step", 10, 1, MAX_BAN_SHIFT_STEP);
         photoModeEnabled = config.getBoolean("photo-mode.enabled", true);
         photoHidePlayers = config.getBoolean("photo-mode.hide-players", true);
         photoHideBodies = config.getBoolean("photo-mode.hide-bodies", true);
@@ -626,7 +701,7 @@ public final class CamSettings {
         camWeatherEnabled = config.getBoolean("cam-weather.enabled", true);
         startDelayEnabled = config.getBoolean("start-delay.enabled", false);
         startDelaySeconds = config.getInt("start-delay.seconds", 3, 1, MAX_START_DELAY_SECONDS);
-        trailEnabled = config.getBoolean("cam-trail.enabled", false);
+        trailEnabled = config.getBoolean("cam-trail.enabled", true);
         trailShowSeconds = config.getInt("cam-trail.show-seconds", 30, 1, MAX_TRAIL_SHOW_SECONDS);
         trailFlights = config.getInt("cam-trail.flights", 5, 1, MAX_TRAIL_FLIGHTS);
         endWarningEnabled = config.getBoolean("end-warning.enabled", true);
@@ -833,6 +908,62 @@ public final class CamSettings {
             case "false" -> ListAccess.OFF;
             default -> ListAccess.ADMIN;
         };
+    }
+
+    /** Reads how something is got at, the values menu, both, command and false. */
+    private static MenuAccess readMenuAccess(ConfigReader config, String path) {
+        String access = config.getChoice(path, "menu", "menu", "both", "command", "false").toLowerCase(Locale.ROOT);
+        return switch (access) {
+            case "both" -> MenuAccess.BOTH;
+            case "command" -> MenuAccess.COMMAND;
+            case "false" -> MenuAccess.OFF;
+            default -> MenuAccess.MENU;
+        };
+    }
+
+    /**
+     * Reads a section of buttons, {@code menu.buttons} or
+     * {@code menu.admin-buttons}: the item and the slot of each. A slot that
+     * another button of the same page has taken already - other than start
+     * and end, which are never there together - is noted, and the button goes
+     * to its own slot of out of the box, or the first one free.
+     */
+    private <B extends MenuSlot> void readButtons(ConfigReader config, String section, B[] buttons,
+                                                  Map<B, MenuIcon> icons, Map<B, Integer> slots) {
+        icons.clear();
+        slots.clear();
+        String allowed = messages.configMessage("config-allowed-menu-items");
+        for (B button : buttons) {
+            String path = section + "." + button.key();
+            String raw = config.getString(path + ".item", button.defaultItem());
+            MenuIcon icon = MenuIcon.parse(raw);
+            if (icon == null) {
+                config.warnUnknownValue(path + ".item", raw, allowed, button.defaultItem());
+                icon = MenuIcon.parse(button.defaultItem());
+            }
+            icons.put(button, icon);
+            int slot = config.getInt(path + ".slot", button.defaultSlot(), 0, MenuButton.SLOTS - 1);
+            B other = slotTakenBy(slots, button, slot);
+            if (other != null) {
+                int free = slotTakenBy(slots, button, button.defaultSlot()) == null ? button.defaultSlot() : 0;
+                while (slotTakenBy(slots, button, free) != null) {
+                    free++;
+                }
+                config.warnSlotTaken(path + ".slot", slot, section + "." + other.key() + ".slot", free);
+                slot = free;
+            }
+            slots.put(button, slot);
+        }
+    }
+
+    /** The button that has this slot already and may not share it with this one, or {@code null}. */
+    private static <B extends MenuSlot> B slotTakenBy(Map<B, Integer> slots, B button, int slot) {
+        for (Map.Entry<B, Integer> entry : slots.entrySet()) {
+            if (entry.getValue() == slot && !button.mayShareWith(entry.getKey())) {
+                return entry.getKey();
+            }
+        }
+        return null;
     }
 
     /**
@@ -1411,6 +1542,87 @@ public final class CamSettings {
 
     public StorageMode getViewpointsStorage() {
         return viewpointsStorage;
+    }
+
+    /** Whether spots may be shared, which only goes while there are spots at all. */
+    public boolean isViewpointsSharing() {
+        return viewpointsEnabled && viewpointsSharing;
+    }
+
+    /** Whether {@code /cam visit} goes, which only goes while spots may be shared. */
+    public boolean isVisitorCameraEnabled() {
+        return isViewpointsSharing() && visitorCameraEnabled;
+    }
+
+    public boolean isResumeEnabled() {
+        return resumeEnabled;
+    }
+
+    public StorageMode getResumeStorage() {
+        return resumeStorage;
+    }
+
+    // ------------------------------------------- player-settings, anti-scouting, menu
+
+    public StorageMode getPlayerSettingsStorage() {
+        return playerSettingsStorage;
+    }
+
+    public boolean isPlayerSettingsFlightSpeed() {
+        return playerSettingsFlightSpeed;
+    }
+
+    public boolean isPlayerSettingsTime() {
+        return playerSettingsTime;
+    }
+
+    public boolean isPlayerSettingsWeather() {
+        return playerSettingsWeather;
+    }
+
+    public boolean isAntiScoutingEnabled() {
+        return antiScoutingEnabled;
+    }
+
+    public double getAntiScoutingRadius() {
+        return antiScoutingRadius;
+    }
+
+    public ScoutAnchor getAntiScoutingFrom() {
+        return antiScoutingFrom;
+    }
+
+    public MenuAccess getMenuAccess() {
+        return menuAccess;
+    }
+
+    public MenuAccess getAdminAccess() {
+        return adminAccess;
+    }
+
+    /** How many days, hours or minutes a click with shift adds to a ban in the menu or takes away. */
+    public int getBanShiftStep() {
+        return banShiftStep;
+    }
+
+    /** What a button of the main page of the menu shows. */
+    public MenuIcon getMenuIcon(MenuButton button) {
+        return menuIcons.get(button);
+    }
+
+    /** Where a button of the main page of the menu stands, 0 being the top left. */
+    public int getMenuSlot(MenuButton button) {
+        return menuSlots.get(button);
+    }
+
+    /** What a button of the admin page of the menu shows. */
+    public MenuIcon getAdminIcon(AdminButton button) {
+        return adminIcons.get(button);
+    }
+
+    /** Where a button of the admin page of the menu stands. */
+    public int getAdminSlot(AdminButton button) {
+        return adminSlots.get(button);
     }
 
     public boolean isPhotoModeEnabled() {

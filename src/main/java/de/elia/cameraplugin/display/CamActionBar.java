@@ -298,7 +298,8 @@ public final class CamActionBar {
         Location anchor = plugin.getMovementGuard().distanceAnchor(data, at);
         if (anchor == null) return signal == null ? null : signal.trim();
         boolean atBody = anchor.getWorld().equals(data.getBody().getWorld());
-        String key = atBody ? "actionbar-distance" : "actionbar-distance-portal";
+        String key = !atBody ? "actionbar-distance-portal"
+                : data.getVisit() != null ? "actionbar-distance-visit" : "actionbar-distance";
         if (!messages.isMessageEnabled(key)) return signal == null ? null : signal.trim();
         double dx = anchor.getX() - at.getX();
         double dy = anchor.getY() - at.getY();

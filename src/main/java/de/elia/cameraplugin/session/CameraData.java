@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.session;
 
+import de.elia.cameraplugin.visit.Visit;
 import org.bukkit.Chunk;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -49,9 +50,18 @@ public class CameraData {
      * while he has not left the world of his body.
      */
     private Location portalEntry;
+    /**
+     * The shared spot the camera visits with {@code /cam visit}, which takes
+     * the place of the body while it lasts, or {@code null} while it visits
+     * nothing.
+     */
+    private Visit visit;
     /** How far the camera has flown so far, in blocks, see {@link SessionTracker}. */
     private double distanceFlown;
-    /** The farthest the camera has been from the body so far, in blocks, in the world of the body. */
+    /**
+     * The farthest the camera has been from the body so far - or from the spot
+     * it visited -, in blocks, in the world of the body.
+     */
     private double farthestFromBody;
 
     public CameraData(LivingEntity body, Mannequin hitbox, TextDisplay nameDisplay, Chunk bodyChunk, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, Collection<PotionEffect> pausedEffects) {
@@ -94,6 +104,9 @@ public class CameraData {
     /** The portal he set out through, or {@code null} when he is still home. */
     public Location getPortalEntry() { return portalEntry; }
     public void setPortalEntry(Location portalEntry) { this.portalEntry = portalEntry; }
+    /** The spot the camera visits, or {@code null} for none. */
+    public Visit getVisit() { return visit; }
+    public void setVisit(Visit visit) { this.visit = visit; }
     /** How far the camera has flown so far, for {@code cam-log} and the statistics. */
     public double getDistanceFlown() { return distanceFlown; }
     public void addDistanceFlown(double blocks) { distanceFlown += blocks; }

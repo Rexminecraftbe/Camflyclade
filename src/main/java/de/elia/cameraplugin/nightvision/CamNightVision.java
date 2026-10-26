@@ -2,6 +2,7 @@ package de.elia.cameraplugin.nightvision;
 
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.preferences.CamPreferences;
 import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -31,9 +32,9 @@ import java.util.UUID;
  * {@code /effect} say, is left alone.</p>
  *
  * <p>With {@code night-vision.player-choice} each player picks the mode for
- * himself, {@code /cam nightvision}. It is not written anywhere: the choice
- * holds until he leaves the server, for every flight until then, and after
- * that the mode of the file is his again.</p>
+ * himself, {@code /cam nightvision}. The choice holds for every flight after
+ * it, kept as {@code player-settings.storage} says, see
+ * {@link CamPreferences}: in his file, or until he leaves the server.</p>
  */
 public final class CamNightVision {
 
@@ -54,17 +55,19 @@ public final class CamNightVision {
     private final CamSettings settings;
     private final Messages messages;
     private final CameraPlayers cameraPlayers;
+    /** Keeps the mode each player picked with {@code /cam nightvision}. */
+    private final CamPreferences preferences;
     private final Map<UUID, BukkitRunnable> tasks = new HashMap<>();
     /** The players wearing the night vision of this class right now. */
     private final Set<UUID> given = new HashSet<>();
-    /** The mode each player picked with {@code /cam nightvision}, until he leaves the server. */
-    private final Map<UUID, NightVisionMode> chosen = new HashMap<>();
 
-    public CamNightVision(JavaPlugin plugin, CamSettings settings, Messages messages, CameraPlayers cameraPlayers) {
+    public CamNightVision(JavaPlugin plugin, CamSettings settings, Messages messages, CameraPlayers cameraPlayers,
+                          CamPreferences preferences) {
         this.plugin = plugin;
         this.settings = settings;
         this.messages = messages;
         this.cameraPlayers = cameraPlayers;
+        this.preferences = preferences;
     }
 
     /**
@@ -72,7 +75,7 @@ public final class CamNightVision {
      * {@code player-choice} lets him, otherwise {@code night-vision.mode}.
      */
     public NightVisionMode modeFor(Player player) {
-        NightVisionMode own = settings.isNightVisionPlayerChoice() ? chosen.get(player.getUniqueId()) : null;
+        NightVisionMode own = settings.isNightVisionPlayerChoice() ? preferences.nightVision(player) : null;
         return own != null ? own : settings.getNightVisionMode();
     }
 
@@ -161,10 +164,9 @@ public final class CamNightVision {
             messages.sendConfiguredMessage(player, "nightvision-usage");
             return;
         }
-        UUID id = player.getUniqueId();
         String word = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
         if (word.equals("reset")) {
-            chosen.remove(id);
+            preferences.setNightVision(player, null);
             restart(player);
             messages.sendConfiguredMessage(player, "nightvision-reset", "{mode}", name(modeFor(player)));
             return;
@@ -180,9 +182,15 @@ public final class CamNightVision {
             messages.sendConfiguredMessage(player, "nightvision-usage");
             return;
         }
-        chosen.put(id, mode);
+        preferences.setNightVision(player, mode);
         restart(player);
-        messages.sendConfiguredMessage(player, "nightvision-set", "{mode}", name(mode));
+        messages.sendConfiguredMessage(player, preferences.keepsForGood() ? "nightvision-set" : "nightvision-set-memory",
+                "{mode}", name(mode));
+    }
+
+    /** Whether he picked a mode of his own, which the menu marks; otherwise the one of the file holds. */
+    public boolean hasOwnMode(Player player) {
+        return settings.isNightVisionPlayerChoice() && preferences.nightVision(player) != null;
     }
 
     /** The words of {@code /cam nightvision} that come after it, for the tab completion. */
@@ -216,17 +224,11 @@ public final class CamNightVision {
         }
     }
 
-    /** Forgets the choice of a player who left the server. */
-    public void forget(UUID playerId) {
-        chosen.remove(playerId);
-    }
-
     public void onDisable() {
         for (BukkitRunnable task : tasks.values()) {
             task.cancel();
         }
         tasks.clear();
         given.clear();
-        chosen.clear();
     }
 }
