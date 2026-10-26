@@ -168,7 +168,12 @@ public final class CamResume {
     /** Puts the camera down where the flight ended and holds it from there. */
     private void go(Player player, CameraData data, LastFlight flight) {
         Plan plan = planned(player, data, flight);
-        if (plan == null || !plugin.getMovementGuard().jumpTo(player, data, plan.target(), plan.visit())) {
+        if (plan == null) {
+            return;
+        }
+        // A jump of his own takes him off a tour he follows.
+        plugin.getTour().leave(player);
+        if (!plugin.getMovementGuard().jumpTo(player, data, plan.target(), plan.visit())) {
             return;
         }
         settings.getSpotSound().play(player);

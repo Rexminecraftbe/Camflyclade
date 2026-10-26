@@ -43,11 +43,16 @@ import java.util.regex.Pattern;
  * of shut lava, water and powder snow and not into a block that has been put
  * there since.</p>
  *
- * <p>With {@code viewpoints.sharing} he shares a spot with other players, or
- * with everybody, {@code /cam spot share}, see {@link SharedSpots}. They jump to
- * it as to one of their own, {@code /cam spot Owner:spot} - by the same rules,
- * held from their own body -, and with {@code visitor-camera} they visit it
- * from wherever they are, {@code /cam visit}.</p>
+ * <p>Each spot of his is private, or - with {@code viewpoints.sharing} -
+ * public, {@code /cam spot share <spot> all}: then everybody finds it among
+ * the public spots, and may like it, {@code /cam spot like}. He may also
+ * offer it to single players, {@code /cam spot share <spot> <player>}; it is
+ * theirs once they accept it, {@code /cam spot accept}, and they may turn it
+ * down or drop it again, {@code /cam spot decline}, see {@link SharedSpots}.
+ * Others jump to a spot they may use as to one of their own,
+ * {@code /cam spot Owner:spot} - by the same rules, held from their own body
+ * -, and with {@code visitor-camera} they visit it from wherever they are,
+ * {@code /cam visit}.</p>
  *
  * <p>Where they are kept is {@code viewpoints.storage}: in the file of the
  * player, or in memory only, which {@code /cam reload} and a restart
@@ -59,9 +64,10 @@ public final class CamSpots {
     private static final Pattern NAME = Pattern.compile("[A-Za-z0-9_-]{1,16}");
 
     /** The words after {@code /cam spot} that are no spot. */
-    private static final Set<String> WORDS = Set.of("set", "delete", "list", "share", "unshare");
+    private static final Set<String> WORDS = Set.of("set", "delete", "list", "share", "unshare", "accept",
+            "decline", "like");
 
-    /** The word that shares with everybody, {@code /cam spot share <spot> all}. */
+    /** The word that makes a spot public, {@code /cam spot share <spot> all}. */
     private static final String EVERYBODY = "all";
 
     private final CameraPlugin plugin;
@@ -99,19 +105,55 @@ public final class CamSpots {
         return Collections.unmodifiableMap(inMemory.getOrDefault(player.getUniqueId(), Map.of()));
     }
 
-    /** His own spots, in the order he saved them, for the menu. */
+    /** His own spots, in the order he saved them. */
     public Collection<Spot> own(Player player) {
         return spotsOf(player).values();
     }
 
-    /** The share of one of his spots, or {@code null} while it is shared with nobody. */
-    public Share shareOf(Player player, Spot spot) {
-        return shared.get(player.getUniqueId(), spot.key());
+    /**
+     * His own spots that are not public, for the page of the private ones in
+     * the menu - every one of them while sharing is switched off, which
+     * leaves nothing public.
+     */
+    public List<Spot> privateSpots(Player player) {
+        List<Spot> found = new ArrayList<>();
+        for (Spot spot : spotsOf(player).values()) {
+            if (!isPublic(player, spot)) {
+                found.add(spot);
+            }
+        }
+        return found;
     }
 
-    /** What others share with him, for the menu and the tab completion. */
+    /** Whether one of his spots is public. */
+    public boolean isPublic(Player player, Spot spot) {
+        Share share = shareOf(player, spot);
+        return share != null && share.isEveryone();
+    }
+
+    /** The share of one of his spots, or {@code null} while it is shared with nobody. */
+    public Share shareOf(Player player, Spot spot) {
+        return settings.isViewpointsSharing() ? shared.get(player.getUniqueId(), spot.key()) : null;
+    }
+
+    /** What others share with him: the public spots and those he accepted, for the tab completion. */
     public List<Share> sharedWith(Player player) {
         return settings.isViewpointsSharing() ? shared.sharedWith(player.getUniqueId()) : List.of();
+    }
+
+    /** Every public spot, his own among them, for the page of the public spots. */
+    public List<Share> publicSpots() {
+        return settings.isViewpointsSharing() ? shared.publicSpots() : List.of();
+    }
+
+    /** What others offered him and he has not accepted yet. */
+    public List<Share> offers(Player player) {
+        return settings.isViewpointsSharing() ? shared.offeredTo(player.getUniqueId()) : List.of();
+    }
+
+    /** What others share with him by name and he accepted, for the page of the shared spots. */
+    public List<Share> accepted(Player player) {
+        return settings.isViewpointsSharing() ? shared.acceptedBy(player.getUniqueId()) : List.of();
     }
 
     /** The names of his spots, for the tab completion. */
@@ -123,10 +165,37 @@ public final class CamSpots {
         return names;
     }
 
-    /** {@code Owner:spot} of every spot shared with him, for the tab completion. */
+    /** {@code Owner:spot} of every spot he may use, for the tab completion. */
     public List<String> sharedLabels(Player player) {
+        return labels(sharedWith(player));
+    }
+
+    /** {@code Owner:spot} of what was offered to him, for the tab completion of {@code accept}. */
+    public List<String> offerLabels(Player player) {
+        return labels(offers(player));
+    }
+
+    /** {@code Owner:spot} of what he may decline: the offers and what he accepted. */
+    public List<String> declinableLabels(Player player) {
+        List<String> labels = labels(offers(player));
+        labels.addAll(labels(accepted(player)));
+        return labels;
+    }
+
+    /** {@code Owner:spot} of the public spots of others, for the tab completion of {@code like}. */
+    public List<String> likeableLabels(Player player) {
         List<String> labels = new ArrayList<>();
-        for (Share share : sharedWith(player)) {
+        for (Share share : publicSpots()) {
+            if (!share.getOwner().equals(player.getUniqueId())) {
+                labels.add(share.label());
+            }
+        }
+        return labels;
+    }
+
+    private static List<String> labels(List<Share> shares) {
+        List<String> labels = new ArrayList<>();
+        for (Share share : shares) {
             labels.add(share.label());
         }
         return labels;
@@ -134,7 +203,8 @@ public final class CamSpots {
 
     /**
      * Whom one of his spots is shared with, for the tab completion of
-     * {@code /cam spot unshare}: {@code all} for everybody, and the names.
+     * {@code /cam spot unshare}: {@code all} while it is public, and the
+     * names, accepted or offered.
      */
     public List<String> sharedNames(Player player, String name) {
         Share share = settings.isViewpointsSharing() ? shared.get(player.getUniqueId(), Spot.key(name)) : null;
@@ -144,6 +214,7 @@ public final class CamSpots {
                 names.add(EVERYBODY);
             }
             names.addAll(share.getPlayers().values());
+            names.addAll(share.getPending().values());
         }
         return names;
     }
@@ -167,6 +238,12 @@ public final class CamSpots {
             share(player, args[1], args[2]);
         } else if (args.length == 3 && first.equals("unshare")) {
             unshare(player, args[1], args[2]);
+        } else if (args.length == 2 && first.equals("accept")) {
+            accept(player, args[1]);
+        } else if (args.length == 2 && first.equals("decline")) {
+            decline(player, args[1]);
+        } else if (args.length == 2 && first.equals("like")) {
+            like(player, args[1]);
         } else if (args.length == 1 && !WORDS.contains(first)) {
             jump(player, args[0]);
         } else {
@@ -174,21 +251,27 @@ public final class CamSpots {
         }
     }
 
-    /** Saves the spot where he is, looking the way he looks. */
-    public void set(Player player, String name) {
+    /**
+     * Saves the spot where he is, looking the way he looks. A spot of the
+     * same name moves here and keeps the day it was first saved.
+     *
+     * @return the spot, or {@code null} when it was not saved; he has been told why
+     */
+    public Spot set(Player player, String name) {
         if (!NAME.matcher(name).matches() || WORDS.contains(Spot.key(name))) {
             messages.sendConfiguredMessage(player, "spot-bad-name");
-            return;
+            return null;
         }
         Map<String, Spot> spots = spotsOf(player);
-        boolean moved = spots.containsKey(Spot.key(name));
-        if (!moved && spots.size() >= settings.getViewpointsMax()) {
+        Spot before = spots.get(Spot.key(name));
+        if (before == null && spots.size() >= settings.getViewpointsMax()) {
             messages.sendConfiguredMessage(player, "spot-full", "{max}",
                     String.valueOf(settings.getViewpointsMax()));
-            return;
+            return null;
         }
         // Under the name he gave it now, capitals and all.
-        Spot spot = Spot.at(name, player.getLocation());
+        Spot spot = before == null ? Spot.at(name, player.getLocation())
+                : Spot.at(name, player.getLocation(), before.created());
         if (inFile()) {
             store.get(player.getUniqueId()).putSpot(player.getName(), spot);
             store.save(player.getUniqueId());
@@ -197,7 +280,8 @@ public final class CamSpots {
         }
         // Whoever it is shared with finds it where it is now.
         shared.moved(player.getUniqueId(), player.getName(), spot);
-        messages.sendConfiguredMessage(player, moved ? "spot-moved" : "spot-saved", "{spot}", name);
+        messages.sendConfiguredMessage(player, before != null ? "spot-moved" : "spot-saved", "{spot}", name);
+        return spot;
     }
 
     public void delete(Player player, String name) {
@@ -220,10 +304,10 @@ public final class CamSpots {
     }
 
     /**
-     * {@code /cam spot share <spot> <player|all>}: shares one of his spots
-     * with a player - one who has been on the server, online or not - or with
-     * everybody. A player who is online hears about it, with a button that
-     * visits it.
+     * {@code /cam spot share <spot> <player|all>}: makes one of his spots
+     * public, or offers it to a player - one who has been on the server,
+     * online or not -, who has it once he accepts it. A player who is online
+     * hears about it, with the buttons to accept it and to turn it down.
      */
     public void share(Player player, String name, String with) {
         if (!settings.isViewpointsSharing()) {
@@ -236,8 +320,7 @@ public final class CamSpots {
             return;
         }
         if (with.equalsIgnoreCase(EVERYBODY)) {
-            shared.share(player.getUniqueId(), player.getName(), spot, null, null);
-            messages.sendConfiguredMessage(player, "spot-shared-all", "{spot}", spot.name());
+            makePublic(player, spot, true);
             return;
         }
         OfflinePlayer other = findPlayer(with);
@@ -249,8 +332,8 @@ public final class CamSpots {
     }
 
     /**
-     * Shares one of his spots with a player, from {@code /cam spot share} or
-     * the menu.
+     * Offers one of his spots to a player, from {@code /cam spot share} or
+     * the menu. One who accepted it already keeps it as it is.
      */
     public void shareWith(Player player, Spot spot, OfflinePlayer other) {
         if (other.getUniqueId().equals(player.getUniqueId())) {
@@ -259,15 +342,23 @@ public final class CamSpots {
         }
         String otherName = other.getName() == null ? other.getUniqueId().toString() : other.getName();
         boolean added = shared.share(player.getUniqueId(), player.getName(), spot, other.getUniqueId(), otherName);
-        messages.sendConfiguredMessage(player, "spot-shared", "{spot}", spot.name(), "{player}", otherName);
-        if (added && other.getPlayer() != null) {
-            tellShared(other.getPlayer(), player, spot);
+        Share share = shared.get(player.getUniqueId(), spot.key());
+        if (share != null && share.isAcceptedBy(other.getUniqueId())) {
+            messages.sendConfiguredMessage(player, "spot-shared-already", "{spot}", spot.name(),
+                    "{player}", otherName);
+            return;
+        }
+        messages.sendConfiguredMessage(player, "spot-offered", "{spot}", spot.name(), "{player}", otherName);
+        if (added && other.getPlayer() != null && share != null) {
+            tellOffered(other.getPlayer(), share);
         }
     }
 
     /**
-     * {@code /cam spot unshare <spot> <player|all>}: takes a share back. Whoever
-     * visits the spot and may no longer is taken back to his body.
+     * {@code /cam spot unshare <spot> <player|all>}: takes a share back -
+     * from a player, accepted or still offered, or from everybody, which
+     * makes the spot private again. Whoever visits the spot and may no
+     * longer is taken back to his body.
      */
     public void unshare(Player player, String name, String with) {
         if (!settings.isViewpointsSharing()) {
@@ -280,17 +371,16 @@ public final class CamSpots {
             return;
         }
         if (with.equalsIgnoreCase(EVERYBODY)) {
-            boolean removed = shared.unshare(player.getUniqueId(), spot.key(), null);
-            messages.sendConfiguredMessage(player, removed ? "spot-unshared-all" : "spot-not-shared-all",
-                    "{spot}", spot.name());
-            plugin.getVisit().checkVisitors(player.getUniqueId(), spot.key());
+            makePublic(player, spot, false);
             return;
         }
         UUID otherId = null;
         String otherName = with;
         Share share = shared.get(player.getUniqueId(), spot.key());
         if (share != null) {
-            for (Map.Entry<UUID, String> entry : share.getPlayers().entrySet()) {
+            Map<UUID, String> whom = new LinkedHashMap<>(share.getPending());
+            whom.putAll(share.getPlayers());
+            for (Map.Entry<UUID, String> entry : whom.entrySet()) {
                 if (entry.getValue().equalsIgnoreCase(with)) {
                     otherId = entry.getKey();
                     otherName = entry.getValue();
@@ -309,7 +399,7 @@ public final class CamSpots {
         unshareWith(player, spot, otherId, otherName);
     }
 
-    /** Takes a share back from a player, from {@code /cam spot unshare} or the menu. */
+    /** Takes a share back from a player, accepted or offered, from {@code /cam spot unshare} or the menu. */
     public void unshareWith(Player player, Spot spot, UUID otherId, String otherName) {
         boolean removed = shared.unshare(player.getUniqueId(), spot.key(), otherId);
         messages.sendConfiguredMessage(player, removed ? "spot-unshared" : "spot-not-shared",
@@ -317,8 +407,16 @@ public final class CamSpots {
         plugin.getVisit().checkVisitors(player.getUniqueId(), spot.key());
     }
 
-    /** Shares one of his spots with everybody, or takes that back, for the menu. */
-    public void shareAll(Player player, Spot spot, boolean everybody) {
+    /**
+     * Makes one of his spots public, or private again, from
+     * {@code /cam spot share|unshare <spot> all} or the menu. A spot made
+     * private keeps whom it is shared with by name, and its likes.
+     */
+    public void makePublic(Player player, Spot spot, boolean everybody) {
+        if (!settings.isViewpointsSharing()) {
+            messages.sendConfiguredMessage(player, "spot-share-off");
+            return;
+        }
         if (everybody) {
             shared.share(player.getUniqueId(), player.getName(), spot, null, null);
             messages.sendConfiguredMessage(player, "spot-shared-all", "{spot}", spot.name());
@@ -327,6 +425,117 @@ public final class CamSpots {
             messages.sendConfiguredMessage(player, removed ? "spot-unshared-all" : "spot-not-shared-all",
                     "{spot}", spot.name());
             plugin.getVisit().checkVisitors(player.getUniqueId(), spot.key());
+        }
+    }
+
+    /** {@code /cam spot accept Owner:spot}: takes a spot offered to him. */
+    public void accept(Player player, String label) {
+        if (!settings.isViewpointsSharing()) {
+            messages.sendConfiguredMessage(player, "spot-share-off");
+            return;
+        }
+        Share share = shared.findOffer(player.getUniqueId(), label);
+        if (share == null) {
+            messages.sendConfiguredMessage(player, "spot-offer-unknown", "{spot}", label);
+            return;
+        }
+        accept(player, share);
+    }
+
+    /** Takes a spot offered to him, from {@code /cam spot accept} or the menu; its owner hears about it. */
+    public void accept(Player player, Share share) {
+        if (!share.isOfferedTo(player.getUniqueId())) {
+            messages.sendConfiguredMessage(player, "spot-offer-unknown", "{spot}", share.label());
+            return;
+        }
+        shared.accept(share, player.getUniqueId(), player.getName());
+        messages.sendConfiguredMessage(player, "spot-accepted", "{spot}", share.label());
+        Player owner = Bukkit.getPlayer(share.getOwner());
+        if (owner != null) {
+            messages.sendConfiguredMessage(owner, "spot-accepted-owner", "{player}", player.getName(),
+                    "{spot}", share.getSpot().name());
+        }
+    }
+
+    /**
+     * {@code /cam spot decline Owner:spot}: turns down a spot offered to him,
+     * or drops one he accepted - one that is public stays among the public
+     * spots all the same.
+     */
+    public void decline(Player player, String label) {
+        if (!settings.isViewpointsSharing()) {
+            messages.sendConfiguredMessage(player, "spot-share-off");
+            return;
+        }
+        Share share = shared.findOffer(player.getUniqueId(), label);
+        if (share == null) {
+            for (Share own : accepted(player)) {
+                if (own.label().equalsIgnoreCase(label)) {
+                    share = own;
+                }
+            }
+        }
+        if (share == null) {
+            messages.sendConfiguredMessage(player, "spot-offer-unknown", "{spot}", label);
+            return;
+        }
+        decline(player, share);
+    }
+
+    /** Turns down an offer or drops a spot he accepted, from {@code /cam spot decline} or the menu. */
+    public void decline(Player player, Share share) {
+        boolean offer = share.isOfferedTo(player.getUniqueId());
+        if (!shared.decline(share, player.getUniqueId())) {
+            messages.sendConfiguredMessage(player, "spot-offer-unknown", "{spot}", share.label());
+            return;
+        }
+        plugin.getVisit().checkVisitors(share.getOwner(), share.getSpot().key());
+        messages.sendConfiguredMessage(player, offer ? "spot-declined" : "spot-removed", "{spot}", share.label());
+        Player owner = Bukkit.getPlayer(share.getOwner());
+        if (owner != null && offer) {
+            messages.sendConfiguredMessage(owner, "spot-declined-owner", "{player}", player.getName(),
+                    "{spot}", share.getSpot().name());
+        }
+    }
+
+    /** {@code /cam spot like Owner:spot}: likes a public spot of another player, or no longer does. */
+    public void like(Player player, String label) {
+        if (!settings.isViewpointsSharing()) {
+            messages.sendConfiguredMessage(player, "spot-share-off");
+            return;
+        }
+        Share share = shared.findPublic(label);
+        if (share == null) {
+            messages.sendConfiguredMessage(player, "spot-public-unknown", "{spot}", label);
+            return;
+        }
+        like(player, share);
+    }
+
+    /** Likes a public spot, or no longer does, from {@code /cam spot like} or the menu. */
+    public void like(Player player, Share share) {
+        if (share.getOwner().equals(player.getUniqueId())) {
+            messages.sendConfiguredMessage(player, "spot-like-own");
+            return;
+        }
+        if (!share.isEveryone()) {
+            messages.sendConfiguredMessage(player, "spot-public-unknown", "{spot}", share.label());
+            return;
+        }
+        boolean likes = shared.toggleLike(share, player.getUniqueId());
+        messages.sendConfiguredMessage(player, likes ? "spot-liked" : "spot-unliked", "{spot}", share.label(),
+                "{likes}", String.valueOf(share.likes()));
+    }
+
+    /**
+     * Goes to a spot of another player: visits it with {@code visitor-camera},
+     * from wherever he is, and jumps to it otherwise, like to one of his own.
+     */
+    public void go(Player player, Share share) {
+        if (settings.isVisitorCameraEnabled()) {
+            plugin.getVisit().visit(player, share);
+        } else {
+            jump(player, share.label());
         }
     }
 
@@ -348,35 +557,36 @@ public final class CamSpots {
         return null;
     }
 
-    /** Tells a player online that a spot was shared with him, with a button to it. */
-    private void tellShared(Player other, Player owner, Spot spot) {
-        if (!messages.isMessageEnabled("spot-shared-with-you")) {
+    /** Tells a player online that a spot is offered to him, with the buttons to accept it and to turn it down. */
+    private void tellOffered(Player other, Share share) {
+        if (!messages.isMessageEnabled("spot-offered-to-you")) {
             return;
         }
-        String label = owner.getName() + ":" + spot.name();
-        String text = messages.getMessage("spot-shared-with-you")
-                .replace("{owner}", owner.getName())
-                .replace("{spot}", spot.name());
+        String text = messages.getMessage("spot-offered-to-you")
+                .replace("{owner}", share.getOwnerName())
+                .replace("{spot}", share.getSpot().name());
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
-        String command = settings.isVisitorCameraEnabled() ? plugin.commandOrMenu("/cam visit " + label)
-                : plugin.commandOrMenu("/cam spot " + label);
-        if (command != null) {
-            line.addAll(button(settings.isVisitorCameraEnabled() ? "spot-button-visit" : "spot-button-go", label,
-                    new ClickEvent(ClickEvent.Action.RUN_COMMAND, command)));
-        }
+        line.addAll(commandButton("spot-button-accept", share.label(), "/cam spot accept " + share.label()));
+        line.addAll(commandButton("spot-button-decline", share.label(), "/cam spot decline " + share.label()));
         other.spigot().sendMessage(line.toArray(new BaseComponent[0]));
+    }
+
+    /** A button that runs a command - or opens the menu, while only the menu goes - or nothing at all. */
+    private List<BaseComponent> commandButton(String key, String spot, String command) {
+        String run = plugin.commandOrMenu(command);
+        return run == null ? List.of() : button(key, spot, new ClickEvent(ClickEvent.Action.RUN_COMMAND, run));
     }
 
     /**
      * Lists his spots, each with a button that jumps to it, one that puts the
      * command to share it into his chat line and one that puts the command to
      * delete it there: deleting takes one key more than a click, so that a
-     * slip of the mouse loses nothing. Below them what others share with him,
-     * with a button that jumps to it and one that visits it.
+     * slip of the mouse loses nothing. Below them what others share with him
+     * by name, the public spots of others, and what is offered to him, with
+     * the buttons that go there, like, accept and turn down.
      */
     private void list(Player player) {
         Map<String, Spot> spots = spotsOf(player);
-        List<Share> sharedWithHim = sharedWith(player);
         if (spots.isEmpty()) {
             messages.sendConfiguredMessage(player, "spot-list-empty");
         } else {
@@ -388,18 +598,47 @@ public final class CamSpots {
                 }
             }
         }
-        if (sharedWithHim.isEmpty()) {
+        listShares(player, accepted(player), "spot-list-shared-header", "spot-list-shared-entry", false);
+        List<Share> others = new ArrayList<>();
+        for (Share share : publicSpots()) {
+            if (!share.getOwner().equals(player.getUniqueId())) {
+                others.add(share);
+            }
+        }
+        listShares(player, others, "spot-list-public-header", "spot-list-public-entry", true);
+        List<Share> offers = offers(player);
+        if (offers.isEmpty()) {
             return;
         }
-        messages.sendConfiguredMessage(player, "spot-list-shared-header", "{count}",
-                String.valueOf(sharedWithHim.size()));
-        if (!messages.isMessageEnabled("spot-list-shared-entry")) {
+        messages.sendConfiguredMessage(player, "spot-list-offers-header", "{count}", String.valueOf(offers.size()));
+        if (!messages.isMessageEnabled("spot-list-offers-entry")) {
             return;
         }
-        for (Share share : sharedWithHim) {
-            Spot spot = share.getSpot();
-            String text = fillPlace(messages.getMessage("spot-list-shared-entry"), spot)
+        for (Share share : offers) {
+            String text = fillPlace(messages.getMessage("spot-list-offers-entry"), share.getSpot())
                     .replace("{owner}", share.getOwnerName());
+            List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
+            line.addAll(button("spot-button-accept", share.label(),
+                    new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam spot accept " + share.label())));
+            line.addAll(button("spot-button-decline", share.label(),
+                    new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam spot decline " + share.label())));
+            player.spigot().sendMessage(line.toArray(new BaseComponent[0]));
+        }
+    }
+
+    /** One part of the list below his own spots: a header and a line for each, with its buttons. */
+    private void listShares(Player player, List<Share> shares, String header, String entry, boolean likes) {
+        if (shares.isEmpty()) {
+            return;
+        }
+        messages.sendConfiguredMessage(player, header, "{count}", String.valueOf(shares.size()));
+        if (!messages.isMessageEnabled(entry)) {
+            return;
+        }
+        for (Share share : shares) {
+            String text = fillPlace(messages.getMessage(entry), share.getSpot())
+                    .replace("{owner}", share.getOwnerName())
+                    .replace("{likes}", String.valueOf(share.likes()));
             List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
             line.addAll(button("spot-button-go", share.label(),
                     new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam spot " + share.label())));
@@ -407,16 +646,27 @@ public final class CamSpots {
                 line.addAll(button("spot-button-visit", share.label(),
                         new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam visit " + share.label())));
             }
+            if (likes) {
+                line.addAll(button(share.isLikedBy(player.getUniqueId()) ? "spot-button-unlike" : "spot-button-like",
+                        share.label(), new ClickEvent(ClickEvent.Action.RUN_COMMAND,
+                                "/cam spot like " + share.label())));
+            }
             player.spigot().sendMessage(line.toArray(new BaseComponent[0]));
         }
     }
 
-    /** One of his own spots in the list: where it is, whom it is shared with, and its buttons. */
+    /** One of his own spots in the list: where it is, whether it is public, whom it is shared with, and its buttons. */
     private BaseComponent[] ownLine(Player player, Spot spot) {
         String text = fillPlace(messages.getMessage("spot-list-entry"), spot);
-        Share share = settings.isViewpointsSharing() ? shared.get(player.getUniqueId(), spot.key()) : null;
-        if (share != null && messages.isMessageEnabled("spot-list-shared")) {
+        Share share = shareOf(player, spot);
+        if (share != null && share.isEveryone() && messages.isMessageEnabled("spot-list-public")) {
+            text += messages.getMessage("spot-list-public").replace("{likes}", String.valueOf(share.likes()));
+        }
+        if (share != null && !share.getPlayers().isEmpty() && messages.isMessageEnabled("spot-list-shared")) {
             text += messages.getMessage("spot-list-shared").replace("{players}", whom(share));
+        }
+        if (share != null && !share.getPending().isEmpty() && messages.isMessageEnabled("spot-list-offered")) {
+            text += messages.getMessage("spot-list-offered").replace("{players}", offeredTo(share));
         }
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
         line.addAll(button("spot-button-go", spot.name(),
@@ -430,14 +680,14 @@ public final class CamSpots {
         return line.toArray(new BaseComponent[0]);
     }
 
-    /** Whom a share is for, written out: everybody, and the names. */
+    /** Who accepted a share, written out. */
     public String whom(Share share) {
-        List<String> names = new ArrayList<>();
-        if (share.isEveryone()) {
-            names.add(messages.getMessage("spot-share-everybody"));
-        }
-        names.addAll(share.getPlayers().values());
-        return String.join(", ", names);
+        return String.join(", ", share.getPlayers().values());
+    }
+
+    /** Whom a share is offered to and who has not accepted it yet, written out. */
+    public String offeredTo(Share share) {
+        return String.join(", ", share.getPending().values());
     }
 
     /** {@code {spot}}, {@code {x}}, {@code {y}}, {@code {z}} and {@code {world}} of a line of the list. */
@@ -512,6 +762,8 @@ public final class CamSpots {
                 "{spot}", label)) {
             return;
         }
+        // A jump of his own takes him off a tour he follows.
+        plugin.getTour().leave(player);
         if (!guard.jumpTo(player, data, target)) {
             return;
         }

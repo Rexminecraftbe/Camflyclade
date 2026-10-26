@@ -13,6 +13,7 @@ public enum MenuButton implements MenuSlot {
     BACK("back", "ender_pearl", 11),
     RESUME("resume", "recovery_compass", 12),
     SPOTS("spots", "filled_map", 13),
+    TOUR("tour", "lead", 20),
     PHOTO("photo", "painting", 14),
     TIME("time", "clock", 15),
     WEATHER("weather", "sunflower", 16),

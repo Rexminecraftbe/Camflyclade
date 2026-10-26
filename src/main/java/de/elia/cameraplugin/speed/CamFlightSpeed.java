@@ -11,7 +11,9 @@ import org.bukkit.event.player.PlayerItemHeldEvent;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -49,6 +51,8 @@ public final class CamFlightSpeed implements Listener {
     private final Map<UUID, Double> speeds = new HashMap<>();
     /** The fly speed each camera player had before, which he gets back at the end. */
     private final Map<UUID, Float> originalSpeeds = new HashMap<>();
+    /** The camera players whose keys move them no longer: guests of a tour, which their guide steers. */
+    private final Set<UUID> held = new HashSet<>();
 
     public CamFlightSpeed(CameraPlugin plugin) {
         this.plugin = plugin;
@@ -67,8 +71,30 @@ public final class CamFlightSpeed implements Listener {
                 : Math.min(settings.getFlightSpeedMax(), Math.max(settings.getFlightSpeedMin(), own)));
     }
 
+    /**
+     * Takes away what his keys do to the camera, for a guest of a tour: his
+     * fly speed is 0, and the mouse wheel changes it no more, until
+     * {@link #release}.
+     */
+    public void hold(Player player) {
+        held.add(player.getUniqueId());
+        player.setFlySpeed(0.0f);
+    }
+
+    /** Gives a guest whose tour is over the speed back that he flew at. */
+    public void release(Player player) {
+        if (!held.remove(player.getUniqueId())) {
+            return;
+        }
+        Double speed = speeds.get(player.getUniqueId());
+        if (speed != null) {
+            player.setFlySpeed((float) (NORMAL_FLY_SPEED * speed));
+        }
+    }
+
     /** Gives a player leaving camera mode the fly speed back that he had before. */
     public void stopFor(Player player) {
+        held.remove(player.getUniqueId());
         speeds.remove(player.getUniqueId());
         Float original = originalSpeeds.remove(player.getUniqueId());
         if (original != null) {
@@ -85,6 +111,11 @@ public final class CamFlightSpeed implements Listener {
         }
         int ahead = Math.floorMod(event.getNewSlot() - event.getPreviousSlot(), HOTBAR_SLOTS);
         if (ahead == 0) {
+            return;
+        }
+        if (held.contains(player.getUniqueId())) {
+            // On a tour the guide sets the pace; the slot stays all the same.
+            event.setCancelled(true);
             return;
         }
         // The slot stays where it was. That also keeps every turn of the
@@ -104,7 +135,9 @@ public final class CamFlightSpeed implements Listener {
 
     private void setSpeed(Player player, double speed) {
         speeds.put(player.getUniqueId(), speed);
-        player.setFlySpeed((float) (NORMAL_FLY_SPEED * speed));
+        if (!held.contains(player.getUniqueId())) {
+            player.setFlySpeed((float) (NORMAL_FLY_SPEED * speed));
+        }
     }
 
     /** Rounded to two places, so that steps of 0.1 add up to 0.3 and not to 0.30000000000000004. */

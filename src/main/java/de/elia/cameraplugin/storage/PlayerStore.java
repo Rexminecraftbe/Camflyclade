@@ -141,6 +141,7 @@ public final class PlayerStore {
                 Math.max(0L, file.getLong("stats.longest-seconds")),
                 Math.max(0.0, file.getDouble("stats.distance-flown")),
                 Math.max(0.0, file.getDouble("stats.farthest-from-body")),
+                Math.max(0L, file.getLong("stats.last-flight")),
                 charge == null ? null : Math.max(0.0, charge),
                 file.getLong("battery.updated"),
                 cooldown);
@@ -226,7 +227,7 @@ public final class PlayerStore {
                 continue;
             }
             record.loadSpot(new Spot(name, world, spot.getDouble("x"), spot.getDouble("y"), spot.getDouble("z"),
-                    (float) spot.getDouble("yaw"), (float) spot.getDouble("pitch")));
+                    (float) spot.getDouble("yaw"), (float) spot.getDouble("pitch"), spot.getLong("created")));
         }
     }
 
@@ -240,6 +241,9 @@ public final class PlayerStore {
         file.set("stats.longest-seconds", record.getLongestSeconds());
         file.set("stats.distance-flown", Math.round(record.getDistanceFlown() * 10.0) / 10.0);
         file.set("stats.farthest-from-body", Math.round(record.getFarthestFromBody() * 10.0) / 10.0);
+        if (record.getLastFlightEnded() > 0L) {
+            file.set("stats.last-flight", record.getLastFlightEnded());
+        }
         if (record.getBatteryCharge() != null) {
             file.set("battery.charge", record.getBatteryCharge());
             file.set("battery.updated", record.getBatteryUpdated());
@@ -256,6 +260,9 @@ public final class PlayerStore {
             file.set(path + ".z", spot.z());
             file.set(path + ".yaw", (double) spot.yaw());
             file.set(path + ".pitch", (double) spot.pitch());
+            if (spot.created() > 0L) {
+                file.set(path + ".created", spot.created());
+            }
         }
         if (record.getNightVision() != null) {
             file.set("settings.night-vision", nightVisionWord(record.getNightVision()));

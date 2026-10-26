@@ -72,6 +72,7 @@ import de.elia.cameraplugin.teleport.CamTeleportGuard;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import de.elia.cameraplugin.timelimit.EndWarning;
 import de.elia.cameraplugin.trail.CamTrail;
+import de.elia.cameraplugin.tour.CamTour;
 import de.elia.cameraplugin.visit.CamVisit;
 import de.elia.cameraplugin.visibility.CamVisibility;
 import org.bukkit.Bukkit;
@@ -141,6 +142,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamSpots spots = new CamSpots(this, playerStore, sharedSpots, jumpCheck);
     private final CamVisit visit = new CamVisit(this, sharedSpots, jumpCheck);
     private final CamResume resume = new CamResume(this, playerStore, sharedSpots, jumpCheck);
+    private final CamTour tour = new CamTour(this);
     private final CamScoutGuard scoutGuard = new CamScoutGuard(this);
     private final CamMenu menu = new CamMenu(this);
     private final CamPhotoMode photoMode = new CamPhotoMode(this);
@@ -246,6 +248,7 @@ public final class CameraPlugin extends JavaPlugin {
                 photoMode,
                 scoutGuard,
                 menu,
+                tour,
                 new CamSuggestionFilter(this));
         for (Listener listener : listeners) {
             pluginManager.registerEvents(listener, this);
@@ -345,6 +348,7 @@ public final class CameraPlugin extends JavaPlugin {
         nudge.onDisable();
         signal.onDisable();
         afk.onDisable();
+        tour.onDisable();
         photoMode.onDisable();
         scoutGuard.onDisable();
         startDelay.onDisable();
@@ -639,6 +643,10 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamVisit getVisit() {
         return visit;
+    }
+
+    public CamTour getTour() {
+        return tour;
     }
 
     public CamResume getResume() {

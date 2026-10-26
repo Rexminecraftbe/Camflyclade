@@ -10,7 +10,7 @@ softdepend: [Vault]
 commands:
   cam:
     description: Enables or disables camera mode
-    usage: /<command> [menu|back|resume|spot [set|delete] <name>|spot share|unshare <name> <player|all>|spot list|visit <player>:<spot>|photo|time <time>|reset|weather clear|rain|reset|nightvision [on|off|dark|reset]|list|reload|stats [reset|player <name>]|stop <name>|all|ban <name>|all [time] [reason]|unban <name>|all|banlist|tp <name> camera|body|trail [name [number|all]]]
+    usage: /<command> [menu|back|resume|spot [set|delete] <name>|spot share|unshare <name> <player|all>|spot accept|decline|like <player>:<spot>|spot list|visit <player>:<spot>|tour invite|accept|decline|kick <player>|tour leave|end|photo|time <time>|reset|weather clear|rain|reset|nightvision [on|off|dark|reset]|list|reload|stats [reset|player <name>]|stop <name>|all|ban <name>|all [time] [reason]|unban <name>|all|banlist|tp <name> camera|body|trail [name [number|all]]]
     permission: camplugin.use
     permission-message: "You do not have permission for this command.!"
 

@@ -30,6 +30,12 @@ public final class PlayerRecord {
     /** The farthest his camera has ever been from his body, in blocks. */
     private double farthestFromBody;
     /**
+     * When his last camera mode ended, as {@link System#currentTimeMillis()}
+     * counts, or 0 while none has been counted - for the admin pages of the
+     * menu, sorted by the last flight.
+     */
+    private long lastFlightEnded;
+    /**
      * The charge of his battery in seconds of flight, as it was at
      * {@link #batteryUpdated}, or {@code null} while it has never been used -
      * a battery nobody has touched yet is full.
@@ -67,13 +73,15 @@ public final class PlayerRecord {
     }
 
     PlayerRecord(String name, long sessions, long totalSeconds, long longestSeconds, double distanceFlown,
-                 double farthestFromBody, Double batteryCharge, long batteryUpdated, Long cooldownStarted) {
+                 double farthestFromBody, long lastFlightEnded, Double batteryCharge, long batteryUpdated,
+                 Long cooldownStarted) {
         this.name = name;
         this.sessions = sessions;
         this.totalSeconds = totalSeconds;
         this.longestSeconds = longestSeconds;
         this.distanceFlown = distanceFlown;
         this.farthestFromBody = farthestFromBody;
+        this.lastFlightEnded = lastFlightEnded;
         this.batteryCharge = batteryCharge;
         this.batteryUpdated = batteryUpdated;
         this.cooldownStarted = cooldownStarted;
@@ -93,10 +101,14 @@ public final class PlayerRecord {
         longestSeconds = Math.max(longestSeconds, seconds);
         distanceFlown += flown;
         farthestFromBody = Math.max(farthestFromBody, farthest);
+        lastFlightEnded = System.currentTimeMillis();
         dirty = true;
     }
 
-    /** Sets the statistics back to nothing, {@code /cam stats reset}. The battery stays as it is. */
+    /**
+     * Sets the statistics back to nothing, {@code /cam stats reset}. The
+     * battery stays as it is, and so does when he last flew: that is no count.
+     */
     public void resetStats() {
         sessions = 0;
         totalSeconds = 0;
@@ -186,6 +198,8 @@ public final class PlayerRecord {
     public long getLongestSeconds() { return longestSeconds; }
     public double getDistanceFlown() { return distanceFlown; }
     public double getFarthestFromBody() { return farthestFromBody; }
+    /** When his last camera mode ended, or 0 while none has been counted. */
+    public long getLastFlightEnded() { return lastFlightEnded; }
     /** The charge of the battery at {@link #getBatteryUpdated()}, or {@code null} for a battery never used. */
     public Double getBatteryCharge() { return batteryCharge; }
     public long getBatteryUpdated() { return batteryUpdated; }

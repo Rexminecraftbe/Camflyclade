@@ -10,6 +10,7 @@ import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.sky.CamSky;
 import de.elia.cameraplugin.stats.CamStats;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
+import de.elia.cameraplugin.tour.CamTour;
 import de.elia.cameraplugin.trail.CamTrail;
 import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.spot.Share;
@@ -40,6 +41,9 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -48,15 +52,20 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.ToIntFunction;
+import java.util.function.ToLongFunction;
 
 /**
  * {@code /cam menu}: what camera mode offers, in a window to click instead of
  * commands to type - starting and ending it, {@code back}, {@code resume},
- * the spots of {@code /cam spot} with sharing them and visiting those of
- * others, {@code photo}, {@code time}, {@code weather}, {@code nightvision}
- * and the own {@code stats}; and for admins a page of their own: who is in
- * camera mode ({@code list}, {@code tp}, {@code stop}), the statistics of
- * others, the bans and the flights of {@code /cam trail}.
+ * the spots of {@code /cam spot} - private, public and shared with him, each
+ * on a tab of its own -, the tour of {@code /cam tour}, {@code photo},
+ * {@code time}, {@code weather}, {@code nightvision} and the own
+ * {@code stats}; and for admins a page of their own: who is in camera mode
+ * ({@code list}, {@code tp}, {@code stop}), the statistics of others, the
+ * bans and the flights of {@code /cam trail}. The lists of spots and of
+ * players have a button that sorts them.
  *
  * <p>Each button does what its command does, with the same checks, rights
  * and messages; what is switched off in the config file is left out, and so
@@ -88,6 +97,15 @@ public final class CamMenu implements Listener {
     private static final int SLOT_NEXT = 50;
     /** The button back to the main page on the small pages. */
     private static final int SLOT_SMALL_BACK = 22;
+    /**
+     * On the pages of the spots, the tabs take the slots after the button
+     * back, so the order and the pages go further right.
+     */
+    private static final int SLOT_SPOT_SORT = 50;
+    private static final int SLOT_SPOT_PREVIOUS = 52;
+    private static final int SLOT_SPOT_NEXT = 53;
+    /** The button that sorts a list of players on the admin pages. */
+    private static final int SLOT_ADMIN_SORT = 53;
 
     /** How long the menu waits for an answer in the chat, in milliseconds. */
     private static final long ANSWER_WAIT = 60_000L;
@@ -115,6 +133,72 @@ public final class CamMenu implements Listener {
 
     /** The bans being set up on their page, by the id of the admin. */
     private final Map<UUID, BanDraft> drafts = new HashMap<>();
+
+    /** How each player has the tabs of the spots sorted, while he is online. */
+    private final Map<UUID, Map<SpotTab, SpotSort>> spotSorts = new HashMap<>();
+
+    /** How each admin has the lists of players sorted, while he is online. */
+    private final Map<UUID, PlayerSort> playerSorts = new HashMap<>();
+
+    /**
+     * The tabs of the spots: his private ones, the public ones of everybody
+     * and those shared with him - each with its icon, its slot in the last
+     * row and the orders it can be sorted in, the first being where it starts.
+     */
+    private enum SpotTab {
+        PRIVATE("private", Material.FILLED_MAP, 46, List.of("date", "name")),
+        PUBLIC("public", Material.GLOBE_BANNER_PATTERN, 47, List.of("date", "name", "owner", "likes")),
+        SHARED("shared", Material.MAP, 48, List.of("date", "name", "owner"));
+
+        final String key;
+        final Material icon;
+        final int slot;
+        final List<String> sorts;
+
+        SpotTab(String key, Material icon, int slot, List<String> sorts) {
+            this.key = key;
+            this.icon = icon;
+            this.slot = slot;
+            this.sorts = sorts;
+        }
+    }
+
+    /** The orders of the spots: the newest first, by name, by the name of the owner, the most liked first. */
+    private enum SpotSort {
+        DATE("date"), NAME("name"), OWNER("owner"), LIKES("likes");
+
+        final String key;
+
+        SpotSort(String key) {
+            this.key = key;
+        }
+
+        static SpotSort of(String key) {
+            for (SpotSort sort : values()) {
+                if (sort.key.equals(key)) {
+                    return sort;
+                }
+            }
+            return DATE;
+        }
+    }
+
+    /** The orders of the lists of players on the admin pages: by name, or the last flight first. */
+    private enum PlayerSort {
+        NAME("name"), LAST_FLIGHT("last-flight");
+
+        static final List<String> KEYS = List.of("name", "last-flight");
+
+        final String key;
+
+        PlayerSort(String key) {
+            this.key = key;
+        }
+
+        static PlayerSort of(String key) {
+            return key.equals(LAST_FLIGHT.key) ? LAST_FLIGHT : NAME;
+        }
+    }
 
     /** Whom the page of a player is about: one player, by his id and name, or everybody. */
     private record Target(UUID id, String name) {
@@ -214,7 +298,10 @@ public final class CamMenu implements Listener {
                     click -> act(player, () -> plugin.getResume().command(player)));
         }
         if (settings.isViewpointsEnabled()) {
-            button(page, MenuButton.SPOTS, "menu-spots", null, false, click -> later(() -> openSpots(player, 0)));
+            spotsButton(player, page);
+        }
+        if (settings.isTourEnabled()) {
+            tourButton(player, page);
         }
         if (settings.isPhotoModeEnabled()) {
             boolean photo = plugin.getPhotoMode().isActive(player);
@@ -287,6 +374,49 @@ public final class CamMenu implements Listener {
         put(page, settings.getMenuSlot(which), shine(item, glint), action);
     }
 
+    /**
+     * The button of the spots on the main page. While spots are offered to
+     * him it shines, says how many, and opens on the tab they wait on.
+     */
+    private void spotsButton(Player player, Page page) {
+        List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-spots-lore")));
+        int offers = plugin.getSpots().offers(player).size();
+        if (offers > 0) {
+            lore.addAll(lines(messages.getMessage("menu-spots-offers").replace("{count}", String.valueOf(offers))));
+        }
+        ItemStack item = labelled(settings.getMenuIcon(MenuButton.SPOTS).create(plugin.getLogger()),
+                messages.getMessage("menu-spots"), lore);
+        SpotTab tab = offers > 0 ? SpotTab.SHARED : SpotTab.PRIVATE;
+        put(page, settings.getMenuSlot(MenuButton.SPOTS), shine(item, offers > 0),
+                click -> later(() -> openSpots(player, tab, 0)));
+    }
+
+    /**
+     * The button of the tour on the main page: under it how his tour stands -
+     * whom he follows, or how many guests he has -, and how many
+     * invitations wait for him, which make it shine.
+     */
+    private void tourButton(Player player, Page page) {
+        CamTour tour = plugin.getTour();
+        List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-tour-lore")));
+        Player guide = tour.guideOf(player);
+        int guests = tour.guestsOf(player).size();
+        if (guide != null) {
+            lore.addAll(lines(messages.getMessage("menu-tour-following").replace("{player}", guide.getName())));
+        } else if (guests > 0) {
+            lore.addAll(lines(messages.getMessage("menu-tour-guiding").replace("{count}", String.valueOf(guests))));
+        }
+        int invited = tour.invitationsOf(player).size();
+        if (invited > 0) {
+            lore.addAll(lines(messages.getMessage("menu-tour-invitations").replace("{count}",
+                    String.valueOf(invited))));
+        }
+        ItemStack item = labelled(settings.getMenuIcon(MenuButton.TOUR).create(plugin.getLogger()),
+                messages.getMessage("menu-tour"), lore);
+        put(page, settings.getMenuSlot(MenuButton.TOUR), shine(item, invited > 0),
+                click -> later(() -> openTour(player, 0)));
+    }
+
     /** How his night vision stands: the name of the mode that holds for him. */
     private String nightVisionState(Player player) {
         return messages.getMessage("menu-nightvision-" + nightVisionWord(plugin.getNightVision().modeFor(player)));
@@ -322,40 +452,102 @@ public final class CamMenu implements Listener {
     }
 
     /**
-     * His own spots and then those shared with him, a page of
-     * {@value #ENTRIES} at a time. Left-click jumps to one; on his own,
-     * right-click shares it and a shift-click deletes it; on a shared one,
-     * right-click visits it.
+     * The spots, a page of {@value #ENTRIES} at a time, on one of three tabs:
+     * his private ones, the public ones of everybody, and those shared with
+     * him - the offers he has not accepted yet first. With sharing switched
+     * off there are only his own. Every tab has the button for a new spot
+     * - left-click private, right-click public - and the one that sorts it.
      */
-    private void openSpots(Player player, int pageNumber) {
+    private void openSpots(Player player, SpotTab wanted, int pageNumber) {
         CamSpots spots = plugin.getSpots();
-        List<Spot> own = new ArrayList<>(spots.own(player));
-        List<Share> shared = spots.sharedWith(player);
-        int total = own.size() + shared.size();
-        int pages = Math.max(1, (total + ENTRIES - 1) / ENTRIES);
-        int number = Math.min(Math.max(0, pageNumber), pages - 1);
+        boolean sharing = settings.isViewpointsSharing();
+        SpotTab tab = sharing ? wanted : SpotTab.PRIVATE;
+        SpotSort sort = spotSort(player, tab);
+        List<Consumer<Integer>> entries = new ArrayList<>();
         Page page = new Page();
-        Inventory inventory = create(page, LIST, messages.getMessage("menu-spots-title"));
-        for (int slot = 0; slot < ENTRIES; slot++) {
-            int index = number * ENTRIES + slot;
-            if (index < own.size()) {
-                putOwnSpot(player, page, slot, own.get(index), number);
-            } else if (index < total) {
-                putSharedSpot(player, page, slot, shared.get(index - own.size()));
+        switch (tab) {
+            case PRIVATE -> {
+                List<Spot> own = sorted(spots.privateSpots(player), sort, spot -> spot.name(), spot -> "",
+                        Spot::created, spot -> 0);
+                for (Spot spot : own) {
+                    entries.add(slot -> putOwnSpot(player, page, slot, spot));
+                }
+            }
+            case PUBLIC -> {
+                List<Share> open = sorted(spots.publicSpots(), sort, share -> share.getSpot().name(),
+                        Share::getOwnerName, share -> share.getSpot().created(), Share::likes);
+                for (Share share : open) {
+                    entries.add(slot -> putPublicSpot(player, page, slot, share));
+                }
+            }
+            case SHARED -> {
+                for (Share share : spots.offers(player)) {
+                    entries.add(slot -> putOffer(player, page, slot, share));
+                }
+                List<Share> accepted = sorted(spots.accepted(player), sort, share -> share.getSpot().name(),
+                        Share::getOwnerName, share -> share.getSpot().created(), Share::likes);
+                for (Share share : accepted) {
+                    entries.add(slot -> putSharedSpot(player, page, slot, share));
+                }
             }
         }
+        int pages = Math.max(1, (entries.size() + ENTRIES - 1) / ENTRIES);
+        int number = Math.min(Math.max(0, pageNumber), pages - 1);
+        Inventory inventory = create(page, LIST, messages.getMessage(sharing ? "menu-spots-title-" + tab.key
+                : "menu-spots-title"));
+        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < entries.size(); slot++) {
+            entries.get(number * ENTRIES + slot).accept(slot);
+        }
+        if (entries.isEmpty()) {
+            put(page, 22, Material.GRAY_DYE, "menu-spots-empty-" + tab.key, click -> { });
+        }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
-        put(page, SLOT_NEW, Material.WRITABLE_BOOK, "menu-new-spot", click -> act(player, () -> askName(player)));
-        paging(page, number, pages, n -> openSpots(player, n));
+        if (sharing) {
+            for (SpotTab other : SpotTab.values()) {
+                putTab(player, page, tab, other);
+            }
+        }
+        List<String> newLore = lines(messages.getMessage(sharing ? "menu-new-spot-lore-public" : "menu-new-spot-lore"));
+        put(page, SLOT_NEW, Material.WRITABLE_BOOK, messages.getMessage("menu-new-spot"), newLore,
+                click -> act(player, () -> askName(player, sharing && click.isRightClick())));
+        putSort(page, SLOT_SPOT_SORT, sort.key, tab.sorts, current -> {
+            spotSorts.computeIfAbsent(player.getUniqueId(), id -> new EnumMap<>(SpotTab.class)).put(tab,
+                    SpotSort.of(current));
+            openSpots(player, tab, 0);
+        });
+        paging(page, number, pages, n -> openSpots(player, tab, n), SLOT_SPOT_PREVIOUS, SLOT_SPOT_NEXT);
         player.openInventory(inventory);
     }
 
-    private void putOwnSpot(Player player, Page page, int slot, Spot spot, int pageNumber) {
+    /**
+     * The button of one tab of the spots: the one open shines and says so;
+     * the tab of the shared spots counts the offers waiting on it.
+     */
+    private void putTab(Player player, Page page, SpotTab open, SpotTab tab) {
+        List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-spots-tab-" + tab.key + "-lore")));
+        int offers = tab == SpotTab.SHARED ? plugin.getSpots().offers(player).size() : 0;
+        if (offers > 0) {
+            lore.addAll(lines(messages.getMessage("menu-spots-offers").replace("{count}", String.valueOf(offers))));
+        }
+        if (tab == open) {
+            lore.addAll(lines(messages.getMessage("menu-state-current")));
+        }
+        ItemStack item = item(tab.icon, messages.getMessage("menu-spots-tab-" + tab.key), lore);
+        item.setAmount(Math.max(1, Math.min(offers, item.getMaxStackSize())));
+        put(page, tab.slot, shine(item, tab == open), click -> later(() -> openSpots(player, tab, 0)));
+    }
+
+    /** One of his private spots: left-click jumps to it, right-click shares it, shift-click deletes it. */
+    private void putOwnSpot(Player player, Page page, int slot, Spot spot) {
         CamSpots spots = plugin.getSpots();
-        List<String> lore = new ArrayList<>(lines(place(messages.getMessage("menu-spot-lore"), spot)));
-        Share share = settings.isViewpointsSharing() ? spots.shareOf(player, spot) : null;
-        if (share != null) {
+        List<String> lore = spotLore(spot);
+        Share share = spots.shareOf(player, spot);
+        if (share != null && !share.getPlayers().isEmpty()) {
             lore.addAll(lines(messages.getMessage("menu-spot-shared-lore").replace("{players}", spots.whom(share))));
+        }
+        if (share != null && !share.getPending().isEmpty()) {
+            lore.addAll(lines(messages.getMessage("menu-spot-offered-lore")
+                    .replace("{players}", spots.offeredTo(share))));
         }
         lore.addAll(lines(messages.getMessage(settings.isViewpointsSharing() ? "menu-spot-actions-share"
                 : "menu-spot-actions")));
@@ -364,7 +556,7 @@ public final class CamMenu implements Listener {
                     if (click.isShiftClick()) {
                         later(() -> {
                             spots.delete(player, spot.name());
-                            openSpots(player, pageNumber);
+                            openSpots(player, SpotTab.PRIVATE, 0);
                         });
                     } else if (click.isRightClick() && settings.isViewpointsSharing()) {
                         later(() -> openShare(player, spot.key(), 0));
@@ -374,25 +566,113 @@ public final class CamMenu implements Listener {
                 });
     }
 
-    private void putSharedSpot(Player player, Page page, int slot, Share share) {
-        List<String> lore = new ArrayList<>(lines(place(messages.getMessage("menu-spot-lore"), share.getSpot())));
-        lore.addAll(lines(messages.getMessage(settings.isVisitorCameraEnabled() ? "menu-shared-spot-actions-visit"
-                : "menu-shared-spot-actions")));
+    /**
+     * A public spot. One of his own: left-click jumps to it, right-click makes
+     * it private again, shift-click deletes it. One of another player:
+     * left-click goes there, right-click likes it or no longer does; it
+     * shines while he likes it.
+     */
+    private void putPublicSpot(Player player, Page page, int slot, Share share) {
+        CamSpots spots = plugin.getSpots();
+        Spot spot = share.getSpot();
+        boolean own = share.getOwner().equals(player.getUniqueId());
+        List<String> lore = spotLore(spot);
+        lore.addAll(lines(messages.getMessage("menu-spot-likes").replace("{likes}", String.valueOf(share.likes()))));
+        if (own) {
+            lore.addAll(lines(messages.getMessage("menu-public-own-actions")));
+            put(page, slot, Material.FILLED_MAP, messages.getMessage("menu-public-own").replace("{spot}", spot.name()),
+                    lore, click -> {
+                        if (click.isShiftClick()) {
+                            later(() -> {
+                                spots.delete(player, spot.name());
+                                openSpots(player, SpotTab.PUBLIC, 0);
+                            });
+                        } else if (click.isRightClick()) {
+                            later(() -> {
+                                spots.makePublic(player, spot, false);
+                                openSpots(player, SpotTab.PUBLIC, 0);
+                            });
+                        } else if (click.isLeftClick()) {
+                            act(player, () -> spots.jump(player, spot.name()));
+                        }
+                    });
+            return;
+        }
+        boolean liked = share.isLikedBy(player.getUniqueId());
+        if (liked) {
+            lore.addAll(lines(messages.getMessage("menu-spot-liked")));
+        }
+        lore.addAll(lines(messages.getMessage(liked ? "menu-public-spot-actions-unlike"
+                : "menu-public-spot-actions")));
         String name = messages.getMessage("menu-shared-spot").replace("{owner}", share.getOwnerName())
-                .replace("{spot}", share.getSpot().name());
-        put(page, slot, Material.MAP, name, lore, click -> {
-            if (click.isRightClick() && settings.isVisitorCameraEnabled()) {
-                act(player, () -> plugin.getVisit().visit(player, share));
+                .replace("{spot}", spot.name());
+        put(page, slot, shine(item(Material.MAP, name, lore), liked), click -> {
+            if (click.isRightClick()) {
+                later(() -> {
+                    spots.like(player, share);
+                    openSpots(player, SpotTab.PUBLIC, 0);
+                });
             } else if (click.isLeftClick()) {
-                act(player, () -> plugin.getSpots().jump(player, share.label()));
+                act(player, () -> spots.go(player, share));
             }
         });
     }
 
+    /** A spot offered to him: left-click accepts it, right-click turns it down. */
+    private void putOffer(Player player, Page page, int slot, Share share) {
+        CamSpots spots = plugin.getSpots();
+        List<String> lore = spotLore(share.getSpot());
+        lore.addAll(lines(messages.getMessage("menu-offer-actions")));
+        String name = messages.getMessage("menu-offer").replace("{owner}", share.getOwnerName())
+                .replace("{spot}", share.getSpot().name());
+        put(page, slot, shine(item(Material.PAPER, name, lore), true), click -> {
+            if (click.isRightClick()) {
+                later(() -> {
+                    spots.decline(player, share);
+                    openSpots(player, SpotTab.SHARED, 0);
+                });
+            } else if (click.isLeftClick()) {
+                later(() -> {
+                    spots.accept(player, share);
+                    openSpots(player, SpotTab.SHARED, 0);
+                });
+            }
+        });
+    }
+
+    /** A spot shared with him that he accepted: left-click goes there, right-click takes it off his list. */
+    private void putSharedSpot(Player player, Page page, int slot, Share share) {
+        CamSpots spots = plugin.getSpots();
+        List<String> lore = spotLore(share.getSpot());
+        lore.addAll(lines(messages.getMessage("menu-shared-spot-actions")));
+        String name = messages.getMessage("menu-shared-spot").replace("{owner}", share.getOwnerName())
+                .replace("{spot}", share.getSpot().name());
+        put(page, slot, Material.MAP, name, lore, click -> {
+            if (click.isRightClick()) {
+                later(() -> {
+                    spots.decline(player, share);
+                    openSpots(player, SpotTab.SHARED, 0);
+                });
+            } else if (click.isLeftClick()) {
+                act(player, () -> spots.go(player, share));
+            }
+        });
+    }
+
+    /** Where a spot is, and since when, as lines under it. */
+    private List<String> spotLore(Spot spot) {
+        List<String> lore = new ArrayList<>(lines(place(messages.getMessage("menu-spot-lore"), spot)));
+        if (spot.created() > 0L) {
+            lore.addAll(lines(messages.getMessage("menu-spot-created").replace("{date}", date(spot.created()))));
+        }
+        return lore;
+    }
+
     /**
-     * Whom one of his spots is shared with: everybody, then the players
-     * online and those it is shared with who are not, a page of
-     * {@value #ENTRIES} at a time. A click shares it, or takes it back.
+     * Whom one of his spots is shared with: public first, then the players
+     * online and those it is shared with or offered to who are not, a page of
+     * {@value #ENTRIES} at a time. A click on a player offers it to him, or
+     * takes it back; a click on the first makes it public, or private again.
      */
     private void openShare(Player player, String key, int pageNumber) {
         CamSpots spots = plugin.getSpots();
@@ -403,7 +683,7 @@ public final class CamMenu implements Listener {
             }
         }
         if (spot == null || !settings.isViewpointsSharing()) {
-            openSpots(player, 0);
+            openSpots(player, SpotTab.PRIVATE, 0);
             return;
         }
         Spot target = spot;
@@ -420,6 +700,9 @@ public final class CamMenu implements Listener {
             for (Map.Entry<UUID, String> entry : share.getPlayers().entrySet()) {
                 people.putIfAbsent(entry.getKey(), entry.getValue());
             }
+            for (Map.Entry<UUID, String> entry : share.getPending().entrySet()) {
+                people.putIfAbsent(entry.getKey(), entry.getValue());
+            }
         }
         List<Map.Entry<UUID, String>> list = new ArrayList<>(people.entrySet());
         // The first slot of the first page is for everybody.
@@ -433,19 +716,21 @@ public final class CamMenu implements Listener {
             int index = number * ENTRIES + slot;
             if (index == 0) {
                 boolean everybody = share != null && share.isEveryone();
-                put(page, slot, Material.BEACON, messages.getMessage("menu-share-everybody"),
-                        lines(messages.getMessage(everybody ? "menu-share-on-lore" : "menu-share-off-lore")),
-                        click -> later(() -> {
-                            spots.shareAll(player, target, !everybody);
+                put(page, slot, shine(item(Material.BEACON, messages.getMessage("menu-share-everybody"),
+                        lines(messages.getMessage(everybody ? "menu-share-public-lore" : "menu-share-private-lore"))),
+                        everybody), click -> later(() -> {
+                            spots.makePublic(player, target, !everybody);
                             openShare(player, key, number);
                         }));
             } else if (index < total) {
                 Map.Entry<UUID, String> entry = list.get(index - 1);
-                boolean with = share != null && share.getPlayers().containsKey(entry.getKey());
+                boolean with = share != null && share.isAcceptedBy(entry.getKey());
+                boolean offered = share != null && share.isOfferedTo(entry.getKey());
+                String state = with ? "on" : offered ? "offered" : "off";
                 ItemStack head = item(Material.PLAYER_HEAD,
-                        messages.getMessage(with ? "menu-share-player-on" : "menu-share-player")
+                        messages.getMessage(with || offered ? "menu-share-player-" + state : "menu-share-player")
                                 .replace("{player}", entry.getValue()),
-                        lines(messages.getMessage(with ? "menu-share-on-lore" : "menu-share-off-lore")));
+                        lines(messages.getMessage("menu-share-" + state + "-lore")));
                 Player other = Bukkit.getPlayer(entry.getKey());
                 if (other != null && head.getItemMeta() instanceof SkullMeta skull) {
                     // Only of a player online: one offline might have to be
@@ -454,7 +739,7 @@ public final class CamMenu implements Listener {
                     head.setItemMeta(skull);
                 }
                 put(page, slot, head, click -> later(() -> {
-                    if (with) {
+                    if (with || offered) {
                         spots.unshareWith(player, target, entry.getKey(), entry.getValue());
                     } else {
                         OfflinePlayer whom = other != null ? other : Bukkit.getOfflinePlayer(entry.getKey());
@@ -464,8 +749,140 @@ public final class CamMenu implements Listener {
                 }));
             }
         }
-        put(page, SLOT_BACK, Material.ARROW, "menu-to-spots", click -> later(() -> openSpots(player, 0)));
+        put(page, SLOT_BACK, Material.ARROW, "menu-to-spots",
+                click -> later(() -> openSpots(player, SpotTab.PRIVATE, 0)));
         paging(page, number, pages, n -> openShare(player, key, n));
+        player.openInventory(inventory);
+    }
+
+    /** How he has a tab of the spots sorted: the newest first, until he picks another order. */
+    private SpotSort spotSort(Player player, SpotTab tab) {
+        Map<SpotTab, SpotSort> own = spotSorts.get(player.getUniqueId());
+        SpotSort sort = own == null ? null : own.get(tab);
+        return sort != null && tab.sorts.contains(sort.key) ? sort : SpotSort.DATE;
+    }
+
+    /**
+     * Spots in an order: the newest first - those without a date, saved
+     * before dates were kept, last -, by name, by owner, or the most liked
+     * first. What is the same in one order goes by name, then by owner.
+     */
+    private static <T> List<T> sorted(Collection<T> items, SpotSort sort, Function<T, String> name,
+                                      Function<T, String> owner, ToLongFunction<T> created, ToIntFunction<T> likes) {
+        Comparator<T> byName = Comparator.comparing(name, String.CASE_INSENSITIVE_ORDER);
+        Comparator<T> byOwner = Comparator.comparing(owner, String.CASE_INSENSITIVE_ORDER);
+        Comparator<T> newest = Comparator.comparingLong(created).reversed();
+        Comparator<T> order = switch (sort) {
+            case DATE -> newest.thenComparing(byName).thenComparing(byOwner);
+            case NAME -> byName.thenComparing(byOwner);
+            case OWNER -> byOwner.thenComparing(byName);
+            case LIKES -> Comparator.comparingInt(likes).reversed().thenComparing(newest).thenComparing(byName);
+        };
+        List<T> list = new ArrayList<>(items);
+        list.sort(order);
+        return list;
+    }
+
+    /**
+     * The button that sorts a list: the order it has now under its name. A
+     * click takes the next order, a right-click the one before.
+     *
+     * @param now    the order it has now, as the language file names it after {@code menu-sort-}
+     * @param orders every order it can have
+     * @param choose what picking one does
+     */
+    private void putSort(Page page, int slot, String now, List<String> orders, Consumer<String> choose) {
+        String name = messages.getMessage("menu-sort").replace("{sort}", messages.getMessage("menu-sort-" + now));
+        put(page, slot, Material.HOPPER, name, lines(messages.getMessage("menu-sort-lore")), click -> later(() -> {
+            int at = Math.max(0, orders.indexOf(now));
+            int step = click.isRightClick() ? orders.size() - 1 : 1;
+            choose.accept(orders.get((at + step) % orders.size()));
+        }));
+    }
+
+    /**
+     * The tour. While he follows one: whom, and the button that leaves it.
+     * Otherwise, a page of {@value #ENTRIES} at a time: the invitations he
+     * has - left-click accepts, right-click turns down -, his guests - a
+     * click sends one away -, and whom he could invite: players in camera
+     * mode close to him who could follow him from where they are; a click
+     * invites one. While he has guests, the last row has the button that
+     * ends the tour.
+     */
+    private void openTour(Player player, int pageNumber) {
+        CamTour tour = plugin.getTour();
+        if (!settings.isTourEnabled()) {
+            openMain(player);
+            return;
+        }
+        Player guide = tour.guideOf(player);
+        if (guide != null) {
+            Page page = new Page();
+            Inventory inventory = create(page, SMALL, messages.getMessage("menu-tour-title"));
+            put(page, 11, head(guide, messages.getMessage("menu-tour-guide").replace("{player}", guide.getName()),
+                    lines(messages.getMessage("menu-tour-guide-lore").replace("{player}", guide.getName()))),
+                    click -> { });
+            put(page, 15, Material.BARRIER, "menu-tour-leave", click -> act(player, () -> tour.leave(player)));
+            put(page, SLOT_SMALL_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
+            player.openInventory(inventory);
+            return;
+        }
+        List<Consumer<Integer>> entries = new ArrayList<>();
+        Page page = new Page();
+        for (Player inviter : tour.invitationsOf(player)) {
+            String name = inviter.getName();
+            entries.add(slot -> put(page, slot, shine(head(inviter,
+                    messages.getMessage("menu-tour-invitation").replace("{player}", name),
+                    lines(messages.getMessage("menu-tour-invitation-lore").replace("{player}", name))), true),
+                    click -> {
+                        if (click.isRightClick()) {
+                            later(() -> {
+                                tour.decline(player, inviter, name);
+                                openTour(player, 0);
+                            });
+                        } else if (click.isLeftClick()) {
+                            act(player, () -> tour.accept(player, inviter, name));
+                        }
+                    }));
+        }
+        List<Player> guests = tour.guestsOf(player);
+        for (Player guest : guests) {
+            String name = guest.getName();
+            entries.add(slot -> put(page, slot, head(guest,
+                    messages.getMessage("menu-tour-guest").replace("{player}", name),
+                    lines(messages.getMessage("menu-tour-guest-lore"))), click -> later(() -> {
+                        tour.kick(player, guest, name);
+                        openTour(player, 0);
+                    })));
+        }
+        if (plugin.isInCameraMode(player)) {
+            for (Player other : tour.candidates(player)) {
+                String name = other.getName();
+                boolean invited = tour.hasInvited(player, other);
+                entries.add(slot -> put(page, slot, head(other,
+                        messages.getMessage("menu-tour-candidate").replace("{player}", name),
+                        lines(messages.getMessage(invited ? "menu-tour-candidate-invited-lore"
+                                : "menu-tour-candidate-lore"))), click -> later(() -> {
+                            tour.invite(player, other, name);
+                            openTour(player, 0);
+                        })));
+            }
+        }
+        int pages = Math.max(1, (entries.size() + ENTRIES - 1) / ENTRIES);
+        int number = Math.min(Math.max(0, pageNumber), pages - 1);
+        Inventory inventory = create(page, LIST, messages.getMessage("menu-tour-title"));
+        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < entries.size(); slot++) {
+            entries.get(number * ENTRIES + slot).accept(slot);
+        }
+        if (entries.isEmpty()) {
+            put(page, 22, Material.GRAY_DYE, plugin.isInCameraMode(player) ? "menu-tour-empty"
+                    : "menu-tour-not-in-cam", click -> { });
+        }
+        put(page, SLOT_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
+        if (!guests.isEmpty()) {
+            put(page, SLOT_NEW, Material.BARRIER, "menu-tour-end", click -> act(player, () -> tour.end(player)));
+        }
+        paging(page, number, pages, n -> openTour(player, n));
         player.openInventory(inventory);
     }
 
@@ -596,6 +1013,7 @@ public final class CamMenu implements Listener {
         }
         boolean teleport = plugin.getListTeleport().mayUse(player);
         List<Player> cameras = cameraPlayersSorted();
+        sortPlayers(player, cameras, Player::getName, Player::getUniqueId);
         int pages = Math.max(1, (cameras.size() + ENTRIES - 1) / ENTRIES);
         int number = Math.min(Math.max(0, pageNumber), pages - 1);
         Page page = new Page();
@@ -620,6 +1038,7 @@ public final class CamMenu implements Listener {
             put(page, 22, Material.GRAY_DYE, "menu-admin-list-empty", click -> { });
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
+        playerSortButton(player, page, () -> openCamList(player, 0));
         paging(page, number, pages, n -> openCamList(player, n));
         player.openInventory(inventory);
     }
@@ -635,6 +1054,45 @@ public final class CamMenu implements Listener {
         }
         cameras.sort((a, b) -> a.getName().compareToIgnoreCase(b.getName()));
         return cameras;
+    }
+
+    /** How he has the lists of players sorted: by name, until he picks the last flight. */
+    private PlayerSort playerSort(Player admin) {
+        return playerSorts.getOrDefault(admin.getUniqueId(), PlayerSort.NAME);
+    }
+
+    /** The button that sorts a list of players on the admin pages, by name or by the last flight. */
+    private void playerSortButton(Player admin, Page page, Runnable reopen) {
+        putSort(page, SLOT_ADMIN_SORT, playerSort(admin).key, PlayerSort.KEYS, chosen -> {
+            playerSorts.put(admin.getUniqueId(), PlayerSort.of(chosen));
+            reopen.run();
+        });
+    }
+
+    /**
+     * Sorts a list of players the way the admin has it, kept by name
+     * otherwise. By the last flight, whoever is in camera mode comes first -
+     * the one who started last at the top -, then the others by when their
+     * last flight ended, as the statistics counted it; whoever never flew,
+     * or was not counted, comes last.
+     */
+    private <T> void sortPlayers(Player admin, List<T> list, Function<T, String> name, Function<T, UUID> id) {
+        list.sort(Comparator.comparing(name, String.CASE_INSENSITIVE_ORDER));
+        if (playerSort(admin) != PlayerSort.LAST_FLIGHT) {
+            return;
+        }
+        Map<UUID, Long> ended = new HashMap<>();
+        for (T entry : list) {
+            UUID player = id.apply(entry);
+            if (!plugin.getCameraPlayers().contains(player)) {
+                ended.put(player, plugin.getPlayerStore().look(player).getLastFlightEnded());
+            }
+        }
+        list.sort(Comparator.comparing((T entry) -> plugin.getCameraPlayers().contains(id.apply(entry))).reversed()
+                .thenComparing(Comparator.comparingLong((T entry) -> {
+                    CameraData data = plugin.getCameraPlayers().get(id.apply(entry));
+                    return data != null ? data.getStartedAt() : ended.getOrDefault(id.apply(entry), 0L);
+                }).reversed()));
     }
 
     /** How long a camera player has been in camera mode and how far from his body, as lines. */
@@ -663,6 +1121,7 @@ public final class CamMenu implements Listener {
             return;
         }
         List<Player> online = onlineSorted(player);
+        sortPlayers(player, online, Player::getName, Player::getUniqueId);
         int pages = Math.max(1, (online.size() + ENTRIES - 1) / ENTRIES);
         int number = Math.min(Math.max(0, pageNumber), pages - 1);
         Page page = new Page();
@@ -676,6 +1135,7 @@ public final class CamMenu implements Listener {
                     click -> act(player, () -> plugin.getStats().command(player, new String[]{"player", name})));
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
+        playerSortButton(player, page, () -> openStatsOf(player, 0));
         paging(page, number, pages, n -> openStatsOf(player, n));
         player.openInventory(inventory);
     }
@@ -705,6 +1165,7 @@ public final class CamMenu implements Listener {
             }
         }
         List<Map.Entry<UUID, String>> list = new ArrayList<>(people.entrySet());
+        sortPlayers(player, list, Map.Entry::getValue, Map.Entry::getKey);
         // The first slot of the first page is for everybody.
         int total = list.size() + 1;
         int pages = Math.max(1, (total + ENTRIES - 1) / ENTRIES);
@@ -723,6 +1184,7 @@ public final class CamMenu implements Listener {
             put(page, slot, targetItem(target, lore), click -> later(() -> openTarget(player, target)));
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
+        playerSortButton(player, page, () -> openPlayers(player, 0));
         paging(page, number, pages, n -> openPlayers(player, n));
         player.openInventory(inventory);
     }
@@ -941,6 +1403,14 @@ public final class CamMenu implements Listener {
         }
         List<String> names = new ArrayList<>(trail.recordedNames());
         names.sort(String.CASE_INSENSITIVE_ORDER);
+        if (playerSort(player) == PlayerSort.LAST_FLIGHT) {
+            // The flights of a player are kept newest first; one still going
+            // is the newest of all.
+            names.sort(Comparator.comparing((String name) -> !trail.flightsOf(name).isEmpty()
+                            && trail.flightsOf(name).get(0).flying()).reversed()
+                    .thenComparing(Comparator.comparingLong((String name) -> trail.flightsOf(name).isEmpty() ? 0L
+                            : trail.flightsOf(name).get(0).startedAt()).reversed()));
+        }
         int pages = Math.max(1, (names.size() + ENTRIES - 1) / ENTRIES);
         int number = Math.min(Math.max(0, pageNumber), pages - 1);
         Page page = new Page();
@@ -963,6 +1433,7 @@ public final class CamMenu implements Listener {
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
         put(page, SLOT_NEW, Material.BUCKET, "menu-admin-trails-hide",
                 click -> act(player, () -> trail.command(player, new String[0])));
+        playerSortButton(player, page, () -> openTrails(player, 0));
         paging(page, number, pages, n -> openTrails(player, n));
         player.openInventory(inventory);
     }
@@ -1057,9 +1528,17 @@ public final class CamMenu implements Listener {
 
     // ------------------------------------------------------------ questions in the chat
 
-    /** Asks for the name of a new spot in the chat; the next line he writes is it. */
-    private void askName(Player player) {
-        ask(player, "menu-spot-name", name -> plugin.getSpots().set(player, name));
+    /**
+     * Asks for the name of a new spot in the chat; the next line he writes is
+     * it. A public one is made public once it is saved.
+     */
+    private void askName(Player player, boolean makePublic) {
+        ask(player, makePublic ? "menu-spot-name-public" : "menu-spot-name", name -> {
+            Spot spot = plugin.getSpots().set(player, name);
+            if (spot != null && makePublic) {
+                plugin.getSpots().makePublic(player, spot, true);
+            }
+        });
     }
 
     /**
@@ -1108,6 +1587,8 @@ public final class CamMenu implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         questions.remove(event.getPlayer().getUniqueId());
         drafts.remove(event.getPlayer().getUniqueId());
+        spotSorts.remove(event.getPlayer().getUniqueId());
+        playerSorts.remove(event.getPlayer().getUniqueId());
     }
 
     // ------------------------------------------------------------ clicks
@@ -1183,11 +1664,16 @@ public final class CamMenu implements Listener {
 
     /** The buttons to the page before and after, where there is one. */
     private void paging(Page page, int number, int pages, Consumer<Integer> open) {
+        paging(page, number, pages, open, SLOT_PREVIOUS, SLOT_NEXT);
+    }
+
+    /** The buttons to the page before and after, in other slots than usual. */
+    private void paging(Page page, int number, int pages, Consumer<Integer> open, int previous, int next) {
         if (number > 0) {
-            put(page, SLOT_PREVIOUS, Material.ARROW, "menu-previous", click -> later(() -> open.accept(number - 1)));
+            put(page, previous, Material.ARROW, "menu-previous", click -> later(() -> open.accept(number - 1)));
         }
         if (number < pages - 1) {
-            put(page, SLOT_NEXT, Material.ARROW, "menu-next", click -> later(() -> open.accept(number + 1)));
+            put(page, next, Material.ARROW, "menu-next", click -> later(() -> open.accept(number + 1)));
         }
     }
 

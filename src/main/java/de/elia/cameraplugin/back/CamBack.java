@@ -43,6 +43,8 @@ public final class CamBack {
             messages.sendConfiguredMessage(player, "back-not-in-cam");
             return;
         }
+        // Back at his body, he follows no tour any more.
+        plugin.getTour().leave(player);
         if (!plugin.getMovementGuard().returnToBody(player, data)) {
             return;
         }
