@@ -12,6 +12,8 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -150,40 +152,70 @@ public final class CamStats {
      * and his cooldown while it runs.
      */
     private void show(CommandSender sender, UUID id, String name) {
+        for (Line line : lines(id, name)) {
+            messages.sendConfiguredMessage(sender, line.key(), line.fills());
+        }
+    }
+
+    /** One line of the statistics: the key of its text in the language file, and what fills it in. */
+    public record Line(String key, String... fills) {
+    }
+
+    /**
+     * The lines of the statistics of one player, as {@code /cam stats} sends
+     * them and the menu shows them under its button: the header, the
+     * numbers, his battery while there is one and his cooldown while it
+     * runs - or {@code stats-off} alone, with nothing to show.
+     */
+    public List<Line> lines(UUID id, String name) {
+        List<Line> lines = new ArrayList<>();
         // With the statistics switched off the battery is still worth a look.
         if (!settings.isStatsEnabled() && !settings.isBatteryEnabled()) {
-            messages.sendConfiguredMessage(sender, "stats-off");
-            return;
+            lines.add(new Line("stats-off"));
+            return lines;
         }
         PlayerRecord record = store.peek(id);
         if (!settings.isStatsEnabled()) {
             // Only the battery is left to show.
-            messages.sendConfiguredMessage(sender, "stats-header", "{player}", name);
+            lines.add(new Line("stats-header", "{player}", name));
         } else if (record.getSessions() == 0) {
-            messages.sendConfiguredMessage(sender, "stats-none", "{player}", name);
+            lines.add(new Line("stats-none", "{player}", name));
         } else {
-            messages.sendConfiguredMessage(sender, "stats-header", "{player}", name);
-            messages.sendConfiguredMessage(sender, "stats-sessions",
-                    "{count}", String.valueOf(record.getSessions()));
-            messages.sendConfiguredMessage(sender, "stats-total-time",
-                    "{time}", CamTimeLimit.formatDuration(record.getTotalSeconds()));
-            messages.sendConfiguredMessage(sender, "stats-longest",
-                    "{time}", CamTimeLimit.formatDuration(record.getLongestSeconds()));
-            messages.sendConfiguredMessage(sender, "stats-distance",
-                    "{distance}", String.valueOf(Math.round(record.getDistanceFlown())));
-            messages.sendConfiguredMessage(sender, "stats-farthest",
-                    "{distance}", String.valueOf(Math.round(record.getFarthestFromBody())));
+            lines.add(new Line("stats-header", "{player}", name));
+            lines.add(new Line("stats-sessions", "{count}", String.valueOf(record.getSessions())));
+            lines.add(new Line("stats-total-time", "{time}", CamTimeLimit.formatDuration(record.getTotalSeconds())));
+            lines.add(new Line("stats-longest", "{time}", CamTimeLimit.formatDuration(record.getLongestSeconds())));
+            lines.add(new Line("stats-distance", "{distance}", String.valueOf(Math.round(record.getDistanceFlown()))));
+            lines.add(new Line("stats-farthest", "{distance}",
+                    String.valueOf(Math.round(record.getFarthestFromBody()))));
         }
         if (settings.isBatteryEnabled()) {
-            messages.sendConfiguredMessage(sender, "stats-battery",
+            lines.add(new Line("stats-battery",
                     "{charge}", CamTimeLimit.formatDuration((long) Math.floor(battery.charge(id))),
-                    "{capacity}", CamTimeLimit.formatDuration(settings.getBatteryCapacity()));
+                    "{capacity}", CamTimeLimit.formatDuration(settings.getBatteryCapacity())));
         }
         long cooldown = timeLimit.getCooldownRemaining(id);
         if (cooldown > 0) {
-            messages.sendConfiguredMessage(sender, "stats-cooldown",
-                    "{time}", CamTimeLimit.formatDuration(cooldown));
+            lines.add(new Line("stats-cooldown", "{time}", CamTimeLimit.formatDuration(cooldown)));
         }
+        return lines;
+    }
+
+    /** The text of a line, filled in, or {@code null} while it is switched off. */
+    public String text(Line line) {
+        if (!messages.isMessageEnabled(line.key())) {
+            return null;
+        }
+        String text = messages.getMessage(line.key());
+        for (int i = 0; i + 1 < line.fills().length; i += 2) {
+            text = text.replace(line.fills()[i], line.fills()[i + 1]);
+        }
+        return text;
+    }
+
+    /** {@code /cam stats reset} for a player, from the menu. */
+    public void reset(Player player) {
+        reset((CommandSender) player);
     }
 
     /**

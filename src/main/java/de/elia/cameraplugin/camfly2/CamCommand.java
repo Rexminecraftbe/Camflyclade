@@ -19,7 +19,14 @@ public class CamCommand implements CommandExecutor {
      * well, which {@code menu.access} may keep to the menu.
      */
     public static final Set<String> MENU_WORDS = Set.of("back", "resume", "spot", "visit", "photo", "time",
-            "weather", "nightvision");
+            "weather", "nightvision", "stats");
+
+    /**
+     * The words after {@code /cam} of the commands for admins, which
+     * {@code menu.admin-access} may keep to the menu for players - the
+     * reload aside, and {@code stats player} as well.
+     */
+    public static final Set<String> ADMIN_WORDS = Set.of("list", "stop", "ban", "unban", "banlist", "trail", "tp");
 
     private final CameraPlugin plugin;
     private final Messages messages;
@@ -38,6 +45,12 @@ public class CamCommand implements CommandExecutor {
         // an operator in the game to type the command.
         if (args.length > 0 && args[0].equalsIgnoreCase("reload")) {
             return reload(sender);
+        }
+        // A player gets at the rest only the way menu.access and
+        // menu.admin-access let him; the console has no menu and gets at
+        // everything.
+        if (sender instanceof Player player && !commandAllowed(player, args)) {
+            return true;
         }
         // From the console as well: whoever runs the server wants to know who
         // is flying around, without being in the game.
@@ -95,13 +108,6 @@ public class CamCommand implements CommandExecutor {
             plugin.getMenu().command(player);
             return true;
         }
-        // What the menu offers as well goes through the commands only while
-        // menu.access lets it.
-        MenuAccess access = plugin.getSettings().getMenuAccess();
-        if (args.length > 0 && MENU_WORDS.contains(args[0].toLowerCase(Locale.ROOT)) && !access.allowsCommands()) {
-            messages.sendConfiguredMessage(player, access.allowsMenu() ? "menu-only" : "menu-features-off");
-            return true;
-        }
         if (args.length > 0 && args[0].equalsIgnoreCase("resume")) {
             plugin.getResume().command(player);
             return true;
@@ -142,6 +148,38 @@ public class CamCommand implements CommandExecutor {
 
         plugin.getStarter().toggle(player);
         return true;
+    }
+
+    /**
+     * Whether a player may use this command as a command, after
+     * {@code menu.access} for what the menu offers him and
+     * {@code menu.admin-access} for what it offers admins. If not, he is told
+     * that it goes through {@code /cam menu}, or that it is switched off.
+     */
+    private boolean commandAllowed(Player player, String[] args) {
+        if (args.length == 0) {
+            return true;
+        }
+        String word = args[0].toLowerCase(Locale.ROOT);
+        MenuAccess access;
+        if (isAdminCommand(args)) {
+            access = plugin.getSettings().getAdminAccess();
+        } else if (MENU_WORDS.contains(word)) {
+            access = plugin.getSettings().getMenuAccess();
+        } else {
+            return true;
+        }
+        if (access.allowsCommands()) {
+            return true;
+        }
+        messages.sendConfiguredMessage(player, access.allowsMenu() ? "menu-only" : "menu-features-off");
+        return false;
+    }
+
+    /** Whether the command is one for admins, {@code /cam stats player} among them. */
+    public static boolean isAdminCommand(String[] args) {
+        return args.length > 0 && (ADMIN_WORDS.contains(args[0].toLowerCase(Locale.ROOT))
+                || (args.length > 1 && args[0].equalsIgnoreCase("stats") && args[1].equalsIgnoreCase("player")));
     }
 
     /**

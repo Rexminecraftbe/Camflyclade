@@ -16,8 +16,10 @@ public enum MenuButton {
     PHOTO("photo", "painting", 14),
     TIME("time", "clock", 15),
     WEATHER("weather", "sunflower", 16),
+    STATS("stats", "book", 21),
     START("start", MenuIcon.CAMERA_HEAD, 22),
-    END("end", "barrier", 22);
+    END("end", "barrier", 22),
+    ADMIN("admin", "command_block", 23);
 
     /** How many slots the main page has: three rows. */
     public static final int SLOTS = 27;

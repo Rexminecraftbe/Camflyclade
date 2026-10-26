@@ -581,19 +581,25 @@ camera-head:
   enabled: false
 
 # /cam menu: ein Menü zum Anklicken statt Befehlen zum Tippen - Cam-Modus an und aus, back, resume, die Aussichtspunkte
-# (auch teilen und besuchen), photo, time, weather und nightvision. Jeder Knopf tut, was sein Befehl tut, mit denselben
+# (auch teilen und besuchen), photo, time, weather, nightvision und die eigene Statistik, und für Admins eine eigene
+# Seite: wer im Cam-Modus ist (hinfliegen, zum Körper, beenden), die Statistik anderer, Sperren und Flugspuren. Jeder Knopf tut, was sein Befehl tut, mit denselben
 # Prüfungen und Meldungen; was in dieser Datei aus ist, fehlt im Menü. Den Namen eines neuen Aussichtspunkts schreibt
 # man nach dem Klick in den Chat (abbrechen mit cancel), lesen tut ihn niemand sonst. Im Menü landet nichts im Inventar
 # und nichts kommt heraus, auch nicht im Cam-Modus, wo sonst jedes Fenster zu bleibt. Texte: menu-... in der Sprachdatei.
 menu:
-  # Wie die Spieler an back, resume, spot, visit, photo, time, weather und nightvision kommen:
+  # Wie die Spieler an back, resume, spot, visit, photo, time, weather, nightvision und stats kommen:
   #   menu    = nur über das Menü - die Befehle sagen, dass es dafür /cam menu gibt (Text: menu-only)
   #   both    = über das Menü und über die Befehle
   #   command = nur über die Befehle, /cam menu ist aus
   #   false   = gar nicht, weder über das Menü noch über die Befehle (Text: menu-features-off) - nur /cam selbst,
   #             an und aus
-  # Befehle für Admins wie list, stats, stop, ban, trail und reload gehen immer, /cam selbst (an und aus) auch.
+  # /cam selbst (an und aus) geht immer.
   access: menu
+  # Wie Admins an list, stats player, stop, ban, unban, banlist, trail und tp kommen - dieselben Werte wie bei access.
+  # Die Rechte dafür (camplugin.list, camplugin.stop ...) brauchen sie so oder so, und was in dieser Datei aus ist
+  # (z. B. cam-ban.enabled: false), fehlt auch im Menü. /cam reload geht immer als Befehl, und die Konsole darf alles,
+  # sie hat ja kein Menü. Beim Sperren über das Menü fragt der Chat nach Dauer und Grund (abbrechen mit cancel).
+  admin-access: menu
   # Die Knöpfe der ersten Seite des Menüs (drei Reihen zu je neun Plätzen):
   #   item = was der Knopf zeigt: ein Item wie bei /give (z. B. clock, ender_pearl, minecraft:compass), dazu
   #          camera_head (der Kamera-Kopf) und night_vision_potion (ein Nachtsichttrank)
@@ -639,6 +645,15 @@ menu:
     weather:
       item: sunflower
       slot: 16
+    # Die eigene Statistik: die Zahlen stehen unter dem Knopf, ein Klick schreibt sie in den Chat, Umschalt-Klick
+    # setzt sie zurück
+    stats:
+      item: book
+      slot: 21
+    # Die Seite für Admins (nur für Spieler, die eins ihrer Rechte haben, und bei admin-access: menu oder both)
+    admin:
+      item: command_block
+      slot: 23
 
 # Den Cam-Modus mit der Taste zum Tauschen der Hände beenden (voreingestellt F), wie mit /cam.
 # Geht mit leeren Händen. Hat ein Spieler die Taste anders belegt, gilt seine - und der Hinweis

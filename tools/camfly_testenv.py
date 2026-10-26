@@ -983,6 +983,10 @@ def prepare_server_files(env):
     text, n = replace_option(text, "access", "both", "menu")
     if n != 1:
         Log.warn("menu.access nicht in der Konfiguration gefunden")
+    # Ebenso list, stop, ban, trail und die anderen fuer Admins.
+    text, n = replace_option(text, "admin-access", "both", "menu")
+    if n != 1:
+        Log.warn("menu.admin-access nicht in der Konfiguration gefunden")
     data_dir = plugins / "CamFly"
     data_dir.mkdir(exist_ok=True)
     (data_dir / "config.yml").write_text(text, encoding="utf-8")
@@ -6086,6 +6090,14 @@ def menue_checks(env, bot):
     nach dem Namen, und die naechste Zeile speichert ihn; ein Linksklick auf
     den Punkt springt hin, ein Klick mit Umschalt loescht ihn.
 
+    Unter dem Knopf der Statistik stehen die Zahlen des Bots, und er hat als
+    op den Knopf der Admin-Seite. Darauf stehen die Liste und die Statistik
+    anderer, Sperren und Flugspuren nicht, solange sie aus sind. Die Liste
+    zeigt den Bot im Cam-Modus. Mit admin-access: menu verweist /cam list auf
+    das Menue, die Konsole darf es weiter. Mit cam-ban.enabled: true fragt
+    "Everybody" auf der Seite der Sperren im Chat nach Dauer und Grund, "-"
+    sperrt alle fuer immer, und ein zweiter Klick hebt es wieder auf.
+
     Foto-Modus, Zeit und Nachtsicht sagen unter ihrem Namen, wie sie stehen:
     vor dem Sonnenuntergang die Zeit der Welt, danach Sunset, der Foto-Modus
     off und nach einem Klick on; auf der Seite der Zeiten hat Sunset "Now"
@@ -6128,12 +6140,17 @@ def menue_checks(env, bot):
         quelle = (env.repo / "src" / "main" / "resources" / "config.yml").read_text(encoding="utf-8")
         FIND.test("Voreingestellt steht menu.access: menu da",
                   re.search(r"(?m)^menu:\s*\n(?:\s*#.*\n)*\s*access:\s*menu\s*$", quelle) is not None, "")
+        FIND.test("Voreingestellt steht menu.admin-access: menu da",
+                  re.search(r"(?m)^  admin-access:\s*menu\s*$", quelle) is not None, "")
         spots_loeschen(bot, "Menue")
         console(env, "time set day", pause=1.0)
         hinstellen(bot, x, y, z)
         f = menue()
         FIND.test("/cam menu oeffnet das Menue", f.get("open") and "Cam" in (f.get("title") or ""), str(f)[:300])
         knopf = f.get("slots", {})
+        FIND.test("Die eigene Statistik steht unter ihrem Knopf auf Platz 21",
+                  "Times in cam mode:" in item_text(knopf.get("21")), item_text(knopf.get("21")))
+        FIND.test("Der Bot mit op hat den Knopf der Admin-Seite auf Platz 23", "23" in knopf, str(sorted(knopf)))
         FIND.test("Vor dem Cam-Modus: Zeit der Welt, Foto-Modus aus, Nachtsicht nur im Dunkeln",
                   "Now: the time of the world" in item_text(knopf.get("15"))
                   and "Now: off" in item_text(knopf.get("14"))
@@ -6204,7 +6221,55 @@ def menue_checks(env, bot):
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Ein Klick mit Umschalt loescht den Punkt", gesagt(zeilen, r"Spot Menue deleted"), zeige(zeilen))
         bot.call("close_window", wait=10)
+
+        menue()
+        klick(23)
+        f = fenster()
+        knopf = f.get("slots", {})
+        FIND.test("Die Admin-Seite: Liste und Statistik anderer, ohne Sperren und Flugspuren, solange die aus sind",
+                  "Cam admin" in (f.get("title") or "") and "10" in knopf and "12" in knopf
+                  and "14" not in knopf and "16" not in knopf, f"{f.get('title')} / {sorted(knopf)}")
+        klick(10)
+        f = fenster()
+        FIND.test("Wer im Cam-Modus ist: der Bot, mit der Zeit im Cam-Modus",
+                  "In cam mode" in (f.get("title") or "") and BOT_NAME in item_text(f.get("slots", {}).get("0"))
+                  and "In cam mode for" in item_text(f.get("slots", {}).get("0")),
+                  item_text(f.get("slots", {}).get("0")))
+        bot.call("close_window", wait=10)
         cam_off(bot)
+
+        set_option(env, "admin-access", "menu", "menu")
+        zeilen = befehl(bot, "/cam list")
+        vorher = len(server_log(env))
+        console(env, "cam list", pause=1.5)
+        log = strip_colors(server_log(env)[vorher:])
+        FIND.test("admin-access: menu - /cam list verweist auf das Menue, die Konsole darf es weiter",
+                  gesagt(zeilen, r"That goes through /cam menu") and "Nobody is in cam mode" in log
+                  and "list" not in tab("/cam "), f"{zeige(zeilen)} / {log.strip()[-200:]}")
+        set_option(env, "enabled", "true", "cam-ban")
+        menue()
+        klick(23)
+        klick(14)
+        f = fenster()
+        seit = bot.mark()
+        klick(0)
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Sperren: \"Everybody\" fragt im Chat, wie lange und warum",
+                  "Bans" in (f.get("title") or "") and gesagt(zeilen, r"How long and why is everybody to be banned"),
+                  f"{f.get('title')} / {zeige(zeilen)}")
+        zeilen = befehl(bot, "-")
+        FIND.test("Die Antwort - sperrt alle fuer immer", gesagt(zeilen, r"Cam mode is locked for everybody for good"),
+                  zeige(zeilen))
+        menue()
+        klick(23)
+        klick(14)
+        seit = bot.mark()
+        klick(0, warten=2.0)
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Ein Klick auf das gesperrte \"Everybody\" hebt die Sperre auf",
+                  gesagt(zeilen, r"Cam mode is open for everybody again"), zeige(zeilen))
+        bot.call("close_window", wait=10)
+        set_options(env, [("enabled", "false", "cam-ban"), ("admin-access", "both", "menu")])
 
         original = datei.read_text(encoding="utf-8")
         text = menue_knopf(original, "start", slot=4)
@@ -6258,7 +6323,9 @@ def menue_checks(env, bot):
             if original is not None:
                 datei.write_text(original, encoding="utf-8")
             # Wie der Testserver es fuer alle anderen Abschnitte hat.
-            set_option(env, "access", "both", "menu")
+            set_options(env, [("access", "both", "menu"), ("admin-access", "both", "menu"),
+                              ("enabled", "false", "cam-ban")])
+            console(env, "cam unban all", pause=0.5)
             spots_loeschen(bot, "Menue")
             console(env, "time set day", pause=0.5)
             hinstellen(bot, heim[0], heim[1], heim[2])

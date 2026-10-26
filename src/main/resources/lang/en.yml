@@ -165,8 +165,41 @@ messages:
   flight-speed: "&bFlight speed: &f{speed}x"
   hitbox.name-format: "&c[HITBOX] {player}"
   # /cam menu (menu): the names of the buttons, and under each the text of the same name with -lore after it (\n
-  # begins a new line). menu-only is what the commands say under menu.access: menu, menu-features-off under false.
-  # menu-spot-name asks for the name of a new spot in the chat, {cancel} being the word that calls it off.
+  # begins a new line). menu-only is what the commands say under menu.access or menu.admin-access: menu,
+  # menu-features-off under false. menu-spot-name asks for the name of a new spot in the chat, menu-admin-ban-question
+  # how long and why a player is to be banned ({player}, {none} the answer for good without a reason), {cancel}
+  # being the word that calls either off, with menu-answer-cancelled. Under menu-stats and the heads of
+  # menu-admin-stats stand the lines of /cam stats; menu-admin-list-lore and -away are those of cam-list-entry.
+  menu-admin: "&cAdmin"
+  menu-admin-ban-everybody: "&eEverybody"
+  menu-admin-ban-question: "&eHow long and why is {player} to be banned? Type e.g. 2h Griefing - a reason alone bans for good, {none} for good without one - or {cancel}."
+  menu-admin-banned-lore: "&cBanned - click to lift the ban."
+  menu-admin-bans: "&cBans"
+  menu-admin-bans-lore: "&7Keep players out of cam mode."
+  menu-admin-bans-title: "&8Bans"
+  menu-admin-everybody: "everybody"
+  menu-admin-list: "&bIn cam mode"
+  menu-admin-list-actions-stop: "&cShift-click: end the cam mode"
+  menu-admin-list-actions-teleport: "&eLeft-click: to the camera\n&eRight-click: to the body"
+  menu-admin-list-lore: "&7In cam mode for {time},\n&7{distance} blocks from the body"
+  menu-admin-list-lore-away: "&7In cam mode for {time},\n&7in another world than the body"
+  menu-admin-list-title: "&8In cam mode"
+  menu-admin-lore: "&7Who is in cam mode, statistics,\n&7bans and flights."
+  menu-admin-not-banned-lore: "&7Not banned - click to ban."
+  menu-admin-player: "&f{player}"
+  menu-admin-stats: "&bStatistics of others"
+  menu-admin-stats-actions: "&eClick: in the chat"
+  menu-admin-stats-lore: "&7Of the players online."
+  menu-admin-stats-title: "&8Statistics"
+  menu-admin-stop-all: "&cEnd everybody's cam mode"
+  menu-admin-stop-all-lore: "&7Shift-click, so that a slip\n&7of the mouse ends nothing."
+  menu-admin-title: "&8Cam admin"
+  menu-admin-trails: "&aFlights"
+  menu-admin-trails-actions: "&eLeft-click: the last flight\n&eRight-click: all kept flights"
+  menu-admin-trails-hide: "&7Hide the line"
+  menu-admin-trails-lore: "&7Where the cameras flew."
+  menu-admin-trails-title: "&8Flights"
+  menu-answer-cancelled: "&7Cancelled."
   menu-back: "&bBack to your body"
   menu-back-lore: "&7The camera goes back to your body,\n&7cam mode goes on."
   menu-end: "&cEnd cam mode"
@@ -203,7 +236,6 @@ messages:
   menu-spot-actions-share: "&eLeft-click: jump there\n&aRight-click: share\n&cShift-click: delete"
   menu-spot-lore: "&7{x} {y} {z} ({world})"
   menu-spot-name: "&eType the name of the new spot in the chat, or {cancel}."
-  menu-spot-name-cancelled: "&7No spot saved."
   menu-spot-shared-lore: "&7Shared with: {players}"
   menu-spots: "&aSpots"
   menu-spots-lore: "&7Your spots and those\n&7shared with you."
@@ -222,6 +254,9 @@ messages:
   menu-state-world-weather: "&7the weather of the world"
   menu-start: "&aStart cam mode"
   menu-start-lore: "&7Fly as a camera, your body stays here."
+  menu-stats: "&bStatistics"
+  menu-stats-actions: "&eClick: in the chat"
+  menu-stats-actions-reset: "&eClick: in the chat\n&cShift-click: reset"
   menu-time: "&eTime of day"
   menu-time-day: "&eDay"
   menu-time-lore: "&7A time of your own, only you see it."
@@ -233,6 +268,7 @@ messages:
   menu-time-sunset: "&6Sunset"
   menu-time-title: "&8Time of day"
   menu-title: "&8Cam"
+  menu-to-admin: "&7« Back"
   menu-to-main: "&7« Back"
   menu-to-spots: "&7« Back to the spots"
   menu-weather: "&bWeather"
@@ -797,11 +833,12 @@ message-settings:
   end-warning-time-limit: true
   enabled: true
   flight-speed: true
+  menu-admin-ban-question: true
+  menu-answer-cancelled: true
   menu-features-off: true
   menu-off: true
   menu-only: true
   menu-spot-name: true
-  menu-spot-name-cancelled: true
   nightvision-off: true
   nightvision-reset: true
   nightvision-set: true

@@ -3,8 +3,12 @@ package de.elia.cameraplugin.menu;
 /**
  * How the players get at what camera mode offers besides itself -
  * {@code back}, {@code resume}, {@code spot}, {@code visit}, {@code photo},
- * {@code time}, {@code weather} and {@code nightvision} -, the values of
- * {@code menu.access}: both, menu, command and false.
+ * {@code time}, {@code weather}, {@code nightvision} and their own
+ * {@code stats} -, the values of {@code menu.access}; and how admins get at
+ * theirs - {@code list}, {@code stats player}, {@code stop}, {@code ban},
+ * {@code unban}, {@code banlist}, {@code trail} and {@code tp} -, the values of
+ * {@code menu.admin-access}: both, menu, command and false. The console is
+ * held to neither.
  */
 public enum MenuAccess {
     /** {@code both}: through {@code /cam menu} and through the commands. */

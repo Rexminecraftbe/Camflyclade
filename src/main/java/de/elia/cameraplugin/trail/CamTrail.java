@@ -323,6 +323,11 @@ public final class CamTrail implements Listener {
         if (count < 2 || !messages.isMessageEnabled("trail-flights")) {
             return;
         }
+        // A click runs /cam trail, which menu.admin-access may keep to the
+        // menu - the flights are picked there then.
+        if (sender instanceof Player && !plugin.getSettings().getAdminAccess().allowsCommands()) {
+            return;
+        }
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(
                 TextComponent.fromLegacyText(messages.getMessage("trail-flights"))));
         for (int number = 1; number <= count; number++) {

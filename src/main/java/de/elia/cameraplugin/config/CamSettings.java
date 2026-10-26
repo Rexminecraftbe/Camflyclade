@@ -348,6 +348,8 @@ public final class CamSettings {
 
     /** How the players get at back, spot, photo and the rest, {@code menu.access}. */
     private MenuAccess menuAccess;
+    /** How admins get at list, stop, ban, trail and the rest, {@code menu.admin-access}. */
+    private MenuAccess adminAccess;
     /** What each button of the main page of the menu shows, {@code menu.buttons.<button>.item}. */
     private final Map<MenuButton, MenuIcon> menuIcons = new EnumMap<>(MenuButton.class);
     /** Where it stands, {@code menu.buttons.<button>.slot}. */
@@ -674,14 +676,8 @@ public final class CamSettings {
         antiScoutingRadius = config.getDouble("anti-scouting.radius", 32.0, 0.0, MAX_SCOUT_RADIUS);
         antiScoutingFrom = config.getChoice("anti-scouting.measured-from", "body", "body", "camera")
                 .equalsIgnoreCase("camera") ? ScoutAnchor.CAMERA : ScoutAnchor.BODY;
-        String access = config.getChoice("menu.access", "menu", "menu", "both", "command", "false")
-                .toLowerCase(Locale.ROOT);
-        menuAccess = switch (access) {
-            case "both" -> MenuAccess.BOTH;
-            case "command" -> MenuAccess.COMMAND;
-            case "false" -> MenuAccess.OFF;
-            default -> MenuAccess.MENU;
-        };
+        menuAccess = readMenuAccess(config, "menu.access");
+        adminAccess = readMenuAccess(config, "menu.admin-access");
         readMenuButtons(config);
         photoModeEnabled = config.getBoolean("photo-mode.enabled", true);
         photoHidePlayers = config.getBoolean("photo-mode.hide-players", true);
@@ -896,6 +892,17 @@ public final class CamSettings {
             case "all" -> ListAccess.ALL;
             case "false" -> ListAccess.OFF;
             default -> ListAccess.ADMIN;
+        };
+    }
+
+    /** Reads how something is got at, the values menu, both, command and false. */
+    private static MenuAccess readMenuAccess(ConfigReader config, String path) {
+        String access = config.getChoice(path, "menu", "menu", "both", "command", "false").toLowerCase(Locale.ROOT);
+        return switch (access) {
+            case "both" -> MenuAccess.BOTH;
+            case "command" -> MenuAccess.COMMAND;
+            case "false" -> MenuAccess.OFF;
+            default -> MenuAccess.MENU;
         };
     }
 
@@ -1571,6 +1578,10 @@ public final class CamSettings {
 
     public MenuAccess getMenuAccess() {
         return menuAccess;
+    }
+
+    public MenuAccess getAdminAccess() {
+        return adminAccess;
     }
 
     /** What a button of the main page of the menu shows. */

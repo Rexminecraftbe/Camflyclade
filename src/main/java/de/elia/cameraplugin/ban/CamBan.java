@@ -232,6 +232,11 @@ public final class CamBan {
         return bans.players().values().stream().map(BanList.Ban::name).toList();
     }
 
+    /** Whether this player is banned himself, for the menu. */
+    public boolean isBanned(UUID playerId) {
+        return bans.get(playerId) != null;
+    }
+
     /** Whether there is a ban of everybody, for the tab completion of {@code /cam unban}. */
     public boolean everybodyBanned() {
         return bans.everybody() != null;

@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **844** - alle 844 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **851** - alle 851 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -1050,9 +1050,10 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   Einstellungen schaltet es für sich ein. Die eigene Nachtsicht setzt der
   Test vorher und nachher mit `/cam nightvision reset` zurück.
 * **Voreingestellt gehen `spot`, `photo`, `time` und die anderen nur über das
-  Menü** (`menu.access: menu`). Die Abschnitte tippen sie als Befehle, der
-  Testserver startet deshalb mit `menu.access: both`; nur der Test des Menüs
-  stellt es für sich um.
+  Menü** (`menu.access: menu`), ebenso `list`, `stop`, `ban`, `trail` und die
+  anderen für Admins (`menu.admin-access: menu`). Die Abschnitte tippen sie als
+  Befehle, der Testserver startet deshalb mit `both` für beide; nur der Test
+  des Menüs stellt sie für sich um.
 * **Im Menü klickt der Bot nach Plätzen, nicht nach Items.** mineflayer kennt
   die Arten nur aus den Daten von 26.1. Name und Zeilen eines Items liest er
   dagegen richtig, als NBT-Textbausteine; `item_text` sammelt den Text daraus. Der Server weist jeden Klick ins Menü
@@ -1398,7 +1399,13 @@ Sonnenuntergang geben dem Bot 12000, nichts kommt ins Inventar · Zeit, Foto-Mod
 und Nachtsicht sagen unter ihrem Namen, wie sie stehen, und auf der Seite der
 Zeiten steht „Now“ unter der, die gerade gilt · mit `menu.buttons` steht der
 Start auf dem eingestellten Platz und startet von dort, ein Knopf auf einem
-besetzten Platz und ein unbekanntes Item werden gemeldet · „Save a spot
+besetzten Platz und ein unbekanntes Item werden gemeldet · unter dem Knopf der
+Statistik stehen die Zahlen, der Bot mit op hat die Admin-Seite mit der Liste
+und der Statistik anderer (Sperren und Flugspuren nur, wenn sie an sind), und
+die Liste zeigt ihn im Cam-Modus · mit `admin-access: menu` verweist `/cam
+list` auf das Menü, die Konsole darf es weiter · „Everybody“ auf der Seite der
+Sperren fragt im Chat nach Dauer und Grund, `-` sperrt alle für immer, ein
+zweiter Klick hebt es auf · „Save a spot
 here“ fragt im Chat nach dem Namen, ein Linksklick springt zum Punkt, ein
 Klick mit Umschalt löscht ihn · `access: menu` lässt nur das Menü, `command`
 nur die Befehle, `false` keins von beiden, `/cam` selbst aber schon ·

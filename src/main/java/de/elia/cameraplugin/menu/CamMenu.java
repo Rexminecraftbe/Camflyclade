@@ -3,8 +3,13 @@ package de.elia.cameraplugin.menu;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.ban.CamBan;
 import de.elia.cameraplugin.nightvision.NightVisionMode;
+import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.sky.CamSky;
+import de.elia.cameraplugin.stats.CamStats;
+import de.elia.cameraplugin.timelimit.CamTimeLimit;
+import de.elia.cameraplugin.trail.CamTrail;
 import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.spot.Share;
 import de.elia.cameraplugin.spot.Spot;
@@ -36,23 +41,28 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
  * {@code /cam menu}: what camera mode offers, in a window to click instead of
  * commands to type - starting and ending it, {@code back}, {@code resume},
  * the spots of {@code /cam spot} with sharing them and visiting those of
- * others, {@code photo}, {@code time}, {@code weather} and
- * {@code nightvision}.
+ * others, {@code photo}, {@code time}, {@code weather}, {@code nightvision}
+ * and the own {@code stats}; and for admins a page of their own: who is in
+ * camera mode ({@code list}, {@code tp}, {@code stop}), the statistics of
+ * others, the bans and the flights of {@code /cam trail}.
  *
- * <p>Each button does what its command does, with the same checks and the
- * same messages; what is switched off in the config file is left out. Whether
- * the menu is there at all, and whether the commands are, is
- * {@code menu.access}.</p>
+ * <p>Each button does what its command does, with the same checks, rights
+ * and messages; what is switched off in the config file is left out, and so
+ * is what he has no right to. Where the buttons of the main page stand and
+ * what they show is {@code menu.buttons}; whether the menu is there at all,
+ * and whether the commands are, {@code menu.access} and
+ * {@code menu.admin-access}.</p>
  *
- * <p>The name of a new spot cannot be clicked, so the menu closes and asks
- * for it in the chat: the next line he writes is the name, and nobody else
- * reads it.</p>
+ * <p>What cannot be clicked - the name of a new spot, how long and why a ban
+ * lasts - the menu asks for in the chat: it closes, and the next line he
+ * writes is the answer, which nobody else reads.</p>
  *
  * <p>The window belongs to no block and holds no items of anybody: every
  * click in it is turned away and only read for the button it hit, so nothing
@@ -74,17 +84,24 @@ public final class CamMenu implements Listener {
     /** The button back to the main page on the small pages. */
     private static final int SLOT_SMALL_BACK = 22;
 
-    /** How long the menu waits for the name of a new spot in the chat, in milliseconds. */
-    private static final long NAME_WAIT = 60_000L;
+    /** How long the menu waits for an answer in the chat, in milliseconds. */
+    private static final long ANSWER_WAIT = 60_000L;
 
-    /** The word that calls off naming a new spot. */
+    /** The word that calls off an answer in the chat. */
     private static final String CANCEL = "cancel";
+
+    /** The answer to the ban prompt that bans for good and without a reason. */
+    private static final String NO_REASON = "-";
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
     private final Messages messages;
-    /** Who is asked for the name of a new spot, until when. Read from the chat thread. */
-    private final Map<UUID, Long> naming = new ConcurrentHashMap<>();
+    /** Who is asked for something in the chat, until when and what to do with it. Read from the chat thread. */
+    private final Map<UUID, Question> questions = new ConcurrentHashMap<>();
+
+    /** A question in the chat: until when the answer counts, and what it does - on the main thread. */
+    private record Question(long until, Consumer<String> answer) {
+    }
 
     /** One window of the menu, and what each of its slots does when clicked. */
     public static final class Page implements InventoryHolder {
@@ -164,7 +181,40 @@ public final class CamMenu implements Listener {
         }
         button(page, inCam ? MenuButton.END : MenuButton.START, inCam ? "menu-end" : "menu-start", null, false,
                 click -> act(player, () -> plugin.getStarter().toggle(player)));
+        CamStats stats = plugin.getStats();
+        if (stats.showsAnything()) {
+            List<String> lore = statLines(player.getUniqueId(), player.getName());
+            lore.addAll(lines(messages.getMessage(settings.isStatsEnabled() ? "menu-stats-actions-reset"
+                    : "menu-stats-actions")));
+            put(page, settings.getMenuSlot(MenuButton.STATS), labelled(
+                    settings.getMenuIcon(MenuButton.STATS).create(plugin.getLogger()),
+                    messages.getMessage("menu-stats"), lore), click -> {
+                        if (click.isShiftClick() && settings.isStatsEnabled()) {
+                            act(player, () -> stats.reset(player));
+                        } else {
+                            act(player, () -> stats.command(player, new String[0]));
+                        }
+                    });
+        }
+        if (settings.getAdminAccess().allowsMenu() && hasAdminPage(player)) {
+            button(page, MenuButton.ADMIN, "menu-admin", null, false, click -> later(() -> openAdmin(player)));
+        }
         player.openInventory(inventory);
+    }
+
+    /**
+     * The statistics of a player as lines under a button, without their
+     * header: the name stands on the button already.
+     */
+    private List<String> statLines(UUID id, String name) {
+        List<String> lore = new ArrayList<>();
+        for (CamStats.Line line : plugin.getStats().lines(id, name)) {
+            String text = line.key().equals("stats-header") ? null : plugin.getStats().text(line);
+            if (text != null && !text.isEmpty()) {
+                lore.add(text);
+            }
+        }
+        return lore;
     }
 
     /**
@@ -430,43 +480,356 @@ public final class CamMenu implements Listener {
         put(page, slot, shine(labelled(item, messages.getMessage(key), lore), now), action);
     }
 
-    // ------------------------------------------------------------ naming
+    // ------------------------------------------------------------ admin pages
 
-    /** Asks for the name of a new spot in the chat; the next line he writes is it. */
-    private void askName(Player player) {
-        naming.put(player.getUniqueId(), System.currentTimeMillis() + NAME_WAIT);
-        messages.sendConfiguredMessage(player, "menu-spot-name", "{cancel}", CANCEL);
+    /** Whether there is anything on the admin page for him: one of its parts he has the right of. */
+    private boolean hasAdminPage(Player player) {
+        return plugin.getCamList().mayUse(player) || viewsOthers(player) || plugin.getBan().mayUse(player)
+                || plugin.getTrail().mayUse(player);
+    }
+
+    private boolean viewsOthers(Player player) {
+        return plugin.getStats().showsAnything() && plugin.getStats().mayViewOthers(player);
     }
 
     /**
-     * The line he writes after "save a spot here": the name of the spot, or
+     * The admin page, for what admins do with commands otherwise: who is in
+     * camera mode, the statistics of others, the bans and the flights of
+     * {@code /cam trail} - each only for whoever has its right and while it
+     * is switched on.
+     */
+    private void openAdmin(Player player) {
+        if (!settings.getAdminAccess().allowsMenu() || !hasAdminPage(player)) {
+            openMain(player);
+            return;
+        }
+        Page page = new Page();
+        Inventory inventory = create(page, SMALL, messages.getMessage("menu-admin-title"));
+        if (plugin.getCamList().mayUse(player)) {
+            put(page, 10, Material.SPYGLASS, "menu-admin-list", click -> later(() -> openCamList(player, 0)));
+        }
+        if (viewsOthers(player)) {
+            put(page, 12, Material.BOOKSHELF, "menu-admin-stats", click -> later(() -> openStatsOf(player, 0)));
+        }
+        if (plugin.getBan().mayUse(player)) {
+            put(page, 14, Material.IRON_BARS, "menu-admin-bans", click -> later(() -> openBans(player, 0)));
+        }
+        if (plugin.getTrail().mayUse(player)) {
+            put(page, 16, Material.LEAD, "menu-admin-trails", click -> later(() -> openTrails(player, 0)));
+        }
+        put(page, SLOT_SMALL_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
+        player.openInventory(inventory);
+    }
+
+    /**
+     * Who is in camera mode, like {@code /cam list}: how long already and how
+     * far from the body. Left-click goes to the camera, right-click to the
+     * body ({@code camplugin.teleport}), a shift-click ends his camera mode
+     * ({@code /cam stop}); the last button ends it for everybody.
+     */
+    private void openCamList(Player player, int pageNumber) {
+        if (!plugin.getCamList().mayUse(player)) {
+            openAdmin(player);
+            return;
+        }
+        boolean teleport = plugin.getListTeleport().mayUse(player);
+        // Each one with cam-list.stop, like the button of /cam list; all
+        // at once whenever /cam stop is his to use.
+        boolean stop = plugin.getStop().showsButton(player);
+        boolean stopAll = plugin.getStop().mayUse(player);
+        List<Player> cameras = new ArrayList<>();
+        for (UUID id : plugin.getCameraPlayers().ids()) {
+            Player camera = Bukkit.getPlayer(id);
+            if (camera != null) {
+                cameras.add(camera);
+            }
+        }
+        cameras.sort((a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+        int pages = Math.max(1, (cameras.size() + ENTRIES - 1) / ENTRIES);
+        int number = Math.min(Math.max(0, pageNumber), pages - 1);
+        Page page = new Page();
+        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-list-title"));
+        long now = System.currentTimeMillis();
+        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < cameras.size(); slot++) {
+            Player camera = cameras.get(number * ENTRIES + slot);
+            CameraData data = plugin.getCameraPlayers().get(camera.getUniqueId());
+            if (data == null) {
+                continue;
+            }
+            String time = CamTimeLimit.formatDuration(TimeUnit.MILLISECONDS.toSeconds(now - data.getStartedAt()));
+            Location body = data.getBody().getLocation();
+            Location at = camera.getLocation();
+            boolean sameWorld = body.getWorld().equals(at.getWorld());
+            List<String> lore = new ArrayList<>(lines(messages.getMessage(sameWorld ? "menu-admin-list-lore"
+                    : "menu-admin-list-lore-away").replace("{time}", time)
+                    .replace("{distance}", sameWorld ? String.valueOf(Math.round(at.distance(body))) : "")));
+            if (teleport) {
+                lore.addAll(lines(messages.getMessage("menu-admin-list-actions-teleport")));
+            }
+            if (stop) {
+                lore.addAll(lines(messages.getMessage("menu-admin-list-actions-stop")));
+            }
+            String name = camera.getName();
+            put(page, slot, head(camera, messages.getMessage("menu-admin-player").replace("{player}", name), lore),
+                    click -> {
+                        if (click.isShiftClick() && stop) {
+                            later(() -> {
+                                plugin.getStop().command(player, new String[]{name});
+                                openCamList(player, number);
+                            });
+                        } else if (click.isRightClick() && teleport) {
+                            act(player, () -> plugin.getListTeleport().command(player, new String[]{name, "body"}));
+                        } else if (click.isLeftClick() && teleport) {
+                            act(player, () -> plugin.getListTeleport().command(player, new String[]{name, "camera"}));
+                        }
+                    });
+        }
+        put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
+        if (stopAll && !cameras.isEmpty()) {
+            put(page, SLOT_NEW, Material.TNT, "menu-admin-stop-all", click -> {
+                if (click.isShiftClick()) {
+                    later(() -> {
+                        plugin.getStop().command(player, new String[]{"all"});
+                        openCamList(player, 0);
+                    });
+                }
+            });
+        }
+        paging(page, number, pages, n -> openCamList(player, n));
+        player.openInventory(inventory);
+    }
+
+    /**
+     * The statistics of the players online, like {@code /cam stats player}:
+     * under each head, and in the chat on a click.
+     */
+    private void openStatsOf(Player player, int pageNumber) {
+        if (!viewsOthers(player)) {
+            openAdmin(player);
+            return;
+        }
+        List<Player> online = onlineSorted(player);
+        int pages = Math.max(1, (online.size() + ENTRIES - 1) / ENTRIES);
+        int number = Math.min(Math.max(0, pageNumber), pages - 1);
+        Page page = new Page();
+        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-stats-title"));
+        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < online.size(); slot++) {
+            Player other = online.get(number * ENTRIES + slot);
+            String name = other.getName();
+            List<String> lore = statLines(other.getUniqueId(), name);
+            lore.addAll(lines(messages.getMessage("menu-admin-stats-actions")));
+            put(page, slot, head(other, messages.getMessage("menu-admin-player").replace("{player}", name), lore),
+                    click -> act(player, () -> plugin.getStats().command(player, new String[]{"player", name})));
+        }
+        put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
+        paging(page, number, pages, n -> openStatsOf(player, n));
+        player.openInventory(inventory);
+    }
+
+    /**
+     * The bans, like {@code /cam ban}, {@code /cam unban} and
+     * {@code /cam banlist}: first everybody, then the players online, and
+     * those banned who are not. A click on one who is banned lifts the ban; on
+     * one who is not, it asks in the chat how long and why.
+     */
+    private void openBans(Player player, int pageNumber) {
+        CamBan ban = plugin.getBan();
+        if (!ban.mayUse(player)) {
+            openAdmin(player);
+            return;
+        }
+        Map<UUID, String> people = new LinkedHashMap<>();
+        for (Player other : onlineSorted(player)) {
+            people.put(other.getUniqueId(), other.getName());
+        }
+        for (String name : ban.bannedNames()) {
+            OfflinePlayer banned = name == null ? null : CamStats.find(name);
+            if (banned != null) {
+                people.putIfAbsent(banned.getUniqueId(), name);
+            }
+        }
+        List<Map.Entry<UUID, String>> list = new ArrayList<>(people.entrySet());
+        // The first slot of the first page is for everybody.
+        int total = list.size() + 1;
+        int pages = Math.max(1, (total + ENTRIES - 1) / ENTRIES);
+        int number = Math.min(Math.max(0, pageNumber), pages - 1);
+        Page page = new Page();
+        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-bans-title"));
+        for (int slot = 0; slot < ENTRIES; slot++) {
+            int index = number * ENTRIES + slot;
+            if (index == 0) {
+                boolean everybody = ban.everybodyBanned();
+                put(page, slot, everybody ? Material.BARRIER : Material.IRON_BARS,
+                        messages.getMessage("menu-admin-ban-everybody"),
+                        lines(messages.getMessage(everybody ? "menu-admin-banned-lore" : "menu-admin-not-banned-lore")),
+                        click -> {
+                            if (everybody) {
+                                later(() -> {
+                                    ban.unban(player, new String[]{"all"});
+                                    openBans(player, number);
+                                });
+                            } else {
+                                act(player, () -> askBan(player, "all", messages.getMessage("menu-admin-everybody")));
+                            }
+                        });
+            } else if (index < total) {
+                Map.Entry<UUID, String> entry = list.get(index - 1);
+                String name = entry.getValue();
+                boolean banned = ban.isBanned(entry.getKey());
+                Player online = Bukkit.getPlayer(entry.getKey());
+                ItemStack item = online != null
+                        ? head(online, messages.getMessage("menu-admin-player").replace("{player}", name),
+                                lines(messages.getMessage(banned ? "menu-admin-banned-lore"
+                                        : "menu-admin-not-banned-lore")))
+                        : item(Material.SKELETON_SKULL, messages.getMessage("menu-admin-player").replace("{player}", name),
+                                lines(messages.getMessage(banned ? "menu-admin-banned-lore"
+                                        : "menu-admin-not-banned-lore")));
+                put(page, slot, item, click -> {
+                    if (banned) {
+                        later(() -> {
+                            ban.unban(player, new String[]{name});
+                            openBans(player, number);
+                        });
+                    } else {
+                        act(player, () -> askBan(player, name, name));
+                    }
+                });
+            }
+        }
+        put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
+        paging(page, number, pages, n -> openBans(player, n));
+        player.openInventory(inventory);
+    }
+
+    /**
+     * Asks in the chat how long and why a ban is to last, the words of
+     * {@code /cam ban} after the name: {@code 2h Griefing}, a reason alone
+     * for good, or {@code -} for good without one.
+     *
+     * @param target the name, or {@code all}
+     * @param shown  how the question names him
+     */
+    private void askBan(Player player, String target, String shown) {
+        ask(player, "menu-admin-ban-question", answer -> {
+            List<String> args = new ArrayList<>(List.of(target));
+            if (!answer.equals(NO_REASON)) {
+                args.addAll(Arrays.asList(answer.split("\\s+")));
+            }
+            plugin.getBan().ban(player, args.toArray(new String[0]));
+        }, "{player}", shown, "{none}", NO_REASON);
+    }
+
+    /**
+     * The flights of {@code /cam trail}: left-click shows the last of a
+     * player, right-click all that are kept; the last button hides the line
+     * again.
+     */
+    private void openTrails(Player player, int pageNumber) {
+        CamTrail trail = plugin.getTrail();
+        if (!trail.mayUse(player)) {
+            openAdmin(player);
+            return;
+        }
+        List<String> names = new ArrayList<>(trail.recordedNames());
+        names.sort(String.CASE_INSENSITIVE_ORDER);
+        int pages = Math.max(1, (names.size() + ENTRIES - 1) / ENTRIES);
+        int number = Math.min(Math.max(0, pageNumber), pages - 1);
+        Page page = new Page();
+        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-trails-title"));
+        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < names.size(); slot++) {
+            String name = names.get(number * ENTRIES + slot);
+            Player online = Bukkit.getPlayerExact(name);
+            String label = messages.getMessage("menu-admin-player").replace("{player}", name);
+            List<String> lore = lines(messages.getMessage("menu-admin-trails-actions"));
+            put(page, slot, online != null ? head(online, label, lore) : item(Material.LEAD, label, lore), click -> {
+                if (click.isRightClick()) {
+                    act(player, () -> trail.command(player, new String[]{name, "all"}));
+                } else if (click.isLeftClick()) {
+                    act(player, () -> trail.command(player, new String[]{name}));
+                }
+            });
+        }
+        put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
+        put(page, SLOT_NEW, Material.BUCKET, "menu-admin-trails-hide",
+                click -> act(player, () -> trail.command(player, new String[0])));
+        paging(page, number, pages, n -> openTrails(player, n));
+        player.openInventory(inventory);
+    }
+
+    /** The players online he can see, by name, for the admin pages. */
+    private static List<Player> onlineSorted(Player viewer) {
+        List<Player> online = new ArrayList<>();
+        for (Player other : Bukkit.getOnlinePlayers()) {
+            if (other.equals(viewer) || viewer.canSee(other)) {
+                online.add(other);
+            }
+        }
+        online.sort((a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+        return online;
+    }
+
+    /** The head of a player online, with a name and lines of the menu. */
+    private static ItemStack head(Player owner, String name, List<String> lore) {
+        ItemStack head = new ItemStack(Material.PLAYER_HEAD);
+        if (head.getItemMeta() instanceof SkullMeta skull) {
+            skull.setOwningPlayer(owner);
+            head.setItemMeta(skull);
+        }
+        return labelled(head, name, lore);
+    }
+
+    // ------------------------------------------------------------ questions in the chat
+
+    /** Asks for the name of a new spot in the chat; the next line he writes is it. */
+    private void askName(Player player) {
+        ask(player, "menu-spot-name", name -> plugin.getSpots().set(player, name));
+    }
+
+    /**
+     * Asks something in the chat: the next line he writes is the answer, or
+     * {@code cancel}, which calls it off with {@code menu-answer-cancelled}.
+     *
+     * @param key    the question, with {@code {cancel}} for the word that calls it off
+     * @param answer what the answer does, on the main thread
+     */
+    private void ask(Player player, String key, Consumer<String> answer, String... fills) {
+        questions.put(player.getUniqueId(), new Question(System.currentTimeMillis() + ANSWER_WAIT, answer));
+        String[] all = Arrays.copyOf(fills, fills.length + 2);
+        all[fills.length] = "{cancel}";
+        all[fills.length + 1] = CANCEL;
+        messages.sendConfiguredMessage(player, key, all);
+    }
+
+    /**
+     * The line he writes after a question of the menu: the answer, or
      * {@code cancel}. Nobody else reads it. Asked on the thread of the chat,
-     * so the spot itself is saved on the main thread, where he stands then.
+     * so the answer itself is acted on on the main thread - the name of a
+     * spot is saved where he stands then.
      */
     @EventHandler(priority = EventPriority.LOWEST)
     public void onChat(AsyncPlayerChatEvent event) {
         Player player = event.getPlayer();
-        Long until = naming.remove(player.getUniqueId());
-        if (until == null || until < System.currentTimeMillis()) {
+        Question question = questions.remove(player.getUniqueId());
+        if (question == null || question.until() < System.currentTimeMillis()) {
             return;
         }
         event.setCancelled(true);
-        String name = event.getMessage().trim();
+        String answer = event.getMessage().trim();
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (!player.isOnline()) {
                 return;
             }
-            if (name.equalsIgnoreCase(CANCEL)) {
-                messages.sendConfiguredMessage(player, "menu-spot-name-cancelled");
+            if (answer.equalsIgnoreCase(CANCEL)) {
+                messages.sendConfiguredMessage(player, "menu-answer-cancelled");
             } else {
-                plugin.getSpots().set(player, name);
+                question.answer().accept(answer);
             }
         });
     }
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        naming.remove(event.getPlayer().getUniqueId());
+        questions.remove(event.getPlayer().getUniqueId());
     }
 
     // ------------------------------------------------------------ clicks

@@ -52,21 +52,28 @@ public class CamTabCompleter implements TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        boolean statsCommand = args.length > 1 && args[0].equalsIgnoreCase("stats");
+        // A player is offered the commands for admins only while
+        // menu.admin-access lets them through as commands; the console always.
+        boolean adminCommands = !(sender instanceof Player)
+                || plugin.getSettings().getAdminAccess().allowsCommands();
+        boolean ownCommands = !(sender instanceof Player) || plugin.getSettings().getMenuAccess().allowsCommands();
+        boolean statsCommand = args.length > 1 && args[0].equalsIgnoreCase("stats") && (ownCommands || adminCommands);
         if (statsCommand && args.length == 2) {
             return statsWords(sender, args[1].toLowerCase(Locale.ROOT));
         }
-        if (statsCommand && args.length == 3 && args[1].equalsIgnoreCase("player")) {
+        if (statsCommand && args.length == 3 && args[1].equalsIgnoreCase("player") && adminCommands) {
             return playerNames(sender, args[2].toLowerCase(Locale.ROOT));
         }
-        boolean tpCommand = args.length > 1 && args[0].equalsIgnoreCase("tp") && listTeleport.mayUse(sender);
+        boolean tpCommand = args.length > 1 && args[0].equalsIgnoreCase("tp") && listTeleport.mayUse(sender)
+                && adminCommands;
         if (tpCommand && args.length == 2) {
             return cameraNames(sender, args[1].toLowerCase(Locale.ROOT));
         }
         if (tpCommand && args.length == 3) {
             return startingWith(args[2].toLowerCase(Locale.ROOT), "camera", "body");
         }
-        boolean banCommand = args.length > 1 && args[0].equalsIgnoreCase("ban") && ban.mayUse(sender);
+        boolean banCommand = args.length > 1 && args[0].equalsIgnoreCase("ban") && ban.mayUse(sender)
+                && adminCommands;
         if (banCommand && args.length == 2) {
             String partial = args[1].toLowerCase(Locale.ROOT);
             List<String> names = new ArrayList<>(startingWith(partial, "all"));
@@ -80,7 +87,7 @@ public class CamTabCompleter implements TabCompleter {
         if (banCommand && args.length == 3) {
             return startingWith(args[2].toLowerCase(Locale.ROOT), "30m", "1h", "1d", "7d");
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("unban") && ban.mayUse(sender)) {
+        if (args.length == 2 && args[0].equalsIgnoreCase("unban") && ban.mayUse(sender) && adminCommands) {
             String partial = args[1].toLowerCase(Locale.ROOT);
             List<String> names = new ArrayList<>();
             if (ban.everybodyBanned() && "all".startsWith(partial)) {
@@ -93,7 +100,7 @@ public class CamTabCompleter implements TabCompleter {
             }
             return names;
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("stop") && stop.mayUse(sender)) {
+        if (args.length == 2 && args[0].equalsIgnoreCase("stop") && stop.mayUse(sender) && adminCommands) {
             String partial = args[1].toLowerCase(Locale.ROOT);
             List<String> names = new ArrayList<>(startingWith(partial, "all"));
             for (Player player : Bukkit.getOnlinePlayers()) {
@@ -103,7 +110,8 @@ public class CamTabCompleter implements TabCompleter {
             }
             return names;
         }
-        boolean trailCommand = args.length > 1 && args[0].equalsIgnoreCase("trail") && trail.mayUse(sender);
+        boolean trailCommand = args.length > 1 && args[0].equalsIgnoreCase("trail") && trail.mayUse(sender)
+                && adminCommands;
         if (trailCommand && args.length == 2) {
             String partial = args[1].toLowerCase(Locale.ROOT);
             List<String> names = new ArrayList<>();
@@ -198,7 +206,7 @@ public class CamTabCompleter implements TabCompleter {
         if (player != null && plugin.getMenu().isOpenable() && "menu".startsWith(partial)) {
             completions.add("menu");
         }
-        if (camList.mayUse(sender) && "list".startsWith(partial)) {
+        if (adminCommands && camList.mayUse(sender) && "list".startsWith(partial)) {
             completions.add("list");
         }
         // The console is neither a player nor an operator, but may reload all
@@ -206,19 +214,20 @@ public class CamTabCompleter implements TabCompleter {
         if ((!(sender instanceof Player) || sender.isOp()) && "reload".startsWith(partial)) {
             completions.add("reload");
         }
-        if (stats.showsAnything() && "stats".startsWith(partial)) {
+        if ((ownCommands || (adminCommands && stats.mayViewOthers(sender))) && stats.showsAnything()
+                && "stats".startsWith(partial)) {
             completions.add("stats");
         }
-        if (stop.mayUse(sender) && "stop".startsWith(partial)) {
+        if (adminCommands && stop.mayUse(sender) && "stop".startsWith(partial)) {
             completions.add("stop");
         }
-        if (ban.mayUse(sender)) {
+        if (adminCommands && ban.mayUse(sender)) {
             completions.addAll(startingWith(partial, "ban", "banlist", "unban"));
         }
-        if (listTeleport.mayUse(sender) && "tp".startsWith(partial)) {
+        if (adminCommands && listTeleport.mayUse(sender) && "tp".startsWith(partial)) {
             completions.add("tp");
         }
-        if (trail.mayUse(sender) && "trail".startsWith(partial)) {
+        if (adminCommands && trail.mayUse(sender) && "trail".startsWith(partial)) {
             completions.add("trail");
         }
         return completions;
@@ -277,10 +286,13 @@ public class CamTabCompleter implements TabCompleter {
      */
     private List<String> statsWords(CommandSender sender, String partial) {
         List<String> words = new ArrayList<>();
-        if (stats.showsAnything() && stats.mayViewOthers(sender) && "player".startsWith(partial)) {
+        boolean player = sender instanceof Player;
+        if ((!player || plugin.getSettings().getAdminAccess().allowsCommands())
+                && stats.showsAnything() && stats.mayViewOthers(sender) && "player".startsWith(partial)) {
             words.add("player");
         }
-        if (sender instanceof Player && plugin.getSettings().isStatsEnabled() && "reset".startsWith(partial)) {
+        if (player && plugin.getSettings().getMenuAccess().allowsCommands()
+                && plugin.getSettings().isStatsEnabled() && "reset".startsWith(partial)) {
             words.add("reset");
         }
         return words;
