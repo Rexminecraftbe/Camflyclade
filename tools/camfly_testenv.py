@@ -12,11 +12,14 @@ Das Skript macht alles, was sonst von Hand gemacht wurde:
   6. Paper-Testserver holen, einrichten und starten (mit FIFO fuer die Konsole)
   7. mineflayer holen, auf Protokoll 26.2 flicken, seine Kollision wie im
      echten Client rechnen lassen, Bot verbinden
-  8. Tests im laufenden Spiel fahren
+  8. Tests im laufenden Spiel fahren: die Grundprobe und die Abschnitte, die
+     die Aenderungen gegenueber master betreffen (tools/testauswahl.py)
   9. Aufraeumen: Server und Bot beenden
 
 Aufruf:
-    python3 tools/camfly_testenv.py                  # alles
+    python3 tools/camfly_testenv.py                  # alles, nur betroffene Abschnitte
+    python3 tools/camfly_testenv.py --alle           # alle Abschnitte
+    python3 tools/camfly_testenv.py --nur-auswahl    # nur zeigen, welche liefen
     python3 tools/camfly_testenv.py --steps build,apicheck
     python3 tools/camfly_testenv.py --steps names    # nach einem Update: fehlen Namen?
     python3 tools/camfly_testenv.py --keep-running   # Server laeuft weiter
@@ -12037,6 +12040,186 @@ def boden_ebnen(bot):
     time.sleep(1.0)
 
 
+# ---------------------------------------------------------------------------
+# Die Abschnitte der Tests und welche davon laufen
+# ---------------------------------------------------------------------------
+
+class Abschnitt:
+    """Ein Abschnitt der Tests: sein Name, die Funktion, die ihn faehrt, und
+    die Bereiche des Plugins, die er prueft.
+
+    Ein Bereich ist ein Paket unter de.elia.cameraplugin wie "trail" oder
+    eine Klasse darin wie "display/CamActionBar". Die Testauswahl
+    (tools/testauswahl.py) faehrt den Abschnitt, wenn sich in einem seiner
+    Bereiche etwas geaendert hat oder davon betroffen ist, wenn sich ein
+    Schluessel geaendert hat, den er mit set_option setzt, oder sein Code im
+    Testskript. Mit koerpertypen=True laeuft er einmal mit jedem Koerpertyp,
+    siehe fuer_beide_koerpertypen."""
+
+    def __init__(self, name, funktion, bereiche, koerpertypen=False):
+        self.name = name
+        self.funktion = funktion
+        self.bereiche = bereiche.split()
+        self.koerpertypen = koerpertypen
+
+
+# Alle Abschnitte, in der Reihenfolge, in der sie laufen. Ein neuer Abschnitt
+# braucht hier einen Eintrag, sonst laeuft er nie. Der Absturztest steht
+# zuletzt: Er startet den Server neu.
+ABSCHNITTE = [
+    Abschnitt("hunger", hunger_checks, "hunger/CamHungerGuard"),
+    Abschnitt("heilung", heal_checks, "hunger/CamRegenGuard"),
+    Abschnitt("effekte_beim_start", effect_start_checks, "start/StartChecks start/EffectStart"),
+    Abschnitt("meldungen", message_switch_checks, "display/CamActionBar config/Messages"),
+    Abschnitt("sprache", language_checks,
+              "config/Messages config/ConfigFile config/ConfigReader config/ConfigIssue display/CamActionBar"),
+    Abschnitt("liste", liste_checks, "list"),
+    Abschnitt("aktionsleiste", aktionsleiste_checks, "display/CamActionBar display/ActionBarDisplay"),
+    Abschnitt("tempo", tempo_checks, "speed"),
+    Abschnitt("nachtsicht", nachtsicht_checks, "nightvision"),
+    Abschnitt("toene", toene_checks, "sound session/CameraMode movement/CamMovementGuard"),
+    Abschnitt("taste", taste_checks, "session/ExitKey display/CamActionBar"),
+    Abschnitt("protokoll", protokoll_checks, "log session/SessionTracker"),
+    Abschnitt("akku", akku_checks, "battery timelimit/FlightLimit stats session/SessionListener"),
+    Abschnitt("kosten", kosten_checks, "cost"),
+    Abschnitt("statistik", statistik_checks, "stats storage session/SessionTracker"),
+    Abschnitt("alte_absturzdatei", alte_absturzdatei_checks, "crash storage session/SessionListener"),
+    Abschnitt("zurueck", zurueck_checks, "back"),
+    Abschnitt("endwarnung", endwarnung_checks, "timelimit battery"),
+    Abschnitt("alarm", alarm_checks, "body/BodyAlarm"),
+    Abschnitt("knoepfe", knoepfe_checks, "list"),
+    Abschnitt("stopp", stopp_checks, "stop list"),
+    Abschnitt("bann", bann_checks, "ban"),
+    Abschnitt("welten", welten_checks, "area"),
+    Abschnitt("angriff", angriff_checks, "start/StartChecks"),
+    Abschnitt("afk", afk_checks, "afk"),
+    Abschnitt("herzen", herzen_checks,
+              "body/BodySpawner body/MannequinLabel display/SpriteText display/NameDisplay"),
+    Abschnitt("wartezeit", wartezeit_checks, "timelimit storage session/SessionListener"),
+    Abschnitt("akku_speicher", akku_speicher_checks, "battery storage"),
+    Abschnitt("startverzoegerung", startverzoegerung_checks, "start/StartDelay start/CamStarter"),
+    Abschnitt("flugspur", flugspur_checks, "trail"),
+    Abschnitt("vorschlaege", vorschlag_checks, "camfly2/CamTabCompleter camfly2/CamSuggestionFilter"),
+    Abschnitt("aussichtspunkte", aussichtspunkt_checks, "spot"),
+    Abschnitt("foto", foto_checks, "photo"),
+    Abschnitt("zeit_wetter", zeit_wetter_checks, "sky"),
+    Abschnitt("nachtsicht_wahl", nachtsicht_wahl_checks, "nightvision preferences session/SessionListener"),
+    Abschnitt("naehe", naehe_checks, "start/StartChecks"),
+    Abschnitt("einstellungen", einstellungen_checks, "preferences speed sky storage session/SessionListener"),
+    Abschnitt("teilen", teilen_checks, "spot visit"),
+    Abschnitt("weiter", weiter_checks, "resume"),
+    Abschnitt("ausspaehen", ausspaeh_checks, "scout"),
+    Abschnitt("menue", menue_checks, "menu"),
+    Abschnitt("anstupsen", anstups_checks, "nudge", koerpertypen=True),
+    Abschnitt("funk", funk_checks, "signal"),
+    Abschnitt("traenke", potion_checks, "potion", koerpertypen=True),
+    Abschnitt("treffergrund", grund_checks, "mirrordamage/DamageMirror body/BodyWatch config/Messages",
+              koerpertypen=True),
+    Abschnitt("anfassen", interact_checks, "interaction inventory ghast session/CameraMode"),
+    Abschnitt("sulfur_cube", sulfur_cube_checks, "sulfurcube"),
+    Abschnitt("ruestung", armor_checks, "inventory session/CameraMode"),
+    Abschnitt("rueckstoss", rueckstoss_checks, "mirrordamage interaction/CamKnockbackGuard",
+              koerpertypen=True),
+    Abschnitt("rueckstoss_mob", rueckstoss_mob_checks, "mirrordamage", koerpertypen=True),
+    Abschnitt("schieben", schieben_checks,
+              "body/MovementSensitivity body/BodyWatch body/BodySpawner scoreboard/NoCollisionTeam",
+              koerpertypen=True),
+    Abschnitt("waerter_ziel", waerter_ziel_checks, "mob/MobTargeting"),
+    Abschnitt("uebergabe", uebergabe_checks, "mob/MobTargeting"),
+    Abschnitt("blick", blick_checks, "mob/MobGaze"),
+    Abschnitt("name", name_checks,
+              "body/BodySpawner body/MannequinLabel body/BodyType display/NameDisplay display/SpriteText "
+              "config/NameStyle"),
+    Abschnitt("spielername", spielername_checks,
+              "display/CamNameTag display/NameMode config/NameStyle visibility scoreboard/NoCollisionTeam"),
+    Abschnitt("spielmodus", gamemode_checks, "session/CamGameMode session/CameraMode interaction inventory"),
+    Abschnitt("medium", medium_checks,
+              "movement/FlightMedium movement/CamMovementGuard movement/CamBorderWall start/StartChecks"),
+    Abschnitt("fall", fall_checks, "start/StartChecks"),
+    Abschnitt("zustand", zustand_checks, "session/CameraMode body/BodySpawner"),
+    Abschnitt("grenze", border_checks, "movement"),
+    Abschnitt("portale", portal_checks, "portal movement/CamMovementGuard area"),
+    Abschnitt("unbewacht", unbewacht_checks, "body/BodySpawner body/BodyWatch", koerpertypen=True),
+    Abschnitt("liegengeblieben", liegengeblieben_checks, "body/BodySpawner crash"),
+    Abschnitt("teleport", teleport_checks, "teleport"),
+    Abschnitt("absturz", absturz_checks, "crash"),
+]
+
+# Welche Abschnitte dieser Lauf faehrt, siehe auswahl_laden. None faehrt alle.
+AUSWAHL = None
+
+
+def markieren(name, ab):
+    """Den Proben ab der Stelle ab, die noch keinem Abschnitt gehoeren, den
+    Namen geben: So weiss der naechste Lauf, welcher Abschnitt durchgefallen
+    ist."""
+    for t in FIND.tests[ab:]:
+        t.setdefault("abschnitt", name)
+
+
+def letzte_fehler(env):
+    """Die Abschnitte, die beim letzten Lauf in diesem Arbeitsordner
+    durchgefallen sind, aus seinem ergebnis.json."""
+    try:
+        alt = json.loads((env.work / "ergebnis.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    namen = {a.name for a in ABSCHNITTE}
+    return {t.get("abschnitt") for t in alt.get("tests", [])
+            if not t.get("ok") and t.get("abschnitt") in namen}
+
+
+def auswahl_laden(env, alle=False, seit=None, namen=None):
+    """Welche Abschnitte laufen.
+
+    Voreingestellt die, die der Vergleich mit master braucht (siehe
+    tools/testauswahl.py), und dazu die, die beim letzten Lauf
+    durchgefallen sind. Mit namen genau diese, mit alle alle."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import testauswahl
+    if alle:
+        return testauswahl.Auswahl(alle="--alle")
+    if namen:
+        auswahl = testauswahl.Auswahl()
+        for name in namen:
+            auswahl.dazu(name, "--abschnitte")
+        return auswahl
+    try:
+        auswahl = testauswahl.auswaehlen(
+            env.repo, {a.name: ([a.funktion.__name__], a.bereiche) for a in ABSCHNITTE}, seit)
+    except Exception as exc:
+        # Lieber alle als eine Auswahl, die an sich selbst gescheitert ist.
+        return testauswahl.Auswahl(alle=f"die Testauswahl ging schief ({type(exc).__name__}: {exc})")
+    for name in sorted(letzte_fehler(env)):
+        auswahl.dazu(name, "beim letzten Lauf durchgefallen")
+    return auswahl
+
+
+def auswahl_zeigen(auswahl):
+    Log.step("Testauswahl")
+    if auswahl.basis:
+        Log.info(f"Verglichen mit: {auswahl.basis_name} ({auswahl.basis[:9]})")
+        geaendert = [Path(p).name for p in auswahl.dateien]
+        Log.info(f"Geaendert:      {', '.join(geaendert) if geaendert else 'nichts'}")
+    if auswahl.alle is not None:
+        Log.info(f"Es laufen alle {len(ABSCHNITTE)} Abschnitte: {auswahl.alle}")
+        return
+    Log.info(f"Es laufen {len(auswahl.abschnitte)} von {len(ABSCHNITTE)} Abschnitten, "
+             f"dazu immer die Grundprobe:")
+    breite = max((len(a.name) for a in ABSCHNITTE), default=0)
+    for a in ABSCHNITTE:
+        if a.name in auswahl.abschnitte:
+            gruende = auswahl.abschnitte[a.name]
+            Log.info(f"  {a.name:<{breite}}  {gruende[0]}")
+            for grund in gruende[1:3]:
+                Log.detail(f"  {'':<{breite}}  {grund}")
+            if len(gruende) > 3:
+                Log.detail(f"  {'':<{breite}}  ... und {len(gruende) - 3} weitere Gruende")
+    if auswahl.ohne_abschnitt:
+        Log.warn("Geaendert, aber von keinem Abschnitt geprueft: " + ", ".join(auswahl.ohne_abschnitt))
+    Log.detail("Alle Abschnitte mit --alle, einzelne mit --abschnitte name,name")
+
+
 def step_tests(env):
     Log.step("9. Tests im laufenden Spiel")
     if server_running(env) is None:
@@ -12056,6 +12239,9 @@ def step_tests(env):
 
     bot = BotClient(env)
     passed = True
+    # Der Abschnitt, der gerade laeuft: Wirft er, gehoert der Fehler ihm.
+    # Die Proben der Schritte davor gehoeren keinem.
+    laufend, erste = None, len(FIND.tests)
     try:
         bot.start()
         spawned = bot.call("wait_spawn", wait=90, timeout=75000).get("spawned")
@@ -12168,140 +12354,35 @@ def step_tests(env):
             bot.chat("/cam")
             time.sleep(1)
 
-        # --- Hunger im Cam-Modus ---
-        hunger_checks(env, bot)
+        markieren("grundprobe", erste)
 
-        # --- Heilung im Cam-Modus ---
-        heal_checks(env, bot)
-
-        # --- Start mit Trankeffekten ---
-        effect_start_checks(env, bot)
-
-        # --- Meldungen einzeln abschalten ---
-        message_switch_checks(env, bot)
-
-        # --- Die Sprache der Texte ---
-        language_checks(env, bot)
-
-        # --- /cam list, die Action-Bar mit dem Abstand, die Fluggeschwindigkeit,
-        # --- die Nachtsicht und die Toene ---
-        liste_checks(env, bot)
-        aktionsleiste_checks(env, bot)
-        tempo_checks(env, bot)
-        nachtsicht_checks(env, bot)
-        toene_checks(env, bot)
-
-        # --- Taste zum Beenden, Protokoll, Akku, Startkosten und Statistik ---
-        taste_checks(env, bot)
-        protokoll_checks(env, bot)
-        akku_checks(env, bot)
-        kosten_checks(env, bot)
-        statistik_checks(env, bot)
-        alte_absturzdatei_checks(env, bot)
-
-        # --- /cam back, die Warnung vor dem Ende, der Koerper-Alarm und die Knoepfe von /cam list ---
-        zurueck_checks(env, bot)
-        endwarnung_checks(env, bot)
-        alarm_checks(env, bot)
-        knoepfe_checks(env, bot)
-
-        # --- /cam stop, /cam ban, die Welten-Liste, die Sperre nach einem Angriff, afk-end, die Herzen,
-        # --- die Wartezeit und der Akku: Bossbar, Einteilung und wo sie liegen ---
-        stopp_checks(env, bot)
-        bann_checks(env, bot)
-        welten_checks(env, bot)
-        angriff_checks(env, bot)
-        afk_checks(env, bot)
-        herzen_checks(env, bot)
-        wartezeit_checks(env, bot)
-        akku_speicher_checks(env, bot)
-
-        # --- Die Wartezeit vor dem Start und die Flugspur fuer Admins ---
-        startverzoegerung_checks(env, bot)
-        flugspur_checks(env, bot)
-        vorschlag_checks(env, bot)
-
-        # --- Aussichtspunkte, der Foto-Modus, die eigene Zeit und das eigene Wetter, die eigene
-        # --- Nachtsicht und die Kampfsperre nach Naehe ---
-        aussichtspunkt_checks(env, bot)
-        foto_checks(env, bot)
-        zeit_wetter_checks(env, bot)
-        nachtsicht_wahl_checks(env, bot)
-        naehe_checks(env, bot)
-
-        # --- Eigene Einstellungen, Aussichtspunkte teilen und besuchen, /cam resume, kein Ausspaehen
-        # --- und /cam menu ---
-        einstellungen_checks(env, bot)
-        teilen_checks(env, bot)
-        weiter_checks(env, bot)
-        ausspaeh_checks(env, bot)
-        menue_checks(env, bot)
-
-        # --- Anstupsen, mit beiden Koerpertypen, und das Funksignal statt der festen Reichweite ---
-        fuer_beide_koerpertypen(env, bot, anstups_checks)
-        funk_checks(env, bot)
-
-        # --- Geworfene Traenke und was den Koerper getroffen hat, mit beiden Koerpertypen ---
-        fuer_beide_koerpertypen(env, bot, potion_checks, grund_checks)
-
-        # --- Bloecke und Entitaeten im Cam-Modus ---
-        interact_checks(env, bot)
-
-        # --- Der Sulfur Cube: schieben und wegschlagen ---
-        sulfur_cube_checks(env, bot)
-
-        # --- Die Ruestung im Cam-Modus ---
-        armor_checks(env, bot)
-
-        # --- Der Rueckstoss eines Treffers auf den Koerper, und wer ihn schieben darf,
-        # --- mit beiden Koerpertypen ---
-        fuer_beide_koerpertypen(env, bot, rueckstoss_checks, rueckstoss_mob_checks, schieben_checks)
-
-        # --- Der Waerter haelt sich an body.mob-target ---
-        waerter_ziel_checks(env, bot)
-
-        # --- Mobs, die beim Start hinter dem Spieler her sind ---
-        uebergabe_checks(env, bot)
-
-        # --- Mobs, die den Kamera-Spieler ansehen ---
-        blick_checks(env, bot)
-
-        # --- Der Name ueber dem Koerper ---
-        name_checks(env, bot)
-
-        # --- Der Name ueber dem Kamera-Spieler ---
-        spielername_checks(env, bot)
-
-        # --- Der Spielmodus, in dem der Cam-Modus laeuft ---
-        gamemode_checks(env, bot)
-
-        # --- Lava, Wasser und Pulverschnee ---
-        medium_checks(env, bot)
-
-        # --- Start mitten im Fall ---
-        fall_checks(env, bot)
-
-        # --- Luft und Frost gehen auf den Koerper ueber ---
-        zustand_checks(env, bot)
-
-        # --- Die Grenze: barrier, push-back und keine ---
-        border_checks(env, bot)
-
-        # --- Portale und das Gedaechtnis fuer gesperrte Portale ---
-        portal_checks(env, bot)
-
-        # --- Ein Koerper, bei dem kein Spieler mehr steht, und was ein Absturz liegen laesst ---
-        fuer_beide_koerpertypen(env, bot, unbewacht_checks)
-        liegengeblieben_checks(env, bot)
-
-        # --- Teleports durch Befehle und andere Plugins (/tp, /tpa, /tpahere) ---
-        teleport_checks(env, bot)
-
-        # --- Ein Absturz im Cam-Modus, zuletzt: er startet den Server neu ---
-        absturz_checks(env, bot)
+        # --- Die Abschnitte, die die Testauswahl fuer diesen Stand braucht ---
+        gewaehlt = [a for a in ABSCHNITTE if AUSWAHL is None or AUSWAHL.gewaehlt(a.name)]
+        i = 0
+        while i < len(gewaehlt):
+            # Was hintereinander mit beiden Koerpertypen laeuft, laeuft in
+            # einem Durchgang: Jeder Wechsel des Typs braucht zwei Reloads.
+            gruppe = [gewaehlt[i]]
+            while gruppe[0].koerpertypen and i + len(gruppe) < len(gewaehlt) \
+                    and gewaehlt[i + len(gruppe)].koerpertypen:
+                gruppe.append(gewaehlt[i + len(gruppe)])
+            i += len(gruppe)
+            laufend = gruppe[0]
+            if not laufend.koerpertypen:
+                laufend.funktion(env, bot)
+                markieren(laufend.name, erste)
+                continue
+            for typ in KOERPERTYPEN:
+                with mit_koerpertyp(env, typ):
+                    for laufend in gruppe:
+                        laufend.funktion(env, bot)
+                        markieren(laufend.name, erste)
+        laufend = None
 
     except Exception as exc:
         FIND.test("Testlauf", False, f"{type(exc).__name__}: {exc}")
+        if laufend is not None:
+            markieren(laufend.name, erste)
         passed = False
     finally:
         for e in bot.events:
@@ -12333,12 +12414,20 @@ def summary(env, results):
         print(f"\n  {Log.YELLOW}Das solltest du dir ansehen:{Log.OFF}")
         for p in FIND.problems:
             print(f"    - {p}")
+    auswahl = None
+    if AUSWAHL is not None and "tests" in results:
+        ausgelassen = [a.name for a in ABSCHNITTE if not AUSWAHL.gewaehlt(a.name)]
+        if ausgelassen:
+            print(f"\n  {len(ausgelassen)} von {len(ABSCHNITTE)} Abschnitten ausgelassen, "
+                  f"siehe Testauswahl oben. Alle mit --alle.")
+        auswahl = {"basis": AUSWAHL.basis, "alle": AUSWAHL.alle,
+                   "abschnitte": AUSWAHL.abschnitte, "ausgelassen": ausgelassen}
     print(f"\n  Arbeitsordner: {env.work}")
     print(f"  Server-Log:    {env.server / 'server.log'}")
     print(f"  ApiCheck:      {env.apicheck / 'report.json'}")
     report = env.work / "ergebnis.json"
     report.write_text(json.dumps(
-        {"tests": FIND.tests, "problems": FIND.problems, "steps": results},
+        {"tests": FIND.tests, "problems": FIND.problems, "steps": results, "auswahl": auswahl},
         indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"  Ergebnis:      {report}")
 
@@ -12359,6 +12448,14 @@ def main(argv=None):
                         help="Server nach den Tests weiterlaufen lassen")
     parser.add_argument("--stop", action="store_true",
                         help="Nur einen laufenden Testserver beenden")
+    parser.add_argument("--alle", action="store_true",
+                        help="Alle Abschnitte der Tests fahren, nicht nur die, die die Aenderungen betreffen")
+    parser.add_argument("--seit", metavar="REF",
+                        help="Womit die Testauswahl vergleicht (voreingestellt: der Abzweig von master)")
+    parser.add_argument("--abschnitte", metavar="NAME,NAME",
+                        help="Genau diese Abschnitte der Tests fahren")
+    parser.add_argument("--nur-auswahl", action="store_true",
+                        help="Nur zeigen, welche Abschnitte der Tests laufen wuerden und warum")
     args = parser.parse_args(argv)
 
     env = Env(args.repo, args.workdir)
@@ -12374,11 +12471,26 @@ def main(argv=None):
     if unknown:
         parser.error(f"Unbekannte Schritte: {', '.join(unknown)}")
     plan = [s for s in STEPS if s in wanted and s not in skip]
+    namen = [n.strip() for n in (args.abschnitte or "").split(",") if n.strip()]
+    unbekannt = [n for n in namen if n not in {a.name for a in ABSCHNITTE}]
+    if unbekannt:
+        parser.error(f"Unbekannte Abschnitte: {', '.join(unbekannt)}. "
+                     f"Es gibt: {', '.join(a.name for a in ABSCHNITTE)}")
+    if args.alle and namen:
+        parser.error("--alle und --abschnitte schliessen sich aus")
+
+    global AUSWAHL
+    if args.nur_auswahl:
+        auswahl_zeigen(auswahl_laden(env, args.alle, args.seit, namen))
+        return 0
 
     print(f"{Log.BLUE}CamFly-Testumgebung{Log.OFF}")
     print(f"  Plugin:        {env.repo}")
     print(f"  Arbeitsordner: {env.work}")
     print(f"  Schritte:      {', '.join(plan)}")
+    if "tests" in plan:
+        AUSWAHL = auswahl_laden(env, args.alle, args.seit, namen)
+        auswahl_zeigen(AUSWAHL)
 
     results = {}
     try:
