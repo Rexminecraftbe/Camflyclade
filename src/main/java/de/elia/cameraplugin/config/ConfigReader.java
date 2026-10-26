@@ -43,6 +43,7 @@ public final class ConfigReader {
     private static final String UNKNOWN_ENTRY = "config-unknown-entry";
     private static final String UNKNOWN_KEY = "config-unknown-key";
     private static final String ENTRY_IN_BOTH_LISTS = "config-entry-in-both-lists";
+    private static final String SLOT_TAKEN = "config-slot-taken";
     private static final String TOO_SMALL = "config-too-small";
     private static final String TOO_LARGE = "config-too-large";
     private static final String OUT_OF_RANGE = "config-out-of-range";
@@ -436,6 +437,21 @@ public final class ConfigReader {
         warnings.add(ConfigIssue.of(NOT_DESCENDING)
                 .with("path", path)
                 .with("value", value)
+                .with("used", used));
+    }
+
+    /**
+     * Notes a slot of a window that another entry has taken already, such as
+     * two buttons of {@code /cam menu} in the same place.
+     *
+     * @param other the entry that has it
+     * @param used  the slot used instead
+     */
+    public void warnSlotTaken(String path, Object value, String other, Object used) {
+        warnings.add(ConfigIssue.of(SLOT_TAKEN)
+                .with("path", path)
+                .with("value", value)
+                .with("other", other)
                 .with("used", used));
     }
 

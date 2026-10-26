@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **846** - alle 846 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **844** - alle 844 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -1049,8 +1049,13 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   `player-settings.flight-speed: false`, und nur der Test der eigenen
   Einstellungen schaltet es für sich ein. Die eigene Nachtsicht setzt der
   Test vorher und nachher mit `/cam nightvision reset` zurück.
+* **Voreingestellt gehen `spot`, `photo`, `time` und die anderen nur über das
+  Menü** (`menu.access: menu`). Die Abschnitte tippen sie als Befehle, der
+  Testserver startet deshalb mit `menu.access: both`; nur der Test des Menüs
+  stellt es für sich um.
 * **Im Menü klickt der Bot nach Plätzen, nicht nach Items.** mineflayer kennt
-  die Arten nur aus den Daten von 26.1. Der Server weist jeden Klick ins Menü
+  die Arten nur aus den Daten von 26.1. Name und Zeilen eines Items liest er
+  dagegen richtig, als NBT-Textbausteine; `item_text` sammelt den Text daraus. Der Server weist jeden Klick ins Menü
   ab und schickt das Fenster neu; eine Antwort, auf die mineflayer warten
   könnte, gibt es nicht, deshalb geht `click_window` nach drei Sekunden weiter.
 * **Beim Ausspähen schaut der zweite Spieler durch die Kamera.** Der Bot hat
@@ -1386,9 +1391,14 @@ daneben schon, mit der Kamera neben dem Bot unter `body` nicht und unter
 `camera` schon · den Körper des Bots im Cam-Modus zehn Blöcke weit sieht er
 nicht, nach dem Cam-Modus wieder · der Bot mit op und damit
 `camplugin.antiscout.bypass` sieht ihn trotzdem · voreingestellt steht
-`menu.access: both` da · `/cam menu` öffnet das Menü mit den Knöpfen auf ihren
-Plätzen, auch im Cam-Modus, und der erste startet den Cam-Modus · Zeit und
-Sonnenuntergang geben dem Bot 12000, nichts kommt ins Inventar · „Save a spot
+`menu.access: menu` da (der Testserver stellt für alle anderen Abschnitte `both`
+ein) · `/cam menu` öffnet das Menü mit den Knöpfen auf ihren
+Plätzen, auch im Cam-Modus, und der Kamera-Kopf startet den Cam-Modus · Zeit und
+Sonnenuntergang geben dem Bot 12000, nichts kommt ins Inventar · Zeit, Foto-Modus
+und Nachtsicht sagen unter ihrem Namen, wie sie stehen, und auf der Seite der
+Zeiten steht „Now“ unter der, die gerade gilt · mit `menu.buttons` steht der
+Start auf dem eingestellten Platz und startet von dort, ein Knopf auf einem
+besetzten Platz und ein unbekanntes Item werden gemeldet · „Save a spot
 here“ fragt im Chat nach dem Namen, ein Linksklick springt zum Punkt, ein
 Klick mit Umschalt löscht ihn · `access: menu` lässt nur das Menü, `command`
 nur die Befehle, `false` keins von beiden, `/cam` selbst aber schon ·

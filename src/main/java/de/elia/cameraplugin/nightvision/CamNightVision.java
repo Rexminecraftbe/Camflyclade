@@ -188,6 +188,11 @@ public final class CamNightVision {
                 "{mode}", name(mode));
     }
 
+    /** Whether he picked a mode of his own, which the menu marks; otherwise the one of the file holds. */
+    public boolean hasOwnMode(Player player) {
+        return settings.isNightVisionPlayerChoice() && preferences.nightVision(player) != null;
+    }
+
     /** The words of {@code /cam nightvision} that come after it, for the tab completion. */
     public static String[] words() {
         return new String[]{"on", "off", "dark", "reset"};

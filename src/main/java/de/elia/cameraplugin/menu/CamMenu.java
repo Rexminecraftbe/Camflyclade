@@ -3,6 +3,8 @@ package de.elia.cameraplugin.menu;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.nightvision.NightVisionMode;
+import de.elia.cameraplugin.sky.CamSky;
 import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.spot.Share;
 import de.elia.cameraplugin.spot.Spot;
@@ -10,6 +12,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.WeatherType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -121,37 +124,100 @@ public final class CamMenu implements Listener {
 
     // ------------------------------------------------------------------ pages
 
+    /**
+     * The main page: each button where {@code menu.buttons} puts it, showing
+     * the item it names. Photo mode, the time, the weather and the night
+     * vision say under their name how they stand now.
+     */
     private void openMain(Player player) {
         Page page = new Page();
         boolean inCam = plugin.isInCameraMode(player);
-        Inventory inventory = create(page, SMALL, messages.getMessage("menu-title"));
-        put(page, 10, inCam ? Material.BARRIER : Material.ENDER_EYE, inCam ? "menu-end" : "menu-start",
-                click -> act(player, () -> plugin.getStarter().toggle(player)));
+        Inventory inventory = create(page, MenuButton.SLOTS, messages.getMessage("menu-title"));
+        if (settings.isNightVisionPlayerChoice()) {
+            button(page, MenuButton.NIGHT_VISION, "menu-nightvision", nightVisionState(player), false,
+                    click -> later(() -> openNightVision(player)));
+        }
         if (settings.isBackCommandEnabled()) {
-            put(page, 11, Material.ENDER_PEARL, "menu-back",
+            button(page, MenuButton.BACK, "menu-back", null, false,
                     click -> act(player, () -> plugin.getBack().command(player)));
         }
         if (settings.isResumeEnabled()) {
-            put(page, 12, Material.RECOVERY_COMPASS, "menu-resume",
+            button(page, MenuButton.RESUME, "menu-resume", null, false,
                     click -> act(player, () -> plugin.getResume().command(player)));
         }
         if (settings.isViewpointsEnabled()) {
-            put(page, 13, Material.FILLED_MAP, "menu-spots", click -> later(() -> openSpots(player, 0)));
+            button(page, MenuButton.SPOTS, "menu-spots", null, false, click -> later(() -> openSpots(player, 0)));
         }
         if (settings.isPhotoModeEnabled()) {
-            put(page, 14, Material.PAINTING, "menu-photo",
+            boolean photo = plugin.getPhotoMode().isActive(player);
+            button(page, MenuButton.PHOTO, "menu-photo",
+                    messages.getMessage(photo ? "menu-state-on" : "menu-state-off"), photo,
                     click -> act(player, () -> plugin.getPhotoMode().command(player)));
         }
         if (settings.isCamTimeEnabled()) {
-            put(page, 15, Material.CLOCK, "menu-time", click -> later(() -> openTime(player)));
+            button(page, MenuButton.TIME, "menu-time", timeState(player), false,
+                    click -> later(() -> openTime(player)));
         }
         if (settings.isCamWeatherEnabled()) {
-            put(page, 16, Material.SUNFLOWER, "menu-weather", click -> later(() -> openWeather(player)));
+            button(page, MenuButton.WEATHER, "menu-weather", weatherState(player), false,
+                    click -> later(() -> openWeather(player)));
         }
-        if (settings.isNightVisionPlayerChoice()) {
-            put(page, 22, Material.GOLDEN_CARROT, "menu-nightvision", click -> later(() -> openNightVision(player)));
-        }
+        button(page, inCam ? MenuButton.END : MenuButton.START, inCam ? "menu-end" : "menu-start", null, false,
+                click -> act(player, () -> plugin.getStarter().toggle(player)));
         player.openInventory(inventory);
+    }
+
+    /**
+     * One button of the main page, with the item and in the slot
+     * {@code menu.buttons} gives it: its name, the text of the same name with
+     * {@code -lore} after it, and how it stands now, if it says.
+     *
+     * @param state how it stands now, for {@code menu-state}, or {@code null}
+     * @param glint whether it shines, for something switched on
+     */
+    private void button(Page page, MenuButton which, String key, String state, boolean glint,
+                        Consumer<ClickType> action) {
+        List<String> lore = new ArrayList<>(lines(messages.getMessage(key + "-lore")));
+        if (state != null) {
+            lore.addAll(lines(messages.getMessage("menu-state").replace("{state}", state)));
+        }
+        ItemStack item = labelled(settings.getMenuIcon(which).create(plugin.getLogger()),
+                messages.getMessage(key), lore);
+        put(page, settings.getMenuSlot(which), shine(item, glint), action);
+    }
+
+    /** How his night vision stands: the name of the mode that holds for him. */
+    private String nightVisionState(Player player) {
+        return messages.getMessage("menu-nightvision-" + nightVisionWord(plugin.getNightVision().modeFor(player)));
+    }
+
+    /** The word of {@code /cam nightvision} for a mode. */
+    private static String nightVisionWord(NightVisionMode mode) {
+        return switch (mode) {
+            case ALWAYS -> "on";
+            case OFF -> "off";
+            case DARK -> "dark";
+        };
+    }
+
+    /** How his time stands: the name of his own, its ticks, or the time of the world. */
+    private String timeState(Player player) {
+        Long ticks = plugin.getSky().ownTime(player);
+        if (ticks == null) {
+            return messages.getMessage("menu-state-world-time");
+        }
+        String word = CamSky.timeWord(ticks);
+        return word != null ? messages.getMessage("menu-time-" + word)
+                : messages.getMessage("menu-state-ticks").replace("{ticks}", String.valueOf(ticks));
+    }
+
+    /** How his weather stands: clear, rain, or the weather of the world. */
+    private String weatherState(Player player) {
+        WeatherType weather = plugin.getSky().ownWeather(player);
+        if (weather == null) {
+            return messages.getMessage("menu-state-world-weather");
+        }
+        return messages.getMessage(weather == WeatherType.CLEAR ? "menu-weather-clear" : "menu-weather-rain");
     }
 
     /**
@@ -302,47 +368,66 @@ public final class CamMenu implements Listener {
         player.openInventory(inventory);
     }
 
+    /** The times of day; the one he sees now shines, {@code reset} while it is the world's. */
     private void openTime(Player player) {
         Page page = new Page();
         Inventory inventory = create(page, SMALL, messages.getMessage("menu-time-title"));
         String[] words = {"day", "noon", "sunset", "night", "midnight", "sunrise", "reset"};
         Material[] icons = {Material.SUNFLOWER, Material.GLOWSTONE, Material.ORANGE_DYE, Material.BLUE_DYE,
                 Material.BLACK_DYE, Material.YELLOW_DYE, Material.BARRIER};
+        Long own = plugin.getSky().ownTime(player);
+        String now = own == null ? "reset" : CamSky.timeWord(own);
         for (int i = 0; i < words.length; i++) {
             String word = words[i];
-            put(page, 10 + i, icons[i], "menu-time-" + word,
+            choice(page, 10 + i, new ItemStack(icons[i]), "menu-time-" + word, word.equals(now),
                     click -> act(player, () -> plugin.getSky().timeCommand(player, new String[]{word})));
         }
         put(page, SLOT_SMALL_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
         player.openInventory(inventory);
     }
 
+    /** The weathers; the one he sees now shines, {@code reset} while it is the world's. */
     private void openWeather(Player player) {
         Page page = new Page();
         Inventory inventory = create(page, SMALL, messages.getMessage("menu-weather-title"));
         String[] words = {"clear", "rain", "reset"};
         Material[] icons = {Material.SUNFLOWER, Material.WATER_BUCKET, Material.BARRIER};
+        WeatherType own = plugin.getSky().ownWeather(player);
+        String now = own == null ? "reset" : own == WeatherType.CLEAR ? "clear" : "rain";
         for (int i = 0; i < words.length; i++) {
             String word = words[i];
-            put(page, 11 + 2 * i, icons[i], "menu-weather-" + word,
+            choice(page, 11 + 2 * i, new ItemStack(icons[i]), "menu-weather-" + word, word.equals(now),
                     click -> act(player, () -> plugin.getSky().weatherCommand(player, new String[]{word})));
         }
         put(page, SLOT_SMALL_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
         player.openInventory(inventory);
     }
 
+    /** The modes of the night vision; the one he picked shines, {@code reset} while he picked none. */
     private void openNightVision(Player player) {
         Page page = new Page();
         Inventory inventory = create(page, SMALL, messages.getMessage("menu-nightvision-title"));
         String[] words = {"on", "dark", "off", "reset"};
-        Material[] icons = {Material.GOLDEN_CARROT, Material.TORCH, Material.COAL, Material.BARRIER};
+        ItemStack[] icons = {MenuIcon.parse(MenuIcon.NIGHT_VISION_POTION).create(plugin.getLogger()),
+                new ItemStack(Material.TORCH), new ItemStack(Material.COAL), new ItemStack(Material.BARRIER)};
+        String now = plugin.getNightVision().hasOwnMode(player)
+                ? nightVisionWord(plugin.getNightVision().modeFor(player)) : "reset";
         for (int i = 0; i < words.length; i++) {
             String word = words[i];
-            put(page, 10 + 2 * i, icons[i], "menu-nightvision-" + word,
+            choice(page, 10 + 2 * i, icons[i], "menu-nightvision-" + word, word.equals(now),
                     click -> act(player, () -> plugin.getNightVision().command(player, new String[]{word})));
         }
         put(page, SLOT_SMALL_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
         player.openInventory(inventory);
+    }
+
+    /** One choice of a small page; the one that holds now shines and says so under its name. */
+    private void choice(Page page, int slot, ItemStack item, String key, boolean now, Consumer<ClickType> action) {
+        List<String> lore = new ArrayList<>(lines(messages.getMessage(key + "-lore")));
+        if (now) {
+            lore.addAll(lines(messages.getMessage("menu-state-current")));
+        }
+        put(page, slot, shine(labelled(item, messages.getMessage(key), lore), now), action);
     }
 
     // ------------------------------------------------------------ naming
@@ -466,11 +551,25 @@ public final class CamMenu implements Listener {
     }
 
     private static ItemStack item(Material material, String name, List<String> lore) {
-        ItemStack item = new ItemStack(material);
+        return labelled(new ItemStack(material), name, lore);
+    }
+
+    /** An item with a name and lines of the menu in place of its own. */
+    private static ItemStack labelled(ItemStack item, String name, List<String> lore) {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(name);
             meta.setLore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    /** Lets an item shine like an enchanted one, for what is switched on or holds now. */
+    private static ItemStack shine(ItemStack item, boolean glint) {
+        ItemMeta meta = item.getItemMeta();
+        if (glint && meta != null) {
+            meta.setEnchantmentGlintOverride(true);
             item.setItemMeta(meta);
         }
         return item;

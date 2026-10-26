@@ -9,6 +9,8 @@ import de.elia.cameraplugin.display.GlowMode;
 import de.elia.cameraplugin.display.NameMode;
 import de.elia.cameraplugin.list.ListAccess;
 import de.elia.cameraplugin.menu.MenuAccess;
+import de.elia.cameraplugin.menu.MenuButton;
+import de.elia.cameraplugin.menu.MenuIcon;
 import de.elia.cameraplugin.mirrordamage.ArmorDamageMode;
 import de.elia.cameraplugin.mirrordamage.DamageMode;
 import de.elia.cameraplugin.mob.MobTargeting;
@@ -346,6 +348,10 @@ public final class CamSettings {
 
     /** How the players get at back, spot, photo and the rest, {@code menu.access}. */
     private MenuAccess menuAccess;
+    /** What each button of the main page of the menu shows, {@code menu.buttons.<button>.item}. */
+    private final Map<MenuButton, MenuIcon> menuIcons = new EnumMap<>(MenuButton.class);
+    /** Where it stands, {@code menu.buttons.<button>.slot}. */
+    private final Map<MenuButton, Integer> menuSlots = new EnumMap<>(MenuButton.class);
 
     /** Whether {@code /cam photo} is there, {@code photo-mode.enabled}. */
     private boolean photoModeEnabled;
@@ -668,14 +674,15 @@ public final class CamSettings {
         antiScoutingRadius = config.getDouble("anti-scouting.radius", 32.0, 0.0, MAX_SCOUT_RADIUS);
         antiScoutingFrom = config.getChoice("anti-scouting.measured-from", "body", "body", "camera")
                 .equalsIgnoreCase("camera") ? ScoutAnchor.CAMERA : ScoutAnchor.BODY;
-        String access = config.getChoice("menu.access", "both", "both", "menu", "command", "false")
+        String access = config.getChoice("menu.access", "menu", "menu", "both", "command", "false")
                 .toLowerCase(Locale.ROOT);
         menuAccess = switch (access) {
-            case "menu" -> MenuAccess.MENU;
+            case "both" -> MenuAccess.BOTH;
             case "command" -> MenuAccess.COMMAND;
             case "false" -> MenuAccess.OFF;
-            default -> MenuAccess.BOTH;
+            default -> MenuAccess.MENU;
         };
+        readMenuButtons(config);
         photoModeEnabled = config.getBoolean("photo-mode.enabled", true);
         photoHidePlayers = config.getBoolean("photo-mode.hide-players", true);
         photoHideBodies = config.getBoolean("photo-mode.hide-bodies", true);
@@ -890,6 +897,50 @@ public final class CamSettings {
             case "false" -> ListAccess.OFF;
             default -> ListAccess.ADMIN;
         };
+    }
+
+    /**
+     * Reads the section {@code menu.buttons}: the item and the slot of each
+     * button of the main page. A slot that another button has taken already
+     * - other than start and end, which are never there together - is noted,
+     * and the button goes to its own slot of out of the box, or the first
+     * one free.
+     */
+    private void readMenuButtons(ConfigReader config) {
+        menuIcons.clear();
+        menuSlots.clear();
+        String allowed = messages.configMessage("config-allowed-menu-items");
+        for (MenuButton button : MenuButton.values()) {
+            String path = "menu.buttons." + button.key();
+            String raw = config.getString(path + ".item", button.defaultItem());
+            MenuIcon icon = MenuIcon.parse(raw);
+            if (icon == null) {
+                config.warnUnknownValue(path + ".item", raw, allowed, button.defaultItem());
+                icon = MenuIcon.parse(button.defaultItem());
+            }
+            menuIcons.put(button, icon);
+            int slot = config.getInt(path + ".slot", button.defaultSlot(), 0, MenuButton.SLOTS - 1);
+            MenuButton other = slotTakenBy(button, slot);
+            if (other != null) {
+                int free = slotTakenBy(button, button.defaultSlot()) == null ? button.defaultSlot() : 0;
+                while (slotTakenBy(button, free) != null) {
+                    free++;
+                }
+                config.warnSlotTaken(path + ".slot", slot, "menu.buttons." + other.key() + ".slot", free);
+                slot = free;
+            }
+            menuSlots.put(button, slot);
+        }
+    }
+
+    /** The button that has this slot already and may not share it with this one, or {@code null}. */
+    private MenuButton slotTakenBy(MenuButton button, int slot) {
+        for (Map.Entry<MenuButton, Integer> entry : menuSlots.entrySet()) {
+            if (entry.getValue() == slot && !button.mayShareWith(entry.getKey())) {
+                return entry.getKey();
+            }
+        }
+        return null;
     }
 
     /**
@@ -1520,6 +1571,16 @@ public final class CamSettings {
 
     public MenuAccess getMenuAccess() {
         return menuAccess;
+    }
+
+    /** What a button of the main page of the menu shows. */
+    public MenuIcon getMenuIcon(MenuButton button) {
+        return menuIcons.get(button);
+    }
+
+    /** Where a button of the main page of the menu stands, 0 being the top left. */
+    public int getMenuSlot(MenuButton button) {
+        return menuSlots.get(button);
     }
 
     public boolean isPhotoModeEnabled() {

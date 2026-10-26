@@ -587,13 +587,58 @@ camera-head:
 # und nichts kommt heraus, auch nicht im Cam-Modus, wo sonst jedes Fenster zu bleibt. Texte: menu-... in der Sprachdatei.
 menu:
   # Wie die Spieler an back, resume, spot, visit, photo, time, weather und nightvision kommen:
-  #   both    = über das Menü und über die Befehle
   #   menu    = nur über das Menü - die Befehle sagen, dass es dafür /cam menu gibt (Text: menu-only)
+  #   both    = über das Menü und über die Befehle
   #   command = nur über die Befehle, /cam menu ist aus
   #   false   = gar nicht, weder über das Menü noch über die Befehle (Text: menu-features-off) - nur /cam selbst,
   #             an und aus
-  # Befehle für Admins wie list, stats, stop, ban, trail und reload gehen immer.
-  access: both
+  # Befehle für Admins wie list, stats, stop, ban, trail und reload gehen immer, /cam selbst (an und aus) auch.
+  access: menu
+  # Die Knöpfe der ersten Seite des Menüs (drei Reihen zu je neun Plätzen):
+  #   item = was der Knopf zeigt: ein Item wie bei /give (z. B. clock, ender_pearl, minecraft:compass), dazu
+  #          camera_head (der Kamera-Kopf) und night_vision_potion (ein Nachtsichttrank)
+  #   slot = wo er steht: 0 bis 26, 0 ist oben links, 9 die erste Stelle der zweiten Reihe
+  # Jeder Knopf braucht einen eigenen Platz - nur start und end dürfen sich einen teilen, da ist immer nur einer von
+  # beiden. Steht ein Knopf, wo schon ein anderer ist, meldet /cam reload das, und er kommt auf einen freien Platz.
+  # Ein Knopf, dessen Sache in dieser Datei aus ist (z. B. back-command.enabled: false), fehlt im Menü.
+  # Foto-Modus, Tageszeit, Wetter und Nachtsicht zeigen unter ihrem Namen, wie sie gerade stehen; was gerade gilt,
+  # glänzt (auf ihren eigenen Seiten auch).
+  buttons:
+    # Cam-Modus starten (ohne Cam-Modus) und beenden (im Cam-Modus)
+    start:
+      item: camera_head
+      slot: 22
+    end:
+      item: barrier
+      slot: 22
+    # Die eigene Nachtsicht (bei night-vision.player-choice: true)
+    nightvision:
+      item: night_vision_potion
+      slot: 10
+    # /cam back
+    back:
+      item: ender_pearl
+      slot: 11
+    # /cam resume
+    resume:
+      item: recovery_compass
+      slot: 12
+    # Die Aussichtspunkte: eigene und geteilte, teilen, besuchen, neuer Punkt
+    spots:
+      item: filled_map
+      slot: 13
+    # /cam photo
+    photo:
+      item: painting
+      slot: 14
+    # /cam time
+    time:
+      item: clock
+      slot: 15
+    # /cam weather
+    weather:
+      item: sunflower
+      slot: 16
 
 # Den Cam-Modus mit der Taste zum Tauschen der Hände beenden (voreingestellt F), wie mit /cam.
 # Geht mit leeren Händen. Hat ein Spieler die Taste anders belegt, gilt seine - und der Hinweis

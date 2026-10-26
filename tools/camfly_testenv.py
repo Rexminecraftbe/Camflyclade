@@ -977,6 +977,12 @@ def prepare_server_files(env):
     text, n = replace_option(text, "flight-speed", "false", "player-settings")
     if n != 1:
         Log.warn("player-settings.flight-speed nicht in der Konfiguration gefunden")
+    # Voreingestellt gehen spot, photo, time und die anderen nur ueber das
+    # Menue. Die Abschnitte tippen sie als Befehle; nur menue_checks stellt
+    # menu.access fuer sich um.
+    text, n = replace_option(text, "access", "both", "menu")
+    if n != 1:
+        Log.warn("menu.access nicht in der Konfiguration gefunden")
     data_dir = plugins / "CamFly"
     data_dir.mkdir(exist_ok=True)
     (data_dir / "config.yml").write_text(text, encoding="utf-8")
@@ -1724,7 +1730,16 @@ async function handle(cmd) {
       const end = w.inventoryStart !== undefined ? w.inventoryStart : w.slots.length;
       for (let i = 0; i < end; i++) {
         const it = w.slots[i];
-        if (it) slots[i] = { name: it.name, count: it.count };
+        if (!it) continue;
+        // Name und Zeilen darunter, wie mineflayer sie aus den Bausteinen des
+        // Items liest - als JSON, wo es Textbausteine sind.
+        const text = (v) => (v === undefined || v === null) ? null
+          : (typeof v === 'string' ? v : JSON.stringify(v));
+        let custom = null;
+        let lore = null;
+        try { custom = text(it.customName); } catch (e) { /* egal */ }
+        try { lore = text(it.customLore); } catch (e) { /* egal */ }
+        slots[i] = { name: it.name, count: it.count, custom, lore };
       }
       return { open: true, title: title || '', slots };
     }
@@ -5569,8 +5584,9 @@ def einstellungen_checks(env, bot):
         zeilen = befehl(bot, "/cam time sunset", warten=2.0)
         wetter = befehl(bot, "/cam weather rain", warten=2.0)
         FIND.test("time und weather: true - die Meldungen sagen, dass sie bleiben",
-                  gesagt(zeilen, r"in every flight until /cam time reset")
-                  and gesagt(wetter, r"in every flight until /cam weather reset"), f"{zeige(zeilen)} / {zeige(wetter)}")
+                  gesagt(zeilen, r"Your own time: sunset\. Only you see it, in every flight until you reset it")
+                  and gesagt(wetter, r"Your own weather: rain\. Only you see it, in every flight until you reset it"),
+                  f"{zeige(zeilen)} / {zeige(wetter)}")
         cam_off(bot)
         time.sleep(6.5)
         FIND.test("Das Ende des Cam-Modus gibt Zeit und Wetter der Welt trotzdem zurueck",
@@ -6016,17 +6032,68 @@ def ausspaeh_checks(env, bot):
             FIND.problem(f"Aufraeumen nach dem Test des Ausspaehens: {exc}")
 
 
+def item_text(slot):
+    """Der Text eines Items im Fenster, Name und Zeilen darunter, ohne
+    Farben: mineflayer gibt beides als NBT-Textbausteine, gesammelt wird
+    jeder Wert unter text."""
+    teile = []
+
+    def sammeln(knoten):
+        if isinstance(knoten, dict):
+            for schluessel, wert in knoten.items():
+                if schluessel == "text" and isinstance(wert, dict) and isinstance(wert.get("value"), str):
+                    teile.append(wert["value"])
+                else:
+                    sammeln(wert)
+        elif isinstance(knoten, list):
+            for wert in knoten:
+                sammeln(wert)
+
+    for feld in ("custom", "lore"):
+        roh = (slot or {}).get(feld)
+        if roh:
+            try:
+                sammeln(json.loads(roh))
+            except ValueError:
+                teile.append(roh)
+        teile.append("\n")
+    return "".join(teile)
+
+
+def menue_knopf(text, knopf, item=None, slot=None):
+    """Item und Platz eines Knopfs unter menu.buttons in einem Text der
+    config.yml umstellen."""
+    muster = rf"(?m)^(    {knopf}:\s*\n\s+item:\s*)(\S+)(\s*\n\s+slot:\s*)(\d+)"
+    treffer = re.search(muster, text)
+    if treffer is None:
+        FIND.problem(f"menu.buttons.{knopf} steht nicht in der config.yml des Testservers")
+        return text
+    neu = (treffer.group(1) + (item if item is not None else treffer.group(2)) + treffer.group(3)
+           + (str(slot) if slot is not None else treffer.group(4)))
+    return text[:treffer.start()] + neu + text[treffer.end():]
+
+
 def menue_checks(env, bot):
     """menu: /cam menu, ein Fenster zum Anklicken statt Befehlen.
 
-    Voreingestellt steht access: both da - nachgesehen in der ausgelieferten
-    Datei. Ohne Cam-Modus oeffnet /cam menu das Menue mit den Knoepfen auf
-    ihren Plaetzen; der auf Platz 10 startet den Cam-Modus und schliesst das
-    Fenster. Im Cam-Modus oeffnet es trotzdem, wo jedes andere Fenster zu
+    Voreingestellt steht access: menu da - nachgesehen in der Datei, die das
+    Plugin mitbringt: der Testserver stellt fuer alle anderen Abschnitte both
+    ein, sie tippen ihre Befehle. Ohne Cam-Modus oeffnet /cam menu das Menue
+    mit den Knoepfen auf ihren Plaetzen; der auf Platz 22 - der Kamera-Kopf -
+    startet den Cam-Modus und schliesst das Fenster. Im Cam-Modus oeffnet es trotzdem, wo jedes andere Fenster zu
     bleibt, und nichts kommt dabei ins Inventar. Zeit, dann Sonnenuntergang
     gibt dem Bot 12000. Aussichtspunkte, "Save a spot here" fragt im Chat
     nach dem Namen, und die naechste Zeile speichert ihn; ein Linksklick auf
     den Punkt springt hin, ein Klick mit Umschalt loescht ihn.
+
+    Foto-Modus, Zeit und Nachtsicht sagen unter ihrem Namen, wie sie stehen:
+    vor dem Sonnenuntergang die Zeit der Welt, danach Sunset, der Foto-Modus
+    off und nach einem Klick on; auf der Seite der Zeiten hat Sunset "Now"
+    darunter, die Zeit der Welt nicht.
+
+    menu.buttons: start auf Platz 4 steht dort und startet von dort, back auf
+    dem Platz der Nachtsicht wird gemeldet und kommt auf seinen eigenen, ein
+    unbekanntes Item wird gemeldet.
 
     access: menu laesst nur das Menue: /cam spot sagt, dass es dafuer
     /cam menu gibt, und die Tab-Vervollstaendigung bietet menu an, spot
@@ -6055,19 +6122,28 @@ def menue_checks(env, bot):
     x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
     console(env, f"fill {_floor(x) - 6} {y} {_floor(z) - 2} {_floor(x) + 2} {y + 6} {_floor(z) + 2} minecraft:air",
             pause=0.5)
+    datei = env.server / "plugins" / "CamFly" / "config.yml"
+    original = None
     try:
-        FIND.test("Voreingestellt steht menu.access: both da",
-                  re.search(r"(?m)^menu:\s*\n(?:\s*#.*\n)*\s*access:\s*both\s*$", ausgeliefert(env)) is not None, "")
+        quelle = (env.repo / "src" / "main" / "resources" / "config.yml").read_text(encoding="utf-8")
+        FIND.test("Voreingestellt steht menu.access: menu da",
+                  re.search(r"(?m)^menu:\s*\n(?:\s*#.*\n)*\s*access:\s*menu\s*$", quelle) is not None, "")
         spots_loeschen(bot, "Menue")
         console(env, "time set day", pause=1.0)
         hinstellen(bot, x, y, z)
         f = menue()
         FIND.test("/cam menu oeffnet das Menue", f.get("open") and "Cam" in (f.get("title") or ""), str(f)[:300])
+        knopf = f.get("slots", {})
+        FIND.test("Vor dem Cam-Modus: Zeit der Welt, Foto-Modus aus, Nachtsicht nur im Dunkeln",
+                  "Now: the time of the world" in item_text(knopf.get("15"))
+                  and "Now: off" in item_text(knopf.get("14"))
+                  and "Now: Only in the dark" in item_text(knopf.get("10")),
+                  f"{item_text(knopf.get('15'))} / {item_text(knopf.get('14'))} / {item_text(knopf.get('10'))}")
         FIND.test("Die Knoepfe stehen auf ihren Plaetzen",
                   all(str(i) in f.get("slots", {}) for i in (10, 11, 12, 13, 14, 15, 16, 22)),
                   str(sorted(f.get("slots", {})))[:200])
-        klick(10, warten=2.0)
-        FIND.test("Der Knopf auf Platz 10 startet den Cam-Modus und schliesst das Fenster",
+        klick(22, warten=2.0)
+        FIND.test("Der Knopf auf Platz 22 startet den Cam-Modus und schliesst das Fenster",
                   spielmodus_ist(bot, "adventure") and not fenster().get("open"), "")
 
         f = menue()
@@ -6083,6 +6159,21 @@ def menue_checks(env, bot):
                   str(bot.call("sky").get("timeOfDay")))
         FIND.test("Im Menue kommt nichts ins Inventar", bot.call("inventory").get("count") == 0,
                   str(bot.call("inventory")))
+        knopf = menue().get("slots", {})
+        FIND.test("Die Zeit sagt, wie sie steht: Sunset", "Now: Sunset" in item_text(knopf.get("15")),
+                  item_text(knopf.get("15")))
+        klick(14, warten=2.0)
+        knopf = menue().get("slots", {})
+        FIND.test("Der Foto-Modus sagt, wie er steht: on", "Now: on" in item_text(knopf.get("14")),
+                  item_text(knopf.get("14")))
+        klick(14, warten=2.0)
+        menue()
+        klick(15)
+        knopf = fenster().get("slots", {})
+        FIND.test("Auf der Seite der Zeiten hat Sunset \"Now\" darunter, die Zeit der Welt nicht",
+                  "Now" in item_text(knopf.get("12")) and "Now" not in item_text(knopf.get("16")),
+                  f"{item_text(knopf.get('12'))} / {item_text(knopf.get('16'))}")
+        bot.call("close_window", wait=10)
 
         menue()
         klick(13)
@@ -6115,6 +6206,29 @@ def menue_checks(env, bot):
         bot.call("close_window", wait=10)
         cam_off(bot)
 
+        original = datei.read_text(encoding="utf-8")
+        text = menue_knopf(original, "start", slot=4)
+        text = menue_knopf(text, "back", slot=10)
+        text = menue_knopf(text, "time", item="kein_item")
+        datei.write_text(text, encoding="utf-8")
+        vorher = len(server_log(env))
+        console(env, "cam reload", pause=2)
+        log = strip_colors(server_log(env)[vorher:])
+        FIND.test("menu.buttons: ein Knopf auf einem besetzten Platz wird gemeldet und kommt auf seinen eigenen",
+                  "menu.buttons.back.slot: slot 10 is taken by menu.buttons.nightvision.slot already. "
+                  "Using slot 11 instead." in log, log.strip()[-300:] or "nichts im Log")
+        FIND.test("menu.buttons: ein unbekanntes Item wird gemeldet",
+                  "Unknown value for menu.buttons.time.item: 'kein_item'" in log, log.strip()[-300:] or "nichts im Log")
+        knopf = menue().get("slots", {})
+        FIND.test("menu.buttons.start.slot: 4 - der Start steht auf Platz 4, back auf 11, die Zeit auf 15",
+                  all(str(i) in knopf for i in (4, 11, 15)) and "22" not in knopf, str(sorted(knopf)))
+        klick(4, warten=2.0)
+        FIND.test("menu.buttons.start.slot: 4 - der Knopf startet von dort", spielmodus_ist(bot, "adventure"), "")
+        cam_off(bot)
+        datei.write_text(original, encoding="utf-8")
+        original = None
+        console(env, "cam reload", pause=2)
+
         set_option(env, "access", "menu", "menu")
         zeilen = befehl(bot, "/cam spot list")
         jetzt = tab("/cam ")
@@ -6141,6 +6255,9 @@ def menue_checks(env, bot):
         try:
             bot.call("close_window", wait=10)
             cam_off(bot)
+            if original is not None:
+                datei.write_text(original, encoding="utf-8")
+            # Wie der Testserver es fuer alle anderen Abschnitte hat.
             set_option(env, "access", "both", "menu")
             spots_loeschen(bot, "Menue")
             console(env, "time set day", pause=0.5)

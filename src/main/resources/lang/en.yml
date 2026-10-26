@@ -107,6 +107,7 @@ messages:
   cant-fly-in-powder-snow: "&cYou cannot fly into powder snow in camera mode."
   cant-fly-in-water: "&cYou cannot fly into water in camera mode."
   config-allowed-blocks: "any block, e.g. barrier or glass"
+  config-allowed-menu-items: "any item, e.g. clock or ender_pearl, or camera_head or night_vision_potion"
   config-allowed-particles: "a particle without extra data, e.g. soul_fire_flame, flame or end_rod"
   config-allowed-signal-costs: "a number of blocks of at least 0, or stop"
   config-allowed-sounds: "a sound as /playsound names it, e.g. block.beacon.activate"
@@ -131,6 +132,7 @@ messages:
   config-syntax-missing-quote: "the closing quote is missing here"
   config-syntax-spot: "line {line}, column {column}"
   config-syntax-tab: "there is a tab here, indent with spaces only"
+  config-slot-taken: "&c{path}: slot {value} is taken by {other} already. Using slot {used} instead."
   config-syntax-unreadable: "unreadable"
   config-too-large: "&cValue for {path} is too large: {value}. Using {max} instead."
   config-too-small: "&cValue for {path} is too small: {value}. Using {min} instead."
@@ -206,6 +208,18 @@ messages:
   menu-spots: "&aSpots"
   menu-spots-lore: "&7Your spots and those\n&7shared with you."
   menu-spots-title: "&8Spots"
+  # How photo mode, the time, the weather and the night vision stand now, under their buttons: menu-state with
+  # {state} being menu-state-on or -off, the name of the time (menu-time-...), menu-state-ticks for a time without
+  # a name, menu-state-world-time, the weather (menu-weather-clear, -rain) or menu-state-world-weather, and the
+  # mode of the night vision (menu-nightvision-...). On their pages, the choice that holds now has
+  # menu-state-current under its name.
+  menu-state: "&7Now: &f{state}"
+  menu-state-current: "&a» Now"
+  menu-state-off: "&7off"
+  menu-state-on: "&aon"
+  menu-state-ticks: "&f{ticks} ticks"
+  menu-state-world-time: "&7the time of the world"
+  menu-state-world-weather: "&7the weather of the world"
   menu-start: "&aStart cam mode"
   menu-start-lore: "&7Fly as a camera, your body stays here."
   menu-time: "&eTime of day"
@@ -250,7 +264,7 @@ messages:
   # /cam photo (photo-mode).
   photo-ended: "&aPhoto mode off: you see everything again."
   photo-off: "&c/cam photo is switched off."
-  photo-started: "&aPhoto mode on: the other players and the bodies are out of the picture for you. F1 hides the rest, /cam photo ends it."
+  photo-started: "&aPhoto mode on: the other players and the bodies are out of the picture for you. F1 hides the rest, photo mode once more ends it."
   player.name-format: "{player}'s Cam"
   portal-blocked: "&cYou cannot go through {portal} portals in camera mode."
   portal-return-area: "&cCam mode is not allowed in {area}, you were brought back."
@@ -305,7 +319,7 @@ messages:
   spot-button-visit: "&d[Visit]"
   spot-button-visit-hover: "&7Visit {spot} with your camera, from wherever you are"
   spot-deleted: "&aSpot {spot} deleted."
-  spot-full: "&cYou have {max} spots already, the most there may be. Delete one first with /cam spot delete <name>."
+  spot-full: "&cYou have {max} spots already, the most there may be. Delete one first."
   spot-jumped: "&aAt spot {spot}"
   spot-list-empty: "&eYou have no spots yet. /cam spot set <name> saves one where you are."
   spot-list-entry: "&7- &f{spot}&7: {x} {y} {z} ({world})"
@@ -369,7 +383,7 @@ messages:
   time-off: "&c/cam time is switched off."
   time-reset: "&aYou see the time of the world again."
   time-set: "&aYour own time: {time}. Only you see it, until cam mode ends."
-  time-set-kept: "&aYour own time: {time}. Only you see it, in every flight until /cam time reset."
+  time-set-kept: "&aYour own time: {time}. Only you see it, in every flight until you reset it."
   time-usage: "&eUse /cam time day, noon, sunset, night, midnight, sunrise or a time in ticks from 0 to 23999, or /cam time reset."
   # /cam trail: {number} which of the kept flights (1 the newest), {distance} in blocks, {time} how long the flight
   # took, {when} trail-flying or trail-ago (with {time} how long ago it ended), {place} as trail-place has it, {world}
@@ -414,7 +428,7 @@ messages:
   weather-off: "&c/cam weather is switched off."
   weather-reset: "&aYou see the weather of the world again."
   weather-set: "&aYour own weather: {weather}. Only you see it, until cam mode ends."
-  weather-set-kept: "&aYour own weather: {weather}. Only you see it, in every flight until /cam weather reset."
+  weather-set-kept: "&aYour own weather: {weather}. Only you see it, in every flight until you reset it."
   weather-usage: "&eUse /cam weather clear, rain or reset."
 
 # Names the texts above fill in for things of the game: damage types, mobs, effects, biomes,

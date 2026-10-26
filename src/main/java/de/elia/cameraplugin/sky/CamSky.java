@@ -52,6 +52,10 @@ public final class CamSky {
     private final CameraPlugin plugin;
     /** What each camera player saw before his first {@code /cam time} or {@code /cam weather}. */
     private final Map<UUID, Before> before = new HashMap<>();
+    /** The time each camera player sees as his own now, in ticks, for the menu. */
+    private final Map<UUID, Long> shownTime = new HashMap<>();
+    /** The weather each camera player sees as his own now, for the menu. */
+    private final Map<UUID, WeatherType> shownWeather = new HashMap<>();
 
     /**
      * What a player saw before camera mode gave him a time or a weather of
@@ -144,6 +148,7 @@ public final class CamSky {
             was.timeRelative = player.isPlayerTimeRelative();
         }
         player.setPlayerTime(ticks, false);
+        shownTime.put(player.getUniqueId(), ticks);
     }
 
     /** A time in ticks of the day, or {@code null} when the word is none. */
@@ -205,6 +210,37 @@ public final class CamSky {
             was.weatherType = player.getPlayerWeather();
         }
         player.setPlayerWeather(type);
+        shownWeather.put(player.getUniqueId(), type);
+    }
+
+    /**
+     * The time of his own, for the menu: the one he sees in camera mode, the
+     * one kept for his next flight before it, or {@code null} for the time of
+     * the world.
+     */
+    public Long ownTime(Player player) {
+        if (plugin.isInCameraMode(player)) {
+            return shownTime.get(player.getUniqueId());
+        }
+        return settings.isCamTimeEnabled() ? plugin.getPreferences().time(player) : null;
+    }
+
+    /** The weather of his own, for the menu, the way {@link #ownTime} has it; {@code null} for the world's. */
+    public WeatherType ownWeather(Player player) {
+        if (plugin.isInCameraMode(player)) {
+            return shownWeather.get(player.getUniqueId());
+        }
+        return settings.isCamWeatherEnabled() ? plugin.getPreferences().weather(player) : null;
+    }
+
+    /** The name {@code /cam time} knows a time by, or {@code null} for a time it has no name for. */
+    public static String timeWord(long ticks) {
+        for (Map.Entry<String, Long> named : TIMES.entrySet()) {
+            if (named.getValue() == ticks) {
+                return named.getKey();
+            }
+        }
+        return null;
     }
 
     /**
@@ -231,6 +267,7 @@ public final class CamSky {
             return;
         }
         was.time = false;
+        shownTime.remove(player.getUniqueId());
         // A relative offset of 0 is what the server keeps for a player
         // without a time of his own.
         if (was.timeRelative && was.timeOffset == 0L) {
@@ -247,6 +284,7 @@ public final class CamSky {
             return;
         }
         was.weather = false;
+        shownWeather.remove(player.getUniqueId());
         if (was.weatherType == null) {
             player.resetPlayerWeather();
         } else {
@@ -259,5 +297,7 @@ public final class CamSky {
         resetTime(player);
         resetWeather(player);
         before.remove(player.getUniqueId());
+        shownTime.remove(player.getUniqueId());
+        shownWeather.remove(player.getUniqueId());
     }
 }
