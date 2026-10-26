@@ -663,10 +663,11 @@ menu:
       item: spyglass
       slot: 10
     # Spieler stoppen und sperren: ein Klick auf einen Kopf - oder auf "Everybody" für alle - zeigt, was geht: den
-    # Cam-Modus beenden (stop-command, camplugin.stop) und sperren, die Sperre ändern oder aufheben (cam-ban,
-    # camplugin.ban). Ist er gesperrt, glänzt der Knopf zum Sperren (einen Kopf zeichnet Minecraft nie glänzend).
-    # Die Dauer einer Sperre: für immer, oder Tage, Stunden und Minuten - Linksklick eins dazu, Rechtsklick eins
-    # weg, mit Umschalt zehn auf einmal. Bei einem Gesperrten steht da, was seine Sperre noch hat.
+    # Cam-Modus beenden (stop-command, camplugin.stop) und sperren (cam-ban, camplugin.ban). Ist er gesperrt, glänzt
+    # der Knopf zum Sperren (einen Kopf zeichnet Minecraft nie glänzend) und führt dahin, wo man seine Sperre ändert
+    # oder aufhebt. Die Dauer einer Sperre: für immer, oder Tage, Stunden und Minuten - Linksklick eins dazu,
+    # Rechtsklick eins weg, mit Umschalt so viele wie ban-shift-step unten. Bei einem Gesperrten steht da, was seine
+    # Sperre noch hat.
     players:
       item: iron_bars
       slot: 12
@@ -682,6 +683,9 @@ menu:
     back:
       item: arrow
       slot: 22
+  # Wie viele Tage, Stunden oder Minuten ein Klick mit Umschalt auf der Seite einer Sperre dazugibt oder wegnimmt
+  # (ohne Umschalt einen), 1 bis 100
+  ban-shift-step: 10
 
 # Den Cam-Modus mit der Taste zum Tauschen der Hände beenden (voreingestellt F), wie mit /cam.
 # Geht mit leeren Händen. Hat ein Spieler die Taste anders belegt, gilt seine - und der Hinweis

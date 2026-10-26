@@ -102,9 +102,6 @@ public final class CamMenu implements Listener {
     /** The longest ban the buttons of the time add up to, in minutes: 999 days. */
     private static final long MAX_BAN_MINUTES = 999L * DAY;
 
-    /** How many a click with shift adds or takes away on a button of the time, instead of one. */
-    private static final int SHIFT_STEPS = 10;
-
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
@@ -733,7 +730,8 @@ public final class CamMenu implements Listener {
     /**
      * What can be done to one player, or to everybody: end his camera mode,
      * while he is in it, and ban him - or, while he is banned, change his ban
-     * or lift it. The button of the ban shines while he is banned.
+     * or lift it, both on the page of the ban. Its button shines while he is
+     * banned.
      */
     private void openTarget(Player player, Target target) {
         if (!managesPlayers(player)) {
@@ -744,7 +742,7 @@ public final class CamMenu implements Listener {
         Page page = new Page();
         Inventory inventory = create(page, SMALL, messages.getMessage("menu-admin-target-title")
                 .replace("{player}", target.name()));
-        put(page, 4, targetItem(target, targetLines(player, target)), click -> { });
+        put(page, 13, targetItem(target, targetLines(player, target)), click -> { });
         if (plugin.getStop().mayUse(player)) {
             boolean inCam = target.everybody() ? !plugin.getCameraPlayers().isEmpty() : target.inCam(plugin);
             if (inCam) {
@@ -761,19 +759,11 @@ public final class CamMenu implements Listener {
         if (ban.mayUse(player)) {
             boolean banned = target.banned(ban);
             String key = banned ? "menu-admin-ban-change" : "menu-admin-ban";
-            put(page, 13, shine(item(Material.IRON_BARS, messages.getMessage(key),
+            put(page, 15, shine(item(Material.IRON_BARS, messages.getMessage(key),
                     lines(messages.getMessage(key + "-lore"))), banned), click -> later(() -> {
                         drafts.put(player.getUniqueId(), draft(target));
                         openBan(player);
                     }));
-            if (banned) {
-                put(page, 15, Material.MILK_BUCKET, "menu-admin-unban", click -> later(() -> {
-                    ban.unban(player, new String[]{target.everybody() ? "all" : target.name()});
-                    openTarget(player, target);
-                }));
-            } else {
-                put(page, 15, Material.GRAY_DYE, "menu-admin-unban-none", click -> { });
-            }
         }
         put(page, SLOT_SMALL_BACK, Material.ARROW, "menu-to-players", click -> later(() -> openPlayers(player, 0)));
         player.openInventory(inventory);
@@ -799,7 +789,8 @@ public final class CamMenu implements Listener {
     /**
      * How long a ban lasts and why, before it is given or changed: for good,
      * or days, hours and minutes added and taken away on their buttons, and a
-     * reason written in the chat if he likes; then the button that bans.
+     * reason written in the chat if he likes; then the button that bans. A
+     * ban that holds already can be lifted here as well.
      */
     private void openBan(Player player) {
         BanDraft draft = drafts.get(player.getUniqueId());
@@ -821,10 +812,9 @@ public final class CamMenu implements Listener {
                     openBan(player);
                 }));
         String time = banTime(draft.minutes);
-        banUnit(player, page, 12, Material.RED_BED, "menu-admin-ban-days", draft, DAY, draft.minutes / DAY, time);
-        banUnit(player, page, 13, Material.DAYLIGHT_DETECTOR, "menu-admin-ban-hours", draft, HOUR,
-                draft.minutes % DAY / HOUR, time);
-        banUnit(player, page, 14, Material.CLOCK, "menu-admin-ban-minutes", draft, 1L, draft.minutes % HOUR, time);
+        banUnit(player, page, 12, "menu-admin-ban-days", draft, DAY, draft.minutes / DAY, time);
+        banUnit(player, page, 13, "menu-admin-ban-hours", draft, HOUR, draft.minutes % DAY / HOUR, time);
+        banUnit(player, page, 14, "menu-admin-ban-minutes", draft, 1L, draft.minutes % HOUR, time);
         String reason = draft.reason.isEmpty() ? messages.getMessage("menu-admin-ban-no-reason") : draft.reason;
         List<String> reasonLore = new ArrayList<>(lines(messages.getMessage("menu-state").replace("{state}", reason)));
         reasonLore.addAll(lines(messages.getMessage("menu-admin-ban-reason-actions")));
@@ -854,6 +844,13 @@ public final class CamMenu implements Listener {
                     ban.ban(player, target.everybody() ? "all" : target.name(), draft.minutes, draft.reason);
                     openTarget(player, target);
                 }));
+        if (draft.change) {
+            put(page, 26, Material.MILK_BUCKET, "menu-admin-unban", click -> later(() -> {
+                drafts.remove(player.getUniqueId());
+                ban.unban(player, new String[]{target.everybody() ? "all" : target.name()});
+                openTarget(player, target);
+            }));
+        }
         put(page, 18, Material.ARROW, "menu-to-target", click -> later(() -> openTarget(player, target)));
         player.openInventory(inventory);
     }
@@ -861,22 +858,24 @@ public final class CamMenu implements Listener {
     /**
      * One of the buttons of the time of a ban: how many days, hours or
      * minutes it has, and what that makes altogether. A click adds one, a
-     * right-click takes one away, with shift ten. Taking away stops short of
-     * nothing - nothing would be for good -, adding at the longest ban the
-     * buttons give.
+     * right-click takes one away, with shift {@code menu.ban-shift-step} of
+     * them. Taking away stops short of nothing - nothing would be for good -,
+     * adding at the longest ban the buttons give.
      *
      * @param unit   what one of them is, in minutes
      * @param amount how many of them the ban has now
      * @param time   how long it lasts altogether, as {@link #banTime} has it
      */
-    private void banUnit(Player player, Page page, int slot, Material material, String key, BanDraft draft,
-                         long unit, long amount, String time) {
+    private void banUnit(Player player, Page page, int slot, String key, BanDraft draft, long unit, long amount,
+                         String time) {
+        int shiftStep = settings.getBanShiftStep();
         List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-ban-time-lore")
                 .replace("{time}", time)));
-        lore.addAll(lines(messages.getMessage("menu-admin-ban-time-actions")));
-        put(page, slot, item(material, messages.getMessage(key).replace("{amount}", String.valueOf(amount)), lore),
+        lore.addAll(lines(messages.getMessage("menu-admin-ban-time-actions")
+                .replace("{step}", String.valueOf(shiftStep))));
+        put(page, slot, item(Material.CLOCK, messages.getMessage(key).replace("{amount}", String.valueOf(amount)), lore),
                 click -> later(() -> {
-                    long step = unit * (click.isShiftClick() ? SHIFT_STEPS : 1);
+                    long step = unit * (click.isShiftClick() ? shiftStep : 1);
                     long minutes = click.isRightClick() ? draft.minutes - step : draft.minutes + step;
                     if (click.isRightClick() ? minutes >= 1L : minutes <= MAX_BAN_MINUTES) {
                         draft.minutes = minutes;

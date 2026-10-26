@@ -139,6 +139,9 @@ public final class CamSettings {
      */
     private static final double MAX_SCOUT_RADIUS = 256.0;
 
+    /** The most {@code menu.ban-shift-step} takes. */
+    private static final int MAX_BAN_SHIFT_STEP = 100;
+
     /**
      * Keys that are read although the config file built into the jar leaves
      * them out on purpose, so that they are not reported as unknown, see
@@ -358,6 +361,11 @@ public final class CamSettings {
     private final Map<MenuButton, Integer> menuSlots = new EnumMap<>(MenuButton.class);
     /** The same for the admin page, {@code menu.admin-buttons}. */
     private final Map<AdminButton, MenuIcon> adminIcons = new EnumMap<>(AdminButton.class);
+    /**
+     * How many days, hours or minutes a click with shift adds to a ban on its
+     * page or takes away, {@code menu.ban-shift-step}.
+     */
+    private int banShiftStep;
     private final Map<AdminButton, Integer> adminSlots = new EnumMap<>(AdminButton.class);
 
     /** Whether {@code /cam photo} is there, {@code photo-mode.enabled}. */
@@ -685,6 +693,7 @@ public final class CamSettings {
         adminAccess = readMenuAccess(config, "menu.admin-access");
         readButtons(config, "menu.buttons", MenuButton.values(), menuIcons, menuSlots);
         readButtons(config, "menu.admin-buttons", AdminButton.values(), adminIcons, adminSlots);
+        banShiftStep = config.getInt("menu.ban-shift-step", 10, 1, MAX_BAN_SHIFT_STEP);
         photoModeEnabled = config.getBoolean("photo-mode.enabled", true);
         photoHidePlayers = config.getBoolean("photo-mode.hide-players", true);
         photoHideBodies = config.getBoolean("photo-mode.hide-bodies", true);
@@ -1589,6 +1598,11 @@ public final class CamSettings {
 
     public MenuAccess getAdminAccess() {
         return adminAccess;
+    }
+
+    /** How many days, hours or minutes a click with shift adds to a ban in the menu or takes away. */
+    public int getBanShiftStep() {
+        return banShiftStep;
     }
 
     /** What a button of the main page of the menu shows. */

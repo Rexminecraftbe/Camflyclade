@@ -6148,13 +6148,15 @@ def menue_checks(env, bot):
     cam-ban und stop-command an steht auf der Seite der Spieler vorn
     Everybody mit einem im Cam-Modus, dahinter der Bot; ein Klick darauf
     bietet Beenden und Sperren an. Beenden beendet den Cam-Modus aller.
-    Sperren steht auf fuer immer; Tage, Stunden und Minuten kommen mit einem
-    Linksklick dazu, mit Umschalt zehn, und mit einem Rechtsklick weg, nur
-    nie bis auf nichts. Der Grund kommt aus dem Chat - einer, der mit 1h
-    anfaengt, bleibt der Grund -, und die Nachricht sagt "because:". Danach
-    steht Banned unter dem Kopf, der Knopf Change the ban glaenzt und hat
-    die Zeit, die noch bleibt; ein Tag mehr gibt die Nachricht, dass die
-    Sperre geaendert ist. Lift the ban hebt sie wieder auf. Mit
+    Sperren steht auf fuer immer; Tage, Stunden und Minuten - alle mit der
+    Uhr - kommen mit einem Linksklick dazu, mit Umschalt so viele wie
+    menu.ban-shift-step (voreingestellt 10, im Test 5), und mit einem
+    Rechtsklick weg, nur nie bis auf nichts. Der Grund kommt aus dem Chat -
+    einer, der mit 1h anfaengt, bleibt der Grund -, und die Nachricht sagt
+    "because:". Danach steht Banned unter dem Kopf, der Knopf Change the ban
+    glaenzt; einen eigenen Knopf zum Aufheben hat die Seite nicht. Change
+    the ban hat die Zeit, die noch bleibt; ein Tag mehr gibt die Nachricht,
+    dass die Sperre geaendert ist, und Lift the ban dort hebt sie auf. Mit
     cam-trail.enabled: true und zwei Fluegen sagt der Kopf des Bots auf der
     Seite der Flugspuren, dass zwei gemerkt sind; ein Klick zeigt sie, den
     neuesten zuerst, mit Datum, Dauer, Strecke, Start und Ende. Linksklick
@@ -6313,7 +6315,10 @@ def menue_checks(env, bot):
         FIND.test("admin-access: menu - /cam list verweist auf das Menue, die Konsole darf es weiter",
                   gesagt(zeilen, r"That goes through /cam menu") and "Nobody is in cam mode" in log
                   and "list" not in tab("/cam "), f"{zeige(zeilen)} / {log.strip()[-200:]}")
-        set_options(env, [("enabled", "true", "cam-ban"), ("enabled", "true", "stop-command")])
+        FIND.test("Voreingestellt steht menu.ban-shift-step: 10 da",
+                  re.search(r"(?m)^  ban-shift-step:\s*10\s*$", quelle_config(env)) is not None, "")
+        set_options(env, [("enabled", "true", "cam-ban"), ("enabled", "true", "stop-command"),
+                          ("ban-shift-step", "5", "menu")])
         cam_on(bot)
         menue()
         klick(23)
@@ -6327,10 +6332,12 @@ def menue_checks(env, bot):
         klick(0)
         f = fenster()
         knopf = f.get("slots", {})
-        FIND.test("Ein Klick auf Everybody: beenden und sperren, noch nichts aufzuheben",
+        FIND.test("Ein Klick auf Everybody: beenden, der Kopf und sperren - kein eigener Knopf zum Aufheben",
                   "Everybody" in (f.get("title") or "") and "End everybody's cam mode" in item_text(knopf.get("11"))
-                  and "Ban" in item_text(knopf.get("13")) and not (knopf.get("13") or {}).get("glint")
-                  and "Not banned" in item_text(knopf.get("15")), f"{f.get('title')} / {sorted(knopf)}")
+                  and "Everybody" in item_text(knopf.get("13")) and "Ban" in item_text(knopf.get("15"))
+                  and not (knopf.get("15") or {}).get("glint")
+                  and not any("Lift the ban" in item_text(v) for v in knopf.values()),
+                  f"{f.get('title')} / {sorted(knopf)}")
         seit = bot.mark()
         klick(11, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
@@ -6340,26 +6347,31 @@ def menue_checks(env, bot):
         klick(23)
         klick(12)
         klick(0)
-        klick(13)
+        klick(15)
         f = fenster()
         knopf = f.get("slots", {})
         FIND.test("Sperren: Dauer im Menue, voreingestellt fuer immer, daneben Tage, Stunden und Minuten",
                   "Ban Everybody" in (f.get("title") or "") and "Now" in item_text(knopf.get("10"))
                   and "For good" in item_text(knopf.get("10")) and "Days: 0" in item_text(knopf.get("12"))
                   and "Hours: 0" in item_text(knopf.get("13")) and "Minutes: 0" in item_text(knopf.get("14"))
-                  and "Altogether: for good" in item_text(knopf.get("13")),
+                  and "Altogether: for good" in item_text(knopf.get("13")) and "26" not in knopf,
                   f"{f.get('title')} / {item_text(knopf.get('10'))} / {item_text(knopf.get('13'))}")
+        arten = {(knopf.get(platz) or {}).get("name") for platz in ("12", "13", "14")}
+        FIND.test("Tage, Stunden und Minuten sind dasselbe Item (die Uhr)", len(arten) == 1 and None not in arten,
+                  str(arten))
+        FIND.test("ban-shift-step: 5 - die Knoepfe sagen, dass Umschalt fuenf auf einmal gibt",
+                  "With shift: 5 at once" in item_text(knopf.get("14")), item_text(knopf.get("14")))
         klick(13)
         klick(14, mode=1)
         klick(14, button=1)
         klick(12, button=1)
         knopf = fenster().get("slots", {})
-        FIND.test("Zeit: Stunde dazu, mit Umschalt zehn Minuten dazu, eine weg - 1h 9m, fuer immer ist es nicht mehr",
-                  "Hours: 1" in item_text(knopf.get("13")) and "Minutes: 9" in item_text(knopf.get("14"))
-                  and "Altogether: for 1h 9m 0s" in item_text(knopf.get("14"))
+        FIND.test("Zeit: Stunde dazu, mit Umschalt fuenf Minuten dazu, eine weg - 1h 4m, fuer immer ist es nicht mehr",
+                  "Hours: 1" in item_text(knopf.get("13")) and "Minutes: 4" in item_text(knopf.get("14"))
+                  and "Altogether: for 1h 4m 0s" in item_text(knopf.get("14"))
                   and "Now" not in item_text(knopf.get("10")),
                   f"{item_text(knopf.get('13'))} / {item_text(knopf.get('14'))} / {item_text(knopf.get('10'))}")
-        FIND.test("Zeit: einen Tag weg geht bei 1h 9m nicht - es bleibt, wie es ist (nichts waere fuer immer)",
+        FIND.test("Zeit: einen Tag weg geht bei 1h 4m nicht - es bleibt, wie es ist (nichts waere fuer immer)",
                   "Days: 0" in item_text(knopf.get("12")) and "Hours: 1" in item_text(knopf.get("13")),
                   item_text(knopf.get("12")))
         seit = bot.mark()
@@ -6371,42 +6383,47 @@ def menue_checks(env, bot):
         f = fenster()
         FIND.test("Nach dem Grund ist die Seite wieder da, mit dem Grund und der Zeit",
                   f.get("open") and "1h Testgrund" in item_text(f.get("slots", {}).get("16"))
-                  and "Minutes: 9" in item_text(f.get("slots", {}).get("14")),
+                  and "Minutes: 4" in item_text(f.get("slots", {}).get("14")),
                   item_text(f.get("slots", {}).get("16")))
         seit = bot.mark()
         klick(22, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
         knopf = fenster().get("slots", {})
-        FIND.test("Sperren sperrt alle fuer 1h 9m mit dem Grund - der mit 1h anfaengt, bleibt der Grund",
-                  gesagt(zeilen, r"Cam mode is locked for everybody for 1h 9m 0s because: 1h Testgrund\."),
+        FIND.test("Sperren sperrt alle fuer 1h 4m mit dem Grund - der mit 1h anfaengt, bleibt der Grund",
+                  gesagt(zeilen, r"Cam mode is locked for everybody for 1h 4m 0s because: 1h Testgrund\."),
                   zeige(zeilen))
-        FIND.test("Danach: Banned unter dem Kopf, Change the ban glaenzt, daneben Lift the ban",
-                  "Banned" in item_text(knopf.get("4")) and "Change the ban" in item_text(knopf.get("13"))
-                  and (knopf.get("13") or {}).get("glint") is True and "Lift the ban" in item_text(knopf.get("15")),
-                  f"{item_text(knopf.get('4'))} / {knopf.get('13')}")
-        klick(13)
+        FIND.test("Danach: Banned unter dem Kopf, Change the ban glaenzt - und kein eigener Knopf zum Aufheben",
+                  "Banned" in item_text(knopf.get("13")) and "Change the ban" in item_text(knopf.get("15"))
+                  and (knopf.get("15") or {}).get("glint") is True
+                  and not any("Lift the ban" in item_text(v) for v in knopf.values()),
+                  f"{item_text(knopf.get('13'))} / {knopf.get('15')}")
+        klick(15)
         f = fenster()
         knopf = f.get("slots", {})
-        FIND.test("Change the ban: die Seite hat die Zeit, die noch bleibt, und den Grund",
+        FIND.test("Change the ban: die Seite hat die Zeit, die noch bleibt, den Grund und Lift the ban",
                   "Change the ban of Everybody" in (f.get("title") or "") and "Hours: 1" in item_text(knopf.get("13"))
-                  and "Minutes: 9" in item_text(knopf.get("14")) and "1h Testgrund" in item_text(knopf.get("16"))
-                  and "Change the ban" in item_text(knopf.get("22")),
+                  and "Minutes: 4" in item_text(knopf.get("14")) and "1h Testgrund" in item_text(knopf.get("16"))
+                  and "Change the ban" in item_text(knopf.get("22")) and "Lift the ban" in item_text(knopf.get("26")),
                   f"{f.get('title')} / {item_text(knopf.get('13'))} / {item_text(knopf.get('14'))}")
         klick(12)
         seit = bot.mark()
         klick(22, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
-        FIND.test("Change the ban: ein Tag mehr - jetzt 1d 1h 9m, und es heisst, sie ist geaendert",
-                  gesagt(zeilen, r"Cam mode is now locked for everybody for 1d 1h 9m because: 1h Testgrund\."),
+        FIND.test("Change the ban: ein Tag mehr - jetzt 1d 1h 4m, und es heisst, sie ist geaendert",
+                  gesagt(zeilen, r"Cam mode is now locked for everybody for 1d 1h 4m because: 1h Testgrund\."),
                   zeige(zeilen))
+        klick(15)
         seit = bot.mark()
-        klick(15, warten=2.0)
+        klick(26, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
-        FIND.test("Lift the ban hebt die Sperre wieder auf", gesagt(zeilen, r"Cam mode is open for everybody again"),
-                  zeige(zeilen))
+        knopf = fenster().get("slots", {})
+        FIND.test("Lift the ban auf der Seite der Sperre hebt sie auf, danach steht wieder Ban da",
+                  gesagt(zeilen, r"Cam mode is open for everybody again") and "Ban" in item_text(knopf.get("15"))
+                  and not (knopf.get("15") or {}).get("glint"), f"{zeige(zeilen)} / {item_text(knopf.get('15'))}")
         bot.call("close_window", wait=10)
         set_options(env, [("enabled", "false", "cam-ban"), ("enabled", "false", "stop-command"),
-                          ("admin-access", "both", "menu"), ("enabled", "true", "cam-trail")])
+                          ("admin-access", "both", "menu"), ("enabled", "true", "cam-trail"),
+                          ("ban-shift-step", "10", "menu")])
 
         # Zwei Fluege vom selben Platz, dann ein Stueck daneben.
         for weg in ({"dy": 3}, {"dx": -3, "dy": 2}):

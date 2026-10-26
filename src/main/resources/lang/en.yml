@@ -178,8 +178,9 @@ messages:
   # menu-admin-cam-lore and -away stand under the heads of who is in cam mode, like cam-list-entry. On the page of a
   # ban, menu-admin-ban-days, -hours and -minutes say how many of them the ban has ({amount}), with
   # menu-admin-ban-time-lore under them ({time} as ban-for or ban-for-good), menu-admin-ban-confirm-lore says what
-  # the ban will be ({ban}: {time} with ban-reason), and menu-admin-banned how a ban stands. The -change ones are
-  # there instead while the player is banned already: then the page changes his ban.
+  # the ban will be ({ban}: {time} with ban-reason), and menu-admin-banned how a ban stands; {step} in
+  # menu-admin-ban-time-actions is menu.ban-shift-step. The -change ones are there instead while the player is banned
+  # already: then the page changes his ban, and menu-admin-unban lifts it.
   menu-admin: "&cAdmin"
   menu-admin-ban: "&cBan"
   menu-admin-ban-change: "&cChange the ban"
@@ -197,7 +198,7 @@ messages:
   menu-admin-ban-reason: "&fReason"
   menu-admin-ban-reason-actions: "&eLeft-click: write one in the chat\n&eRight-click: none"
   menu-admin-ban-reason-question: "&eType in the chat why {player} is banned, or {cancel}."
-  menu-admin-ban-time-actions: "&eLeft-click: +1\n&eRight-click: -1\n&eWith shift: 10 at once"
+  menu-admin-ban-time-actions: "&eLeft-click: +1\n&eRight-click: -1\n&eWith shift: {step} at once"
   menu-admin-ban-time-lore: "&7Altogether: &f{time}"
   menu-admin-ban-title: "&8Ban {player}"
   menu-admin-banned: "&cBanned {ban}"
@@ -250,8 +251,6 @@ messages:
   menu-admin-trails-title: "&8Flights"
   menu-admin-unban: "&aLift the ban"
   menu-admin-unban-lore: "&7Cam mode is open again."
-  menu-admin-unban-none: "&7Not banned"
-  menu-admin-unban-none-lore: "&7There is no ban to lift."
   menu-answer-cancelled: "&7Cancelled."
   menu-back: "&bBack to your body"
   menu-back-lore: "&7The camera goes back to your body,\n&7cam mode goes on."
