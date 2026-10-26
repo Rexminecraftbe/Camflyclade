@@ -790,7 +790,8 @@ public final class CamMenu implements Listener {
      * How long a ban lasts and why, before it is given or changed: for good,
      * or days, hours and minutes added and taken away on their buttons, and a
      * reason written in the chat if he likes; then the button that bans. A
-     * ban that holds already can be lifted here as well.
+     * ban that holds already keeps its reason: in place of the reason the
+     * page has the button that lifts it.
      */
     private void openBan(Player player) {
         BanDraft draft = drafts.get(player.getUniqueId());
@@ -815,22 +816,33 @@ public final class CamMenu implements Listener {
         banUnit(player, page, 12, "menu-admin-ban-days", draft, DAY, draft.minutes / DAY, time);
         banUnit(player, page, 13, "menu-admin-ban-hours", draft, HOUR, draft.minutes % DAY / HOUR, time);
         banUnit(player, page, 14, "menu-admin-ban-minutes", draft, 1L, draft.minutes % HOUR, time);
-        String reason = draft.reason.isEmpty() ? messages.getMessage("menu-admin-ban-no-reason") : draft.reason;
-        List<String> reasonLore = new ArrayList<>(lines(messages.getMessage("menu-state").replace("{state}", reason)));
-        reasonLore.addAll(lines(messages.getMessage("menu-admin-ban-reason-actions")));
-        put(page, 16, Material.WRITABLE_BOOK, messages.getMessage("menu-admin-ban-reason"), reasonLore, click -> {
-            if (click.isRightClick()) {
-                later(() -> {
-                    draft.reason = "";
-                    openBan(player);
-                });
-            } else {
-                act(player, () -> ask(player, "menu-admin-ban-reason-question", answer -> {
-                    draft.reason = answer;
-                    openBan(player);
-                }, "{player}", target.name()));
-            }
-        });
+        if (draft.change) {
+            put(page, 16, Material.MILK_BUCKET, messages.getMessage("menu-admin-unban"),
+                    lines(messages.getMessage("menu-admin-unban-lore").replace("{player}", target.name())),
+                    click -> later(() -> {
+                        drafts.remove(player.getUniqueId());
+                        ban.unban(player, new String[]{target.everybody() ? "all" : target.name()});
+                        openTarget(player, target);
+                    }));
+        } else {
+            String reason = draft.reason.isEmpty() ? messages.getMessage("menu-admin-ban-no-reason") : draft.reason;
+            List<String> reasonLore = new ArrayList<>(lines(messages.getMessage("menu-state")
+                    .replace("{state}", reason)));
+            reasonLore.addAll(lines(messages.getMessage("menu-admin-ban-reason-actions")));
+            put(page, 16, Material.WRITABLE_BOOK, messages.getMessage("menu-admin-ban-reason"), reasonLore, click -> {
+                if (click.isRightClick()) {
+                    later(() -> {
+                        draft.reason = "";
+                        openBan(player);
+                    });
+                } else {
+                    act(player, () -> ask(player, "menu-admin-ban-reason-question", answer -> {
+                        draft.reason = answer;
+                        openBan(player);
+                    }, "{player}", target.name()));
+                }
+            });
+        }
         String summary = time;
         if (!draft.reason.isEmpty()) {
             summary += messages.getMessage("ban-reason").replace("{reason}", draft.reason);
@@ -844,13 +856,6 @@ public final class CamMenu implements Listener {
                     ban.ban(player, target.everybody() ? "all" : target.name(), draft.minutes, draft.reason);
                     openTarget(player, target);
                 }));
-        if (draft.change) {
-            put(page, 26, Material.MILK_BUCKET, "menu-admin-unban", click -> later(() -> {
-                drafts.remove(player.getUniqueId());
-                ban.unban(player, new String[]{target.everybody() ? "all" : target.name()});
-                openTarget(player, target);
-            }));
-        }
         put(page, 18, Material.ARROW, "menu-to-target", click -> later(() -> openTarget(player, target)));
         player.openInventory(inventory);
     }

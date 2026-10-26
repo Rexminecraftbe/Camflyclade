@@ -4186,12 +4186,16 @@ def bann_checks(env, bot):
     laufender Cam-Modus endet, er erfaehrt, wer es war, und ein neuer Start
     wird abgelehnt, mit der Zeit, die noch bleibt, und dem Grund. Die Sperre
     steht in playerdata/bans.yml und in /cam banlist und bleibt nach
-    /cam reload. Noch einmal /cam ban mit 2h aendert sie, und beide erfahren,
-    dass sie geaendert ist. /cam unban hebt sie auf, ein
-    zweites Mal sagt es, dass er nicht gesperrt ist. Eine Sperre fuer drei
+    /cam reload. Noch einmal /cam ban aendert sie, und beide erfahren es;
+    er erfaehrt mehr: mit 2h die neue Zeit, bis wann und wie viel laenger,
+    mit 30m wie viel weniger, ohne Zeit, dass sie dauerhaft ist, und mit 1h,
+    dass sie das nicht mehr ist und bis wann. /cam unban schaltet ihn wieder
+    frei, er erfaehrt von wem; ein zweites Mal sagt es, dass er nicht
+    gesperrt ist. Eine Sperre fuer drei
     Sekunden laeuft von selbst ab. /cam ban all von der Konsole sperrt den
     zweiten Spieler aus, den Bot nicht: Als op hat er camplugin.ban.bypass.
-    /cam unban all macht wieder auf. Ein unbekannter Name wird gemeldet, und
+    Noch einmal mit 2h sagt sie ihm, wie viel laenger. /cam unban all macht
+    wieder auf. Ein unbekannter Name wird gemeldet, und
     ohne op fehlt das Recht. Eine bans.yml von vor dem Umzug, noch direkt in
     plugins/CamFly, zieht beim Laden nach playerdata um und gilt weiter.
     """
@@ -4269,20 +4273,36 @@ def bann_checks(env, bot):
         zeilen = befehl(zuschauer, "/cam")
         FIND.test("cam-ban: nach /cam reload ist er immer noch gesperrt",
                   gesagt(zeilen, r"You are banned from cam mode"), zeige(zeilen))
+        datum = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}"
         since = zuschauer.mark()
         zeilen = befehl(bot, f"/cam ban {ZUSCHAUER_NAME} 2h")
         FIND.test("/cam ban noch einmal: die Sperre ist geaendert, jetzt zwei Stunden ohne Grund",
                   gesagt(zeilen, rf"{ZUSCHAUER_NAME} is now banned from cam mode for 2h 0m 0s\."), zeige(zeilen))
-        FIND.test("/cam ban noch einmal: er erfaehrt, dass seine Sperre geaendert ist",
-                  bool(zuschauer.expect(rf"{BOT_NAME} changed your ban: you are banned from cam mode for "
-                                        rf"(1h 59m \d+s|2h 0m 0s)\.", since, 4000)), "")
+        FIND.test("/cam ban noch einmal, laenger: er erfaehrt die neue Zeit, bis wann und wie viel laenger",
+                  bool(zuschauer.expect(rf"{BOT_NAME} changed your cam mode ban: it now lasts for 2h 0m 0s, "
+                                        rf"until {datum}\. You have to wait 1h [01]m 0s longer\.", since, 4000)), "")
+        since = zuschauer.mark()
+        befehl(bot, f"/cam ban {ZUSCHAUER_NAME} 30m")
+        FIND.test("/cam ban noch einmal, kuerzer: er erfaehrt, wie viel weniger",
+                  bool(zuschauer.expect(rf"changed your cam mode ban: it now lasts for 30m 0s, until {datum}\. "
+                                        rf"You have to wait 1h (29|30)m 0s less\.", since, 4000)), "")
+        since = zuschauer.mark()
+        befehl(bot, f"/cam ban {ZUSCHAUER_NAME}")
+        FIND.test("/cam ban noch einmal, ohne Zeit: er erfaehrt, dass sie jetzt dauerhaft ist",
+                  bool(zuschauer.expect(rf"{BOT_NAME} changed your cam mode ban: it is permanent now\.", since, 4000)),
+                  "")
+        since = zuschauer.mark()
+        befehl(bot, f"/cam ban {ZUSCHAUER_NAME} 1h")
+        FIND.test("/cam ban noch einmal, wieder mit Zeit: er erfaehrt, dass sie nicht mehr dauerhaft ist und bis wann",
+                  bool(zuschauer.expect(rf"changed your cam mode ban: it is not permanent any more and ends on "
+                                        rf"{datum}\.", since, 4000)), "")
 
         since = zuschauer.mark()
         zeilen = befehl(bot, f"/cam unban {ZUSCHAUER_NAME}")
-        FIND.test("/cam unban <Name>: die Bestaetigung", gesagt(zeilen, rf"{ZUSCHAUER_NAME} may use cam mode again"),
-                  zeige(zeilen))
-        FIND.test("/cam unban <Name>: er erfaehrt es",
-                  bool(zuschauer.expect(r"You may use cam mode again", since, 4000)), "")
+        FIND.test("/cam unban <Name>: die Bestaetigung - er ist freigeschaltet",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} is unlocked and may use cam mode again"), zeige(zeilen))
+        FIND.test("/cam unban <Name>: er erfaehrt, wer ihn freigeschaltet hat",
+                  bool(zuschauer.expect(rf"{BOT_NAME} unlocked you: you may use cam mode again", since, 4000)), "")
         an = kamera_an()
         cam_off(zuschauer)
         FIND.test("/cam unban <Name>: danach startet er wieder", an, "")
@@ -4323,11 +4343,21 @@ def bann_checks(env, bot):
         FIND.test("/cam banlist nennt die Sperre fuer alle",
                   gesagt(zeilen, rf"Everybody: {stunde}, by the server \(Event\)"), zeige(zeilen))
         since = zuschauer.mark()
+        log = konsole("cam ban all 2h Event")
+        FIND.test("/cam ban all noch einmal: die Bestaetigung sagt, dass sie geaendert ist",
+                  "Cam mode is now locked for everybody for 2h 0m 0s because: Event." in log,
+                  log.strip()[-200:] or "nichts im Log")
+        FIND.test("/cam ban all noch einmal: der zweite Spieler erfaehrt, wie viel laenger",
+                  bool(zuschauer.expect(rf"the server changed the lock of cam mode for everybody: it now lasts for "
+                                        rf"2h 0m 0s, until {datum}\. You have to wait 1h [01]m 0s longer\.", since,
+                                        4000)), "")
+        since = zuschauer.mark()
         log = konsole("cam unban all")
         FIND.test("/cam unban all von der Konsole: die Bestaetigung",
-                  "Cam mode is open for everybody again" in log, log.strip()[-200:] or "nichts im Log")
-        FIND.test("/cam unban all: der zweite Spieler erfaehrt es",
-                  bool(zuschauer.expect(r"Cam mode is open for everybody again", since, 4000)), "")
+                  "Cam mode is unlocked: everybody may use it again" in log, log.strip()[-200:] or "nichts im Log")
+        FIND.test("/cam unban all: der zweite Spieler erfaehrt es, und von wem",
+                  bool(zuschauer.expect(r"the server unlocked cam mode: everybody may use it again", since, 4000)),
+                  "")
         an = kamera_an()
         cam_off(zuschauer)
         FIND.test("/cam unban all: danach startet er wieder", an, "")
@@ -6155,8 +6185,10 @@ def menue_checks(env, bot):
     einer, der mit 1h anfaengt, bleibt der Grund -, und die Nachricht sagt
     "because:". Danach steht Banned unter dem Kopf, der Knopf Change the ban
     glaenzt; einen eigenen Knopf zum Aufheben hat die Seite nicht. Change
-    the ban hat die Zeit, die noch bleibt; ein Tag mehr gibt die Nachricht,
-    dass die Sperre geaendert ist, und Lift the ban dort hebt sie auf. Mit
+    the ban hat die Zeit, die noch bleibt, und statt des Grundes Lift the
+    ban, das sagt, dass er wieder freigeschaltet ist; ein Tag mehr gibt die
+    Nachricht, dass die Sperre geaendert ist, und Lift the ban hebt sie auf.
+    Mit
     cam-trail.enabled: true und zwei Fluegen sagt der Kopf des Bots auf der
     Seite der Flugspuren, dass zwei gemerkt sind; ein Klick zeigt sie, den
     neuesten zuerst, mit Datum, Dauer, Strecke, Start und Ende. Linksklick
@@ -6400,11 +6432,14 @@ def menue_checks(env, bot):
         klick(15)
         f = fenster()
         knopf = f.get("slots", {})
-        FIND.test("Change the ban: die Seite hat die Zeit, die noch bleibt, den Grund und Lift the ban",
+        FIND.test("Change the ban: die Seite hat die Zeit, die noch bleibt, und statt des Grundes Lift the ban",
                   "Change the ban of Everybody" in (f.get("title") or "") and "Hours: 1" in item_text(knopf.get("13"))
-                  and "Minutes: 4" in item_text(knopf.get("14")) and "1h Testgrund" in item_text(knopf.get("16"))
-                  and "Change the ban" in item_text(knopf.get("22")) and "Lift the ban" in item_text(knopf.get("26")),
-                  f"{f.get('title')} / {item_text(knopf.get('13'))} / {item_text(knopf.get('14'))}")
+                  and "Minutes: 4" in item_text(knopf.get("14")) and "Lift the ban" in item_text(knopf.get("16"))
+                  and "Everybody is unlocked and" in item_text(knopf.get("16"))
+                  and "may use cam mode again" in item_text(knopf.get("16"))
+                  and not any("Reason" in item_text(v) for v in knopf.values())
+                  and "Change the ban" in item_text(knopf.get("22")) and "26" not in knopf,
+                  f"{f.get('title')} / {item_text(knopf.get('14'))} / {item_text(knopf.get('16'))}")
         klick(12)
         seit = bot.mark()
         klick(22, warten=2.0)
@@ -6414,11 +6449,12 @@ def menue_checks(env, bot):
                   zeige(zeilen))
         klick(15)
         seit = bot.mark()
-        klick(26, warten=2.0)
+        klick(16, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
         knopf = fenster().get("slots", {})
         FIND.test("Lift the ban auf der Seite der Sperre hebt sie auf, danach steht wieder Ban da",
-                  gesagt(zeilen, r"Cam mode is open for everybody again") and "Ban" in item_text(knopf.get("15"))
+                  gesagt(zeilen, r"Cam mode is unlocked: everybody may use it again")
+                  and "Ban" in item_text(knopf.get("15"))
                   and not (knopf.get("15") or {}).get("glint"), f"{zeige(zeilen)} / {item_text(knopf.get('15'))}")
         bot.call("close_window", wait=10)
         set_options(env, [("enabled", "false", "cam-ban"), ("enabled", "false", "stop-command"),

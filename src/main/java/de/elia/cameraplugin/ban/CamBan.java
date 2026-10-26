@@ -11,6 +11,10 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.Map;
@@ -41,7 +45,8 @@ import java.util.regex.Pattern;
  * of a single player holds for everybody, operators included: it is meant
  * for him by name. Banning again whom a ban holds already changes his ban:
  * the new time and reason take the place of the old ones, and the texts say
- * so.</p>
+ * so - to him, whether he has to wait longer or less, or whether it is for
+ * good now or not any more.</p>
  */
 public final class CamBan {
 
@@ -155,7 +160,8 @@ public final class CamBan {
     private void give(CommandSender sender, String who, long now, long until, String reason) {
         String by = name(sender);
         if (who.equalsIgnoreCase(ALL)) {
-            boolean change = bans.everybody() != null;
+            BanList.Ban old = bans.everybody();
+            boolean change = old != null;
             BanList.Ban ban = new BanList.Ban(null, until, reason, by);
             bans.banEverybody(ban);
             for (Player player : Bukkit.getOnlinePlayers()) {
@@ -165,8 +171,9 @@ public final class CamBan {
                 if (plugin.isInCameraMode(player)) {
                     plugin.exitCameraMode(player, EndReason.BAN);
                 }
-                messages.sendMessage(player, change ? "banned-everybody-changed-now" : "banned-everybody-now",
-                        "{player}", by, "{time}", time(ban, now), "{reason}", reason(ban));
+                messages.sendMessage(player, change ? changed("banned-everybody-changed-", old, ban)
+                                : "banned-everybody-now", "{player}", by, "{time}", time(ban, now),
+                        "{reason}", reason(ban), "{date}", date(ban), "{diff}", difference(old, ban));
             }
             messages.sendConfiguredMessage(sender, change ? "ban-everybody-changed" : "ban-everybody-done",
                     "{time}", time(ban, now), "{reason}", reason(ban));
@@ -178,7 +185,8 @@ public final class CamBan {
             return;
         }
         String name = target.getName() != null ? target.getName() : who;
-        boolean change = bans.get(target.getUniqueId()) != null;
+        BanList.Ban old = bans.get(target.getUniqueId());
+        boolean change = old != null;
         BanList.Ban ban = new BanList.Ban(name, until, reason, by);
         bans.ban(target.getUniqueId(), ban);
         Player online = target.getPlayer();
@@ -186,8 +194,9 @@ public final class CamBan {
             if (plugin.isInCameraMode(online)) {
                 plugin.exitCameraMode(online, EndReason.BAN);
             }
-            messages.sendMessage(online, change ? "banned-changed-now" : "banned-now", "{player}", by,
-                    "{time}", time(ban, now), "{reason}", reason(ban));
+            messages.sendMessage(online, change ? changed("banned-changed-", old, ban) : "banned-now",
+                    "{player}", by, "{time}", time(ban, now), "{reason}", reason(ban),
+                    "{date}", date(ban), "{diff}", difference(old, ban));
         }
         messages.sendConfiguredMessage(sender, change ? "ban-changed" : "ban-done", "{player}", name,
                 "{time}", time(ban, now), "{reason}", reason(ban));
@@ -209,7 +218,7 @@ public final class CamBan {
             }
             for (Player player : Bukkit.getOnlinePlayers()) {
                 if (!player.equals(sender) && !player.hasPermission(BYPASS)) {
-                    messages.sendMessage(player, "unbanned-everybody-now");
+                    messages.sendMessage(player, "unbanned-everybody-now", "{player}", name(sender));
                 }
             }
             messages.sendConfiguredMessage(sender, "unban-everybody-done");
@@ -222,7 +231,7 @@ public final class CamBan {
         }
         Player online = Bukkit.getPlayer(id);
         if (online != null) {
-            messages.sendMessage(online, "unbanned-now");
+            messages.sendMessage(online, "unbanned-now", "{player}", name(sender));
         }
         OfflinePlayer target = Bukkit.getOfflinePlayer(id);
         messages.sendConfiguredMessage(sender, "unban-done",
@@ -324,6 +333,50 @@ public final class CamBan {
     /** Why, the way the texts put it behind the time, or nothing when no reason was given. */
     private String reason(BanList.Ban ban) {
         return ban.reason().isEmpty() ? "" : messages.getMessage("ban-reason").replace("{reason}", ban.reason());
+    }
+
+    /**
+     * Which text tells whom a changed ban holds how it changed, after its
+     * {@code prefix}: {@code forever} when it is for good now, {@code until}
+     * when it was for good and is not any more, {@code longer} or
+     * {@code shorter} by a minute or more, else {@code now}.
+     */
+    private static String changed(String prefix, BanList.Ban old, BanList.Ban ban) {
+        if (ban.forGood() || old.forGood()) {
+            return prefix + (ban.forGood() == old.forGood() ? "now" : ban.forGood() ? "forever" : "until");
+        }
+        long diff = ban.until() - old.until();
+        return prefix + (Math.abs(diff) < 60_000L ? "now" : diff > 0L ? "longer" : "shorter");
+    }
+
+    /**
+     * By how much a ban lasts longer or shorter than the one it changed, in
+     * whole minutes, the way the texts write a duration; nothing where either
+     * is for good.
+     */
+    private static String difference(BanList.Ban old, BanList.Ban ban) {
+        if (old == null || old.forGood() || ban.forGood()) {
+            return "";
+        }
+        long minutes = Math.round(Math.abs(ban.until() - old.until()) / 60_000.0);
+        return CamTimeLimit.formatDuration(minutes * 60L);
+    }
+
+    /**
+     * When a ban ends, as {@code ban-date} writes it, in the time zone of the
+     * server; nothing for one for good. A pattern that is none falls back on
+     * year, month, day, hour and minute.
+     */
+    private String date(BanList.Ban ban) {
+        if (ban.forGood()) {
+            return "";
+        }
+        ZonedDateTime when = Instant.ofEpochMilli(ban.until()).atZone(ZoneId.systemDefault());
+        try {
+            return DateTimeFormatter.ofPattern(messages.getMessage("ban-date")).format(when);
+        } catch (IllegalArgumentException ex) {
+            return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(when);
+        }
     }
 
     /** Why, the way {@code /cam banlist} puts it behind who banned, or nothing when no reason was given. */

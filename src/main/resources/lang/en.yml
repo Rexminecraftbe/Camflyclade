@@ -41,8 +41,13 @@ messages:
   back-to-body: "&aBack at your body"
   # /cam ban: {time} is ban-for or ban-for-good, {reason} is ban-reason (in /cam banlist banlist-reason) or nothing
   # when no reason was given, {player} who was banned or who banned, {by} who banned. Banning again whom a ban holds
-  # already changes his ban: then ban-changed, ban-everybody-changed and the -changed-now ones come instead.
+  # already changes his ban: then ban-changed and ban-everybody-changed come instead, and whom it holds learns how it
+  # changed - banned-changed-longer or -shorter by {diff} (in whole minutes), now lasting {time} until {date} (as
+  # ban-date writes it, a pattern of Java's DateTimeFormatter, in the time zone of the server), -forever when it is
+  # for good now, -until when it was for good and is not any more, else -now. The same for everybody:
+  # banned-everybody-changed-...
   ban-changed: "&a{player} is now banned from cam mode {time}{reason}."
+  ban-date: "yyyy-MM-dd HH:mm"
   ban-done: "&a{player} is banned from cam mode {time}{reason}."
   ban-everybody-changed: "&aCam mode is now locked for everybody {time}{reason}."
   ban-everybody-done: "&aCam mode is locked for everybody {time}{reason}."
@@ -58,9 +63,17 @@ messages:
   banlist-header: "&eBanned from cam mode ({count}):"
   banlist-reason: " ({reason})"
   banned: "&cYou are banned from cam mode {time}{reason}."
+  banned-changed-forever: "&c{player} changed your cam mode ban: it is permanent now."
+  banned-changed-longer: "&c{player} changed your cam mode ban: it now lasts {time}, until {date}. You have to wait {diff} longer."
   banned-changed-now: "&c{player} changed your ban: you are banned from cam mode {time}{reason}."
+  banned-changed-shorter: "&a{player} changed your cam mode ban: it now lasts {time}, until {date}. You have to wait {diff} less."
+  banned-changed-until: "&a{player} changed your cam mode ban: it is not permanent any more and ends on {date}."
   banned-everybody: "&cCam mode is locked for everybody {time}{reason}."
+  banned-everybody-changed-forever: "&c{player} changed the lock of cam mode for everybody: it is permanent now."
+  banned-everybody-changed-longer: "&c{player} changed the lock of cam mode for everybody: it now lasts {time}, until {date}. You have to wait {diff} longer."
   banned-everybody-changed-now: "&c{player} changed the lock: cam mode is locked for everybody {time}{reason}."
+  banned-everybody-changed-shorter: "&a{player} changed the lock of cam mode for everybody: it now lasts {time}, until {date}. You have to wait {diff} less."
+  banned-everybody-changed-until: "&a{player} changed the lock of cam mode for everybody: it is not permanent any more and ends on {date}."
   banned-everybody-now: "&c{player} locked cam mode for everybody {time}{reason}."
   banned-now: "&c{player} banned you from cam mode {time}{reason}."
   battery-bossbar: "Battery: {time}"
@@ -180,7 +193,7 @@ messages:
   # menu-admin-ban-time-lore under them ({time} as ban-for or ban-for-good), menu-admin-ban-confirm-lore says what
   # the ban will be ({ban}: {time} with ban-reason), and menu-admin-banned how a ban stands; {step} in
   # menu-admin-ban-time-actions is menu.ban-shift-step. The -change ones are there instead while the player is banned
-  # already: then the page changes his ban, and menu-admin-unban lifts it.
+  # already: then the page changes his ban, and menu-admin-unban ({player} in its -lore) lifts it.
   menu-admin: "&cAdmin"
   menu-admin-ban: "&cBan"
   menu-admin-ban-change: "&cChange the ban"
@@ -250,7 +263,7 @@ messages:
   menu-admin-trails-lore: "&7Where the cameras flew."
   menu-admin-trails-title: "&8Flights"
   menu-admin-unban: "&aLift the ban"
-  menu-admin-unban-lore: "&7Cam mode is open again."
+  menu-admin-unban-lore: "&7{player} is unlocked and\n&7may use cam mode again."
   menu-answer-cancelled: "&7Cancelled."
   menu-back: "&bBack to your body"
   menu-back-lore: "&7The camera goes back to your body,\n&7cam mode goes on."
@@ -503,12 +516,13 @@ messages:
   trail-shown: "&aShown for {time}, from green at the body to red at the camera. /cam trail hides it."
   trail-to: "&7Camera last at &f{place}"
   trail-usage: "&eUse /cam trail <player> [number|all] to show cam flights of a player, /cam trail to hide them."
-  unban-done: "&a{player} may use cam mode again."
-  unban-everybody-done: "&aCam mode is open for everybody again."
+  # unbanned-now and unbanned-everybody-now: {player} is who lifted it.
+  unban-done: "&a{player} is unlocked and may use cam mode again."
+  unban-everybody-done: "&aCam mode is unlocked: everybody may use it again."
   unban-everybody-none: "&eCam mode is not locked for everybody."
   unban-not-banned: "&e{player} is not banned from cam mode."
-  unbanned-everybody-now: "&aCam mode is open for everybody again."
-  unbanned-now: "&aYou may use cam mode again."
+  unbanned-everybody-now: "&a{player} unlocked cam mode: everybody may use it again."
+  unbanned-now: "&a{player} unlocked you: you may use cam mode again."
   # /cam visit (visitor-camera): {spot} is Owner:spot, or in visit-started and visit-ended the spot alone, {owner} whose
   # it is; {area} as in cam-area-limit. visit-started comes in the action bar, visit-ended when the owner takes the
   # share back or deletes the spot and the camera goes back to its body.
@@ -835,9 +849,17 @@ message-settings:
   banlist-everybody: true
   banlist-header: true
   banned: true
+  banned-changed-forever: true
+  banned-changed-longer: true
   banned-changed-now: true
+  banned-changed-shorter: true
+  banned-changed-until: true
   banned-everybody: true
+  banned-everybody-changed-forever: true
+  banned-everybody-changed-longer: true
   banned-everybody-changed-now: true
+  banned-everybody-changed-shorter: true
+  banned-everybody-changed-until: true
   banned-everybody-now: true
   banned-now: true
   body-alarm-mob: true
