@@ -40,7 +40,8 @@ messages:
   back-off: "&c/cam back is switched off."
   back-to-body: "&aBack at your body"
   # /cam ban: {time} is ban-for or ban-for-good, {reason} is ban-reason (in /cam banlist banlist-reason) or nothing
-  # when no reason was given, {player} who was banned or who banned, {by} who banned. Banning again whom a ban holds
+  # when no reason was given; a ban for good with a reason leaves {time} out, "because:" says enough then (but not in
+  # /cam banlist). {player} is who was banned or who banned, {by} who banned. Banning again whom a ban holds
   # already changes his ban: then ban-changed and ban-everybody-changed come instead, and whom it holds learns how it
   # changed - banned-changed-longer or -shorter by {diff} (in whole minutes), now lasting {time} until {date} (as
   # ban-date writes it, a pattern of Java's DateTimeFormatter, in the time zone of the server), -forever when it is
@@ -263,7 +264,7 @@ messages:
   menu-admin-trails-lore: "&7Where the cameras flew."
   menu-admin-trails-title: "&8Flights"
   menu-admin-unban: "&aLift the ban"
-  menu-admin-unban-lore: "&7{player} is unlocked and\n&7may use cam mode again."
+  menu-admin-unban-lore: "&7Unlock {player} again, so they\n&7can use cam mode again."
   menu-answer-cancelled: "&7Cancelled."
   menu-back: "&bBack to your body"
   menu-back-lore: "&7The camera goes back to your body,\n&7cam mode goes on."

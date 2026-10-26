@@ -107,13 +107,13 @@ public final class CamBan {
         long now = System.currentTimeMillis();
         BanList.Ban ban = bans.get(player.getUniqueId());
         if (ban != null) {
-            messages.sendMessage(player, "banned", "{time}", time(ban, now), "{reason}", reason(ban));
+            messages.sendMessage(player, "banned", "{time}", messageTime(ban, now), "{reason}", messageReason(ban));
             return false;
         }
         BanList.Ban everybody = bans.everybody();
         if (everybody != null && !player.hasPermission(BYPASS)) {
-            messages.sendMessage(player, "banned-everybody", "{time}", time(everybody, now),
-                    "{reason}", reason(everybody));
+            messages.sendMessage(player, "banned-everybody", "{time}", messageTime(everybody, now),
+                    "{reason}", messageReason(everybody));
             return false;
         }
         return true;
@@ -172,11 +172,11 @@ public final class CamBan {
                     plugin.exitCameraMode(player, EndReason.BAN);
                 }
                 messages.sendMessage(player, change ? changed("banned-everybody-changed-", old, ban)
-                                : "banned-everybody-now", "{player}", by, "{time}", time(ban, now),
-                        "{reason}", reason(ban), "{date}", date(ban), "{diff}", difference(old, ban));
+                                : "banned-everybody-now", "{player}", by, "{time}", messageTime(ban, now),
+                        "{reason}", messageReason(ban), "{date}", date(ban), "{diff}", difference(old, ban));
             }
             messages.sendConfiguredMessage(sender, change ? "ban-everybody-changed" : "ban-everybody-done",
-                    "{time}", time(ban, now), "{reason}", reason(ban));
+                    "{time}", messageTime(ban, now), "{reason}", messageReason(ban));
             return;
         }
         OfflinePlayer target = CamStats.find(who);
@@ -195,11 +195,11 @@ public final class CamBan {
                 plugin.exitCameraMode(online, EndReason.BAN);
             }
             messages.sendMessage(online, change ? changed("banned-changed-", old, ban) : "banned-now",
-                    "{player}", by, "{time}", time(ban, now), "{reason}", reason(ban),
+                    "{player}", by, "{time}", messageTime(ban, now), "{reason}", messageReason(ban),
                     "{date}", date(ban), "{diff}", difference(old, ban));
         }
         messages.sendConfiguredMessage(sender, change ? "ban-changed" : "ban-done", "{player}", name,
-                "{time}", time(ban, now), "{reason}", reason(ban));
+                "{time}", messageTime(ban, now), "{reason}", messageReason(ban));
     }
 
     /** {@code /cam unban}, with what follows it. */
@@ -333,6 +333,23 @@ public final class CamBan {
     /** Why, the way the texts put it behind the time, or nothing when no reason was given. */
     private String reason(BanList.Ban ban) {
         return ban.reason().isEmpty() ? "" : messages.getMessage("ban-reason").replace("{reason}", ban.reason());
+    }
+
+    /**
+     * {@code {time}} in the messages of a ban: as {@link #time} has it, but
+     * nothing for a ban for good with a reason - "banned you from cam mode
+     * because: ..." says enough then.
+     */
+    private String messageTime(BanList.Ban ban, long now) {
+        return ban.forGood() && !ban.reason().isEmpty() ? "" : time(ban, now);
+    }
+
+    /**
+     * {@code {reason}} in the messages of a ban: as {@link #reason} has it,
+     * without the space in front where {@link #messageTime} leaves the time out.
+     */
+    private String messageReason(BanList.Ban ban) {
+        return ban.forGood() ? reason(ban).stripLeading() : reason(ban);
     }
 
     /**

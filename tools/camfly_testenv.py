@@ -4191,7 +4191,8 @@ def bann_checks(env, bot):
     mit 30m wie viel weniger, ohne Zeit, dass sie dauerhaft ist, und mit 1h,
     dass sie das nicht mehr ist und bis wann. /cam unban schaltet ihn wieder
     frei, er erfaehrt von wem; ein zweites Mal sagt es, dass er nicht
-    gesperrt ist. Eine Sperre fuer drei
+    gesperrt ist. Fuer immer mit einem Grund heisst es nur "because: ...",
+    ohne for good - nur /cam banlist sagt for good. Eine Sperre fuer drei
     Sekunden laeuft von selbst ab. /cam ban all von der Konsole sperrt den
     zweiten Spieler aus, den Bot nicht: Als op hat er camplugin.ban.bypass.
     Noch einmal mit 2h sagt sie ihm, wie viel laenger. /cam unban all macht
@@ -4309,6 +4310,23 @@ def bann_checks(env, bot):
         zeilen = befehl(bot, f"/cam unban {ZUSCHAUER_NAME}")
         FIND.test("/cam unban: wer nicht gesperrt ist, wird gemeldet",
                   gesagt(zeilen, rf"{ZUSCHAUER_NAME} is not banned from cam mode"), zeige(zeilen))
+
+        since = zuschauer.mark()
+        zeilen = befehl(bot, f"/cam ban {ZUSCHAUER_NAME} Griefing")
+        FIND.test("/cam ban <Name> <Grund>, fuer immer: die Bestaetigung nennt nur den Grund, kein for good",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} is banned from cam mode because: Griefing\.")
+                  and not gesagt(zeilen, r"for good"), zeige(zeilen))
+        FIND.test("/cam ban <Name> <Grund>, fuer immer: er erfaehrt es ohne for good",
+                  bool(zuschauer.expect(rf"{BOT_NAME} banned you from cam mode because: Griefing\.", since, 4000)),
+                  "")
+        zeilen = befehl(zuschauer, "/cam")
+        FIND.test("/cam ban <Name> <Grund>, fuer immer: beim Startversuch auch",
+                  gesagt(zeilen, r"You are banned from cam mode because: Griefing\.") and not gesagt(zeilen, r"for good"),
+                  zeige(zeilen))
+        zeilen = befehl(bot, "/cam banlist")
+        FIND.test("/cam banlist sagt dabei weiter for good",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME}: for good, by {BOT_NAME} \(Griefing\)"), zeige(zeilen))
+        befehl(bot, f"/cam unban {ZUSCHAUER_NAME}")
 
         befehl(bot, f"/cam ban {ZUSCHAUER_NAME} 3s")
         zeilen = befehl(zuschauer, "/cam")
@@ -6435,8 +6453,8 @@ def menue_checks(env, bot):
         FIND.test("Change the ban: die Seite hat die Zeit, die noch bleibt, und statt des Grundes Lift the ban",
                   "Change the ban of Everybody" in (f.get("title") or "") and "Hours: 1" in item_text(knopf.get("13"))
                   and "Minutes: 4" in item_text(knopf.get("14")) and "Lift the ban" in item_text(knopf.get("16"))
-                  and "Everybody is unlocked and" in item_text(knopf.get("16"))
-                  and "may use cam mode again" in item_text(knopf.get("16"))
+                  and "Unlock Everybody again, so they" in item_text(knopf.get("16"))
+                  and "can use cam mode again" in item_text(knopf.get("16"))
                   and not any("Reason" in item_text(v) for v in knopf.values())
                   and "Change the ban" in item_text(knopf.get("22")) and "26" not in knopf,
                   f"{f.get('title')} / {item_text(knopf.get('14'))} / {item_text(knopf.get('16'))}")
