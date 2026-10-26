@@ -8,7 +8,6 @@ import de.elia.cameraplugin.display.ActionBarDisplay;
 import de.elia.cameraplugin.display.GlowMode;
 import de.elia.cameraplugin.display.NameMode;
 import de.elia.cameraplugin.list.ListAccess;
-import de.elia.cameraplugin.ban.CamBan;
 import de.elia.cameraplugin.menu.AdminButton;
 import de.elia.cameraplugin.menu.MenuAccess;
 import de.elia.cameraplugin.menu.MenuButton;
@@ -139,12 +138,6 @@ public final class CamSettings {
      * nothing is left to hide.
      */
     private static final double MAX_SCOUT_RADIUS = 256.0;
-
-    /** The times {@code menu.ban-times} has out of the box. */
-    private static final List<String> DEFAULT_BAN_TIMES = List.of("30m", "1h", "6h", "12h", "1d", "3d", "7d");
-
-    /** The most {@code menu.ban-times} has room for: one row of the page, with for good in front. */
-    private static final int MAX_BAN_TIMES = 8;
 
     /**
      * Keys that are read although the config file built into the jar leaves
@@ -366,8 +359,6 @@ public final class CamSettings {
     /** The same for the admin page, {@code menu.admin-buttons}. */
     private final Map<AdminButton, MenuIcon> adminIcons = new EnumMap<>(AdminButton.class);
     private final Map<AdminButton, Integer> adminSlots = new EnumMap<>(AdminButton.class);
-    /** The times a ban from the menu can last besides for good, {@code menu.ban-times}. */
-    private final List<String> banTimes = new ArrayList<>();
 
     /** Whether {@code /cam photo} is there, {@code photo-mode.enabled}. */
     private boolean photoModeEnabled;
@@ -694,7 +685,6 @@ public final class CamSettings {
         adminAccess = readMenuAccess(config, "menu.admin-access");
         readButtons(config, "menu.buttons", MenuButton.values(), menuIcons, menuSlots);
         readButtons(config, "menu.admin-buttons", AdminButton.values(), adminIcons, adminSlots);
-        readBanTimes(config);
         photoModeEnabled = config.getBoolean("photo-mode.enabled", true);
         photoHidePlayers = config.getBoolean("photo-mode.hide-players", true);
         photoHideBodies = config.getBoolean("photo-mode.hide-bodies", true);
@@ -965,28 +955,6 @@ public final class CamSettings {
             }
         }
         return null;
-    }
-
-    /**
-     * Reads {@code menu.ban-times}: the times a ban from the menu can last
-     * besides for good, as {@code /cam ban} takes them. One that is none is
-     * noted and left out, and so is every one past the eighth: one row of the
-     * page holds them, with for good in front.
-     */
-    private void readBanTimes(ConfigReader config) {
-        banTimes.clear();
-        List<String> raw = config.getStringList("menu.ban-times", DEFAULT_BAN_TIMES);
-        for (String time : raw) {
-            String word = time.trim().toLowerCase(Locale.ROOT);
-            if (!CamBan.isTime(word)) {
-                config.warnUnknownEntry("menu.ban-times", time);
-            } else if (banTimes.size() < MAX_BAN_TIMES && !banTimes.contains(word)) {
-                banTimes.add(word);
-            } else if (!banTimes.contains(word)) {
-                config.warnTooManyEntries("menu.ban-times", MAX_BAN_TIMES);
-                break;
-            }
-        }
     }
 
     /**
@@ -1641,11 +1609,6 @@ public final class CamSettings {
     /** Where a button of the admin page of the menu stands. */
     public int getAdminSlot(AdminButton button) {
         return adminSlots.get(button);
-    }
-
-    /** The times a ban from the menu can last besides for good, as {@code /cam ban} takes them. */
-    public List<String> getBanTimes() {
-        return Collections.unmodifiableList(banTimes);
     }
 
     public boolean isPhotoModeEnabled() {

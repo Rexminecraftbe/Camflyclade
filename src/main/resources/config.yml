@@ -598,7 +598,7 @@ menu:
   # Wie Admins an list, stats player, stop, ban, unban, banlist, trail und tp kommen - dieselben Werte wie bei access.
   # Die Rechte dafür (camplugin.list, camplugin.stop ...) brauchen sie so oder so, und was in dieser Datei aus ist
   # (z. B. cam-ban.enabled: false), fehlt auch im Menü. /cam reload geht immer als Befehl, und die Konsole darf alles,
-  # sie hat ja kein Menü. Beim Sperren über das Menü fragt der Chat nach Dauer und Grund (abbrechen mit cancel).
+  # sie hat ja kein Menü. Beim Sperren über das Menü fragt der Chat nach dem Grund (abbrechen mit cancel).
   admin-access: menu
   # Die Knöpfe der ersten Seite des Menüs (drei Reihen zu je neun Plätzen):
   #   item = was der Knopf zeigt: ein Item wie bei /give (z. B. clock, ender_pearl, minecraft:compass), dazu
@@ -663,8 +663,10 @@ menu:
       item: spyglass
       slot: 10
     # Spieler stoppen und sperren: ein Klick auf einen Kopf - oder auf "Everybody" für alle - zeigt, was geht: den
-    # Cam-Modus beenden (stop-command, camplugin.stop) und sperren oder entsperren (cam-ban, camplugin.ban).
-    # Gesperrte Köpfe glänzen.
+    # Cam-Modus beenden (stop-command, camplugin.stop) und sperren, die Sperre ändern oder aufheben (cam-ban,
+    # camplugin.ban). Ist er gesperrt, glänzt der Knopf zum Sperren (einen Kopf zeichnet Minecraft nie glänzend).
+    # Die Dauer einer Sperre: für immer, oder Tage, Stunden und Minuten - Linksklick eins dazu, Rechtsklick eins
+    # weg, mit Umschalt zehn auf einmal. Bei einem Gesperrten steht da, was seine Sperre noch hat.
     players:
       item: iron_bars
       slot: 12
@@ -680,9 +682,6 @@ menu:
     back:
       item: arrow
       slot: 22
-  # Wie lange eine Sperre aus dem Menü dauern kann, außer für immer (das gibt es immer): Zahlen mit s, m, h, d oder w
-  # dahinter, auch zusammen, wie bei /cam ban - höchstens 8. Den Grund schreibt man, wenn man will, in den Chat.
-  ban-times: [30m, 1h, 6h, 12h, 1d, 3d, 7d]
 
 # Den Cam-Modus mit der Taste zum Tauschen der Hände beenden (voreingestellt F), wie mit /cam.
 # Geht mit leeren Händen. Hat ein Spieler die Taste anders belegt, gilt seine - und der Hinweis
@@ -807,7 +806,8 @@ anti-scouting:
 stop-command:
   enabled: true
 # /cam ban sperrt Spieler aus dem Cam-Modus aus, einzelne oder alle:
-#   /cam ban <Name> [Zeit] [Grund]  = einen Spieler, z. B. /cam ban Steve 2h Griefing (ohne Zeit für immer)
+#   /cam ban <Name> [Zeit] [Grund]  = einen Spieler, z. B. /cam ban Steve 2h Griefing (ohne Zeit für immer);
+#                                     ist er schon gesperrt, gelten ab jetzt die neue Zeit und der neue Grund
 #   /cam ban all [Zeit] [Grund]     = alle, z. B. während eines Events - außer wer das Recht camplugin.ban.bypass hat
 #                                     (Operatoren haben es)
 #   /cam unban <Name>               = die Sperre eines Spielers aufheben

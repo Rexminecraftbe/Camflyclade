@@ -39,7 +39,9 @@ import java.util.regex.Pattern;
  * <p>A ban ends a running camera mode at once, the way {@code /cam stop}
  * does, and is checked first of all when somebody tries to start one. A ban
  * of a single player holds for everybody, operators included: it is meant
- * for him by name.</p>
+ * for him by name. Banning again whom a ban holds already changes his ban:
+ * the new time and reason take the place of the old ones, and the texts say
+ * so.</p>
  */
 public final class CamBan {
 
@@ -128,9 +130,32 @@ public final class CamBan {
             until = now + millis(args[1]);
             reasonFrom = 2;
         }
-        String reason = String.join(" ", Arrays.copyOfRange(args, reasonFrom, args.length)).trim();
+        give(sender, args[0], now, until, String.join(" ", Arrays.copyOfRange(args, reasonFrom, args.length)).trim());
+    }
+
+    /**
+     * A ban from the menu, the same as {@code /cam ban}: the time in minutes,
+     * 0 for good, and the reason as it was written - one that begins with a
+     * word such as 2h included, which the command would take for the time.
+     *
+     * @param who a player by his name, or {@code all}
+     */
+    public void ban(CommandSender sender, String who, long minutes, String reason) {
+        if (!checkUse(sender)) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        give(sender, who, now, minutes > 0L ? now + Math.min(MAX_MILLIS, minutes * 60_000L) : 0L, reason.trim());
+    }
+
+    /**
+     * Bans a player, or everybody, until then - 0 for good -, or changes the
+     * ban that holds already.
+     */
+    private void give(CommandSender sender, String who, long now, long until, String reason) {
         String by = name(sender);
-        if (args[0].equalsIgnoreCase(ALL)) {
+        if (who.equalsIgnoreCase(ALL)) {
+            boolean change = bans.everybody() != null;
             BanList.Ban ban = new BanList.Ban(null, until, reason, by);
             bans.banEverybody(ban);
             for (Player player : Bukkit.getOnlinePlayers()) {
@@ -140,19 +165,20 @@ public final class CamBan {
                 if (plugin.isInCameraMode(player)) {
                     plugin.exitCameraMode(player, EndReason.BAN);
                 }
-                messages.sendMessage(player, "banned-everybody-now", "{player}", by,
-                        "{time}", time(ban, now), "{reason}", reason(ban));
+                messages.sendMessage(player, change ? "banned-everybody-changed-now" : "banned-everybody-now",
+                        "{player}", by, "{time}", time(ban, now), "{reason}", reason(ban));
             }
-            messages.sendConfiguredMessage(sender, "ban-everybody-done",
+            messages.sendConfiguredMessage(sender, change ? "ban-everybody-changed" : "ban-everybody-done",
                     "{time}", time(ban, now), "{reason}", reason(ban));
             return;
         }
-        OfflinePlayer target = CamStats.find(args[0]);
+        OfflinePlayer target = CamStats.find(who);
         if (target == null) {
-            messages.sendConfiguredMessage(sender, "ban-unknown-player", "{player}", args[0]);
+            messages.sendConfiguredMessage(sender, "ban-unknown-player", "{player}", who);
             return;
         }
-        String name = target.getName() != null ? target.getName() : args[0];
+        String name = target.getName() != null ? target.getName() : who;
+        boolean change = bans.get(target.getUniqueId()) != null;
         BanList.Ban ban = new BanList.Ban(name, until, reason, by);
         bans.ban(target.getUniqueId(), ban);
         Player online = target.getPlayer();
@@ -160,10 +186,10 @@ public final class CamBan {
             if (plugin.isInCameraMode(online)) {
                 plugin.exitCameraMode(online, EndReason.BAN);
             }
-            messages.sendMessage(online, "banned-now", "{player}", by,
+            messages.sendMessage(online, change ? "banned-changed-now" : "banned-now", "{player}", by,
                     "{time}", time(ban, now), "{reason}", reason(ban));
         }
-        messages.sendConfiguredMessage(sender, "ban-done", "{player}", name,
+        messages.sendConfiguredMessage(sender, change ? "ban-changed" : "ban-done", "{player}", name,
                 "{time}", time(ban, now), "{reason}", reason(ban));
     }
 
@@ -219,11 +245,11 @@ public final class CamBan {
                 "{count}", String.valueOf(players.size() + (everybody != null ? 1 : 0)));
         if (everybody != null) {
             messages.sendConfiguredMessage(sender, "banlist-everybody", "{time}", time(everybody, now),
-                    "{by}", everybody.by(), "{reason}", reason(everybody));
+                    "{by}", everybody.by(), "{reason}", listReason(everybody));
         }
         for (BanList.Ban ban : players.values()) {
             messages.sendConfiguredMessage(sender, "banlist-entry", "{player}", ban.name(),
-                    "{time}", time(ban, now), "{by}", ban.by(), "{reason}", reason(ban));
+                    "{time}", time(ban, now), "{by}", ban.by(), "{reason}", listReason(ban));
         }
     }
 
@@ -235,6 +261,16 @@ public final class CamBan {
     /** Whether this player is banned himself, for the menu. */
     public boolean isBanned(UUID playerId) {
         return bans.get(playerId) != null;
+    }
+
+    /** The ban of this player, or {@code null} while he is not banned. For the menu, which changes it. */
+    public BanList.Ban banOf(UUID playerId) {
+        return bans.get(playerId);
+    }
+
+    /** The ban of everybody, or {@code null} while there is none. For the menu, which changes it. */
+    public BanList.Ban everybodyBan() {
+        return bans.everybody();
     }
 
     /**
@@ -250,16 +286,6 @@ public final class CamBan {
     public String everybodyBanText() {
         BanList.Ban ban = bans.everybody();
         return ban == null ? null : time(ban, System.currentTimeMillis()) + reason(ban);
-    }
-
-    /** Whether a word is a time {@code /cam ban} takes, such as 2h or 1d12h, for {@code menu.ban-times}. */
-    public static boolean isTime(String word) {
-        return TIME.matcher(word).matches();
-    }
-
-    /** A time such as 2h written out the way the texts write a duration. */
-    public static String spell(String time) {
-        return CamTimeLimit.formatDuration(millis(time) / 1000L);
     }
 
     /** Whether there is a ban of everybody, for the tab completion of {@code /cam unban}. */
@@ -298,6 +324,11 @@ public final class CamBan {
     /** Why, the way the texts put it behind the time, or nothing when no reason was given. */
     private String reason(BanList.Ban ban) {
         return ban.reason().isEmpty() ? "" : messages.getMessage("ban-reason").replace("{reason}", ban.reason());
+    }
+
+    /** Why, the way {@code /cam banlist} puts it behind who banned, or nothing when no reason was given. */
+    private String listReason(BanList.Ban ban) {
+        return ban.reason().isEmpty() ? "" : messages.getMessage("banlist-reason").replace("{reason}", ban.reason());
     }
 
     /** Who bans, for the texts: a player by his name, the console as {@code console-name}. */

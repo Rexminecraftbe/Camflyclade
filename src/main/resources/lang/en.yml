@@ -39,22 +39,28 @@ messages:
   back-not-in-cam: "&cYou are not in cam mode."
   back-off: "&c/cam back is switched off."
   back-to-body: "&aBack at your body"
-  # /cam ban: {time} is ban-for or ban-for-good, {reason} is ban-reason or nothing when no reason was given,
-  # {player} who was banned or who banned, {by} who banned.
+  # /cam ban: {time} is ban-for or ban-for-good, {reason} is ban-reason (in /cam banlist banlist-reason) or nothing
+  # when no reason was given, {player} who was banned or who banned, {by} who banned. Banning again whom a ban holds
+  # already changes his ban: then ban-changed, ban-everybody-changed and the -changed-now ones come instead.
+  ban-changed: "&a{player} is now banned from cam mode {time}{reason}."
   ban-done: "&a{player} is banned from cam mode {time}{reason}."
+  ban-everybody-changed: "&aCam mode is now locked for everybody {time}{reason}."
   ban-everybody-done: "&aCam mode is locked for everybody {time}{reason}."
   ban-for: "for {time}"
   ban-for-good: "for good"
   ban-off: "&c/cam ban is switched off."
-  ban-reason: " ({reason})"
+  ban-reason: " because: {reason}"
   ban-unknown-player: "&cNobody called {player} has been on this server."
   ban-usage: "&eUse /cam ban <player|all> [time] [reason], /cam unban <player|all> or /cam banlist. A time is e.g. 30m, 2h or 7d."
   banlist-empty: "&eNobody is banned from cam mode."
   banlist-entry: "&7- &f{player}&7: {time}, by {by}{reason}"
   banlist-everybody: "&7- &fEverybody&7: {time}, by {by}{reason}"
   banlist-header: "&eBanned from cam mode ({count}):"
+  banlist-reason: " ({reason})"
   banned: "&cYou are banned from cam mode {time}{reason}."
+  banned-changed-now: "&c{player} changed your ban: you are banned from cam mode {time}{reason}."
   banned-everybody: "&cCam mode is locked for everybody {time}{reason}."
+  banned-everybody-changed-now: "&c{player} changed the lock: cam mode is locked for everybody {time}{reason}."
   banned-everybody-now: "&c{player} locked cam mode for everybody {time}{reason}."
   banned-now: "&c{player} banned you from cam mode {time}{reason}."
   battery-bossbar: "Battery: {time}"
@@ -135,7 +141,6 @@ messages:
   config-slot-taken: "&c{path}: slot {value} is taken by {other} already. Using slot {used} instead."
   config-syntax-unreadable: "unreadable"
   config-too-large: "&cValue for {path} is too large: {value}. Using {max} instead."
-  config-too-many-entries: "&c{path} has more than {max} entries. The ones after them are ignored."
   config-too-small: "&cValue for {path} is too small: {value}. Using {min} instead."
   config-unknown-entry: "&cUnknown entry in {path}: '{value}'. It is ignored."
   config-unknown-key: "&cUnknown setting {path}. It is ignored, check its spelling and indentation."
@@ -171,19 +176,29 @@ messages:
   # menu-admin-ban-reason-question why a player is banned ({player}), {cancel} being the word that calls either off,
   # with menu-answer-cancelled. Under menu-stats and the heads of menu-admin-stats stand the lines of /cam stats;
   # menu-admin-cam-lore and -away stand under the heads of who is in cam mode, like cam-list-entry. On the page of a
-  # ban, menu-admin-ban-time names each of menu.ban-times ({time} written out), menu-admin-ban-confirm-lore says
-  # what the ban will be ({ban} as ban-for or ban-for-good with ban-reason), and menu-admin-banned how a ban stands.
+  # ban, menu-admin-ban-days, -hours and -minutes say how many of them the ban has ({amount}), with
+  # menu-admin-ban-time-lore under them ({time} as ban-for or ban-for-good), menu-admin-ban-confirm-lore says what
+  # the ban will be ({ban}: {time} with ban-reason), and menu-admin-banned how a ban stands. The -change ones are
+  # there instead while the player is banned already: then the page changes his ban.
   menu-admin: "&cAdmin"
   menu-admin-ban: "&cBan"
+  menu-admin-ban-change: "&cChange the ban"
+  menu-admin-ban-change-confirm: "&4Change the ban"
+  menu-admin-ban-change-lore: "&7Banned now: change\n&7how long and why."
+  menu-admin-ban-change-title: "&8Change the ban of {player}"
   menu-admin-ban-confirm: "&4Ban"
   menu-admin-ban-confirm-lore: "&7{player}, {ban}"
+  menu-admin-ban-days: "&eDays: &f{amount}"
   menu-admin-ban-forever: "&cFor good"
+  menu-admin-ban-hours: "&eHours: &f{amount}"
   menu-admin-ban-lore: "&7Pick how long and why."
+  menu-admin-ban-minutes: "&eMinutes: &f{amount}"
   menu-admin-ban-no-reason: "&7none"
   menu-admin-ban-reason: "&fReason"
   menu-admin-ban-reason-actions: "&eLeft-click: write one in the chat\n&eRight-click: none"
   menu-admin-ban-reason-question: "&eType in the chat why {player} is banned, or {cancel}."
-  menu-admin-ban-time: "&eFor {time}"
+  menu-admin-ban-time-actions: "&eLeft-click: +1\n&eRight-click: -1\n&eWith shift: 10 at once"
+  menu-admin-ban-time-lore: "&7Altogether: &f{time}"
   menu-admin-ban-title: "&8Ban {player}"
   menu-admin-banned: "&cBanned {ban}"
   menu-admin-cam-lore: "&7In cam mode for {time},\n&7{distance} blocks from the body"
@@ -213,7 +228,7 @@ messages:
   menu-admin-player: "&f{player}"
   menu-admin-players: "&cPlayers: stop and ban"
   menu-admin-players-actions: "&eClick: stop or ban"
-  menu-admin-players-lore: "&7End the cam mode of a player,\n&7ban him or lift his ban."
+  menu-admin-players-lore: "&7End the cam mode of a player,\n&7ban him, change or lift his ban."
   menu-admin-players-title: "&8Players"
   menu-admin-stats: "&bStatistics of others"
   menu-admin-stats-actions: "&eClick: in the chat"
@@ -234,6 +249,9 @@ messages:
   menu-admin-trails-lore: "&7Where the cameras flew."
   menu-admin-trails-title: "&8Flights"
   menu-admin-unban: "&aLift the ban"
+  menu-admin-unban-lore: "&7Cam mode is open again."
+  menu-admin-unban-none: "&7Not banned"
+  menu-admin-unban-none-lore: "&7There is no ban to lift."
   menu-answer-cancelled: "&7Cancelled."
   menu-back: "&bBack to your body"
   menu-back-lore: "&7The camera goes back to your body,\n&7cam mode goes on."
@@ -806,7 +824,9 @@ message-settings:
   back-not-in-cam: true
   back-off: true
   back-to-body: true
+  ban-changed: true
   ban-done: true
+  ban-everybody-changed: true
   ban-everybody-done: true
   ban-off: true
   ban-unknown-player: true
@@ -816,7 +836,9 @@ message-settings:
   banlist-everybody: true
   banlist-header: true
   banned: true
+  banned-changed-now: true
   banned-everybody: true
+  banned-everybody-changed-now: true
   banned-everybody-now: true
   banned-now: true
   body-alarm-mob: true
