@@ -5996,7 +5996,9 @@ def flugtempo(env, name):
     Konsole gefragt, die jeden fragen darf."""
     vorher = len(server_log(env))
     console(env, f"data get entity {name} abilities.flySpeed", pause=1.0)
-    treffer = re.search(r"has the following entity data: (-?[\d.]+)f?", strip_colors(server_log(env)[vorher:]))
+    # Die Konsole faerbt die Zahl mit ANSI-Folgen ein.
+    text = re.sub(r"\x1b\[[0-9;]*m", "", strip_colors(server_log(env)[vorher:]))
+    treffer = re.search(rf"{name} has the following entity data: (-?[\d.]+)f?", text)
     return float(treffer.group(1)) if treffer else None
 
 
