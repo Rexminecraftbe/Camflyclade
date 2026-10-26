@@ -655,8 +655,8 @@ public final class CamSettings {
         camListAccess = readAccess(config, "cam-list.access");
         camListTeleport = config.getBoolean("cam-list.teleport", true);
         camListStop = config.getBoolean("cam-list.stop", true);
-        stopCommandEnabled = config.getBoolean("stop-command.enabled", false);
-        camBanEnabled = config.getBoolean("cam-ban.enabled", false);
+        stopCommandEnabled = config.getBoolean("stop-command.enabled", true);
+        camBanEnabled = config.getBoolean("cam-ban.enabled", true);
         afkEndEnabled = config.getBoolean("afk-end.enabled", false);
         afkEndSeconds = config.getInt("afk-end.seconds", 300, MIN_AFK_SECONDS);
         afkWarningPercent = config.getInt("afk-end.warning-percent", 80, 0, 99);
@@ -686,7 +686,7 @@ public final class CamSettings {
         camWeatherEnabled = config.getBoolean("cam-weather.enabled", true);
         startDelayEnabled = config.getBoolean("start-delay.enabled", false);
         startDelaySeconds = config.getInt("start-delay.seconds", 3, 1, MAX_START_DELAY_SECONDS);
-        trailEnabled = config.getBoolean("cam-trail.enabled", false);
+        trailEnabled = config.getBoolean("cam-trail.enabled", true);
         trailShowSeconds = config.getInt("cam-trail.show-seconds", 30, 1, MAX_TRAIL_SHOW_SECONDS);
         trailFlights = config.getInt("cam-trail.flights", 5, 1, MAX_TRAIL_FLIGHTS);
         endWarningEnabled = config.getBoolean("end-warning.enabled", true);

@@ -33,6 +33,10 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -720,9 +724,8 @@ public final class CamMenu implements Listener {
     }
 
     /**
-     * The flights of {@code /cam trail}: left-click shows the last of a
-     * player, right-click all that are kept; the last button hides the line
-     * again.
+     * The players whose flights {@code /cam trail} keeps: a click shows his
+     * flights. The last button hides a line that is shown.
      */
     private void openTrails(Player player, int pageNumber) {
         CamTrail trail = plugin.getTrail();
@@ -738,22 +741,90 @@ public final class CamMenu implements Listener {
         Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-trails-title"));
         for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < names.size(); slot++) {
             String name = names.get(number * ENTRIES + slot);
+            List<CamTrail.Flight> flights = trail.flightsOf(name);
             Player online = Bukkit.getPlayerExact(name);
             String label = messages.getMessage("menu-admin-player").replace("{player}", name);
-            List<String> lore = lines(messages.getMessage("menu-admin-trails-actions"));
-            put(page, slot, online != null ? head(online, label, lore) : item(Material.LEAD, label, lore), click -> {
-                if (click.isRightClick()) {
-                    act(player, () -> trail.command(player, new String[]{name, "all"}));
-                } else if (click.isLeftClick()) {
-                    act(player, () -> trail.command(player, new String[]{name}));
-                }
-            });
+            List<String> lore = new ArrayList<>();
+            if (!flights.isEmpty()) {
+                lore.addAll(lines(messages.getMessage("menu-admin-trails-count")
+                        .replace("{count}", String.valueOf(flights.size()))
+                        .replace("{date}", date(flights.get(0).startedAt()))));
+            }
+            lore.addAll(lines(messages.getMessage("menu-admin-trails-actions")));
+            put(page, slot, online != null ? head(online, label, lore) : item(Material.LEAD, label, lore),
+                    click -> later(() -> openFlights(player, name, 0)));
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
         put(page, SLOT_NEW, Material.BUCKET, "menu-admin-trails-hide",
                 click -> act(player, () -> trail.command(player, new String[0])));
         paging(page, number, pages, n -> openTrails(player, n));
         player.openInventory(inventory);
+    }
+
+    /**
+     * The flights kept of one player, the newest first: under each when it
+     * began, how long and how far it went, where it began and ended. A
+     * left-click shows it; a right-click shows it and takes him to where it
+     * began. The last button shows all of them at once.
+     */
+    private void openFlights(Player player, String name, int pageNumber) {
+        CamTrail trail = plugin.getTrail();
+        if (!trail.mayUse(player)) {
+            openAdmin(player);
+            return;
+        }
+        List<CamTrail.Flight> flights = trail.flightsOf(name);
+        if (flights.isEmpty()) {
+            openTrails(player, 0);
+            return;
+        }
+        int pages = Math.max(1, (flights.size() + ENTRIES - 1) / ENTRIES);
+        int number = Math.min(Math.max(0, pageNumber), pages - 1);
+        Page page = new Page();
+        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-flights-title")
+                .replace("{player}", name));
+        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < flights.size(); slot++) {
+            CamTrail.Flight flight = flights.get(number * ENTRIES + slot);
+            String when = date(flight.startedAt());
+            List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-flight-lore")
+                    .replace("{date}", when)
+                    .replace("{time}", CamTimeLimit.formatDuration(TimeUnit.MILLISECONDS.toSeconds(flight.duration())))
+                    .replace("{distance}", String.valueOf(Math.round(flight.distance())))
+                    .replace("{from}", trail.place(flight.start()))
+                    .replace("{to}", trail.place(flight.last()))));
+            if (flight.flying()) {
+                lore.addAll(lines(messages.getMessage("menu-admin-flight-flying")));
+            }
+            lore.addAll(lines(messages.getMessage("menu-admin-flight-actions")));
+            String label = messages.getMessage("menu-admin-flight")
+                    .replace("{number}", String.valueOf(flight.number())).replace("{date}", when);
+            put(page, slot, flight.flying() ? Material.ENDER_EYE : Material.PAPER, label, lore, click -> {
+                if (click.isRightClick()) {
+                    act(player, () -> trail.showFlight(player, name, flight.startedAt(), true));
+                } else if (click.isLeftClick()) {
+                    act(player, () -> trail.showFlight(player, name, flight.startedAt(), false));
+                }
+            });
+        }
+        put(page, SLOT_BACK, Material.ARROW, "menu-to-trails", click -> later(() -> openTrails(player, 0)));
+        put(page, SLOT_NEW, Material.SPYGLASS, "menu-admin-flights-all",
+                click -> act(player, () -> trail.command(player, new String[]{name, "all"})));
+        paging(page, number, pages, n -> openFlights(player, name, n));
+        player.openInventory(inventory);
+    }
+
+    /**
+     * A moment as {@code menu-admin-flight-date} writes it, in the time zone
+     * of the server. A pattern that is none falls back on year, month, day,
+     * hour and minute.
+     */
+    private String date(long millis) {
+        ZonedDateTime when = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault());
+        try {
+            return DateTimeFormatter.ofPattern(messages.getMessage("menu-admin-flight-date")).format(when);
+        } catch (IllegalArgumentException ex) {
+            return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(when);
+        }
     }
 
     /** The players online he can see, by name, for the admin pages. */

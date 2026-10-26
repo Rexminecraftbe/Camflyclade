@@ -172,12 +172,23 @@ messages:
   # menu-admin-stats stand the lines of /cam stats; menu-admin-list-lore and -away are those of cam-list-entry.
   menu-admin: "&cAdmin"
   menu-admin-ban-everybody: "&eEverybody"
+  # The flights of a player on the admin page: menu-admin-flight with {number} (1 the newest) and {date}, when it
+  # began as menu-admin-flight-date writes it (a pattern of Java's DateTimeFormatter, e.g. dd.MM.yyyy HH:mm), and
+  # under it menu-admin-flight-lore with {time} how long it took, {distance} in blocks, {from} where the body stood and
+  # {to} where the camera was last, both as trail-place has them.
   menu-admin-ban-question: "&eHow long and why is {player} to be banned? Type e.g. 2h Griefing - a reason alone bans for good, {none} for good without one - or {cancel}."
   menu-admin-banned-lore: "&cBanned - click to lift the ban."
   menu-admin-bans: "&cBans"
   menu-admin-bans-lore: "&7Keep players out of cam mode."
   menu-admin-bans-title: "&8Bans"
   menu-admin-everybody: "everybody"
+  menu-admin-flight: "&f#{number} &7- &f{date}"
+  menu-admin-flight-actions: "&eLeft-click: show it\n&eRight-click: show it and go to its start"
+  menu-admin-flight-date: "yyyy-MM-dd HH:mm"
+  menu-admin-flight-flying: "&aStill in cam mode"
+  menu-admin-flight-lore: "&7Started: &f{date}\n&7Duration: &f{time}\n&7Distance: &f{distance} blocks\n&7From: &f{from}\n&7To: &f{to}"
+  menu-admin-flights-all: "&eShow all flights"
+  menu-admin-flights-title: "&8Flights of {player}"
   menu-admin-list: "&bIn cam mode"
   menu-admin-list-actions-stop: "&cShift-click: end the cam mode"
   menu-admin-list-actions-teleport: "&eLeft-click: to the camera\n&eRight-click: to the body"
@@ -195,7 +206,8 @@ messages:
   menu-admin-stop-all-lore: "&7Shift-click, so that a slip\n&7of the mouse ends nothing."
   menu-admin-title: "&8Cam admin"
   menu-admin-trails: "&aFlights"
-  menu-admin-trails-actions: "&eLeft-click: the last flight\n&eRight-click: all kept flights"
+  menu-admin-trails-actions: "&eClick: his flights"
+  menu-admin-trails-count: "&7{count} flights kept, the last at {date}"
   menu-admin-trails-hide: "&7Hide the line"
   menu-admin-trails-lore: "&7Where the cameras flew."
   menu-admin-trails-title: "&8Flights"
@@ -269,6 +281,7 @@ messages:
   menu-time-title: "&8Time of day"
   menu-title: "&8Cam"
   menu-to-admin: "&7« Back"
+  menu-to-trails: "&7« Back"
   menu-to-main: "&7« Back"
   menu-to-spots: "&7« Back to the spots"
   menu-weather: "&bWeather"
@@ -424,7 +437,8 @@ messages:
   # /cam trail: {number} which of the kept flights (1 the newest), {distance} in blocks, {time} how long the flight
   # took, {when} trail-flying or trail-ago (with {time} how long ago it ended), {place} as trail-place has it, {world}
   # the worlds of the flight in trail-elsewhere. trail-flights is followed by a button for each kept flight,
-  # trail-button, and one for all of them, trail-button-all; hovering over them shows the -hover texts.
+  # trail-button, and one for all of them, trail-button-all; hovering over them shows the -hover texts. From the menu,
+  # trail-at-start says that he was taken to where the flight began, trail-gone that it is no longer kept.
   trail-ago: "ended {time} ago"
   trail-all-entry: "&7#{number}: &f{distance} blocks in {time}, {when}, camera last at {place}"
   trail-all-header: "&eThe last {count} cam flights of {player}:"
@@ -435,7 +449,9 @@ messages:
   trail-elsewhere: "&eNone of the flight is in your world, it is in {world}."
   trail-flights: "&7Kept flights:"
   trail-flying: "still in cam mode"
+  trail-at-start: "&aAt the start of cam flight #{number} of {player}"
   trail-from: "&7From the body at &f{place}"
+  trail-gone: "&e{player} has no such cam flight any more."
   trail-header: "&eCam flight #{number} of {player}: {distance} blocks in {time}, {when}"
   trail-hidden: "&aThe flight is hidden again."
   trail-no-such: "&e{player} has no cam flight #{number}, only {count} kept."
@@ -943,11 +959,13 @@ message-settings:
   time-usage: true
   trail-all-entry: true
   trail-all-header: true
+  trail-at-start: true
   trail-button: true
   trail-button-all: true
   trail-elsewhere: true
   trail-flights: true
   trail-from: true
+  trail-gone: true
   trail-header: true
   trail-hidden: true
   trail-no-such: true

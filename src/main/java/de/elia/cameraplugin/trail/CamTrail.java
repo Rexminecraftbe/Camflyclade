@@ -3,6 +3,7 @@ package de.elia.cameraplugin.trail;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.ClickEvent;
@@ -232,6 +233,91 @@ public final class CamTrail implements Listener {
         }
     }
 
+    /**
+     * One kept flight, as the menu shows it.
+     *
+     * @param number    which one: 1 for the newest, as {@code /cam trail} counts
+     * @param startedAt when it began, which tells it from the others
+     * @param endedAt   when it ended, 0 while the camera still flies
+     * @param duration  how long it took, or has taken so far, in milliseconds
+     * @param distance  how far the camera flew, in blocks
+     * @param start     where the body stood
+     * @param last      where the camera was last
+     */
+    public record Flight(int number, long startedAt, long endedAt, long duration, double distance,
+                         Location start, Location last) {
+
+        /** Whether the camera is still flying it. */
+        public boolean flying() {
+            return endedAt == 0L;
+        }
+    }
+
+    /** The flights kept of a player, the newest first, for the menu; none while there are none. */
+    public List<Flight> flightsOf(String name) {
+        Deque<FlightTrail> kept = find(name);
+        List<Flight> found = new ArrayList<>();
+        if (kept == null) {
+            return found;
+        }
+        int number = 1;
+        for (FlightTrail trail : kept) {
+            found.add(new Flight(number++, trail.startedAt(), trail.endedAt(), trail.duration(),
+                    trail.distanceFlown(), trail.start(), trail.last()));
+        }
+        return found;
+    }
+
+    /**
+     * Shows one kept flight to a viewer, from the menu: as
+     * {@code /cam trail <player> <number>} does, only found by when it
+     * began, which stays the same while newer flights move it back.
+     *
+     * @param toStart whether he is taken to where the body stood first, to
+     *                see the line from its beginning - out of camera mode,
+     *                if he is in it
+     */
+    public void showFlight(Player viewer, String name, long startedAt, boolean toStart) {
+        if (!settings.isTrailEnabled()) {
+            messages.sendConfiguredMessage(viewer, "trail-off");
+            return;
+        }
+        if (!mayUse(viewer)) {
+            messages.sendConfiguredMessage(viewer, "no-permission");
+            return;
+        }
+        Deque<FlightTrail> kept = find(name);
+        FlightTrail trail = null;
+        int number = 0;
+        if (kept != null) {
+            int count = 0;
+            for (FlightTrail each : kept) {
+                count++;
+                if (each.startedAt() == startedAt) {
+                    trail = each;
+                    number = count;
+                }
+            }
+        }
+        if (trail == null) {
+            messages.sendConfiguredMessage(viewer, "trail-gone", "{player}", name);
+            return;
+        }
+        if (toStart) {
+            if (plugin.isInCameraMode(viewer)) {
+                plugin.exitCameraMode(viewer, EndReason.COMMAND);
+                messages.sendConfiguredMessage(viewer, "camera-off");
+            }
+            if (plugin.getTeleportGuard().teleport(viewer, trail.start())) {
+                messages.sendConfiguredMessage(viewer, "trail-at-start", "{player}", trail.playerName(),
+                        "{number}", String.valueOf(number));
+            }
+        }
+        describe(viewer, trail, number);
+        FlightTrail shown = trail;
+        show(viewer, () -> List.of(shown), List.of(shown));
+    }
+
     /** The names of the players flights are kept of, for the tab completion. */
     public List<String> recordedNames() {
         List<String> names = new ArrayList<>();
@@ -372,8 +458,8 @@ public final class CamTrail implements Listener {
         return messages.getMessage("trail-ago").replace("{time}", CamTimeLimit.formatDuration(ago));
     }
 
-    /** A spot as {@code trail-place} writes it. */
-    private String place(Location at) {
+    /** A spot as {@code trail-place} writes it, here and in the menu. */
+    public String place(Location at) {
         return messages.getMessage("trail-place")
                 .replace("{x}", String.valueOf(at.getBlockX()))
                 .replace("{y}", String.valueOf(at.getBlockY()))

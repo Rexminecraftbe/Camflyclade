@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **851** - alle 851 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **853** - alle 853 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -1049,6 +1049,11 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   `player-settings.flight-speed: false`, und nur der Test der eigenen
   Einstellungen schaltet es für sich ein. Die eigene Nachtsicht setzt der
   Test vorher und nachher mit `/cam nightvision reset` zurück.
+* **`stop-command`, `cam-ban` und `cam-trail` sind voreingestellt an**, der
+  Testserver startet sie aber aus: Ihre Abschnitte schalten sie für sich ein
+  und prüfen dabei auch, was sie ausgeschaltet sagen, und `cam-trail` soll
+  nicht die Flüge aller anderen Abschnitte aufzeichnen. Den Standard lesen sie
+  aus der `config.yml`, die das Plugin mitbringt.
 * **Voreingestellt gehen `spot`, `photo`, `time` und die anderen nur über das
   Menü** (`menu.access: menu`), ebenso `list`, `stop`, `ban`, `trail` und die
   anderen für Admins (`menu.admin-access: menu`). Die Abschnitte tippen sie als
@@ -1298,7 +1303,7 @@ die Action-Bar nach `/cam` 3, 2, 1 herunter, jede Sekunde mit dem Ton, und
 erst dann beginnt der Cam-Modus · ein Schritt, ein Treffer und ein zweites
 `/cam` brechen den Start ab · wer `start-cost` nicht zahlen kann, hört es
 gleich, bezahlt wird erst beim Start · mehr als 60 Sekunden werden gemeldet ·
-voreingestellt ist `cam-trail` aus, und `/cam trail` sagt das · mitten im Flug
+voreingestellt ist `cam-trail` an (der Testserver startet es aus), und ausgeschaltet sagt `/cam trail` das · mitten im Flug
 heißt es „still in cam mode“ · danach nennt `/cam trail` von der Konsole die
 Strecke ohne den Sprung von `/cam back`, den Platz des Körpers und den
 letzten der Kamera · der Spieler bekommt die Linie als Partikel, alle mit dem
@@ -1405,7 +1410,10 @@ und der Statistik anderer (Sperren und Flugspuren nur, wenn sie an sind), und
 die Liste zeigt ihn im Cam-Modus · mit `admin-access: menu` verweist `/cam
 list` auf das Menü, die Konsole darf es weiter · „Everybody“ auf der Seite der
 Sperren fragt im Chat nach Dauer und Grund, `-` sperrt alle für immer, ein
-zweiter Klick hebt es auf · „Save a spot
+zweiter Klick hebt es auf · ein Klick auf den Kopf auf der Seite der Flugspuren
+zeigt die Flüge des Bots, den neuesten zuerst, mit Datum, Dauer, Strecke, Start
+und Ende; Linksklick zeigt einen, Rechtsklick bringt den Bot an seinen Start,
+der letzte Knopf zeigt alle · „Save a spot
 here“ fragt im Chat nach dem Namen, ein Linksklick springt zum Punkt, ein
 Klick mit Umschalt löscht ihn · `access: menu` lässt nur das Menü, `command`
 nur die Befehle, `false` keins von beiden, `/cam` selbst aber schon ·

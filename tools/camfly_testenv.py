@@ -987,6 +987,14 @@ def prepare_server_files(env):
     text, n = replace_option(text, "admin-access", "both", "menu")
     if n != 1:
         Log.warn("menu.admin-access nicht in der Konfiguration gefunden")
+    # /cam stop, /cam ban und /cam trail sind voreingestellt an. Die
+    # Abschnitte schalten sie fuer sich ein und pruefen dabei auch, was sie
+    # ausgeschaltet sagen; der Testserver startet sie deshalb aus, und
+    # cam-trail zeichnet nicht die Fluege aller anderen Abschnitte auf.
+    for abschnitt in ("stop-command", "cam-ban", "cam-trail"):
+        text, n = replace_option(text, "enabled", "false", abschnitt)
+        if n != 1:
+            Log.warn(f"{abschnitt}.enabled nicht in der Konfiguration gefunden")
     data_dir = plugins / "CamFly"
     data_dir.mkdir(exist_ok=True)
     (data_dir / "config.yml").write_text(text, encoding="utf-8")
@@ -4024,6 +4032,12 @@ def knoepfe_checks(env, bot):
             FIND.problem(f"Aufraeumen nach dem Test der Knoepfe: {exc}")
 
 
+def quelle_config(env):
+    """Die config.yml, wie das Plugin sie mitbringt - fuer Werte, die der
+    Testserver anders einstellt."""
+    return (env.repo / "src" / "main" / "resources" / "config.yml").read_text(encoding="utf-8")
+
+
 def ausgeliefert(env):
     """Die config.yml des Testservers, wie sie gerade auf der Platte steht."""
     return (env.server / "plugins" / "CamFly" / "config.yml").read_text(encoding="utf-8")
@@ -4088,8 +4102,8 @@ def stopp_checks(env, bot):
         return " ".join(p["text"] for p in bot.call("chat_packets", since=seit).get("packets", []))
 
     try:
-        FIND.test("Voreingestellt steht stop-command.enabled: false da",
-                  re.search(r"(?m)^stop-command:\s*\n\s*enabled:\s*false\s*$", ausgeliefert(env)) is not None, "")
+        FIND.test("Voreingestellt steht stop-command.enabled: true da (der Testserver startet es aus)",
+                  re.search(r"(?m)^stop-command:\s*\n\s*enabled:\s*true\s*$", quelle_config(env)) is not None, "")
         zeilen = befehl(bot, "/cam stop all")
         FIND.test("stop-command.enabled: false - /cam stop ist abgeschaltet",
                   gesagt(zeilen, r"/cam stop is switched off"), zeige(zeilen))
@@ -4198,8 +4212,8 @@ def bann_checks(env, bot):
         return strip_colors(server_log(env)[vorher:])
 
     try:
-        FIND.test("Voreingestellt steht cam-ban.enabled: false da",
-                  re.search(r"(?m)^cam-ban:\s*\n(?:\s*#.*\n)*\s*enabled:\s*false\s*$", ausgeliefert(env)) is not None,
+        FIND.test("Voreingestellt steht cam-ban.enabled: true da (der Testserver startet es aus)",
+                  re.search(r"(?m)^cam-ban:\s*\n(?:\s*#.*\n)*\s*enabled:\s*true\s*$", quelle_config(env)) is not None,
                   "")
         zeilen = befehl(bot, f"/cam ban {ZUSCHAUER_NAME}")
         FIND.test("cam-ban.enabled: false - /cam ban ist abgeschaltet", gesagt(zeilen, r"/cam ban is switched off"),
@@ -4699,9 +4713,9 @@ def flugspur_checks(env, bot):
 
     try:
         cam_off(bot)
-        FIND.test("Voreingestellt steht cam-trail.enabled: false da, mit flights: 5",
-                  re.search(r"(?m)^cam-trail:\s*\n\s*enabled:\s*false\s*\n(?:\s*#.*\n)*\s*flights:\s*5\s*$",
-                            ausgeliefert(env)) is not None, "")
+        FIND.test("Voreingestellt steht cam-trail.enabled: true da, mit flights: 5 (der Testserver startet es aus)",
+                  re.search(r"(?m)^cam-trail:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*flights:\s*5\s*$",
+                            quelle_config(env)) is not None, "")
         z = befehl(bot, f"/cam trail {BOT_NAME}")
         FIND.test("cam-trail.enabled: false - /cam trail ist abgeschaltet",
                   gesagt(z, r"/cam trail is switched off"), zeige(z))
@@ -6096,7 +6110,12 @@ def menue_checks(env, bot):
     zeigt den Bot im Cam-Modus. Mit admin-access: menu verweist /cam list auf
     das Menue, die Konsole darf es weiter. Mit cam-ban.enabled: true fragt
     "Everybody" auf der Seite der Sperren im Chat nach Dauer und Grund, "-"
-    sperrt alle fuer immer, und ein zweiter Klick hebt es wieder auf.
+    sperrt alle fuer immer, und ein zweiter Klick hebt es wieder auf. Mit
+    cam-trail.enabled: true und zwei Fluegen sagt der Kopf des Bots auf der
+    Seite der Flugspuren, dass zwei gemerkt sind; ein Klick zeigt sie, den
+    neuesten zuerst, mit Datum, Dauer, Strecke, Start und Ende. Linksklick
+    zeigt einen, Rechtsklick zeigt ihn und bringt den Bot an seinen Start, der
+    letzte Knopf zeigt alle.
 
     Foto-Modus, Zeit und Nachtsicht sagen unter ihrem Namen, wie sie stehen:
     vor dem Sonnenuntergang die Zeit der Welt, danach Sunset, der Foto-Modus
@@ -6269,7 +6288,58 @@ def menue_checks(env, bot):
         FIND.test("Ein Klick auf das gesperrte \"Everybody\" hebt die Sperre auf",
                   gesagt(zeilen, r"Cam mode is open for everybody again"), zeige(zeilen))
         bot.call("close_window", wait=10)
-        set_options(env, [("enabled", "false", "cam-ban"), ("admin-access", "both", "menu")])
+        set_options(env, [("enabled", "false", "cam-ban"), ("admin-access", "both", "menu"),
+                          ("enabled", "true", "cam-trail")])
+
+        # Zwei Fluege vom selben Platz, dann ein Stueck daneben.
+        for weg in ({"dy": 3}, {"dx": -3, "dy": 2}):
+            hinstellen(bot, x, y, z)
+            cam_on(bot)
+            bot.call("fly", wait=30, timeout=15000, **weg)
+            time.sleep(1.0)
+            cam_off(bot)
+            time.sleep(1.5)
+        hinstellen(bot, x - 5, y, z)
+        menue()
+        klick(23)
+        klick(16)
+        knopf = fenster().get("slots", {})
+        FIND.test("Flugspuren: der Kopf des Bots sagt, wie viele Fluege gemerkt sind",
+                  "2 flights kept" in item_text(knopf.get("0")), item_text(knopf.get("0")))
+        klick(0)
+        f = fenster()
+        knopf = f.get("slots", {})
+        neuester, aelterer = item_text(knopf.get("0")), item_text(knopf.get("1"))
+        FIND.test("Ein Klick auf den Kopf zeigt seine Fluege, der neueste zuerst, mit Datum, Dauer, Strecke, Start "
+                  "und Ende",
+                  f"Flights of {BOT_NAME}" in (f.get("title") or "") and "#1" in neuester and "#2" in aelterer
+                  and all(w in neuester for w in ("Started:", "Duration:", "Distance:", "From:", "To:"))
+                  and "49" in knopf, f"{f.get('title')} / {neuester} / {aelterer}")
+        seit = bot.mark()
+        klick(1, warten=2.0)
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Linksklick zeigt den aelteren Flug", gesagt(zeilen, rf"Cam flight #2 of {BOT_NAME}"), zeige(zeilen))
+        menue()
+        klick(23)
+        klick(16)
+        klick(0)
+        seit = bot.mark()
+        klick(0, button=1, warten=2.5)
+        zeilen = zeilen_seit(bot, seit)
+        da = bot.server_pos()
+        FIND.test("Rechtsklick zeigt ihn und bringt den Bot zum Start, wo der Koerper stand",
+                  gesagt(zeilen, rf"At the start of cam flight #1 of {BOT_NAME}")
+                  and da is not None and math.dist(da, (x, y, z)) < 1.0, f"{da} / {zeige(zeilen)}")
+        menue()
+        klick(23)
+        klick(16)
+        klick(0)
+        seit = bot.mark()
+        klick(49, warten=2.0)
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Der letzte Knopf zeigt alle Fluege", gesagt(zeilen, rf"The last 2 cam flights of {BOT_NAME}"),
+                  zeige(zeilen))
+        set_option(env, "enabled", "false", "cam-trail")
 
         original = datei.read_text(encoding="utf-8")
         text = menue_knopf(original, "start", slot=4)
@@ -6324,7 +6394,7 @@ def menue_checks(env, bot):
                 datei.write_text(original, encoding="utf-8")
             # Wie der Testserver es fuer alle anderen Abschnitte hat.
             set_options(env, [("access", "both", "menu"), ("admin-access", "both", "menu"),
-                              ("enabled", "false", "cam-ban")])
+                              ("enabled", "false", "cam-ban"), ("enabled", "false", "cam-trail")])
             console(env, "cam unban all", pause=0.5)
             spots_loeschen(bot, "Menue")
             console(env, "time set day", pause=0.5)

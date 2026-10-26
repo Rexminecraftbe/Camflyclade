@@ -776,8 +776,7 @@ anti-scouting:
 # Event oder einem Neustart. Er kommt zurück zu seinem Körper und erfährt, wer es war (Text: stopped-by).
 # Benutzen dürfen es die Konsole und wer das Recht camplugin.stop hat (Operatoren haben es). Ton: sounds.end-forced.
 stop-command:
-  enabled: false
-
+  enabled: true
 # /cam ban sperrt Spieler aus dem Cam-Modus aus, einzelne oder alle:
 #   /cam ban <Name> [Zeit] [Grund]  = einen Spieler, z. B. /cam ban Steve 2h Griefing (ohne Zeit für immer)
 #   /cam ban all [Zeit] [Grund]     = alle, z. B. während eines Events - außer wer das Recht camplugin.ban.bypass hat
@@ -792,8 +791,7 @@ stop-command:
 # Benutzen dürfen es die Konsole und wer das Recht camplugin.ban hat (Operatoren haben es).
 cam-ban:
   # false = die Befehle sind aus, und keine Sperre gilt (bans.yml bleibt, wie sie ist)
-  enabled: false
-
+  enabled: true
 # /cam trail zeigt, wo die Kamera eines Spielers herumgeflogen ist: als Linie aus Partikeln, die nur
 # der sieht, der fragt - von grün am Körper über gelb nach rot, wo die Kamera zuletzt war. Dazu stehen im
 # Chat Länge, Dauer, Start und Ende des Flugs (Texte: trail-...), auch für die Konsole, die keine Partikel sieht.
@@ -803,13 +801,16 @@ cam-ban:
 #                                 Im Chat stehen dafür Knöpfe zum Anklicken (Texte: trail-button ...).
 #   /cam trail <Name> all       = alle gemerkten Flüge auf einmal
 #   /cam trail                  = die Linie wieder ausblenden
+# Im Menü (Admin-Seite, Flugspuren): ein Klick auf einen Kopf zeigt seine Flüge, der neueste zuerst, mit Datum und
+# Uhrzeit, Dauer, Strecke, Start und Ende beim Drüberfahren. Linksklick zeigt einen Flug, Rechtsklick zeigt ihn und
+# bringt einen zu seinem Start (aus dem Cam-Modus heraus, wenn man darin ist); ein Knopf zeigt alle auf einmal.
 # Wo die Kamera versetzt wurde (/cam back, Portal, Teleport), hat die Linie eine Lücke.
 # Gezeichnet wird bis 128 Blöcke um den, der zusieht.
 # Aufgezeichnet wird nur, solange enabled an ist, und nur im Arbeitsspeicher, bis zum Neustart
 # (nach /cam reload bleiben die Flüge, mit enabled: false sind sie weg).
 # Benutzen dürfen es die Konsole und wer das Recht camplugin.trail hat (Operatoren haben es).
 cam-trail:
-  enabled: false
+  enabled: true
   # Wie viele seiner letzten Flüge von jedem Spieler gemerkt werden (1 bis 20)
   flights: 5
   # Wie lange die Linie zu sehen ist, in Sekunden (1 bis 600)

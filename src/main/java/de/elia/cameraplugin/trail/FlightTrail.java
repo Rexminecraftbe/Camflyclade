@@ -230,6 +230,11 @@ final class FlightTrail {
         return playerName;
     }
 
+    /** When it began, as {@link System#currentTimeMillis()} counts - which tells one flight from another. */
+    long startedAt() {
+        return startedAt;
+    }
+
     /** Whether the camera is still flying it. */
     boolean isFlying() {
         return endedAt == 0L;
