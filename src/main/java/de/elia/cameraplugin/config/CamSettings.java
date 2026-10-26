@@ -8,9 +8,12 @@ import de.elia.cameraplugin.display.ActionBarDisplay;
 import de.elia.cameraplugin.display.GlowMode;
 import de.elia.cameraplugin.display.NameMode;
 import de.elia.cameraplugin.list.ListAccess;
+import de.elia.cameraplugin.ban.CamBan;
+import de.elia.cameraplugin.menu.AdminButton;
 import de.elia.cameraplugin.menu.MenuAccess;
 import de.elia.cameraplugin.menu.MenuButton;
 import de.elia.cameraplugin.menu.MenuIcon;
+import de.elia.cameraplugin.menu.MenuSlot;
 import de.elia.cameraplugin.mirrordamage.ArmorDamageMode;
 import de.elia.cameraplugin.mirrordamage.DamageMode;
 import de.elia.cameraplugin.mob.MobTargeting;
@@ -136,6 +139,12 @@ public final class CamSettings {
      * nothing is left to hide.
      */
     private static final double MAX_SCOUT_RADIUS = 256.0;
+
+    /** The times {@code menu.ban-times} has out of the box. */
+    private static final List<String> DEFAULT_BAN_TIMES = List.of("30m", "1h", "6h", "12h", "1d", "3d", "7d");
+
+    /** The most {@code menu.ban-times} has room for: one row of the page, with for good in front. */
+    private static final int MAX_BAN_TIMES = 8;
 
     /**
      * Keys that are read although the config file built into the jar leaves
@@ -354,6 +363,11 @@ public final class CamSettings {
     private final Map<MenuButton, MenuIcon> menuIcons = new EnumMap<>(MenuButton.class);
     /** Where it stands, {@code menu.buttons.<button>.slot}. */
     private final Map<MenuButton, Integer> menuSlots = new EnumMap<>(MenuButton.class);
+    /** The same for the admin page, {@code menu.admin-buttons}. */
+    private final Map<AdminButton, MenuIcon> adminIcons = new EnumMap<>(AdminButton.class);
+    private final Map<AdminButton, Integer> adminSlots = new EnumMap<>(AdminButton.class);
+    /** The times a ban from the menu can last besides for good, {@code menu.ban-times}. */
+    private final List<String> banTimes = new ArrayList<>();
 
     /** Whether {@code /cam photo} is there, {@code photo-mode.enabled}. */
     private boolean photoModeEnabled;
@@ -678,7 +692,9 @@ public final class CamSettings {
                 .equalsIgnoreCase("camera") ? ScoutAnchor.CAMERA : ScoutAnchor.BODY;
         menuAccess = readMenuAccess(config, "menu.access");
         adminAccess = readMenuAccess(config, "menu.admin-access");
-        readMenuButtons(config);
+        readButtons(config, "menu.buttons", MenuButton.values(), menuIcons, menuSlots);
+        readButtons(config, "menu.admin-buttons", AdminButton.values(), adminIcons, adminSlots);
+        readBanTimes(config);
         photoModeEnabled = config.getBoolean("photo-mode.enabled", true);
         photoHidePlayers = config.getBoolean("photo-mode.hide-players", true);
         photoHideBodies = config.getBoolean("photo-mode.hide-bodies", true);
@@ -907,47 +923,70 @@ public final class CamSettings {
     }
 
     /**
-     * Reads the section {@code menu.buttons}: the item and the slot of each
-     * button of the main page. A slot that another button has taken already
-     * - other than start and end, which are never there together - is noted,
-     * and the button goes to its own slot of out of the box, or the first
-     * one free.
+     * Reads a section of buttons, {@code menu.buttons} or
+     * {@code menu.admin-buttons}: the item and the slot of each. A slot that
+     * another button of the same page has taken already - other than start
+     * and end, which are never there together - is noted, and the button goes
+     * to its own slot of out of the box, or the first one free.
      */
-    private void readMenuButtons(ConfigReader config) {
-        menuIcons.clear();
-        menuSlots.clear();
+    private <B extends MenuSlot> void readButtons(ConfigReader config, String section, B[] buttons,
+                                                  Map<B, MenuIcon> icons, Map<B, Integer> slots) {
+        icons.clear();
+        slots.clear();
         String allowed = messages.configMessage("config-allowed-menu-items");
-        for (MenuButton button : MenuButton.values()) {
-            String path = "menu.buttons." + button.key();
+        for (B button : buttons) {
+            String path = section + "." + button.key();
             String raw = config.getString(path + ".item", button.defaultItem());
             MenuIcon icon = MenuIcon.parse(raw);
             if (icon == null) {
                 config.warnUnknownValue(path + ".item", raw, allowed, button.defaultItem());
                 icon = MenuIcon.parse(button.defaultItem());
             }
-            menuIcons.put(button, icon);
+            icons.put(button, icon);
             int slot = config.getInt(path + ".slot", button.defaultSlot(), 0, MenuButton.SLOTS - 1);
-            MenuButton other = slotTakenBy(button, slot);
+            B other = slotTakenBy(slots, button, slot);
             if (other != null) {
-                int free = slotTakenBy(button, button.defaultSlot()) == null ? button.defaultSlot() : 0;
-                while (slotTakenBy(button, free) != null) {
+                int free = slotTakenBy(slots, button, button.defaultSlot()) == null ? button.defaultSlot() : 0;
+                while (slotTakenBy(slots, button, free) != null) {
                     free++;
                 }
-                config.warnSlotTaken(path + ".slot", slot, "menu.buttons." + other.key() + ".slot", free);
+                config.warnSlotTaken(path + ".slot", slot, section + "." + other.key() + ".slot", free);
                 slot = free;
             }
-            menuSlots.put(button, slot);
+            slots.put(button, slot);
         }
     }
 
     /** The button that has this slot already and may not share it with this one, or {@code null}. */
-    private MenuButton slotTakenBy(MenuButton button, int slot) {
-        for (Map.Entry<MenuButton, Integer> entry : menuSlots.entrySet()) {
+    private static <B extends MenuSlot> B slotTakenBy(Map<B, Integer> slots, B button, int slot) {
+        for (Map.Entry<B, Integer> entry : slots.entrySet()) {
             if (entry.getValue() == slot && !button.mayShareWith(entry.getKey())) {
                 return entry.getKey();
             }
         }
         return null;
+    }
+
+    /**
+     * Reads {@code menu.ban-times}: the times a ban from the menu can last
+     * besides for good, as {@code /cam ban} takes them. One that is none is
+     * noted and left out, and so is every one past the eighth: one row of the
+     * page holds them, with for good in front.
+     */
+    private void readBanTimes(ConfigReader config) {
+        banTimes.clear();
+        List<String> raw = config.getStringList("menu.ban-times", DEFAULT_BAN_TIMES);
+        for (String time : raw) {
+            String word = time.trim().toLowerCase(Locale.ROOT);
+            if (!CamBan.isTime(word)) {
+                config.warnUnknownEntry("menu.ban-times", time);
+            } else if (banTimes.size() < MAX_BAN_TIMES && !banTimes.contains(word)) {
+                banTimes.add(word);
+            } else if (!banTimes.contains(word)) {
+                config.warnTooManyEntries("menu.ban-times", MAX_BAN_TIMES);
+                break;
+            }
+        }
     }
 
     /**
@@ -1592,6 +1631,21 @@ public final class CamSettings {
     /** Where a button of the main page of the menu stands, 0 being the top left. */
     public int getMenuSlot(MenuButton button) {
         return menuSlots.get(button);
+    }
+
+    /** What a button of the admin page of the menu shows. */
+    public MenuIcon getAdminIcon(AdminButton button) {
+        return adminIcons.get(button);
+    }
+
+    /** Where a button of the admin page of the menu stands. */
+    public int getAdminSlot(AdminButton button) {
+        return adminSlots.get(button);
+    }
+
+    /** The times a ban from the menu can last besides for good, as {@code /cam ban} takes them. */
+    public List<String> getBanTimes() {
+        return Collections.unmodifiableList(banTimes);
     }
 
     public boolean isPhotoModeEnabled() {

@@ -654,6 +654,35 @@ menu:
     admin:
       item: command_block
       slot: 23
+  # Die Knöpfe der Seite für Admins, genau wie buttons (drei Reihen, Plätze 0 bis 26). Ein Knopf, wozu das Recht fehlt
+  # oder dessen Sache aus ist, fehlt auf der Seite.
+  admin-buttons:
+    # Wer gerade im Cam-Modus ist: Linksklick teleportiert zur Kamera, Rechtsklick zum Körper (camplugin.list,
+    # camplugin.teleport)
+    list:
+      item: spyglass
+      slot: 10
+    # Spieler stoppen und sperren: ein Klick auf einen Kopf - oder auf "Everybody" für alle - zeigt, was geht: den
+    # Cam-Modus beenden (stop-command, camplugin.stop) und sperren oder entsperren (cam-ban, camplugin.ban).
+    # Gesperrte Köpfe glänzen.
+    players:
+      item: iron_bars
+      slot: 12
+    # Die Statistik der Spieler online (statistics.view-others)
+    stats:
+      item: bookshelf
+      slot: 14
+    # Die Flugspuren (cam-trail, camplugin.trail)
+    trails:
+      item: lead
+      slot: 16
+    # Zurück zur ersten Seite
+    back:
+      item: arrow
+      slot: 22
+  # Wie lange eine Sperre aus dem Menü dauern kann, außer für immer (das gibt es immer): Zahlen mit s, m, h, d oder w
+  # dahinter, auch zusammen, wie bei /cam ban - höchstens 8. Den Grund schreibt man, wenn man will, in den Chat.
+  ban-times: [30m, 1h, 6h, 12h, 1d, 3d, 7d]
 
 # Den Cam-Modus mit der Taste zum Tauschen der Hände beenden (voreingestellt F), wie mit /cam.
 # Geht mit leeren Händen. Hat ein Spieler die Taste anders belegt, gilt seine - und der Hinweis

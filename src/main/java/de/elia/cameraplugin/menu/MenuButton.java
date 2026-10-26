@@ -8,7 +8,7 @@ package de.elia.cameraplugin.menu;
  * starts camera mode, the other ends it -, so they may share a slot; every
  * other button needs one of its own.</p>
  */
-public enum MenuButton {
+public enum MenuButton implements MenuSlot {
     NIGHT_VISION("nightvision", MenuIcon.NIGHT_VISION_POTION, 10),
     BACK("back", "ender_pearl", 11),
     RESUME("resume", "recovery_compass", 12),
@@ -35,20 +35,24 @@ public enum MenuButton {
     }
 
     /** Its section under {@code menu.buttons}. */
+    @Override
     public String key() {
         return key;
     }
 
+    @Override
     public String defaultItem() {
         return defaultItem;
     }
 
+    @Override
     public int defaultSlot() {
         return defaultSlot;
     }
 
     /** Whether two buttons may stand in the same slot: only start and end, which are never there together. */
-    public boolean mayShareWith(MenuButton other) {
+    @Override
+    public boolean mayShareWith(MenuSlot other) {
         return (this == START && other == END) || (this == END && other == START);
     }
 }

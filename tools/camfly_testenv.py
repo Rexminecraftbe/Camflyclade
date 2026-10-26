@@ -6107,10 +6107,14 @@ def menue_checks(env, bot):
     Unter dem Knopf der Statistik stehen die Zahlen des Bots, und er hat als
     op den Knopf der Admin-Seite. Darauf stehen die Liste und die Statistik
     anderer, Sperren und Flugspuren nicht, solange sie aus sind. Die Liste
-    zeigt den Bot im Cam-Modus. Mit admin-access: menu verweist /cam list auf
-    das Menue, die Konsole darf es weiter. Mit cam-ban.enabled: true fragt
-    "Everybody" auf der Seite der Sperren im Chat nach Dauer und Grund, "-"
-    sperrt alle fuer immer, und ein zweiter Klick hebt es wieder auf. Mit
+    zeigt den Bot im Cam-Modus, zum Hinteleportieren. Mit admin-access: menu
+    verweist /cam list auf das Menue, die Konsole darf es weiter. Mit
+    cam-ban und stop-command an steht auf der Seite der Spieler vorn
+    Everybody mit einem im Cam-Modus, dahinter der Bot; ein Klick darauf
+    bietet Beenden und Sperren an. Beenden beendet den Cam-Modus aller.
+    Sperren zeigt die Dauern, fuer immer vorgewaehlt; eine Stunde gewaehlt
+    glaenzt sie, der Grund kommt aus dem Chat, und danach steht Banned unter
+    dem Kopf und Lift the ban daneben, was die Sperre wieder aufhebt. Mit
     cam-trail.enabled: true und zwei Fluegen sagt der Kopf des Bots auf der
     Seite der Flugspuren, dass zwei gemerkt sind; ein Klick zeigt sie, den
     neuesten zuerst, mit Datum, Dauer, Strecke, Start und Ende. Linksklick
@@ -6245,14 +6249,18 @@ def menue_checks(env, bot):
         klick(23)
         f = fenster()
         knopf = f.get("slots", {})
-        FIND.test("Die Admin-Seite: Liste und Statistik anderer, ohne Sperren und Flugspuren, solange die aus sind",
-                  "Cam admin" in (f.get("title") or "") and "10" in knopf and "12" in knopf
-                  and "14" not in knopf and "16" not in knopf, f"{f.get('title')} / {sorted(knopf)}")
+        FIND.test("Die Admin-Seite: wer im Cam-Modus ist und die Statistik anderer, ohne Spieler und Flugspuren, "
+                  "solange stop, ban und trail aus sind",
+                  "Cam admin" in (f.get("title") or "") and "10" in knopf and "14" in knopf
+                  and "12" not in knopf and "16" not in knopf
+                  and "teleport to them" in item_text(knopf.get("10")), f"{f.get('title')} / {sorted(knopf)}")
         klick(10)
         f = fenster()
-        FIND.test("Wer im Cam-Modus ist: der Bot, mit der Zeit im Cam-Modus",
-                  "In cam mode" in (f.get("title") or "") and BOT_NAME in item_text(f.get("slots", {}).get("0"))
-                  and "In cam mode for" in item_text(f.get("slots", {}).get("0")),
+        FIND.test("Wer im Cam-Modus ist: der Bot, mit der Zeit im Cam-Modus und dem Teleport",
+                  "Who is in cam mode" in (f.get("title") or "")
+                  and BOT_NAME in item_text(f.get("slots", {}).get("0"))
+                  and "In cam mode for" in item_text(f.get("slots", {}).get("0"))
+                  and "teleport to the camera" in item_text(f.get("slots", {}).get("0")),
                   item_text(f.get("slots", {}).get("0")))
         bot.call("close_window", wait=10)
         cam_off(bot)
@@ -6265,31 +6273,70 @@ def menue_checks(env, bot):
         FIND.test("admin-access: menu - /cam list verweist auf das Menue, die Konsole darf es weiter",
                   gesagt(zeilen, r"That goes through /cam menu") and "Nobody is in cam mode" in log
                   and "list" not in tab("/cam "), f"{zeige(zeilen)} / {log.strip()[-200:]}")
-        set_option(env, "enabled", "true", "cam-ban")
+        set_options(env, [("enabled", "true", "cam-ban"), ("enabled", "true", "stop-command")])
+        cam_on(bot)
         menue()
         klick(23)
-        klick(14)
+        klick(12)
         f = fenster()
-        seit = bot.mark()
+        knopf = f.get("slots", {})
+        FIND.test("Spieler: vorn Everybody mit einem im Cam-Modus, dahinter der Bot",
+                  "Players" in (f.get("title") or "") and "Everybody" in item_text(knopf.get("0"))
+                  and "1 in cam mode" in item_text(knopf.get("0")) and BOT_NAME in item_text(knopf.get("1")),
+                  f"{item_text(knopf.get('0'))} / {item_text(knopf.get('1'))}")
         klick(0)
+        f = fenster()
+        knopf = f.get("slots", {})
+        FIND.test("Ein Klick auf Everybody: beenden und sperren",
+                  "Everybody" in (f.get("title") or "") and "End everybody's cam mode" in item_text(knopf.get("11"))
+                  and "Ban" in item_text(knopf.get("15")), f"{f.get('title')} / {sorted(knopf)}")
+        seit = bot.mark()
+        klick(11, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
-        FIND.test("Sperren: \"Everybody\" fragt im Chat, wie lange und warum",
-                  "Bans" in (f.get("title") or "") and gesagt(zeilen, r"How long and why is everybody to be banned"),
-                  f"{f.get('title')} / {zeige(zeilen)}")
-        zeilen = befehl(bot, "-")
-        FIND.test("Die Antwort - sperrt alle fuer immer", gesagt(zeilen, r"Cam mode is locked for everybody for good"),
-                  zeige(zeilen))
+        FIND.test("Beenden beendet den Cam-Modus aller", gesagt(zeilen, r"Ended the cam mode of 1 players")
+                  and not spielmodus_ist(bot, "adventure"), zeige(zeilen))
         menue()
         klick(23)
-        klick(14)
+        klick(12)
+        klick(0)
+        klick(15)
+        f = fenster()
+        knopf = f.get("slots", {})
+        FIND.test("Sperren: Dauer im Menue, voreingestellt fuer immer",
+                  "Ban Everybody" in (f.get("title") or "") and "Now" in item_text(knopf.get("9"))
+                  and "For good" in item_text(knopf.get("9")) and all(str(i) in knopf for i in range(9, 17)),
+                  f"{f.get('title')} / {sorted(knopf)}")
+        klick(11)
+        knopf = fenster().get("slots", {})
+        FIND.test("Eine Stunde gewaehlt - sie glaenzt jetzt, fuer immer nicht mehr",
+                  "Now" in item_text(knopf.get("11")) and "Now" not in item_text(knopf.get("9")),
+                  f"{item_text(knopf.get('11'))} / {item_text(knopf.get('9'))}")
         seit = bot.mark()
-        klick(0, warten=2.0)
+        klick(20)
         zeilen = zeilen_seit(bot, seit)
-        FIND.test("Ein Klick auf das gesperrte \"Everybody\" hebt die Sperre auf",
-                  gesagt(zeilen, r"Cam mode is open for everybody again"), zeige(zeilen))
+        FIND.test("Der Grund: der Chat fragt danach", gesagt(zeilen, r"Type in the chat why Everybody is banned"),
+                  zeige(zeilen))
+        befehl(bot, "Testgrund")
+        f = fenster()
+        FIND.test("Nach dem Grund ist die Seite wieder da, mit dem Grund",
+                  f.get("open") and "Testgrund" in item_text(f.get("slots", {}).get("20")),
+                  item_text(f.get("slots", {}).get("20")))
+        seit = bot.mark()
+        klick(22, warten=2.0)
+        zeilen = zeilen_seit(bot, seit)
+        knopf = fenster().get("slots", {})
+        FIND.test("Sperren sperrt alle fuer eine Stunde mit dem Grund, danach steht Banned da und Lift the ban",
+                  gesagt(zeilen, r"Cam mode is locked for everybody for .*\(Testgrund\)")
+                  and "Banned" in item_text(knopf.get("13")) and "Lift the ban" in item_text(knopf.get("15")),
+                  f"{zeige(zeilen)} / {item_text(knopf.get('13'))}")
+        seit = bot.mark()
+        klick(15, warten=2.0)
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Lift the ban hebt die Sperre wieder auf", gesagt(zeilen, r"Cam mode is open for everybody again"),
+                  zeige(zeilen))
         bot.call("close_window", wait=10)
-        set_options(env, [("enabled", "false", "cam-ban"), ("admin-access", "both", "menu"),
-                          ("enabled", "true", "cam-trail")])
+        set_options(env, [("enabled", "false", "cam-ban"), ("enabled", "false", "stop-command"),
+                          ("admin-access", "both", "menu"), ("enabled", "true", "cam-trail")])
 
         # Zwei Fluege vom selben Platz, dann ein Stueck daneben.
         for weg in ({"dy": 3}, {"dx": -3, "dy": 2}):
@@ -6345,6 +6392,7 @@ def menue_checks(env, bot):
         text = menue_knopf(original, "start", slot=4)
         text = menue_knopf(text, "back", slot=10)
         text = menue_knopf(text, "time", item="kein_item")
+        text = menue_knopf(text, "list", slot=4)
         datei.write_text(text, encoding="utf-8")
         vorher = len(server_log(env))
         console(env, "cam reload", pause=2)
@@ -6354,6 +6402,12 @@ def menue_checks(env, bot):
                   "Using slot 11 instead." in log, log.strip()[-300:] or "nichts im Log")
         FIND.test("menu.buttons: ein unbekanntes Item wird gemeldet",
                   "Unknown value for menu.buttons.time.item: 'kein_item'" in log, log.strip()[-300:] or "nichts im Log")
+        menue()
+        klick(23)
+        knopf = fenster().get("slots", {})
+        FIND.test("menu.admin-buttons.list.slot: 4 - auf der Admin-Seite steht die Liste auf Platz 4",
+                  "4" in knopf and "10" not in knopf, str(sorted(knopf)))
+        bot.call("close_window", wait=10)
         knopf = menue().get("slots", {})
         FIND.test("menu.buttons.start.slot: 4 - der Start steht auf Platz 4, back auf 11, die Zeit auf 15",
                   all(str(i) in knopf for i in (4, 11, 15)) and "22" not in knopf, str(sorted(knopf)))
@@ -6394,7 +6448,8 @@ def menue_checks(env, bot):
                 datei.write_text(original, encoding="utf-8")
             # Wie der Testserver es fuer alle anderen Abschnitte hat.
             set_options(env, [("access", "both", "menu"), ("admin-access", "both", "menu"),
-                              ("enabled", "false", "cam-ban"), ("enabled", "false", "cam-trail")])
+                              ("enabled", "false", "cam-ban"), ("enabled", "false", "cam-trail"),
+                              ("enabled", "false", "stop-command")])
             console(env, "cam unban all", pause=0.5)
             spots_loeschen(bot, "Menue")
             console(env, "time set day", pause=0.5)

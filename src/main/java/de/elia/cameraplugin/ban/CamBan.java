@@ -237,6 +237,31 @@ public final class CamBan {
         return bans.get(playerId) != null;
     }
 
+    /**
+     * How the ban of this player stands, the way the texts put it - for how
+     * long, and why - or {@code null} while he is not banned. For the menu.
+     */
+    public String banText(UUID playerId) {
+        BanList.Ban ban = bans.get(playerId);
+        return ban == null ? null : time(ban, System.currentTimeMillis()) + reason(ban);
+    }
+
+    /** How the ban of everybody stands, as {@link #banText} has it, or {@code null} while there is none. */
+    public String everybodyBanText() {
+        BanList.Ban ban = bans.everybody();
+        return ban == null ? null : time(ban, System.currentTimeMillis()) + reason(ban);
+    }
+
+    /** Whether a word is a time {@code /cam ban} takes, such as 2h or 1d12h, for {@code menu.ban-times}. */
+    public static boolean isTime(String word) {
+        return TIME.matcher(word).matches();
+    }
+
+    /** A time such as 2h written out the way the texts write a duration. */
+    public static String spell(String time) {
+        return CamTimeLimit.formatDuration(millis(time) / 1000L);
+    }
+
     /** Whether there is a ban of everybody, for the tab completion of {@code /cam unban}. */
     public boolean everybodyBanned() {
         return bans.everybody() != null;

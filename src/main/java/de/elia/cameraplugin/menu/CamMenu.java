@@ -43,6 +43,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -94,8 +95,6 @@ public final class CamMenu implements Listener {
     /** The word that calls off an answer in the chat. */
     private static final String CANCEL = "cancel";
 
-    /** The answer to the ban prompt that bans for good and without a reason. */
-    private static final String NO_REASON = "-";
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
@@ -105,6 +104,40 @@ public final class CamMenu implements Listener {
 
     /** A question in the chat: until when the answer counts, and what it does - on the main thread. */
     private record Question(long until, Consumer<String> answer) {
+    }
+
+    /** The bans being set up on their page, by the id of the admin. */
+    private final Map<UUID, BanDraft> drafts = new HashMap<>();
+
+    /** Whom the page of a player is about: one player, by his id and name, or everybody. */
+    private record Target(UUID id, String name) {
+
+        static Target everybody(String name) {
+            return new Target(null, name);
+        }
+
+        boolean everybody() {
+            return id == null;
+        }
+
+        boolean inCam(CameraPlugin plugin) {
+            return id != null && plugin.getCameraPlayers().contains(id);
+        }
+
+        boolean banned(CamBan ban) {
+            return id == null ? ban.everybodyBanned() : ban.isBanned(id);
+        }
+    }
+
+    /** A ban being set up on its page: whom, for how long - {@code null} for good - and why. */
+    private static final class BanDraft {
+        final Target target;
+        String time;
+        String reason = "";
+
+        BanDraft(Target target) {
+            this.target = target;
+        }
     }
 
     /** One window of the menu, and what each of its slots does when clicked. */
@@ -488,7 +521,7 @@ public final class CamMenu implements Listener {
 
     /** Whether there is anything on the admin page for him: one of its parts he has the right of. */
     private boolean hasAdminPage(Player player) {
-        return plugin.getCamList().mayUse(player) || viewsOthers(player) || plugin.getBan().mayUse(player)
+        return plugin.getCamList().mayUse(player) || viewsOthers(player) || managesPlayers(player)
                 || plugin.getTrail().mayUse(player);
     }
 
@@ -496,11 +529,17 @@ public final class CamMenu implements Listener {
         return plugin.getStats().showsAnything() && plugin.getStats().mayViewOthers(player);
     }
 
+    /** Whether he may end the camera mode of others or ban them, the page of the players. */
+    private boolean managesPlayers(Player player) {
+        return plugin.getStop().mayUse(player) || plugin.getBan().mayUse(player);
+    }
+
     /**
      * The admin page, for what admins do with commands otherwise: who is in
-     * camera mode, the statistics of others, the bans and the flights of
-     * {@code /cam trail} - each only for whoever has its right and while it
-     * is switched on.
+     * camera mode, the players to stop and to ban, the statistics of others
+     * and the flights of {@code /cam trail} - each where
+     * {@code menu.admin-buttons} puts it, only for whoever has its right and
+     * while it is switched on.
      */
     private void openAdmin(Player player) {
         if (!settings.getAdminAccess().allowsMenu() || !hasAdminPage(player)) {
@@ -508,28 +547,33 @@ public final class CamMenu implements Listener {
             return;
         }
         Page page = new Page();
-        Inventory inventory = create(page, SMALL, messages.getMessage("menu-admin-title"));
+        Inventory inventory = create(page, MenuButton.SLOTS, messages.getMessage("menu-admin-title"));
         if (plugin.getCamList().mayUse(player)) {
-            put(page, 10, Material.SPYGLASS, "menu-admin-list", click -> later(() -> openCamList(player, 0)));
+            adminButton(page, AdminButton.LIST, "menu-admin-list", click -> later(() -> openCamList(player, 0)));
+        }
+        if (managesPlayers(player)) {
+            adminButton(page, AdminButton.PLAYERS, "menu-admin-players", click -> later(() -> openPlayers(player, 0)));
         }
         if (viewsOthers(player)) {
-            put(page, 12, Material.BOOKSHELF, "menu-admin-stats", click -> later(() -> openStatsOf(player, 0)));
-        }
-        if (plugin.getBan().mayUse(player)) {
-            put(page, 14, Material.IRON_BARS, "menu-admin-bans", click -> later(() -> openBans(player, 0)));
+            adminButton(page, AdminButton.STATS, "menu-admin-stats", click -> later(() -> openStatsOf(player, 0)));
         }
         if (plugin.getTrail().mayUse(player)) {
-            put(page, 16, Material.LEAD, "menu-admin-trails", click -> later(() -> openTrails(player, 0)));
+            adminButton(page, AdminButton.TRAILS, "menu-admin-trails", click -> later(() -> openTrails(player, 0)));
         }
-        put(page, SLOT_SMALL_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
+        adminButton(page, AdminButton.BACK, "menu-to-main", click -> later(() -> openMain(player)));
         player.openInventory(inventory);
     }
 
+    /** One button of the admin page, with the item and in the slot {@code menu.admin-buttons} gives it. */
+    private void adminButton(Page page, AdminButton which, String key, Consumer<ClickType> action) {
+        put(page, settings.getAdminSlot(which), labelled(settings.getAdminIcon(which).create(plugin.getLogger()),
+                messages.getMessage(key), lines(messages.getMessage(key + "-lore"))), action);
+    }
+
     /**
-     * Who is in camera mode, like {@code /cam list}: how long already and how
-     * far from the body. Left-click goes to the camera, right-click to the
-     * body ({@code camplugin.teleport}), a shift-click ends his camera mode
-     * ({@code /cam stop}); the last button ends it for everybody.
+     * Who is in camera mode right now, like {@code /cam list}: how long
+     * already and how far from the body. Left-click teleports to the camera,
+     * right-click to the body ({@code camplugin.teleport}).
      */
     private void openCamList(Player player, int pageNumber) {
         if (!plugin.getCamList().mayUse(player)) {
@@ -537,10 +581,37 @@ public final class CamMenu implements Listener {
             return;
         }
         boolean teleport = plugin.getListTeleport().mayUse(player);
-        // Each one with cam-list.stop, like the button of /cam list; all
-        // at once whenever /cam stop is his to use.
-        boolean stop = plugin.getStop().showsButton(player);
-        boolean stopAll = plugin.getStop().mayUse(player);
+        List<Player> cameras = cameraPlayersSorted();
+        int pages = Math.max(1, (cameras.size() + ENTRIES - 1) / ENTRIES);
+        int number = Math.min(Math.max(0, pageNumber), pages - 1);
+        Page page = new Page();
+        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-list-title"));
+        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < cameras.size(); slot++) {
+            Player camera = cameras.get(number * ENTRIES + slot);
+            List<String> lore = new ArrayList<>(camLines(camera));
+            if (teleport) {
+                lore.addAll(lines(messages.getMessage("menu-admin-list-actions")));
+            }
+            String name = camera.getName();
+            put(page, slot, head(camera, messages.getMessage("menu-admin-player").replace("{player}", name), lore),
+                    click -> {
+                        if (click.isRightClick() && teleport) {
+                            act(player, () -> plugin.getListTeleport().command(player, new String[]{name, "body"}));
+                        } else if (click.isLeftClick() && teleport) {
+                            act(player, () -> plugin.getListTeleport().command(player, new String[]{name, "camera"}));
+                        }
+                    });
+        }
+        if (cameras.isEmpty()) {
+            put(page, 22, Material.GRAY_DYE, "menu-admin-list-empty", click -> { });
+        }
+        put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
+        paging(page, number, pages, n -> openCamList(player, n));
+        player.openInventory(inventory);
+    }
+
+    /** The players in camera mode, by name. */
+    private List<Player> cameraPlayersSorted() {
         List<Player> cameras = new ArrayList<>();
         for (UUID id : plugin.getCameraPlayers().ids()) {
             Player camera = Bukkit.getPlayer(id);
@@ -549,58 +620,23 @@ public final class CamMenu implements Listener {
             }
         }
         cameras.sort((a, b) -> a.getName().compareToIgnoreCase(b.getName()));
-        int pages = Math.max(1, (cameras.size() + ENTRIES - 1) / ENTRIES);
-        int number = Math.min(Math.max(0, pageNumber), pages - 1);
-        Page page = new Page();
-        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-list-title"));
-        long now = System.currentTimeMillis();
-        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < cameras.size(); slot++) {
-            Player camera = cameras.get(number * ENTRIES + slot);
-            CameraData data = plugin.getCameraPlayers().get(camera.getUniqueId());
-            if (data == null) {
-                continue;
-            }
-            String time = CamTimeLimit.formatDuration(TimeUnit.MILLISECONDS.toSeconds(now - data.getStartedAt()));
-            Location body = data.getBody().getLocation();
-            Location at = camera.getLocation();
-            boolean sameWorld = body.getWorld().equals(at.getWorld());
-            List<String> lore = new ArrayList<>(lines(messages.getMessage(sameWorld ? "menu-admin-list-lore"
-                    : "menu-admin-list-lore-away").replace("{time}", time)
-                    .replace("{distance}", sameWorld ? String.valueOf(Math.round(at.distance(body))) : "")));
-            if (teleport) {
-                lore.addAll(lines(messages.getMessage("menu-admin-list-actions-teleport")));
-            }
-            if (stop) {
-                lore.addAll(lines(messages.getMessage("menu-admin-list-actions-stop")));
-            }
-            String name = camera.getName();
-            put(page, slot, head(camera, messages.getMessage("menu-admin-player").replace("{player}", name), lore),
-                    click -> {
-                        if (click.isShiftClick() && stop) {
-                            later(() -> {
-                                plugin.getStop().command(player, new String[]{name});
-                                openCamList(player, number);
-                            });
-                        } else if (click.isRightClick() && teleport) {
-                            act(player, () -> plugin.getListTeleport().command(player, new String[]{name, "body"}));
-                        } else if (click.isLeftClick() && teleport) {
-                            act(player, () -> plugin.getListTeleport().command(player, new String[]{name, "camera"}));
-                        }
-                    });
+        return cameras;
+    }
+
+    /** How long a camera player has been in camera mode and how far from his body, as lines. */
+    private List<String> camLines(Player camera) {
+        CameraData data = plugin.getCameraPlayers().get(camera.getUniqueId());
+        if (data == null) {
+            return List.of();
         }
-        put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
-        if (stopAll && !cameras.isEmpty()) {
-            put(page, SLOT_NEW, Material.TNT, "menu-admin-stop-all", click -> {
-                if (click.isShiftClick()) {
-                    later(() -> {
-                        plugin.getStop().command(player, new String[]{"all"});
-                        openCamList(player, 0);
-                    });
-                }
-            });
-        }
-        paging(page, number, pages, n -> openCamList(player, n));
-        player.openInventory(inventory);
+        String time = CamTimeLimit.formatDuration(
+                TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - data.getStartedAt()));
+        Location body = data.getBody().getLocation();
+        Location at = camera.getLocation();
+        boolean sameWorld = body.getWorld().equals(at.getWorld());
+        return lines(messages.getMessage(sameWorld ? "menu-admin-cam-lore" : "menu-admin-cam-lore-away")
+                .replace("{time}", time)
+                .replace("{distance}", sameWorld ? String.valueOf(Math.round(at.distance(body))) : ""));
     }
 
     /**
@@ -631,25 +667,27 @@ public final class CamMenu implements Listener {
     }
 
     /**
-     * The bans, like {@code /cam ban}, {@code /cam unban} and
-     * {@code /cam banlist}: first everybody, then the players online, and
-     * those banned who are not. A click on one who is banned lifts the ban; on
-     * one who is not, it asks in the chat how long and why.
+     * The players, to end their camera mode and to ban them: first
+     * everybody, then the players online, and those banned who are not. Under
+     * each whether he is in camera mode and whether he is banned; a banned
+     * one shines. A click opens what can be done to him.
      */
-    private void openBans(Player player, int pageNumber) {
-        CamBan ban = plugin.getBan();
-        if (!ban.mayUse(player)) {
+    private void openPlayers(Player player, int pageNumber) {
+        if (!managesPlayers(player)) {
             openAdmin(player);
             return;
         }
+        CamBan ban = plugin.getBan();
         Map<UUID, String> people = new LinkedHashMap<>();
         for (Player other : onlineSorted(player)) {
             people.put(other.getUniqueId(), other.getName());
         }
-        for (String name : ban.bannedNames()) {
-            OfflinePlayer banned = name == null ? null : CamStats.find(name);
-            if (banned != null) {
-                people.putIfAbsent(banned.getUniqueId(), name);
+        if (ban.mayUse(player)) {
+            for (String name : ban.bannedNames()) {
+                OfflinePlayer banned = name == null ? null : CamStats.find(name);
+                if (banned != null) {
+                    people.putIfAbsent(banned.getUniqueId(), name);
+                }
             }
         }
         List<Map.Entry<UUID, String>> list = new ArrayList<>(people.entrySet());
@@ -658,69 +696,171 @@ public final class CamMenu implements Listener {
         int pages = Math.max(1, (total + ENTRIES - 1) / ENTRIES);
         int number = Math.min(Math.max(0, pageNumber), pages - 1);
         Page page = new Page();
-        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-bans-title"));
+        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-players-title"));
         for (int slot = 0; slot < ENTRIES; slot++) {
             int index = number * ENTRIES + slot;
-            if (index == 0) {
-                boolean everybody = ban.everybodyBanned();
-                put(page, slot, everybody ? Material.BARRIER : Material.IRON_BARS,
-                        messages.getMessage("menu-admin-ban-everybody"),
-                        lines(messages.getMessage(everybody ? "menu-admin-banned-lore" : "menu-admin-not-banned-lore")),
-                        click -> {
-                            if (everybody) {
-                                later(() -> {
-                                    ban.unban(player, new String[]{"all"});
-                                    openBans(player, number);
-                                });
-                            } else {
-                                act(player, () -> askBan(player, "all", messages.getMessage("menu-admin-everybody")));
-                            }
-                        });
-            } else if (index < total) {
-                Map.Entry<UUID, String> entry = list.get(index - 1);
-                String name = entry.getValue();
-                boolean banned = ban.isBanned(entry.getKey());
-                Player online = Bukkit.getPlayer(entry.getKey());
-                ItemStack item = online != null
-                        ? head(online, messages.getMessage("menu-admin-player").replace("{player}", name),
-                                lines(messages.getMessage(banned ? "menu-admin-banned-lore"
-                                        : "menu-admin-not-banned-lore")))
-                        : item(Material.SKELETON_SKULL, messages.getMessage("menu-admin-player").replace("{player}", name),
-                                lines(messages.getMessage(banned ? "menu-admin-banned-lore"
-                                        : "menu-admin-not-banned-lore")));
-                put(page, slot, item, click -> {
-                    if (banned) {
-                        later(() -> {
-                            ban.unban(player, new String[]{name});
-                            openBans(player, number);
-                        });
-                    } else {
-                        act(player, () -> askBan(player, name, name));
-                    }
-                });
+            if (index >= total) {
+                break;
             }
+            Target target = index == 0 ? Target.everybody(messages.getMessage("menu-admin-everybody-name"))
+                    : new Target(list.get(index - 1).getKey(), list.get(index - 1).getValue());
+            List<String> lore = new ArrayList<>(targetLines(player, target));
+            lore.addAll(lines(messages.getMessage("menu-admin-players-actions")));
+            put(page, slot, targetItem(target, lore), click -> later(() -> openTarget(player, target)));
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
-        paging(page, number, pages, n -> openBans(player, n));
+        paging(page, number, pages, n -> openPlayers(player, n));
         player.openInventory(inventory);
     }
 
     /**
-     * Asks in the chat how long and why a ban is to last, the words of
-     * {@code /cam ban} after the name: {@code 2h Griefing}, a reason alone
-     * for good, or {@code -} for good without one.
-     *
-     * @param target the name, or {@code all}
-     * @param shown  how the question names him
+     * What can be done to one player, or to everybody: end his camera mode,
+     * while he is in it, and ban him - or lift his ban.
      */
-    private void askBan(Player player, String target, String shown) {
-        ask(player, "menu-admin-ban-question", answer -> {
-            List<String> args = new ArrayList<>(List.of(target));
-            if (!answer.equals(NO_REASON)) {
-                args.addAll(Arrays.asList(answer.split("\\s+")));
+    private void openTarget(Player player, Target target) {
+        if (!managesPlayers(player)) {
+            openAdmin(player);
+            return;
+        }
+        CamBan ban = plugin.getBan();
+        Page page = new Page();
+        Inventory inventory = create(page, SMALL, messages.getMessage("menu-admin-target-title")
+                .replace("{player}", target.name()));
+        put(page, 13, targetItem(target, targetLines(player, target)), click -> { });
+        if (plugin.getStop().mayUse(player)) {
+            boolean inCam = target.everybody() ? !plugin.getCameraPlayers().isEmpty() : target.inCam(plugin);
+            if (inCam) {
+                put(page, 11, Material.BARRIER, target.everybody() ? "menu-admin-stop-all" : "menu-admin-stop",
+                        click -> later(() -> {
+                            plugin.getStop().command(player,
+                                    new String[]{target.everybody() ? "all" : target.name()});
+                            openTarget(player, target);
+                        }));
+            } else {
+                put(page, 11, Material.GRAY_DYE, "menu-admin-stop-none", click -> { });
             }
-            plugin.getBan().ban(player, args.toArray(new String[0]));
-        }, "{player}", shown, "{none}", NO_REASON);
+        }
+        if (ban.mayUse(player)) {
+            if (target.banned(ban)) {
+                put(page, 15, Material.MILK_BUCKET, "menu-admin-unban", click -> later(() -> {
+                    ban.unban(player, new String[]{target.everybody() ? "all" : target.name()});
+                    openTarget(player, target);
+                }));
+            } else {
+                put(page, 15, Material.IRON_BARS, "menu-admin-ban", click -> later(() -> {
+                    drafts.put(player.getUniqueId(), new BanDraft(target));
+                    openBan(player);
+                }));
+            }
+        }
+        put(page, SLOT_SMALL_BACK, Material.ARROW, "menu-to-players", click -> later(() -> openPlayers(player, 0)));
+        player.openInventory(inventory);
+    }
+
+    /**
+     * How long a ban lasts and why, before it is given: for good or one of
+     * {@code menu.ban-times} - the one picked shines -, a reason written in
+     * the chat if he likes, and the button that bans.
+     */
+    private void openBan(Player player) {
+        BanDraft draft = drafts.get(player.getUniqueId());
+        CamBan ban = plugin.getBan();
+        if (draft == null || !ban.mayUse(player)) {
+            openPlayers(player, 0);
+            return;
+        }
+        Target target = draft.target;
+        Page page = new Page();
+        Inventory inventory = create(page, SMALL, messages.getMessage("menu-admin-ban-title")
+                .replace("{player}", target.name()));
+        put(page, 4, targetItem(target, targetLines(player, target)), click -> { });
+        List<String> times = new ArrayList<>();
+        times.add(null);
+        times.addAll(settings.getBanTimes());
+        for (int i = 0; i < times.size(); i++) {
+            String time = times.get(i);
+            boolean now = Objects.equals(time, draft.time);
+            String label = time == null ? messages.getMessage("menu-admin-ban-forever")
+                    : messages.getMessage("menu-admin-ban-time").replace("{time}", CamBan.spell(time));
+            List<String> lore = new ArrayList<>();
+            if (now) {
+                lore.addAll(lines(messages.getMessage("menu-state-current")));
+            }
+            put(page, 9 + i, shine(item(time == null ? Material.BEDROCK : Material.CLOCK, label, lore), now),
+                    click -> later(() -> {
+                        draft.time = time;
+                        openBan(player);
+                    }));
+        }
+        String reason = draft.reason.isEmpty() ? messages.getMessage("menu-admin-ban-no-reason") : draft.reason;
+        List<String> reasonLore = new ArrayList<>(lines(messages.getMessage("menu-state").replace("{state}", reason)));
+        reasonLore.addAll(lines(messages.getMessage("menu-admin-ban-reason-actions")));
+        put(page, 20, Material.WRITABLE_BOOK, messages.getMessage("menu-admin-ban-reason"), reasonLore, click -> {
+            if (click.isRightClick()) {
+                later(() -> {
+                    draft.reason = "";
+                    openBan(player);
+                });
+            } else {
+                act(player, () -> ask(player, "menu-admin-ban-reason-question", answer -> {
+                    draft.reason = answer;
+                    openBan(player);
+                }, "{player}", target.name()));
+            }
+        });
+        String summary = draft.time == null ? messages.getMessage("ban-for-good")
+                : messages.getMessage("ban-for").replace("{time}", CamBan.spell(draft.time));
+        if (!draft.reason.isEmpty()) {
+            summary += messages.getMessage("ban-reason").replace("{reason}", draft.reason);
+        }
+        put(page, 22, Material.REDSTONE_BLOCK, messages.getMessage("menu-admin-ban-confirm"),
+                lines(messages.getMessage("menu-admin-ban-confirm-lore").replace("{player}", target.name())
+                        .replace("{ban}", summary)),
+                click -> later(() -> {
+                    List<String> args = new ArrayList<>();
+                    args.add(target.everybody() ? "all" : target.name());
+                    if (draft.time != null) {
+                        args.add(draft.time);
+                    }
+                    if (!draft.reason.isEmpty()) {
+                        args.addAll(Arrays.asList(draft.reason.split("\\s+")));
+                    }
+                    drafts.remove(player.getUniqueId());
+                    ban.ban(player, args.toArray(new String[0]));
+                    openTarget(player, target);
+                }));
+        put(page, 18, Material.ARROW, "menu-to-target", click -> later(() -> openTarget(player, target)));
+        player.openInventory(inventory);
+    }
+
+    /** Whether he is in camera mode and whether he is banned, as lines under him. */
+    private List<String> targetLines(Player viewer, Target target) {
+        List<String> lore = new ArrayList<>();
+        if (target.everybody()) {
+            lore.addAll(lines(messages.getMessage("menu-admin-everybody-cam")
+                    .replace("{count}", String.valueOf(cameraPlayersSorted().size()))));
+        } else if (Bukkit.getPlayer(target.id()) != null) {
+            lore.addAll(target.inCam(plugin) ? camLines(Bukkit.getPlayer(target.id()))
+                    : lines(messages.getMessage("menu-admin-not-in-cam")));
+        } else {
+            lore.addAll(lines(messages.getMessage("menu-admin-offline")));
+        }
+        CamBan ban = plugin.getBan();
+        if (ban.mayUse(viewer)) {
+            String text = target.everybody() ? ban.everybodyBanText() : ban.banText(target.id());
+            lore.addAll(lines(text == null ? messages.getMessage("menu-admin-not-banned")
+                    : messages.getMessage("menu-admin-banned").replace("{ban}", text)));
+        }
+        return lore;
+    }
+
+    /** A player, or everybody, as an item: his head while he is online; shining while he is banned. */
+    private ItemStack targetItem(Target target, List<String> lore) {
+        String label = messages.getMessage("menu-admin-player").replace("{player}", target.name());
+        Player online = target.everybody() ? null : Bukkit.getPlayer(target.id());
+        ItemStack item = target.everybody() ? item(Material.BEACON, label, lore)
+                : online != null ? head(online, label, lore) : item(Material.SKELETON_SKULL, label, lore);
+        return shine(item, target.banned(plugin.getBan()));
     }
 
     /**
@@ -901,6 +1041,7 @@ public final class CamMenu implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         questions.remove(event.getPlayer().getUniqueId());
+        drafts.remove(event.getPlayer().getUniqueId());
     }
 
     // ------------------------------------------------------------ clicks

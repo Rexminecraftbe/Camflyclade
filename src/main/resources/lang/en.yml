@@ -135,6 +135,7 @@ messages:
   config-slot-taken: "&c{path}: slot {value} is taken by {other} already. Using slot {used} instead."
   config-syntax-unreadable: "unreadable"
   config-too-large: "&cValue for {path} is too large: {value}. Using {max} instead."
+  config-too-many-entries: "&c{path} has more than {max} entries. The ones after them are ignored."
   config-too-small: "&cValue for {path} is too small: {value}. Using {min} instead."
   config-unknown-entry: "&cUnknown entry in {path}: '{value}'. It is ignored."
   config-unknown-key: "&cUnknown setting {path}. It is ignored, check its spelling and indentation."
@@ -166,22 +167,33 @@ messages:
   hitbox.name-format: "&c[HITBOX] {player}"
   # /cam menu (menu): the names of the buttons, and under each the text of the same name with -lore after it (\n
   # begins a new line). menu-only is what the commands say under menu.access or menu.admin-access: menu,
-  # menu-features-off under false. menu-spot-name asks for the name of a new spot in the chat, menu-admin-ban-question
-  # how long and why a player is to be banned ({player}, {none} the answer for good without a reason), {cancel}
-  # being the word that calls either off, with menu-answer-cancelled. Under menu-stats and the heads of
-  # menu-admin-stats stand the lines of /cam stats; menu-admin-list-lore and -away are those of cam-list-entry.
+  # menu-features-off under false. menu-spot-name asks for the name of a new spot in the chat,
+  # menu-admin-ban-reason-question why a player is banned ({player}), {cancel} being the word that calls either off,
+  # with menu-answer-cancelled. Under menu-stats and the heads of menu-admin-stats stand the lines of /cam stats;
+  # menu-admin-cam-lore and -away stand under the heads of who is in cam mode, like cam-list-entry. On the page of a
+  # ban, menu-admin-ban-time names each of menu.ban-times ({time} written out), menu-admin-ban-confirm-lore says
+  # what the ban will be ({ban} as ban-for or ban-for-good with ban-reason), and menu-admin-banned how a ban stands.
   menu-admin: "&cAdmin"
-  menu-admin-ban-everybody: "&eEverybody"
+  menu-admin-ban: "&cBan"
+  menu-admin-ban-confirm: "&4Ban"
+  menu-admin-ban-confirm-lore: "&7{player}, {ban}"
+  menu-admin-ban-forever: "&cFor good"
+  menu-admin-ban-lore: "&7Pick how long and why."
+  menu-admin-ban-no-reason: "&7none"
+  menu-admin-ban-reason: "&fReason"
+  menu-admin-ban-reason-actions: "&eLeft-click: write one in the chat\n&eRight-click: none"
+  menu-admin-ban-reason-question: "&eType in the chat why {player} is banned, or {cancel}."
+  menu-admin-ban-time: "&eFor {time}"
+  menu-admin-ban-title: "&8Ban {player}"
+  menu-admin-banned: "&cBanned {ban}"
+  menu-admin-cam-lore: "&7In cam mode for {time},\n&7{distance} blocks from the body"
+  menu-admin-cam-lore-away: "&7In cam mode for {time},\n&7in another world than the body"
+  menu-admin-everybody-cam: "&7{count} in cam mode"
+  menu-admin-everybody-name: "Everybody"
   # The flights of a player on the admin page: menu-admin-flight with {number} (1 the newest) and {date}, when it
   # began as menu-admin-flight-date writes it (a pattern of Java's DateTimeFormatter, e.g. dd.MM.yyyy HH:mm), and
   # under it menu-admin-flight-lore with {time} how long it took, {distance} in blocks, {from} where the body stood and
   # {to} where the camera was last, both as trail-place has them.
-  menu-admin-ban-question: "&eHow long and why is {player} to be banned? Type e.g. 2h Griefing - a reason alone bans for good, {none} for good without one - or {cancel}."
-  menu-admin-banned-lore: "&cBanned - click to lift the ban."
-  menu-admin-bans: "&cBans"
-  menu-admin-bans-lore: "&7Keep players out of cam mode."
-  menu-admin-bans-title: "&8Bans"
-  menu-admin-everybody: "everybody"
   menu-admin-flight: "&f#{number} &7- &f{date}"
   menu-admin-flight-actions: "&eLeft-click: show it\n&eRight-click: show it and go to its start"
   menu-admin-flight-date: "yyyy-MM-dd HH:mm"
@@ -189,21 +201,31 @@ messages:
   menu-admin-flight-lore: "&7Started: &f{date}\n&7Duration: &f{time}\n&7Distance: &f{distance} blocks\n&7From: &f{from}\n&7To: &f{to}"
   menu-admin-flights-all: "&eShow all flights"
   menu-admin-flights-title: "&8Flights of {player}"
-  menu-admin-list: "&bIn cam mode"
-  menu-admin-list-actions-stop: "&cShift-click: end the cam mode"
-  menu-admin-list-actions-teleport: "&eLeft-click: to the camera\n&eRight-click: to the body"
-  menu-admin-list-lore: "&7In cam mode for {time},\n&7{distance} blocks from the body"
-  menu-admin-list-lore-away: "&7In cam mode for {time},\n&7in another world than the body"
-  menu-admin-list-title: "&8In cam mode"
-  menu-admin-lore: "&7Who is in cam mode, statistics,\n&7bans and flights."
-  menu-admin-not-banned-lore: "&7Not banned - click to ban."
+  menu-admin-list: "&bWho is in cam mode"
+  menu-admin-list-actions: "&eLeft-click: teleport to the camera\n&eRight-click: teleport to the body"
+  menu-admin-list-empty: "&7Nobody is in cam mode."
+  menu-admin-list-lore: "&7See who is flying right now\n&7and teleport to them."
+  menu-admin-list-title: "&8Who is in cam mode"
+  menu-admin-lore: "&7Who is in cam mode, players to\n&7stop and ban, statistics and flights."
+  menu-admin-not-banned: "&7Not banned"
+  menu-admin-not-in-cam: "&7Not in cam mode"
+  menu-admin-offline: "&7Not online"
   menu-admin-player: "&f{player}"
+  menu-admin-players: "&cPlayers: stop and ban"
+  menu-admin-players-actions: "&eClick: stop or ban"
+  menu-admin-players-lore: "&7End the cam mode of a player,\n&7ban him or lift his ban."
+  menu-admin-players-title: "&8Players"
   menu-admin-stats: "&bStatistics of others"
   menu-admin-stats-actions: "&eClick: in the chat"
   menu-admin-stats-lore: "&7Of the players online."
   menu-admin-stats-title: "&8Statistics"
+  menu-admin-stop: "&cEnd the cam mode"
   menu-admin-stop-all: "&cEnd everybody's cam mode"
-  menu-admin-stop-all-lore: "&7Shift-click, so that a slip\n&7of the mouse ends nothing."
+  menu-admin-stop-all-lore: "&7Everybody back to the body, at once."
+  menu-admin-stop-lore: "&7Back to the body, at once."
+  menu-admin-stop-none: "&7Not in cam mode"
+  menu-admin-stop-none-lore: "&7There is no cam mode to end."
+  menu-admin-target-title: "&8{player}"
   menu-admin-title: "&8Cam admin"
   menu-admin-trails: "&aFlights"
   menu-admin-trails-actions: "&eClick: his flights"
@@ -211,6 +233,7 @@ messages:
   menu-admin-trails-hide: "&7Hide the line"
   menu-admin-trails-lore: "&7Where the cameras flew."
   menu-admin-trails-title: "&8Flights"
+  menu-admin-unban: "&aLift the ban"
   menu-answer-cancelled: "&7Cancelled."
   menu-back: "&bBack to your body"
   menu-back-lore: "&7The camera goes back to your body,\n&7cam mode goes on."
@@ -281,6 +304,8 @@ messages:
   menu-time-title: "&8Time of day"
   menu-title: "&8Cam"
   menu-to-admin: "&7« Back"
+  menu-to-players: "&7« Back"
+  menu-to-target: "&7« Back"
   menu-to-trails: "&7« Back"
   menu-to-main: "&7« Back"
   menu-to-spots: "&7« Back to the spots"
@@ -849,7 +874,7 @@ message-settings:
   end-warning-time-limit: true
   enabled: true
   flight-speed: true
-  menu-admin-ban-question: true
+  menu-admin-ban-reason-question: true
   menu-answer-cancelled: true
   menu-features-off: true
   menu-off: true

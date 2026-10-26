@@ -44,6 +44,7 @@ public final class ConfigReader {
     private static final String UNKNOWN_KEY = "config-unknown-key";
     private static final String ENTRY_IN_BOTH_LISTS = "config-entry-in-both-lists";
     private static final String SLOT_TAKEN = "config-slot-taken";
+    private static final String TOO_MANY_ENTRIES = "config-too-many-entries";
     private static final String TOO_SMALL = "config-too-small";
     private static final String TOO_LARGE = "config-too-large";
     private static final String OUT_OF_RANGE = "config-out-of-range";
@@ -453,6 +454,13 @@ public final class ConfigReader {
                 .with("value", value)
                 .with("other", other)
                 .with("used", used));
+    }
+
+    /** Notes a list with more entries than there is room for; the ones after {@code max} are left out. */
+    public void warnTooManyEntries(String path, int max) {
+        warnings.add(ConfigIssue.of(TOO_MANY_ENTRIES)
+                .with("path", path)
+                .with("max", max));
     }
 
     public void warnEntryInBothLists(String path, String other, Object value) {

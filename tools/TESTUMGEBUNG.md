@@ -58,7 +58,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **853** - alle 853 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **856** - alle 856 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -1405,12 +1405,16 @@ und Nachtsicht sagen unter ihrem Namen, wie sie stehen, und auf der Seite der
 Zeiten steht „Now“ unter der, die gerade gilt · mit `menu.buttons` steht der
 Start auf dem eingestellten Platz und startet von dort, ein Knopf auf einem
 besetzten Platz und ein unbekanntes Item werden gemeldet · unter dem Knopf der
-Statistik stehen die Zahlen, der Bot mit op hat die Admin-Seite mit der Liste
-und der Statistik anderer (Sperren und Flugspuren nur, wenn sie an sind), und
-die Liste zeigt ihn im Cam-Modus · mit `admin-access: menu` verweist `/cam
-list` auf das Menü, die Konsole darf es weiter · „Everybody“ auf der Seite der
-Sperren fragt im Chat nach Dauer und Grund, `-` sperrt alle für immer, ein
-zweiter Klick hebt es auf · ein Klick auf den Kopf auf der Seite der Flugspuren
+Statistik stehen die Zahlen, der Bot mit op hat die Admin-Seite mit „Who is in
+cam mode“ und der Statistik anderer (Spieler und Flugspuren nur, wenn stop, ban
+und trail an sind), und die Liste zeigt ihn im Cam-Modus zum Hinteleportieren
+· mit `admin-access: menu` verweist `/cam list` auf das Menü, die Konsole darf
+es weiter · auf der Seite der Spieler steht vorn „Everybody“ mit der Zahl im
+Cam-Modus, ein Klick bietet Beenden und Sperren an, Beenden beendet alle,
+Sperren zeigt die Dauern (für immer vorgewählt), eine gewählte glänzt, der
+Grund kommt aus dem Chat, danach steht „Banned“ unter dem Kopf, und „Lift the
+ban“ hebt es auf · mit `menu.admin-buttons` steht die Liste auf dem
+eingestellten Platz · ein Klick auf den Kopf auf der Seite der Flugspuren
 zeigt die Flüge des Bots, den neuesten zuerst, mit Datum, Dauer, Strecke, Start
 und Ende; Linksklick zeigt einen, Rechtsklick bringt den Bot an seinen Start,
 der letzte Knopf zeigt alle · „Save a spot
