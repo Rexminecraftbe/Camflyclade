@@ -1130,6 +1130,8 @@ let spawned = false;
 let dead = false;
 // Was knock_start gerade mitschreibt, bis knock_stop es abholt.
 let knock = null;
+// Was 'velocity' an die Pakete der Geschwindigkeit haengt, solange es laeuft.
+let follower = null;
 // Was watch_blocks gerade mitschreibt, bis watch_stop es abholt.
 let watched = null;
 // Die Toene, die der Server schickt, als Text des ganzen Pakets: Wo der Name
@@ -1473,6 +1475,27 @@ async function handle(cmd) {
       await new Promise((r) => setTimeout(r, 500));
       const now = bot.entity.position;
       return { forced, pos: [now.x, now.y, now.z] };
+    }
+    case 'velocity': {
+      // Fliegt mit der Geschwindigkeit, die der Server schickt, wie ein
+      // echter Client im Flug: ohne Schwerkraft, und mit der Zahl aus dem
+      // Paket - mineflayer teilt das lpVec3 von 26.x noch durch 8000, siehe
+      // knock_start. 'on: false' hoert damit auf.
+      if (follower) {
+        bot._client.removeListener('entity_velocity', follower);
+        follower = null;
+      }
+      if (cmd.on) {
+        follower = (packet) => {
+          if (!bot.entity || packet.entityId !== bot.entity.id) return;
+          const v = packet.velocity;
+          bot.entity.velocity.set(v.x, v.y, v.z);
+        };
+        bot._client.on('entity_velocity', follower);
+        try { bot.creative.startFlying(); } catch (e) { /* egal */ }
+        bot.physics.gravity = 0;
+      }
+      return { ok: true };
     }
     case 'knock_start': {
       // Schreibt mit, was den Bot nach einem Treffer bewegt: jedes Paket mit
@@ -6011,7 +6034,8 @@ def fuehrung_checks(env, bot):
     max-distance auf 20 und out-of-reach-seconds auf 8. Eingeladen wird nur,
     wer schon im Cam-Modus ist und dessen Kamera nicht weiter als 16 Bloecke
     weg ist, sonst sagt die Meldung warum, und die Tab-Vervollstaendigung
-    bietet ihn nicht an. Nah dabei bietet sie ihn an, die Einladung kommt mit
+    bietet ihn nicht an. Sein Koerper steht sechs Bloecke hinter dem des
+    Fuehrers. Nah dabei bietet sie ihn an, die Einladung kommt mit
     Knoepfen und dem Ton von sounds.tour-invite. Nimmt er an, steht seine
     Kamera beim Fuehrer, der es erfaehrt, und sein Flugtempo ist 0. Fliegt
     der Fuehrer acht Bloecke, fliegt der Gast mit; im Menue sagt der Knopf
@@ -6057,7 +6081,11 @@ def fuehrung_checks(env, bot):
     if heim is None:
         return
     x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
-    console(env, f"fill {_floor(x) - 4} {y} {_floor(z) - 4} {_floor(x) + 40} {y + 8} {_floor(z) + 4} "
+    # Der Koerper des Gastes steht sechs Bloecke hinter dem des Fuehrers: So
+    # kommt der Fuehrer aus der Reichweite des Gastes heraus und bleibt in
+    # seiner eigenen - max-distance haelt auch ihn.
+    gast = (x - 6, y, z)
+    console(env, f"fill {_floor(x) - 10} {y} {_floor(z) - 4} {_floor(x) + 40} {y + 8} {_floor(z) + 4} "
                  f"minecraft:air", pause=0.5)
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
     try:
@@ -6073,7 +6101,7 @@ def fuehrung_checks(env, bot):
         cam_off(zuschauer)
         hinstellen(bot, x, y, z)
         cam_on(bot)
-        console(env, f"tp {ZUSCHAUER_NAME} {x + 4} {y} {z}", pause=1.0)
+        console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
         zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
         FIND.test("Eingeladen wird nur, wer schon im Cam-Modus ist", gesagt(zeilen, r"is not in cam mode"),
                   zeige(zeilen))
@@ -6086,11 +6114,14 @@ def fuehrung_checks(env, bot):
                   gesagt(zeilen, r"more than 16 blocks from yours") and ZUSCHAUER_NAME not in tabs,
                   f"{zeige(zeilen)} / {tabs}")
         cam_off(zuschauer)
-        if not FIND.test("Der zweite Spieler ist vier Bloecke daneben im Cam-Modus",
-                         zuschauer_cam_an(env, zuschauer, x + 4, y, z), ""):
+        if not FIND.test("Der zweite Spieler ist sechs Bloecke daneben im Cam-Modus",
+                         zuschauer_cam_an(env, zuschauer, gast[0], y, z), ""):
             return
         tabs = tab(bot, "/cam tour invite ")
         FIND.test("Tab nach /cam tour invite: der Spieler daneben", tabs == [ZUSCHAUER_NAME], str(tabs))
+        # Wie ein echter Client im Flug: die Geschwindigkeit des Servers, ohne Schwerkraft.
+        zuschauer.call("velocity", on=True)
+        eigenes_tempo = flugtempo(env, ZUSCHAUER_NAME)
         seit = zuschauer.mark()
         ton = toene_marke(zuschauer)
         pakete_seit = zuschauer.call("chat_packets", since=10 ** 9).get("count", 0)
@@ -6124,11 +6155,11 @@ def fuehrung_checks(env, bot):
                   f"You follow {BOT_NAME}" in item_text(knopf.get("20")), item_text(knopf.get("20")))
         zuschauer.call("close_window", wait=10)
 
-        # Der Koerper des Gastes steht bei x + 4, max-distance ist 20: Bei
-        # x + 28 ist der Fuehrer ausser seiner Reichweite.
+        # Der Fuehrer ist bei x + 8, max-distance ist 20: Bei x + 16 ist er 22
+        # Bloecke vom Koerper des Gastes weg und 16 von seinem eigenen.
         seit, seit_bot = zuschauer.mark(), bot.mark()
         ton = toene_marke(zuschauer)
-        bot.call("fly", wait=30, dx=20, timeout=15000)
+        bot.call("fly", wait=30, dx=8, timeout=15000)
         time.sleep(1.0)
         dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, seit_bot)
         FIND.test("Ausser Reichweite: beide lesen in der Action-Bar, dass die Fuehrung endet",
@@ -6138,8 +6169,8 @@ def fuehrung_checks(env, bot):
         FIND.test("sounds.tour-reach - der Gast hoert den Ton", ton_da(zuschauer, ton, "block.conduit.deactivate"), "")
         wo = zuschauer_pos()
         FIND.test("Die Kamera des Gastes bleibt in ihrer eigenen Reichweite",
-                  wo is not None and math.dist(wo, (x + 4, y, z)) <= 21.0, str(wo))
-        bot.call("fly", wait=30, dx=-14, timeout=15000)
+                  wo is not None and math.dist(wo, gast) <= 21.0, str(wo))
+        bot.call("fly", wait=30, dx=-6, timeout=15000)
         time.sleep(2.0)
         dort = zeilen_seit(zuschauer, seit)
         FIND.test("Rechtzeitig zurueck: der Gast fliegt wieder mit, die Fuehrung geht weiter",
@@ -6147,7 +6178,7 @@ def fuehrung_checks(env, bot):
                   f"{zuschauer_pos()} / {bot.server_pos()} / {zeige(dort)}")
 
         seit, seit_bot = zuschauer.mark(), bot.mark()
-        bot.call("fly", wait=30, dx=20, timeout=15000)
+        bot.call("fly", wait=30, dx=8, timeout=15000)
         time.sleep(10.0)
         dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, seit_bot)
         FIND.test("Zu lange ausser Reichweite: die Fuehrung ist fuer den Gast vorbei, beide erfahren es",
@@ -6156,12 +6187,13 @@ def fuehrung_checks(env, bot):
                   f"{zeige(dort)} / {zeige(hier)}")
         tempo = flugtempo(env, ZUSCHAUER_NAME)
         FIND.test("Danach fliegt der Gast wieder mit seinem eigenen Tempo",
-                  tempo is not None and tempo > 0.05, str(tempo))
+                  tempo is not None and eigenes_tempo is not None and tempo > 0.0
+                  and abs(tempo - eigenes_tempo) < 1e-6, f"{tempo} / vorher {eigenes_tempo}")
         zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
         FIND.test("Einladen geht nicht, solange der Fuehrer ausser seiner Reichweite ist",
                   gesagt(zeilen, rf"{ZUSCHAUER_NAME} could not follow you from there"), zeige(zeilen))
 
-        bot.call("fly", wait=30, dx=-14, timeout=15000)
+        bot.call("fly", wait=30, dx=-8, timeout=15000)
         time.sleep(1.0)
         FIND.test("Wieder in Reichweite: einladen und annehmen", einladen_und_annehmen(), "")
         seit = bot.mark()
@@ -6176,7 +6208,10 @@ def fuehrung_checks(env, bot):
         hier = zeilen_seit(bot, seit)
         FIND.test("/cam back - zurueck am Koerper und nicht mehr auf der Fuehrung",
                   gesagt(dort, rf"You left the tour of {BOT_NAME}") and gesagt(hier, rf"{ZUSCHAUER_NAME} left your tour")
-                  and nahe(zuschauer_pos(), (x + 4, y, z), 1.5), f"{zeige(dort)} / {zuschauer_pos()}")
+                  and nahe(zuschauer_pos(), gast, 1.5), f"{zeige(dort)} / {zuschauer_pos()}")
+        # Wieder nah an den Gast heran, der jetzt an seinem Koerper ist.
+        bot.call("fly", wait=30, dx=-8, timeout=15000)
+        time.sleep(1.0)
         einladen_und_annehmen()
         seit = zuschauer.mark()
         zeilen = befehl(bot, f"/cam tour kick {ZUSCHAUER_NAME}")
@@ -6231,6 +6266,7 @@ def fuehrung_checks(env, bot):
                 if client.proc is not None:
                     client.call("close_window", wait=10)
             if zuschauer.proc is not None:
+                zuschauer.call("velocity", on=False)
                 cam_off(zuschauer)
                 zuschauer.stop()
             cam_off(bot)
