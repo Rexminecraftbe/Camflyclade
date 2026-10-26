@@ -222,7 +222,8 @@ Repository: Was ihr fehlt, kommt aus der englischen Datei.
   ein halbes Herz alle paar Ticks. Der Test von `body.health-visible` stellt deshalb
   `natural_health_regeneration` für sich ab, sonst stünde der Bot schon vor
   dem Start des Cam-Modus wieder mit vollen Herzen da.
-* **Der Sperrtest löscht `plugins/CamFly/bans.yml`**, vorher und nachher.
+* **Der Sperrtest löscht `plugins/CamFly/playerdata/bans.yml`** (und eine alte
+  `plugins/CamFly/bans.yml` von vor dem Umzug), vorher und nachher.
   Die Sperren bleiben sonst über einen Neustart hinweg stehen, und ein
   abgebrochener Lauf ließe den zweiten Spieler gesperrt zurück.
 * **Der zweite Spieler meldet sich an, wo ihn der letzte Lauf zurückließ**,

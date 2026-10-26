@@ -815,11 +815,12 @@ stop-command:
 #   /cam banlist                    = wer gesperrt ist, wie lange noch, von wem und warum
 # Zeit: Zahlen mit s, m, h, d oder w dahinter, auch zusammen, z. B. 30m, 2h, 1d12h oder 1w.
 # Wer gerade im Cam-Modus ist, kommt zurück zu seinem Körper (Ton: sounds.end-forced) und erfährt, wer es war.
-# Die Sperre eines einzelnen Spielers gilt auch für Operatoren. Gespeichert wird in plugins/CamFly/bans.yml,
-# die Sperren bleiben nach /cam reload und einem Neustart.
+# Die Sperre eines einzelnen Spielers gilt auch für Operatoren. Gespeichert wird in plugins/CamFly/playerdata/bans.yml,
+# die Sperren bleiben nach /cam reload und einem Neustart. Eine bans.yml von früher, direkt in plugins/CamFly,
+# zieht beim Start von selbst dorthin um.
 # Benutzen dürfen es die Konsole und wer das Recht camplugin.ban hat (Operatoren haben es).
 cam-ban:
-  # false = die Befehle sind aus, und keine Sperre gilt (bans.yml bleibt, wie sie ist)
+  # false = die Befehle sind aus, und keine Sperre gilt (playerdata/bans.yml bleibt, wie sie ist)
   enabled: true
 # /cam trail zeigt, wo die Kamera eines Spielers herumgeflogen ist: als Linie aus Partikeln, die nur
 # der sieht, der fragt - von grün am Körper über gelb nach rot, wo die Kamera zuletzt war. Dazu stehen im

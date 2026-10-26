@@ -20,8 +20,8 @@ import java.util.logging.Level;
 
 /**
  * Who may not use camera mode, {@code /cam ban}: single players, and
- * everybody at once. Kept in {@code bans.yml} in the folder of the plugin, so
- * that a ban outlasts {@code /cam reload} and a restart.
+ * everybody at once. Kept in {@code playerdata/bans.yml} in the folder of the
+ * plugin, so that a ban outlasts {@code /cam reload} and a restart.
  *
  * <p>A ban for a while carries the moment it ends. One that has ended is no
  * ban any more from then on and is left out the next time the file is
@@ -33,7 +33,14 @@ import java.util.logging.Level;
  */
 public final class BanList {
 
-    /** The file, inside the folder of the plugin. */
+    /**
+     * The folder of everything the plugin keeps about players, inside the
+     * folder of the plugin. The file lay right in the folder of the plugin
+     * before, and is moved from there on the first start after the update.
+     */
+    private static final String PLAYER_FOLDER = "playerdata";
+
+    /** The file, inside {@link #PLAYER_FOLDER}. */
     private static final String FILE = "bans.yml";
 
     /** What stands at the top of the file, for whoever finds it and wonders. */
@@ -83,6 +90,11 @@ public final class BanList {
     }
 
     private Path file() {
+        return plugin.getDataFolder().toPath().resolve(PLAYER_FOLDER).resolve(FILE);
+    }
+
+    /** Where the file lay before it moved into {@link #PLAYER_FOLDER}. */
+    private Path oldFile() {
         return plugin.getDataFolder().toPath().resolve(FILE);
     }
 
@@ -154,7 +166,7 @@ public final class BanList {
     public void load() {
         players.clear();
         everybody = null;
-        Path path = file();
+        Path path = moveOldFile();
         if (!Files.exists(path)) {
             return;
         }
@@ -233,6 +245,33 @@ public final class BanList {
         section.set("until", ban.until());
         section.set("reason", ban.reason());
         section.set("by", ban.by());
+    }
+
+    /**
+     * Moves the file from where it lay before into {@link #PLAYER_FOLDER},
+     * so that no ban is lost with the update. One that is already there wins;
+     * the old one then stays where it is.
+     *
+     * @return the file to read: the old one while it could not be moved,
+     *         else the one in {@link #PLAYER_FOLDER}, which the next save
+     *         writes either way
+     */
+    private Path moveOldFile() {
+        Path path = file();
+        Path old = oldFile();
+        if (!Files.exists(old) || Files.exists(path)) {
+            return path;
+        }
+        try {
+            Files.createDirectories(path.getParent());
+            Files.move(old, path);
+            log.log(Level.INFO, "The bans of cam mode moved to " + PLAYER_FOLDER + "/" + FILE + ".");
+            return path;
+        } catch (IOException ex) {
+            log.log(Level.WARNING, "The bans of cam mode could not be moved to " + PLAYER_FOLDER + "/" + FILE
+                    + ", they are read from where they are: " + ex);
+            return old;
+        }
     }
 
     /** Moves a file that could not be read out of the way, under a name that says so. */

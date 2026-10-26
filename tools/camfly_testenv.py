@@ -4173,17 +4173,19 @@ def stopp_checks(env, bot):
 def bann_checks(env, bot):
     """cam-ban: /cam ban, /cam unban und /cam banlist.
 
-    Voreingestellt ist es aus - nachgesehen in der ausgelieferten Datei -, und
-    /cam ban sagt das. Eingeschaltet sperrt der Bot (op) den zweiten Spieler
-    fuer eine Stunde mit einem Grund: Dessen laufender Cam-Modus endet, er
-    erfaehrt, wer es war, und ein neuer Start wird abgelehnt, mit der Zeit,
-    die noch bleibt, und dem Grund. Die Sperre steht in bans.yml und in
-    /cam banlist und bleibt nach /cam reload. /cam unban hebt sie auf, ein
+    Voreingestellt ist es an - nachgesehen in der ausgelieferten Datei -, der
+    Testserver startet es aus, und /cam ban sagt das. Eingeschaltet sperrt der
+    Bot (op) den zweiten Spieler fuer eine Stunde mit einem Grund: Dessen
+    laufender Cam-Modus endet, er erfaehrt, wer es war, und ein neuer Start
+    wird abgelehnt, mit der Zeit, die noch bleibt, und dem Grund. Die Sperre
+    steht in playerdata/bans.yml und in /cam banlist und bleibt nach
+    /cam reload. /cam unban hebt sie auf, ein
     zweites Mal sagt es, dass er nicht gesperrt ist. Eine Sperre fuer drei
     Sekunden laeuft von selbst ab. /cam ban all von der Konsole sperrt den
     zweiten Spieler aus, den Bot nicht: Als op hat er camplugin.ban.bypass.
     /cam unban all macht wieder auf. Ein unbekannter Name wird gemeldet, und
-    ohne op fehlt das Recht.
+    ohne op fehlt das Recht. Eine bans.yml von vor dem Umzug, noch direkt in
+    plugins/CamFly, zieht beim Laden nach playerdata um und gilt weiter.
     """
     if not FIND.test("Cam-Modus ist vor dem Sperrtest aus", cam_off(bot), ""):
         return
@@ -4195,7 +4197,9 @@ def bann_checks(env, bot):
     bot.chat(f"/fill {_floor(x) - 2} {y} {_floor(z) - 2} {_floor(x) + 2} {y + 3} {_floor(z) + 2} minecraft:air")
     time.sleep(0.5)
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
-    sperren = env.server / "plugins" / "CamFly" / "bans.yml"
+    sperren = env.server / "plugins" / "CamFly" / "playerdata" / "bans.yml"
+    # Wo die Datei vor dem Umzug nach playerdata lag.
+    alte_sperren = env.server / "plugins" / "CamFly" / "bans.yml"
     # Die Zeit, die eine Stunde nach ein paar Sekunden noch hat.
     stunde = r"for (59m \d+s|1h 0m 0s)"
 
@@ -4224,8 +4228,9 @@ def bann_checks(env, bot):
                          zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
             return
         time.sleep(1.5)
-        if sperren.exists():
-            sperren.unlink()
+        for datei in (sperren, alte_sperren):
+            if datei.exists():
+                datei.unlink()
         set_option(env, "enabled", "true", "cam-ban")
         if not FIND.test("Der zweite Spieler ist fuer den Sperrtest im Cam-Modus", kamera_an(), ""):
             return
@@ -4246,7 +4251,7 @@ def bann_checks(env, bot):
                   gesagt(zeilen, rf"You are banned from cam mode {stunde} \(Testgrund\)")
                   and not gesagt(zeilen, r"[Cc]am mode activated"), zeige(zeilen))
         text = sperren.read_text(encoding="utf-8") if sperren.exists() else ""
-        FIND.test("cam-ban: die Sperre steht in bans.yml",
+        FIND.test("cam-ban: die Sperre steht in playerdata/bans.yml",
                   f"name: {ZUSCHAUER_NAME}" in text and "Testgrund" in text, text[-300:] or "keine Datei")
         zeilen = befehl(bot, "/cam banlist")
         FIND.test("/cam banlist nennt ihn, wie lange noch, von wem und warum",
@@ -4320,14 +4325,28 @@ def bann_checks(env, bot):
         FIND.test("/cam ban ohne camplugin.ban: keine Berechtigung, und niemand ist gesperrt",
                   gesagt(zeilen, r"permission") and gesagt(liste, r"Nobody is banned from cam mode"),
                   f"{zeige(zeilen)} - {zeige(liste)}")
+
+        if sperren.exists():
+            sperren.unlink()
+        alte_sperren.write_text("everybody:\n  until: 0\n  reason: Altdatei\n  by: Testlauf\n", encoding="utf-8")
+        log = konsole("cam reload")
+        text = sperren.read_text(encoding="utf-8") if sperren.exists() else ""
+        FIND.test("bans.yml von vor dem Umzug: sie zieht beim Laden nach playerdata um",
+                  not alte_sperren.exists() and "Altdatei" in text and "moved to playerdata/bans.yml" in log,
+                  f"alt da: {alte_sperren.exists()}, neu: {text[-200:] or 'keine Datei'}")
+        zeilen = befehl(bot, "/cam banlist")
+        FIND.test("bans.yml von vor dem Umzug: ihre Sperre gilt weiter",
+                  gesagt(zeilen, r"Everybody: for good, by Testlauf \(Altdatei\)"), zeige(zeilen))
+        konsole("cam unban all")
     finally:
         try:
             if zuschauer.proc is not None:
                 zuschauer.stop()
             console(env, f"op {BOT_NAME}", pause=1.0)
             cam_off(bot)
-            if sperren.exists():
-                sperren.unlink()
+            for datei in (sperren, alte_sperren):
+                if datei.exists():
+                    datei.unlink()
             set_option(env, "enabled", "false", "cam-ban")
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
