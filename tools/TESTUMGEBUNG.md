@@ -11,6 +11,11 @@ Beim ersten Mal dauert es ein paar Minuten, weil JDK, paper-api, der Server und
 mineflayer geholt werden. Alles davon landet unter `~/camfly-testenv` und wird
 danach wiederverwendet.
 
+Gefahren werden nicht alle Abschnitte der Tests - alle zusammen dauern über
+anderthalb Stunden -, sondern die, die die Änderungen gegenüber `master`
+betreffen, siehe [Welche Abschnitte laufen](#welche-abschnitte-laufen). Alle
+wie früher mit `--alle`.
+
 ## Nützliche Aufrufe
 
 ```bash
@@ -20,6 +25,10 @@ python3 tools/camfly_testenv.py --skip jdk,paperapi                # Schritte au
 python3 tools/camfly_testenv.py --keep-running                     # Server bleibt oben
 python3 tools/camfly_testenv.py --stop                             # laufenden Server beenden
 python3 tools/camfly_testenv.py --workdir /pfad/woanders           # anderer Arbeitsordner
+python3 tools/camfly_testenv.py --nur-auswahl                      # nur zeigen, welche Abschnitte liefen
+python3 tools/camfly_testenv.py --alle                             # alle Abschnitte, ohne Auswahl
+python3 tools/camfly_testenv.py --abschnitte flugspur,menue        # genau diese Abschnitte
+python3 tools/camfly_testenv.py --seit HEAD~3                      # mit einem anderen Stand vergleichen
 ```
 
 Läuft der Server weiter, gehen Konsolenbefehle über die FIFO:
@@ -40,7 +49,88 @@ echo "say hallo" > ~/camfly-testenv/server/console.fifo
 | `names`      | Die Namenslisten der Sprachdatei gegen die Daten des Spiels prüfen, siehe unten. |
 | `server`     | Paper-Server holen, einrichten, starten, Konsole an eine FIFO hängen. |
 | `bot`        | `mineflayer` holen, auf Protokoll 26.2 flicken und seine Kollision wie im echten Client rechnen lassen. |
-| `tests`      | Der Bot spielt die Testfälle im laufenden Server durch. |
+| `tests`      | Der Bot spielt die Testfälle im laufenden Server durch: die Grundprobe und die Abschnitte, die die Testauswahl wählt. |
+
+## Welche Abschnitte laufen
+
+Die Tests bestehen aus der **Grundprobe** und gut sechzig **Abschnitten**. Die
+Grundprobe läuft immer, sie ist kurz: `/cam` an und aus, der Körper, Fliegen,
+zurück zum Körper, `/cam reload`, ein verbotenes Biom. Die
+Abschnitte stehen in `ABSCHNITTE` im Skript, jeder mit seinem Namen, seiner
+Funktion und den Bereichen des Plugins, die er prüft:
+
+```python
+Abschnitt("flugspur", flugspur_checks, "trail"),
+Abschnitt("taste", taste_checks, "session/ExitKey display/CamActionBar"),
+Abschnitt("traenke", potion_checks, "potion", koerpertypen=True),
+```
+
+Ein Bereich ist ein Paket unter `de.elia.cameraplugin` (`trail`) oder eine
+Klasse darin (`display/CamActionBar`). `koerpertypen=True` fährt den Abschnitt
+einmal mit jedem Körpertyp.
+
+Vor dem Schritt `tests` vergleicht `tools/testauswahl.py` den Arbeitsordner -
+eingecheckt oder nicht - mit dem Stand von `master`, von dem der Zweig abging,
+und wählt die Abschnitte, die etwas davon betrifft:
+
+* **Java**: die Methoden und Felder, die sich geändert haben, und die Klassen,
+  die eins davon direkt aufrufen - auch über einen Getter wie
+  `plugin.getTrail()`. Ein Abschnitt läuft, wenn einer seiner Bereiche
+  darunter ist. Ändert sich `CamTrail.showFlight`, läuft `flugspur` und, weil
+  das Menü `showFlight` aufruft, `menue`.
+* **Die Sammeldateien** unter `camfly2` und `config` - `CameraPlugin`,
+  `CamCommand`, `CamTabCompleter`, `CamSettings`, `Messages` …: Was in den
+  geänderten Zeilen steht. Eine Zeile in `CamSettings.load`, die
+  `cam-trail.flights` liest, führt über das Feld und seinen Getter zu
+  `CamTrail` und `CamMenu`; `case "trail"` in `CamCommand` zum Paket `trail`.
+* **`config.yml`, `lang/en.yml`, `plugin.yml`**: die Schlüssel der geänderten
+  Zeilen, über die Stellen im Code, die sie lesen. Ein Abschnitt, der einen
+  geänderten Schlüssel mit `set_option` setzt, läuft auch.
+* **Das Testskript**: ein neuer oder geänderter Eintrag in `ABSCHNITTE`, eine
+  geänderte Funktion eines Abschnitts oder ein Helfer, den er benutzt, eine
+  Methode von `BotClient` oder eine Aktion des Bots in `BOT_JS`, die er
+  aufruft.
+* Dazu jeder Abschnitt, der **beim letzten Lauf** im selben Arbeitsordner
+  durchgefallen ist (aus `ergebnis.json`).
+
+Reine Kommentare und Javadoc zählen nicht, `*.md`, `.idea/` und `.vscode/`
+auch nicht. **Alle** Abschnitte laufen, wenn sich etwas nicht zuordnen lässt:
+`pom.xml`, eine andere Datei unter `src/main/resources`, ein Schlüssel, den
+kein Code liest, was Server oder Bot einrichtet (`prepare_server_files`,
+`SERVER_PROPERTIES` …), eine Änderung an `step_tests`, oder wenn es keinen
+`master` zum Vergleichen gibt. Lieber zu viel als zu wenig.
+
+Was gewählt ist und warum, steht vor dem ersten Schritt im Terminal; ohne
+Server und Bauen zeigt es
+
+```bash
+python3 tools/camfly_testenv.py --nur-auswahl
+```
+
+```
+=== Testauswahl ===
+  Verglichen mit: Abzweig von origin/master (1e5a2a949)
+  Geaendert:      CamTrail.java, en.yml
+  Es laufen 2 von 66 Abschnitten, dazu immer die Grundprobe:
+    flugspur            CamTrail.java: trail/CamTrail
+                        en.yml: trail/CamTrail
+    menue               CamTrail.java: menu/CamMenu
+```
+
+Hier hat sich `CamTrail.showFlight` geändert und ein Text der Flugspur; das
+Menü ruft `showFlight` für die Flüge auf seiner Admin-Seite auf.
+
+Steht dort *Geändert, aber von keinem Abschnitt geprüft*, hat sich eine Klasse
+geändert, für die es keinen Abschnitt gibt - ein Hinweis, dass ein Test fehlt.
+
+**Ein neuer Abschnitt** braucht einen Eintrag in `ABSCHNITTE`, sonst läuft er
+nie. Als Bereiche gehört dorthin, was er prüft: das Paket der neuen Sache und
+die Klassen, an deren Verhalten seine Proben hängen. Ein Bereich zu viel lässt
+ihn nur öfter laufen, einer zu wenig lässt ihn aus, wenn sich dort etwas
+ändert. Eine neue Methode in `BotClient` oder eine neue Aktion in `BOT_JS`
+braucht nichts weiter, eine Änderung an einer bestehenden erreicht die
+Abschnitte, die sie benutzen. Der Absturztest steht zuletzt, er startet den
+Server neu.
 
 ## Warum gegen beide APIs geprüft wird
 
