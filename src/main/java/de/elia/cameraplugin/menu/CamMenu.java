@@ -590,6 +590,7 @@ public final class CamMenu implements Listener {
             lore.addAll(lines(messages.getMessage("menu-spot-offered-lore")
                     .replace("{players}", spots.offeredTo(share))));
         }
+        lore.addAll(reachLore());
         lore.addAll(lines(messages.getMessage(settings.isViewpointsSharing() ? "menu-spot-actions-share"
                 : "menu-spot-actions")));
         put(page, slot, Material.FILLED_MAP, messages.getMessage("menu-spot").replace("{spot}", spot.name()), lore,
@@ -621,6 +622,7 @@ public final class CamMenu implements Listener {
         List<String> lore = spotLore(spot);
         lore.addAll(lines(messages.getMessage("menu-spot-likes").replace("{likes}", String.valueOf(share.likes()))));
         if (own) {
+            lore.addAll(reachLore());
             lore.addAll(lines(messages.getMessage("menu-public-own-actions")));
             put(page, slot, Material.FILLED_MAP, messages.getMessage("menu-public-own").replace("{spot}", spot.name()),
                     lore, click -> {
@@ -643,6 +645,7 @@ public final class CamMenu implements Listener {
         if (liked) {
             lore.addAll(lines(messages.getMessage("menu-spot-liked")));
         }
+        lore.addAll(reachLore());
         lore.addAll(lines(messages.getMessage(liked ? "menu-public-spot-actions-unlike"
                 : "menu-public-spot-actions")));
         lore.addAll(visitLore());
@@ -692,6 +695,7 @@ public final class CamMenu implements Listener {
     private void putSharedSpot(Player player, Page page, int slot, Share share) {
         CamSpots spots = plugin.getSpots();
         List<String> lore = spotLore(share.getSpot());
+        lore.addAll(reachLore());
         lore.addAll(lines(messages.getMessage("menu-shared-spot-actions")));
         lore.addAll(visitLore());
         String name = messages.getMessage("menu-shared-spot").replace("{owner}", share.getOwnerName())
@@ -708,6 +712,18 @@ public final class CamMenu implements Listener {
                 act(player, () -> spots.jump(player, share.label()));
             }
         });
+    }
+
+    /**
+     * How close he has to be to jump to a spot, over what a click does:
+     * without camera mode within {@code viewpoints.start-distance} of it, in
+     * camera mode where his camera may fly - or only the latter, while
+     * {@code viewpoints.start-distance} is 0.
+     */
+    private List<String> reachLore() {
+        double start = settings.getViewpointsStartDistance();
+        return lines(messages.getMessage(start > 0.0 ? "menu-spot-reach-lore" : "menu-spot-reach-lore-cam-only")
+                .replace("{start}", String.valueOf(Math.round(start))));
     }
 
     /** What shift-click does on a spot of another player, while {@code visitor-camera} is on: nothing otherwise. */

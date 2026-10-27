@@ -189,6 +189,7 @@ messages:
   # of its own (menu-spots-title-...); menu-spot-created says when a spot was saved ({date} as menu-admin-flight-date
   # writes it), menu-spots-offers how many spots wait for him to accept them, menu-spot-public-lore that one of his
   # own is public ({likes}); menu-spot-visit-action stands under the spots of others while visitor-camera is on.
+  # menu-spot-reach-lore stands under every spot that can be jumped to: how close one has to be to jump there.
   # menu-new-spot-count says on the button of a new spot how many spots he has ({count}), may have ({max},
   # viewpoints.max-per-player) and may still save ({left}); -full once there is no room left, -unlimited without a
   # limit. menu-sort is the button that sorts a list, {sort} being one of the menu-sort-... orders; under it every
@@ -339,6 +340,9 @@ messages:
   menu-spot-name-public: "&eType the name of the new public spot in the chat, or {cancel}."
   menu-spot-offered-lore: "&7Offered to: {players}"
   menu-spot-public-lore: "&ePublic, {likes} likes"
+  # {start} = viewpoints.start-distance; the second while it is 0.
+  menu-spot-reach-lore: "&7To jump there: within {start} blocks\n&7of it, or in cam mode within\n&7reach of your camera"
+  menu-spot-reach-lore-cam-only: "&7To jump there: in cam mode,\n&7within reach of your camera"
   menu-spot-shared-lore: "&7Shared with: {players}"
   menu-spot-visit-action: "&bShift-click: visit it, from wherever you are"
   menu-spots: "&aSpots"

@@ -7227,7 +7227,7 @@ def spotreiter_checks(env, bot):
     stehen zurueck auf 45, die Reiter auf 48, 49 und 50, der Filter auf 51,
     52 frei und das Buch fuer einen neuen Punkt auf 53. Auf dem Reiter der
     eigenen stehen die Punkte, der neueste zuerst, mit dem Tag, an dem er
-    entstand; das Buch sagt, wie viele Punkte er hat und wie viele noch gehen.
+    entstand, und wie nah man fuer den Sprung sein muss; das Buch sagt, wie viele Punkte er hat und wie viele noch gehen.
     Der Filter zeigt alle Sortierungen, die gewaehlte markiert, und sortiert
     nach dem Namen und dann nach der Reichweite, die naechsten zuerst. Ein Rechtsklick auf das Buch fragt nach
     einem oeffentlichen Punkt, Gamma ist danach oeffentlich und steht bei den
@@ -7303,6 +7303,10 @@ def spotreiter_checks(env, bot):
                   "Spots: yours" in (f.get("title") or "") and namen(f)[:3] == ["Cee", "Beta", "Alpha"]
                   and "Saved:" in item_text(knopf.get("0")) and "newest first" in item_text(knopf.get("51")),
                   f"{f.get('title')} / {namen(f)} / {item_text(knopf.get('51'))}")
+        FIND.test("Unter jedem Punkt steht, wie nah man fuer den Sprung sein muss: viewpoints.start-distance (16) "
+                  "ohne Cam-Modus, im Cam-Modus in Reichweite der Kamera",
+                  "To jump there: within 16 blocks" in item_text(knopf.get("0"))
+                  and "reach of your camera" in item_text(knopf.get("0")), item_text(knopf.get("0")))
         FIND.test("Das Buch sagt, wie viele Punkte er hat und wie viele noch gehen",
                   "Your spots: 3 of 10 - 7 more possible" in item_text(knopf.get("53")), item_text(knopf.get("53")))
         filter_text = item_text(knopf.get("51"))
@@ -7354,6 +7358,8 @@ def spotreiter_checks(env, bot):
         FIND.test("Rechtsklick liked ihn: danach steht das Like darunter, und er glaenzt",
                   gesagt(dort, rf"You like {label} now\. It has 1 likes") and "1 likes" in item_text(eintrag)
                   and eintrag.get("glint") is True, f"{zeige(dort)} / {item_text(eintrag)}")
+        FIND.test("Auch unter dem oeffentlichen Punkt eines anderen steht, wie nah man fuer den Sprung sein muss",
+                  "To jump there: within 16 blocks" in item_text(eintrag), item_text(eintrag))
         seit = zuschauer.mark()
         klick(zuschauer, platz, warten=3.0)
         dort = zeilen_seit(zuschauer, seit)
