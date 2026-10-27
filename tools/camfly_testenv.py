@@ -7265,6 +7265,10 @@ def spotreiter_checks(env, bot):
     Auf der Admin-Seite sortiert der Trichter die Statistik der Spieler nach
     dem Namen oder dem letzten Flug: der zweite Spieler, der gerade geflogen
     ist, steht dann vorn.
+
+    viewpoints.views-cooldown-minutes steht voreingestellt auf 10: springt
+    der Bot zweimal gleich hintereinander zu Beta, zaehlt das einmal; mit 0
+    zaehlt jeder Sprung.
     """
     def fenster(client):
         return client.call("window_slots", wait=10)
@@ -7288,6 +7292,15 @@ def spotreiter_checks(env, bot):
 
     def zuschauer_pos():
         return bot.call("server_pos", selector=ZUSCHAUER_NAME).get("pos")
+
+    def aufrufe(name):
+        """Wie oft der Punkt des Bots aufgerufen wurde, wie das Menue es sagt."""
+        f = punkte(bot)
+        platz = platz_von(f, name)
+        text = item_text(f.get("slots", {}).get(str(platz))) if platz is not None else ""
+        bot.call("close_window", wait=10)
+        treffer = re.search(r"Views: (\d+)", text)
+        return int(treffer.group(1)) if treffer else None
 
     if not FIND.test("Cam-Modus ist vor dem Test der Reiter aus", cam_off(bot), ""):
         return
@@ -7468,6 +7481,22 @@ def spotreiter_checks(env, bot):
         FIND.test("Der Trichter sortiert nach dem letzten Flug: wer gerade geflogen ist, steht vorn",
                   namen(f)[:1] == [ZUSCHAUER_NAME] and "» last flight first" in item_text(f.get("slots", {}).get("53")),
                   f"{namen(f)} / {item_text(f.get('slots', {}).get('53'))}")
+        bot.call("close_window", wait=10)
+
+        FIND.test("Voreingestellt steht viewpoints.views-cooldown-minutes: 10 da",
+                  re.search(r"(?m)^\s*views-cooldown-minutes:\s*10\s*$", ausgeliefert(env)) is not None, "")
+        hinstellen(bot, x, y, z)
+        befehl(bot, "/cam spot Beta", warten=2.5)
+        befehl(bot, "/cam spot Beta", warten=1.0)
+        einmal = aufrufe("Beta")
+        set_option(env, "views-cooldown-minutes", "0", "viewpoints")
+        hinstellen(bot, x, y, z)
+        befehl(bot, "/cam spot Beta", warten=2.5)
+        befehl(bot, "/cam spot Beta", warten=1.0)
+        jeder = aufrufe("Beta")
+        set_option(env, "views-cooldown-minutes", "10", "viewpoints")
+        FIND.test("views-cooldown-minutes: 10 - zweimal gleich hintereinander zaehlt einmal; mit 0 zaehlt jeder Sprung",
+                  einmal == 1 and jeder == 3, f"{einmal} / {jeder}")
     finally:
         try:
             for client in (zuschauer, bot):

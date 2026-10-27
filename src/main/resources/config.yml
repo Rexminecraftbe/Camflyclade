@@ -773,8 +773,9 @@ resume-command:
 # nicht in gesperrte Lava, Wasser oder Pulverschnee und nicht in einen Block, der dort inzwischen steht. Sonst sagt
 # eine Meldung, warum nicht. Wie bei /cam back zählt der Sprung nicht als geflogen, und /cam trail hat dort eine Lücke.
 # Aufrufe: Jeder Sprung zu einem Punkt und jeder Besuch (/cam visit) zählt als Aufruf - von jedem, auch vom Besitzer,
-# derselbe Spieler am selben Punkt höchstens einmal in 10 Minuten. Das Menü zeigt sie unter jedem Punkt und sortiert
-# auf allen drei Reitern danach (die meisten zuerst). Verschoben behält ein Punkt seine Aufrufe, gelöscht sind sie weg.
+# derselbe Spieler am selben Punkt höchstens einmal in views-cooldown-minutes. Das Menü zeigt sie unter jedem Punkt und
+# sortiert auf allen drei Reitern danach (die meisten zuerst). Verschoben behält ein Punkt seine Aufrufe, gelöscht sind
+# sie weg.
 viewpoints:
   enabled: true
   # Wie nah man einem Punkt sein muss, um ohne Cam-Modus hinzuspringen, in Blöcken (0 bis 128, 0 = nur im
@@ -795,6 +796,9 @@ viewpoints:
   # geteilten Punkt, wandert er für alle mit, löscht er ihn, ist er auch für alle weg. Mit false gibt es nur private
   # Punkte - auch im Menü nur den Reiter der eigenen.
   sharing: true
+  # Wie lange derselbe Spieler am selben Punkt nicht noch einmal als Aufruf zählt, in Minuten (0 bis 1440, 0 = jeder
+  # Sprung und jeder Besuch zählt). So treibt Hin- und Herspringen die Zahl nicht hoch.
+  views-cooldown-minutes: 10
 
 # Besucher-Kamera: /cam visit <Spieler>:<Name> - die Kamera geht zu einem Punkt, den ein anderer mit einem teilt oder
 # der öffentlich ist, von überall aus, z. B. um sich den Bau eines Freundes zeigen zu lassen. Ohne Cam-Modus startet er dafür erst (mit allem,

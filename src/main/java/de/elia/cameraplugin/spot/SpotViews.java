@@ -25,8 +25,8 @@ import java.util.logging.Level;
 /**
  * How often each spot was looked at, its views: every jump to it and every
  * visit, by anybody - its owner as well. The same player at the same spot
- * counts once in {@value #AGAIN_MINUTES} minutes at most, so that jumping
- * back and forth does not drive the number up.
+ * counts once in {@code viewpoints.views-cooldown-minutes} at most, so that
+ * jumping back and forth does not drive the number up.
  *
  * <p>The views are kept by owner and spot, not with the spot: a spot of an
  * owner who is offline is looked at as well, and his own file is read only
@@ -39,9 +39,6 @@ import java.util.logging.Level;
  * or in memory only, which {@code /cam reload} and a restart forget.</p>
  */
 public final class SpotViews {
-
-    /** How long the same player at the same spot does not count again, in minutes. */
-    private static final int AGAIN_MINUTES = 10;
 
     /** The folder of everything the plugin keeps per player, inside the folder of the plugin. */
     private static final String PLAYER_FOLDER = "playerdata";
@@ -84,17 +81,21 @@ public final class SpotViews {
 
     /**
      * A player looked at a spot: jumped there or visited it. It counts unless
-     * he did the same less than {@value #AGAIN_MINUTES} minutes ago.
+     * he did the same less than {@code viewpoints.views-cooldown-minutes}
+     * ago.
      */
     public void count(UUID owner, String key, UUID viewer) {
         long now = System.currentTimeMillis();
+        long again = TimeUnit.MINUTES.toMillis(settings.getViewsCooldownMinutes());
         String who = owner + "/" + key + "/" + viewer;
         Long last = lastCounted.get(who);
-        if (last != null && now - last < TimeUnit.MINUTES.toMillis(AGAIN_MINUTES)) {
+        if (last != null && now - last < again) {
             return;
         }
-        lastCounted.put(who, now);
-        lastCounted.values().removeIf(at -> now - at >= TimeUnit.MINUTES.toMillis(AGAIN_MINUTES));
+        lastCounted.values().removeIf(at -> now - at >= again);
+        if (again > 0L) {
+            lastCounted.put(who, now);
+        }
         views.computeIfAbsent(owner, id -> new LinkedHashMap<>()).merge(key, 1L, Long::sum);
         save();
     }

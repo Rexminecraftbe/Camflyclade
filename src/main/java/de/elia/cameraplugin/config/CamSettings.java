@@ -113,6 +113,9 @@ public final class CamSettings {
      */
     private static final int MAX_VIEWPOINTS = 100;
 
+    /** The longest {@code viewpoints.views-cooldown-minutes} accepts: a day. */
+    private static final int MAX_VIEWS_COOLDOWN_MINUTES = 1440;
+
     /** The levels of {@code signal.levels}, from the most bars down, as the config file names them. */
     private static final String[] SIGNAL_LEVEL_NAMES = {"excellent", "good", "medium", "weak"};
 
@@ -364,6 +367,8 @@ public final class CamSettings {
     private int tourMaxGuests;
     /** How close a player out of camera mode has to be to a spot to jump there, {@code viewpoints.start-distance}. */
     private double viewpointsStartDistance;
+    /** How long the same player at the same spot is no new view, {@code viewpoints.views-cooldown-minutes}. */
+    private int viewsCooldownMinutes;
 
     /** Whether {@code /cam resume} goes on where the last flight ended, {@code resume-command.enabled}. */
     private boolean resumeEnabled;
@@ -723,6 +728,7 @@ public final class CamSettings {
         tourStartDistance = config.getDouble("tour.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
         tourMaxGuests = config.getInt("tour.max-guests", 5, 0, MAX_TOUR_GUESTS);
         viewpointsStartDistance = config.getDouble("viewpoints.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
+        viewsCooldownMinutes = config.getInt("viewpoints.views-cooldown-minutes", 10, 0, MAX_VIEWS_COOLDOWN_MINUTES);
         resumeEnabled = config.getBoolean("resume-command.enabled", true);
         resumeStorage = readStorage(config, "resume-command.storage");
         playerSettingsStorage = readStorage(config, "player-settings.storage");
@@ -1653,6 +1659,14 @@ public final class CamSettings {
      */
     public double getViewpointsStartDistance() {
         return viewpointsStartDistance;
+    }
+
+    /**
+     * How long, in minutes, the same player at the same spot does not count
+     * as a view again; 0 while every jump and every visit counts.
+     */
+    public int getViewsCooldownMinutes() {
+        return viewsCooldownMinutes;
     }
 
     public boolean isResumeEnabled() {
