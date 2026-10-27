@@ -6096,7 +6096,9 @@ def fuehrung_checks(env, bot):
         """Durch wen der Server den Gast seit der Marke sehen liess: 'fuehrer',
         'selbst' oder die Nummer, der Reihe nach."""
         antwort = zuschauer.call("cameras", since=marke)
-        fuehrer = (antwort.get("players") or {}).get(BOT_NAME)
+        # Die Nummer einer Entitaet vergibt der Server fuer alle gleich: der
+        # Fuehrer kennt seine eigene.
+        fuehrer = bot.call("cameras").get("self")
         return ["fuehrer" if p.get("id") == fuehrer else "selbst" if p.get("id") == antwort.get("self")
                 else p.get("id") for p in antwort.get("packets", [])]
 
