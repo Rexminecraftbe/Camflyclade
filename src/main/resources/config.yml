@@ -598,8 +598,9 @@ camera-head:
 # und die eigene Statistik, und für Admins eine eigene Seite: wer im Cam-Modus ist (hinfliegen, zum Körper, beenden),
 # die Statistik anderer, Sperren und Flugspuren. Jeder Knopf tut, was sein Befehl tut, mit denselben
 # Prüfungen und Meldungen; was in dieser Datei aus ist, fehlt im Menü. Listen haben einen Knopf zum Sortieren (ein
-# Trichter): die Aussichtspunkte nach Datum (die neuesten zuerst) oder Name, die geteilten und öffentlichen auch nach
-# dem Spieler, die öffentlichen auch nach Likes; die Spieler auf der Admin-Seite nach Name oder dem letzten Flug. Den Namen eines neuen Aussichtspunkts schreibt
+# Trichter): die Aussichtspunkte nach Datum (die neuesten zuerst), Name oder Reichweite (die nächsten zuerst, gemessen
+# vom Körper - wie ein Sprung), die geteilten und öffentlichen auch nach dem Spieler, die öffentlichen auch nach
+# Likes; die Spieler auf der Admin-Seite nach Name oder dem letzten Flug. Den Namen eines neuen Aussichtspunkts schreibt
 # man nach dem Klick in den Chat (abbrechen mit cancel), lesen tut ihn niemand sonst. Im Menü landet nichts im Inventar
 # und nichts kommt heraus, auch nicht im Cam-Modus, wo sonst jedes Fenster zu bleibt. Texte: menu-... in der Sprachdatei.
 menu:
@@ -636,7 +637,7 @@ menu:
     # Die eigene Nachtsicht (bei night-vision.player-choice: true)
     nightvision:
       item: night_vision_potion
-      slot: 10
+      slot: 17
     # /cam back
     back:
       item: ender_pearl
@@ -645,16 +646,22 @@ menu:
     resume:
       item: recovery_compass
       slot: 12
-    # Die Aussichtspunkte auf drei Reitern: privat (die eigenen), öffentlich (die von allen, eigene dabei) und
-    # geteilt (was andere einem geteilt haben, und was sie einem anbieten - das muss man erst annehmen). Der Knopf
-    # für einen neuen Punkt: Linksklick privat, Rechtsklick öffentlich. Wartet ein Angebot, glänzt der Knopf.
+    # Die Aussichtspunkte auf drei Reitern: die eigenen (alle, auch die öffentlichen - sie zählen zu max-per-player),
+    # öffentlich (die von allen, eigene dabei) und geteilt (was andere einem geteilt haben, und was sie einem
+    # anbieten - das muss man erst annehmen). Unten von links: zurück, die Seiten, die drei Reiter, der Filter
+    # (sortieren), ein freier Platz und ganz rechts der Knopf für einen neuen Punkt: Linksklick privat, Rechtsklick
+    # öffentlich - ein öffentlicher bleibt einer der eigenen und lässt sich auf der öffentlichen Seite mit Rechtsklick
+    # wieder offline nehmen, ohne ihn zu löschen. Ein Linksklick auf einen Punkt springt hin, auf einen geteilten oder
+    # öffentlichen genauso wie auf einen eigenen: nur im Cam-Modus und nur, wohin die Kamera auch fliegen dürfte.
+    # Umschalt-Klick besucht einen Punkt eines anderen (visitor-camera). Wartet ein Angebot, glänzt der Knopf.
     spots:
       item: filled_map
-      slot: 13
-    # Die Führung (tour): einladen, Einladungen annehmen, Gäste wegschicken, verlassen, beenden
+      slot: 10
+    # Die Führung (tour): einladen, Einladungen annehmen, Gäste wegschicken, verlassen, beenden, und der Blick
+    # (des Führers oder frei)
     tour:
       item: lead
-      slot: 20
+      slot: 9
     # /cam photo
     photo:
       item: painting
@@ -800,12 +807,13 @@ visitor-camera:
 #   /cam tour leave              = die Führung verlassen (auch /cam back, ein Sprung zu einem Aussichtspunkt, ein Besuch
 #                                  oder /cam resume)
 #   /cam tour end                = die Führung für alle beenden (auch, wenn der Cam-Modus des Führers endet)
+#   /cam tour view               = zwischen dem Blick des Führers und freiem Umsehen umschalten (auch im Menü)
 # Fair bleibt es so: Für die Kamera eines Gastes gelten alle ihre eigenen Grenzen weiter - max-distance und das
 # Funksignal von ihrem Körper aus, die Wand, cam-area, gesperrte Lava, Wasser und Pulverschnee. Der Führer lenkt sie,
 # aber nicht weiter, als sie selbst fliegen dürfte. Fliegt er aus der Reichweite eines Gastes, bleibt dessen Kamera an
 # ihrer Grenze stehen, und beide lesen in der Action-Bar, dass die Führung für ihn in out-of-reach-seconds endet (Ton:
 # sounds.tour-reach). Kommt der Führer rechtzeitig zurück, geht sie weiter. Die eigenen Tasten bewegen die Kamera eines
-# Gastes nicht (umsehen geht), das Mausrad ändert sein Tempo nicht. Ton der Einladung: sounds.tour-invite, Texte: tour-...
+# Gastes nicht, das Mausrad ändert sein Tempo nicht. Ton der Einladung: sounds.tour-invite, Texte: tour-...
 tour:
   enabled: true
   # Wie nah die Kamera eines anderen der eigenen sein muss, damit man ihn einladen kann, in Blöcken (1 bis 128)
@@ -813,6 +821,13 @@ tour:
   # Wie viele Sekunden der Führer außer Reichweite eines Gastes sein darf, bevor die Führung für den Gast endet
   # (1 bis 60)
   out-of-reach-seconds: 5
+  # Ob ein Gast durch die Augen des Führers sieht - so flüssig wie im Zuschauermodus, nur ohne ihn: kein Fliegen durch
+  # Wände, kein Teleport-Menü. Jeder Gast kann mit /cam tour view auf freies Umsehen umschalten. Ist der Führer außer
+  # seiner Reichweite, sieht er wieder aus seiner eigenen Kamera, die an ihrer Grenze steht.
+  # Geht nur auf Paper: Das Spiel hat dafür ein Paket, das nur über das Innere des Servers zu schicken ist (keine
+  # offizielle Schnittstelle). Ändert ein Update von Minecraft dort etwas, meldet der Start das in der Konsole, und
+  # die Gäste sehen sich frei um, bis das Plugin angepasst ist - sonst läuft alles weiter. Auf Spigot immer frei.
+  guide-view: true
 
 # /cam photo: der Foto-Modus, an und wieder aus, nur im Cam-Modus. Für Bilder und Videos der eigenen Bauten blendet er
 # nur für den Spieler selbst aus, was im Bild stört - alle anderen sehen weiter alles wie vorher, und an der Welt ändert

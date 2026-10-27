@@ -183,6 +183,9 @@ public class CamTabCompleter implements TabCompleter {
         CamTour tour = plugin.getTour();
         if (args.length == 2 && args[0].equalsIgnoreCase("tour") && own != null && tour.isEnabled()) {
             List<String> words = new ArrayList<>();
+            if (tour.viewWorks()) {
+                words.add("view");
+            }
             if (tour.guideOf(own) != null) {
                 words.add("leave");
             } else {

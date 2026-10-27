@@ -346,6 +346,8 @@ public final class CamSettings {
     private double tourRadius;
     /** How long a guest may be out of reach before his tour ends, {@code tour.out-of-reach-seconds}. */
     private int tourOutOfReachSeconds;
+    /** Whether a guest sees through the eyes of his guide, {@code tour.guide-view}. */
+    private boolean tourGuideView;
 
     /** Whether {@code /cam resume} goes on where the last flight ended, {@code resume-command.enabled}. */
     private boolean resumeEnabled;
@@ -701,6 +703,7 @@ public final class CamSettings {
         tourEnabled = config.getBoolean("tour.enabled", true);
         tourRadius = config.getDouble("tour.radius", 16.0, 1.0, MAX_TOUR_RADIUS);
         tourOutOfReachSeconds = config.getInt("tour.out-of-reach-seconds", 5, 1, MAX_TOUR_OUT_OF_REACH_SECONDS);
+        tourGuideView = config.getBoolean("tour.guide-view", true);
         resumeEnabled = config.getBoolean("resume-command.enabled", true);
         resumeStorage = readStorage(config, "resume-command.storage");
         playerSettingsStorage = readStorage(config, "player-settings.storage");
@@ -1597,6 +1600,11 @@ public final class CamSettings {
     /** How long the guide may be out of a guest's reach before the tour ends for him, in seconds. */
     public int getTourOutOfReachSeconds() {
         return tourOutOfReachSeconds;
+    }
+
+    /** Whether a guest may see through the eyes of his guide, where the server lets it. */
+    public boolean isTourGuideView() {
+        return tourGuideView;
     }
 
     public boolean isResumeEnabled() {

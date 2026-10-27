@@ -105,30 +105,9 @@ public final class CamSpots {
         return Collections.unmodifiableMap(inMemory.getOrDefault(player.getUniqueId(), Map.of()));
     }
 
-    /** His own spots, in the order he saved them. */
+    /** His own spots, private and public, in the order he saved them. */
     public Collection<Spot> own(Player player) {
         return spotsOf(player).values();
-    }
-
-    /**
-     * His own spots that are not public, for the page of the private ones in
-     * the menu - every one of them while sharing is switched off, which
-     * leaves nothing public.
-     */
-    public List<Spot> privateSpots(Player player) {
-        List<Spot> found = new ArrayList<>();
-        for (Spot spot : spotsOf(player).values()) {
-            if (!isPublic(player, spot)) {
-                found.add(spot);
-            }
-        }
-        return found;
-    }
-
-    /** Whether one of his spots is public. */
-    public boolean isPublic(Player player, Spot spot) {
-        Share share = shareOf(player, spot);
-        return share != null && share.isEveryone();
     }
 
     /** The share of one of his spots, or {@code null} while it is shared with nobody. */
@@ -525,18 +504,6 @@ public final class CamSpots {
         boolean likes = shared.toggleLike(share, player.getUniqueId());
         messages.sendConfiguredMessage(player, likes ? "spot-liked" : "spot-unliked", "{spot}", share.label(),
                 "{likes}", String.valueOf(share.likes()));
-    }
-
-    /**
-     * Goes to a spot of another player: visits it with {@code visitor-camera},
-     * from wherever he is, and jumps to it otherwise, like to one of his own.
-     */
-    public void go(Player player, Share share) {
-        if (settings.isVisitorCameraEnabled()) {
-            plugin.getVisit().visit(player, share);
-        } else {
-            jump(player, share.label());
-        }
     }
 
     /**

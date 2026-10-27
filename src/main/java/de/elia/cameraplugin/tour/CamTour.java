@@ -3,6 +3,7 @@ package de.elia.cameraplugin.tour;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.movement.CamMovementGuard;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
@@ -24,11 +25,13 @@ import org.bukkit.util.Vector;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -50,10 +53,16 @@ import java.util.UUID;
  * <p>The camera of a guest is not teleported along every tick: it is given
  * the speed that takes it to the guide, and flies there like any camera -
  * through the checks of a step, with the wall in its way. Its own keys move
- * it no longer, its fly speed is 0 while it follows. It looks round as it
- * likes; at the start it looks the way the guide looks. Only when it falls
- * far behind - the guide jumped to a spot, say - is it put next to him, if
- * he is within its reach.</p>
+ * it no longer, its fly speed is 0 while it follows. Only when it falls far
+ * behind - the guide jumped to a spot, say - is it put next to him, if he is
+ * within its reach.</p>
+ *
+ * <p>What the guest sees: with {@code tour.guide-view}, on Paper, the world
+ * through the eyes of the guide, as smoothly as spectator mode shows another
+ * player, see {@link GuideView}; while the guide is out of his reach, his own
+ * camera again, which stands at its border. Otherwise - on Spigot, or after
+ * {@code /cam tour view} - he looks round as he likes from his own camera,
+ * which starts looking the way the guide looks.</p>
  *
  * <p>A jump of his own - {@code /cam back}, a spot, a visit, {@code resume} -
  * takes a guest off the tour, as does the end of his camera mode. The end of
@@ -82,6 +91,13 @@ public final class CamTour implements Listener {
     /** The fastest a guest is sent after the guide, in blocks per tick. */
     private static final double MAX_SPEED = 4.0;
 
+    /**
+     * How often the guide's view is sent again while it holds, in ticks. A
+     * client that lost sight of the guide for a moment - after a jump, say -
+     * would otherwise keep looking from its own camera.
+     */
+    private static final int VIEW_REFRESH = 20;
+
     private final CameraPlugin plugin;
     private final CamSettings settings;
     private final Messages messages;
@@ -94,6 +110,10 @@ public final class CamTour implements Listener {
     private final Map<UUID, Map<UUID, Long>> invitations = new HashMap<>();
     /** What moves the guests, while there is a tour at all. */
     private BukkitRunnable task;
+    /** The internals that let a guest see through the eyes of the guide. */
+    private final GuideView view = new GuideView();
+    /** Who looks round freely on tours instead of through the guide's eyes, while he is online. */
+    private final Set<UUID> freeLook = new HashSet<>();
 
     /** One tour: its guide's guests, and where the guide was last tick. */
     private static final class Tour {
@@ -113,6 +133,10 @@ public final class CamTour implements Listener {
         long shownSeconds = -1L;
         /** Whether he was last sent no speed at all, so standing still is not sent again every tick. */
         boolean resting;
+        /** Whether he sees through the eyes of the guide right now. */
+        boolean viewing;
+        /** Ticks since the guide's view was last sent. */
+        int sinceView;
     }
 
     public CamTour(CameraPlugin plugin) {
@@ -125,6 +149,51 @@ public final class CamTour implements Listener {
     /** Whether {@code /cam tour} is there at all. */
     public boolean isEnabled() {
         return settings.isTourEnabled();
+    }
+
+    /**
+     * At the start and after a reload: looks up what the guide's view needs.
+     * Where it is switched on and does not work, the console hears why.
+     */
+    public void load(ConsoleLog log) {
+        view.load(settings.isTourEnabled() && settings.isTourGuideView() ? log : null);
+    }
+
+    /** Whether a guest can see through the eyes of his guide here: switched on, and on a server it works on. */
+    public boolean viewWorks() {
+        return settings.isTourGuideView() && view.isAvailable();
+    }
+
+    /** Whether he sees through the eyes of his guide on tours, rather than looking round freely. */
+    public boolean seesThroughGuide(Player guest) {
+        return viewWorks() && !freeLook.contains(guest.getUniqueId());
+    }
+
+    /**
+     * {@code /cam tour view}: switches between the guide's view and looking
+     * round freely, for the tour he follows and the ones after it.
+     */
+    public void toggleView(Player guest) {
+        if (!viewWorks()) {
+            messages.sendConfiguredMessage(guest, "tour-view-unavailable");
+            return;
+        }
+        UUID id = guest.getUniqueId();
+        if (!freeLook.remove(id)) {
+            freeLook.add(id);
+            Guest state = stateOf(id);
+            if (state != null) {
+                unview(guest, state);
+            }
+        }
+        messages.sendConfiguredMessage(guest, seesThroughGuide(guest) ? "tour-view-guide" : "tour-view-free");
+    }
+
+    /** The state of a guest on the tour he follows, or {@code null}. */
+    private Guest stateOf(UUID guest) {
+        UUID guide = guideOf.get(guest);
+        Tour tour = guide == null ? null : tours.get(guide);
+        return tour == null ? null : tour.guests.get(guest);
     }
 
     // ------------------------------------------------------------ who is where
@@ -279,6 +348,8 @@ public final class CamTour implements Listener {
             }
         } else if (args.length == 1 && word.equals("end")) {
             end(player);
+        } else if (args.length == 1 && word.equals("view")) {
+            toggleView(player);
         } else {
             messages.sendConfiguredMessage(player, "tour-usage");
         }
@@ -514,8 +585,9 @@ public final class CamTour implements Listener {
      */
     private void drop(UUID guideId, UUID guestId) {
         Tour tour = tours.get(guideId);
+        Guest state = null;
         if (tour != null) {
-            tour.guests.remove(guestId);
+            state = tour.guests.remove(guestId);
             if (tour.guests.isEmpty()) {
                 tours.remove(guideId);
                 Player guide = Bukkit.getPlayer(guideId);
@@ -527,6 +599,9 @@ public final class CamTour implements Listener {
         guideOf.remove(guestId);
         Player guest = Bukkit.getPlayer(guestId);
         if (guest != null) {
+            if (state != null) {
+                unview(guest, state);
+            }
             plugin.getFlightSpeed().release(guest);
             guest.setVelocity(new Vector());
         }
@@ -562,6 +637,7 @@ public final class CamTour implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         stopFor(event.getPlayer());
+        freeLook.remove(event.getPlayer().getUniqueId());
     }
 
     /** After a reload or when the plugin is switched off: nobody is on a tour any more. */
@@ -655,6 +731,9 @@ public final class CamTour implements Listener {
                 state.shownSeconds = -1L;
                 state.resting = true;
                 guest.setVelocity(new Vector());
+                // Back to his own camera, which stands at its border: he sees
+                // no further than he could fly himself.
+                unview(guest, state);
                 settings.getTourReachSound().play(guest);
                 settings.getTourReachSound().play(guide);
             }
@@ -694,6 +773,8 @@ public final class CamTour implements Listener {
             plugin.getMovementGuard().jumpTo(guest, data, target);
             guest.setVelocity(new Vector());
             state.resting = true;
+            // After the jump the client may have to find the guide anew.
+            state.viewing = false;
             return null;
         }
         Vector speed = step.clone().add(gap.multiply(PULL));
@@ -705,7 +786,36 @@ public final class CamTour implements Listener {
             guest.setVelocity(still ? new Vector() : speed);
         }
         state.resting = still;
+        updateView(guide, guest, state);
         return null;
+    }
+
+    /**
+     * Lets a guest within reach see through the eyes of his guide, while he
+     * wants to and his client knows the guide - one a vanish plugin or photo
+     * mode hides from him it does not -; sent again now and then, in case the
+     * client lost sight of the guide for a moment. Otherwise his own camera.
+     */
+    private void updateView(Player guide, Player guest, Guest state) {
+        boolean wanted = seesThroughGuide(guest) && guest.canSee(guide)
+                && guest.getWorld().equals(guide.getWorld());
+        if (!wanted) {
+            unview(guest, state);
+            return;
+        }
+        if (state.viewing && ++state.sinceView < VIEW_REFRESH) {
+            return;
+        }
+        state.viewing = view.show(guest, guide);
+        state.sinceView = 0;
+    }
+
+    /** Gives a guest who sees through the eyes of his guide his own camera back. */
+    private void unview(Player guest, Guest state) {
+        if (state.viewing) {
+            view.show(guest, guest);
+            state.viewing = false;
+        }
     }
 
     /**

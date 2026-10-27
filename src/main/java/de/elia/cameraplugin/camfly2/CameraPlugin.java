@@ -194,6 +194,7 @@ public final class CameraPlugin extends JavaPlugin {
         configFile.reportConfigWarnings(loadConfigValues(), null);
         ban.reload();
         sharedSpots.load();
+        tour.load(log);
         bodySpawner = new BodySpawner(this, settings, messages, log, cameraPlayers);
         camModeObjective.setUp();
         bodySpawner.removeLeftoverEntities();
@@ -437,6 +438,7 @@ public final class CameraPlugin extends JavaPlugin {
         trail.onReload();
         spots.onReload();
         sharedSpots.load();
+        tour.load(log);
         return true;
     }
 

@@ -9,11 +9,11 @@ package de.elia.cameraplugin.menu;
  * other button needs one of its own.</p>
  */
 public enum MenuButton implements MenuSlot {
-    NIGHT_VISION("nightvision", MenuIcon.NIGHT_VISION_POTION, 10),
+    NIGHT_VISION("nightvision", MenuIcon.NIGHT_VISION_POTION, 17),
     BACK("back", "ender_pearl", 11),
     RESUME("resume", "recovery_compass", 12),
-    SPOTS("spots", "filled_map", 13),
-    TOUR("tour", "lead", 20),
+    SPOTS("spots", "filled_map", 10),
+    TOUR("tour", "lead", 9),
     PHOTO("photo", "painting", 14),
     TIME("time", "clock", 15),
     WEATHER("weather", "sunflower", 16),

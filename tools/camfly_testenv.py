@@ -1132,6 +1132,8 @@ let dead = false;
 let knock = null;
 // Was 'velocity' an die Pakete der Geschwindigkeit haengt, solange es laeuft.
 let follower = null;
+// Durch welche Entitaet der Server den Bot sehen liess (Paket camera), mit der Zeit.
+const cameras = [];
 // Was watch_blocks gerade mitschreibt, bis watch_stop es abholt.
 let watched = null;
 // Die Toene, die der Server schickt, als Text des ganzen Pakets: Wo der Name
@@ -1214,6 +1216,8 @@ bot._client.on('boss_bar', (packet) => {
 // Toenen, dazu was mineflayer daraus liest.
 let skyTime = null;
 bot._client.on('update_time', (packet) => { skyTime = soundText(packet); });
+// Das Paket camera: durch welche Entitaet der Client sieht.
+bot._client.on('camera', (packet) => cameras.push({ t: Date.now(), id: packet.cameraId }));
 // Wie stark es regnet, so wie der echte Client es rechnet: Ereignis 1
 // (START_RAINING) setzt den Regen auf 0, von wo ihn die Ereignisse 7 steigen
 // lassen, Ereignis 2 (STOP_RAINING) auf 1, von wo sie ihn fallen lassen.
@@ -1475,6 +1479,16 @@ async function handle(cmd) {
       await new Promise((r) => setTimeout(r, 500));
       const now = bot.entity.position;
       return { forced, pos: [now.x, now.y, now.z] };
+    }
+    case 'cameras': {
+      // Die Pakete camera seit einer Marke, dazu die eigene Nummer und die
+      // der Spieler, wie der Bot sie kennt.
+      const players = {};
+      for (const [name, p] of Object.entries(bot.players)) {
+        players[name] = p.entity ? p.entity.id : null;
+      }
+      return { count: cameras.length, packets: cameras.slice(cmd.since || 0),
+               self: bot.entity ? bot.entity.id : null, players };
     }
     case 'velocity': {
       // Fliegt mit der Geschwindigkeit, die der Server schickt, wie ein
@@ -6044,7 +6058,12 @@ def fuehrung_checks(env, bot):
     Fliegt der Fuehrer weiter, als die Kamera des Gastes von ihrem Koerper
     aus darf, lesen beide in der Action-Bar, dass die Fuehrung endet, mit dem
     Ton von sounds.tour-reach. Kommt er rechtzeitig zurueck, fliegt der Gast
-    wieder mit. Bleibt er weg, ist die Fuehrung fuer den Gast vorbei, beide
+    wieder mit. Mit tour.guide-view (voreingestellt) sieht der Gast durch die
+    Augen des Fuehrers - der Bot bekommt das Paket camera mit dessen Nummer,
+    und der Start meldet nichts dazu -, ausser Reichweite und nach dem
+    Verlassen wieder aus seiner eigenen Kamera; der Knopf im Menue und
+    /cam tour view schalten zwischen beidem um. Bleibt er weg, ist die
+    Fuehrung fuer den Gast vorbei, beide
     erfahren es, und das Flugtempo des Gastes ist wieder seins. Einladen
     geht dann nicht, solange der Fuehrer ausser seiner Reichweite ist.
 
@@ -6069,6 +6088,17 @@ def fuehrung_checks(env, bot):
     def klick(client, slot, button=0, mode=0, warten=1.5):
         client.call("click_window", wait=15, slot=slot, button=button, mode=mode)
         time.sleep(warten)
+
+    def kamera_marke():
+        return zuschauer.call("cameras").get("count", 0)
+
+    def kameras_seit(marke):
+        """Durch wen der Server den Gast seit der Marke sehen liess: 'fuehrer',
+        'selbst' oder die Nummer, der Reihe nach."""
+        antwort = zuschauer.call("cameras", since=marke)
+        fuehrer = (antwort.get("players") or {}).get(BOT_NAME)
+        return ["fuehrer" if p.get("id") == fuehrer else "selbst" if p.get("id") == antwort.get("self")
+                else p.get("id") for p in antwort.get("packets", [])]
 
     def einladen_und_annehmen():
         befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
@@ -6136,8 +6166,13 @@ def fuehrung_checks(env, bot):
         FIND.test("sounds.tour-invite - der Eingeladene hoert den Ton", ton_da(zuschauer, ton, "block.note_block.bell"),
                   "")
         seit = bot.mark()
+        kamera = kamera_marke()
         dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=2.0)
         hier = zeilen_seit(bot, seit)
+        FIND.test("tour.guide-view: der Gast sieht durch die Augen des Fuehrers (Paket camera mit dessen Nummer)",
+                  "fuehrer" in kameras_seit(kamera), str(kameras_seit(kamera)))
+        FIND.test("Auf Paper meldet der Start nichts zum Blick des Fuehrers",
+                  "guide's view of /cam tour does not work" not in server_log(env), "")
         FIND.test("/cam tour accept - seine Kamera steht beim Fuehrer, und der erfaehrt es",
                   gesagt(dort, rf"You follow {BOT_NAME} now") and gesagt(hier, rf"{ZUSCHAUER_NAME} follows you now")
                   and nahe(zuschauer_pos(), bot.server_pos(), 1.0),
@@ -6151,14 +6186,33 @@ def fuehrung_checks(env, bot):
                   nahe(zuschauer_pos(), bot.server_pos(), 2.5), f"{zuschauer_pos()} / {bot.server_pos()}")
         befehl(zuschauer, "/cam menu", warten=1.0)
         knopf = fenster(zuschauer).get("slots", {})
-        FIND.test("Im Menue sagt der Knopf der Fuehrung auf Platz 20, wem er folgt",
-                  f"You follow {BOT_NAME}" in item_text(knopf.get("20")), item_text(knopf.get("20")))
+        FIND.test("Im Menue sagt der Knopf der Fuehrung auf Platz 9, wem er folgt",
+                  f"You follow {BOT_NAME}" in item_text(knopf.get("9")), item_text(knopf.get("9")))
+        klick(zuschauer, 9)
+        knopf = fenster(zuschauer).get("slots", {})
+        FIND.test("Auf der Seite der Fuehrung: der Knopf des Blicks, er steht auf dem des Fuehrers",
+                  "View on tours" in item_text(knopf.get("13")) and "Now: the guide's" in item_text(knopf.get("13")),
+                  item_text(knopf.get("13")))
+        kamera = kamera_marke()
+        seit = zuschauer.mark()
+        klick(zuschauer, 13)
+        dort = zeilen_seit(zuschauer, seit)
+        knopf = fenster(zuschauer).get("slots", {})
+        FIND.test("Ein Klick schaltet auf freies Umsehen: die eigene Kamera wieder",
+                  gesagt(dort, r"On tours you look round freely now") and kameras_seit(kamera)[-1:] == ["selbst"]
+                  and "Now: free" in item_text(knopf.get("13")), f"{zeige(dort)} / {kameras_seit(kamera)}")
         zuschauer.call("close_window", wait=10)
+        kamera = kamera_marke()
+        dort = befehl(zuschauer, "/cam tour view", warten=2.0)
+        FIND.test("/cam tour view schaltet zurueck auf den Blick des Fuehrers",
+                  gesagt(dort, r"On tours you see through the eyes of the guide")
+                  and "fuehrer" in kameras_seit(kamera), f"{zeige(dort)} / {kameras_seit(kamera)}")
 
         # Der Fuehrer ist bei x + 8, max-distance ist 20: Bei x + 16 ist er 22
         # Bloecke vom Koerper des Gastes weg und 16 von seinem eigenen.
         seit, seit_bot = zuschauer.mark(), bot.mark()
         ton = toene_marke(zuschauer)
+        kamera = kamera_marke()
         bot.call("fly", wait=30, dx=8, timeout=15000)
         time.sleep(1.0)
         dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, seit_bot)
@@ -6167,12 +6221,17 @@ def fuehrung_checks(env, bot):
                   and gesagt(hier, rf"{ZUSCHAUER_NAME} cannot follow: the tour ends for them in"),
                   f"{zeige(dort)} / {zeige(hier)}")
         FIND.test("sounds.tour-reach - der Gast hoert den Ton", ton_da(zuschauer, ton, "block.conduit.deactivate"), "")
+        FIND.test("Ausser Reichweite sieht der Gast wieder aus seiner eigenen Kamera",
+                  kameras_seit(kamera)[-1:] == ["selbst"], str(kameras_seit(kamera)))
         wo = zuschauer_pos()
         FIND.test("Die Kamera des Gastes bleibt in ihrer eigenen Reichweite",
                   wo is not None and math.dist(wo, gast) <= 21.0, str(wo))
+        kamera = kamera_marke()
         bot.call("fly", wait=30, dx=-6, timeout=15000)
         time.sleep(2.0)
         dort = zeilen_seit(zuschauer, seit)
+        FIND.test("Wieder in Reichweite: wieder der Blick des Fuehrers", "fuehrer" in kameras_seit(kamera),
+                  str(kameras_seit(kamera)))
         FIND.test("Rechtzeitig zurueck: der Gast fliegt wieder mit, die Fuehrung geht weiter",
                   nahe(zuschauer_pos(), bot.server_pos(), 2.5) and not gesagt(dort, r"for too long"),
                   f"{zuschauer_pos()} / {bot.server_pos()} / {zeige(dort)}")
@@ -6197,11 +6256,14 @@ def fuehrung_checks(env, bot):
         time.sleep(1.0)
         FIND.test("Wieder in Reichweite: einladen und annehmen", einladen_und_annehmen(), "")
         seit = bot.mark()
+        time.sleep(1.0)
+        kamera = kamera_marke()
         dort = befehl(zuschauer, "/cam tour leave")
         hier = zeilen_seit(bot, seit)
-        FIND.test("/cam tour leave - er verlaesst die Fuehrung, der Fuehrer erfaehrt es",
-                  gesagt(dort, rf"You left the tour of {BOT_NAME}") and gesagt(hier, rf"{ZUSCHAUER_NAME} left your tour"),
-                  f"{zeige(dort)} / {zeige(hier)}")
+        FIND.test("/cam tour leave - er verlaesst die Fuehrung, der Fuehrer erfaehrt es, und er sieht aus seiner "
+                  "eigenen Kamera",
+                  gesagt(dort, rf"You left the tour of {BOT_NAME}") and gesagt(hier, rf"{ZUSCHAUER_NAME} left your tour")
+                  and kameras_seit(kamera)[-1:] == ["selbst"], f"{zeige(dort)} / {zeige(hier)} / {kameras_seit(kamera)}")
         einladen_und_annehmen()
         seit = bot.mark()
         dort = befehl(zuschauer, "/cam back", warten=2.0)
@@ -6236,7 +6298,7 @@ def fuehrung_checks(env, bot):
                   and gesagt(hier, rf"{ZUSCHAUER_NAME} turned your tour down"), f"{zeige(dort)} / {zeige(hier)}")
 
         befehl(bot, "/cam menu", warten=1.0)
-        klick(bot, 20)
+        klick(bot, 9)
         f = fenster(bot)
         FIND.test("Menue: auf der Seite der Fuehrung steht der Spieler daneben, zum Einladen",
                   "Tour" in (f.get("title") or "") and ZUSCHAUER_NAME in item_text(f.get("slots", {}).get("0"))
@@ -6244,7 +6306,7 @@ def fuehrung_checks(env, bot):
         klick(bot, 0)
         bot.call("close_window", wait=10)
         befehl(zuschauer, "/cam menu", warten=1.0)
-        klick(zuschauer, 20)
+        klick(zuschauer, 9)
         f = fenster(zuschauer)
         FIND.test("Menue: beim Eingeladenen steht die Einladung",
                   BOT_NAME in item_text(f.get("slots", {}).get("0"))
@@ -6534,7 +6596,8 @@ def menue_checks(env, bot):
     Voreingestellt steht access: menu da - nachgesehen in der Datei, die das
     Plugin mitbringt: der Testserver stellt fuer alle anderen Abschnitte both
     ein, sie tippen ihre Befehle. Ohne Cam-Modus oeffnet /cam menu das Menue
-    mit den Knoepfen auf ihren Plaetzen; der auf Platz 22 - der Kamera-Kopf -
+    mit den Knoepfen auf ihren Plaetzen - die Fuehrung auf 9, die Punkte auf
+    10, die Nachtsicht auf 17, Platz 13 frei -; der auf Platz 22 - der Kamera-Kopf -
     startet den Cam-Modus und schliesst das Fenster. Im Cam-Modus oeffnet es trotzdem, wo jedes andere Fenster zu
     bleibt, und nichts kommt dabei ins Inventar. Zeit, dann Sonnenuntergang
     gibt dem Bot 12000. Aussichtspunkte, "Save a spot here" fragt im Chat
@@ -6622,10 +6685,11 @@ def menue_checks(env, bot):
         FIND.test("Vor dem Cam-Modus: Zeit der Welt, Foto-Modus aus, Nachtsicht nur im Dunkeln",
                   "Now: the time of the world" in item_text(knopf.get("15"))
                   and "Now: off" in item_text(knopf.get("14"))
-                  and "Now: Only in the dark" in item_text(knopf.get("10")),
-                  f"{item_text(knopf.get('15'))} / {item_text(knopf.get('14'))} / {item_text(knopf.get('10'))}")
+                  and "Now: Only in the dark" in item_text(knopf.get("17")),
+                  f"{item_text(knopf.get('15'))} / {item_text(knopf.get('14'))} / {item_text(knopf.get('17'))}")
         FIND.test("Die Knoepfe stehen auf ihren Plaetzen",
-                  all(str(i) in f.get("slots", {}) for i in (10, 11, 12, 13, 14, 15, 16, 22)),
+                  all(str(i) in f.get("slots", {}) for i in (9, 10, 11, 12, 14, 15, 16, 17, 22))
+                  and "13" not in f.get("slots", {}),
                   str(sorted(f.get("slots", {})))[:200])
         klick(22, warten=2.0)
         FIND.test("Der Knopf auf Platz 22 startet den Cam-Modus und schliesst das Fenster",
@@ -6661,12 +6725,12 @@ def menue_checks(env, bot):
         bot.call("close_window", wait=10)
 
         menue()
-        klick(13)
+        klick(10)
         f = fenster()
         FIND.test("Aussichtspunkte - die Seite der Punkte", f.get("open") and "Spots" in (f.get("title") or ""),
                   str(f)[:300])
         seit = bot.mark()
-        klick(49)
+        klick(53)
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Save a spot here - das Fenster ist zu, und der Chat fragt nach dem Namen",
                   gesagt(zeilen, r"Type the name of the new spot in the chat") and not fenster().get("open"),
@@ -6677,13 +6741,13 @@ def menue_checks(env, bot):
         bot.call("fly", wait=30, dx=-5, timeout=15000)
         time.sleep(1.0)
         menue()
-        klick(13)
+        klick(10)
         klick(0, warten=2.0)
         da = bot.server_pos()
         FIND.test("Linksklick auf den Punkt springt hin",
                   punkt is not None and da is not None and math.dist(punkt, da) < 0.5, f"{punkt} / {da}")
         menue()
-        klick(13)
+        klick(10)
         seit = bot.mark()
         klick(0, mode=1)
         zeilen = zeilen_seit(bot, seit)
@@ -6884,7 +6948,7 @@ def menue_checks(env, bot):
 
         original = datei.read_text(encoding="utf-8")
         text = menue_knopf(original, "start", slot=4)
-        text = menue_knopf(text, "back", slot=10)
+        text = menue_knopf(text, "back", slot=17)
         text = menue_knopf(text, "time", item="kein_item")
         text = menue_knopf(text, "list", slot=4)
         datei.write_text(text, encoding="utf-8")
@@ -6892,7 +6956,7 @@ def menue_checks(env, bot):
         console(env, "cam reload", pause=2)
         log = strip_colors(server_log(env)[vorher:])
         FIND.test("menu.buttons: ein Knopf auf einem besetzten Platz wird gemeldet und kommt auf seinen eigenen",
-                  "menu.buttons.back.slot: slot 10 is taken by menu.buttons.nightvision.slot already. "
+                  "menu.buttons.back.slot: slot 17 is taken by menu.buttons.nightvision.slot already. "
                   "Using slot 11 instead." in log, log.strip()[-300:] or "nichts im Log")
         FIND.test("menu.buttons: ein unbekanntes Item wird gemeldet",
                   "Unknown value for menu.buttons.time.item: 'kein_item'" in log, log.strip()[-300:] or "nichts im Log")
@@ -6953,19 +7017,25 @@ def menue_checks(env, bot):
 
 
 def spotreiter_checks(env, bot):
-    """menu: die Aussichtspunkte auf drei Reitern - privat, oeffentlich und
-    geteilt - und das Sortieren der Listen.
+    """menu: die Aussichtspunkte auf drei Reitern - die eigenen, oeffentlich
+    und geteilt - und das Sortieren der Listen.
 
-    Der Bot setzt erst Alpha, dann Beta. Auf dem Reiter der privaten stehen
-    sie, der neueste zuerst, mit dem Tag, an dem er entstand; der Trichter
-    sortiert nach dem Namen. Ein Rechtsklick auf das Buch fragt nach einem
-    oeffentlichen Punkt, Gamma ist danach oeffentlich und steht nicht bei den
-    privaten, sondern bei den oeffentlichen, als seiner. Der zweite Spieler
-    sieht ihn dort und liked ihn mit einem Rechtsklick; danach steht das Like
-    darunter, und der Punkt glaenzt. Der Trichter des Bots auf den
-    oeffentlichen kommt nach drei Klicks zu den meisten Likes. Ein
-    Rechtsklick des Bots auf seinen oeffentlichen Punkt macht ihn wieder
-    privat.
+    Der Bot setzt Alpha zwei Bloecke weiter, dann Beta an seinem Platz, dann
+    Cee sechs Bloecke weiter, und stellt sich wieder an seinen Platz. Unten
+    stehen zurueck auf 45, die Reiter auf 48, 49 und 50, der Filter auf 51,
+    52 frei und das Buch fuer einen neuen Punkt auf 53. Auf dem Reiter der
+    eigenen stehen die Punkte, der neueste zuerst, mit dem Tag, an dem er
+    entstand; der Filter sortiert nach dem Namen und dann nach der
+    Reichweite, die naechsten zuerst. Ein Rechtsklick auf das Buch fragt nach
+    einem oeffentlichen Punkt, Gamma ist danach oeffentlich und steht bei den
+    eigenen - dort mit "Public" darunter - und bei den oeffentlichen, als
+    seiner. Der zweite Spieler sieht ihn dort und liked ihn mit einem
+    Rechtsklick; danach steht das Like darunter, und der Punkt glaenzt. Ein
+    Linksklick springt wie zu einem eigenen Punkt: ohne Cam-Modus nicht, im
+    Cam-Modus steht seine Kamera danach am Punkt. Der Filter des Bots auf den
+    oeffentlichen kommt nach drei Klicks zu den meisten Likes. Umschalt-Klick
+    auf den eigenen oeffentlichen loescht ihn dort nicht, ein Rechtsklick
+    nimmt ihn offline - bei den eigenen bleibt er.
 
     Bietet der Bot Alpha an, glaenzt beim anderen der Knopf der Punkte und
     sagt, dass einer wartet, und er oeffnet auf dem Reiter der geteilten: vorn
@@ -6985,7 +7055,7 @@ def spotreiter_checks(env, bot):
 
     def punkte(client):
         befehl(client, "/cam menu", warten=1.0)
-        klick(client, 13)
+        klick(client, 10)
         return fenster(client)
 
     def namen(f):
@@ -6993,64 +7063,79 @@ def spotreiter_checks(env, bot):
         slots = f.get("slots", {})
         return [item_text(slots.get(str(i))).split("\n")[0] for i in range(45) if str(i) in slots]
 
+    def platz_von(f, text):
+        return next((i for i, n in enumerate(namen(f)) if text in n), None)
+
+    def zuschauer_pos():
+        return bot.call("server_pos", selector=ZUSCHAUER_NAME).get("pos")
+
     if not FIND.test("Cam-Modus ist vor dem Test der Reiter aus", cam_off(bot), ""):
         return
     heim = bot.server_pos()
     if heim is None:
         return
     x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
-    console(env, f"fill {_floor(x) - 2} {y} {_floor(z) - 2} {_floor(x) + 6} {y + 4} {_floor(z) + 2} minecraft:air",
+    console(env, f"fill {_floor(x) - 2} {y} {_floor(z) - 2} {_floor(x) + 8} {y + 4} {_floor(z) + 2} minecraft:air",
             pause=0.5)
     label = f"{BOT_NAME}:Gamma"
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
     try:
-        spots_loeschen(bot, "Alpha", "Beta", "Gamma")
+        spots_loeschen(bot, "Alpha", "Beta", "Cee", "Gamma")
         zuschauer.start()
         if not FIND.test("Zweiter Spieler fuer die Reiter kommt herein",
                          zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
             return
         time.sleep(1.5)
         cam_off(zuschauer)
-        console(env, f"tp {ZUSCHAUER_NAME} {x + 3} {y} {z}", pause=1.0)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 3} {y} {z + 1}", pause=1.0)
+        for name, dx in (("Alpha", 2), ("Beta", 0), ("Cee", 6)):
+            hinstellen(bot, x + dx, y, z)
+            befehl(bot, f"/cam spot set {name}")
+            time.sleep(1.2)
         hinstellen(bot, x, y, z)
-        befehl(bot, "/cam spot set Alpha")
-        time.sleep(1.2)
-        befehl(bot, "/cam spot set Beta")
 
         f = punkte(bot)
         knopf = f.get("slots", {})
-        FIND.test("Reiter privat: der neueste zuerst, mit dem Tag, an dem er entstand",
-                  "Spots: private" in (f.get("title") or "") and namen(f)[:2] == ["Beta", "Alpha"]
-                  and "Saved:" in item_text(knopf.get("0")) and "newest first" in item_text(knopf.get("50")),
-                  f"{f.get('title')} / {namen(f)} / {item_text(knopf.get('50'))}")
-        FIND.test("Die drei Reiter stehen in der letzten Reihe, der offene glaenzt",
-                  all(str(i) in knopf for i in (46, 47, 48)) and (knopf.get("46") or {}).get("glint") is True
-                  and not (knopf.get("47") or {}).get("glint"), str(sorted(knopf)))
-        klick(bot, 50)
+        FIND.test("Reiter der eigenen: der neueste zuerst, mit dem Tag, an dem er entstand",
+                  "Spots: yours" in (f.get("title") or "") and namen(f)[:3] == ["Cee", "Beta", "Alpha"]
+                  and "Saved:" in item_text(knopf.get("0")) and "newest first" in item_text(knopf.get("51")),
+                  f"{f.get('title')} / {namen(f)} / {item_text(knopf.get('51'))}")
+        FIND.test("Unten: zurueck auf 45, die Reiter auf 48 bis 50 (der offene glaenzt), der Filter auf 51, "
+                  "52 frei, das Buch auf 53",
+                  all(str(i) in knopf for i in (45, 48, 49, 50, 51, 53)) and "52" not in knopf
+                  and (knopf.get("48") or {}).get("glint") is True and not (knopf.get("49") or {}).get("glint")
+                  and "Save a spot here" in item_text(knopf.get("53")), str(sorted(knopf)))
+        klick(bot, 51)
         f = fenster(bot)
-        FIND.test("Der Trichter sortiert nach dem Namen", namen(f)[:2] == ["Alpha", "Beta"]
-                  and "by name" in item_text(f.get("slots", {}).get("50")), str(namen(f)))
+        FIND.test("Der Filter sortiert nach dem Namen", namen(f)[:3] == ["Alpha", "Beta", "Cee"]
+                  and "by name" in item_text(f.get("slots", {}).get("51")), str(namen(f)))
+        klick(bot, 51)
+        f = fenster(bot)
+        FIND.test("Noch ein Klick: nach der Reichweite, die naechsten zuerst",
+                  namen(f)[:3] == ["Beta", "Alpha", "Cee"]
+                  and "nearest first" in item_text(f.get("slots", {}).get("51")), str(namen(f)))
         seit = bot.mark()
-        klick(bot, 49, button=1)
-        zeilen = befehl(bot, "Gamma")
+        klick(bot, 53, button=1)
+        befehl(bot, "Gamma")
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Rechtsklick auf das Buch: ein oeffentlicher Punkt",
                   gesagt(zeilen, r"Type the name of the new public spot") and gesagt(zeilen, r"Spot Gamma saved here")
                   and gesagt(zeilen, r"Spot Gamma is public now"), zeige(zeilen))
         f = punkte(bot)
-        privat = namen(f)
-        klick(bot, 47)
+        platz = platz_von(f, "Gamma")
+        eigene = item_text(f.get("slots", {}).get(str(platz))) if platz is not None else ""
+        klick(bot, 49)
         f = fenster(bot)
-        FIND.test("Gamma steht nicht bei den privaten, sondern bei den oeffentlichen, als seiner",
-                  "Gamma" not in " ".join(privat) and "Spots: public" in (f.get("title") or "")
-                  and any("Gamma (yours)" in n for n in namen(f)), f"{privat} / {namen(f)}")
+        FIND.test("Gamma bleibt bei den eigenen, mit \"Public\" darunter, und steht bei den oeffentlichen, als seiner",
+                  "Public, 0 likes" in eigene and "Spots: public" in (f.get("title") or "")
+                  and any("Gamma (yours)" in n for n in namen(f)), f"{eigene} / {namen(f)}")
         bot.call("close_window", wait=10)
 
         f = punkte(zuschauer)
-        klick(zuschauer, 47)
+        klick(zuschauer, 49)
         f = fenster(zuschauer)
         FIND.test("Der andere sieht den oeffentlichen Punkt", label in " ".join(namen(f)), str(namen(f)))
-        platz = next((i for i, n in enumerate(namen(f)) if label in n), 0)
+        platz = platz_von(f, label) or 0
         seit = zuschauer.mark()
         klick(zuschauer, platz, button=1)
         dort = zeilen_seit(zuschauer, seit)
@@ -7059,23 +7144,44 @@ def spotreiter_checks(env, bot):
         FIND.test("Rechtsklick liked ihn: danach steht das Like darunter, und er glaenzt",
                   gesagt(dort, rf"You like {label} now\. It has 1 likes") and "1 likes" in item_text(eintrag)
                   and eintrag.get("glint") is True, f"{zeige(dort)} / {item_text(eintrag)}")
+        seit = zuschauer.mark()
+        klick(zuschauer, platz, warten=2.0)
+        dort = zeilen_seit(zuschauer, seit)
+        FIND.test("Linksklick springt wie zu einem eigenen Punkt: ohne Cam-Modus nicht",
+                  gesagt(dort, r"only works in cam mode"), zeige(dort))
+        if FIND.test("Der andere ist im Cam-Modus", cam_on(zuschauer), ""):
+            f = punkte(zuschauer)
+            klick(zuschauer, 49)
+            klick(zuschauer, platz_von(fenster(zuschauer), label) or 0, warten=2.0)
+            wo = zuschauer_pos()
+            FIND.test("Im Cam-Modus springt ein Linksklick zum oeffentlichen Punkt",
+                      wo is not None and math.dist(wo, (x, y, z)) < 0.6, str(wo))
+            cam_off(zuschauer)
         zuschauer.call("close_window", wait=10)
 
         punkte(bot)
-        klick(bot, 47)
+        klick(bot, 49)
         for _ in range(3):
-            klick(bot, 50)
+            klick(bot, 51)
         f = fenster(bot)
-        FIND.test("Auf den oeffentlichen sortiert der Trichter nach drei Klicks nach den Likes",
-                  "most likes first" in item_text(f.get("slots", {}).get("50")), item_text(f.get("slots", {}).get("50")))
-        platz = next((i for i, n in enumerate(namen(f)) if "Gamma (yours)" in n), 0)
+        FIND.test("Auf den oeffentlichen sortiert der Filter nach drei Klicks nach den Likes",
+                  "most likes first" in item_text(f.get("slots", {}).get("51")), item_text(f.get("slots", {}).get("51")))
+        platz = platz_von(f, "Gamma (yours)") or 0
         seit = bot.mark()
-        klick(bot, platz, button=1)
+        klick(bot, platz, mode=1)
+        geklickt = zeilen_seit(bot, seit)
+        FIND.test("Umschalt-Klick auf den eigenen oeffentlichen loescht ihn dort nicht",
+                  not gesagt(geklickt, r"Spot Gamma deleted")
+                  and any("Gamma (yours)" in n for n in namen(fenster(bot))), zeige(geklickt))
+        seit = bot.mark()
+        klick(bot, platz_von(fenster(bot), "Gamma (yours)") or 0, button=1)
         zeilen = zeilen_seit(bot, seit)
         bot.call("close_window", wait=10)
         f = punkte(bot)
-        FIND.test("Rechtsklick auf den eigenen oeffentlichen macht ihn wieder privat",
-                  gesagt(zeilen, r"Spot Gamma is private again") and "Gamma" in " ".join(namen(f)),
+        platz = platz_von(f, "Gamma")
+        eigene = item_text(f.get("slots", {}).get(str(platz))) if platz is not None else ""
+        FIND.test("Rechtsklick nimmt den eigenen oeffentlichen offline - bei den eigenen bleibt er",
+                  gesagt(zeilen, r"Spot Gamma is private again") and platz is not None and "Public" not in eigene,
                   f"{zeige(zeilen)} / {namen(f)}")
         bot.call("close_window", wait=10)
 
@@ -7083,9 +7189,9 @@ def spotreiter_checks(env, bot):
         befehl(zuschauer, "/cam menu", warten=1.0)
         knopf = fenster(zuschauer).get("slots", {})
         FIND.test("Ein Angebot: beim anderen glaenzt der Knopf der Punkte und sagt, dass eins wartet",
-                  (knopf.get("13") or {}).get("glint") is True
-                  and "New, offered to you: 1" in item_text(knopf.get("13")), item_text(knopf.get("13")))
-        klick(zuschauer, 13)
+                  (knopf.get("10") or {}).get("glint") is True
+                  and "New, offered to you: 1" in item_text(knopf.get("10")), item_text(knopf.get("10")))
+        klick(zuschauer, 10)
         f = fenster(zuschauer)
         FIND.test("Er oeffnet auf dem Reiter der geteilten, vorn das Angebot",
                   "shared with you" in (f.get("title") or "")
@@ -7130,7 +7236,7 @@ def spotreiter_checks(env, bot):
                 cam_off(zuschauer)
                 zuschauer.stop()
             cam_off(bot)
-            spots_loeschen(bot, "Alpha", "Beta", "Gamma")
+            spots_loeschen(bot, "Alpha", "Beta", "Cee", "Gamma")
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test der Reiter: {exc}")

@@ -187,9 +187,11 @@ messages:
   # /cam menu (menu): the names of the buttons, and under each the text of the same name with -lore after it (\n
   # begins a new line). The spots have three tabs, menu-spots-tab-private, -public and -shared, each page with a title
   # of its own (menu-spots-title-...); menu-spot-created says when a spot was saved ({date} as menu-admin-flight-date
-  # writes it), menu-spots-offers how many spots wait for him to accept them. menu-sort is the button that sorts a list,
-  # {sort} being one of the menu-sort-... orders. menu-tour-... are the page of /cam tour. menu-only is what the commands say under menu.access or menu.admin-access: menu,
-  # menu-features-off under false. menu-spot-name asks for the name of a new spot in the chat,
+  # writes it), menu-spots-offers how many spots wait for him to accept them, menu-spot-public-lore that one of his
+  # own is public ({likes}); menu-spot-visit-action stands under the spots of others while visitor-camera is on.
+  # menu-sort is the button that sorts a list, {sort} being one of the menu-sort-... orders. menu-tour-... are the page
+  # of /cam tour, menu-tour-view the button that switches between the guide's view and looking round freely.
+  # menu-only is what the commands say under menu.access or menu.admin-access: menu, menu-features-off under false. menu-spot-name asks for the name of a new spot in the chat,
   # menu-admin-ban-reason-question why a player is banned ({player}), {cancel} being the word that calls either off,
   # with menu-answer-cancelled. Under menu-stats and the heads of menu-admin-stats stand the lines of /cam stats;
   # menu-admin-cam-lore and -away stand under the heads of who is in cam mode, like cam-list-entry. On the page of a
@@ -276,7 +278,7 @@ messages:
   menu-features-off: "&cThat is switched off on this server."
   menu-new-spot: "&aSave a spot here"
   menu-new-spot-lore: "&7Where you are, looking the way you look.\n&7Then type its name in the chat."
-  menu-new-spot-lore-public: "&7Where you are, looking the way you look.\n&7Then type its name in the chat.\n&fLeft-click: private\n&eRight-click: public"
+  menu-new-spot-lore-public: "&7Where you are, looking the way you look.\n&7Then type its name in the chat.\n&fLeft-click: private\n&eRight-click: public - it is one of\n&eyour spots all the same"
   menu-next: "&7Next page »"
   menu-nightvision: "&eNight vision"
   menu-nightvision-dark: "&eOnly in the dark"
@@ -293,9 +295,9 @@ messages:
   menu-photo-lore: "&7The other players and the bodies\n&7out of the picture, on and off."
   menu-previous: "&7« Previous page"
   menu-public-own: "&f{spot} &7(yours)"
-  menu-public-own-actions: "&eLeft-click: jump there\n&7Right-click: make it private\n&cShift-click: delete"
-  menu-public-spot-actions: "&eLeft-click: go there\n&dRight-click: like"
-  menu-public-spot-actions-unlike: "&eLeft-click: go there\n&7Right-click: no longer like"
+  menu-public-own-actions: "&eLeft-click: jump there\n&7Right-click: take it offline -\n&7it stays among your spots"
+  menu-public-spot-actions: "&eLeft-click: jump there\n&dRight-click: like"
+  menu-public-spot-actions-unlike: "&eLeft-click: jump there\n&7Right-click: no longer like"
   menu-resume: "&bResume the last flight"
   menu-resume-lore: "&7The camera goes on where\n&7your last flight ended."
   menu-share-everybody: "&ePublic"
@@ -309,13 +311,14 @@ messages:
   menu-share-public-lore: "&aPublic - click to make it private."
   menu-share-title: "&8Share {spot}"
   menu-shared-spot: "&b{owner}:{spot}"
-  menu-shared-spot-actions: "&eLeft-click: go there\n&cRight-click: take it off your list"
+  menu-shared-spot-actions: "&eLeft-click: jump there\n&cRight-click: take it off your list"
   menu-sort: "&eOrder: &f{sort}"
   menu-sort-date: "newest first"
   menu-sort-last-flight: "last flight first"
   menu-sort-likes: "most likes first"
   menu-sort-lore: "&7Left-click: the next order\n&7Right-click: the one before"
   menu-sort-name: "by name"
+  menu-sort-near: "nearest first"
   menu-sort-owner: "by player"
   menu-spot: "&f{spot}"
   menu-spot-actions: "&eLeft-click: jump there\n&cShift-click: delete"
@@ -327,24 +330,26 @@ messages:
   menu-spot-name: "&eType the name of the new spot in the chat, or {cancel}."
   menu-spot-name-public: "&eType the name of the new public spot in the chat, or {cancel}."
   menu-spot-offered-lore: "&7Offered to: {players}"
+  menu-spot-public-lore: "&ePublic, {likes} likes"
   menu-spot-shared-lore: "&7Shared with: {players}"
+  menu-spot-visit-action: "&bShift-click: visit it, from wherever you are"
   menu-spots: "&aSpots"
-  menu-spots-empty-private: "&7No private spots"
-  menu-spots-empty-private-lore: "&7Save one with the book below."
+  menu-spots-empty-private: "&7No spots yet"
+  menu-spots-empty-private-lore: "&7Save one with the book\n&7on the right."
   menu-spots-empty-public: "&7No public spots yet"
-  menu-spots-empty-public-lore: "&7Right-click the book below\n&7to save a public one."
+  menu-spots-empty-public-lore: "&7Right-click the book on the right\n&7to save a public one."
   menu-spots-empty-shared: "&7Nothing shared with you"
   menu-spots-empty-shared-lore: "&7What others offer you\n&7shows up here."
-  menu-spots-lore: "&7Your private spots, the public ones\n&7and those shared with you."
+  menu-spots-lore: "&7Your own spots, the public ones\n&7and those shared with you."
   menu-spots-offers: "&eNew, offered to you: {count}"
-  menu-spots-tab-private: "&fPrivate"
-  menu-spots-tab-private-lore: "&7Your own spots, only for you."
+  menu-spots-tab-private: "&fYour spots"
+  menu-spots-tab-private-lore: "&7All your own spots,\n&7the public ones among them."
   menu-spots-tab-public: "&ePublic"
   menu-spots-tab-public-lore: "&7The public spots of everybody,\n&7yours among them."
   menu-spots-tab-shared: "&bShared with you"
   menu-spots-tab-shared-lore: "&7What others share with you,\n&7and what they offer you."
   menu-spots-title: "&8Spots"
-  menu-spots-title-private: "&8Spots: private"
+  menu-spots-title-private: "&8Spots: yours"
   menu-spots-title-public: "&8Spots: public"
   menu-spots-title-shared: "&8Spots: shared with you"
   # How photo mode, the time, the weather and the night vision stand now, under their buttons: menu-state with
@@ -404,6 +409,10 @@ messages:
   menu-tour-not-in-cam: "&7Not in cam mode"
   menu-tour-not-in-cam-lore: "&7Start cam mode to show\n&7others round."
   menu-tour-title: "&8Tour"
+  menu-tour-view: "&bView on tours"
+  menu-tour-view-free: "&efree"
+  menu-tour-view-guide: "&athe guide's"
+  menu-tour-view-lore: "&7Through the eyes of the guide,\n&7or look round freely."
   menu-weather: "&bWeather"
   menu-weather-clear: "&eClear"
   menu-weather-lore: "&7A weather of your own, only you see it."
@@ -587,7 +596,8 @@ messages:
   # {players} the guests the guide leaves behind and {time} the time left before the tour ends for them:
   # tour-reach-warning (for the guest) and tour-reach-warning-guide (for the guide) count it down in the action bar,
   # tour-reach-lost and tour-reach-lost-guide say when it is over. tour-invitation has the buttons tour-button-accept
-  # and tour-button-decline behind it, and what hovering over them says.
+  # and tour-button-decline behind it, and what hovering over them says. tour-view-guide and tour-view-free answer
+  # /cam tour view, tour-view-unavailable says that the guide's view does not work on the server (tour.guide-view).
   tour-already-guest: "&e{player} is on your tour already."
   tour-busy: "&cYou are on a tour already."
   tour-busy-following: "&cYou follow a tour yourself. Leave it first."
@@ -625,12 +635,15 @@ messages:
   tour-self: "&cYou cannot invite yourself."
   tour-too-far: "&cThe camera of {player} is more than {radius} blocks from yours."
   tour-unknown-player: "&cNobody called {player} is online."
-  tour-usage: "&eUse /cam tour invite|accept|decline|kick <player>, /cam tour leave or /cam tour end."
+  tour-usage: "&eUse /cam tour invite|accept|decline|kick <player>, /cam tour leave, /cam tour end or /cam tour view."
   # /cam trail: {number} which of the kept flights (1 the newest), {distance} in blocks, {time} how long the flight
   # took, {when} trail-flying or trail-ago (with {time} how long ago it ended), {place} as trail-place has it, {world}
   # the worlds of the flight in trail-elsewhere. trail-flights is followed by a button for each kept flight,
   # trail-button, and one for all of them, trail-button-all; hovering over them shows the -hover texts. From the menu,
   # trail-at-start says that he was taken to where the flight began, trail-gone that it is no longer kept.
+  tour-view-free: "&aOn tours you look round freely now."
+  tour-view-guide: "&aOn tours you see through the eyes of the guide."
+  tour-view-unavailable: "&cThe guide's view does not work on this server: on tours you look round freely."
   trail-ago: "ended {time} ago"
   trail-all-entry: "&7#{number}: &f{distance} blocks in {time}, {when}, camera last at {place}"
   trail-all-header: "&eThe last {count} cam flights of {player}:"
@@ -1220,6 +1233,9 @@ message-settings:
   tour-too-far: true
   tour-unknown-player: true
   tour-usage: true
+  tour-view-free: true
+  tour-view-guide: true
+  tour-view-unavailable: true
   trail-all-entry: true
   trail-all-header: true
   trail-at-start: true

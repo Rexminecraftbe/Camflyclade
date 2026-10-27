@@ -98,12 +98,14 @@ public final class CamMenu implements Listener {
     /** The button back to the main page on the small pages. */
     private static final int SLOT_SMALL_BACK = 22;
     /**
-     * On the pages of the spots, the tabs take the slots after the button
-     * back, so the order and the pages go further right.
+     * The last row of the pages of the spots: after the button back the
+     * pages, then the tabs, the order next to them, a gap, and on the right
+     * the button for a new spot.
      */
-    private static final int SLOT_SPOT_SORT = 50;
-    private static final int SLOT_SPOT_PREVIOUS = 52;
-    private static final int SLOT_SPOT_NEXT = 53;
+    private static final int SLOT_SPOT_PREVIOUS = 46;
+    private static final int SLOT_SPOT_NEXT = 47;
+    private static final int SLOT_SPOT_SORT = 51;
+    private static final int SLOT_SPOT_NEW = 53;
     /** The button that sorts a list of players on the admin pages. */
     private static final int SLOT_ADMIN_SORT = 53;
 
@@ -141,14 +143,14 @@ public final class CamMenu implements Listener {
     private final Map<UUID, PlayerSort> playerSorts = new HashMap<>();
 
     /**
-     * The tabs of the spots: his private ones, the public ones of everybody
-     * and those shared with him - each with its icon, its slot in the last
-     * row and the orders it can be sorted in, the first being where it starts.
+     * The tabs of the spots: all his own, the public ones of everybody and
+     * those shared with him - each with its icon, its slot in the last row
+     * and the orders it can be sorted in, the first being where it starts.
      */
     private enum SpotTab {
-        PRIVATE("private", Material.FILLED_MAP, 46, List.of("date", "name")),
-        PUBLIC("public", Material.GLOBE_BANNER_PATTERN, 47, List.of("date", "name", "owner", "likes")),
-        SHARED("shared", Material.MAP, 48, List.of("date", "name", "owner"));
+        PRIVATE("private", Material.FILLED_MAP, 48, List.of("date", "name", "near")),
+        PUBLIC("public", Material.GLOBE_BANNER_PATTERN, 49, List.of("date", "name", "owner", "likes", "near")),
+        SHARED("shared", Material.MAP, 50, List.of("date", "name", "owner", "near"));
 
         final String key;
         final Material icon;
@@ -163,9 +165,12 @@ public final class CamMenu implements Listener {
         }
     }
 
-    /** The orders of the spots: the newest first, by name, by the name of the owner, the most liked first. */
+    /**
+     * The orders of the spots: the newest first, by name, by the name of the
+     * owner, the most liked first, the nearest first.
+     */
     private enum SpotSort {
-        DATE("date"), NAME("name"), OWNER("owner"), LIKES("likes");
+        DATE("date"), NAME("name"), OWNER("owner"), LIKES("likes"), NEAR("near");
 
         final String key;
 
@@ -453,30 +458,29 @@ public final class CamMenu implements Listener {
 
     /**
      * The spots, a page of {@value #ENTRIES} at a time, on one of three tabs:
-     * his private ones, the public ones of everybody, and those shared with
-     * him - the offers he has not accepted yet first. With sharing switched
-     * off there are only his own. Every tab has the button for a new spot
-     * - left-click private, right-click public - and the one that sorts it.
+     * all his own - the public ones among them -, the public ones of
+     * everybody, and those shared with him - the offers he has not accepted
+     * yet first. With sharing switched off there are only his own. The last
+     * row: back, the pages, the tabs, the order, and on the right the button
+     * for a new spot - left-click private, right-click public.
      */
     private void openSpots(Player player, SpotTab wanted, int pageNumber) {
         CamSpots spots = plugin.getSpots();
         boolean sharing = settings.isViewpointsSharing();
         SpotTab tab = sharing ? wanted : SpotTab.PRIVATE;
         SpotSort sort = spotSort(player, tab);
+        Location from = nearFrom(player);
         List<Consumer<Integer>> entries = new ArrayList<>();
         Page page = new Page();
         switch (tab) {
             case PRIVATE -> {
-                List<Spot> own = sorted(spots.privateSpots(player), sort, spot -> spot.name(), spot -> "",
-                        Spot::created, spot -> 0);
-                for (Spot spot : own) {
+                for (Spot spot : sorted(spots.own(player), sort, own -> own, own -> "", own -> 0, from)) {
                     entries.add(slot -> putOwnSpot(player, page, slot, spot));
                 }
             }
             case PUBLIC -> {
-                List<Share> open = sorted(spots.publicSpots(), sort, share -> share.getSpot().name(),
-                        Share::getOwnerName, share -> share.getSpot().created(), Share::likes);
-                for (Share share : open) {
+                for (Share share : sorted(spots.publicSpots(), sort, Share::getSpot, Share::getOwnerName,
+                        Share::likes, from)) {
                     entries.add(slot -> putPublicSpot(player, page, slot, share));
                 }
             }
@@ -484,9 +488,8 @@ public final class CamMenu implements Listener {
                 for (Share share : spots.offers(player)) {
                     entries.add(slot -> putOffer(player, page, slot, share));
                 }
-                List<Share> accepted = sorted(spots.accepted(player), sort, share -> share.getSpot().name(),
-                        Share::getOwnerName, share -> share.getSpot().created(), Share::likes);
-                for (Share share : accepted) {
+                for (Share share : sorted(spots.accepted(player), sort, Share::getSpot, Share::getOwnerName,
+                        Share::likes, from)) {
                     entries.add(slot -> putSharedSpot(player, page, slot, share));
                 }
             }
@@ -507,16 +510,26 @@ public final class CamMenu implements Listener {
                 putTab(player, page, tab, other);
             }
         }
-        List<String> newLore = lines(messages.getMessage(sharing ? "menu-new-spot-lore-public" : "menu-new-spot-lore"));
-        put(page, SLOT_NEW, Material.WRITABLE_BOOK, messages.getMessage("menu-new-spot"), newLore,
-                click -> act(player, () -> askName(player, sharing && click.isRightClick())));
         putSort(page, SLOT_SPOT_SORT, sort.key, tab.sorts, current -> {
             spotSorts.computeIfAbsent(player.getUniqueId(), id -> new EnumMap<>(SpotTab.class)).put(tab,
                     SpotSort.of(current));
             openSpots(player, tab, 0);
         });
+        List<String> newLore = lines(messages.getMessage(sharing ? "menu-new-spot-lore-public" : "menu-new-spot-lore"));
+        put(page, SLOT_SPOT_NEW, Material.WRITABLE_BOOK, messages.getMessage("menu-new-spot"), newLore,
+                click -> act(player, () -> askName(player, sharing && click.isRightClick())));
         paging(page, number, pages, n -> openSpots(player, tab, n), SLOT_SPOT_PREVIOUS, SLOT_SPOT_NEXT);
         player.openInventory(inventory);
+    }
+
+    /**
+     * What "nearest first" measures from: where his camera is held from - his
+     * body, or the spot he visits -, the same spot a jump is measured from;
+     * out of camera mode, where he stands, which is where his body will be.
+     */
+    private Location nearFrom(Player player) {
+        CameraData data = plugin.getCameraPlayers().get(player.getUniqueId());
+        return data != null ? plugin.getMovementGuard().home(data) : player.getLocation();
     }
 
     /**
@@ -537,11 +550,19 @@ public final class CamMenu implements Listener {
         put(page, tab.slot, shine(item, tab == open), click -> later(() -> openSpots(player, tab, 0)));
     }
 
-    /** One of his private spots: left-click jumps to it, right-click shares it, shift-click deletes it. */
+    /**
+     * One of his own spots, private or public - a public one says so, with
+     * its likes: left-click jumps to it, right-click shares it or makes it
+     * public, shift-click deletes it.
+     */
     private void putOwnSpot(Player player, Page page, int slot, Spot spot) {
         CamSpots spots = plugin.getSpots();
         List<String> lore = spotLore(spot);
         Share share = spots.shareOf(player, spot);
+        if (share != null && share.isEveryone()) {
+            lore.addAll(lines(messages.getMessage("menu-spot-public-lore")
+                    .replace("{likes}", String.valueOf(share.likes()))));
+        }
         if (share != null && !share.getPlayers().isEmpty()) {
             lore.addAll(lines(messages.getMessage("menu-spot-shared-lore").replace("{players}", spots.whom(share))));
         }
@@ -567,10 +588,11 @@ public final class CamMenu implements Listener {
     }
 
     /**
-     * A public spot. One of his own: left-click jumps to it, right-click makes
-     * it private again, shift-click deletes it. One of another player:
-     * left-click goes there, right-click likes it or no longer does; it
-     * shines while he likes it.
+     * A public spot. One of his own: left-click jumps to it, right-click takes
+     * it offline - it stays among his own; it is deleted there. One of another
+     * player: left-click jumps to it like to one of his own, in camera mode
+     * and within reach, right-click likes it or no longer does, shift-click
+     * visits it; it shines while he likes it.
      */
     private void putPublicSpot(Player player, Page page, int slot, Share share) {
         CamSpots spots = plugin.getSpots();
@@ -583,11 +605,10 @@ public final class CamMenu implements Listener {
             put(page, slot, Material.FILLED_MAP, messages.getMessage("menu-public-own").replace("{spot}", spot.name()),
                     lore, click -> {
                         if (click.isShiftClick()) {
-                            later(() -> {
-                                spots.delete(player, spot.name());
-                                openSpots(player, SpotTab.PUBLIC, 0);
-                            });
-                        } else if (click.isRightClick()) {
+                            // Deleting is for the tab of his own spots, not this one.
+                            return;
+                        }
+                        if (click.isRightClick()) {
                             later(() -> {
                                 spots.makePublic(player, spot, false);
                                 openSpots(player, SpotTab.PUBLIC, 0);
@@ -604,16 +625,19 @@ public final class CamMenu implements Listener {
         }
         lore.addAll(lines(messages.getMessage(liked ? "menu-public-spot-actions-unlike"
                 : "menu-public-spot-actions")));
+        lore.addAll(visitLore());
         String name = messages.getMessage("menu-shared-spot").replace("{owner}", share.getOwnerName())
                 .replace("{spot}", spot.name());
         put(page, slot, shine(item(Material.MAP, name, lore), liked), click -> {
-            if (click.isRightClick()) {
+            if (click.isShiftClick()) {
+                visit(player, share);
+            } else if (click.isRightClick()) {
                 later(() -> {
                     spots.like(player, share);
                     openSpots(player, SpotTab.PUBLIC, 0);
                 });
             } else if (click.isLeftClick()) {
-                act(player, () -> spots.go(player, share));
+                act(player, () -> spots.jump(player, share.label()));
             }
         });
     }
@@ -640,23 +664,42 @@ public final class CamMenu implements Listener {
         });
     }
 
-    /** A spot shared with him that he accepted: left-click goes there, right-click takes it off his list. */
+    /**
+     * A spot shared with him that he accepted: left-click jumps to it like to
+     * one of his own, in camera mode and within reach, right-click takes it
+     * off his list, shift-click visits it.
+     */
     private void putSharedSpot(Player player, Page page, int slot, Share share) {
         CamSpots spots = plugin.getSpots();
         List<String> lore = spotLore(share.getSpot());
         lore.addAll(lines(messages.getMessage("menu-shared-spot-actions")));
+        lore.addAll(visitLore());
         String name = messages.getMessage("menu-shared-spot").replace("{owner}", share.getOwnerName())
                 .replace("{spot}", share.getSpot().name());
         put(page, slot, Material.MAP, name, lore, click -> {
-            if (click.isRightClick()) {
+            if (click.isShiftClick()) {
+                visit(player, share);
+            } else if (click.isRightClick()) {
                 later(() -> {
                     spots.decline(player, share);
                     openSpots(player, SpotTab.SHARED, 0);
                 });
             } else if (click.isLeftClick()) {
-                act(player, () -> spots.go(player, share));
+                act(player, () -> spots.jump(player, share.label()));
             }
         });
+    }
+
+    /** What shift-click does on a spot of another player, while {@code visitor-camera} is on: nothing otherwise. */
+    private List<String> visitLore() {
+        return settings.isVisitorCameraEnabled() ? lines(messages.getMessage("menu-spot-visit-action")) : List.of();
+    }
+
+    /** Visits a spot of another player with the visitor camera, while it is on. */
+    private void visit(Player player, Share share) {
+        if (settings.isVisitorCameraEnabled()) {
+            act(player, () -> plugin.getVisit().visit(player, share));
+        }
     }
 
     /** Where a spot is, and since when, as lines under it. */
@@ -764,23 +807,39 @@ public final class CamMenu implements Listener {
 
     /**
      * Spots in an order: the newest first - those without a date, saved
-     * before dates were kept, last -, by name, by owner, or the most liked
-     * first. What is the same in one order goes by name, then by owner.
+     * before dates were kept, last -, by name, by owner, the most liked
+     * first, or the nearest first - those in another world last. What is the
+     * same in one order goes by name, then by owner.
+     *
+     * @param from what "nearest first" measures from, see {@link #nearFrom}
      */
-    private static <T> List<T> sorted(Collection<T> items, SpotSort sort, Function<T, String> name,
-                                      Function<T, String> owner, ToLongFunction<T> created, ToIntFunction<T> likes) {
-        Comparator<T> byName = Comparator.comparing(name, String.CASE_INSENSITIVE_ORDER);
+    private static <T> List<T> sorted(Collection<T> items, SpotSort sort, Function<T, Spot> spot,
+                                      Function<T, String> owner, ToIntFunction<T> likes, Location from) {
+        Comparator<T> byName = Comparator.comparing(item -> spot.apply(item).name(), String.CASE_INSENSITIVE_ORDER);
         Comparator<T> byOwner = Comparator.comparing(owner, String.CASE_INSENSITIVE_ORDER);
-        Comparator<T> newest = Comparator.comparingLong(created).reversed();
+        Comparator<T> newest = Comparator.comparingLong((T item) -> spot.apply(item).created()).reversed();
         Comparator<T> order = switch (sort) {
             case DATE -> newest.thenComparing(byName).thenComparing(byOwner);
             case NAME -> byName.thenComparing(byOwner);
             case OWNER -> byOwner.thenComparing(byName);
             case LIKES -> Comparator.comparingInt(likes).reversed().thenComparing(newest).thenComparing(byName);
+            case NEAR -> Comparator.comparingDouble((T item) -> distance(spot.apply(item), from))
+                    .thenComparing(byName).thenComparing(byOwner);
         };
         List<T> list = new ArrayList<>(items);
         list.sort(order);
         return list;
+    }
+
+    /** How far a spot is from a place, squared - endlessly far in another world. */
+    private static double distance(Spot spot, Location from) {
+        if (from.getWorld() == null || !from.getWorld().getName().equals(spot.world())) {
+            return Double.MAX_VALUE;
+        }
+        double dx = spot.x() - from.getX();
+        double dy = spot.y() - from.getY();
+        double dz = spot.z() - from.getZ();
+        return dx * dx + dy * dy + dz * dz;
     }
 
     /**
@@ -807,7 +866,8 @@ public final class CamMenu implements Listener {
      * click sends one away -, and whom he could invite: players in camera
      * mode close to him who could follow him from where they are; a click
      * invites one. While he has guests, the last row has the button that
-     * ends the tour.
+     * ends the tour. Both pages have the button that switches between the
+     * guide's view and looking round freely, where the guide's view works.
      */
     private void openTour(Player player, int pageNumber) {
         CamTour tour = plugin.getTour();
@@ -822,6 +882,7 @@ public final class CamMenu implements Listener {
             put(page, 11, head(guide, messages.getMessage("menu-tour-guide").replace("{player}", guide.getName()),
                     lines(messages.getMessage("menu-tour-guide-lore").replace("{player}", guide.getName()))),
                     click -> { });
+            viewButton(player, page, 13);
             put(page, 15, Material.BARRIER, "menu-tour-leave", click -> act(player, () -> tour.leave(player)));
             put(page, SLOT_SMALL_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
             player.openInventory(inventory);
@@ -882,8 +943,30 @@ public final class CamMenu implements Listener {
         if (!guests.isEmpty()) {
             put(page, SLOT_NEW, Material.BARRIER, "menu-tour-end", click -> act(player, () -> tour.end(player)));
         }
+        viewButton(player, page, SLOT_ADMIN_SORT);
         paging(page, number, pages, n -> openTour(player, n));
         player.openInventory(inventory);
+    }
+
+    /**
+     * Whether he sees through the eyes of his guide on tours or looks round
+     * freely: how it stands under its name; a click switches. Only where the
+     * guide's view works at all.
+     */
+    private void viewButton(Player player, Page page, int slot) {
+        CamTour tour = plugin.getTour();
+        if (!tour.viewWorks()) {
+            return;
+        }
+        boolean guide = tour.seesThroughGuide(player);
+        List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-tour-view-lore")));
+        lore.addAll(lines(messages.getMessage("menu-state").replace("{state}",
+                messages.getMessage(guide ? "menu-tour-view-guide" : "menu-tour-view-free"))));
+        put(page, slot, item(guide ? Material.ENDER_EYE : Material.SPYGLASS, messages.getMessage("menu-tour-view"),
+                lore), click -> later(() -> {
+                    tour.toggleView(player);
+                    openTour(player, 0);
+                }));
     }
 
     /** The times of day; the one he sees now shines, {@code reset} while it is the world's. */
