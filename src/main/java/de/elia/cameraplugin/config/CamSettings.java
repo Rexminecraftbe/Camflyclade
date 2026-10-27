@@ -158,6 +158,9 @@ public final class CamSettings {
     /** The longest {@code tour.out-of-reach-seconds} accepts, like {@code signal.lost-seconds}. */
     private static final int MAX_TOUR_OUT_OF_REACH_SECONDS = 60;
 
+    /** The most guests {@code tour.max-guests} lets one tour take. */
+    private static final int MAX_TOUR_GUESTS = 100;
+
     /**
      * Keys that are read although the config file built into the jar leaves
      * them out on purpose, so that they are not reported as unknown, see
@@ -357,6 +360,8 @@ public final class CamSettings {
     private boolean tourGuideView;
     /** How close a player out of camera mode has to be to the guide to come along, {@code tour.start-distance}. */
     private double tourStartDistance;
+    /** How many guests one tour takes at once, {@code tour.max-guests}; 0 for no limit. */
+    private int tourMaxGuests;
     /** How close a player out of camera mode has to be to a spot to jump there, {@code viewpoints.start-distance}. */
     private double viewpointsStartDistance;
 
@@ -716,6 +721,7 @@ public final class CamSettings {
         tourOutOfReachSeconds = config.getInt("tour.out-of-reach-seconds", 5, 1, MAX_TOUR_OUT_OF_REACH_SECONDS);
         tourGuideView = config.getBoolean("tour.guide-view", true);
         tourStartDistance = config.getDouble("tour.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
+        tourMaxGuests = config.getInt("tour.max-guests", 5, 0, MAX_TOUR_GUESTS);
         viewpointsStartDistance = config.getDouble("viewpoints.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
         resumeEnabled = config.getBoolean("resume-command.enabled", true);
         resumeStorage = readStorage(config, "resume-command.storage");
@@ -1633,6 +1639,11 @@ public final class CamSettings {
      */
     public double getTourStartDistance() {
         return tourStartDistance;
+    }
+
+    /** How many guests one tour takes at once; 0 for no limit. */
+    public int getTourMaxGuests() {
+        return tourMaxGuests;
     }
 
     /**

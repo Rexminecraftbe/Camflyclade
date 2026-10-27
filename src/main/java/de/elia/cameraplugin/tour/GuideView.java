@@ -4,8 +4,6 @@ import de.elia.cameraplugin.log.ConsoleLog;
 import org.bukkit.entity.Player;
 
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.logging.Level;
 
 /**
@@ -18,8 +16,8 @@ import java.util.logging.Level;
  * neither Bukkit nor Paper lets a plugin send it outside spectator mode -
  * {@code Player#setSpectatorTarget} asks for spectator mode, and that is no
  * fair camera: it flies through walls and teleports to any player. So the
- * packet is sent through the internals of the server, by reflection, under
- * the names Paper runs with since 1.20.5: Mojang's.</p>
+ * packet is sent through the internals of the server, see
+ * {@link PacketSender}.</p>
  *
  * <p>Internals are no API: any update of the game may rename them. That is
  * why all of it is in this class, and why nothing depends on it: when a name
@@ -29,28 +27,21 @@ import java.util.logging.Level;
  */
 final class GuideView {
 
-    /** The player of CraftBukkit, whose {@code getHandle()} is the player of the server. */
-    private static final String CRAFT_PLAYER = "org.bukkit.craftbukkit.entity.CraftPlayer";
-
     /** The packet that tells the client which entity it sees through. */
     private static final String CAMERA_PACKET = "net.minecraft.network.protocol.game.ClientboundSetCameraPacket";
 
     /** What the packet takes: an entity of the server. */
     private static final String ENTITY = "net.minecraft.world.entity.Entity";
 
-    /** What the connection sends. */
-    private static final String PACKET = "net.minecraft.network.protocol.Packet";
-
-    /** The player of the server, from a Bukkit player. */
-    private Method handle;
-    /** The connection of the player of the server. */
-    private Field connection;
-    /** Sends a packet over that connection. */
-    private Method send;
+    private final PacketSender sender;
     /** Makes the packet, from the entity to see through. */
     private Constructor<?> cameraPacket;
     /** Whether all of it was found. */
     private boolean available;
+
+    GuideView(PacketSender sender) {
+        this.sender = sender;
+    }
 
     /**
      * Looks the internals up, at the start and after a reload. Whatever is
@@ -63,29 +54,14 @@ final class GuideView {
     void load(ConsoleLog log) {
         available = false;
         try {
-            ClassLoader server = Player.class.getClassLoader();
-            Class<?> craftPlayer = Class.forName(CRAFT_PLAYER, false, server);
-            handle = craftPlayer.getMethod("getHandle");
-            connection = handle.getReturnType().getField("connection");
-            send = connection.getType().getMethod("send", Class.forName(PACKET, false, server));
-            cameraPacket = Class.forName(CAMERA_PACKET, false, server)
-                    .getConstructor(Class.forName(ENTITY, false, server));
+            sender.load();
+            cameraPacket = PacketSender.internal(CAMERA_PACKET).getConstructor(PacketSender.internal(ENTITY));
             available = true;
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
-            if (log != null && isPaper()) {
+            if (log != null && PacketSender.isPaper()) {
                 log.log(Level.WARNING, "The guide's view of /cam tour does not work on this version of the server,"
                         + " guests look round freely: " + ex);
             }
-        }
-    }
-
-    /** Whether the server is Paper, where the internals go by Mojang's names. */
-    private static boolean isPaper() {
-        try {
-            Class.forName("io.papermc.paper.ServerBuildInfo");
-            return true;
-        } catch (ClassNotFoundException ex) {
-            return false;
         }
     }
 
@@ -105,8 +81,7 @@ final class GuideView {
             return false;
         }
         try {
-            Object packet = cameraPacket.newInstance(handle.invoke(through));
-            send.invoke(connection.get(handle.invoke(guest)), packet);
+            sender.send(guest, cameraPacket.newInstance(sender.handleOf(through)));
             return true;
         } catch (ReflectiveOperationException | RuntimeException ex) {
             return false;

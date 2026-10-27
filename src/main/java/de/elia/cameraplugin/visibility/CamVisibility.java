@@ -45,7 +45,8 @@ public final class CamVisibility {
      * ends, see {@link de.elia.cameraplugin.photo.CamPhotoMode}. So is a
      * camera player {@code anti-scouting} hides from the viewer, being too
      * far away, see {@link de.elia.cameraplugin.scout.CamScoutGuard}, and one
-     * on the same tour, see {@link de.elia.cameraplugin.tour.CamTour}.</p>
+     * a tour hides from him with {@code hidePlayer}, see
+     * {@link de.elia.cameraplugin.tour.CamTour#hidesPlayer}.</p>
      */
     private void applyVisibility(Player camPlayer, Player viewer) {
         if (camPlayer.equals(viewer)) return;

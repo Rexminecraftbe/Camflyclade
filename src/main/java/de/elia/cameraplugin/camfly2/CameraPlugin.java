@@ -260,6 +260,7 @@ public final class CameraPlugin extends JavaPlugin {
         swingStrength.register();
         damageMirror.watchBursts();
         mobTargeting.watchWardenAnger();
+        tour.watchTickEnd();
         mobGaze.start();
     }
 

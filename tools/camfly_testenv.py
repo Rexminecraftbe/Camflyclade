@@ -1490,6 +1490,9 @@ async function handle(cmd) {
       return { count: cameras.length, packets: cameras.slice(cmd.since || 0),
                self: bot.entity ? bot.entity.id : null, players };
     }
+    case 'players':
+      // Wer in der Tab-Liste steht: hidePlayer nimmt einen Spieler dort heraus.
+      return { players: Object.keys(bot.players) };
     case 'velocity': {
       // Fliegt mit der Geschwindigkeit, die der Server schickt, wie ein
       // echter Client im Flug: ohne Schwerkraft, und mit der Zahl aus dem
@@ -6103,6 +6106,16 @@ def fuehrung_checks(env, bot):
     sagt es dem Fuehrer. Im Menue steht der Gast auf der Seite der Fuehrung,
     ein Klick laedt ihn ein, bei ihm steht die Einladung, und ein Linksklick
     nimmt sie an. Mit tour.enabled: false ist /cam tour aus.
+
+    Ist niemand nah genug, sagt die Seite der Fuehrung, wie nah: ohne
+    Cam-Modus start-distance, im Cam-Modus radius. Auf der Fuehrung bleiben
+    beide in der Tab-Liste des anderen (auf Paper meldet der Start nichts
+    dazu), ueber der Kamera des Fuehrers stehen die Namen gestapelt - der
+    Gast mit (Follower) ueber dem Fuehrer mit (Guide) -, und der Gast kann
+    seinen eigenen Koerper weder anklicken noch schlagen: der Cam-Modus bleibt
+    an, mit tour-body-locked. Mit max-guests: 1 kommt ein dritter Spieler
+    nicht mehr mit, der Fuehrer kann ihn nicht mehr einladen, und der Knopf
+    der Fuehrung sagt "Guests: 1/1".
     """
     def zuschauer_pos():
         return bot.call("server_pos", selector=ZUSCHAUER_NAME).get("pos")
@@ -6141,6 +6154,19 @@ def fuehrung_checks(env, bot):
         """Die Text-Displays nah an der Kamera - die Namen anderer Kameras."""
         return [e for e in client.call("entities", radius=3).get("entities", []) if "text_display" in (e.get("type") or "")]
 
+    def in_tab(client, wer):
+        return wer in client.call("players").get("players", [])
+
+    def name_text(wer):
+        """Was der Name ueber dieser Kamera sagt, am Server gelesen: das
+        TextDisplay, das ihrer Stelle am naechsten ist - die eines Gastes
+        steht nur fast dort."""
+        since = bot.mark()
+        bot.chat(f"/execute at {wer} positioned ~ ~{NAME_UEBER_SPIELER} ~ run data get entity "
+                 f"@e[type=minecraft:text_display,distance=..0.3,limit=1,sort=nearest] text")
+        hit = bot.expect("entity data", since, 4000)
+        return strip_colors(hit["text"]) if hit else ""
+
     def einladen_und_annehmen():
         befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
         dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=2.0)
@@ -6159,12 +6185,14 @@ def fuehrung_checks(env, bot):
     console(env, f"fill {_floor(x) - 10} {y} {_floor(z) - 4} {_floor(x) + 40} {y + 8} {_floor(z) + 4} "
                  f"minecraft:air", pause=0.5)
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    dritter = BotClient(env, name=DRITTER_NAME)
     try:
-        FIND.test("Voreingestellt steht tour mit enabled: true, radius: 16, start-distance: 16 und "
-                  "out-of-reach-seconds: 5 da",
+        FIND.test("Voreingestellt steht tour mit enabled: true, radius: 16, start-distance: 16, "
+                  "out-of-reach-seconds: 5 und max-guests: 5 da",
                   re.search(r"(?m)^tour:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*radius:\s*16\.0\s*\n"
                             r"(?:\s*#.*\n)*\s*start-distance:\s*16\s*\n"
-                            r"(?:\s*#.*\n)*\s*out-of-reach-seconds:\s*5\s*$", quelle_config(env)) is not None, "")
+                            r"(?:\s*#.*\n)*\s*out-of-reach-seconds:\s*5\s*\n"
+                            r"(?:\s*#.*\n)*\s*max-guests:\s*5\s*$", quelle_config(env)) is not None, "")
         # Die Partikel der Kameras, die der Testserver sonst abschaltet.
         set_options(env, [("max-distance", "20.0"), ("out-of-reach-seconds", "8", "tour"),
                           ("particles-per-tick", "1", "camera-particles")])
@@ -6184,6 +6212,14 @@ def fuehrung_checks(env, bot):
         FIND.test("tour.radius: 16 - wer im Cam-Modus weiter weg ist, wird nicht eingeladen und nicht angeboten",
                   gesagt(zeilen, rf"{ZUSCHAUER_NAME} is too far away") and ZUSCHAUER_NAME not in tabs,
                   f"{zeige(zeilen)} / {tabs}")
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 9)
+        leer = item_text(fenster(bot).get("slots", {}).get("22"))
+        FIND.test("Menue: niemand nah genug - die Seite sagt, wie nah: ohne Cam-Modus start-distance, im Cam-Modus "
+                  "radius",
+                  "Nobody to invite" in leer and "- without cam mode: within 16 blocks" in leer
+                  and "- in cam mode: within 16 blocks" in leer, leer)
+        bot.call("close_window", wait=10)
         cam_off(zuschauer)
         zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
         FIND.test("tour.start-distance: 16 - ohne Cam-Modus 30 Bloecke weg wird er auch nicht eingeladen",
@@ -6230,6 +6266,32 @@ def fuehrung_checks(env, bot):
         tempo = flugtempo(env, ZUSCHAUER_NAME)
         FIND.test("Auf der Fuehrung bewegen die eigenen Tasten die Kamera nicht: Flugtempo 0",
                   tempo is not None and abs(tempo) < 1e-6, str(tempo))
+        FIND.test("Auf der Fuehrung bleiben beide in der Tab-Liste des anderen",
+                  in_tab(bot, ZUSCHAUER_NAME) and in_tab(zuschauer, BOT_NAME),
+                  f"{bot.call('players').get('players')} / {zuschauer.call('players').get('players')}")
+        FIND.test("Auf Paper meldet der Start nichts zur Tab-Liste der Fuehrung",
+                  "cannot keep the ones on a tour" not in server_log(env), "")
+        text = name_text(BOT_NAME)
+        FIND.test("Ueber der Kamera des Fuehrers stehen die Namen gestapelt: der Gast mit (Follower) ueber dem "
+                  "Fuehrer mit (Guide)",
+                  "(Follower)" in text and "(Guide)" in text and ZUSCHAUER_NAME in text
+                  and text.index(ZUSCHAUER_NAME) < text.index("(Follower)") < text.index(BOT_NAME)
+                  < text.index("(Guide)"), text)
+        # Der Koerper des Gastes steht sechs Bloecke hinter dem Fuehrer: Der
+        # fliegt hin, die Kamera des Gastes mit.
+        bot.call("fly", wait=30, dx=-5, timeout=15000)
+        time.sleep(1.5)
+        seit = zuschauer.mark()
+        zuschauer.call("activate_entity", wait=20, at=list(gast), radius=2)
+        time.sleep(1.0)
+        zuschauer.call("attack_entity", wait=20, at=list(gast), radius=2)
+        time.sleep(1.0)
+        dort = zeilen_seit(zuschauer, seit)
+        gesperrt = sum(1 for z in dort if re.search(rf"You follow the tour of {BOT_NAME}: leave it first", z))
+        FIND.test("Wer folgt, kann seinen eigenen Koerper weder anklicken noch schlagen: der Cam-Modus bleibt an",
+                  im_cam_modus(bot, ZUSCHAUER_NAME) and gesperrt == 2, f"{gesperrt} / {zeige(dort)}")
+        bot.call("fly", wait=30, dx=5, timeout=15000)
+        time.sleep(1.5)
         bot.call("fly", wait=30, dx=8, dy=2, timeout=15000)
         time.sleep(2.0)
         FIND.test("Der Fuehrer fliegt acht Bloecke - die Kamera des Gastes fliegt mit",
@@ -6264,7 +6326,8 @@ def fuehrung_checks(env, bot):
                   and "Now: free" in item_text(knopf.get("13")), f"{zeige(dort)} / {kameras_seit(kamera)}")
         zuschauer.call("close_window", wait=10)
         time.sleep(1.0)
-        FIND.test("Beim freien Umsehen sieht auch der Gast den Fuehrer nicht", not kennt(zuschauer, fuehrer_nr), "")
+        FIND.test("Beim freien Umsehen sieht auch der Gast den Fuehrer nicht - in der Tab-Liste steht er",
+                  not kennt(zuschauer, fuehrer_nr) and in_tab(zuschauer, BOT_NAME), "")
         kamera = kamera_marke()
         dort = befehl(zuschauer, "/cam tour view", warten=2.0)
         FIND.test("/cam tour view schaltet zurueck auf den Blick des Fuehrers",
@@ -6367,9 +6430,11 @@ def fuehrung_checks(env, bot):
         befehl(bot, "/cam menu", warten=1.0)
         klick(bot, 9)
         f = fenster(bot)
-        FIND.test("Menue: auf der Seite der Fuehrung steht der Spieler daneben, zum Einladen",
+        FIND.test("Menue: auf der Seite der Fuehrung steht der Spieler daneben, zum Einladen, mit seinem Abstand",
                   "Tour" in (f.get("title") or "") and ZUSCHAUER_NAME in item_text(f.get("slots", {}).get("0"))
-                  and "Click: invite" in item_text(f.get("slots", {}).get("0")), item_text(f.get("slots", {}).get("0")))
+                  and "Click: invite" in item_text(f.get("slots", {}).get("0"))
+                  and re.search(r"In cam mode, \d+ blocks away", item_text(f.get("slots", {}).get("0"))),
+                  item_text(f.get("slots", {}).get("0")))
         klick(bot, 0)
         bot.call("close_window", wait=10)
         befehl(zuschauer, "/cam menu", warten=1.0)
@@ -6385,6 +6450,36 @@ def fuehrung_checks(env, bot):
         cam_off(zuschauer)
         cam_off(bot)
 
+        set_option(env, "max-guests", "1", "tour")
+        dritter.start()
+        if FIND.test("Dritter Spieler fuer tour.max-guests kommt herein",
+                     dritter.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            time.sleep(1.5)
+            hinstellen(bot, x, y, z)
+            cam_on(bot)
+            console(env, f"tp {DRITTER_NAME} {x - 3} {y} {z}", pause=0.5)
+            console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
+            befehl(bot, f"/cam tour invite {DRITTER_NAME}")
+            befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+            dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=3.0)
+            FIND.test("max-guests: 1 - der erste Gast kommt mit", gesagt(dort, rf"You follow {BOT_NAME} now"),
+                      zeige(dort))
+            zeilen = befehl(dritter, f"/cam tour accept {BOT_NAME}", warten=2.0)
+            FIND.test("Die Fuehrung ist voll: wer eingeladen ist, kommt nicht mehr mit, und nichts startet",
+                      gesagt(zeilen, rf"The tour of {BOT_NAME} is full right now")
+                      and not im_cam_modus(bot, DRITTER_NAME), zeige(zeilen))
+            zeilen = befehl(bot, f"/cam tour invite {DRITTER_NAME}")
+            FIND.test("Die Fuehrung ist voll: der Fuehrer kann niemanden mehr einladen",
+                      gesagt(zeilen, r"Your tour is full\. Guests at most: 1\."), zeige(zeilen))
+            befehl(bot, "/cam menu", warten=1.0)
+            knopf = item_text(fenster(bot).get("slots", {}).get("9"))
+            FIND.test("Im Menue sagt der Knopf der Fuehrung \"Guests: 1/1\"", "Guests: 1/1" in knopf, knopf)
+            bot.call("close_window", wait=10)
+            cam_off(zuschauer)
+            cam_off(bot)
+        dritter.stop()
+        set_option(env, "max-guests", "5", "tour")
+
         set_option(env, "enabled", "false", "tour")
         zeilen = befehl(bot, "/cam tour leave")
         FIND.test("tour.enabled: false - /cam tour ist aus", gesagt(zeilen, r"/cam tour is switched off"),
@@ -6398,9 +6493,12 @@ def fuehrung_checks(env, bot):
                 zuschauer.call("velocity", on=False)
                 cam_off(zuschauer)
                 zuschauer.stop()
+            if dritter.proc is not None:
+                dritter.stop()
             cam_off(bot)
             set_options(env, [("max-distance", "100.0"), ("out-of-reach-seconds", "5", "tour"),
-                              ("enabled", "true", "tour"), ("particles-per-tick", "0", "camera-particles")])
+                              ("max-guests", "5", "tour"), ("enabled", "true", "tour"),
+                              ("particles-per-tick", "0", "camera-particles")])
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test der Fuehrung: {exc}")
@@ -11590,6 +11688,9 @@ GROSSER_RADIUS = 32
 # steht. Hoechstens 16 Zeichen, und nicht der Name des ersten Bots - sonst
 # kickt der eine den anderen mit duplicate_login.
 ZUSCHAUER_NAME = "CamFlyZuschauer"
+
+# Ein dritter Spieler, fuer das Limit der Gaeste einer Fuehrung.
+DRITTER_NAME = "CamFlyDritter"
 
 
 def grenz_lauf(bot, heim, ms=GRENZ_LAUF_MS):

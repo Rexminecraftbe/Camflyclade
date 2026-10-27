@@ -5,6 +5,7 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
@@ -19,7 +20,9 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Transformation;
 import org.joml.Vector3f;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -34,6 +37,14 @@ import java.util.UUID;
  * say nothing but his name. This name is a text display of its own, see
  * {@link NameDisplay}: everybody who sees him sees it, and it says what
  * {@code messages.player.name-format} says - "Camera of {player}", say.</p>
+ *
+ * <p>On a tour the guests fly where the guide flies, and their names would
+ * be written over each other. So the names of those who follow him stand
+ * over his camera, stacked over his own, see
+ * {@link de.elia.cameraplugin.tour.CamTour#stackedOver}: his at the bottom,
+ * {@code player.tour-guide-format}, theirs over it,
+ * {@code player.tour-follower-format}. Their own names are hidden while
+ * they do.</p>
  *
  * <p>How it keeps to him is the {@link NameMode}: put back over his head every
  * tick, or sitting on him as a passenger. A passenger has to come off before a
@@ -57,6 +68,8 @@ public final class CamNameTag implements Listener {
      */
     private final NamespacedKey nameKey;
     private final Map<UUID, TextDisplay> names = new HashMap<>();
+    /** What each name says right now, so it is only sent anew when that changes. */
+    private final Map<UUID, String> texts = new HashMap<>();
     private final Map<UUID, BukkitRunnable> tasks = new HashMap<>();
 
     public CamNameTag(CameraPlugin plugin, CamSettings settings, Messages messages, CameraPlayers cameraPlayers) {
@@ -89,6 +102,11 @@ public final class CamNameTag implements Listener {
                     stopFor(player);
                     return;
                 }
+                String text = textFor(player);
+                if (!text.equals(texts.get(player.getUniqueId()))) {
+                    current.setText(text);
+                    texts.put(player.getUniqueId(), text);
+                }
                 showToViewers(player, current);
             }
         };
@@ -104,9 +122,9 @@ public final class CamNameTag implements Listener {
      * @return the name, or {@code null} when the text says nothing
      */
     private TextDisplay putUp(Player player) {
-        String format = messages.getMessage("player.name-format").replace("{player}", player.getName());
+        String text = textFor(player);
         boolean rides = rides();
-        TextDisplay name = NameDisplay.spawn(nameLocation(player), format, settings.getPlayerNameStyle(), nameKey,
+        TextDisplay name = NameDisplay.spawnStyled(nameLocation(player), text, settings.getPlayerNameStyle(), nameKey,
                 display -> {
                     display.setVisibleByDefault(false);
                     if (rides) {
@@ -116,7 +134,49 @@ public final class CamNameTag implements Listener {
         if (name != null && rides) {
             player.addPassenger(name);
         }
+        texts.put(player.getUniqueId(), text);
         return name;
+    }
+
+    /**
+     * What the name over him says, coloured: his {@code player.name-format}.
+     * Over the camera of a guide, the names of the guests who follow him
+     * stand over it, the one who joined first right above his - a text
+     * display writes its lines upwards from where it stands.
+     */
+    private String textFor(Player player) {
+        String own = nameOf(player);
+        List<Player> guests = plugin.getTour().stackedOver(player);
+        if (guests.isEmpty()) {
+            return NameDisplay.styled(own, settings.getPlayerNameStyle());
+        }
+        List<String> lines = new ArrayList<>();
+        for (int i = guests.size() - 1; i >= 0; i--) {
+            String line = NameDisplay.styled(onTour("player.tour-follower-format", guests.get(i)),
+                    settings.getPlayerNameStyle());
+            if (!ChatColor.stripColor(line).isBlank()) {
+                lines.add(line);
+            }
+        }
+        String guide = onTour("player.tour-guide-format", player);
+        lines.add(ChatColor.stripColor(guide).isBlank() ? NameDisplay.styled(own, settings.getPlayerNameStyle())
+                : guide);
+        return String.join("\n", lines);
+    }
+
+    /** His {@code player.name-format}. */
+    private String nameOf(Player player) {
+        return messages.getMessage("player.name-format").replace("{player}", player.getName());
+    }
+
+    /**
+     * One line of the names of a tour: {@code {name}} is what his
+     * name-format says, without its colour - the line brings its own -,
+     * {@code {player}} his name.
+     */
+    private String onTour(String key, Player player) {
+        return messages.getMessage(key).replace("{name}", NameDisplay.withoutLeadingColor(nameOf(player)))
+                .replace("{player}", player.getName());
     }
 
     private boolean rides() {
@@ -162,6 +222,7 @@ public final class CamNameTag implements Listener {
             name = putUp(player);
             if (name == null) {
                 names.remove(player.getUniqueId());
+                texts.remove(player.getUniqueId());
                 return null;
             }
             names.put(player.getUniqueId(), name);
@@ -182,10 +243,14 @@ public final class CamNameTag implements Listener {
         return name;
     }
 
-    /** Shows the name to everybody who should see it and hides it from the rest. */
+    /**
+     * Shows the name to everybody who should see it and hides it from the
+     * rest - from everybody, while it stands over the camera of his guide.
+     */
     private void showToViewers(Player owner, TextDisplay name) {
+        boolean stacked = plugin.getTour().stacksName(owner);
         for (Player viewer : Bukkit.getOnlinePlayers()) {
-            boolean shown = showsNameTo(owner, viewer);
+            boolean shown = !stacked && showsNameTo(owner, viewer);
             if (shown == viewer.canSee(name)) {
                 continue;
             }
@@ -256,6 +321,7 @@ public final class CamNameTag implements Listener {
         if (name != null) {
             takeDown(name);
         }
+        texts.remove(player.getUniqueId());
     }
 
     /**
@@ -276,5 +342,6 @@ public final class CamNameTag implements Listener {
             takeDown(name);
         }
         names.clear();
+        texts.clear();
     }
 }

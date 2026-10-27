@@ -396,10 +396,15 @@ messages:
   menu-to-spots: "&7« Back to the spots"
   menu-tour: "&aTour"
   menu-tour-candidate: "&f{player}"
+  menu-tour-candidate-full-lore: "&cYour tour is full.\n&7Guests at most: {max}"
   menu-tour-candidate-invited-lore: "&eInvited, no answer yet.\n&7Click: invite again"
-  menu-tour-candidate-lore: "&7In cam mode, close to you.\n&eClick: invite"
+  menu-tour-candidate-lore: "&7In cam mode, {blocks} blocks away.\n&eClick: invite"
+  menu-tour-candidate-outside-lore: "&7Not in cam mode, {blocks} blocks away.\n&7Cam mode starts where they stand\n&7once they accept.\n&eClick: invite"
   menu-tour-empty: "&7Nobody to invite"
-  menu-tour-empty-lore: "&7Only who is in cam mode already,\n&7close to your camera and on no\n&7tour shows up here."
+  # {start} = tour.start-distance, {radius} = tour.radius.
+  menu-tour-empty-lore: "&7Players on no tour show up here\n&7when they are close to your camera:\n&7- without cam mode: within {start} blocks\n&7- in cam mode: within {radius} blocks"
+  # The same while tour.start-distance is 0: only who is in cam mode can come along.
+  menu-tour-empty-lore-cam-only: "&7Players on no tour show up here\n&7when they are in cam mode and their\n&7camera is within {radius} blocks of yours."
   menu-tour-end: "&cEnd the tour"
   menu-tour-end-lore: "&7Every guest goes their own way."
   menu-tour-following: "&aYou follow {player}"
@@ -408,6 +413,8 @@ messages:
   menu-tour-guide: "&a{player}"
   menu-tour-guide-lore: "&7Your camera follows theirs."
   menu-tour-guiding: "&aGuests: {count}"
+  # The same while tour.max-guests is set.
+  menu-tour-guiding-max: "&aGuests: {count}/{max}"
   menu-tour-invitation: "&e{player}"
   menu-tour-invitation-lore: "&7Invites you to a tour.\n&aLeft-click: come along\n&cRight-click: turn down"
   menu-tour-invitations: "&eInvitations for you: {count}"
@@ -452,6 +459,11 @@ messages:
   photo-off: "&c/cam photo is switched off."
   photo-started: "&aPhoto mode on: the other players and the bodies are out of the picture for you. F1 hides the rest, photo mode once more ends it."
   player.name-format: "{player}'s Cam"
+  # On a tour, the names of the guests stand over the guide's camera, stacked over the guide's: {name} = what
+  # player.name-format says (without its colour), {player} = the player's name. The follower lines take the colour of
+  # camera-mode.name.color, the guide's line brings its own.
+  player.tour-follower-format: "{name} &7(Follower)"
+  player.tour-guide-format: "&6{name} &7(Guide)"
   portal-blocked: "&cYou cannot go through {portal} portals in camera mode."
   portal-return-area: "&cCam mode is not allowed in {area}, you were brought back."
   portal-return-distance: "&cYou ended up more than {distance} blocks away from {from} and were brought back."
@@ -610,7 +622,10 @@ messages:
   # tour-reach-lost and tour-reach-lost-guide say when it is over. tour-invitation has the buttons tour-button-accept
   # and tour-button-decline behind it, and what hovering over them says. tour-view-guide and tour-view-free answer
   # /cam tour view, tour-view-unavailable says that the guide's view does not work on the server (tour.guide-view).
+  # tour-full and tour-full-guide: the tour has tour.max-guests ({max}) already. tour-body-locked: a guest clicked or hit
+  # his own body, which he cannot use while he follows the guide.
   tour-already-guest: "&e{player} is on your tour already."
+  tour-body-locked: "&cYou follow the tour of {player}: leave it first to use your body."
   tour-busy: "&cYou are on a tour already."
   tour-busy-following: "&cYou follow a tour yourself. Leave it first."
   tour-button-accept: "&a[Come along]"
@@ -621,6 +636,8 @@ messages:
   tour-declined-guide: "&e{player} turned your tour down."
   tour-ended: "&e{player} ended the tour."
   tour-ended-guide: "&eYour tour is over."
+  tour-full: "&cThe tour of {player} is full right now."
+  tour-full-guide: "&cYour tour is full. Guests at most: {max}."
   tour-guide-gone: "&c{player} is no longer in cam mode."
   tour-guide-out-of-reach: "&c{player} is out of the reach of your camera."
   tour-invitation: "&e{player} invites you to a tour: your camera follows theirs."
@@ -1214,6 +1231,7 @@ message-settings:
   time-set-kept: true
   time-usage: true
   tour-already-guest: true
+  tour-body-locked: true
   tour-busy: true
   tour-busy-following: true
   tour-button-accept: true
@@ -1222,6 +1240,8 @@ message-settings:
   tour-declined-guide: true
   tour-ended: true
   tour-ended-guide: true
+  tour-full: true
+  tour-full-guide: true
   tour-guide-gone: true
   tour-guide-out-of-reach: true
   tour-invitation: true

@@ -823,7 +823,16 @@ visitor-camera:
 # aber nicht weiter, als sie selbst fliegen dürfte. Fliegt er aus der Reichweite eines Gastes, bleibt dessen Kamera an
 # ihrer Grenze stehen, und beide lesen in der Action-Bar, dass die Führung für ihn in out-of-reach-seconds endet (Ton:
 # sounds.tour-reach). Kommt der Führer rechtzeitig zurück, geht sie weiter. Die eigenen Tasten bewegen die Kamera eines
-# Gastes nicht, das Mausrad ändert sein Tempo nicht. Ton der Einladung: sounds.tour-invite, Texte: tour-...
+# Gastes nicht, das Mausrad ändert sein Tempo nicht, und seinen eigenen Körper kann er nicht anklicken oder schlagen,
+# solange er folgt (Text: tour-body-locked) - zurück zum Körper geht es nach dem Verlassen. Der Führer bleibt frei.
+# Die Teilnehmer einer Führung sehen sich gegenseitig nicht: weder die Kamera noch ihren Namen, ihre Partikel oder
+# ihren Umriss. In der Tab-Liste bleiben sie - auf Paper über das Innere des Servers (wie guide-view). Geht das nach
+# einem Update von Minecraft nicht mehr, meldet der Start das in der Konsole, und sie verschwinden füreinander auch
+# aus der Tab-Liste, bis das Plugin angepasst ist. Auf Spigot immer so.
+# Wer nicht dabei ist, sieht die Namen der Gäste über der Kamera des Führers gestapelt: ganz unten seiner, darüber
+# die der Gäste in der Reihenfolge, in der sie dazukamen (Texte: player.tour-guide-format und
+# player.tour-follower-format, nur mit camera-mode.name-visible: true). Ton der Einladung: sounds.tour-invite,
+# Texte: tour-...
 tour:
   enabled: true
   # Wie nah die Kamera eines anderen der eigenen sein muss, damit man ihn einladen kann, in Blöcken (1 bis 128)
@@ -835,6 +844,10 @@ tour:
   # Wie viele Sekunden der Führer außer Reichweite eines Gastes sein darf, bevor die Führung für den Gast endet
   # (1 bis 60)
   out-of-reach-seconds: 5
+  # Wie viele Gäste höchstens gleichzeitig auf einer Führung mitkommen (0 = kein Limit, bis 100). Ist sie voll,
+  # kann der Führer niemanden mehr einladen, und wer schon eingeladen ist, kommt erst mit, wenn wieder Platz ist
+  # (Texte: tour-full, tour-full-guide).
+  max-guests: 5
   # Ob ein Gast durch die Augen des Führers sieht - so flüssig wie im Zuschauermodus, nur ohne ihn: kein Fliegen durch
   # Wände, kein Teleport-Menü. Jeder Gast kann mit /cam tour view auf freies Umsehen umschalten. Ist der Führer außer
   # seiner Reichweite, sieht er wieder aus seiner eigenen Kamera, die an ihrer Grenze steht.

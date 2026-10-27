@@ -409,7 +409,9 @@ public final class CamMenu implements Listener {
         if (guide != null) {
             lore.addAll(lines(messages.getMessage("menu-tour-following").replace("{player}", guide.getName())));
         } else if (guests > 0) {
-            lore.addAll(lines(messages.getMessage("menu-tour-guiding").replace("{count}", String.valueOf(guests))));
+            int max = settings.getTourMaxGuests();
+            lore.addAll(lines(messages.getMessage(max > 0 ? "menu-tour-guiding-max" : "menu-tour-guiding")
+                    .replace("{count}", String.valueOf(guests)).replace("{max}", String.valueOf(max))));
         }
         int invited = tour.invitationsOf(player).size();
         if (invited > 0) {
@@ -888,11 +890,13 @@ public final class CamMenu implements Listener {
      * The tour. While he follows one: whom, and the button that leaves it.
      * Otherwise, a page of {@value #ENTRIES} at a time: the invitations he
      * has - left-click accepts, right-click turns down -, his guests - a
-     * click sends one away -, and whom he could invite: players in camera
-     * mode close to him who could follow him from where they are; a click
-     * invites one. While he has guests, the last row has the button that
-     * ends the tour. Both pages have the button that switches between the
-     * guide's view and looking round freely, where the guide's view works.
+     * click sends one away -, and whom he could invite: players close to him
+     * who could follow him from where they are, in camera mode or not, with
+     * how far away they are; a click invites one. Is there nobody, the page
+     * says how close they would have to be. While he has guests, the last
+     * row has the button that ends the tour. Both pages have the button that
+     * switches between the guide's view and looking round freely, where the
+     * guide's view works.
      */
     private void openTour(Player player, int pageNumber) {
         CamTour tour = plugin.getTour();
@@ -942,13 +946,19 @@ public final class CamMenu implements Listener {
                     })));
         }
         if (plugin.isInCameraMode(player)) {
+            boolean full = tour.isFull(player);
             for (Player other : tour.candidates(player)) {
                 String name = other.getName();
-                boolean invited = tour.hasInvited(player, other);
+                String key = full ? "menu-tour-candidate-full-lore"
+                        : tour.hasInvited(player, other) ? "menu-tour-candidate-invited-lore"
+                        : plugin.isInCameraMode(other) ? "menu-tour-candidate-lore"
+                        : "menu-tour-candidate-outside-lore";
+                long blocks = Math.round(player.getLocation().distance(other.getLocation()));
+                String lore = messages.getMessage(key).replace("{blocks}", String.valueOf(blocks))
+                        .replace("{max}", String.valueOf(settings.getTourMaxGuests()));
                 entries.add(slot -> put(page, slot, head(other,
-                        messages.getMessage("menu-tour-candidate").replace("{player}", name),
-                        lines(messages.getMessage(invited ? "menu-tour-candidate-invited-lore"
-                                : "menu-tour-candidate-lore"))), click -> later(() -> {
+                        messages.getMessage("menu-tour-candidate").replace("{player}", name), lines(lore)),
+                        click -> later(() -> {
                             tour.invite(player, other, name);
                             openTour(player, 0);
                         })));
@@ -960,9 +970,17 @@ public final class CamMenu implements Listener {
         for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < entries.size(); slot++) {
             entries.get(number * ENTRIES + slot).accept(slot);
         }
-        if (entries.isEmpty()) {
-            put(page, 22, Material.GRAY_DYE, plugin.isInCameraMode(player) ? "menu-tour-empty"
-                    : "menu-tour-not-in-cam", click -> { });
+        if (entries.isEmpty() && plugin.isInCameraMode(player)) {
+            // How close one has to be: out of camera mode to the guide's
+            // camera, in camera mode camera to camera.
+            double start = settings.getTourStartDistance();
+            put(page, 22, Material.GRAY_DYE, messages.getMessage("menu-tour-empty"),
+                    lines(messages.getMessage(start > 0.0 ? "menu-tour-empty-lore" : "menu-tour-empty-lore-cam-only")
+                            .replace("{start}", String.valueOf(Math.round(start)))
+                            .replace("{radius}", String.valueOf(Math.round(settings.getTourRadius())))),
+                    click -> { });
+        } else if (entries.isEmpty()) {
+            put(page, 22, Material.GRAY_DYE, "menu-tour-not-in-cam", click -> { });
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
         if (!guests.isEmpty()) {
