@@ -7533,6 +7533,8 @@ def spotmoderation_checks(env, bot):
     zeigt seine Punkte: ModA privat, ModB oeffentlich, ModC angeboten. Ein
     Linksklick nimmt ModB herunter - er ist wieder privat, und der Besitzer
     erfaehrt es -, ein Umschalt-Klick loescht ModA, auch das erfaehrt er.
+    Ein Rechtsklick auf ModC teleportiert den Bot hin, auch 30 Bloecke
+    weit.
 
     Der Knopf der Einschraenkung (49) oeffnet ihre Seite: "New spots",
     "Making public" und "Looking at spots" angewaehlt, fuer immer, bestaetigt
@@ -7622,6 +7624,19 @@ def spotmoderation_checks(env, bot):
         FIND.test("Umschalt-Klick loescht einen Punkt, und der Besitzer erfaehrt es",
                   platz(f, "ModA") is None and gesagt(dort, rf"{BOT_NAME} deleted your spot ModA"),
                   f"{list(texte(f).values())} / {zeige(dort)}")
+
+        # Weit weg vom Punkt: der Rechtsklick fragt nicht, wie weit.
+        bot.call("close_window", wait=10)
+        hinstellen(bot, x - 30, y, z)
+        liste, f = seine_punkte()
+        seit = bot.mark()
+        klick(bot, platz(f, "ModC"), button=1, warten=2.0)
+        wo = bot.server_pos()
+        FIND.test("Rechtsklick teleportiert den Admin zum Punkt, von wo er auch ist",
+                  wo is not None and math.dist(wo, (x + 2, y, z)) < 0.6
+                  and gesagt(zeilen_seit(bot, seit), rf"You are at spot ModC of {ZUSCHAUER_NAME}"),
+                  f"{wo} / {zeige(zeilen_seit(bot, seit))}")
+        liste, f = seine_punkte()
 
         klick(bot, 49)
         f = fenster(bot)

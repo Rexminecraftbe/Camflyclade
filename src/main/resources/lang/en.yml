@@ -262,8 +262,8 @@ messages:
   # ({ban}: {what} as spot-restriction-..., the time as ban-for or ban-for-good, the reason as ban-reason);
   # menu-admin-spot-... the page of one player's spots and the page that restricts them, with its three switches
   # (-create, -public, -share, -view), -kept or -free under each.
-  menu-admin-spot-actions: "&cShift-click: delete"
-  menu-admin-spot-actions-shared: "&eLeft-click: take it down -\n&eprivate again\n&cShift-click: delete"
+  menu-admin-spot-actions: "&bRight-click: go there\n&cShift-click: delete"
+  menu-admin-spot-actions-shared: "&eLeft-click: take it down -\n&eprivate again\n&bRight-click: go there\n&cShift-click: delete"
   menu-admin-spot-private: "&7Private"
   menu-admin-spot-restrict: "&cRestrict"
   menu-admin-spot-restrict-change: "&cChange the restriction"
@@ -570,13 +570,16 @@ messages:
   spot-accepted: "&aYou accepted {spot}: you find it among the spots shared with you."
   spot-accepted-owner: "&a{player} accepted your spot {spot}."
   # The moderation of the spots on the admin page: spot-admin-... and spot-restrict-... / spot-unrestrict-done tell the
-  # admin ({player} is the owner), spot-taken-down, spot-deleted-by-admin, spot-restricted-now, -changed and
+  # admin ({player} is the owner; spot-admin-teleported: he went there with a right-click, spot-admin-tp-no-world: its
+  # world {world} is not loaded), spot-taken-down, spot-deleted-by-admin, spot-restricted-now, -changed and
   # spot-unrestricted-now the owner ({player} is the admin). spot-restricted-create, -public and -share answer him when
   # a restriction keeps him from it ({time} and {reason} as with /cam ban; -view: jumping to a spot, his own as well,
   # a visit, and /cam resume of a visit); {what} lists spot-restriction-create, -public, -share and -view, joined by
   # spot-restriction-separator.
   spot-admin-deleted: "&aSpot {spot} of {player} deleted."
+  spot-admin-teleported: "&aYou are at spot {spot} of {player}."
   spot-admin-took-down: "&aSpot {spot} of {player} is private now."
+  spot-admin-tp-no-world: "&cSpot {spot} lies in {world}, which is not loaded."
   spot-area: "&cSpot {spot} lies in {area}, cam mode is not allowed there."
   spot-bad-name: "&cA spot name has 1 to 16 letters, digits, - or _, and is not set, delete, list, share, unshare, accept, decline or like."
   spot-blocked: "&cSomething has been built at spot {spot} since, the camera cannot go there."
@@ -1223,7 +1226,9 @@ message-settings:
   spot-accepted: true
   spot-accepted-owner: true
   spot-admin-deleted: true
+  spot-admin-teleported: true
   spot-admin-took-down: true
+  spot-admin-tp-no-world: true
   spot-area: true
   spot-bad-name: true
   spot-blocked: true

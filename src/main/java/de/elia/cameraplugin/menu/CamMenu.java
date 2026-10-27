@@ -1656,9 +1656,9 @@ public final class CamMenu implements Listener {
     /**
      * The spots of one player, online or not, the newest first: under each
      * where it is, whether it is public, shared or private, and its views. A
-     * click takes a public or shared one down - private again -, shift-click
-     * deletes one. The last row has the button of what keeps him from what
-     * with spots.
+     * click takes a public or shared one down - private again -, right-click
+     * takes the admin there, shift-click deletes one. The last row has the
+     * button of what keeps him from what with spots.
      */
     private void openSpotsOf(Player player, UUID owner, String name, int pageNumber) {
         SpotModeration moderation = plugin.getSpotModeration();
@@ -1706,6 +1706,8 @@ public final class CamMenu implements Listener {
                                 moderation.delete(player, owner, name, spot);
                                 openSpotsOf(player, owner, name, pageNumber);
                             });
+                        } else if (click.isRightClick()) {
+                            act(player, () -> moderation.teleport(player, name, spot));
                         } else if (click.isLeftClick() && (open || shared)) {
                             later(() -> {
                                 moderation.takeDown(player, owner, name, spot);

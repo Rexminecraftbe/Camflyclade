@@ -3,8 +3,10 @@ package de.elia.cameraplugin.spot;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
@@ -16,8 +18,8 @@ import java.util.UUID;
 /**
  * The moderation of the spots, on the admin page of the spots
  * ({@value #PERMISSION}): an admin looks at the spots of any player - online
- * or not -, takes a public or shared one down, so that it is private again,
- * or deletes one, and keeps a player from saving new spots, making them
+ * or not -, goes there himself, takes a public or shared one down, so that it
+ * is private again, or deletes one, and keeps a player from saving new spots, making them
  * public, sharing them or looking at spots at all, for good or for a while
  * and why, see {@link SpotBans}.
  *
@@ -191,6 +193,36 @@ public final class SpotModeration {
             messages.sendMessage(online, "spot-taken-down", "{player}", name(admin), "{spot}", spot.name());
         }
         messages.sendConfiguredMessage(admin, "spot-admin-took-down", "{player}", ownerName, "{spot}", spot.name());
+    }
+
+    /**
+     * Takes the admin himself to one of the spots, looking its way - from
+     * wherever he is, with none of the rules of a jump: he goes to look at
+     * it. In camera mode he leaves it first, as with {@code /cam tp}: his
+     * body would stay behind otherwise. Whoever may fly keeps flying there,
+     * as a spot may hang in the air.
+     */
+    public void teleport(Player admin, String ownerName, Spot spot) {
+        if (!mayUse(admin)) {
+            return;
+        }
+        Location to = spot.toLocation();
+        if (to == null) {
+            messages.sendConfiguredMessage(admin, "spot-admin-tp-no-world", "{spot}", spot.name(),
+                    "{world}", spot.world());
+            return;
+        }
+        if (plugin.isInCameraMode(admin)) {
+            plugin.exitCameraMode(admin, EndReason.COMMAND);
+            messages.sendConfiguredMessage(admin, "camera-off");
+        }
+        if (!plugin.getTeleportGuard().teleport(admin, to)) {
+            return;
+        }
+        if (admin.getAllowFlight()) {
+            admin.setFlying(true);
+        }
+        messages.sendConfiguredMessage(admin, "spot-admin-teleported", "{player}", ownerName, "{spot}", spot.name());
     }
 
     /** Deletes one of his spots, whether he is online or not. He hears about it while he is online. */
