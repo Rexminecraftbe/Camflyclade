@@ -712,7 +712,8 @@ menu:
     # Die Punkte aller Spieler (camplugin.spotadmin, nur mit viewpoints.enabled): die Spieler mit Punkten - auch wer
     # offline ist -, ein Klick zeigt seine Punkte, privat, öffentlich und geteilt. Linksklick nimmt einen öffentlichen
     # oder geteilten herunter (er ist wieder privat), Rechtsklick teleportiert einen selbst hin - von überall, ohne die
-    # Regeln eines Sprungs; im Cam-Modus endet der erst, wie bei /cam tp -, Umschalt-Klick löscht einen. Unten der Knopf, der ihn
+    # Regeln eines Sprungs; im Cam-Modus endet der erst, wie bei /cam tp -, Umschalt-Klick löscht einen. Der Trichter
+    # sortiert seine Punkte: die neuesten zuerst, nach Namen, die meisten Likes, die meisten Aufrufe, die nächsten. Unten der Knopf, der ihn
     # einschränkt: keine neuen Punkte, nichts öffentlich machen, nichts teilen, keine Punkte anschauen (kein Sprung zu
     # einem Punkt, auch nicht zu einem eigenen, kein Besuch) - einzeln anwählbar, für immer oder Tage, Stunden und
     # Minuten wie bei einer Sperre, mit Grund; steht schon etwas, ändert oder hebt man es dort auf.

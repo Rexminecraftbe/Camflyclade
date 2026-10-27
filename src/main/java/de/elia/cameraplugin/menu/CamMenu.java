@@ -151,6 +151,12 @@ public final class CamMenu implements Listener {
     /** How each admin has the lists of players sorted, while he is online. */
     private final Map<UUID, PlayerSort> playerSorts = new HashMap<>();
 
+    /** The orders of the spots of a player on the admin page, the first being where it starts. */
+    private static final List<String> ADMIN_SPOT_SORTS = List.of("date", "name", "likes", "views", "near");
+
+    /** How each admin has the spots of a player sorted on the admin page, while he is online. */
+    private final Map<UUID, SpotSort> adminSpotSorts = new HashMap<>();
+
     /**
      * The tabs of the spots: all his own, the public ones of everybody and
      * those shared with him - each with its icon, its slot in the last row
@@ -1654,11 +1660,13 @@ public final class CamMenu implements Listener {
     }
 
     /**
-     * The spots of one player, online or not, the newest first: under each
-     * where it is, whether it is public, shared or private, and its views. A
-     * click takes a public or shared one down - private again -, right-click
-     * takes the admin there, shift-click deletes one. The last row has the
-     * button of what keeps him from what with spots.
+     * The spots of one player, online or not, in the order the admin picks
+     * - the newest first, by name, the most likes, the most views, the
+     * nearest to him first: under each where it is, whether it is public,
+     * shared or private, and its views. A click takes a public or shared one
+     * down - private again -, right-click takes the admin there, shift-click
+     * deletes one. The last row has the button of what keeps him from what
+     * with spots, and the order.
      */
     private void openSpotsOf(Player player, UUID owner, String name, int pageNumber) {
         SpotModeration moderation = plugin.getSpotModeration();
@@ -1667,9 +1675,11 @@ public final class CamMenu implements Listener {
             return;
         }
         CamSpots spots = plugin.getSpots();
-        List<Spot> list = new ArrayList<>(spots.spotsOf(owner).values());
-        list.sort(Comparator.comparingLong(Spot::created).reversed()
-                .thenComparing(Spot::name, String.CASE_INSENSITIVE_ORDER));
+        SpotSort sort = adminSpotSorts.getOrDefault(player.getUniqueId(), SpotSort.DATE);
+        List<Spot> list = sorted(spots.spotsOf(owner).values(), sort, spot -> spot, spot -> "", spot -> {
+            Share share = spots.shareOf(owner, spot.key());
+            return share == null ? 0 : share.likes();
+        }, spot -> spots.views(owner, spot), nearFrom(player));
         int pages = Math.max(1, (list.size() + ENTRIES - 1) / ENTRIES);
         int number = Math.min(Math.max(0, pageNumber), pages - 1);
         Page page = new Page();
@@ -1729,6 +1739,10 @@ public final class CamMenu implements Listener {
                     spotDrafts.put(player.getUniqueId(), spotDraft(owner, name));
                     openSpotBan(player);
                 }));
+        putSort(page, SLOT_ADMIN_SORT, sort.key, ADMIN_SPOT_SORTS, chosen -> {
+            adminSpotSorts.put(player.getUniqueId(), SpotSort.of(chosen));
+            openSpotsOf(player, owner, name, 0);
+        });
         paging(page, number, pages, n -> openSpotsOf(player, owner, name, n));
         player.openInventory(inventory);
     }
@@ -2098,6 +2112,7 @@ public final class CamMenu implements Listener {
         questions.remove(event.getPlayer().getUniqueId());
         drafts.remove(event.getPlayer().getUniqueId());
         spotDrafts.remove(event.getPlayer().getUniqueId());
+        adminSpotSorts.remove(event.getPlayer().getUniqueId());
         spotSorts.remove(event.getPlayer().getUniqueId());
         playerSorts.remove(event.getPlayer().getUniqueId());
     }

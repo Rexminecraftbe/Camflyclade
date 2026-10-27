@@ -7534,7 +7534,8 @@ def spotmoderation_checks(env, bot):
     Linksklick nimmt ModB herunter - er ist wieder privat, und der Besitzer
     erfaehrt es -, ein Umschalt-Klick loescht ModA, auch das erfaehrt er.
     Ein Rechtsklick auf ModC teleportiert den Bot hin, auch 30 Bloecke
-    weit.
+    weit. Der Trichter sortiert seine Punkte, erst die neuesten, nach einem
+    Klick nach dem Namen.
 
     Der Knopf der Einschraenkung (49) oeffnet ihre Seite: "New spots",
     "Making public" und "Looking at spots" angewaehlt, fuer immer, bestaetigt
@@ -7637,6 +7638,19 @@ def spotmoderation_checks(env, bot):
                   and gesagt(zeilen_seit(bot, seit), rf"You are at spot ModC of {ZUSCHAUER_NAME}"),
                   f"{wo} / {zeige(zeilen_seit(bot, seit))}")
         liste, f = seine_punkte()
+
+        def reihe(f):
+            return [t.split("\n")[0] for _, t in sorted(texte(f).items())]
+
+        vorher = reihe(f)
+        klick(bot, 53)
+        f = fenster(bot)
+        sortierung = item_text(f.get("slots", {}).get("53"))
+        FIND.test("Der Trichter (53) sortiert seine Punkte: erst die neuesten, dann nach dem Namen",
+                  vorher[:2] == ["ModC", "ModB"] and reihe(f)[:2] == ["ModB", "ModC"]
+                  and "» by name" in sortierung and "most views first" in sortierung
+                  and "most likes first" in sortierung and "nearest first" in sortierung,
+                  f"{vorher} / {reihe(f)} / {sortierung}")
 
         klick(bot, 49)
         f = fenster(bot)
