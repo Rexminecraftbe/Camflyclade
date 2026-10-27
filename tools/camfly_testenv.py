@@ -1218,6 +1218,15 @@ let skyTime = null;
 bot._client.on('update_time', (packet) => { skyTime = soundText(packet); });
 // Das Paket camera: durch welche Entitaet der Client sieht.
 bot._client.on('camera', (packet) => cameras.push({ t: Date.now(), id: packet.cameraId }));
+// Der Frost des eigenen Spielers (Eintrag 7 der Entitaetsdaten), wie der
+// Server ihn diesem Client schickt.
+const frosts = [];
+bot._client.on('entity_metadata', (packet) => {
+  if (!bot.entity || packet.entityId !== bot.entity.id) return;
+  for (const m of packet.metadata || []) {
+    if (m.key === 7) frosts.push({ t: Date.now(), value: m.value });
+  }
+});
 // Wie stark es regnet, so wie der echte Client es rechnet: Ereignis 1
 // (START_RAINING) setzt den Regen auf 0, von wo ihn die Ereignisse 7 steigen
 // lassen, Ereignis 2 (STOP_RAINING) auf 1, von wo sie ihn fallen lassen.
@@ -1493,6 +1502,8 @@ async function handle(cmd) {
     case 'players':
       // Wer in der Tab-Liste steht: hidePlayer nimmt einen Spieler dort heraus.
       return { players: Object.keys(bot.players) };
+    case 'frosts':
+      return { count: frosts.length, values: frosts.slice(cmd.since || 0).map((f) => f.value) };
     case 'velocity': {
       // Fliegt mit der Geschwindigkeit, die der Server schickt, wie ein
       // echter Client im Flug: ohne Schwerkraft, und mit der Zahl aus dem
@@ -6113,7 +6124,10 @@ def fuehrung_checks(env, bot):
     dazu), ueber der Kamera des Fuehrers stehen die Namen gestapelt - der
     Gast mit (Follower) ueber dem Fuehrer mit (Guide) -, und der Gast kann
     seinen eigenen Koerper weder anklicken noch schlagen: der Cam-Modus bleibt
-    an, mit tour-body-locked. Mit max-guests: 1 kommt ein dritter Spieler
+    an, mit tour-body-locked. Sein Client bekommt seinen Frost immer wieder
+    geschickt, und jeder am Ende des Cam-Modus: was ein Client in Pulverschnee
+    selbst hochzaehlt, wo der Server ihn nicht hatte, bleibt sonst bis zum
+    naechsten Beitritt auf dem Bildschirm. Mit max-guests: 1 kommt ein dritter Spieler
     nicht mehr mit, der Fuehrer kann ihn nicht mehr einladen, und der Knopf
     der Fuehrung sagt "Guests: 1/1". Der dritte sieht von aussen nur den
     Fuehrer - der Gast, der ihm folgt, steht nur in der Tab-Liste -, nach
@@ -6268,6 +6282,12 @@ def fuehrung_checks(env, bot):
         tempo = flugtempo(env, ZUSCHAUER_NAME)
         FIND.test("Auf der Fuehrung bewegen die eigenen Tasten die Kamera nicht: Flugtempo 0",
                   tempo is not None and abs(tempo) < 1e-6, str(tempo))
+        frost = zuschauer.call("frosts").get("count", 0)
+        time.sleep(1.0)
+        werte = zuschauer.call("frosts", since=frost).get("values", [])
+        FIND.test("Auf der Fuehrung bekommt der Client des Gastes seinen Frost immer wieder geschickt (0) - was er "
+                  "selbst hochzaehlt, bleibt nicht stehen",
+                  len(werte) >= 2 and all(w == 0 for w in werte), str(werte))
         FIND.test("Auf der Fuehrung bleiben beide in der Tab-Liste des anderen",
                   in_tab(bot, ZUSCHAUER_NAME) and in_tab(zuschauer, BOT_NAME),
                   f"{bot.call('players').get('players')} / {zuschauer.call('players').get('players')}")
@@ -6415,10 +6435,14 @@ def fuehrung_checks(env, bot):
                   f"{zeige(zeilen)} / {zeige(dort)}")
         einladen_und_annehmen()
         seit = zuschauer.mark()
+        frost = bot.call("frosts").get("count", 0)
         cam_off(bot)
         dort = zeilen_seit(zuschauer, seit)
         FIND.test("Endet der Cam-Modus des Fuehrers, endet die Fuehrung", gesagt(dort, rf"{BOT_NAME} ended the tour"),
                   zeige(dort))
+        FIND.test("Am Ende des Cam-Modus bekommt der Client seinen Frost geschickt, auch wenn er gleich bleibt (0)",
+                  0 in bot.call("frosts", since=frost).get("values", []),
+                  str(bot.call("frosts", since=frost).get("values")))
         hinstellen(bot, x + 8, y, z)
         cam_on(bot)
         befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")

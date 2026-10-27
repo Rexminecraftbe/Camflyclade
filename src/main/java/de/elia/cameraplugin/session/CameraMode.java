@@ -362,10 +362,12 @@ public final class CameraMode {
         player.setGlowing(cameraData.getOriginalGlowing());
         plugin.getFlightSpeed().stopFor(player);
         // He stands where the mannequin stood, in the same water or powder
-        // snow: what air it has left and how frozen it got is his now.
+        // snow: what air it has left and how frozen it got is his now. The
+        // frost goes to his client even where the count stays the same: the
+        // client of the camera may have counted some up by itself.
         LivingEntity standIn = cameraData.getDamageTarget();
         player.setRemainingAir(standIn.getRemainingAir());
-        player.setFreezeTicks(standIn.getFreezeTicks());
+        ClientFrost.resend(player, standIn.getFreezeTicks());
         plugin.getHungerGuard().stopFor(player);
 
         cameraPlayers.remove(player.getUniqueId());

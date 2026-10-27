@@ -8,6 +8,7 @@ import de.elia.cameraplugin.portal.PortalReturn;
 import de.elia.cameraplugin.portal.PortalRules;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.ClientFrost;
 import de.elia.cameraplugin.visit.Visit;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -112,10 +113,25 @@ public final class CamMovementGuard implements Listener {
             // him in. The step is sent to the spot he belongs at instead.
             warnDistanceLimit(player, "portal-return-distance", data, event.getFrom());
             event.setTo(bringBack(player, data));
+            ClientFrost.resend(player);
             return;
         }
         event.setCancelled(true);
         warnDistanceLimit(player, "distance-limit", data, to);
+    }
+
+    /**
+     * After a step of a camera player was stopped - here, by the wall, or by
+     * anybody else: his client took it already, and may have counted frost
+     * up in powder snow over there that the server never sees, see
+     * {@link ClientFrost}. A camera on a tour, sent after the guide, runs
+     * into such a stop over and over.
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onStoppedStep(PlayerMoveEvent event) {
+        if (event.isCancelled() && cameraPlayers.contains(event.getPlayer().getUniqueId())) {
+            ClientFrost.resend(event.getPlayer());
+        }
     }
 
     /**

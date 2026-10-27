@@ -7,6 +7,7 @@ import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.movement.CamMovementGuard;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.ClientFrost;
 import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import net.md_5.bungee.api.chat.BaseComponent;
@@ -124,6 +125,14 @@ public final class CamTour implements Listener {
      */
     private static final int VIEW_REFRESH = 20;
 
+    /**
+     * How often a guest's frost is sent to his client again, in ticks: sent
+     * after the guide, his camera may have been in powder snow on his client
+     * only, see {@link ClientFrost}. Between two sends it counts up to this
+     * many ticks of 140 - too little frost to be seen.
+     */
+    private static final int FROST_REFRESH = 5;
+
     private final CameraPlugin plugin;
     private final CamSettings settings;
     private final Messages messages;
@@ -173,6 +182,8 @@ public final class CamTour implements Listener {
         boolean viewing;
         /** Ticks since the guide's view was last sent. */
         int sinceView;
+        /** Ticks since his frost was last sent to his client. */
+        int sinceFrost;
     }
 
     public CamTour(CameraPlugin plugin) {
@@ -990,6 +1001,8 @@ public final class CamTour implements Listener {
             }
             plugin.getFlightSpeed().release(guest);
             guest.setVelocity(new Vector());
+            // Whatever frost his client counted up by itself since the last send.
+            ClientFrost.resend(guest);
         }
         syncVisibility();
         if (tours.isEmpty()) {
@@ -1087,10 +1100,15 @@ public final class CamTour implements Listener {
                     drop(guideId, next.getKey());
                     continue;
                 }
-                Long left = follow(guide, guest, data, next.getValue(), at, step, now);
+                Guest state = next.getValue();
+                Long left = follow(guide, guest, data, state, at, step, now);
                 if (left != null) {
                     away.add(guest.getName());
                     soonest = Math.min(soonest, left);
+                }
+                if (++state.sinceFrost >= FROST_REFRESH) {
+                    state.sinceFrost = 0;
+                    ClientFrost.resend(guest);
                 }
             }
             if (!tours.containsKey(guideId)) {
