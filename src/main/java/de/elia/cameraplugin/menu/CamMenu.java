@@ -740,7 +740,11 @@ public final class CamMenu implements Listener {
         }
     }
 
-    /** Where a spot of this owner is, since when, and how often it was looked at, as lines under it. */
+    /**
+     * Where a spot of this owner is, since when, and how often it was looked
+     * at, as lines under it - with how often one player counts, while
+     * {@code viewpoints.views-cooldown-minutes} holds him back.
+     */
     private List<String> spotLore(UUID owner, Spot spot) {
         List<String> lore = new ArrayList<>(lines(place(messages.getMessage("menu-spot-lore"), spot)));
         if (spot.created() > 0L) {
@@ -748,6 +752,11 @@ public final class CamMenu implements Listener {
         }
         lore.addAll(lines(messages.getMessage("menu-spot-views")
                 .replace("{views}", String.valueOf(plugin.getSpots().views(owner, spot)))));
+        int minutes = settings.getViewsCooldownMinutes();
+        if (minutes > 0) {
+            lore.addAll(lines(messages.getMessage("menu-spot-views-hint")
+                    .replace("{minutes}", String.valueOf(minutes))));
+        }
         return lore;
     }
 

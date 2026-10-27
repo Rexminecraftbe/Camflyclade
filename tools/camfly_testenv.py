@@ -7356,10 +7356,11 @@ def spotreiter_checks(env, bot):
         klick(bot, 51)
         f = fenster(bot)
         FIND.test("Noch ein Klick: nach den Aufrufen, die meisten zuerst - noch keiner hat einen, also der neueste "
-                  "zuerst; unter jedem steht \"Views: 0\"",
+                  "zuerst; unter jedem steht \"Views: 0\" und, wie oft ein Spieler zaehlt",
                   namen(f)[:3] == ["Cee", "Beta", "Alpha"]
                   and "» most views first" in item_text(f.get("slots", {}).get("51"))
-                  and "Views: 0" in item_text(f.get("slots", {}).get("0")), str(namen(f)))
+                  and "Views: 0" in item_text(f.get("slots", {}).get("0"))
+                  and "One view per player every 10 min" in item_text(f.get("slots", {}).get("0")), str(namen(f)))
         klick(bot, 51)
         f = fenster(bot)
         FIND.test("Noch ein Klick: nach der Reichweite, die naechsten zuerst",
