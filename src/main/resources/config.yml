@@ -771,7 +771,8 @@ resume-command:
 # eine Meldung, warum nicht. Wie bei /cam back zählt der Sprung nicht als geflogen, und /cam trail hat dort eine Lücke.
 viewpoints:
   enabled: true
-  # Wie viele Punkte jeder Spieler höchstens hat (1 bis 100)
+  # Wie viele Punkte jeder Spieler höchstens hat (1 bis 100, 0 = kein Limit). Öffentliche zählen mit. Der Knopf für
+  # einen neuen Punkt im Menü zeigt, wie viele man hat und wie viele noch gehen (ohne Limit nur, wie viele man hat).
   max-per-player: 10
   # Wo die Punkte liegen:
   #   file   = in plugins/CamFly/playerdata/stats/<UUID>.yml - sie bleiben nach /cam reload und einem Neustart

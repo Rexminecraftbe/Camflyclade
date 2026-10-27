@@ -5066,8 +5066,8 @@ def aussichtspunkt_checks(env, bot):
 
     Ein falscher Name, ein voller Platz, ein unbekannter Punkt und das
     Loeschen sagen, was los ist; ein Name, den es schon gibt, wandert, auch
-    wenn kein Platz mehr frei ist. In der Datei steht bei jedem Punkt, wann er
-    entstand. Die Tab-Vervollstaendigung bietet nach
+    wenn kein Platz mehr frei ist; mit max-per-player: 0 gibt es kein Limit.
+    In der Datei steht bei jedem Punkt, wann er entstand. Die Tab-Vervollstaendigung bietet nach
     /cam spot set, delete, list und die Namen an, nach /cam spot delete die
     Namen. Mit storage: memory steht der Punkt nicht in der Datei, und nach
     /cam reload ist er weg.
@@ -5217,6 +5217,13 @@ def aussichtspunkt_checks(env, bot):
         zeilen = befehl(bot, "/cam spot set turm")
         FIND.test("max-per-player: 2 - ein Name, den es schon gibt, wandert trotzdem",
                   gesagt(zeilen, r"Spot turm moved here"), zeige(zeilen))
+        set_option(env, "max-per-player", "0")
+        zeilen = befehl(bot, "/cam spot set Dritter")
+        liste = befehl(bot, "/cam spot list")
+        FIND.test("max-per-player: 0 - kein Limit, und die Liste nennt keins",
+                  gesagt(zeilen, r"Spot Dritter saved here") and gesagt(liste, r"Your spots \(3\):"),
+                  f"{zeige(zeilen)} / {zeige(liste)}")
+        befehl(bot, "/cam spot delete Dritter")
         set_option(env, "max-per-player", "10")
         zeilen = befehl(bot, "/cam spot delete Turm")
         FIND.test("/cam spot delete Turm - der Punkt ist geloescht", gesagt(zeilen, r"Spot turm deleted"),
@@ -7027,8 +7034,9 @@ def spotreiter_checks(env, bot):
     stehen zurueck auf 45, die Reiter auf 48, 49 und 50, der Filter auf 51,
     52 frei und das Buch fuer einen neuen Punkt auf 53. Auf dem Reiter der
     eigenen stehen die Punkte, der neueste zuerst, mit dem Tag, an dem er
-    entstand; der Filter sortiert nach dem Namen und dann nach der
-    Reichweite, die naechsten zuerst. Ein Rechtsklick auf das Buch fragt nach
+    entstand; das Buch sagt, wie viele Punkte er hat und wie viele noch gehen.
+    Der Filter zeigt alle Sortierungen, die gewaehlte markiert, und sortiert
+    nach dem Namen und dann nach der Reichweite, die naechsten zuerst. Ein Rechtsklick auf das Buch fragt nach
     einem oeffentlichen Punkt, Gamma ist danach oeffentlich und steht bei den
     eigenen - dort mit "Public" darunter - und bei den oeffentlichen, als
     seiner. Der zweite Spieler sieht ihn dort und liked ihn mit einem
@@ -7102,6 +7110,12 @@ def spotreiter_checks(env, bot):
                   "Spots: yours" in (f.get("title") or "") and namen(f)[:3] == ["Cee", "Beta", "Alpha"]
                   and "Saved:" in item_text(knopf.get("0")) and "newest first" in item_text(knopf.get("51")),
                   f"{f.get('title')} / {namen(f)} / {item_text(knopf.get('51'))}")
+        FIND.test("Das Buch sagt, wie viele Punkte er hat und wie viele noch gehen",
+                  "Your spots: 3 of 10 - 7 more possible" in item_text(knopf.get("53")), item_text(knopf.get("53")))
+        filter_text = item_text(knopf.get("51"))
+        FIND.test("Der Filter zeigt alle Sortierungen, die gewaehlte markiert",
+                  "» newest first" in filter_text and "by name" in filter_text and "nearest first" in filter_text
+                  and "» by name" not in filter_text and "» nearest first" not in filter_text, filter_text)
         FIND.test("Unten: zurueck auf 45, die Reiter auf 48 bis 50 (der offene glaenzt), der Filter auf 51, "
                   "52 frei, das Buch auf 53",
                   all(str(i) in knopf for i in (45, 48, 49, 50, 51, 53)) and "52" not in knopf
@@ -7109,13 +7123,14 @@ def spotreiter_checks(env, bot):
                   and "Save a spot here" in item_text(knopf.get("53")), str(sorted(knopf)))
         klick(bot, 51)
         f = fenster(bot)
-        FIND.test("Der Filter sortiert nach dem Namen", namen(f)[:3] == ["Alpha", "Beta", "Cee"]
-                  and "by name" in item_text(f.get("slots", {}).get("51")), str(namen(f)))
+        FIND.test("Der Filter sortiert nach dem Namen, jetzt ist der Name markiert",
+                  namen(f)[:3] == ["Alpha", "Beta", "Cee"] and "» by name" in item_text(f.get("slots", {}).get("51"))
+                  and "» newest first" not in item_text(f.get("slots", {}).get("51")), str(namen(f)))
         klick(bot, 51)
         f = fenster(bot)
         FIND.test("Noch ein Klick: nach der Reichweite, die naechsten zuerst",
                   namen(f)[:3] == ["Beta", "Alpha", "Cee"]
-                  and "nearest first" in item_text(f.get("slots", {}).get("51")), str(namen(f)))
+                  and "» nearest first" in item_text(f.get("slots", {}).get("51")), str(namen(f)))
         seit = bot.mark()
         klick(bot, 53, button=1)
         befehl(bot, "Gamma")
@@ -7167,7 +7182,7 @@ def spotreiter_checks(env, bot):
             klick(bot, 51)
         f = fenster(bot)
         FIND.test("Auf den oeffentlichen sortiert der Filter nach drei Klicks nach den Likes",
-                  "most likes first" in item_text(f.get("slots", {}).get("51")), item_text(f.get("slots", {}).get("51")))
+                  "» most likes first" in item_text(f.get("slots", {}).get("51")), item_text(f.get("slots", {}).get("51")))
         platz = platz_von(f, "Gamma (yours)") or 0
         seit = bot.mark()
         klick(bot, platz, mode=1)
@@ -7223,11 +7238,11 @@ def spotreiter_checks(env, bot):
         klick(bot, 14)
         f = fenster(bot)
         FIND.test("Admin-Seite, Statistik: nach dem Namen", namen(f)[:2] == [BOT_NAME, ZUSCHAUER_NAME]
-                  and "by name" in item_text(f.get("slots", {}).get("53")), str(namen(f)))
+                  and "» by name" in item_text(f.get("slots", {}).get("53")), str(namen(f)))
         klick(bot, 53)
         f = fenster(bot)
         FIND.test("Der Trichter sortiert nach dem letzten Flug: wer gerade geflogen ist, steht vorn",
-                  namen(f)[:1] == [ZUSCHAUER_NAME] and "last flight first" in item_text(f.get("slots", {}).get("53")),
+                  namen(f)[:1] == [ZUSCHAUER_NAME] and "» last flight first" in item_text(f.get("slots", {}).get("53")),
                   f"{namen(f)} / {item_text(f.get('slots', {}).get('53'))}")
     finally:
         try:

@@ -515,11 +515,29 @@ public final class CamMenu implements Listener {
                     SpotSort.of(current));
             openSpots(player, tab, 0);
         });
-        List<String> newLore = lines(messages.getMessage(sharing ? "menu-new-spot-lore-public" : "menu-new-spot-lore"));
+        List<String> newLore = new ArrayList<>(lines(spotCount(player)));
+        newLore.addAll(lines(messages.getMessage(sharing ? "menu-new-spot-lore-public" : "menu-new-spot-lore")));
         put(page, SLOT_SPOT_NEW, Material.WRITABLE_BOOK, messages.getMessage("menu-new-spot"), newLore,
                 click -> act(player, () -> askName(player, sharing && click.isRightClick())));
         paging(page, number, pages, n -> openSpots(player, tab, n), SLOT_SPOT_PREVIOUS, SLOT_SPOT_NEXT);
         player.openInventory(inventory);
+    }
+
+    /**
+     * How many spots he has, and how many more he may save under
+     * {@code viewpoints.max-per-player}, for the button of a new spot - or
+     * only how many he has, while there is no limit.
+     */
+    private String spotCount(Player player) {
+        int count = plugin.getSpots().own(player).size();
+        if (!settings.limitsViewpoints()) {
+            return messages.getMessage("menu-new-spot-count-unlimited").replace("{count}", String.valueOf(count));
+        }
+        int left = Math.max(0, settings.getViewpointsMax() - count);
+        return messages.getMessage(left > 0 ? "menu-new-spot-count" : "menu-new-spot-count-full")
+                .replace("{count}", String.valueOf(count))
+                .replace("{max}", String.valueOf(settings.getViewpointsMax()))
+                .replace("{left}", String.valueOf(left));
     }
 
     /**
@@ -843,8 +861,9 @@ public final class CamMenu implements Listener {
     }
 
     /**
-     * The button that sorts a list: the order it has now under its name. A
-     * click takes the next order, a right-click the one before.
+     * The button that sorts a list: the order it has now under its name, and
+     * under it every order there is - the one it has now marked, the others
+     * greyed out. A click takes the next order, a right-click the one before.
      *
      * @param now    the order it has now, as the language file names it after {@code menu-sort-}
      * @param orders every order it can have
@@ -852,7 +871,13 @@ public final class CamMenu implements Listener {
      */
     private void putSort(Page page, int slot, String now, List<String> orders, Consumer<String> choose) {
         String name = messages.getMessage("menu-sort").replace("{sort}", messages.getMessage("menu-sort-" + now));
-        put(page, slot, Material.HOPPER, name, lines(messages.getMessage("menu-sort-lore")), click -> later(() -> {
+        List<String> lore = new ArrayList<>();
+        for (String order : orders) {
+            lore.addAll(lines(messages.getMessage(order.equals(now) ? "menu-sort-option-current" : "menu-sort-option")
+                    .replace("{sort}", messages.getMessage("menu-sort-" + order))));
+        }
+        lore.addAll(lines(messages.getMessage("menu-sort-lore")));
+        put(page, slot, Material.HOPPER, name, lore, click -> later(() -> {
             int at = Math.max(0, orders.indexOf(now));
             int step = click.isRightClick() ? orders.size() - 1 : 1;
             choose.accept(orders.get((at + step) % orders.size()));

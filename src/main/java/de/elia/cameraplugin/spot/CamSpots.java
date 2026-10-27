@@ -243,7 +243,7 @@ public final class CamSpots {
         }
         Map<String, Spot> spots = spotsOf(player);
         Spot before = spots.get(Spot.key(name));
-        if (before == null && spots.size() >= settings.getViewpointsMax()) {
+        if (before == null && settings.limitsViewpoints() && spots.size() >= settings.getViewpointsMax()) {
             messages.sendConfiguredMessage(player, "spot-full", "{max}",
                     String.valueOf(settings.getViewpointsMax()));
             return null;
@@ -557,7 +557,8 @@ public final class CamSpots {
         if (spots.isEmpty()) {
             messages.sendConfiguredMessage(player, "spot-list-empty");
         } else {
-            messages.sendConfiguredMessage(player, "spot-list-header", "{count}", String.valueOf(spots.size()),
+            messages.sendConfiguredMessage(player, settings.limitsViewpoints() ? "spot-list-header"
+                    : "spot-list-header-unlimited", "{count}", String.valueOf(spots.size()),
                     "{max}", String.valueOf(settings.getViewpointsMax()));
             if (messages.isMessageEnabled("spot-list-entry")) {
                 for (Spot spot : spots.values()) {

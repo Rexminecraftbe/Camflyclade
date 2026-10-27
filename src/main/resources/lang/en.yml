@@ -189,7 +189,10 @@ messages:
   # of its own (menu-spots-title-...); menu-spot-created says when a spot was saved ({date} as menu-admin-flight-date
   # writes it), menu-spots-offers how many spots wait for him to accept them, menu-spot-public-lore that one of his
   # own is public ({likes}); menu-spot-visit-action stands under the spots of others while visitor-camera is on.
-  # menu-sort is the button that sorts a list, {sort} being one of the menu-sort-... orders. menu-tour-... are the page
+  # menu-new-spot-count says on the button of a new spot how many spots he has ({count}), may have ({max},
+  # viewpoints.max-per-player) and may still save ({left}); -full once there is no room left, -unlimited without a
+  # limit. menu-sort is the button that sorts a list, {sort} being one of the menu-sort-... orders; under it every
+  # order, the one in use as menu-sort-option-current, the others as menu-sort-option. menu-tour-... are the page
   # of /cam tour, menu-tour-view the button that switches between the guide's view and looking round freely.
   # menu-only is what the commands say under menu.access or menu.admin-access: menu, menu-features-off under false. menu-spot-name asks for the name of a new spot in the chat,
   # menu-admin-ban-reason-question why a player is banned ({player}), {cancel} being the word that calls either off,
@@ -277,6 +280,9 @@ messages:
   menu-end-lore: "&7Back to your body."
   menu-features-off: "&cThat is switched off on this server."
   menu-new-spot: "&aSave a spot here"
+  menu-new-spot-count: "&7Your spots: &f{count} of {max} &7- &a{left} more &7possible"
+  menu-new-spot-count-full: "&cYour spots: {count} of {max} - delete one first"
+  menu-new-spot-count-unlimited: "&7Your spots: &f{count}"
   menu-new-spot-lore: "&7Where you are, looking the way you look.\n&7Then type its name in the chat."
   menu-new-spot-lore-public: "&7Where you are, looking the way you look.\n&7Then type its name in the chat.\n&fLeft-click: private\n&eRight-click: public - it is one of\n&eyour spots all the same"
   menu-next: "&7Next page »"
@@ -316,9 +322,11 @@ messages:
   menu-sort-date: "newest first"
   menu-sort-last-flight: "last flight first"
   menu-sort-likes: "most likes first"
-  menu-sort-lore: "&7Left-click: the next order\n&7Right-click: the one before"
+  menu-sort-lore: "&eLeft-click: the next order\n&eRight-click: the one before"
   menu-sort-name: "by name"
   menu-sort-near: "nearest first"
+  menu-sort-option: "&7   {sort}"
+  menu-sort-option-current: "&a» {sort}"
   menu-sort-owner: "by player"
   menu-spot: "&f{spot}"
   menu-spot-actions: "&eLeft-click: jump there\n&cShift-click: delete"
@@ -520,6 +528,7 @@ messages:
   spot-list-empty: "&eYou have no spots yet. /cam spot set <name> saves one where you are."
   spot-list-entry: "&7- &f{spot}&7: {x} {y} {z} ({world})"
   spot-list-header: "&eYour spots ({count} of {max}):"
+  spot-list-header-unlimited: "&eYour spots ({count}):"
   spot-list-offered: " &7(offered to {players})"
   spot-list-offers-entry: "&7- &f{owner}:{spot}&7: {x} {y} {z} ({world})"
   spot-list-offers-header: "&eOffered to you ({count}):"
@@ -1129,6 +1138,7 @@ message-settings:
   spot-list-empty: true
   spot-list-entry: true
   spot-list-header: true
+  spot-list-header-unlimited: true
   spot-list-offered: true
   spot-list-offers-entry: true
   spot-list-offers-header: true

@@ -106,9 +106,10 @@ public final class CamSettings {
     private static final int MAX_TRAIL_FLIGHTS = 20;
 
     /**
-     * The most spots {@code viewpoints.max-per-player} lets each player keep.
-     * {@code /cam spot list} sends a line for each of them, and more than this
-     * no longer fits into the chat a player scrolls back through.
+     * The most spots {@code viewpoints.max-per-player} lets each player keep,
+     * short of no limit at all, 0. {@code /cam spot list} sends a line for
+     * each of them, and more than this no longer fits into the chat a player
+     * scrolls back through.
      */
     private static final int MAX_VIEWPOINTS = 100;
 
@@ -696,7 +697,7 @@ public final class CamSettings {
         afkWarningPercent = config.getInt("afk-end.warning-percent", 80, 0, 99);
         backCommandEnabled = config.getBoolean("back-command.enabled", true);
         viewpointsEnabled = config.getBoolean("viewpoints.enabled", true);
-        viewpointsMax = config.getInt("viewpoints.max-per-player", 10, 1, MAX_VIEWPOINTS);
+        viewpointsMax = config.getInt("viewpoints.max-per-player", 10, 0, MAX_VIEWPOINTS);
         viewpointsStorage = readStorage(config, "viewpoints.storage");
         viewpointsSharing = config.getBoolean("viewpoints.sharing", true);
         visitorCameraEnabled = config.getBoolean("visitor-camera.enabled", true);
@@ -1569,8 +1570,14 @@ public final class CamSettings {
         return viewpointsEnabled;
     }
 
+    /** How many spots each player may keep, {@code viewpoints.max-per-player}; 0 for no limit. */
     public int getViewpointsMax() {
         return viewpointsMax;
+    }
+
+    /** Whether there is a limit to how many spots a player may keep. */
+    public boolean limitsViewpoints() {
+        return viewpointsMax > 0;
     }
 
     public StorageMode getViewpointsStorage() {
