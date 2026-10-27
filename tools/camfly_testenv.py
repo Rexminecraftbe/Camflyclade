@@ -6160,8 +6160,10 @@ def fuehrung_checks(env, bot):
                  f"minecraft:air", pause=0.5)
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
     try:
-        FIND.test("Voreingestellt steht tour mit enabled: true, radius: 16 und out-of-reach-seconds: 5 da",
+        FIND.test("Voreingestellt steht tour mit enabled: true, radius: 16, start-distance: 16 und "
+                  "out-of-reach-seconds: 5 da",
                   re.search(r"(?m)^tour:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*radius:\s*16\.0\s*\n"
+                            r"(?:\s*#.*\n)*\s*start-distance:\s*16\s*\n"
                             r"(?:\s*#.*\n)*\s*out-of-reach-seconds:\s*5\s*$", quelle_config(env)) is not None, "")
         # Die Partikel der Kameras, die der Testserver sonst abschaltet.
         set_options(env, [("max-distance", "20.0"), ("out-of-reach-seconds", "8", "tour"),
