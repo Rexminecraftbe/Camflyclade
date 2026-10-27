@@ -21,7 +21,8 @@ import java.util.logging.Level;
 /**
  * What single players may not do with spots, set on the admin page of the
  * spots, see {@link SpotModeration}: save new ones, make them public, share
- * them with others - for good or for a while, with a reason. Kept in
+ * them with others, look at spots at all - for good or for a while, with a
+ * reason. Kept in
  * {@code playerdata/spot-bans.yml}, whatever {@code viewpoints.storage}
  * says: a restriction outlasts {@code /cam reload} and a restart, like a
  * ban of camera mode.
@@ -41,7 +42,8 @@ public final class SpotBans {
     /** What stands at the top of the file, for whoever finds it and wonders. */
     private static final List<String> HEADER = List.of(
             "CamFly: what single players may not do with spots - create: save new ones, public: make them",
-            "public, share: share them with others -, set on the admin page of the spots.",
+            "public, share: share them with others, view: jump to spots or visit them -, set on the admin page",
+            "of the spots.",
             "until: when it ends (milliseconds since 1970), 0 = for good. Changes made here by hand count after",
             "/cam reload.");
 
@@ -52,16 +54,17 @@ public final class SpotBans {
      * @param create  whether he may not save new spots
      * @param publish whether he may not make spots public
      * @param share   whether he may not share spots with others
+     * @param view    whether he may not look at spots: jump to them, his own as well, or visit them
      * @param until   when it ends, as {@link System#currentTimeMillis()} counts, 0 for good
      * @param reason  why, or an empty text
      * @param by      who set it
      */
-    public record Ban(String name, boolean create, boolean publish, boolean share, long until, String reason,
-                      String by) {
+    public record Ban(String name, boolean create, boolean publish, boolean share, boolean view, long until,
+                      String reason, String by) {
 
         /** Whether it still holds at {@code now}, and keeps him from anything at all. */
         boolean holds(long now) {
-            return (create || publish || share) && (until <= 0L || until > now);
+            return (create || publish || share || view) && (until <= 0L || until > now);
         }
 
         /** Whether it holds for good, rather than for a while. */
@@ -161,8 +164,8 @@ public final class SpotBans {
                 continue;
             }
             players.put(id, new Ban(entry.getString("name"), entry.getBoolean("create"),
-                    entry.getBoolean("public"), entry.getBoolean("share"), entry.getLong("until"),
-                    entry.getString("reason", ""), entry.getString("by", "")));
+                    entry.getBoolean("public"), entry.getBoolean("share"), entry.getBoolean("view"),
+                    entry.getLong("until"), entry.getString("reason", ""), entry.getString("by", "")));
         }
     }
 
@@ -184,6 +187,7 @@ public final class SpotBans {
             out.set("create", ban.create());
             out.set("public", ban.publish());
             out.set("share", ban.share());
+            out.set("view", ban.view());
             out.set("until", ban.until());
             out.set("reason", ban.reason());
             out.set("by", ban.by());

@@ -5,6 +5,7 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.ban.BanList;
 import de.elia.cameraplugin.ban.CamBan;
+import de.elia.cameraplugin.body.PlayerSkins;
 import de.elia.cameraplugin.nightvision.NightVisionMode;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.sky.CamSky;
@@ -265,9 +266,15 @@ public final class CamMenu implements Listener {
         boolean create;
         boolean publish;
         boolean share;
+        boolean view;
         /** How long, in minutes; 0 for good. */
         long minutes;
         String reason = "";
+
+        /** Whether it keeps him from anything at all. */
+        boolean any() {
+            return create || publish || share || view;
+        }
 
         SpotBanDraft(UUID id, String name, boolean change) {
             this.id = id;
@@ -859,7 +866,7 @@ public final class CamMenu implements Listener {
                 if (other != null && head.getItemMeta() instanceof SkullMeta skull) {
                     // Only of a player online: one offline might have to be
                     // asked of Mojang for his skin.
-                    skull.setOwningPlayer(other);
+                    PlayerSkins.putOn(skull, other);
                     head.setItemMeta(skull);
                 }
                 put(page, slot, head, click -> later(() -> {
@@ -1736,6 +1743,7 @@ public final class CamMenu implements Listener {
             draft.create = now.create();
             draft.publish = now.publish();
             draft.share = now.share();
+            draft.view = now.view();
             draft.minutes = now.forGood() ? 0L
                     : Math.max(1L, (now.secondsLeft(System.currentTimeMillis()) + 59L) / 60L);
             draft.reason = now.reason();
@@ -1745,7 +1753,8 @@ public final class CamMenu implements Listener {
 
     /**
      * What a player may not do with spots, before it is set or changed: save
-     * new ones, make them public, share them - each switched on its button -,
+     * new ones, make them public, share them, look at spots at all - each
+     * switched on its button -,
      * for good or for days, hours and minutes, as on the page of a ban, and
      * why; then the button that sets it. While something keeps him already,
      * the last row has the button that lifts it.
@@ -1762,10 +1771,11 @@ public final class CamMenu implements Listener {
                 ? "menu-admin-spot-restrict-change-title" : "menu-admin-spot-restrict-title")
                 .replace("{player}", draft.name));
         put(page, 4, playerItem(draft.id, draft.name, restrictionLines(draft.id), draft.change), click -> { });
-        restrictToggle(player, page, 11, Material.WRITABLE_BOOK, "create", draft.create, () -> draft.create ^= true);
-        restrictToggle(player, page, 13, Material.GLOBE_BANNER_PATTERN, "public", draft.publish,
+        restrictToggle(player, page, 10, Material.WRITABLE_BOOK, "create", draft.create, () -> draft.create ^= true);
+        restrictToggle(player, page, 12, Material.GLOBE_BANNER_PATTERN, "public", draft.publish,
                 () -> draft.publish ^= true);
-        restrictToggle(player, page, 15, Material.MAP, "share", draft.share, () -> draft.share ^= true);
+        restrictToggle(player, page, 14, Material.MAP, "share", draft.share, () -> draft.share ^= true);
+        restrictToggle(player, page, 16, Material.SPYGLASS, "view", draft.view, () -> draft.view ^= true);
         boolean forGood = draft.minutes == 0L;
         List<String> foreverLore = forGood ? lines(messages.getMessage("menu-state-current")) : List.of();
         put(page, 19, shine(item(Material.BEDROCK, messages.getMessage("menu-admin-ban-forever"), foreverLore),
@@ -1796,8 +1806,8 @@ public final class CamMenu implements Listener {
                 }, "{player}", draft.name));
             }
         });
-        if (draft.create || draft.publish || draft.share) {
-            String summary = moderation.whatText(draft.create, draft.publish, draft.share) + " " + time;
+        if (draft.any()) {
+            String summary = moderation.whatText(draft.create, draft.publish, draft.share, draft.view) + " " + time;
             if (!draft.reason.isEmpty()) {
                 summary += messages.getMessage("ban-reason").replace("{reason}", draft.reason);
             }
@@ -1808,7 +1818,7 @@ public final class CamMenu implements Listener {
                     click -> later(() -> {
                         spotDrafts.remove(player.getUniqueId());
                         moderation.ban(player, draft.id, draft.name, draft.create, draft.publish, draft.share,
-                                draft.minutes, draft.reason);
+                                draft.view, draft.minutes, draft.reason);
                         openSpotsOf(player, draft.id, draft.name, 0);
                     }));
         } else {
@@ -1834,7 +1844,7 @@ public final class CamMenu implements Listener {
      * One of the buttons of what a restriction keeps him from: whether he
      * may not do it - then it shines -, and a click that switches it.
      *
-     * @param what the word of the texts: create, public or share
+     * @param what the word of the texts: create, public, share or view
      */
     private void restrictToggle(Player player, Page page, int slot, Material icon, String what, boolean kept,
                                 Runnable flip) {
@@ -2008,11 +2018,14 @@ public final class CamMenu implements Listener {
         return online;
     }
 
-    /** The head of a player online, with a name and lines of the menu. */
+    /**
+     * The head of a player online, with a name and lines of the menu - a
+     * plain one while the server has no skin of his, see {@link PlayerSkins}.
+     */
     private static ItemStack head(Player owner, String name, List<String> lore) {
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);
         if (head.getItemMeta() instanceof SkullMeta skull) {
-            skull.setOwningPlayer(owner);
+            PlayerSkins.putOn(skull, owner);
             head.setItemMeta(skull);
         }
         return labelled(head, name, lore);

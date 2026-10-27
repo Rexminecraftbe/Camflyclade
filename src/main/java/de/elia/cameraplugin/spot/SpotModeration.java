@@ -18,8 +18,8 @@ import java.util.UUID;
  * ({@value #PERMISSION}): an admin looks at the spots of any player - online
  * or not -, takes a public or shared one down, so that it is private again,
  * or deletes one, and keeps a player from saving new spots, making them
- * public or sharing them, for good or for a while and why, see
- * {@link SpotBans}.
+ * public, sharing them or looking at spots at all, for good or for a while
+ * and why, see {@link SpotBans}.
  *
  * <p>The player hears about all of it while he is online, and every time a
  * restriction keeps him from something: what, for how long still and why -
@@ -37,7 +37,9 @@ public final class SpotModeration {
         /** Making spots public. */
         PUBLIC("public"),
         /** Sharing spots with single players. */
-        SHARE("share");
+        SHARE("share"),
+        /** Looking at spots: jumping to them, his own as well, and visiting them, also with {@code /cam resume}. */
+        VIEW("view");
 
         final String key;
 
@@ -89,6 +91,7 @@ public final class SpotModeration {
             case CREATE -> ban.create();
             case PUBLIC -> ban.publish();
             case SHARE -> ban.share();
+            case VIEW -> ban.view();
         };
     }
 
@@ -112,12 +115,12 @@ public final class SpotModeration {
         if (ban == null) {
             return null;
         }
-        return whatText(ban.create(), ban.publish(), ban.share()) + " " + time(ban, System.currentTimeMillis())
-                + reason(ban);
+        return whatText(ban.create(), ban.publish(), ban.share(), ban.view()) + " "
+                + time(ban, System.currentTimeMillis()) + reason(ban);
     }
 
     /** What a restriction keeps him from, written out one after the other: "no new spots, nothing public". */
-    public String whatText(boolean create, boolean publish, boolean share) {
+    public String whatText(boolean create, boolean publish, boolean share, boolean view) {
         List<String> parts = new ArrayList<>();
         if (create) {
             parts.add(messages.getMessage("spot-restriction-create"));
@@ -127,6 +130,9 @@ public final class SpotModeration {
         }
         if (share) {
             parts.add(messages.getMessage("spot-restriction-share"));
+        }
+        if (view) {
+            parts.add(messages.getMessage("spot-restriction-view"));
         }
         return String.join(messages.getMessage("spot-restriction-separator"), parts);
     }
@@ -139,16 +145,16 @@ public final class SpotModeration {
      * @param name his name, for the texts and the file
      */
     public void ban(CommandSender admin, UUID playerId, String name, boolean create, boolean publish, boolean share,
-                    long minutes, String reason) {
-        if (!mayUse(admin) || !(create || publish || share)) {
+                    boolean view, long minutes, String reason) {
+        if (!mayUse(admin) || !(create || publish || share || view)) {
             return;
         }
         long now = System.currentTimeMillis();
         boolean change = bans.get(playerId) != null;
-        SpotBans.Ban ban = new SpotBans.Ban(name, create, publish, share,
+        SpotBans.Ban ban = new SpotBans.Ban(name, create, publish, share, view,
                 minutes > 0L ? now + minutes * 60_000L : 0L, reason.trim(), name(admin));
         bans.ban(playerId, ban);
-        String what = whatText(create, publish, share);
+        String what = whatText(create, publish, share, view);
         Player online = Bukkit.getPlayer(playerId);
         if (online != null && !online.equals(admin)) {
             messages.sendMessage(online, change ? "spot-restricted-changed" : "spot-restricted-now",

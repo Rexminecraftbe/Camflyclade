@@ -580,7 +580,9 @@ public final class BodySpawner implements Listener {
         ItemStack playerHead = new ItemStack(Material.PLAYER_HEAD);
         SkullMeta skullMeta = (SkullMeta) playerHead.getItemMeta();
         if (skullMeta != null) {
-            skullMeta.setOwningPlayer(player);
+            // A plain head while the server has no skin of his: it would be
+            // asked of Mojang for nothing, see PlayerSkins.
+            PlayerSkins.putOn(skullMeta, player);
             playerHead.setItemMeta(skullMeta);
         }
         equipment.setHelmet(playerHead);

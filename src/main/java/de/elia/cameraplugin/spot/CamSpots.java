@@ -738,6 +738,9 @@ public final class CamSpots {
      * of a start of {@code /cam}.
      */
     public void jump(Player player, String name) {
+        if (!plugin.getSpotModeration().check(player, SpotModeration.What.VIEW)) {
+            return;
+        }
         Spot spot;
         String label;
         UUID owner;

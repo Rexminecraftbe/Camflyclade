@@ -7534,16 +7534,19 @@ def spotmoderation_checks(env, bot):
     Linksklick nimmt ModB herunter - er ist wieder privat, und der Besitzer
     erfaehrt es -, ein Umschalt-Klick loescht ModA, auch das erfaehrt er.
 
-    Der Knopf der Einschraenkung (49) oeffnet ihre Seite: "New spots" und
-    "Making public" angewaehlt, fuer immer, bestaetigt - er erfaehrt es,
-    /cam spot set eines neuen Punkts sagt ihm, dass er keine neuen speichern
-    darf, /cam spot share ... all, dass er nichts oeffentlich machen darf;
+    Der Knopf der Einschraenkung (49) oeffnet ihre Seite: "New spots",
+    "Making public" und "Looking at spots" angewaehlt, fuer immer, bestaetigt
+    - er erfaehrt es, /cam spot set eines neuen Punkts sagt ihm, dass er
+    keine neuen speichern darf, /cam spot share ... all, dass er nichts
+    oeffentlich machen darf, der Sprung zu einem eigenen, dass er keine
+    Punkte anschauen darf;
     einen Punkt verschieben und teilen darf er weiter. Der Knopf glaenzt
     danach, und auf seiner Seite hebt der Milcheimer (35) die Einschraenkung
     auf: er darf wieder speichern.
 
     Geht er offline, steht er weiter in der Liste, und ein Umschalt-Klick
-    loescht seine Punkte aus seiner Datei.
+    loescht seine Punkte aus seiner Datei. Die Koepfe der Seite fragen nicht
+    bei Mojang nach: die Spieler dieses Servers haben keine Skin.
     """
     def fenster(client):
         return client.call("window_slots", wait=10)
@@ -7579,6 +7582,7 @@ def spotmoderation_checks(env, bot):
     x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
     datei = env.server / "plugins" / "CamFly" / "playerdata" / "stats" / f"{offline_uuid(ZUSCHAUER_NAME)}.yml"
+    log_vorher = len(server_log(env))
     try:
         zuschauer.start()
         if not FIND.test("Zweiter Spieler fuer die Moderation kommt herein",
@@ -7623,22 +7627,25 @@ def spotmoderation_checks(env, bot):
         f = fenster(bot)
         FIND.test("Der Knopf der Einschraenkung (49) oeffnet ihre Seite",
                   f"Restrict the spots of {ZUSCHAUER_NAME}" in (f.get("title") or "")
-                  and "Allowed" in item_text(f.get("slots", {}).get("11")), str(f.get("title")))
-        klick(bot, 11)
-        klick(bot, 13)
+                  and "Allowed" in item_text(f.get("slots", {}).get("10")), str(f.get("title")))
+        klick(bot, 10)
+        klick(bot, 12)
+        klick(bot, 16)
         f = fenster(bot)
-        FIND.test("Anwaehlen: neue Punkte und oeffentlich machen sind nicht erlaubt, teilen schon",
-                  "Not allowed" in item_text(f.get("slots", {}).get("11"))
-                  and "Not allowed" in item_text(f.get("slots", {}).get("13"))
-                  and "Allowed" in item_text(f.get("slots", {}).get("15"))
-                  and "no new spots, nothing public" in item_text(f.get("slots", {}).get("31")),
+        FIND.test("Anwaehlen: neue Punkte, oeffentlich machen und Punkte anschauen sind nicht erlaubt, teilen schon",
+                  "Not allowed" in item_text(f.get("slots", {}).get("10"))
+                  and "Not allowed" in item_text(f.get("slots", {}).get("12"))
+                  and "Allowed" in item_text(f.get("slots", {}).get("14"))
+                  and "Not allowed" in item_text(f.get("slots", {}).get("16"))
+                  and "no new spots, nothing public, no looking at spots" in item_text(f.get("slots", {}).get("31")),
                   item_text(f.get("slots", {}).get("31")))
         seit = zuschauer.mark()
         klick(bot, 31)
         dort = zeilen_seit(zuschauer, seit)
         f = fenster(bot)
         FIND.test("Bestaetigt: er erfaehrt es, und der Knopf glaenzt",
-                  gesagt(dort, rf"{BOT_NAME} restricted your spots: no new spots, nothing public for good")
+                  gesagt(dort, rf"{BOT_NAME} restricted your spots: no new spots, nothing public, no looking at "
+                               r"spots for good")
                   and (f.get("slots", {}).get("49") or {}).get("glint") is True, zeige(dort))
         bot.call("close_window", wait=10)
         zeilen = befehl(zuschauer, "/cam spot set ModD")
@@ -7647,6 +7654,10 @@ def spotmoderation_checks(env, bot):
         zeilen = befehl(zuschauer, "/cam spot share ModC all")
         FIND.test("Eingeschraenkt: nichts oeffentlich machen",
                   gesagt(zeilen, r"You may not make spots public for good"), zeige(zeilen))
+        zeilen = befehl(zuschauer, "/cam spot ModC")
+        FIND.test("Eingeschraenkt: keinen Punkt anschauen, auch keinen eigenen",
+                  gesagt(zeilen, r"You may not look at spots - jump to them or visit them - for good")
+                  and not im_cam_modus(bot, ZUSCHAUER_NAME), zeige(zeilen))
         zeilen = befehl(zuschauer, "/cam spot set ModC") + befehl(zuschauer, f"/cam spot share ModB {BOT_NAME}")
         FIND.test("Verschieben und teilen darf er weiter", gesagt(zeilen, r"Spot ModC moved here")
                   and gesagt(zeilen, rf"offered|{BOT_NAME}"), zeige(zeilen))
@@ -7654,7 +7665,7 @@ def spotmoderation_checks(env, bot):
         liste, f = seine_punkte()
         eintrag = texte(liste).get(platz(liste, ZUSCHAUER_NAME), "")
         FIND.test("In der Liste steht die Einschraenkung unter ihm",
-                  "Restricted: no new spots, nothing public for good" in eintrag, eintrag)
+                  "Restricted: no new spots, nothing public, no looking at spots for good" in eintrag, eintrag)
         klick(bot, 49)
         seit = zuschauer.mark()
         klick(bot, 35)
@@ -7682,6 +7693,12 @@ def spotmoderation_checks(env, bot):
         FIND.test("Offline loescht der Umschalt-Klick seine Punkte aus seiner Datei",
                   gesagt(hier, rf"Spot ModD of {ZUSCHAUER_NAME} deleted") and "ModD" not in text
                   and "ModB" not in text, f"{zeige(hier)} / {text[-300:]}")
+        # Die Koepfe der Spieler ohne Skin - auf diesem Server alle - fragt
+        # der Server nicht bei Mojang nach: das ginge nur ins Leere.
+        neu = server_log(env)[log_vorher:]
+        FIND.test("Die Koepfe der Seite fragen nicht bei Mojang nach (kein \"Couldn't look up profile properties\")",
+                  "Couldn't look up profile properties" not in neu and "sessionserver.mojang.com/session" not in neu,
+                  "")
     finally:
         try:
             bot.call("close_window", wait=10)
