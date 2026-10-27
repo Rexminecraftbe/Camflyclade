@@ -19,20 +19,34 @@ import java.util.UUID;
  * The moderation of the spots, on the admin page of the spots
  * ({@value #PERMISSION}): an admin looks at the spots of any player - online
  * or not -, goes there himself, takes a public or shared one down, so that it
- * is private again, or deletes one, and restricts a player for good or for a
- * while and why, see {@link SpotBans}: for each kind of spots - his own, the
- * public ones, those shared by name - no new ones, or none at all, not even
- * to look at.
+ * is private again, or deletes one, and restricts a player, or everybody at
+ * once, for good or for a while and why, see {@link SpotBans}: for each kind
+ * of spots - his own, the public ones, those shared by name - no new ones, or
+ * none at all, not even to look at. The restriction of everybody leaves out
+ * whoever has {@value #BYPASS}.
  *
  * <p>The player hears about all of it while he is online, and every time a
  * restriction keeps him from something: what, for how long still and why -
- * with the texts of a ban of camera mode for the time and the reason. A tab
- * of the spots he may not look at shows him nothing but that.</p>
+ * with the texts of a ban of camera mode for the time and the reason; one of
+ * everybody tells him that it is switched off. A tab of the spots he may not
+ * look at shows him nothing but that.</p>
  */
 public final class SpotModeration {
 
     /** The right of the admin page of the spots. Operators have it by default. */
     public static final String PERMISSION = "camplugin.spotadmin";
+
+    /** Whoever has this right is not kept by the restriction of everybody. Operators have it by default. */
+    public static final String BYPASS = "camplugin.spotadmin.bypass";
+
+    /**
+     * What keeps a player from something.
+     *
+     * @param ban       the restriction
+     * @param everybody whether it is the one of everybody, rather than his own
+     */
+    public record Hold(SpotBans.Ban ban, boolean everybody) {
+    }
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
@@ -57,15 +71,26 @@ public final class SpotModeration {
         bans.load();
     }
 
-    /** How far a restriction keeps him from this kind of spots right now. */
-    public SpotBans.Stage stage(UUID playerId, SpotBans.Kind kind) {
-        SpotBans.Ban ban = bans.get(playerId);
-        return ban == null ? SpotBans.Stage.FREE : ban.stage(kind);
+    /**
+     * What keeps him from this kind of spots at least as far as
+     * {@code stage} - his own restriction first, then that of everybody -,
+     * or {@code null} while nothing does.
+     */
+    private Hold hold(Player player, SpotBans.Kind kind, SpotBans.Stage stage) {
+        SpotBans.Ban own = bans.get(player.getUniqueId());
+        if (own != null && own.stage(kind).compareTo(stage) >= 0) {
+            return new Hold(own, false);
+        }
+        SpotBans.Ban all = bans.everybody();
+        if (all != null && all.stage(kind).compareTo(stage) >= 0 && !player.hasPermission(BYPASS)) {
+            return new Hold(all, true);
+        }
+        return null;
     }
 
-    /** Whether he may look at this kind of spots: nothing keeps him that far. */
-    public boolean mayLook(Player player, SpotBans.Kind kind) {
-        return stage(player.getUniqueId(), kind) != SpotBans.Stage.NO_LOOK;
+    /** What keeps him from looking at this kind of spots, or {@code null} while nothing does. */
+    public Hold lookHold(Player player, SpotBans.Kind kind) {
+        return hold(player, kind, SpotBans.Stage.NO_LOOK);
     }
 
     /**
@@ -73,10 +98,11 @@ public final class SpotModeration {
      * public, share one. If not, he has been told for how long still and why.
      */
     public boolean checkNew(Player player, SpotBans.Kind kind) {
-        if (stage(player.getUniqueId(), kind) == SpotBans.Stage.FREE) {
+        Hold hold = hold(player, kind, SpotBans.Stage.NO_NEW);
+        if (hold == null) {
             return true;
         }
-        tell(player, "spot-restricted-" + kind.key + "-new");
+        tell(player, hold, kind, "new");
         return false;
     }
 
@@ -105,39 +131,47 @@ public final class SpotModeration {
     }
 
     private boolean checkLook(Player player, List<SpotBans.Kind> ways) {
+        Hold first = null;
         for (SpotBans.Kind kind : ways) {
-            if (mayLook(player, kind)) {
+            Hold hold = lookHold(player, kind);
+            if (hold == null) {
                 return true;
             }
+            first = first == null ? hold : first;
         }
-        tell(player, "spot-restricted-" + ways.get(0).key + "-look");
+        tell(player, first, ways.get(0), "look");
         return false;
     }
 
-    /** Tells him what keeps him, with for how long still and why. */
-    private void tell(Player player, String key) {
-        SpotBans.Ban ban = bans.get(player.getUniqueId());
-        long now = System.currentTimeMillis();
-        messages.sendMessage(player, key, "{time}", messageTime(ban, now), "{reason}", messageReason(ban));
+    /**
+     * Tells him what keeps him, with for how long still and why: his own
+     * restriction as {@code spot-restricted-...}, that of everybody as
+     * {@code spot-disabled-...}.
+     */
+    private void tell(Player player, Hold hold, SpotBans.Kind kind, String what) {
+        messages.sendMessage(player, (hold.everybody() ? "spot-disabled-" : "spot-restricted-") + kind.key + "-"
+                + what, "{time}", messageTime(hold.ban(), System.currentTimeMillis()),
+                "{reason}", messageReason(hold.ban()));
     }
 
     /**
      * Fills in {@code {time}} and {@code {reason}} of a text with how long
-     * still and why a restriction keeps him, the way its messages put it -
-     * for the tab of the spots he may not look at.
+     * still and why it keeps him, the way its messages put it - for the tab
+     * of the spots he may not look at.
      */
-    public String fill(String text, UUID playerId) {
-        SpotBans.Ban ban = bans.get(playerId);
-        if (ban == null) {
-            return text.replace("{time}", "").replace("{reason}", "");
-        }
-        return text.replace("{time}", messageTime(ban, System.currentTimeMillis()))
-                .replace("{reason}", messageReason(ban));
+    public String fill(String text, Hold hold) {
+        return text.replace("{time}", messageTime(hold.ban(), System.currentTimeMillis()))
+                .replace("{reason}", messageReason(hold.ban()));
     }
 
     /** What keeps a player from what, or {@code null} while nothing does. For the menu, which changes it. */
     public SpotBans.Ban banOf(UUID playerId) {
         return bans.get(playerId);
+    }
+
+    /** What keeps everybody from what, or {@code null} while nothing does. For the menu, which changes it. */
+    public SpotBans.Ban everybodyBan() {
+        return bans.everybody();
     }
 
     /** Every player kept from something right now, by his id. */
@@ -151,7 +185,15 @@ public final class SpotModeration {
      * none.
      */
     public String banText(UUID playerId) {
-        SpotBans.Ban ban = bans.get(playerId);
+        return text(bans.get(playerId));
+    }
+
+    /** How the restriction of everybody stands, as {@link #banText} has it. */
+    public String everybodyText() {
+        return text(bans.everybody());
+    }
+
+    private String text(SpotBans.Ban ban) {
         if (ban == null) {
             return null;
         }
@@ -203,6 +245,34 @@ public final class SpotModeration {
                 "{player}", name, "{what}", what, "{time}", messageTime(ban, now), "{reason}", messageReason(ban));
     }
 
+    /**
+     * Restricts everybody but those with {@value #BYPASS}, or changes that
+     * restriction: as {@link #ban} does a single player. Whoever it keeps
+     * hears about it while he is online.
+     */
+    public void banEverybody(CommandSender admin, SpotBans.Stage own, SpotBans.Stage open, SpotBans.Stage shared,
+                             long minutes, String reason) {
+        long now = System.currentTimeMillis();
+        SpotBans.Ban ban = new SpotBans.Ban(null, own, open, shared, minutes > 0L ? now + minutes * 60_000L : 0L,
+                reason.trim(), name(admin));
+        if (!mayUse(admin) || !ban.any()) {
+            return;
+        }
+        boolean change = bans.everybody() != null;
+        bans.banEverybody(ban);
+        String what = whatText(own, open, shared);
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (!online.equals(admin) && !online.hasPermission(BYPASS)) {
+                messages.sendMessage(online, change ? "spot-disabled-changed" : "spot-disabled-now",
+                        "{player}", name(admin), "{what}", what, "{time}", messageTime(ban, now),
+                        "{reason}", messageReason(ban));
+            }
+        }
+        messages.sendConfiguredMessage(admin, change ? "spot-restrict-everybody-changed"
+                : "spot-restrict-everybody-done", "{what}", what, "{time}", messageTime(ban, now),
+                "{reason}", messageReason(ban));
+    }
+
     /** Lets a player do everything with spots again. He hears about it while he is online. */
     public void unban(CommandSender admin, UUID playerId, String name) {
         if (!mayUse(admin) || !bans.unban(playerId)) {
@@ -213,6 +283,22 @@ public final class SpotModeration {
             messages.sendMessage(online, "spot-unrestricted-now", "{player}", name(admin));
         }
         messages.sendConfiguredMessage(admin, "spot-unrestrict-done", "{player}", name);
+    }
+
+    /**
+     * Lets everybody do everything with spots again; single players stay
+     * restricted. Whoever it kept hears about it while he is online.
+     */
+    public void unbanEverybody(CommandSender admin) {
+        if (!mayUse(admin) || !bans.unbanEverybody()) {
+            return;
+        }
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (!online.equals(admin) && !online.hasPermission(BYPASS)) {
+                messages.sendMessage(online, "spot-enabled-now", "{player}", name(admin));
+            }
+        }
+        messages.sendConfiguredMessage(admin, "spot-unrestrict-everybody-done");
     }
 
     /**

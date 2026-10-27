@@ -42,6 +42,15 @@ permissions:
   camplugin.spotadmin:
     description: Allows the spots page of the admin menu, to take down or delete the spots of others and restrict them
     default: op
+  camplugin.spotadmin.bypass:
+    description: Lets a player do everything with spots while the admin menu restricts everybody
+    default: op
+  camplugin.touradmin:
+    description: Allows the tours page of the admin menu, to keep players or everybody from leading or joining tours
+    default: op
+  camplugin.touradmin.bypass:
+    description: Lets a player lead and join tours while the admin menu restricts everybody
+    default: op
   camplugin.antiscout.bypass:
     description: Sees every player in cam mode while anti-scouting hides those far away from the others
     default: op

@@ -719,6 +719,9 @@ public final class CamTour implements Listener {
             messages.sendConfiguredMessage(guide, "tour-already-guest", "{player}", other.getName());
             return;
         }
+        if (!plugin.getTourModeration().checkGuest(guide, other)) {
+            return;
+        }
         if (isFull(guide)) {
             messages.sendConfiguredMessage(guide, "tour-full-guide", "{max}",
                     String.valueOf(settings.getTourMaxGuests()));
@@ -750,12 +753,16 @@ public final class CamTour implements Listener {
     }
 
     /**
-     * Whether he may show others round: in camera mode, and following no
-     * tour himself. If not, he has been told why.
+     * Whether he may show others round: no restriction keeps him from it, in
+     * camera mode, and following no tour himself. If not, he has been told
+     * why.
      */
     private boolean checkGuide(Player guide) {
         if (!isEnabled()) {
             messages.sendConfiguredMessage(guide, "tour-off");
+            return false;
+        }
+        if (!plugin.getTourModeration().check(guide, TourBans.What.LEAD)) {
             return false;
         }
         if (!cameraPlayers.contains(guide.getUniqueId())) {
@@ -818,6 +825,9 @@ public final class CamTour implements Listener {
     public void accept(Player guest, Player guide, String name) {
         if (!isEnabled()) {
             messages.sendConfiguredMessage(guest, "tour-off");
+            return;
+        }
+        if (!plugin.getTourModeration().check(guest, TourBans.What.JOIN)) {
             return;
         }
         if (guide == null || !hasInvited(guide, guest)) {
@@ -888,6 +898,11 @@ public final class CamTour implements Listener {
      * follows him from now on.
      */
     private void join(Player guest, Player guide) {
+        TourModeration moderation = plugin.getTourModeration();
+        if (!moderation.may(guest, TourBans.What.JOIN) || !moderation.may(guide, TourBans.What.LEAD)) {
+            // A restriction came while his camera mode started; it told him.
+            return;
+        }
         if (isFull(guide)) {
             // Somebody else came first while his camera mode started.
             messages.sendConfiguredMessage(guest, "tour-full", "{player}", guide.getName());
@@ -1038,6 +1053,36 @@ public final class CamTour implements Listener {
         invitations.remove(id);
         for (Map<UUID, Long> own : invitations.values()) {
             own.remove(id);
+        }
+    }
+
+    /**
+     * After a restriction of the tours, as far as it keeps him now: off the
+     * tour he follows, with the invitations he has, when he may not take part
+     * any more; the end of the tour he shows, with the invitations he gave,
+     * when he may not lead any more.
+     */
+    public void keepOut(Player player) {
+        TourModeration moderation = plugin.getTourModeration();
+        UUID id = player.getUniqueId();
+        if (!moderation.may(player, TourBans.What.JOIN)) {
+            UUID guideId = guideOf.get(id);
+            if (guideId != null) {
+                drop(guideId, id);
+                Player guide = Bukkit.getPlayer(guideId);
+                if (guide != null) {
+                    messages.sendConfiguredMessage(guide, "tour-left-guide", "{player}", player.getName());
+                }
+            }
+            invitations.remove(id);
+        }
+        if (!moderation.may(player, TourBans.What.LEAD)) {
+            if (tours.containsKey(id)) {
+                endTour(id, player.getName());
+            }
+            for (Map<UUID, Long> own : invitations.values()) {
+                own.remove(id);
+            }
         }
     }
 

@@ -720,10 +720,24 @@ menu:
     # öffentlichen oder geteilten und kein Besuch dort; der Reiter im Spot-Menü zeigt ihm dann nur, dass er gesperrt
     # ist). Für immer oder Tage, Stunden und Minuten wie bei einer Sperre, mit Grund; steht schon etwas, ändert oder
     # hebt man es dort auf. Er erfährt alles davon, wenn er online ist, und jedes Mal, wenn ihn eine Einschränkung
-    # aufhält, was, wie lange noch und warum (in plugins/CamFly/playerdata/spot-bans.yml).
+    # aufhält, was, wie lange noch und warum (in plugins/CamFly/playerdata/spot-bans.yml). "Alle" ganz vorn in der
+    # Liste schränkt alle auf einmal genauso ein, außer wer camplugin.spotadmin.bypass hat; ihnen steht dann, dass es
+    # gerade abgeschaltet ist.
     spots:
       item: filled_map
       slot: 20
+    # Die Führungen (camplugin.touradmin, nur mit tour.enabled): zuerst "Alle", dann die Spieler - wer online ist
+    # und wer eingeschränkt ist, auch offline -, darunter, ob er gerade führt oder folgt. Ein Klick öffnet die
+    # Einschränkung: führen (einladen, also eine Führung starten) und teilnehmen (Einladungen annehmen), je ein Knopf
+    # zum Umschalten, für immer oder Tage, Stunden und Minuten wie bei einer Sperre, mit Grund; steht schon etwas,
+    # ändert oder hebt man es dort auf. Sie gilt sofort: wer nicht mehr führen darf, dessen Führung endet, wer nicht
+    # mehr teilnehmen darf, verlässt die, der er folgt. Im Menü steht ihm dann "darfst du nicht" (bei "Alle":
+    # "gerade abgeschaltet"), und wer nicht teilnehmen darf, steht in der Liste zum Einladen mit dem Hinweis, dass
+    # man ihn nicht einladen kann. "Alle" lässt aus, wer camplugin.touradmin.bypass hat (in
+    # plugins/CamFly/playerdata/tour-bans.yml).
+    tours:
+      item: saddle
+      slot: 24
     # Zurück zur ersten Seite
     back:
       item: arrow

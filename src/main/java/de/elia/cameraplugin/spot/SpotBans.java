@@ -19,10 +19,11 @@ import java.util.UUID;
 import java.util.logging.Level;
 
 /**
- * What single players may not do with spots, set on the admin page of the
- * spots, see {@link SpotModeration}: for each kind of spots - his own, the
- * public ones, those shared by name - no new ones, or none at all, not even to
- * look at - for good or for a while, with a reason. Kept in
+ * What single players, or everybody at once, may not do with spots, set on
+ * the admin page of the spots, see {@link SpotModeration}: for each kind of
+ * spots - his own, the public ones, those shared by name - no new ones, or
+ * none at all, not even to look at - for good or for a while, with a reason.
+ * Kept in
  * {@code playerdata/spot-bans.yml}, whatever {@code viewpoints.storage}
  * says: a restriction outlasts {@code /cam reload} and a restart, like a
  * ban of camera mode.
@@ -43,7 +44,8 @@ public final class SpotBans {
     private static final List<String> HEADER = List.of(
             "CamFly: what single players may not do with spots, set on the admin page of the spots. For each",
             "kind - private: his own, public: the public ones, shared: those shared by name - no-new: he may",
-            "make no new ones, no-look: nor look at them; left out: nothing keeps him.",
+            "make no new ones, no-look: nor look at them; left out: nothing keeps him. everybody: the same for",
+            "every player but those with camplugin.spotadmin.bypass.",
             "until: when it ends (milliseconds since 1970), 0 = for good. Changes made here by hand count after",
             "/cam reload.");
 
@@ -100,7 +102,7 @@ public final class SpotBans {
     /**
      * What one player may not do, and for how long.
      *
-     * @param name    the name of the player, as he was called then
+     * @param name    the name of the player, as he was called then; {@code null} for everybody
      * @param own     how far it keeps him from his own spots
      * @param open    how far it keeps him from the public ones
      * @param shared  how far it keeps him from those shared by name
@@ -144,6 +146,8 @@ public final class SpotBans {
     private final ConsoleLog log;
     /** The restricted players by their id, in the order they were restricted. */
     private final Map<UUID, Ban> players = new LinkedHashMap<>();
+    /** The restriction of everybody, or {@code null} while there is none. */
+    private Ban everybody;
 
     public SpotBans(JavaPlugin plugin, ConsoleLog log) {
         this.plugin = plugin;
@@ -158,6 +162,11 @@ public final class SpotBans {
     public Ban get(UUID playerId) {
         Ban ban = players.get(playerId);
         return ban != null && ban.holds(System.currentTimeMillis()) ? ban : null;
+    }
+
+    /** What everybody may not do, or {@code null} while nothing keeps everybody. */
+    public Ban everybody() {
+        return everybody != null && everybody.holds(System.currentTimeMillis()) ? everybody : null;
     }
 
     /** Every player kept from something right now, by his id. */
@@ -179,6 +188,25 @@ public final class SpotBans {
         save();
     }
 
+    /** Keeps everybody from what the ban says, in place of what kept everybody before. */
+    public void banEverybody(Ban ban) {
+        everybody = ban;
+        save();
+    }
+
+    /**
+     * Lets everybody do everything with spots again. What keeps single
+     * players stays.
+     *
+     * @return whether anything kept everybody
+     */
+    public boolean unbanEverybody() {
+        boolean was = everybody() != null;
+        everybody = null;
+        save();
+        return was;
+    }
+
     /**
      * Lets a player do everything with spots again.
      *
@@ -198,6 +226,7 @@ public final class SpotBans {
      */
     public void load() {
         players.clear();
+        everybody = null;
         Path path = file();
         if (!Files.exists(path)) {
             return;
@@ -209,6 +238,8 @@ public final class SpotBans {
             keepBroken(path, ex);
             return;
         }
+        ConfigurationSection all = file.getConfigurationSection("everybody");
+        everybody = all == null ? null : read(all, null);
         ConfigurationSection section = file.getConfigurationSection("players");
         if (section == null) {
             return;
@@ -225,10 +256,14 @@ public final class SpotBans {
                 log.log(Level.WARNING, "An entry of " + FILE + " is no restriction and is left out: players." + key);
                 continue;
             }
-            players.put(id, new Ban(entry.getString("name"), stage(entry, Kind.PRIVATE, "create"),
-                    stage(entry, Kind.PUBLIC, "public"), stage(entry, Kind.SHARED, "share"),
-                    entry.getLong("until"), entry.getString("reason", ""), entry.getString("by", "")));
+            players.put(id, read(entry, entry.getString("name")));
         }
+    }
+
+    private static Ban read(ConfigurationSection entry, String name) {
+        return new Ban(name, stage(entry, Kind.PRIVATE, "create"), stage(entry, Kind.PUBLIC, "public"),
+                stage(entry, Kind.SHARED, "share"), entry.getLong("until"), entry.getString("reason", ""),
+                entry.getString("by", ""));
     }
 
     /**
@@ -252,24 +287,14 @@ public final class SpotBans {
         long now = System.currentTimeMillis();
         YamlConfiguration file = new YamlConfiguration();
         file.options().setHeader(HEADER);
+        if (everybody != null && everybody.holds(now)) {
+            write(file.createSection("everybody"), everybody);
+        }
         ConfigurationSection section = file.createSection("players");
         for (Map.Entry<UUID, Ban> entry : players.entrySet()) {
-            Ban ban = entry.getValue();
-            if (!ban.holds(now)) {
-                continue;
+            if (entry.getValue().holds(now)) {
+                write(section.createSection(entry.getKey().toString()), entry.getValue());
             }
-            ConfigurationSection out = section.createSection(entry.getKey().toString());
-            if (ban.name() != null) {
-                out.set("name", ban.name());
-            }
-            for (Kind kind : Kind.values()) {
-                if (ban.stage(kind) != Stage.FREE) {
-                    out.set(kind.key, ban.stage(kind).key);
-                }
-            }
-            out.set("until", ban.until());
-            out.set("reason", ban.reason());
-            out.set("by", ban.by());
         }
         Path target = file();
         Path temp = target.resolveSibling(target.getFileName() + ".tmp");
@@ -284,6 +309,20 @@ public final class SpotBans {
         } catch (IOException ex) {
             log.log(Level.WARNING, "The restrictions of the spots could not be written: " + ex);
         }
+    }
+
+    private static void write(ConfigurationSection out, Ban ban) {
+        if (ban.name() != null) {
+            out.set("name", ban.name());
+        }
+        for (Kind kind : Kind.values()) {
+            if (ban.stage(kind) != Stage.FREE) {
+                out.set(kind.key, ban.stage(kind).key);
+            }
+        }
+        out.set("until", ban.until());
+        out.set("reason", ban.reason());
+        out.set("by", ban.by());
     }
 
     /** Moves a file that could not be read out of the way, under a name that says so. */

@@ -7716,8 +7716,7 @@ def spotmoderation_checks(env, bot):
         f = fenster(zuschauer)
         gesperrt = item_text(f.get("slots", {}).get("22"))
         FIND.test("Im Spot-Menue zeigt ihm der Reiter der oeffentlichen nur das graue Zeichen: gesperrt",
-                  (f.get("slots", {}).get("22") or {}).get("name") == "gray_dye"
-                  and "Sorry, you can't look at these" in gesperrt and "You are restricted" in gesperrt
+                  "Sorry, you can't look at these" in gesperrt and "You are restricted" in gesperrt
                   and "for good" in gesperrt and platz(f, "AdmPub") is None, f"{gesperrt} / {texte(f)}")
         klick(zuschauer, 48)
         f = fenster(zuschauer)
@@ -7738,6 +7737,66 @@ def spotmoderation_checks(env, bot):
         FIND.test("Der Milcheimer hebt sie auf: er erfaehrt es und darf wieder speichern",
                   gesagt(dort, rf"{BOT_NAME} lifted the restriction of your spots")
                   and gesagt(zeilen, r"Spot ModD saved"), f"{zeige(dort)} / {zeige(zeilen)}")
+
+        # Alle auf einmal: vorn in der Liste der Spieler.
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 23)
+        klick(bot, 20)
+        alle = texte(fenster(bot)).get(0, "")
+        FIND.test("Vorn in der Liste der Punkte steht \"Everybody\", ohne Einschraenkung",
+                  alle.startswith("Everybody") and "No restrictions" in alle, alle)
+        klick(bot, 0)
+        f = fenster(bot)
+        FIND.test("Ein Klick oeffnet die Einschraenkung von allen, mit denselben Knoepfen",
+                  "Restrict the spots of Everybody" in (f.get("title") or "")
+                  and stufe(f, 13).startswith("Public spots"), str(f.get("title")))
+        klick(bot, 13)
+        klick(bot, 13)
+        seit = zuschauer.mark()
+        hier_seit = bot.mark()
+        klick(bot, 31)
+        dort = zeilen_seit(zuschauer, seit)
+        hier = zeilen_seit(bot, hier_seit)
+        FIND.test("Fuer alle bestaetigt: er liest, dass es abgeschaltet ist, der Admin, dass es fuer alle gilt",
+                  gesagt(dort, rf"{BOT_NAME} switched spots off for everybody: no public spots at all for good")
+                  and gesagt(hier, r"Spots are restricted for everybody: no public spots at all for good"),
+                  f"{zeige(dort)} / {zeige(hier)}")
+        bot.call("close_window", wait=10)
+        zeilen = befehl(zuschauer, "/cam spot share ModC all")
+        FIND.test("Fuer alle: oeffentlich machen ist abgeschaltet",
+                  gesagt(zeilen, r"Making spots public is switched off for good"), zeige(zeilen))
+        zeilen = befehl(zuschauer, f"/cam spot {BOT_NAME}:AdmPub")
+        FIND.test("Fuer alle: oeffentliche Punkte anschauen ist abgeschaltet",
+                  gesagt(zeilen, r"Looking at public spots is switched off for good")
+                  and not im_cam_modus(bot, ZUSCHAUER_NAME), zeige(zeilen))
+        befehl(zuschauer, "/cam menu", warten=1.0)
+        klick(zuschauer, 10)
+        klick(zuschauer, 49)
+        aus = item_text(fenster(zuschauer).get("slots", {}).get("22"))
+        FIND.test("Fuer alle: der Reiter der oeffentlichen sagt, dass es abgeschaltet ist",
+                  "Looking at these is switched off" in aus and "It is off for everybody" in aus
+                  and "for good" in aus, aus)
+        zuschauer.call("close_window", wait=10)
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 10)
+        klick(bot, 49)
+        FIND.test("camplugin.spotadmin.bypass (op): der Bot sieht die oeffentlichen weiter",
+                  platz(fenster(bot), "AdmPub") is not None, str(texte(fenster(bot))))
+        bot.call("close_window", wait=10)
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 23)
+        klick(bot, 20)
+        alle = texte(fenster(bot)).get(0, "")
+        klick(bot, 0)
+        seit = zuschauer.mark()
+        klick(bot, 35)
+        dort = zeilen_seit(zuschauer, seit)
+        bot.call("close_window", wait=10)
+        zeilen = befehl(zuschauer, "/cam spot share ModC all")
+        FIND.test("Unter \"Everybody\" steht die Einschraenkung; der Milcheimer hebt sie fuer alle auf",
+                  "Restricted: no public spots at all for good" in alle
+                  and gesagt(dort, rf"{BOT_NAME} switched spots on again for everybody")
+                  and gesagt(zeilen, r"Spot ModC is public now"), f"{alle} / {zeige(dort)} / {zeige(zeilen)}")
 
         zuschauer.stop()
         time.sleep(2.0)
@@ -7769,8 +7828,212 @@ def spotmoderation_checks(env, bot):
             if zuschauer.proc is not None and zuschauer.proc.poll() is None:
                 spots_loeschen(zuschauer, "ModA", "ModB", "ModC", "ModD")
                 zuschauer.stop()
+            einschraenkungen_weg(env, "spot-bans.yml")
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test der Moderation: {exc}")
+
+
+def tourmoderation_checks(env, bot):
+    """menu: die Seite der Fuehrungen auf der Admin-Seite (camplugin.touradmin).
+
+    Der zweite Spieler folgt der Fuehrung des Bots. Auf der Admin-Seite
+    oeffnet der Knopf der Fuehrungen (24) die Liste: vorn "Everybody", dann
+    die Spieler, unter dem zweiten, wem er folgt, und dass nichts ihn
+    einschraenkt. Ein Klick oeffnet seine Einschraenkung: fuehren (12) und
+    teilnehmen (14), beide erlaubt. Teilnehmen verboten, fuer immer,
+    bestaetigt: er erfaehrt es, ist von der Fuehrung, und der Bot erfaehrt
+    es. Der Bot kann ihn nicht mehr einladen - im Menue steht er trotzdem in
+    der Liste, mit "You can't invite him" -, annehmen sagt ihm, dass er nicht
+    teilnehmen darf, und sein Menue sagt es unten (49).
+
+    Geaendert auf fuehren: er erfaehrt es, einladen sagt ihm, dass er nicht
+    fuehren darf, und die Seite der Fuehrung sagt es in der Mitte (22). Der
+    Milcheimer hebt es auf.
+
+    "Everybody" mit fuehren verboten: er liest, dass es fuer alle
+    abgeschaltet ist, einladen sagt "Leading tours is switched off", seine
+    Seite der Fuehrung ebenso; der Bot (op, camplugin.touradmin.bypass) laedt
+    ihn weiter ein. Aufgehoben hoert er, dass es wieder an ist.
+    """
+    def fenster(client):
+        return client.call("window_slots", wait=10)
+
+    def klick(client, slot, button=0, mode=0, warten=1.5):
+        client.call("click_window", wait=15, slot=slot, button=button, mode=mode)
+        time.sleep(warten)
+
+    def texte(f):
+        slots = f.get("slots", {})
+        return {i: item_text(slots.get(str(i))) for i in range(54) if str(i) in slots}
+
+    def platz(f, anfang):
+        return next((i for i, t in texte(f).items() if t.startswith(anfang) and i < 45), None)
+
+    def liste():
+        """Die Admin-Seite der Fuehrungen."""
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 23)
+        klick(bot, 24)
+        return fenster(bot)
+
+    def seine_seite():
+        """Die Seite der Einschraenkung des zweiten Spielers."""
+        f = liste()
+        klick(bot, platz(f, ZUSCHAUER_NAME))
+        return fenster(bot)
+
+    def fuehrung_seite(client):
+        befehl(client, "/cam menu", warten=1.0)
+        klick(client, 9)
+        f = fenster(client)
+        client.call("close_window", wait=10)
+        return f
+
+    if not FIND.test("Cam-Modus ist vor dem Test der Fuehrungs-Moderation aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    try:
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Fuehrungs-Moderation kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        hinstellen(bot, x, y, z)
+        cam_on(bot)
+        if not FIND.test("Der zweite Spieler ist drei Bloecke daneben im Cam-Modus",
+                         zuschauer_cam_an(env, zuschauer, x + 3, y, z), ""):
+            return
+        befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=2.0)
+        if not FIND.test("Er folgt der Fuehrung des Bots", gesagt(dort, rf"You follow {BOT_NAME} now"), zeige(dort)):
+            return
+
+        f = liste()
+        alle = texte(f).get(0, "")
+        er = texte(f).get(platz(f, ZUSCHAUER_NAME), "")
+        FIND.test("Admin-Seite, Fuehrungen (24): vorn Everybody, dann er - wem er folgt, ohne Einschraenkung",
+                  "Tours: players" in (f.get("title") or "") and alle.startswith("Everybody")
+                  and "No restrictions" in alle and f"On the tour of {BOT_NAME}" in er and "No restrictions" in er,
+                  f"{f.get('title')} / {alle} / {er}")
+        klick(bot, platz(f, ZUSCHAUER_NAME))
+        f = fenster(bot)
+        fuehren, teilnehmen = item_text(f.get("slots", {}).get("12")), item_text(f.get("slots", {}).get("14"))
+        FIND.test("Ein Klick oeffnet seine Einschraenkung: fuehren (12) und teilnehmen (14), beide erlaubt",
+                  f"Restrict the tours of {ZUSCHAUER_NAME}" in (f.get("title") or "")
+                  and fuehren.startswith("Leading tours") and teilnehmen.startswith("Taking part")
+                  and "» allowed" in fuehren and "» allowed" in teilnehmen, f"{fuehren} / {teilnehmen}")
+        klick(bot, 14)
+        f = fenster(bot)
+        teilnehmen = item_text(f.get("slots", {}).get("14"))
+        FIND.test("Teilnehmen umgeschaltet: nicht erlaubt, der Knopf glaenzt",
+                  "» no taking part" in teilnehmen and (f.get("slots", {}).get("14") or {}).get("glint") is True
+                  and "no taking part for good" in item_text(f.get("slots", {}).get("31")), teilnehmen)
+        seit, hier_seit = zuschauer.mark(), bot.mark()
+        klick(bot, 31, warten=2.0)
+        dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, hier_seit)
+        bot.call("close_window", wait=10)
+        FIND.test("Bestaetigt: er erfaehrt es und ist von der Fuehrung, der Bot erfaehrt beides",
+                  gesagt(dort, rf"{BOT_NAME} restricted your tours: no taking part for good")
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} left your tour")
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} is restricted from tours: no taking part for good"),
+                  f"{zeige(dort)} / {zeige(hier)}")
+        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        FIND.test("Der Bot kann ihn nicht mehr einladen",
+                  gesagt(zeilen, rf"You can't invite {ZUSCHAUER_NAME}: he is restricted from tours"), zeige(zeilen))
+        f = fuehrung_seite(bot)
+        er = texte(f).get(platz(f, ZUSCHAUER_NAME), "")
+        FIND.test("Im Menue steht er trotzdem in der Liste, mit dem Grund, warum er nicht eingeladen werden kann",
+                  "You can't invite him" in er and "he is restricted from tours" in er, er)
+        zeilen = befehl(zuschauer, f"/cam tour accept {BOT_NAME}")
+        f = fuehrung_seite(zuschauer)
+        unten = item_text(f.get("slots", {}).get("49"))
+        FIND.test("Annehmen sagt ihm, dass er nicht teilnehmen darf, und seine Seite der Fuehrung sagt es unten",
+                  gesagt(zeilen, r"You may not take part in tours for good")
+                  and "Sorry, you may not take part in tours" in unten and "You are restricted" in unten,
+                  f"{zeige(zeilen)} / {unten}")
+
+        f = seine_seite()
+        FIND.test("Seine Seite heisst nun Aendern", f"Change the tour restriction of {ZUSCHAUER_NAME}"
+                  in (f.get("title") or ""), str(f.get("title")))
+        klick(bot, 12)
+        klick(bot, 14)
+        seit = zuschauer.mark()
+        klick(bot, 31)
+        dort = zeilen_seit(zuschauer, seit)
+        bot.call("close_window", wait=10)
+        zeilen = befehl(zuschauer, f"/cam tour invite {BOT_NAME}")
+        mitte = item_text(fuehrung_seite(zuschauer).get("slots", {}).get("22"))
+        FIND.test("Geaendert auf fuehren: er erfaehrt es, einladen sagt, dass er nicht fuehren darf, die Seite "
+                  "der Fuehrung sagt es in der Mitte",
+                  gesagt(dort, rf"{BOT_NAME} changed the restriction of your tours: no leading for good")
+                  and gesagt(zeilen, r"You may not lead tours for good")
+                  and "Sorry, you may not lead tours" in mitte, f"{zeige(dort)} / {zeige(zeilen)} / {mitte}")
+        seine_seite()
+        seit = zuschauer.mark()
+        klick(bot, 35)
+        dort = zeilen_seit(zuschauer, seit)
+        bot.call("close_window", wait=10)
+        FIND.test("Der Milcheimer hebt sie auf", gesagt(dort, rf"{BOT_NAME} lifted the restriction of your tours"),
+                  zeige(dort))
+
+        liste()
+        klick(bot, 0)
+        f = fenster(bot)
+        FIND.test("Everybody oeffnet die Einschraenkung von allen",
+                  "Restrict the tours of Everybody" in (f.get("title") or ""), str(f.get("title")))
+        klick(bot, 12)
+        seit, hier_seit = zuschauer.mark(), bot.mark()
+        klick(bot, 31)
+        dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, hier_seit)
+        bot.call("close_window", wait=10)
+        FIND.test("Fuer alle: er liest, dass es abgeschaltet ist, der Admin, dass es fuer alle gilt",
+                  gesagt(dort, rf"{BOT_NAME} switched tours off for everybody: no leading for good")
+                  and gesagt(hier, r"Tours are restricted for everybody: no leading for good"),
+                  f"{zeige(dort)} / {zeige(hier)}")
+        zeilen = befehl(zuschauer, f"/cam tour invite {BOT_NAME}")
+        mitte = item_text(fuehrung_seite(zuschauer).get("slots", {}).get("22"))
+        FIND.test("Fuer alle: einladen sagt, dass fuehren abgeschaltet ist, die Seite der Fuehrung ebenso",
+                  gesagt(zeilen, r"Leading tours is switched off for good")
+                  and "Leading tours is switched off" in mitte and "It is off for everybody" in mitte,
+                  f"{zeige(zeilen)} / {mitte}")
+        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        FIND.test("camplugin.touradmin.bypass (op): der Bot laedt weiter ein",
+                  gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to your tour"), zeige(zeilen))
+        liste()
+        klick(bot, 0)
+        seit = zuschauer.mark()
+        klick(bot, 35)
+        dort = zeilen_seit(zuschauer, seit)
+        alle = texte(liste()).get(0, "")
+        bot.call("close_window", wait=10)
+        FIND.test("Der Milcheimer hebt sie fuer alle auf, und unter Everybody steht nichts mehr",
+                  gesagt(dort, rf"{BOT_NAME} switched tours on again for everybody") and "No restrictions" in alle,
+                  f"{zeige(dort)} / {alle}")
+    finally:
+        try:
+            bot.call("close_window", wait=10)
+            if zuschauer.proc is not None and zuschauer.proc.poll() is None:
+                cam_off(zuschauer)
+                zuschauer.stop()
+            cam_off(bot)
+            einschraenkungen_weg(env, "tour-bans.yml")
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Fuehrungs-Moderation: {exc}")
+
+
+def einschraenkungen_weg(env, datei):
+    """Was ein abgebrochener Test an Einschraenkungen stehen liess, weg: die
+    Datei unter playerdata, und /cam reload, damit das Plugin sie vergisst -
+    sonst hielte sie die Spieler in den folgenden Tests auf."""
+    pfad = env.server / "plugins" / "CamFly" / "playerdata" / datei
+    if pfad.exists() and "until" in pfad.read_text(encoding="utf-8"):
+        pfad.unlink()
+        console(env, "cam reload", pause=2.0)
 
 
 def naehe_checks(env, bot):
@@ -13287,6 +13550,7 @@ ABSCHNITTE = [
     Abschnitt("menue", menue_checks, "menu"),
     Abschnitt("spotreiter", spotreiter_checks, "menu spot"),
     Abschnitt("spotmoderation", spotmoderation_checks, "menu spot/SpotModeration spot/SpotBans spot/CamSpots"),
+    Abschnitt("tourmoderation", tourmoderation_checks, "menu tour/TourModeration tour/TourBans tour/CamTour"),
     Abschnitt("anstupsen", anstups_checks, "nudge", koerpertypen=True),
     Abschnitt("funk", funk_checks, "signal"),
     Abschnitt("traenke", potion_checks, "potion", koerpertypen=True),
@@ -13427,6 +13691,11 @@ def step_tests(env):
                 Log.detail(str(e))
             return False
         time.sleep(2)
+        # Ein abgebrochener Lauf kann den Bot im Nether zurueckgelassen haben,
+        # auf dessen Dach: Dort startet /cam nicht, und die Grundprobe
+        # schluege fehl. Zurueck in die Overworld, an dieselbe Stelle.
+        console(env, f"execute as {BOT_NAME} at @s unless dimension minecraft:overworld "
+                     f"in minecraft:overworld run tp @s ~ {BODEN_Y + 1} ~", pause=1.5)
 
         # --- /cam ohne op: camplugin.use ist Standardrecht ---
         since = bot.mark()

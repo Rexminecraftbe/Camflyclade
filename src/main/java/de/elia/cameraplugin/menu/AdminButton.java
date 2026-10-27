@@ -11,6 +11,7 @@ public enum AdminButton implements MenuSlot {
     STATS("stats", "bookshelf", 14),
     TRAILS("trails", "lead", 16),
     SPOTS("spots", "filled_map", 20),
+    TOURS("tours", "saddle", 24),
     BACK("back", "arrow", 22);
 
     private final String key;

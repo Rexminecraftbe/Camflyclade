@@ -12,6 +12,8 @@ import de.elia.cameraplugin.sky.CamSky;
 import de.elia.cameraplugin.stats.CamStats;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import de.elia.cameraplugin.tour.CamTour;
+import de.elia.cameraplugin.tour.TourBans;
+import de.elia.cameraplugin.tour.TourModeration;
 import de.elia.cameraplugin.trail.CamTrail;
 import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.spot.Share;
@@ -47,10 +49,12 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -146,6 +150,8 @@ public final class CamMenu implements Listener {
 
     /** The restrictions of the spots being set up on their page, by the id of the admin. */
     private final Map<UUID, SpotBanDraft> spotDrafts = new HashMap<>();
+    /** The restrictions of the tours being set up on their page, by the id of the admin. */
+    private final Map<UUID, TourBanDraft> tourDrafts = new HashMap<>();
 
     /** How each player has the tabs of the spots sorted, while he is online. */
     private final Map<UUID, Map<SpotTab, SpotSort>> spotSorts = new HashMap<>();
@@ -262,35 +268,65 @@ public final class CamMenu implements Listener {
     }
 
     /**
-     * A restriction of the spots of a player being set up on its page: whom,
-     * what he may not do, for how long and why - a new one, or the one he
-     * has already, to be changed.
+     * A restriction being set up on its page - of the spots or of the
+     * tours, of one player or of everybody -: whom, for how long and why - a
+     * new one, or the one that holds already, to be changed. What it keeps
+     * him from is up to the kind of restriction.
      */
-    private static final class SpotBanDraft {
+    private abstract static class RestrictDraft {
+        /** The player, or {@code null} for everybody. */
         final UUID id;
         final String name;
         /** Whether something keeps him already, and the page changes it. */
         final boolean change;
-        /** How far it keeps him from each kind of spots. */
-        final Map<SpotBans.Kind, SpotBans.Stage> stages = new EnumMap<>(SpotBans.Kind.class);
         /** How long, in minutes; 0 for good. */
         long minutes;
         String reason = "";
+
+        RestrictDraft(UUID id, String name, boolean change) {
+            this.id = id;
+            this.name = name;
+            this.change = change;
+        }
+
+        boolean everybody() {
+            return id == null;
+        }
+
+        /** Whether it keeps him from anything at all. */
+        abstract boolean any();
+    }
+
+    /** A restriction of the spots: how far it keeps him from each kind of spots. */
+    private static final class SpotBanDraft extends RestrictDraft {
+        final Map<SpotBans.Kind, SpotBans.Stage> stages = new EnumMap<>(SpotBans.Kind.class);
+
+        SpotBanDraft(UUID id, String name, boolean change) {
+            super(id, name, change);
+        }
 
         /** How far it keeps him from this kind of spots. */
         SpotBans.Stage stage(SpotBans.Kind kind) {
             return stages.getOrDefault(kind, SpotBans.Stage.FREE);
         }
 
-        /** Whether it keeps him from anything at all. */
+        @Override
         boolean any() {
             return stages.values().stream().anyMatch(stage -> stage != SpotBans.Stage.FREE);
         }
+    }
 
-        SpotBanDraft(UUID id, String name, boolean change) {
-            this.id = id;
-            this.name = name;
-            this.change = change;
+    /** A restriction of the tours: whether it keeps him from leading them, and from taking part. */
+    private static final class TourBanDraft extends RestrictDraft {
+        final Set<TourBans.What> kept = EnumSet.noneOf(TourBans.What.class);
+
+        TourBanDraft(UUID id, String name, boolean change) {
+            super(id, name, change);
+        }
+
+        @Override
+        boolean any() {
+            return !kept.isEmpty();
         }
     }
 
@@ -526,8 +562,8 @@ public final class CamMenu implements Listener {
         List<Consumer<Integer>> entries = new ArrayList<>();
         Page page = new Page();
         // A tab of the spots a restriction keeps him from looking at shows him only that.
-        boolean mayLook = plugin.getSpotModeration().mayLook(player, SpotBans.Kind.valueOf(tab.name()));
-        if (mayLook) {
+        SpotModeration.Hold kept = plugin.getSpotModeration().lookHold(player, SpotBans.Kind.valueOf(tab.name()));
+        if (kept == null) {
             switch (tab) {
                 case PRIVATE -> {
                     for (Spot spot : sorted(spots.own(player), sort, own -> own, own -> "", own -> 0,
@@ -559,10 +595,10 @@ public final class CamMenu implements Listener {
         for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < entries.size(); slot++) {
             entries.get(number * ENTRIES + slot).accept(slot);
         }
-        if (!mayLook) {
-            put(page, 22, Material.GRAY_DYE, messages.getMessage("menu-spots-restricted"),
-                    lines(plugin.getSpotModeration().fill(messages.getMessage("menu-spots-restricted-lore"),
-                            player.getUniqueId())), click -> { });
+        if (kept != null) {
+            String key = kept.everybody() ? "menu-spots-disabled" : "menu-spots-restricted";
+            put(page, 22, Material.GRAY_DYE, messages.getMessage(key),
+                    lines(plugin.getSpotModeration().fill(messages.getMessage(key + "-lore"), kept)), click -> { });
         } else if (entries.isEmpty()) {
             put(page, 22, Material.GRAY_DYE, "menu-spots-empty-" + tab.key, click -> { });
         }
@@ -982,11 +1018,15 @@ public final class CamMenu implements Listener {
      * has - left-click accepts, right-click turns down -, his guests - a
      * click sends one away -, and whom he could invite: players close to him
      * who could follow him from where they are, in camera mode or not, with
-     * how far away they are; a click invites one. Is there nobody, the page
-     * says how close they would have to be. While he has guests, the last
-     * row has the button that ends the tour. Both pages have the button that
-     * switches between the guide's view and looking round freely, where the
-     * guide's view works.
+     * how far away they are; a click invites one. One a restriction keeps
+     * from taking part shows up all the same, with why he cannot be invited.
+     * Is there nobody, the page says how close they would have to be. While
+     * he has guests, the last row has the button that ends the tour. A
+     * restriction that keeps him from leading takes the place of the players
+     * to invite, one that keeps him from taking part that of the button that
+     * ends the tour - his own, or the one of everybody, which says that it
+     * is switched off. Both pages have the button that switches between the
+     * guide's view and looking round freely, where the guide's view works.
      */
     private void openTour(Player player, int pageNumber) {
         CamTour tour = plugin.getTour();
@@ -1025,6 +1065,9 @@ public final class CamMenu implements Listener {
                         }
                     }));
         }
+        TourModeration moderation = plugin.getTourModeration();
+        TourModeration.Hold lead = moderation.hold(player, TourBans.What.LEAD);
+        TourModeration.Hold join = moderation.hold(player, TourBans.What.JOIN);
         List<Player> guests = tour.guestsOf(player);
         for (Player guest : guests) {
             String name = guest.getName();
@@ -1035,11 +1078,16 @@ public final class CamMenu implements Listener {
                         openTour(player, 0);
                     })));
         }
-        if (plugin.isInCameraMode(player)) {
+        // Whom he could invite - unless he may not lead; one who may not take
+        // part shows up all the same, with why he cannot be invited.
+        if (plugin.isInCameraMode(player) && lead == null) {
             boolean full = tour.isFull(player);
             for (Player other : tour.candidates(player)) {
                 String name = other.getName();
-                String key = full ? "menu-tour-candidate-full-lore"
+                TourModeration.Hold kept = moderation.hold(other, TourBans.What.JOIN);
+                String key = kept != null ? kept.everybody() ? "menu-tour-candidate-disabled-lore"
+                        : "menu-tour-candidate-restricted-lore"
+                        : full ? "menu-tour-candidate-full-lore"
                         : tour.hasInvited(player, other) ? "menu-tour-candidate-invited-lore"
                         : plugin.isInCameraMode(other) ? "menu-tour-candidate-lore"
                         : "menu-tour-candidate-outside-lore";
@@ -1060,7 +1108,9 @@ public final class CamMenu implements Listener {
         for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < entries.size(); slot++) {
             entries.get(number * ENTRIES + slot).accept(slot);
         }
-        if (entries.isEmpty() && plugin.isInCameraMode(player)) {
+        if (entries.isEmpty() && lead != null) {
+            put(page, 22, tourKept(TourBans.What.LEAD, lead), click -> { });
+        } else if (entries.isEmpty() && plugin.isInCameraMode(player)) {
             // How close one has to be: out of camera mode to the guide's
             // camera, in camera mode camera to camera.
             double start = settings.getTourStartDistance();
@@ -1075,10 +1125,25 @@ public final class CamMenu implements Listener {
         put(page, SLOT_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
         if (!guests.isEmpty()) {
             put(page, SLOT_NEW, Material.BARRIER, "menu-tour-end", click -> act(player, () -> tour.end(player)));
+        } else if (lead != null && !entries.isEmpty()) {
+            put(page, SLOT_NEW, tourKept(TourBans.What.LEAD, lead), click -> { });
+        } else if (join != null) {
+            put(page, SLOT_NEW, tourKept(TourBans.What.JOIN, join), click -> { });
         }
         viewButton(player, page, SLOT_ADMIN_SORT);
         paging(page, number, pages, n -> openTour(player, n));
         player.openInventory(inventory);
+    }
+
+    /**
+     * A grey item that says what keeps him from leading tours or taking part
+     * in them: his own restriction, or that it is switched off for everybody
+     * - for how long still and why.
+     */
+    private ItemStack tourKept(TourBans.What what, TourModeration.Hold hold) {
+        String key = "menu-tour-" + what.key + (hold.everybody() ? "-disabled" : "-restricted");
+        return item(Material.GRAY_DYE, messages.getMessage(key),
+                lines(plugin.getTourModeration().fill(messages.getMessage(key + "-lore"), hold)));
     }
 
     /**
@@ -1169,7 +1234,8 @@ public final class CamMenu implements Listener {
     /** Whether there is anything on the admin page for him: one of its parts he has the right of. */
     private boolean hasAdminPage(Player player) {
         return plugin.getCamList().mayUse(player) || viewsOthers(player) || managesPlayers(player)
-                || plugin.getTrail().mayUse(player) || plugin.getSpotModeration().mayUse(player);
+                || plugin.getTrail().mayUse(player) || plugin.getSpotModeration().mayUse(player)
+                || plugin.getTourModeration().mayUse(player);
     }
 
     private boolean viewsOthers(Player player) {
@@ -1184,7 +1250,8 @@ public final class CamMenu implements Listener {
     /**
      * The admin page, for what admins do with commands otherwise: who is in
      * camera mode, the players to stop and to ban, the statistics of others,
-     * the flights of {@code /cam trail} and the spots of everybody - each where
+     * the flights of {@code /cam trail}, the spots of everybody and who may
+     * lead tours and take part in them - each where
      * {@code menu.admin-buttons} puts it, only for whoever has its right and
      * while it is switched on.
      */
@@ -1209,6 +1276,9 @@ public final class CamMenu implements Listener {
         }
         if (plugin.getSpotModeration().mayUse(player)) {
             adminButton(page, AdminButton.SPOTS, "menu-admin-spots", click -> later(() -> openSpotOwners(player, 0)));
+        }
+        if (plugin.getTourModeration().mayUse(player)) {
+            adminButton(page, AdminButton.TOURS, "menu-admin-tours", click -> later(() -> openTourPlayers(player, 0)));
         }
         adminButton(page, AdminButton.BACK, "menu-to-main", click -> later(() -> openMain(player)));
         player.openInventory(inventory);
@@ -1585,10 +1655,11 @@ public final class CamMenu implements Listener {
     // ------------------------------------------------------------ admin: the spots of everybody
 
     /**
-     * The players who have spots - and those kept from something with spots
-     * who have none -, online or not: under each how many he has, how many
-     * of them are public or shared, and what keeps him. A click shows his
-     * spots.
+     * First everybody, then the players who have spots - and those kept from
+     * something with spots who have none -, online or not: under each how
+     * many he has, how many of them are public or shared, and what keeps
+     * him. A click shows his spots; on everybody, it opens the restriction of
+     * everybody.
      */
     private void openSpotOwners(Player player, int pageNumber) {
         SpotModeration moderation = plugin.getSpotModeration();
@@ -1614,13 +1685,27 @@ public final class CamMenu implements Listener {
         }
         List<Map.Entry<UUID, String>> list = new ArrayList<>(names.entrySet());
         sortPlayers(player, list, Map.Entry::getValue, Map.Entry::getKey);
-        int pages = Math.max(1, (list.size() + ENTRIES - 1) / ENTRIES);
+        // The first slot of the first page is for everybody.
+        int total = list.size() + 1;
+        int pages = Math.max(1, (total + ENTRIES - 1) / ENTRIES);
         int number = Math.min(Math.max(0, pageNumber), pages - 1);
         Page page = new Page();
         Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-spots-title"));
-        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < list.size(); slot++) {
-            UUID id = list.get(number * ENTRIES + slot).getKey();
-            String name = list.get(number * ENTRIES + slot).getValue();
+        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < total; slot++) {
+            int index = number * ENTRIES + slot;
+            if (index == 0) {
+                String everybody = messages.getMessage("menu-admin-everybody-name");
+                List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-spots-everybody-lore")));
+                lore.addAll(restrictionLines(moderation.everybodyText()));
+                lore.addAll(lines(messages.getMessage("menu-admin-spots-everybody-actions")));
+                put(page, slot, everybodyItem(lore, moderation.everybodyBan() != null), click -> later(() -> {
+                    spotDrafts.put(player.getUniqueId(), spotDraft(null, everybody));
+                    openSpotBan(player);
+                }));
+                continue;
+            }
+            UUID id = list.get(index - 1).getKey();
+            String name = list.get(index - 1).getValue();
             List<String> lore = spotOwnerLines(id, counts.getOrDefault(id, 0));
             lore.addAll(lines(messages.getMessage("menu-admin-spots-actions")));
             put(page, slot, playerItem(id, name, lore, moderation.banOf(id) != null),
@@ -1650,15 +1735,25 @@ public final class CamMenu implements Listener {
         List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-spots-count")
                 .replace("{count}", String.valueOf(count)).replace("{public}", String.valueOf(open))
                 .replace("{shared}", String.valueOf(sharedCount))));
-        lore.addAll(restrictionLines(id));
+        lore.addAll(restrictionLines(plugin.getSpotModeration().banText(id)));
         return lore;
     }
 
-    /** What keeps him from what with spots, for how long and why, as lines - or that nothing does. */
-    private List<String> restrictionLines(UUID id) {
-        String text = plugin.getSpotModeration().banText(id);
-        return lines(text == null ? messages.getMessage("menu-admin-spots-free")
-                : messages.getMessage("menu-admin-spots-restricted").replace("{ban}", text));
+    /**
+     * What a restriction keeps him, or everybody, from, for how long and
+     * why, as lines - or that nothing does.
+     *
+     * @param text the restriction as its moderation writes it out, {@code null} for none
+     */
+    private List<String> restrictionLines(String text) {
+        return lines(text == null ? messages.getMessage("menu-admin-restrict-free")
+                : messages.getMessage("menu-admin-restricted").replace("{ban}", text));
+    }
+
+    /** Everybody as an item, on the admin pages of the spots and the tours: a beacon, which shines while restricted. */
+    private ItemStack everybodyItem(List<String> lore, boolean glint) {
+        return shine(item(Material.BEACON, messages.getMessage("menu-admin-player")
+                .replace("{player}", messages.getMessage("menu-admin-everybody-name")), lore), glint);
     }
 
     /**
@@ -1745,7 +1840,7 @@ public final class CamMenu implements Listener {
         put(page, SLOT_BACK, Material.ARROW, "menu-to-spot-owners", click -> later(() -> openSpotOwners(player, 0)));
         boolean restricted = moderation.banOf(owner) != null;
         String key = restricted ? "menu-admin-spot-restrict-change" : "menu-admin-spot-restrict";
-        List<String> lore = new ArrayList<>(restrictionLines(owner));
+        List<String> lore = new ArrayList<>(restrictionLines(moderation.banText(owner)));
         lore.addAll(lines(messages.getMessage(key + "-lore")));
         put(page, SLOT_NEW, shine(item(Material.IRON_BARS, messages.getMessage(key), lore), restricted),
                 click -> later(() -> {
@@ -1761,31 +1856,38 @@ public final class CamMenu implements Listener {
     }
 
     /**
-     * A new restriction for him - nothing ticked yet, for good, without a
-     * reason - or the one he has, to be changed: what it keeps him from, the
-     * time it still has, rounded up to whole minutes, and its reason.
+     * A new restriction for him, or for everybody - nothing picked yet, for
+     * good, without a reason - or the one that holds, to be changed: what it
+     * keeps him from, the time it still has, rounded up to whole minutes, and
+     * its reason.
+     *
+     * @param id the player, {@code null} for everybody
      */
     private SpotBanDraft spotDraft(UUID id, String name) {
-        SpotBans.Ban now = plugin.getSpotModeration().banOf(id);
+        SpotModeration moderation = plugin.getSpotModeration();
+        SpotBans.Ban now = id == null ? moderation.everybodyBan() : moderation.banOf(id);
         SpotBanDraft draft = new SpotBanDraft(id, name, now != null);
         if (now != null) {
             for (SpotBans.Kind kind : SpotBans.Kind.values()) {
                 draft.stages.put(kind, now.stage(kind));
             }
-            draft.minutes = now.forGood() ? 0L
-                    : Math.max(1L, (now.secondsLeft(System.currentTimeMillis()) + 59L) / 60L);
-            draft.reason = now.reason();
+            keepTime(draft, now.forGood(), now.secondsLeft(System.currentTimeMillis()), now.reason());
         }
         return draft;
     }
 
+    /** The time a restriction that holds still has, rounded up to whole minutes, and its reason, into its draft. */
+    private static void keepTime(RestrictDraft draft, boolean forGood, long secondsLeft, String reason) {
+        draft.minutes = forGood ? 0L : Math.max(1L, (secondsLeft + 59L) / 60L);
+        draft.reason = reason;
+    }
+
     /**
-     * What a player may not do with spots, before it is set or changed: for
-     * his own spots, the public ones and those shared by name, each on its
-     * button, step by step: nothing, no new ones, none at all - not even to
-     * look at -; for good or for days, hours and minutes, as on the page of a
-     * ban, and why; then the button that sets it. While something keeps him
-     * already, the last row has the button that lifts it.
+     * What a player, or everybody, may not do with spots, before it is set or
+     * changed: for his own spots, the public ones and those shared by name,
+     * each on its button, step by step: nothing, no new ones, none at all -
+     * not even to look at -; then the time and the reason, see
+     * {@link #restrictTimeAndReason}, and the button that sets it.
      */
     private void openSpotBan(Player player) {
         SpotBanDraft draft = spotDrafts.get(player.getUniqueId());
@@ -1794,24 +1896,74 @@ public final class CamMenu implements Listener {
             openSpotOwners(player, 0);
             return;
         }
+        Runnable back = () -> {
+            spotDrafts.remove(player.getUniqueId());
+            if (draft.everybody()) {
+                openSpotOwners(player, 0);
+            } else {
+                openSpotsOf(player, draft.id, draft.name, 0);
+            }
+        };
         Page page = new Page();
         Inventory inventory = create(page, MEDIUM, messages.getMessage(draft.change
                 ? "menu-admin-spot-restrict-change-title" : "menu-admin-spot-restrict-title")
                 .replace("{player}", draft.name));
-        put(page, 4, playerItem(draft.id, draft.name, restrictionLines(draft.id), draft.change), click -> { });
+        String now = draft.everybody() ? moderation.everybodyText() : moderation.banText(draft.id);
+        put(page, 4, restrictTarget(draft, restrictionLines(now)), click -> { });
         for (SpotTab tab : SpotTab.values()) {
             restrictStage(player, page, draft, tab);
         }
+        restrictTimeAndReason(player, page, draft, "menu-admin-spot-restrict-reason-question",
+                () -> openSpotBan(player));
+        SpotBans.Stage own = draft.stage(SpotBans.Kind.PRIVATE);
+        SpotBans.Stage open = draft.stage(SpotBans.Kind.PUBLIC);
+        SpotBans.Stage shared = draft.stage(SpotBans.Kind.SHARED);
+        restrictConfirm(page, draft, "menu-admin-spot-restrict", moderation.whatText(own, open, shared), () -> {
+            if (draft.everybody()) {
+                moderation.banEverybody(player, own, open, shared, draft.minutes, draft.reason);
+            } else {
+                moderation.ban(player, draft.id, draft.name, own, open, shared, draft.minutes, draft.reason);
+            }
+        }, () -> {
+            if (draft.everybody()) {
+                moderation.unbanEverybody(player);
+            } else {
+                moderation.unban(player, draft.id, draft.name);
+            }
+        }, back);
+        put(page, 27, Material.ARROW, draft.everybody() ? "menu-to-spot-owners" : "menu-to-spots-of",
+                click -> later(back));
+        player.openInventory(inventory);
+    }
+
+    /**
+     * Whom a restriction is about, at the top of its page: everybody as a
+     * beacon, a player as on the lists. It shines while one holds.
+     */
+    private ItemStack restrictTarget(RestrictDraft draft, List<String> lore) {
+        return draft.everybody() ? everybodyItem(lore, draft.change) : playerItem(draft.id, draft.name, lore,
+                draft.change);
+    }
+
+    /**
+     * The part every page of a restriction has, under what it keeps him
+     * from: for good or days, hours and minutes, as on the page of a ban, and
+     * the reason, written in the chat.
+     *
+     * @param question the question for the reason
+     * @param reopen   what shows the page anew
+     */
+    private void restrictTimeAndReason(Player player, Page page, RestrictDraft draft, String question,
+                                       Runnable reopen) {
         boolean forGood = draft.minutes == 0L;
         List<String> foreverLore = forGood ? lines(messages.getMessage("menu-state-current")) : List.of();
         put(page, 19, shine(item(Material.BEDROCK, messages.getMessage("menu-admin-ban-forever"), foreverLore),
                 forGood), click -> later(() -> {
                     draft.minutes = 0L;
-                    openSpotBan(player);
+                    reopen.run();
                 }));
         String time = banTime(draft.minutes);
         LongConsumer set = minutes -> draft.minutes = minutes;
-        Runnable reopen = () -> openSpotBan(player);
         banUnit(page, 21, "menu-admin-ban-days", draft.minutes, set, reopen, DAY, draft.minutes / DAY, time);
         banUnit(page, 22, "menu-admin-ban-hours", draft.minutes, set, reopen, HOUR, draft.minutes % DAY / HOUR,
                 time);
@@ -1823,49 +1975,55 @@ public final class CamMenu implements Listener {
             if (click.isRightClick()) {
                 later(() -> {
                     draft.reason = "";
-                    openSpotBan(player);
+                    reopen.run();
                 });
             } else {
-                act(player, () -> ask(player, "menu-admin-spot-restrict-reason-question", answer -> {
+                act(player, () -> ask(player, question, answer -> {
                     draft.reason = answer;
-                    openSpotBan(player);
+                    reopen.run();
                 }, "{player}", draft.name));
             }
         });
+    }
+
+    /**
+     * The last buttons of the page of a restriction: the one that sets it,
+     * with all it does written out - or, while it keeps him from nothing, a
+     * grey one that says so -, and while one holds already the one that
+     * lifts it. Both go back to the page before.
+     *
+     * @param prefix the texts of the page, such as {@code menu-admin-spot-restrict}; the button that lifts
+     *               it has those of {@code menu-admin-spot-unrestrict}
+     * @param what   what it keeps him from, as its messages put it
+     */
+    private void restrictConfirm(Page page, RestrictDraft draft, String prefix, String what, Runnable set,
+                                 Runnable lift, Runnable back) {
         if (draft.any()) {
-            String summary = moderation.whatText(draft.stage(SpotBans.Kind.PRIVATE),
-                    draft.stage(SpotBans.Kind.PUBLIC), draft.stage(SpotBans.Kind.SHARED)) + " " + time;
+            String summary = what + " " + banTime(draft.minutes);
             if (!draft.reason.isEmpty()) {
                 summary += messages.getMessage("ban-reason").replace("{reason}", draft.reason);
             }
             put(page, 31, Material.REDSTONE_BLOCK, messages.getMessage(draft.change
-                            ? "menu-admin-spot-restrict-change-confirm" : "menu-admin-spot-restrict-confirm"),
-                    lines(messages.getMessage("menu-admin-spot-restrict-confirm-lore")
-                            .replace("{player}", draft.name).replace("{ban}", summary)),
+                            ? prefix + "-change-confirm" : prefix + "-confirm"),
+                    lines(messages.getMessage(prefix + "-confirm-lore").replace("{player}", draft.name)
+                            .replace("{ban}", summary)),
                     click -> later(() -> {
-                        spotDrafts.remove(player.getUniqueId());
-                        moderation.ban(player, draft.id, draft.name, draft.stage(SpotBans.Kind.PRIVATE),
-                                draft.stage(SpotBans.Kind.PUBLIC), draft.stage(SpotBans.Kind.SHARED), draft.minutes,
-                                draft.reason);
-                        openSpotsOf(player, draft.id, draft.name, 0);
+                        set.run();
+                        back.run();
                     }));
         } else {
-            put(page, 31, Material.GRAY_DYE, "menu-admin-spot-restrict-nothing", click -> { });
+            put(page, 31, Material.GRAY_DYE, prefix + "-nothing", click -> { });
         }
         if (draft.change) {
-            put(page, 35, Material.MILK_BUCKET, messages.getMessage("menu-admin-spot-unrestrict"),
-                    lines(messages.getMessage("menu-admin-spot-unrestrict-lore").replace("{player}", draft.name)),
+            String unrestrict = prefix.replace("-restrict", "-unrestrict");
+            put(page, 35, Material.MILK_BUCKET, messages.getMessage(unrestrict),
+                    lines(messages.getMessage(draft.everybody() ? unrestrict + "-everybody-lore" : unrestrict + "-lore")
+                            .replace("{player}", draft.name)),
                     click -> later(() -> {
-                        spotDrafts.remove(player.getUniqueId());
-                        moderation.unban(player, draft.id, draft.name);
-                        openSpotsOf(player, draft.id, draft.name, 0);
+                        lift.run();
+                        back.run();
                     }));
         }
-        put(page, 27, Material.ARROW, "menu-to-spots-of", click -> later(() -> {
-            spotDrafts.remove(player.getUniqueId());
-            openSpotsOf(player, draft.id, draft.name, 0);
-        }));
-        player.openInventory(inventory);
     }
 
     /**
@@ -1880,17 +2038,179 @@ public final class CamMenu implements Listener {
         String what = "menu-admin-spot-restrict-" + kind.key;
         List<String> lore = new ArrayList<>(lines(messages.getMessage(what + "-lore")));
         for (SpotBans.Stage stage : SpotBans.Stage.values()) {
-            String label = messages.getMessage(stage == SpotBans.Stage.FREE ? "menu-admin-spot-restrict-free"
+            String label = messages.getMessage(stage == SpotBans.Stage.FREE ? "menu-admin-restrict-allowed"
                     : "spot-restriction-" + kind.key + "-" + stage.key);
-            lore.addAll(lines(messages.getMessage(stage == now ? "menu-admin-spot-restrict-stage-now"
-                    : "menu-admin-spot-restrict-stage").replace("{stage}", label)));
+            lore.addAll(stateLine(label, stage == now));
         }
-        lore.addAll(lines(messages.getMessage("menu-admin-spot-restrict-steps")));
+        lore.addAll(lines(messages.getMessage("menu-admin-restrict-steps")));
         put(page, RESTRICT_SLOTS[kind.ordinal()], shine(item(tab.icon, messages.getMessage(what), lore),
                 now != SpotBans.Stage.FREE), click -> later(() -> {
                     draft.stages.put(kind, now.next(click.isRightClick()));
                     openSpotBan(player);
                 }));
+    }
+
+    /** One of the steps under a button of a restriction: the one it is at marked. */
+    private List<String> stateLine(String label, boolean now) {
+        return lines(messages.getMessage(now ? "menu-admin-restrict-stage-now" : "menu-admin-restrict-stage")
+                .replace("{stage}", label));
+    }
+
+    // ------------------------------------------------------------ admin: the tours
+
+    /**
+     * First everybody, then the players online and those kept from tours who
+     * are not: under each whether he shows others round or follows a tour,
+     * and what keeps him. A click opens what keeps him, to set or change it.
+     */
+    private void openTourPlayers(Player player, int pageNumber) {
+        TourModeration moderation = plugin.getTourModeration();
+        if (!moderation.mayUse(player)) {
+            openAdmin(player);
+            return;
+        }
+        Map<UUID, String> people = new LinkedHashMap<>();
+        for (Player other : onlineSorted(player)) {
+            people.put(other.getUniqueId(), other.getName());
+        }
+        for (Map.Entry<UUID, TourBans.Ban> entry : moderation.restricted().entrySet()) {
+            String name = entry.getValue().name();
+            people.putIfAbsent(entry.getKey(), name == null ? entry.getKey().toString() : name);
+        }
+        List<Map.Entry<UUID, String>> list = new ArrayList<>(people.entrySet());
+        sortPlayers(player, list, Map.Entry::getValue, Map.Entry::getKey);
+        // The first slot of the first page is for everybody.
+        int total = list.size() + 1;
+        int pages = Math.max(1, (total + ENTRIES - 1) / ENTRIES);
+        int number = Math.min(Math.max(0, pageNumber), pages - 1);
+        Page page = new Page();
+        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-tours-title"));
+        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < total; slot++) {
+            int index = number * ENTRIES + slot;
+            UUID id = index == 0 ? null : list.get(index - 1).getKey();
+            String name = index == 0 ? messages.getMessage("menu-admin-everybody-name")
+                    : list.get(index - 1).getValue();
+            List<String> lore = new ArrayList<>(id == null
+                    ? lines(messages.getMessage("menu-admin-tours-everybody-lore")) : tourLines(id));
+            lore.addAll(restrictionLines(id == null ? moderation.everybodyText() : moderation.banText(id)));
+            lore.addAll(lines(messages.getMessage("menu-admin-tours-actions")));
+            ItemStack item = id == null ? everybodyItem(lore, moderation.everybodyBan() != null)
+                    : playerItem(id, name, lore, moderation.banOf(id) != null);
+            put(page, slot, item, click -> later(() -> {
+                tourDrafts.put(player.getUniqueId(), tourDraft(id, name));
+                openTourBan(player);
+            }));
+        }
+        put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
+        playerSortButton(player, page, () -> openTourPlayers(player, 0));
+        paging(page, number, pages, n -> openTourPlayers(player, n));
+        player.openInventory(inventory);
+    }
+
+    /** Whether he shows others round or follows a tour - or that he is not online -, as lines under him. */
+    private List<String> tourLines(UUID id) {
+        Player online = Bukkit.getPlayer(id);
+        if (online == null) {
+            return lines(messages.getMessage("menu-admin-offline"));
+        }
+        CamTour tour = plugin.getTour();
+        Player guide = tour.guideOf(online);
+        int guests = tour.guestsOf(online).size();
+        if (guide != null) {
+            return lines(messages.getMessage("menu-admin-tours-following").replace("{player}", guide.getName()));
+        }
+        return lines(guests > 0
+                ? messages.getMessage("menu-admin-tours-guiding").replace("{count}", String.valueOf(guests))
+                : messages.getMessage("menu-admin-tours-none"));
+    }
+
+    /**
+     * A new restriction of tours for him, or for everybody - nothing picked
+     * yet, for good, without a reason - or the one that holds, to be changed.
+     *
+     * @param id the player, {@code null} for everybody
+     */
+    private TourBanDraft tourDraft(UUID id, String name) {
+        TourModeration moderation = plugin.getTourModeration();
+        TourBans.Ban now = id == null ? moderation.everybodyBan() : moderation.banOf(id);
+        TourBanDraft draft = new TourBanDraft(id, name, now != null);
+        if (now != null) {
+            for (TourBans.What what : TourBans.What.values()) {
+                if (now.keeps(what)) {
+                    draft.kept.add(what);
+                }
+            }
+            keepTime(draft, now.forGood(), now.secondsLeft(System.currentTimeMillis()), now.reason());
+        }
+        return draft;
+    }
+
+    /**
+     * What a player, or everybody, may not do with tours, before it is set or
+     * changed: lead them - invite players, which starts one - and take part
+     * in them - accept an invitation -, each switched on its button; then the
+     * time and the reason, see {@link #restrictTimeAndReason}, and the button
+     * that sets it.
+     */
+    private void openTourBan(Player player) {
+        TourBanDraft draft = tourDrafts.get(player.getUniqueId());
+        TourModeration moderation = plugin.getTourModeration();
+        if (draft == null || !moderation.mayUse(player)) {
+            openTourPlayers(player, 0);
+            return;
+        }
+        Runnable back = () -> {
+            tourDrafts.remove(player.getUniqueId());
+            openTourPlayers(player, 0);
+        };
+        Page page = new Page();
+        Inventory inventory = create(page, MEDIUM, messages.getMessage(draft.change
+                ? "menu-admin-tour-restrict-change-title" : "menu-admin-tour-restrict-title")
+                .replace("{player}", draft.name));
+        String now = draft.everybody() ? moderation.everybodyText() : moderation.banText(draft.id);
+        put(page, 4, restrictTarget(draft, restrictionLines(now)), click -> { });
+        restrictToggle(player, page, draft, TourBans.What.LEAD, 12, Material.LEAD);
+        restrictToggle(player, page, draft, TourBans.What.JOIN, 14, Material.SADDLE);
+        restrictTimeAndReason(player, page, draft, "menu-admin-tour-restrict-reason-question",
+                () -> openTourBan(player));
+        boolean lead = draft.kept.contains(TourBans.What.LEAD);
+        boolean join = draft.kept.contains(TourBans.What.JOIN);
+        restrictConfirm(page, draft, "menu-admin-tour-restrict", moderation.whatText(lead, join), () -> {
+            if (draft.everybody()) {
+                moderation.banEverybody(player, lead, join, draft.minutes, draft.reason);
+            } else {
+                moderation.ban(player, draft.id, draft.name, lead, join, draft.minutes, draft.reason);
+            }
+        }, () -> {
+            if (draft.everybody()) {
+                moderation.unbanEverybody(player);
+            } else {
+                moderation.unban(player, draft.id, draft.name);
+            }
+        }, back);
+        put(page, 27, Material.ARROW, "menu-to-tour-players", click -> later(back));
+        player.openInventory(inventory);
+    }
+
+    /**
+     * One of the buttons of what a restriction of tours keeps him from:
+     * allowed or not, the one it is marked - it shines while not -, and a
+     * click that switches it.
+     */
+    private void restrictToggle(Player player, Page page, TourBanDraft draft, TourBans.What what, int slot,
+                                Material icon) {
+        boolean kept = draft.kept.contains(what);
+        String key = "menu-admin-tour-restrict-" + what.key;
+        List<String> lore = new ArrayList<>(lines(messages.getMessage(key + "-lore")));
+        lore.addAll(stateLine(messages.getMessage("menu-admin-restrict-allowed"), !kept));
+        lore.addAll(stateLine(messages.getMessage("tour-restriction-" + what.key), kept));
+        lore.addAll(lines(messages.getMessage("menu-admin-restrict-switch")));
+        put(page, slot, shine(item(icon, messages.getMessage(key), lore), kept), click -> later(() -> {
+            if (!draft.kept.remove(what)) {
+                draft.kept.add(what);
+            }
+            openTourBan(player);
+        }));
     }
 
     /** Whether he is in camera mode and whether he is banned, as lines under him. */
@@ -2130,6 +2450,7 @@ public final class CamMenu implements Listener {
         questions.remove(event.getPlayer().getUniqueId());
         drafts.remove(event.getPlayer().getUniqueId());
         spotDrafts.remove(event.getPlayer().getUniqueId());
+        tourDrafts.remove(event.getPlayer().getUniqueId());
         adminSpotSorts.remove(event.getPlayer().getUniqueId());
         spotSorts.remove(event.getPlayer().getUniqueId());
         playerSorts.remove(event.getPlayer().getUniqueId());

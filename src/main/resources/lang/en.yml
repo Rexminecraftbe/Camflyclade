@@ -197,7 +197,10 @@ messages:
   # viewpoints.max-per-player) and may still save ({left}); -full once there is no room left, -unlimited without a
   # limit. menu-sort is the button that sorts a list, {sort} being one of the menu-sort-... orders; under it every
   # order, the one in use as menu-sort-option-current, the others as menu-sort-option. menu-tour-... are the page
-  # of /cam tour, menu-tour-view the button that switches between the guide's view and looking round freely.
+  # of /cam tour, menu-tour-view the button that switches between the guide's view and looking round freely;
+  # menu-tour-lead-... and menu-tour-join-... what keeps him from leading or taking part (-restricted his own
+  # restriction, -disabled the one of everybody, {time} and {reason} as with /cam ban), menu-tour-candidate-restricted-
+  # and -disabled-lore under a player he cannot invite for that.
   # menu-only is what the commands say under menu.access or menu.admin-access: menu, menu-features-off under false. menu-spot-name asks for the name of a new spot in the chat,
   # menu-admin-ban-reason-question why a player is banned ({player}), {cancel} being the word that calls either off,
   # with menu-answer-cancelled. Under menu-stats and the heads of menu-admin-stats stand the lines of /cam stats;
@@ -257,12 +260,21 @@ messages:
   menu-admin-players-actions: "&eClick: stop or ban"
   menu-admin-players-lore: "&7End the cam mode of a player,\n&7ban him, change or lift his ban."
   menu-admin-players-title: "&8Players"
+  # The pages that restrict the spots or the tours of a player, or of everybody: menu-admin-restricted what keeps him
+  # ({ban}: {what} as spot-restriction-... or tour-restriction-..., the time as ban-for or ban-for-good, the reason as
+  # ban-reason), -restrict-free that nothing does. Under each button what it can keep him at, the one it is at as
+  # -stage-now, the others as -stage ({stage}: -allowed or the restriction), then -steps (spots) or -switch (tours).
+  menu-admin-restrict-allowed: "allowed"
+  menu-admin-restrict-free: "&7No restrictions"
+  menu-admin-restrict-stage: "&8- {stage}"
+  menu-admin-restrict-stage-now: "&a» {stage}"
+  menu-admin-restrict-steps: "&eLeft-click: next step\n&eRight-click: step back"
+  menu-admin-restrict-switch: "&eClick: switch"
+  menu-admin-restricted: "&cRestricted: {ban}"
   # The admin page of the spots (camplugin.spotadmin): menu-admin-spots-... is the list of the players who have spots
-  # ({count} spots, {public} of them public, {shared} shared by name), menu-admin-spots-restricted what keeps one
-  # ({ban}: {what} as spot-restriction-..., the time as ban-for or ban-for-good, the reason as ban-reason);
+  # ({count} spots, {public} of them public, {shared} shared by name), everybody first (-everybody-...);
   # menu-admin-spot-... the page of one player's spots and the page that restricts them, with a button for each kind
-  # of spots (-private, -public, -shared): its steps under it, -free and spot-restriction-..., the one it is at as
-  # -stage-now, the others as -stage.
+  # of spots (-private, -public, -shared).
   menu-admin-spot-actions: "&bRight-click: go there\n&cShift-click: delete"
   menu-admin-spot-actions-shared: "&eLeft-click: take it down -\n&eprivate again\n&bRight-click: go there\n&cShift-click: delete"
   menu-admin-spot-private: "&7Private"
@@ -273,7 +285,6 @@ messages:
   menu-admin-spot-restrict-change-title: "&8Change the restriction of {player}"
   menu-admin-spot-restrict-confirm: "&4Restrict"
   menu-admin-spot-restrict-confirm-lore: "&7{player}: {ban}"
-  menu-admin-spot-restrict-free: "allowed"
   menu-admin-spot-restrict-lore: "&7Keep him from saving spots, making\n&7them public, sharing them or\n&7looking at spots."
   menu-admin-spot-restrict-nothing: "&7Nothing picked"
   menu-admin-spot-restrict-nothing-lore: "&7Pick at least one thing\n&7he may not do."
@@ -284,23 +295,21 @@ messages:
   menu-admin-spot-restrict-reason-question: "&eType in the chat why the spots of {player} are restricted, or {cancel}."
   menu-admin-spot-restrict-shared: "&bShared spots"
   menu-admin-spot-restrict-shared-lore: "&7Sharing his spots by name, and\n&7jumping to or visiting those\n&7shared with him"
-  menu-admin-spot-restrict-stage: "&8- {stage}"
-  menu-admin-spot-restrict-stage-now: "&a» {stage}"
-  menu-admin-spot-restrict-steps: "&eLeft-click: next step\n&eRight-click: step back"
   menu-admin-spot-restrict-title: "&8Restrict the spots of {player}"
   menu-admin-spot-unrestrict: "&aLift the restriction"
+  menu-admin-spot-unrestrict-everybody-lore: "&7Everybody may do everything\n&7with spots again."
   menu-admin-spot-unrestrict-lore: "&7{player} may do everything\n&7with spots again."
   menu-admin-spots: "&aSpots of everybody"
   menu-admin-spots-actions: "&eClick: his spots"
   menu-admin-spots-count: "&7Spots: &f{count}&7, public: &f{public}&7, shared: &f{shared}"
   menu-admin-spots-empty: "&7Nobody has spots"
   menu-admin-spots-empty-lore: "&7Players show up here once\n&7they save a spot."
-  menu-admin-spots-free: "&7No restrictions"
+  menu-admin-spots-everybody-actions: "&eClick: restrict"
+  menu-admin-spots-everybody-lore: "&7Restrict spots for every player\n&7at once, but those with\n&7camplugin.spotadmin.bypass"
   menu-admin-spots-lore: "&7Look at the spots of a player,\n&7take them down or delete them,\n&7and restrict what he may do."
   menu-admin-spots-none: "&7No spots"
   menu-admin-spots-none-lore: "&7He has no spots (any more)."
   menu-admin-spots-of-title: "&8Spots of {player}"
-  menu-admin-spots-restricted: "&cRestricted: {ban}"
   menu-admin-spots-title: "&8Spots: players"
   menu-admin-stats: "&bStatistics of others"
   menu-admin-stats-actions: "&eClick: in the chat"
@@ -314,6 +323,32 @@ messages:
   menu-admin-stop-none-lore: "&7There is no cam mode to end."
   menu-admin-target-title: "&8{player}"
   menu-admin-title: "&8Cam admin"
+  # The admin page of the tours (camplugin.touradmin): menu-admin-tours-... the list of the players, everybody first
+  # (-everybody-lore), under each whether he shows others round ({count} guests) or follows a tour ({player} is the
+  # guide); menu-admin-tour-... the page that restricts one, with the buttons -lead and -join.
+  menu-admin-tour-restrict-change-confirm: "&4Change the restriction"
+  menu-admin-tour-restrict-change-title: "&8Change the tour restriction of {player}"
+  menu-admin-tour-restrict-confirm: "&4Restrict"
+  menu-admin-tour-restrict-confirm-lore: "&7{player}: {ban}"
+  menu-admin-tour-restrict-join: "&bTaking part"
+  menu-admin-tour-restrict-join-lore: "&7Accepting invitations,\n&7coming along on tours"
+  menu-admin-tour-restrict-lead: "&6Leading tours"
+  menu-admin-tour-restrict-lead-lore: "&7Inviting players to his tour,\n&7which starts it"
+  menu-admin-tour-restrict-nothing: "&7Nothing picked"
+  menu-admin-tour-restrict-nothing-lore: "&7Pick at least one thing\n&7he may not do."
+  menu-admin-tour-restrict-reason-question: "&eType in the chat why the tours of {player} are restricted, or {cancel}."
+  menu-admin-tour-restrict-title: "&8Restrict the tours of {player}"
+  menu-admin-tour-unrestrict: "&aLift the restriction"
+  menu-admin-tour-unrestrict-everybody-lore: "&7Everybody may lead tours and\n&7take part in them again."
+  menu-admin-tour-unrestrict-lore: "&7{player} may lead tours and\n&7take part in them again."
+  menu-admin-tours: "&6Tours"
+  menu-admin-tours-actions: "&eClick: restrict"
+  menu-admin-tours-everybody-lore: "&7Restrict tours for every player\n&7at once, but those with\n&7camplugin.touradmin.bypass"
+  menu-admin-tours-following: "&7On the tour of {player}"
+  menu-admin-tours-guiding: "&7Showing {count} round"
+  menu-admin-tours-lore: "&7Keep players, or everybody,\n&7from leading tours or\n&7taking part in them."
+  menu-admin-tours-none: "&7On no tour"
+  menu-admin-tours-title: "&8Tours: players"
   menu-admin-trails: "&aFlights"
   menu-admin-trails-actions: "&eClick: his flights"
   menu-admin-trails-count: "&7{count} flights kept, the last at {date}"
@@ -397,13 +432,16 @@ messages:
   menu-spot-views-hint: "&8One view per player every {minutes} min"
   menu-spot-visit-action: "&bShift-click: visit it, from wherever you are"
   menu-spots: "&aSpots"
+  menu-spots-disabled: "&7Looking at these is switched off"
+  menu-spots-disabled-lore: "&7It is off for everybody\n&7{time}{reason}."
   menu-spots-empty-private: "&7No spots yet"
   menu-spots-empty-private-lore: "&7Save one with the book\n&7on the right."
   menu-spots-empty-public: "&7No public spots yet"
   menu-spots-empty-public-lore: "&7Right-click the book on the right\n&7to save a public one."
   menu-spots-empty-shared: "&7Nothing shared with you"
   menu-spots-empty-shared-lore: "&7What others offer you\n&7shows up here."
-  # In place of the spots of a tab a restriction keeps him from looking at ({time} and {reason} as with /cam ban).
+  # In place of the spots of a tab a restriction keeps him from looking at ({time} and {reason} as with /cam ban);
+  # menu-spots-disabled when it is the one of everybody.
   menu-spots-lore: "&7Your own spots, the public ones\n&7and those shared with you."
   menu-spots-offers: "&eNew, offered to you: {count}"
   menu-spots-restricted: "&7Sorry, you can't look at these"
@@ -451,15 +489,18 @@ messages:
   menu-to-spot-owners: "&7« Back"
   menu-to-spots-of: "&7« Back"
   menu-to-target: "&7« Back"
+  menu-to-tour-players: "&7« Back"
   menu-to-trails: "&7« Back"
   menu-to-main: "&7« Back"
   menu-to-spots: "&7« Back to the spots"
   menu-tour: "&aTour"
   menu-tour-candidate: "&f{player}"
+  menu-tour-candidate-disabled-lore: "&cYou can't invite him: taking\n&cpart in tours is switched off"
   menu-tour-candidate-full-lore: "&cYour tour is full.\n&7Guests at most: {max}"
   menu-tour-candidate-invited-lore: "&eInvited, no answer yet.\n&7Click: invite again"
   menu-tour-candidate-lore: "&7In cam mode, {blocks} blocks away.\n&eClick: invite"
   menu-tour-candidate-outside-lore: "&7Not in cam mode, {blocks} blocks away.\n&7Cam mode starts where they stand\n&7once they accept.\n&eClick: invite"
+  menu-tour-candidate-restricted-lore: "&cYou can't invite him:\n&che is restricted from tours"
   menu-tour-empty: "&7Nobody to invite"
   # {start} = tour.start-distance, {radius} = tour.radius.
   menu-tour-empty-lore: "&7Players on no tour show up here\n&7when they are close to your camera:\n&7- without cam mode: within {start} blocks\n&7- in cam mode: within {radius} blocks"
@@ -478,6 +519,14 @@ messages:
   menu-tour-invitation: "&e{player}"
   menu-tour-invitation-lore: "&7Invites you to a tour.\n&aLeft-click: come along\n&cRight-click: turn down"
   menu-tour-invitations: "&eInvitations for you: {count}"
+  menu-tour-join-disabled: "&7Taking part in tours is switched off"
+  menu-tour-join-disabled-lore: "&7It is off for everybody\n&7{time}{reason}."
+  menu-tour-join-restricted: "&7Sorry, you may not take part in tours"
+  menu-tour-join-restricted-lore: "&7You are restricted\n&7{time}{reason}."
+  menu-tour-lead-disabled: "&7Leading tours is switched off"
+  menu-tour-lead-disabled-lore: "&7It is off for everybody\n&7{time}{reason}."
+  menu-tour-lead-restricted: "&7Sorry, you may not lead tours"
+  menu-tour-lead-restricted-lore: "&7You are restricted\n&7{time}{reason}."
   menu-tour-leave: "&cLeave the tour"
   menu-tour-leave-lore: "&7Your camera stays where it is,\n&7your keys move it again."
   menu-tour-lore: "&7Show others round in cam mode,\n&7or follow someone who does."
@@ -572,14 +621,16 @@ messages:
   # the spot is further than viewpoints.start-distance, {blocks} being by how much.
   spot-accepted: "&aYou accepted {spot}: you find it among the spots shared with you."
   spot-accepted-owner: "&a{player} accepted your spot {spot}."
-  # The moderation of the spots on the admin page: spot-admin-... and spot-restrict-... / spot-unrestrict-done tell the
+  # The moderation of the spots on the admin page: spot-admin-... and spot-restrict-... / spot-unrestrict-... tell the
   # admin ({player} is the owner; spot-admin-teleported: he went there with a right-click, spot-admin-tp-no-world: its
   # world {world} is not loaded), spot-taken-down, spot-deleted-by-admin, spot-restricted-now, -changed and
   # spot-unrestricted-now the owner ({player} is the admin). spot-restricted-<kind>-new and -look answer him when a
   # restriction keeps him from it ({time} and {reason} as with /cam ban): -private-new saving a spot, -public-new making
   # one public, -shared-new sharing one; -private-look jumping to one of his own, -public-look and -shared-look jumping
   # to or visiting one of another, also with /cam resume of a visit. {what} lists spot-restriction-<kind>-no-new or
-  # -no-look of each kind, joined by spot-restriction-separator.
+  # -no-look of each kind, joined by spot-restriction-separator. The restriction of everybody: spot-disabled-<kind>-...
+  # in place of spot-restricted-<kind>-..., spot-disabled-now, -changed and spot-enabled-now to every player but those
+  # with camplugin.spotadmin.bypass.
   spot-admin-deleted: "&aSpot {spot} of {player} deleted."
   spot-admin-teleported: "&aYou are at spot {spot} of {player}."
   spot-admin-took-down: "&aSpot {spot} of {player} is private now."
@@ -607,6 +658,15 @@ messages:
   spot-declined-owner: "&e{player} turned down your spot {spot}."
   spot-deleted: "&aSpot {spot} deleted."
   spot-deleted-by-admin: "&c{player} deleted your spot {spot}."
+  spot-disabled-changed: "&e{player} changed what is switched off of spots for everybody: {what} {time}{reason}."
+  spot-disabled-now: "&c{player} switched spots off for everybody: {what} {time}{reason}."
+  spot-disabled-private-look: "&cJumping to your own spots is switched off {time}{reason}."
+  spot-disabled-private-new: "&cSaving new spots is switched off {time}{reason}."
+  spot-disabled-public-look: "&cLooking at public spots is switched off {time}{reason}."
+  spot-disabled-public-new: "&cMaking spots public is switched off {time}{reason}."
+  spot-disabled-shared-look: "&cLooking at shared spots is switched off {time}{reason}."
+  spot-disabled-shared-new: "&cSharing spots is switched off {time}{reason}."
+  spot-enabled-now: "&a{player} switched spots on again for everybody."
   spot-full: "&cYou have {max} spots already, the most there may be. Delete one first."
   spot-jumped: "&aAt spot {spot}"
   spot-like-own: "&cYou cannot like your own spot."
@@ -637,6 +697,8 @@ messages:
   spot-removed: "&eSpot {spot} is no longer among the spots shared with you."
   spot-restrict-changed: "&aThe restriction of {player} is changed: {what} {time}{reason}."
   spot-restrict-done: "&a{player} is restricted: {what} {time}{reason}."
+  spot-restrict-everybody-changed: "&aThe restriction of everybody is changed: {what} {time}{reason}."
+  spot-restrict-everybody-done: "&aSpots are restricted for everybody: {what} {time}{reason}."
   spot-restricted-changed: "&e{player} changed the restriction of your spots: {what} {time}{reason}."
   spot-restricted-now: "&c{player} restricted your spots: {what} {time}{reason}."
   spot-restricted-private-look: "&cYou may not look at your own spots {time}{reason}."
@@ -666,6 +728,7 @@ messages:
   spot-unknown: "&cYou have no spot called {spot}."
   spot-unliked: "&7You no longer like {spot}. It has {likes} likes."
   spot-unrestrict-done: "&a{player} may do everything with spots again."
+  spot-unrestrict-everybody-done: "&aEverybody may do everything with spots again."
   spot-unrestricted-now: "&a{player} lifted the restriction of your spots."
   spot-unshared: "&aSpot {spot} is no longer shared with {player}."
   spot-unshared-all: "&aSpot {spot} is private again."
@@ -717,6 +780,13 @@ messages:
   # /cam tour view, tour-view-unavailable says that the guide's view does not work on the server (tour.guide-view).
   # tour-full and tour-full-guide: the tour has tour.max-guests ({max}) already. tour-body-locked: a guest clicked or hit
   # his own body, which he cannot use while he follows the guide.
+  # The moderation of the tours on the admin page (camplugin.touradmin): tour-restrict-... / tour-unrestrict-... tell
+  # the admin ({player} is the player), tour-restricted-now, -changed and tour-unrestricted-now the player ({player} is
+  # the admin). tour-restricted-lead and -join answer him when a restriction keeps him from inviting or accepting
+  # ({time} and {reason} as with /cam ban), tour-restricted-guest the guide who would invite him. {what} lists
+  # tour-restriction-lead and -join, joined by tour-restriction-separator. The restriction of everybody:
+  # tour-disabled-... in place of tour-restricted-..., tour-disabled-now, -changed and tour-enabled-now to every player
+  # but those with camplugin.touradmin.bypass.
   tour-already-guest: "&e{player} is on your tour already."
   tour-body-locked: "&cYou follow the tour of {player}: leave it first to use your body."
   tour-busy: "&cYou are on a tour already."
@@ -727,6 +797,12 @@ messages:
   tour-button-decline-hover: "&7Turn the tour of {player} down"
   tour-declined: "&eYou turned down the tour of {player}."
   tour-declined-guide: "&e{player} turned your tour down."
+  tour-disabled-changed: "&e{player} changed what is switched off of tours for everybody: {what} {time}{reason}."
+  tour-disabled-guest: "&cYou can't invite {player}: taking part in tours is switched off."
+  tour-disabled-join: "&cTaking part in tours is switched off {time}{reason}."
+  tour-disabled-lead: "&cLeading tours is switched off {time}{reason}."
+  tour-disabled-now: "&c{player} switched tours off for everybody: {what} {time}{reason}."
+  tour-enabled-now: "&a{player} switched tours on again for everybody."
   tour-ended: "&e{player} ended the tour."
   tour-ended-guide: "&eYour tour is over."
   tour-full: "&cThe tour of {player} is full right now."
@@ -754,11 +830,26 @@ messages:
   tour-reach-lost-guide: "&c{player} could not follow you for too long and is off your tour."
   tour-reach-warning: "&c{player} is out of your reach: the tour ends in {time}"
   tour-reach-warning-guide: "&c{players} cannot follow: the tour ends for them in {time}"
+  tour-restrict-changed: "&aThe tour restriction of {player} is changed: {what} {time}{reason}."
+  tour-restrict-done: "&a{player} is restricted from tours: {what} {time}{reason}."
+  tour-restrict-everybody-changed: "&aThe tour restriction of everybody is changed: {what} {time}{reason}."
+  tour-restrict-everybody-done: "&aTours are restricted for everybody: {what} {time}{reason}."
+  tour-restricted-changed: "&e{player} changed the restriction of your tours: {what} {time}{reason}."
+  tour-restricted-guest: "&cYou can't invite {player}: he is restricted from tours."
+  tour-restricted-join: "&cYou may not take part in tours {time}{reason}."
+  tour-restricted-lead: "&cYou may not lead tours {time}{reason}."
+  tour-restricted-now: "&c{player} restricted your tours: {what} {time}{reason}."
+  tour-restriction-join: "no taking part"
+  tour-restriction-lead: "no leading"
+  tour-restriction-separator: ", "
   tour-self: "&cYou cannot invite yourself."
   tour-start-too-far: "&cYou are {blocks} blocks too far away."
   tour-too-far: "&c{player} is too far away."
   tour-too-far-guest: "&cYou are too far away."
   tour-unknown-player: "&cNobody called {player} is online."
+  tour-unrestrict-done: "&a{player} may lead tours and take part in them again."
+  tour-unrestrict-everybody-done: "&aEverybody may lead tours and take part in them again."
+  tour-unrestricted-now: "&a{player} lifted the restriction of your tours."
   tour-usage: "&eUse /cam tour invite|accept|decline|kick <player>, /cam tour leave, /cam tour end or /cam tour view."
   # /cam trail: {number} which of the kept flights (1 the newest), {distance} in blocks, {time} how long the flight
   # took, {when} trail-flying or trail-ago (with {time} how long ago it ended), {place} as trail-place has it, {world}
@@ -1193,6 +1284,7 @@ message-settings:
   flight-speed: true
   menu-admin-ban-reason-question: true
   menu-admin-spot-restrict-reason-question: true
+  menu-admin-tour-restrict-reason-question: true
   menu-answer-cancelled: true
   menu-features-off: true
   menu-off: true
@@ -1252,6 +1344,15 @@ message-settings:
   spot-declined-owner: true
   spot-deleted: true
   spot-deleted-by-admin: true
+  spot-disabled-changed: true
+  spot-disabled-now: true
+  spot-disabled-private-look: true
+  spot-disabled-private-new: true
+  spot-disabled-public-look: true
+  spot-disabled-public-new: true
+  spot-disabled-shared-look: true
+  spot-disabled-shared-new: true
+  spot-enabled-now: true
   spot-full: true
   spot-jumped: true
   spot-like-own: true
@@ -1282,6 +1383,8 @@ message-settings:
   spot-removed: true
   spot-restrict-changed: true
   spot-restrict-done: true
+  spot-restrict-everybody-changed: true
+  spot-restrict-everybody-done: true
   spot-restricted-changed: true
   spot-restricted-now: true
   spot-restricted-private-look: true
@@ -1303,6 +1406,7 @@ message-settings:
   spot-unknown: true
   spot-unliked: true
   spot-unrestrict-done: true
+  spot-unrestrict-everybody-done: true
   spot-unrestricted-now: true
   spot-unshared: true
   spot-unshared-all: true
@@ -1350,6 +1454,12 @@ message-settings:
   tour-button-decline: true
   tour-declined: true
   tour-declined-guide: true
+  tour-disabled-changed: true
+  tour-disabled-guest: true
+  tour-disabled-join: true
+  tour-disabled-lead: true
+  tour-disabled-now: true
+  tour-enabled-now: true
   tour-ended: true
   tour-ended-guide: true
   tour-full: true
@@ -1377,11 +1487,23 @@ message-settings:
   tour-reach-lost-guide: true
   tour-reach-warning: true
   tour-reach-warning-guide: true
+  tour-restrict-changed: true
+  tour-restrict-done: true
+  tour-restrict-everybody-changed: true
+  tour-restrict-everybody-done: true
+  tour-restricted-changed: true
+  tour-restricted-guest: true
+  tour-restricted-join: true
+  tour-restricted-lead: true
+  tour-restricted-now: true
   tour-self: true
   tour-start-too-far: true
   tour-too-far: true
   tour-too-far-guest: true
   tour-unknown-player: true
+  tour-unrestrict-done: true
+  tour-unrestrict-everybody-done: true
+  tour-unrestricted-now: true
   tour-usage: true
   tour-view-free: true
   tour-view-guide: true

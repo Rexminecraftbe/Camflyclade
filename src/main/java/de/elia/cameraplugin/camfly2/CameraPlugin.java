@@ -76,6 +76,8 @@ import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import de.elia.cameraplugin.timelimit.EndWarning;
 import de.elia.cameraplugin.trail.CamTrail;
 import de.elia.cameraplugin.tour.CamTour;
+import de.elia.cameraplugin.tour.TourBans;
+import de.elia.cameraplugin.tour.TourModeration;
 import de.elia.cameraplugin.visit.CamVisit;
 import de.elia.cameraplugin.visibility.CamVisibility;
 import org.bukkit.Bukkit;
@@ -148,6 +150,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamVisit visit = new CamVisit(this, sharedSpots, jumpCheck);
     private final CamResume resume = new CamResume(this, playerStore, sharedSpots, jumpCheck);
     private final CamTour tour = new CamTour(this);
+    private final TourModeration tourModeration = new TourModeration(this, new TourBans(this, log));
     private final CamScoutGuard scoutGuard = new CamScoutGuard(this);
     private final CamMenu menu = new CamMenu(this);
     private final CamPhotoMode photoMode = new CamPhotoMode(this);
@@ -203,6 +206,7 @@ public final class CameraPlugin extends JavaPlugin {
         spotModeration.reload();
         spots.indexOwners();
         tour.load(log);
+        tourModeration.reload();
         bodySpawner = new BodySpawner(this, settings, messages, log, cameraPlayers);
         camModeObjective.setUp();
         bodySpawner.removeLeftoverEntities();
@@ -451,6 +455,7 @@ public final class CameraPlugin extends JavaPlugin {
         spotModeration.reload();
         spots.indexOwners();
         tour.load(log);
+        tourModeration.reload();
         return true;
     }
 
@@ -665,6 +670,10 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamTour getTour() {
         return tour;
+    }
+
+    public TourModeration getTourModeration() {
+        return tourModeration;
     }
 
     public CamResume getResume() {
