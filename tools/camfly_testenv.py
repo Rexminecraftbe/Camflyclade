@@ -5099,7 +5099,8 @@ def aussichtspunkt_checks(env, bot):
     wand = f"{_floor(x) + 5} {y} {bz - 3} {_floor(x) + 5} {y + 4} {bz + 3}"
     try:
         FIND.test("Voreingestellt steht viewpoints mit enabled: true, max-per-player: 10 und storage: file da",
-                  re.search(r"(?m)^viewpoints:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*max-per-player:\s*10\s*\n"
+                  re.search(r"(?m)^viewpoints:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*start-distance:\s*16\s*\n"
+                            r"(?:\s*#.*\n)*\s*max-per-player:\s*10\s*\n"
                             r"(?:\s*#.*\n)*\s*storage:\s*file\s*$", ausgeliefert(env)) is not None, "")
         spots_loeschen(bot, "Turm", "Weit", "Mem")
         zeilen = befehl(bot, "/cam spot")
