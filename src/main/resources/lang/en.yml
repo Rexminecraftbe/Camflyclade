@@ -257,6 +257,49 @@ messages:
   menu-admin-players-actions: "&eClick: stop or ban"
   menu-admin-players-lore: "&7End the cam mode of a player,\n&7ban him, change or lift his ban."
   menu-admin-players-title: "&8Players"
+  # The admin page of the spots (camplugin.spotadmin): menu-admin-spots-... is the list of the players who have spots
+  # ({count} spots, {public} of them public, {shared} shared by name), menu-admin-spots-restricted what keeps one
+  # ({ban}: {what} as spot-restriction-..., the time as ban-for or ban-for-good, the reason as ban-reason);
+  # menu-admin-spot-... the page of one player's spots and the page that restricts them, with its three switches
+  # (-create, -public, -share), -kept or -free under each.
+  menu-admin-spot-actions: "&cShift-click: delete"
+  menu-admin-spot-actions-shared: "&eLeft-click: take it down -\n&eprivate again\n&cShift-click: delete"
+  menu-admin-spot-private: "&7Private"
+  menu-admin-spot-restrict: "&cRestrict"
+  menu-admin-spot-restrict-change: "&cChange the restriction"
+  menu-admin-spot-restrict-change-confirm: "&4Change the restriction"
+  menu-admin-spot-restrict-change-lore: "&7Restricted now: change what,\n&7how long and why, or lift it."
+  menu-admin-spot-restrict-change-title: "&8Change the restriction of {player}"
+  menu-admin-spot-restrict-confirm: "&4Restrict"
+  menu-admin-spot-restrict-confirm-lore: "&7{player}: {ban}"
+  menu-admin-spot-restrict-create: "&fNew spots"
+  menu-admin-spot-restrict-create-lore: "&7Saving new spots"
+  menu-admin-spot-restrict-free: "&aAllowed"
+  menu-admin-spot-restrict-kept: "&cNot allowed"
+  menu-admin-spot-restrict-lore: "&7Keep him from saving spots,\n&7making them public or sharing them."
+  menu-admin-spot-restrict-nothing: "&7Nothing picked"
+  menu-admin-spot-restrict-nothing-lore: "&7Pick at least one thing\n&7he may not do."
+  menu-admin-spot-restrict-public: "&eMaking public"
+  menu-admin-spot-restrict-public-lore: "&7Making spots public"
+  menu-admin-spot-restrict-reason-question: "&eType in the chat why the spots of {player} are restricted, or {cancel}."
+  menu-admin-spot-restrict-share: "&bSharing"
+  menu-admin-spot-restrict-share-lore: "&7Sharing spots with players"
+  menu-admin-spot-restrict-title: "&8Restrict the spots of {player}"
+  menu-admin-spot-restrict-toggle: "&eClick: switch"
+  menu-admin-spot-unrestrict: "&aLift the restriction"
+  menu-admin-spot-unrestrict-lore: "&7{player} may do everything\n&7with spots again."
+  menu-admin-spots: "&aSpots of everybody"
+  menu-admin-spots-actions: "&eClick: his spots"
+  menu-admin-spots-count: "&7Spots: &f{count}&7, public: &f{public}&7, shared: &f{shared}"
+  menu-admin-spots-empty: "&7Nobody has spots"
+  menu-admin-spots-empty-lore: "&7Players show up here once\n&7they save a spot."
+  menu-admin-spots-free: "&7No restrictions"
+  menu-admin-spots-lore: "&7Look at the spots of a player,\n&7take them down or delete them,\n&7and restrict what he may do."
+  menu-admin-spots-none: "&7No spots"
+  menu-admin-spots-none-lore: "&7He has no spots (any more)."
+  menu-admin-spots-of-title: "&8Spots of {player}"
+  menu-admin-spots-restricted: "&cRestricted: {ban}"
+  menu-admin-spots-title: "&8Spots: players"
   menu-admin-stats: "&bStatistics of others"
   menu-admin-stats-actions: "&eClick: in the chat"
   menu-admin-stats-lore: "&7Of the players online."
@@ -400,6 +443,8 @@ messages:
   menu-title: "&8Cam"
   menu-to-admin: "&7« Back"
   menu-to-players: "&7« Back"
+  menu-to-spot-owners: "&7« Back"
+  menu-to-spots-of: "&7« Back"
   menu-to-target: "&7« Back"
   menu-to-trails: "&7« Back"
   menu-to-main: "&7« Back"
@@ -522,6 +567,13 @@ messages:
   # the spot is further than viewpoints.start-distance, {blocks} being by how much.
   spot-accepted: "&aYou accepted {spot}: you find it among the spots shared with you."
   spot-accepted-owner: "&a{player} accepted your spot {spot}."
+  # The moderation of the spots on the admin page: spot-admin-... and spot-restrict-... / spot-unrestrict-done tell the
+  # admin ({player} is the owner), spot-taken-down, spot-deleted-by-admin, spot-restricted-now, -changed and
+  # spot-unrestricted-now the owner ({player} is the admin). spot-restricted-create, -public and -share answer him when
+  # a restriction keeps him from it ({time} and {reason} as with /cam ban); {what} lists spot-restriction-create,
+  # -public and -share, joined by spot-restriction-separator.
+  spot-admin-deleted: "&aSpot {spot} of {player} deleted."
+  spot-admin-took-down: "&aSpot {spot} of {player} is private now."
   spot-area: "&cSpot {spot} lies in {area}, cam mode is not allowed there."
   spot-bad-name: "&cA spot name has 1 to 16 letters, digits, - or _, and is not set, delete, list, share, unshare, accept, decline or like."
   spot-blocked: "&cSomething has been built at spot {spot} since, the camera cannot go there."
@@ -544,6 +596,7 @@ messages:
   spot-declined: "&eYou turned down {spot}."
   spot-declined-owner: "&e{player} turned down your spot {spot}."
   spot-deleted: "&aSpot {spot} deleted."
+  spot-deleted-by-admin: "&c{player} deleted your spot {spot}."
   spot-full: "&cYou have {max} spots already, the most there may be. Delete one first."
   spot-jumped: "&aAt spot {spot}"
   spot-like-own: "&cYou cannot like your own spot."
@@ -572,6 +625,17 @@ messages:
   spot-other-world: "&cSpot {spot} is not in the world of your body."
   spot-public-unknown: "&cThere is no public spot called {spot}."
   spot-removed: "&eSpot {spot} is no longer among the spots shared with you."
+  spot-restrict-changed: "&aThe restriction of {player} is changed: {what} {time}{reason}."
+  spot-restrict-done: "&a{player} is restricted: {what} {time}{reason}."
+  spot-restricted-changed: "&e{player} changed the restriction of your spots: {what} {time}{reason}."
+  spot-restricted-create: "&cYou may not save new spots {time}{reason}."
+  spot-restricted-now: "&c{player} restricted your spots: {what} {time}{reason}."
+  spot-restricted-public: "&cYou may not make spots public {time}{reason}."
+  spot-restricted-share: "&cYou may not share spots {time}{reason}."
+  spot-restriction-create: "no new spots"
+  spot-restriction-public: "nothing public"
+  spot-restriction-separator: ", "
+  spot-restriction-share: "no sharing"
   spot-saved: "&aSpot {spot} saved here, looking the way you look now."
   spot-share-everybody: "everybody"
   spot-share-off: "&cSharing spots is switched off."
@@ -581,9 +645,12 @@ messages:
   spot-shared-already: "&e{player} has spot {spot} already."
   spot-shared-unknown: "&cNobody shares a spot called {spot} with you."
   spot-start-too-far: "&cYou are {blocks} blocks too far away."
+  spot-taken-down: "&c{player} took your spot {spot} down: it is private now."
   spot-too-far: "&cYou are too far away."
   spot-unknown: "&cYou have no spot called {spot}."
   spot-unliked: "&7You no longer like {spot}. It has {likes} likes."
+  spot-unrestrict-done: "&a{player} may do everything with spots again."
+  spot-unrestricted-now: "&a{player} lifted the restriction of your spots."
   spot-unshared: "&aSpot {spot} is no longer shared with {player}."
   spot-unshared-all: "&aSpot {spot} is private again."
   spot-usage: "&eUse /cam spot set <name>, /cam spot <name>, /cam spot delete <name>, /cam spot share <name> <player|all>, /cam spot unshare <name> <player|all>, /cam spot accept|decline|like <player>:<spot> or /cam spot list."
@@ -1109,6 +1176,7 @@ message-settings:
   enabled: true
   flight-speed: true
   menu-admin-ban-reason-question: true
+  menu-admin-spot-restrict-reason-question: true
   menu-answer-cancelled: true
   menu-features-off: true
   menu-off: true
@@ -1149,6 +1217,8 @@ message-settings:
   signal-lost: true
   spot-accepted: true
   spot-accepted-owner: true
+  spot-admin-deleted: true
+  spot-admin-took-down: true
   spot-area: true
   spot-bad-name: true
   spot-blocked: true
@@ -1163,6 +1233,7 @@ message-settings:
   spot-declined: true
   spot-declined-owner: true
   spot-deleted: true
+  spot-deleted-by-admin: true
   spot-full: true
   spot-jumped: true
   spot-like-own: true
@@ -1191,6 +1262,13 @@ message-settings:
   spot-other-world: true
   spot-public-unknown: true
   spot-removed: true
+  spot-restrict-changed: true
+  spot-restrict-done: true
+  spot-restricted-changed: true
+  spot-restricted-create: true
+  spot-restricted-now: true
+  spot-restricted-public: true
+  spot-restricted-share: true
   spot-saved: true
   spot-share-off: true
   spot-share-self: true
@@ -1199,9 +1277,12 @@ message-settings:
   spot-shared-already: true
   spot-shared-unknown: true
   spot-start-too-far: true
+  spot-taken-down: true
   spot-too-far: true
   spot-unknown: true
   spot-unliked: true
+  spot-unrestrict-done: true
+  spot-unrestricted-now: true
   spot-unshared: true
   spot-unshared-all: true
   spot-usage: true

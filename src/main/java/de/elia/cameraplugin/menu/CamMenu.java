@@ -15,6 +15,8 @@ import de.elia.cameraplugin.trail.CamTrail;
 import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.spot.Share;
 import de.elia.cameraplugin.spot.Spot;
+import de.elia.cameraplugin.spot.SpotBans;
+import de.elia.cameraplugin.spot.SpotModeration;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -53,6 +55,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.LongConsumer;
 import java.util.function.ToIntFunction;
 import java.util.function.ToLongFunction;
 
@@ -88,6 +91,8 @@ public final class CamMenu implements Listener {
     /** The sizes of the windows: three rows for the main page and the small ones, six for the lists. */
     private static final int SMALL = 27;
     private static final int LIST = 54;
+    /** The size of the page of a restriction of the spots: four rows, for what it keeps him from as well. */
+    private static final int MEDIUM = 36;
 
     /** The slots of a list page that hold entries; the last row holds the buttons to go on. */
     private static final int ENTRIES = 45;
@@ -135,6 +140,9 @@ public final class CamMenu implements Listener {
 
     /** The bans being set up on their page, by the id of the admin. */
     private final Map<UUID, BanDraft> drafts = new HashMap<>();
+
+    /** The restrictions of the spots being set up on their page, by the id of the admin. */
+    private final Map<UUID, SpotBanDraft> spotDrafts = new HashMap<>();
 
     /** How each player has the tabs of the spots sorted, while he is online. */
     private final Map<UUID, Map<SpotTab, SpotSort>> spotSorts = new HashMap<>();
@@ -240,6 +248,30 @@ public final class CamMenu implements Listener {
 
         BanDraft(Target target, boolean change) {
             this.target = target;
+            this.change = change;
+        }
+    }
+
+    /**
+     * A restriction of the spots of a player being set up on its page: whom,
+     * what he may not do, for how long and why - a new one, or the one he
+     * has already, to be changed.
+     */
+    private static final class SpotBanDraft {
+        final UUID id;
+        final String name;
+        /** Whether something keeps him already, and the page changes it. */
+        final boolean change;
+        boolean create;
+        boolean publish;
+        boolean share;
+        /** How long, in minutes; 0 for good. */
+        long minutes;
+        String reason = "";
+
+        SpotBanDraft(UUID id, String name, boolean change) {
+            this.id = id;
+            this.name = name;
             this.change = change;
         }
     }
@@ -1111,7 +1143,7 @@ public final class CamMenu implements Listener {
     /** Whether there is anything on the admin page for him: one of its parts he has the right of. */
     private boolean hasAdminPage(Player player) {
         return plugin.getCamList().mayUse(player) || viewsOthers(player) || managesPlayers(player)
-                || plugin.getTrail().mayUse(player);
+                || plugin.getTrail().mayUse(player) || plugin.getSpotModeration().mayUse(player);
     }
 
     private boolean viewsOthers(Player player) {
@@ -1125,8 +1157,8 @@ public final class CamMenu implements Listener {
 
     /**
      * The admin page, for what admins do with commands otherwise: who is in
-     * camera mode, the players to stop and to ban, the statistics of others
-     * and the flights of {@code /cam trail} - each where
+     * camera mode, the players to stop and to ban, the statistics of others,
+     * the flights of {@code /cam trail} and the spots of everybody - each where
      * {@code menu.admin-buttons} puts it, only for whoever has its right and
      * while it is switched on.
      */
@@ -1148,6 +1180,9 @@ public final class CamMenu implements Listener {
         }
         if (plugin.getTrail().mayUse(player)) {
             adminButton(page, AdminButton.TRAILS, "menu-admin-trails", click -> later(() -> openTrails(player, 0)));
+        }
+        if (plugin.getSpotModeration().mayUse(player)) {
+            adminButton(page, AdminButton.SPOTS, "menu-admin-spots", click -> later(() -> openSpotOwners(player, 0)));
         }
         adminButton(page, AdminButton.BACK, "menu-to-main", click -> later(() -> openMain(player)));
         player.openInventory(inventory);
@@ -1433,9 +1468,12 @@ public final class CamMenu implements Listener {
                     openBan(player);
                 }));
         String time = banTime(draft.minutes);
-        banUnit(player, page, 12, "menu-admin-ban-days", draft, DAY, draft.minutes / DAY, time);
-        banUnit(player, page, 13, "menu-admin-ban-hours", draft, HOUR, draft.minutes % DAY / HOUR, time);
-        banUnit(player, page, 14, "menu-admin-ban-minutes", draft, 1L, draft.minutes % HOUR, time);
+        LongConsumer set = minutes -> draft.minutes = minutes;
+        Runnable reopen = () -> openBan(player);
+        banUnit(page, 12, "menu-admin-ban-days", draft.minutes, set, reopen, DAY, draft.minutes / DAY, time);
+        banUnit(page, 13, "menu-admin-ban-hours", draft.minutes, set, reopen, HOUR, draft.minutes % DAY / HOUR,
+                time);
+        banUnit(page, 14, "menu-admin-ban-minutes", draft.minutes, set, reopen, 1L, draft.minutes % HOUR, time);
         if (draft.change) {
             put(page, 16, Material.MILK_BUCKET, messages.getMessage("menu-admin-unban"),
                     lines(messages.getMessage("menu-admin-unban-lore").replace("{player}", target.name())),
@@ -1487,12 +1525,15 @@ public final class CamMenu implements Listener {
      * them. Taking away stops short of nothing - nothing would be for good -,
      * adding at the longest ban the buttons give.
      *
-     * @param unit   what one of them is, in minutes
-     * @param amount how many of them the ban has now
-     * @param time   how long it lasts altogether, as {@link #banTime} has it
+     * @param minutes how long the ban lasts now, in minutes, 0 for good
+     * @param set     what takes a new length
+     * @param reopen  what shows the page anew afterwards
+     * @param unit    what one of them is, in minutes
+     * @param amount  how many of them the ban has now
+     * @param time    how long it lasts altogether, as {@link #banTime} has it
      */
-    private void banUnit(Player player, Page page, int slot, String key, BanDraft draft, long unit, long amount,
-                         String time) {
+    private void banUnit(Page page, int slot, String key, long minutes, LongConsumer set, Runnable reopen, long unit,
+                         long amount, String time) {
         int shiftStep = settings.getBanShiftStep();
         List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-ban-time-lore")
                 .replace("{time}", time)));
@@ -1501,11 +1542,11 @@ public final class CamMenu implements Listener {
         put(page, slot, item(Material.CLOCK, messages.getMessage(key).replace("{amount}", String.valueOf(amount)), lore),
                 click -> later(() -> {
                     long step = unit * (click.isShiftClick() ? shiftStep : 1);
-                    long minutes = click.isRightClick() ? draft.minutes - step : draft.minutes + step;
-                    if (click.isRightClick() ? minutes >= 1L : minutes <= MAX_BAN_MINUTES) {
-                        draft.minutes = minutes;
+                    long next = click.isRightClick() ? minutes - step : minutes + step;
+                    if (click.isRightClick() ? next >= 1L : next <= MAX_BAN_MINUTES) {
+                        set.accept(next);
                     }
-                    openBan(player);
+                    reopen.run();
                 }));
     }
 
@@ -1513,6 +1554,299 @@ public final class CamMenu implements Listener {
     private String banTime(long minutes) {
         return minutes == 0L ? messages.getMessage("ban-for-good")
                 : messages.getMessage("ban-for").replace("{time}", CamTimeLimit.formatDuration(minutes * 60L));
+    }
+
+    // ------------------------------------------------------------ admin: the spots of everybody
+
+    /**
+     * The players who have spots - and those kept from something with spots
+     * who have none -, online or not: under each how many he has, how many
+     * of them are public or shared, and what keeps him. A click shows his
+     * spots.
+     */
+    private void openSpotOwners(Player player, int pageNumber) {
+        SpotModeration moderation = plugin.getSpotModeration();
+        if (!moderation.mayUse(player)) {
+            openAdmin(player);
+            return;
+        }
+        Map<UUID, String> names = new LinkedHashMap<>();
+        Map<UUID, Integer> counts = new HashMap<>();
+        for (CamSpots.Owner owner : plugin.getSpots().owners()) {
+            names.put(owner.id(), owner.name());
+            counts.put(owner.id(), owner.spots());
+        }
+        for (Map.Entry<UUID, SpotBans.Ban> entry : moderation.restricted().entrySet()) {
+            String name = entry.getValue().name();
+            names.putIfAbsent(entry.getKey(), name == null ? entry.getKey().toString() : name);
+        }
+        for (Map.Entry<UUID, String> entry : names.entrySet()) {
+            Player online = Bukkit.getPlayer(entry.getKey());
+            if (online != null) {
+                entry.setValue(online.getName());
+            }
+        }
+        List<Map.Entry<UUID, String>> list = new ArrayList<>(names.entrySet());
+        sortPlayers(player, list, Map.Entry::getValue, Map.Entry::getKey);
+        int pages = Math.max(1, (list.size() + ENTRIES - 1) / ENTRIES);
+        int number = Math.min(Math.max(0, pageNumber), pages - 1);
+        Page page = new Page();
+        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-spots-title"));
+        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < list.size(); slot++) {
+            UUID id = list.get(number * ENTRIES + slot).getKey();
+            String name = list.get(number * ENTRIES + slot).getValue();
+            List<String> lore = spotOwnerLines(id, counts.getOrDefault(id, 0));
+            lore.addAll(lines(messages.getMessage("menu-admin-spots-actions")));
+            put(page, slot, playerItem(id, name, lore, moderation.banOf(id) != null),
+                    click -> later(() -> openSpotsOf(player, id, name, 0)));
+        }
+        if (list.isEmpty()) {
+            put(page, 22, Material.GRAY_DYE, "menu-admin-spots-empty", click -> { });
+        }
+        put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
+        playerSortButton(player, page, () -> openSpotOwners(player, 0));
+        paging(page, number, pages, n -> openSpotOwners(player, n));
+        player.openInventory(inventory);
+    }
+
+    /** How many spots he has, how many of them are public or shared, and what keeps him, as lines under him. */
+    private List<String> spotOwnerLines(UUID id, int count) {
+        int open = 0;
+        int sharedCount = 0;
+        for (Share share : plugin.getSpots().sharesOf(id)) {
+            if (share.isEveryone()) {
+                open++;
+            }
+            if (!share.getPlayers().isEmpty() || !share.getPending().isEmpty()) {
+                sharedCount++;
+            }
+        }
+        List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-spots-count")
+                .replace("{count}", String.valueOf(count)).replace("{public}", String.valueOf(open))
+                .replace("{shared}", String.valueOf(sharedCount))));
+        lore.addAll(restrictionLines(id));
+        return lore;
+    }
+
+    /** What keeps him from what with spots, for how long and why, as lines - or that nothing does. */
+    private List<String> restrictionLines(UUID id) {
+        String text = plugin.getSpotModeration().banText(id);
+        return lines(text == null ? messages.getMessage("menu-admin-spots-free")
+                : messages.getMessage("menu-admin-spots-restricted").replace("{ban}", text));
+    }
+
+    /**
+     * A player as an item, online or not: his head while he is online, a
+     * skull while he is not. It shines while something keeps him - where the
+     * game draws it, never on a head.
+     */
+    private ItemStack playerItem(UUID id, String name, List<String> lore, boolean glint) {
+        String label = messages.getMessage("menu-admin-player").replace("{player}", name);
+        Player online = Bukkit.getPlayer(id);
+        return shine(online != null ? head(online, label, lore) : item(Material.SKELETON_SKULL, label, lore), glint);
+    }
+
+    /**
+     * The spots of one player, online or not, the newest first: under each
+     * where it is, whether it is public, shared or private, and its views. A
+     * click takes a public or shared one down - private again -, shift-click
+     * deletes one. The last row has the button of what keeps him from what
+     * with spots.
+     */
+    private void openSpotsOf(Player player, UUID owner, String name, int pageNumber) {
+        SpotModeration moderation = plugin.getSpotModeration();
+        if (!moderation.mayUse(player)) {
+            openAdmin(player);
+            return;
+        }
+        CamSpots spots = plugin.getSpots();
+        List<Spot> list = new ArrayList<>(spots.spotsOf(owner).values());
+        list.sort(Comparator.comparingLong(Spot::created).reversed()
+                .thenComparing(Spot::name, String.CASE_INSENSITIVE_ORDER));
+        int pages = Math.max(1, (list.size() + ENTRIES - 1) / ENTRIES);
+        int number = Math.min(Math.max(0, pageNumber), pages - 1);
+        Page page = new Page();
+        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-spots-of-title")
+                .replace("{player}", name));
+        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < list.size(); slot++) {
+            Spot spot = list.get(number * ENTRIES + slot);
+            Share share = spots.shareOf(owner, spot.key());
+            boolean open = share != null && share.isEveryone();
+            boolean shared = share != null && (!share.getPlayers().isEmpty() || !share.getPending().isEmpty());
+            List<String> lore = spotLore(owner, spot);
+            if (open) {
+                lore.addAll(lines(messages.getMessage("menu-spot-public-lore")
+                        .replace("{likes}", String.valueOf(share.likes()))));
+            }
+            if (share != null && !share.getPlayers().isEmpty()) {
+                lore.addAll(lines(messages.getMessage("menu-spot-shared-lore")
+                        .replace("{players}", spots.whom(share))));
+            }
+            if (share != null && !share.getPending().isEmpty()) {
+                lore.addAll(lines(messages.getMessage("menu-spot-offered-lore")
+                        .replace("{players}", spots.offeredTo(share))));
+            }
+            if (!open && !shared) {
+                lore.addAll(lines(messages.getMessage("menu-admin-spot-private")));
+            }
+            lore.addAll(lines(messages.getMessage(open || shared ? "menu-admin-spot-actions-shared"
+                    : "menu-admin-spot-actions")));
+            Material icon = open ? Material.GLOBE_BANNER_PATTERN : shared ? Material.MAP : Material.FILLED_MAP;
+            put(page, slot, item(icon, messages.getMessage("menu-spot").replace("{spot}", spot.name()), lore),
+                    click -> {
+                        if (click.isShiftClick()) {
+                            later(() -> {
+                                moderation.delete(player, owner, name, spot);
+                                openSpotsOf(player, owner, name, pageNumber);
+                            });
+                        } else if (click.isLeftClick() && (open || shared)) {
+                            later(() -> {
+                                moderation.takeDown(player, owner, name, spot);
+                                openSpotsOf(player, owner, name, pageNumber);
+                            });
+                        }
+                    });
+        }
+        if (list.isEmpty()) {
+            put(page, 22, Material.GRAY_DYE, "menu-admin-spots-none", click -> { });
+        }
+        put(page, SLOT_BACK, Material.ARROW, "menu-to-spot-owners", click -> later(() -> openSpotOwners(player, 0)));
+        boolean restricted = moderation.banOf(owner) != null;
+        String key = restricted ? "menu-admin-spot-restrict-change" : "menu-admin-spot-restrict";
+        List<String> lore = new ArrayList<>(restrictionLines(owner));
+        lore.addAll(lines(messages.getMessage(key + "-lore")));
+        put(page, SLOT_NEW, shine(item(Material.IRON_BARS, messages.getMessage(key), lore), restricted),
+                click -> later(() -> {
+                    spotDrafts.put(player.getUniqueId(), spotDraft(owner, name));
+                    openSpotBan(player);
+                }));
+        paging(page, number, pages, n -> openSpotsOf(player, owner, name, n));
+        player.openInventory(inventory);
+    }
+
+    /**
+     * A new restriction for him - nothing ticked yet, for good, without a
+     * reason - or the one he has, to be changed: what it keeps him from, the
+     * time it still has, rounded up to whole minutes, and its reason.
+     */
+    private SpotBanDraft spotDraft(UUID id, String name) {
+        SpotBans.Ban now = plugin.getSpotModeration().banOf(id);
+        SpotBanDraft draft = new SpotBanDraft(id, name, now != null);
+        if (now != null) {
+            draft.create = now.create();
+            draft.publish = now.publish();
+            draft.share = now.share();
+            draft.minutes = now.forGood() ? 0L
+                    : Math.max(1L, (now.secondsLeft(System.currentTimeMillis()) + 59L) / 60L);
+            draft.reason = now.reason();
+        }
+        return draft;
+    }
+
+    /**
+     * What a player may not do with spots, before it is set or changed: save
+     * new ones, make them public, share them - each switched on its button -,
+     * for good or for days, hours and minutes, as on the page of a ban, and
+     * why; then the button that sets it. While something keeps him already,
+     * the last row has the button that lifts it.
+     */
+    private void openSpotBan(Player player) {
+        SpotBanDraft draft = spotDrafts.get(player.getUniqueId());
+        SpotModeration moderation = plugin.getSpotModeration();
+        if (draft == null || !moderation.mayUse(player)) {
+            openSpotOwners(player, 0);
+            return;
+        }
+        Page page = new Page();
+        Inventory inventory = create(page, MEDIUM, messages.getMessage(draft.change
+                ? "menu-admin-spot-restrict-change-title" : "menu-admin-spot-restrict-title")
+                .replace("{player}", draft.name));
+        put(page, 4, playerItem(draft.id, draft.name, restrictionLines(draft.id), draft.change), click -> { });
+        restrictToggle(player, page, 11, Material.WRITABLE_BOOK, "create", draft.create, () -> draft.create ^= true);
+        restrictToggle(player, page, 13, Material.GLOBE_BANNER_PATTERN, "public", draft.publish,
+                () -> draft.publish ^= true);
+        restrictToggle(player, page, 15, Material.MAP, "share", draft.share, () -> draft.share ^= true);
+        boolean forGood = draft.minutes == 0L;
+        List<String> foreverLore = forGood ? lines(messages.getMessage("menu-state-current")) : List.of();
+        put(page, 19, shine(item(Material.BEDROCK, messages.getMessage("menu-admin-ban-forever"), foreverLore),
+                forGood), click -> later(() -> {
+                    draft.minutes = 0L;
+                    openSpotBan(player);
+                }));
+        String time = banTime(draft.minutes);
+        LongConsumer set = minutes -> draft.minutes = minutes;
+        Runnable reopen = () -> openSpotBan(player);
+        banUnit(page, 21, "menu-admin-ban-days", draft.minutes, set, reopen, DAY, draft.minutes / DAY, time);
+        banUnit(page, 22, "menu-admin-ban-hours", draft.minutes, set, reopen, HOUR, draft.minutes % DAY / HOUR,
+                time);
+        banUnit(page, 23, "menu-admin-ban-minutes", draft.minutes, set, reopen, 1L, draft.minutes % HOUR, time);
+        String reason = draft.reason.isEmpty() ? messages.getMessage("menu-admin-ban-no-reason") : draft.reason;
+        List<String> reasonLore = new ArrayList<>(lines(messages.getMessage("menu-state").replace("{state}", reason)));
+        reasonLore.addAll(lines(messages.getMessage("menu-admin-ban-reason-actions")));
+        put(page, 25, Material.WRITABLE_BOOK, messages.getMessage("menu-admin-ban-reason"), reasonLore, click -> {
+            if (click.isRightClick()) {
+                later(() -> {
+                    draft.reason = "";
+                    openSpotBan(player);
+                });
+            } else {
+                act(player, () -> ask(player, "menu-admin-spot-restrict-reason-question", answer -> {
+                    draft.reason = answer;
+                    openSpotBan(player);
+                }, "{player}", draft.name));
+            }
+        });
+        if (draft.create || draft.publish || draft.share) {
+            String summary = moderation.whatText(draft.create, draft.publish, draft.share) + " " + time;
+            if (!draft.reason.isEmpty()) {
+                summary += messages.getMessage("ban-reason").replace("{reason}", draft.reason);
+            }
+            put(page, 31, Material.REDSTONE_BLOCK, messages.getMessage(draft.change
+                            ? "menu-admin-spot-restrict-change-confirm" : "menu-admin-spot-restrict-confirm"),
+                    lines(messages.getMessage("menu-admin-spot-restrict-confirm-lore")
+                            .replace("{player}", draft.name).replace("{ban}", summary)),
+                    click -> later(() -> {
+                        spotDrafts.remove(player.getUniqueId());
+                        moderation.ban(player, draft.id, draft.name, draft.create, draft.publish, draft.share,
+                                draft.minutes, draft.reason);
+                        openSpotsOf(player, draft.id, draft.name, 0);
+                    }));
+        } else {
+            put(page, 31, Material.GRAY_DYE, "menu-admin-spot-restrict-nothing", click -> { });
+        }
+        if (draft.change) {
+            put(page, 35, Material.MILK_BUCKET, messages.getMessage("menu-admin-spot-unrestrict"),
+                    lines(messages.getMessage("menu-admin-spot-unrestrict-lore").replace("{player}", draft.name)),
+                    click -> later(() -> {
+                        spotDrafts.remove(player.getUniqueId());
+                        moderation.unban(player, draft.id, draft.name);
+                        openSpotsOf(player, draft.id, draft.name, 0);
+                    }));
+        }
+        put(page, 27, Material.ARROW, "menu-to-spots-of", click -> later(() -> {
+            spotDrafts.remove(player.getUniqueId());
+            openSpotsOf(player, draft.id, draft.name, 0);
+        }));
+        player.openInventory(inventory);
+    }
+
+    /**
+     * One of the buttons of what a restriction keeps him from: whether he
+     * may not do it - then it shines -, and a click that switches it.
+     *
+     * @param what the word of the texts: create, public or share
+     */
+    private void restrictToggle(Player player, Page page, int slot, Material icon, String what, boolean kept,
+                                Runnable flip) {
+        List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-spot-restrict-" + what + "-lore")));
+        lore.addAll(lines(messages.getMessage(kept ? "menu-admin-spot-restrict-kept"
+                : "menu-admin-spot-restrict-free")));
+        lore.addAll(lines(messages.getMessage("menu-admin-spot-restrict-toggle")));
+        put(page, slot, shine(item(icon, messages.getMessage("menu-admin-spot-restrict-" + what), lore), kept),
+                click -> later(() -> {
+                    flip.run();
+                    openSpotBan(player);
+                }));
     }
 
     /** Whether he is in camera mode and whether he is banned, as lines under him. */
@@ -1691,6 +2025,9 @@ public final class CamMenu implements Listener {
      * it. A public one is made public once it is saved.
      */
     private void askName(Player player, boolean makePublic) {
+        if (makePublic && !plugin.getSpotModeration().check(player, SpotModeration.What.PUBLIC)) {
+            return;
+        }
         ask(player, makePublic ? "menu-spot-name-public" : "menu-spot-name", name -> {
             Spot spot = plugin.getSpots().set(player, name);
             if (spot != null && makePublic) {
@@ -1745,6 +2082,7 @@ public final class CamMenu implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         questions.remove(event.getPlayer().getUniqueId());
         drafts.remove(event.getPlayer().getUniqueId());
+        spotDrafts.remove(event.getPlayer().getUniqueId());
         spotSorts.remove(event.getPlayer().getUniqueId());
         playerSorts.remove(event.getPlayer().getUniqueId());
     }

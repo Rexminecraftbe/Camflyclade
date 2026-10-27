@@ -82,6 +82,16 @@ public final class CamSpots {
     private final JumpCheck jumpCheck;
     /** The spots of each player, by {@link Spot#key()}, on {@code storage: memory}. */
     private final Map<UUID, Map<String, Spot>> inMemory = new HashMap<>();
+    /**
+     * Who has spots, with how many: on {@code storage: file} read once from
+     * the files of the players in the background, at the start and after a
+     * reload, see {@link #indexOwners()}, and kept up to date as spots are
+     * saved and deleted - so that the admin page reads no file of everybody
+     * every time it opens.
+     */
+    private final Map<UUID, Owner> owners = new HashMap<>();
+    /** Counts the readings of the files, so that an older one that comes back late is left alone. */
+    private int ownerReadings;
 
     public CamSpots(CameraPlugin plugin, PlayerStore store, SharedSpots shared, SpotViews views,
                     JumpCheck jumpCheck) {
@@ -259,6 +269,9 @@ public final class CamSpots {
         }
         Map<String, Spot> spots = spotsOf(player);
         Spot before = spots.get(Spot.key(name));
+        if (before == null && !plugin.getSpotModeration().check(player, SpotModeration.What.CREATE)) {
+            return null;
+        }
         if (before == null && settings.limitsViewpoints() && spots.size() >= settings.getViewpointsMax()) {
             messages.sendConfiguredMessage(player, "spot-full", "{max}",
                     String.valueOf(settings.getViewpointsMax()));
@@ -275,6 +288,7 @@ public final class CamSpots {
         }
         // Whoever it is shared with finds it where it is now.
         shared.moved(player.getUniqueId(), player.getName(), spot);
+        countOwner(player);
         messages.sendConfiguredMessage(player, before != null ? "spot-moved" : "spot-saved", "{spot}", name);
         return spot;
     }
@@ -296,6 +310,7 @@ public final class CamSpots {
         shared.deleted(player.getUniqueId(), spot.key());
         views.deleted(player.getUniqueId(), spot.key());
         plugin.getVisit().checkVisitors(player.getUniqueId(), spot.key());
+        countOwner(player);
         messages.sendConfiguredMessage(player, "spot-deleted", "{spot}", spot.name());
     }
 
@@ -332,6 +347,9 @@ public final class CamSpots {
      * the menu. One who accepted it already keeps it as it is.
      */
     public void shareWith(Player player, Spot spot, OfflinePlayer other) {
+        if (!plugin.getSpotModeration().check(player, SpotModeration.What.SHARE)) {
+            return;
+        }
         if (other.getUniqueId().equals(player.getUniqueId())) {
             messages.sendConfiguredMessage(player, "spot-share-self");
             return;
@@ -414,6 +432,9 @@ public final class CamSpots {
             return;
         }
         if (everybody) {
+            if (!plugin.getSpotModeration().check(player, SpotModeration.What.PUBLIC)) {
+                return;
+            }
             shared.share(player.getUniqueId(), player.getName(), spot, null, null);
             messages.sendConfiguredMessage(player, "spot-shared-all", "{spot}", spot.name());
         } else {
@@ -807,5 +828,136 @@ public final class CamSpots {
     /** After a reload: on {@code storage: memory} every spot is forgotten. */
     public void onReload() {
         inMemory.clear();
+    }
+
+    // ------------------------------------------------------------ the admin page
+
+    /**
+     * A player who has spots, for the admin page of the spots: his name and
+     * how many he has.
+     */
+    public record Owner(UUID id, String name, int spots) {
+    }
+
+    /**
+     * Reads who has spots, at the start and after a reload: on
+     * {@code storage: file} from every file of a player, in the background;
+     * whoever is online counts with what he has right now.
+     */
+    public void indexOwners() {
+        owners.clear();
+        int reading = ++ownerReadings;
+        if (!inFile()) {
+            return;
+        }
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            Map<UUID, PlayerStore.SpotCount> found = store.countSpots();
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (reading != ownerReadings) {
+                    return;
+                }
+                owners.clear();
+                for (Map.Entry<UUID, PlayerStore.SpotCount> entry : found.entrySet()) {
+                    owners.put(entry.getKey(), new Owner(entry.getKey(), entry.getValue().name(),
+                            entry.getValue().spots()));
+                }
+                for (Player online : Bukkit.getOnlinePlayers()) {
+                    countOwner(online);
+                }
+            });
+        });
+    }
+
+    /** Counts the spots of a player online anew, after he saved or deleted one. */
+    private void countOwner(Player player) {
+        count(player.getUniqueId(), player.getName(), spotsOf(player).size());
+    }
+
+    private void count(UUID id, String name, int spots) {
+        if (spots > 0) {
+            owners.put(id, new Owner(id, name, spots));
+        } else {
+            owners.remove(id);
+        }
+    }
+
+    /** Everybody who has spots, online or not, by name. */
+    public List<Owner> owners() {
+        Map<UUID, Owner> all = new HashMap<>(owners);
+        if (!inFile()) {
+            for (Map.Entry<UUID, Map<String, Spot>> entry : inMemory.entrySet()) {
+                if (!entry.getValue().isEmpty()) {
+                    String name = Bukkit.getOfflinePlayer(entry.getKey()).getName();
+                    all.put(entry.getKey(), new Owner(entry.getKey(), name == null ? entry.getKey().toString() : name,
+                            entry.getValue().size()));
+                }
+            }
+        }
+        List<Owner> list = new ArrayList<>(all.values());
+        list.sort((a, b) -> a.name().compareToIgnoreCase(b.name()));
+        return list;
+    }
+
+    /**
+     * The spots of a player, online or not, by {@link Spot#key()}, for the
+     * admin page: read from his file while he is offline.
+     */
+    public Map<String, Spot> spotsOf(UUID owner) {
+        if (inFile()) {
+            return store.look(owner).getSpots();
+        }
+        return Collections.unmodifiableMap(inMemory.getOrDefault(owner, Map.of()));
+    }
+
+    /** The share of one of his spots, or {@code null} while it is shared with nobody, for the admin page. */
+    public Share shareOf(UUID owner, String key) {
+        return shared.get(owner, key);
+    }
+
+    /** What one player shares, public or by name, for the admin page. */
+    public List<Share> sharesOf(UUID owner) {
+        return shared.of(owner);
+    }
+
+    /**
+     * An admin takes one of his spots down: no longer public, shared with
+     * nobody, offered to nobody. Whoever visits it is sent back.
+     *
+     * @return whether it was shared at all
+     */
+    public boolean takeDown(UUID owner, String key) {
+        if (!shared.takeBack(owner, key)) {
+            return false;
+        }
+        plugin.getVisit().checkVisitors(owner, key);
+        return true;
+    }
+
+    /**
+     * An admin deletes one of his spots, whether he is online or not: out of
+     * his file, shared with nobody, its views gone, and whoever visits it is
+     * sent back.
+     *
+     * @return whether he had it
+     */
+    public boolean deleteOf(UUID owner, String key) {
+        boolean removed;
+        if (inFile()) {
+            removed = store.change(owner, record -> record.removeSpot(key));
+        } else {
+            Map<String, Spot> own = inMemory.get(owner);
+            removed = own != null && own.remove(key) != null;
+        }
+        if (!removed) {
+            return false;
+        }
+        shared.deleted(owner, key);
+        views.deleted(owner, key);
+        plugin.getVisit().checkVisitors(owner, key);
+        Owner before = owners.get(owner);
+        if (before != null) {
+            count(owner, before.name(), spotsOf(owner).size());
+        }
+        return true;
     }
 }

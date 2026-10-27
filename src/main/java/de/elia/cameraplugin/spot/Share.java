@@ -90,6 +90,11 @@ public final class Share {
         boolean offered = pending.remove(player) != null;
         return accepted || offered;
     }
+    /** Takes it back from everybody it was shared with or offered to by name. */
+    void clearPlayers() {
+        players.clear();
+        pending.clear();
+    }
     void addLike(UUID player) { likes.add(player); }
     boolean removeLike(UUID player) { return likes.remove(player); }
     Set<UUID> likers() { return Collections.unmodifiableSet(likes); }

@@ -33,6 +33,7 @@ Alles, was es herunterlaedt, liegt unter --workdir (Standard:
 import argparse
 import contextlib
 import gzip
+import hashlib
 import io
 import json
 import math
@@ -44,6 +45,7 @@ import struct
 import subprocess
 import sys
 import time
+import uuid
 import zipfile
 from pathlib import Path
 
@@ -7513,6 +7515,183 @@ def spotreiter_checks(env, bot):
             FIND.problem(f"Aufraeumen nach dem Test der Reiter: {exc}")
 
 
+def offline_uuid(name):
+    """Die Nummer eines Spielers auf einem Server ohne Anmeldung bei Mojang,
+    wie Java sie bildet: UUID.nameUUIDFromBytes("OfflinePlayer:" + name)."""
+    roh = bytearray(hashlib.md5(("OfflinePlayer:" + name).encode("utf-8")).digest())
+    roh[6] = (roh[6] & 0x0F) | 0x30
+    roh[8] = (roh[8] & 0x3F) | 0x80
+    return str(uuid.UUID(bytes=bytes(roh)))
+
+
+def spotmoderation_checks(env, bot):
+    """menu: die Seite der Punkte auf der Admin-Seite (camplugin.spotadmin).
+
+    Der zweite Spieler setzt drei Punkte: ModA privat, ModB oeffentlich, ModC
+    dem Bot angeboten. Auf der Admin-Seite (Knopf auf 20) steht er unter den
+    Spielern mit Punkten, mit "Spots: 3, public: 1, shared: 1", und ein Klick
+    zeigt seine Punkte: ModA privat, ModB oeffentlich, ModC angeboten. Ein
+    Linksklick nimmt ModB herunter - er ist wieder privat, und der Besitzer
+    erfaehrt es -, ein Umschalt-Klick loescht ModA, auch das erfaehrt er.
+
+    Der Knopf der Einschraenkung (49) oeffnet ihre Seite: "New spots" und
+    "Making public" angewaehlt, fuer immer, bestaetigt - er erfaehrt es,
+    /cam spot set eines neuen Punkts sagt ihm, dass er keine neuen speichern
+    darf, /cam spot share ... all, dass er nichts oeffentlich machen darf;
+    einen Punkt verschieben und teilen darf er weiter. Der Knopf glaenzt
+    danach, und auf seiner Seite hebt der Milcheimer (35) die Einschraenkung
+    auf: er darf wieder speichern.
+
+    Geht er offline, steht er weiter in der Liste, und ein Umschalt-Klick
+    loescht seine Punkte aus seiner Datei.
+    """
+    def fenster(client):
+        return client.call("window_slots", wait=10)
+
+    def klick(client, slot, button=0, mode=0, warten=1.5):
+        client.call("click_window", wait=15, slot=slot, button=button, mode=mode)
+        time.sleep(warten)
+
+    def texte(f):
+        """Der Text jedes Eintrags einer Liste, nach seinem Platz."""
+        slots = f.get("slots", {})
+        return {i: item_text(slots.get(str(i))) for i in range(45) if str(i) in slots}
+
+    def platz(f, anfang):
+        return next((i for i, t in texte(f).items() if t.startswith(anfang)), None)
+
+    def seine_punkte():
+        """Die Admin-Seite der Punkte, und darauf der zweite Spieler."""
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 23)
+        klick(bot, 20)
+        liste = fenster(bot)
+        wo = platz(liste, ZUSCHAUER_NAME)
+        if wo is not None:
+            klick(bot, wo)
+        return liste, fenster(bot)
+
+    if not FIND.test("Cam-Modus ist vor dem Test der Moderation aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    datei = env.server / "plugins" / "CamFly" / "playerdata" / "stats" / f"{offline_uuid(ZUSCHAUER_NAME)}.yml"
+    try:
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Moderation kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 2} {y} {z}", pause=1.0)
+        spots_loeschen(zuschauer, "ModA", "ModB", "ModC", "ModD")
+        for zeile in ("/cam spot set ModA", "/cam spot set ModB", "/cam spot share ModB all", "/cam spot set ModC",
+                      f"/cam spot share ModC {BOT_NAME}"):
+            befehl(zuschauer, zeile, warten=0.8)
+
+        liste, f = seine_punkte()
+        eintrag = texte(liste).get(platz(liste, ZUSCHAUER_NAME), "")
+        FIND.test("Admin-Seite, Punkte (20): der zweite Spieler steht dort, mit seinen Punkten",
+                  "Spots: 3, public: 1, shared: 1" in eintrag and "No restrictions" in eintrag, eintrag)
+        alle = texte(f)
+        a, b, c = (alle.get(platz(f, n), "") for n in ("ModA", "ModB", "ModC"))
+        FIND.test("Ein Klick zeigt seine Punkte: privat, oeffentlich, angeboten",
+                  f"Spots of {ZUSCHAUER_NAME}" in (f.get("title") or "") and "Private" in a
+                  and "Public, 0 likes" in b and f"Offered to: {BOT_NAME}" in c
+                  and "Left-click: take it down" in b and "Shift-click: delete" in a,
+                  f"{f.get('title')} / {a} / {b} / {c}")
+
+        seit = zuschauer.mark()
+        klick(bot, platz(f, "ModB"))
+        dort = zeilen_seit(zuschauer, seit)
+        f = fenster(bot)
+        b = texte(f).get(platz(f, "ModB"), "")
+        FIND.test("Linksklick nimmt einen oeffentlichen herunter: wieder privat, und der Besitzer erfaehrt es",
+                  "Private" in b and gesagt(dort, rf"{BOT_NAME} took your spot ModB down"), f"{b} / {zeige(dort)}")
+        seit = zuschauer.mark()
+        klick(bot, platz(f, "ModA"), mode=1)
+        dort = zeilen_seit(zuschauer, seit)
+        f = fenster(bot)
+        FIND.test("Umschalt-Klick loescht einen Punkt, und der Besitzer erfaehrt es",
+                  platz(f, "ModA") is None and gesagt(dort, rf"{BOT_NAME} deleted your spot ModA"),
+                  f"{list(texte(f).values())} / {zeige(dort)}")
+
+        klick(bot, 49)
+        f = fenster(bot)
+        FIND.test("Der Knopf der Einschraenkung (49) oeffnet ihre Seite",
+                  f"Restrict the spots of {ZUSCHAUER_NAME}" in (f.get("title") or "")
+                  and "Allowed" in item_text(f.get("slots", {}).get("11")), str(f.get("title")))
+        klick(bot, 11)
+        klick(bot, 13)
+        f = fenster(bot)
+        FIND.test("Anwaehlen: neue Punkte und oeffentlich machen sind nicht erlaubt, teilen schon",
+                  "Not allowed" in item_text(f.get("slots", {}).get("11"))
+                  and "Not allowed" in item_text(f.get("slots", {}).get("13"))
+                  and "Allowed" in item_text(f.get("slots", {}).get("15"))
+                  and "no new spots, nothing public" in item_text(f.get("slots", {}).get("31")),
+                  item_text(f.get("slots", {}).get("31")))
+        seit = zuschauer.mark()
+        klick(bot, 31)
+        dort = zeilen_seit(zuschauer, seit)
+        f = fenster(bot)
+        FIND.test("Bestaetigt: er erfaehrt es, und der Knopf glaenzt",
+                  gesagt(dort, rf"{BOT_NAME} restricted your spots: no new spots, nothing public for good")
+                  and (f.get("slots", {}).get("49") or {}).get("glint") is True, zeige(dort))
+        bot.call("close_window", wait=10)
+        zeilen = befehl(zuschauer, "/cam spot set ModD")
+        FIND.test("Eingeschraenkt: keinen neuen Punkt speichern",
+                  gesagt(zeilen, r"You may not save new spots for good"), zeige(zeilen))
+        zeilen = befehl(zuschauer, "/cam spot share ModC all")
+        FIND.test("Eingeschraenkt: nichts oeffentlich machen",
+                  gesagt(zeilen, r"You may not make spots public for good"), zeige(zeilen))
+        zeilen = befehl(zuschauer, "/cam spot set ModC") + befehl(zuschauer, f"/cam spot share ModB {BOT_NAME}")
+        FIND.test("Verschieben und teilen darf er weiter", gesagt(zeilen, r"Spot ModC moved here")
+                  and gesagt(zeilen, rf"offered|{BOT_NAME}"), zeige(zeilen))
+
+        liste, f = seine_punkte()
+        eintrag = texte(liste).get(platz(liste, ZUSCHAUER_NAME), "")
+        FIND.test("In der Liste steht die Einschraenkung unter ihm",
+                  "Restricted: no new spots, nothing public for good" in eintrag, eintrag)
+        klick(bot, 49)
+        seit = zuschauer.mark()
+        klick(bot, 35)
+        dort = zeilen_seit(zuschauer, seit)
+        bot.call("close_window", wait=10)
+        zeilen = befehl(zuschauer, "/cam spot set ModD")
+        FIND.test("Der Milcheimer hebt sie auf: er erfaehrt es und darf wieder speichern",
+                  gesagt(dort, rf"{BOT_NAME} lifted the restriction of your spots")
+                  and gesagt(zeilen, r"Spot ModD saved"), f"{zeige(dort)} / {zeige(zeilen)}")
+
+        zuschauer.stop()
+        time.sleep(2.0)
+        liste, f = seine_punkte()
+        FIND.test("Offline steht er weiter in der Liste, mit seinen Punkten",
+                  platz(liste, ZUSCHAUER_NAME) is not None and platz(f, "ModD") is not None,
+                  f"{list(texte(liste).values())} / {list(texte(f).values())}")
+        seit = bot.mark()
+        for name in ("ModD", "ModC", "ModB"):
+            wo = platz(fenster(bot), name)
+            if wo is not None:
+                klick(bot, wo, mode=1)
+        hier = zeilen_seit(bot, seit)
+        bot.call("close_window", wait=10)
+        text = datei.read_text(encoding="utf-8") if datei.exists() else ""
+        FIND.test("Offline loescht der Umschalt-Klick seine Punkte aus seiner Datei",
+                  gesagt(hier, rf"Spot ModD of {ZUSCHAUER_NAME} deleted") and "ModD" not in text
+                  and "ModB" not in text, f"{zeige(hier)} / {text[-300:]}")
+    finally:
+        try:
+            bot.call("close_window", wait=10)
+            if zuschauer.proc is not None and zuschauer.proc.poll() is None:
+                spots_loeschen(zuschauer, "ModA", "ModB", "ModC", "ModD")
+                zuschauer.stop()
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Moderation: {exc}")
+
+
 def naehe_checks(env, bot):
     """cam-safety.nearby-players: kein Start des Cam-Modus, solange ein anderer
     Spieler naeher ist als nearby-radius.
@@ -13026,6 +13205,7 @@ ABSCHNITTE = [
     Abschnitt("ausspaehen", ausspaeh_checks, "scout"),
     Abschnitt("menue", menue_checks, "menu"),
     Abschnitt("spotreiter", spotreiter_checks, "menu spot"),
+    Abschnitt("spotmoderation", spotmoderation_checks, "menu spot/SpotModeration spot/SpotBans spot/CamSpots"),
     Abschnitt("anstupsen", anstups_checks, "nudge", koerpertypen=True),
     Abschnitt("funk", funk_checks, "signal"),
     Abschnitt("traenke", potion_checks, "potion", koerpertypen=True),

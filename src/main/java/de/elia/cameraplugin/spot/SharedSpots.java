@@ -98,6 +98,12 @@ public final class SharedSpots {
         return collect(share -> share.isAcceptedBy(viewer));
     }
 
+    /** What one player shares, public or by name, in the order he shared it. */
+    public List<Share> of(UUID owner) {
+        Map<String, Share> own = shares.get(owner);
+        return own == null ? List.of() : new ArrayList<>(own.values());
+    }
+
     /** Every public spot, his own among them, by owner and then spot. */
     public List<Share> publicSpots() {
         return collect(Share::isEveryone);
@@ -243,6 +249,27 @@ public final class SharedSpots {
             save();
         }
         return removed;
+    }
+
+    /**
+     * Takes a spot down, from the admin page of the spots: no longer public,
+     * shared with nobody and offered to nobody. Its likes stay, as when its
+     * owner makes it private himself.
+     *
+     * @return whether it was shared at all
+     */
+    public boolean takeBack(UUID owner, String key) {
+        Share share = get(owner, key);
+        if (share == null || !share.isEveryone() && share.getPlayers().isEmpty() && share.getPending().isEmpty()) {
+            return false;
+        }
+        share.setEveryone(false);
+        share.clearPlayers();
+        if (share.isEmpty()) {
+            drop(owner, key);
+        }
+        save();
+        return true;
     }
 
     /** Follows a spot its owner has moved, or given a name of other capitals. */

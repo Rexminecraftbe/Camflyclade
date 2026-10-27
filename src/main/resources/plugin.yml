@@ -39,6 +39,9 @@ permissions:
   camplugin.trail:
     description: Allows /cam trail, to see where the camera of a player flew, while cam-trail is on
     default: op
+  camplugin.spotadmin:
+    description: Allows the spots page of the admin menu, to take down or delete the spots of others and restrict them
+    default: op
   camplugin.antiscout.bypass:
     description: Sees every player in cam mode while anti-scouting hides those far away from the others
     default: op
