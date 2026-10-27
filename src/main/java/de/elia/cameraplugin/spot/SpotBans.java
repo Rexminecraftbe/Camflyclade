@@ -225,10 +225,26 @@ public final class SpotBans {
                 log.log(Level.WARNING, "An entry of " + FILE + " is no restriction and is left out: players." + key);
                 continue;
             }
-            players.put(id, new Ban(entry.getString("name"), Stage.of(entry.getString(Kind.PRIVATE.key)),
-                    Stage.of(entry.getString(Kind.PUBLIC.key)), Stage.of(entry.getString(Kind.SHARED.key)),
+            players.put(id, new Ban(entry.getString("name"), stage(entry, Kind.PRIVATE, "create"),
+                    stage(entry, Kind.PUBLIC, "public"), stage(entry, Kind.SHARED, "share"),
                     entry.getLong("until"), entry.getString("reason", ""), entry.getString("by", "")));
         }
+    }
+
+    /**
+     * How far an entry keeps him from a kind of spots. An entry of the
+     * version before has a switch for each thing instead - {@code create},
+     * {@code public}, {@code share}: no new ones; {@code view}: no looking at
+     * any spots -, and keeps him as far as it did.
+     *
+     * @param before the switch of the version before for new ones of this kind
+     */
+    private static Stage stage(ConfigurationSection entry, Kind kind, String before) {
+        if (entry.getBoolean("view")) {
+            return Stage.NO_LOOK;
+        }
+        Stage stage = Stage.of(entry.getString(kind.key));
+        return stage == Stage.FREE && entry.getBoolean(before) ? Stage.NO_NEW : stage;
     }
 
     /** Writes the file with everything that still holds. */
