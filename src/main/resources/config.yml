@@ -648,10 +648,10 @@ menu:
       slot: 12
     # Die Aussichtspunkte auf drei Reitern: die eigenen (alle, auch die öffentlichen - sie zählen zu max-per-player),
     # öffentlich (die von allen, eigene dabei) und geteilt (was andere einem geteilt haben, und was sie einem
-    # anbieten - das muss man erst annehmen). Unten von links: zurück, die Seiten, die drei Reiter, der Filter
-    # (sortieren), ein freier Platz und ganz rechts der Knopf für einen neuen Punkt: Linksklick privat, Rechtsklick
-    # öffentlich - ein öffentlicher bleibt einer der eigenen und lässt sich auf der öffentlichen Seite mit Rechtsklick
-    # wieder offline nehmen, ohne ihn zu löschen. Ein Linksklick auf einen Punkt springt hin, auf einen geteilten oder
+    # anbieten - das muss man erst annehmen). Unten von links: zurück, die Seite davor, die Glocke des Gästebuchs
+    # (viewpoints.guestbook: an oder aus), die drei Reiter, der Filter (sortieren), die Seite danach und ganz rechts der
+    # Knopf für einen neuen Punkt: Linksklick privat, Rechtsklick öffentlich - ein öffentlicher bleibt einer der
+    # eigenen und lässt sich auf der öffentlichen Seite mit Rechtsklick wieder offline nehmen, ohne ihn zu löschen. Ein Linksklick auf einen Punkt springt hin, auf einen geteilten oder
     # öffentlichen genauso wie auf einen eigenen: nur, wohin die Kamera auch fliegen dürfte; ohne Cam-Modus startet er
     # erst, wenn der Punkt nah genug ist (viewpoints.start-distance).
     # Umschalt-Klick besucht einen Punkt eines anderen (visitor-camera). Wartet ein Angebot, glänzt der Knopf.
@@ -829,6 +829,15 @@ viewpoints:
   # Wie lange derselbe Spieler am selben Punkt nicht noch einmal als Aufruf zählt, in Minuten (0 bis 1440, 0 = jeder
   # Sprung und jeder Besuch zählt). So treibt Hin- und Herspringen die Zahl nicht hoch.
   views-cooldown-minutes: 10
+  # Das Gästebuch: Wer einen Punkt hat, erfährt, wer ihn sich ansieht (springt hin oder besucht ihn) und wer ihn liked -
+  # nur andere zählen, und nur so oft, wie es als Aufruf zählt (views-cooldown-minutes). Ist der Besitzer online, steht
+  # es gleich im Chat, mit dem Namen (Texte: spot-guestbook-viewed, spot-guestbook-liked). Ist er offline, steht beim
+  # nächsten Beitritt, wie viele Aufrufe und Likes jeder seiner Punkte seitdem bekam (Texte: spot-guestbook-header,
+  # spot-guestbook-entry); ein Like, das bis dahin zurückgenommen wurde, zählt nicht. Jeder schaltet es für sich mit
+  # der Glocke im Menü aus und wieder an (unten auf den Seiten der Punkte, links neben den Reitern) - ausgeschaltet
+  # wird für ihn auch nichts gesammelt. Gespeichert nach storage, in plugins/CamFly/playerdata/spot-guestbook.yml.
+  # Geht nur mit sharing: true - private Punkte sieht sich niemand sonst an.
+  guestbook: true
 
 # Besucher-Kamera: /cam visit <Spieler>:<Name> - die Kamera geht zu einem Punkt, den ein anderer mit einem teilt oder
 # der öffentlich ist, von überall aus, z. B. um sich den Bau eines Freundes zeigen zu lassen. Ohne Cam-Modus startet er dafür erst (mit allem,
@@ -855,7 +864,8 @@ visitor-camera:
 #   /cam tour kick <Spieler>     = einen Gast wegschicken
 #   /cam tour leave              = die Führung verlassen (auch /cam back, ein Sprung zu einem Aussichtspunkt, ein Besuch
 #                                  oder /cam resume)
-#   /cam tour end                = die Führung für alle beenden (auch, wenn der Cam-Modus des Führers endet)
+#   /cam tour end                = die Führung für alle beenden (auch, wenn der Cam-Modus des Führers endet, er stirbt
+#                                  oder in den Zuschauermodus wechselt)
 #   /cam tour view               = zwischen dem Blick des Führers und freiem Umsehen umschalten (auch im Menü)
 # Fair bleibt es so: Für die Kamera eines Gastes gelten alle ihre eigenen Grenzen weiter - max-distance und das
 # Funksignal von ihrem Körper aus, die Wand, cam-area, gesperrte Lava, Wasser und Pulverschnee. Der Führer lenkt sie,
@@ -873,6 +883,19 @@ visitor-camera:
 # In der Tab-Liste bleiben alle - auf Paper über das Innere des Servers (wie guide-view). Geht das nach einem Update
 # von Minecraft nicht mehr, meldet der Start das in der Konsole, und Ausgeblendete fehlen dann auch in der Tab-Liste,
 # bis das Plugin angepasst ist. Auf Spigot immer so. Ton der Einladung: sounds.tour-invite, Texte: tour-...
+# Führen ohne Cam-Modus (lead-without-cam): Der Führer muss nicht selbst im Cam-Modus sein - die Kameras seiner Gäste
+# folgen ihm, während er herumläuft und baut. Für die Gäste gilt alles wie oben, auch ihre eigenen Grenzen. Im
+# Zuschauermodus führt niemand (er flöge durch Wände, Text: tour-guide-spectator), und stirbt er, endet die Führung.
+# Startet er doch den Cam-Modus, geht die Führung mit seiner Kamera weiter; endet der Cam-Modus, endet auch sie.
+# Über ihm stehen die Namen gestapelt wie über der Kamera eines Führers, solange Gäste ihm folgen - ganz unten seiner
+# (Text: player.tour-builder-format), siehe guide-name. Nie mehr, als sein eigener Name zeigen würde: nicht, solange er
+# unsichtbar ist, und nicht durch Wände, solange er schleicht.
+# Seine Gäste sehen auf ihrem eigenen Bildschirm seine Herzen und die Items in seinen Händen (mirror-...) - nur auf
+# ihrem Bildschirm: Am Server bleiben ihre Herzen ihre, und ihre Hände bleiben leer wie im Cam-Modus; nehmen,
+# wegwerfen oder benutzen lässt sich nichts davon, und sein übriges Inventar sehen sie nicht. Der Hunger bleibt ihrer.
+# Mit dem Ende der Führung (oder wenn er den Cam-Modus startet) sehen sie wieder ihre eigenen Herzen und Hände.
+# Mit guide-view sieht ein Gast durch seine Augen: Die Herzen dort zeichnet das Spiel selbst - und den Hunger dabei
+# immer voll, den schickt das Spiel von niemandem an andere.
 tour:
   enabled: true
   # Wie nah die Kamera eines anderen der eigenen sein muss, damit man ihn einladen kann, in Blöcken (1 bis 128)
@@ -895,6 +918,20 @@ tour:
   # offizielle Schnittstelle). Ändert ein Update von Minecraft dort etwas, meldet der Start das in der Konsole, und
   # die Gäste sehen sich frei um, bis das Plugin angepasst ist - sonst läuft alles weiter. Auf Spigot immer frei.
   guide-view: true
+  # Ob auch führen darf, wer nicht im Cam-Modus ist (siehe oben)
+  lead-without-cam: true
+  # Wie die Namen über einem Führer ohne Cam-Modus stehen, solange ihm Gäste folgen:
+  #   replace = an der Stelle seines eigenen Namens: Den blendet das Team cam_guide aus, und ganz unten steht
+  #             player.tour-builder-format. Ist er schon in einem Team eines anderen Plugins (z. B. für einen Rang mit
+  #             Farbe und Präfix) oder hat er ein eigenes Scoreboard, nimmt CamFly ihn da nicht heraus - dann wie above.
+  #             Plugins, die Namen nur über Pakete setzen (z. B. TAB), sieht der Server nicht: dort above nehmen.
+  #   above   = sein eigener Name bleibt, die Namen der Gäste stehen darüber
+  guide-name: replace
+  # Was die Gäste eines Führers ohne Cam-Modus von ihm sehen: seine Herzen, das Item in seiner Hand und das in seiner
+  # zweiten Hand
+  mirror-health: true
+  mirror-main-hand: true
+  mirror-off-hand: true
 
 # /cam photo: der Foto-Modus, an und wieder aus, nur im Cam-Modus. Für Bilder und Videos der eigenen Bauten blendet er
 # nur für den Spieler selbst aus, was im Bild stört - alle anderen sehen weiter alles wie vorher, und an der Welt ändert

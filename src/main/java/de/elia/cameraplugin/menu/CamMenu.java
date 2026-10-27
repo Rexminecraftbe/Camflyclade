@@ -19,6 +19,7 @@ import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.spot.Share;
 import de.elia.cameraplugin.spot.Spot;
 import de.elia.cameraplugin.spot.SpotBans;
+import de.elia.cameraplugin.spot.SpotGuestbook;
 import de.elia.cameraplugin.spot.SpotModeration;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -110,12 +111,14 @@ public final class CamMenu implements Listener {
     /** The button back to the main page on the small pages. */
     private static final int SLOT_SMALL_BACK = 22;
     /**
-     * The last row of the pages of the spots: after the button back the
-     * pages, then the tabs, the order next to them, a gap, and on the right
-     * the button for a new spot.
+     * The last row of the pages of the spots: after the button back the page
+     * before, the bell of the guestbook next to the tabs, the tabs, the order
+     * next to them, the page after, and on the right the button for a new
+     * spot.
      */
     private static final int SLOT_SPOT_PREVIOUS = 46;
-    private static final int SLOT_SPOT_NEXT = 47;
+    private static final int SLOT_SPOT_GUESTBOOK = 47;
+    private static final int SLOT_SPOT_NEXT = 52;
     private static final int SLOT_SPOT_SORT = 51;
     private static final int SLOT_SPOT_NEW = 53;
     /** The button that sorts a list of players on the admin pages. */
@@ -550,8 +553,9 @@ public final class CamMenu implements Listener {
      * all his own - the public ones among them -, the public ones of
      * everybody, and those shared with him - the offers he has not accepted
      * yet first. With sharing switched off there are only his own. The last
-     * row: back, the pages, the tabs, the order, and on the right the button
-     * for a new spot - left-click private, right-click public.
+     * row: back, the page before, the bell of the guestbook, the tabs, the
+     * order, the page after, and on the right the button for a new spot -
+     * left-click private, right-click public.
      */
     private void openSpots(Player player, SpotTab wanted, int pageNumber) {
         CamSpots spots = plugin.getSpots();
@@ -617,8 +621,32 @@ public final class CamMenu implements Listener {
         newLore.addAll(lines(messages.getMessage(sharing ? "menu-new-spot-lore-public" : "menu-new-spot-lore")));
         put(page, SLOT_SPOT_NEW, Material.WRITABLE_BOOK, messages.getMessage("menu-new-spot"), newLore,
                 click -> act(player, () -> askName(player, sharing && click.isRightClick())));
+        if (settings.isGuestbookEnabled()) {
+            guestbookButton(player, page, () -> openSpots(player, tab, number));
+        }
         paging(page, number, pages, n -> openSpots(player, tab, n), SLOT_SPOT_PREVIOUS, SLOT_SPOT_NEXT);
         player.openInventory(inventory);
+    }
+
+    /**
+     * The bell of the guestbook: whether he hears who looks at his spots and
+     * likes them, see {@link SpotGuestbook}, under its name - it shines while
+     * on -; a click switches it.
+     *
+     * @param again opens the page anew, with the bell as it stands then
+     */
+    private void guestbookButton(Player player, Page page, Runnable again) {
+        SpotGuestbook guestbook = plugin.getGuestbook();
+        boolean on = guestbook.isOn(player.getUniqueId());
+        List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-guestbook-lore")));
+        lore.addAll(lines(messages.getMessage("menu-state").replace("{state}",
+                messages.getMessage(on ? "menu-state-on" : "menu-state-off"))));
+        lore.addAll(lines(messages.getMessage("menu-guestbook-action")));
+        put(page, SLOT_SPOT_GUESTBOOK, shine(item(Material.BELL, messages.getMessage("menu-guestbook"), lore), on),
+                click -> later(() -> {
+                    guestbook.toggle(player);
+                    again.run();
+                }));
     }
 
     /**
@@ -1084,7 +1112,7 @@ public final class CamMenu implements Listener {
         }
         // Whom he could invite - unless he may not lead; one who may not take
         // part shows up all the same, with why he cannot be invited.
-        if (plugin.isInCameraMode(player) && lead == null) {
+        if (tour.canLead(player) && lead == null) {
             boolean full = tour.isFull(player);
             for (Player other : tour.candidates(player)) {
                 String name = other.getName();
@@ -1114,7 +1142,7 @@ public final class CamMenu implements Listener {
         }
         if (entries.isEmpty() && lead != null) {
             put(page, 22, tourKept(TourBans.What.LEAD, lead), click -> { });
-        } else if (entries.isEmpty() && plugin.isInCameraMode(player)) {
+        } else if (entries.isEmpty() && tour.canLead(player)) {
             // How close one has to be: out of camera mode to the guide's
             // camera, in camera mode camera to camera.
             double start = settings.getTourStartDistance();

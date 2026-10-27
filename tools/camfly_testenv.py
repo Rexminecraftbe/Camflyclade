@@ -1229,6 +1229,25 @@ bot._client.on('entity_metadata', (packet) => {
     if (m.key === 7) frosts.push({ t: Date.now(), value: m.value });
   }
 });
+// Was der Server diesem Client fuer den eigenen Spieler in die Haende legt
+// (Paket entity_equipment mit der eigenen Nummer: Platz 0 die Hand, 1 die
+// zweite Hand) - eine Fuehrung ohne Cam-Modus malt ihm so die Items des
+// Fuehrers hinein. Dazu, wie oft das ganze eigene Inventar neu kam
+// (window_items von Fenster 0), was das Bild wieder wegnimmt.
+const ownEquipment = [];
+let inventoryResends = 0;
+bot._client.on('entity_equipment', (packet) => {
+  if (!bot.entity || packet.entityId !== bot.entity.id) return;
+  for (const e of packet.equipments || []) {
+    const item = e.item || {};
+    const count = item.itemCount !== undefined ? item.itemCount : (item.present ? (item.count || 1) : 0);
+    ownEquipment.push({ t: Date.now(), slot: e.slot, count,
+                        id: item.itemId !== undefined ? item.itemId : null });
+  }
+});
+bot._client.on('window_items', (packet) => {
+  if (Number(packet.windowId) === 0) inventoryResends++;
+});
 // Wie stark es regnet, so wie der echte Client es rechnet: Ereignis 1
 // (START_RAINING) setzt den Regen auf 0, von wo ihn die Ereignisse 7 steigen
 // lassen, Ereignis 2 (STOP_RAINING) auf 1, von wo sie ihn fallen lassen.
@@ -1822,6 +1841,9 @@ async function handle(cmd) {
       const items = bot.inventory ? bot.inventory.items() : [];
       return { count: items.length, names: items.map((i) => i.name) };
     }
+    case 'own_equipment':
+      return { packets: ownEquipment.slice(cmd.since || 0), count: ownEquipment.length,
+               resends: inventoryResends };
     case 'quit':
       setTimeout(() => process.exit(0), 200);
       try { bot.quit(); } catch (e) { /* egal */ }
@@ -6070,6 +6092,160 @@ def teilen_checks(env, bot):
             FIND.problem(f"Aufraeumen nach dem Test des Teilens: {exc}")
 
 
+def gaestebuch_datei(env):
+    """playerdata/spot-guestbook.yml des Testservers, oder leer."""
+    datei = env.server / "plugins" / "CamFly" / "playerdata" / "spot-guestbook.yml"
+    return datei.read_text(encoding="utf-8") if datei.exists() else ""
+
+
+def gaestebuch_checks(env, bot):
+    """viewpoints.guestbook: wer einen Punkt hat, erfaehrt, wer ihn sich
+    ansieht und wer ihn liked.
+
+    Voreingestellt ist es an - nachgesehen in der Datei, die das Plugin
+    mitbringt; der Test stellt views-cooldown-minutes auf 0. Der Bot macht
+    den Punkt "Buch" oeffentlich. Springt der zweite Spieler hin, liest der
+    Bot "Guestbook: CamFlyZuschauer looked at your spot Buch", liked er ihn,
+    dass er ihn liked; nimmt er das Like zurueck, steht nichts da, und der
+    eigene Sprung des Bots auch nicht. Im Menue steht auf der Seite der Punkte
+    unten auf Platz 47, links neben den Reitern, die Glocke - an, und sie
+    glaenzt; ein Klick schaltet sie aus, und der Bot erfaehrt vom naechsten
+    Sprung nichts mehr; ein zweiter schaltet sie wieder an.
+
+    Ist der Besitzer offline, sammelt das Gaestebuch: der zweite Spieler macht
+    seinen Punkt "Gast" oeffentlich und geht, der Bot springt hin und liked
+    ihn - in playerdata/spot-guestbook.yml steht es -, und kommt er wieder,
+    liest er "- Gast: 1 views, 1 likes", und die Datei hat es nicht mehr.
+    Mit viewpoints.guestbook: false fehlt die Glocke.
+    """
+    def fenster(client):
+        return client.call("window_slots", wait=10)
+
+    def klick(client, slot, button=0, mode=0, warten=1.5):
+        client.call("click_window", wait=15, slot=slot, button=button, mode=mode)
+        time.sleep(warten)
+
+    def punkte(client):
+        befehl(client, "/cam menu", warten=1.0)
+        klick(client, 10)
+        return fenster(client).get("slots", {})
+
+    if not FIND.test("Cam-Modus ist vor dem Test des Gaestebuchs aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    punkt = (x + 4, y, z)
+    label = f"{BOT_NAME}:Buch"
+    console(env, f"fill {_floor(x) - 4} {y} {_floor(z) - 3} {_floor(x) + 8} {y + 4} {_floor(z) + 3} minecraft:air",
+            pause=0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    try:
+        FIND.test("Voreingestellt steht viewpoints.guestbook: true da",
+                  re.search(r"(?m)^\s+guestbook:\s*true\s*$", quelle_config(env)) is not None, "")
+        set_option(env, "views-cooldown-minutes", "0", "viewpoints")
+        spots_loeschen(bot, "Buch")
+        bot.chat(f"/tp {BOT_NAME} {punkt[0]} {y} {z} -90 0")
+        time.sleep(1.0)
+        befehl(bot, "/cam spot set Buch")
+        befehl(bot, "/cam spot share Buch all")
+        hinstellen(bot, x, y, z)
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer das Gaestebuch kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        befehl(zuschauer, "/cam spot delete Gast")
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 2} {y} {z + 2}", pause=1.0)
+
+        seit = bot.mark()
+        dort = befehl(zuschauer, f"/cam spot {label}", warten=3.0)
+        hier = zeilen_seit(bot, seit)
+        FIND.test("Springt ein anderer zum Punkt, liest der Besitzer, wer es war",
+                  gesagt(dort, r"At spot") and gesagt(hier, rf"Guestbook: {ZUSCHAUER_NAME} looked at your spot Buch"),
+                  f"{zeige(dort)} / {zeige(hier)}")
+        seit = bot.mark()
+        befehl(zuschauer, f"/cam spot like {label}")
+        hier = zeilen_seit(bot, seit)
+        FIND.test("Liked er ihn, liest der Besitzer auch das",
+                  gesagt(hier, rf"Guestbook: {ZUSCHAUER_NAME} likes your spot Buch"), zeige(hier))
+        seit = bot.mark()
+        befehl(zuschauer, f"/cam spot like {label}")
+        befehl(bot, "/cam spot Buch", warten=3.0)
+        hier = zeilen_seit(bot, seit)
+        FIND.test("Ein zurueckgenommenes Like und der eigene Sprung stehen nicht im Gaestebuch",
+                  not gesagt(hier, r"Guestbook"), zeige(hier))
+        cam_off(bot)
+
+        knopf = punkte(bot)
+        glocke = knopf.get("47") or {}
+        FIND.test("Im Menue: unten auf 47, links neben den Reitern, die Glocke - an, und sie glaenzt",
+                  "Guestbook" in item_text(glocke) and "Now: on" in item_text(glocke) and glocke.get("glint") is True,
+                  item_text(glocke))
+        seit = bot.mark()
+        klick(bot, 47)
+        hier = zeilen_seit(bot, seit)
+        glocke = fenster(bot).get("slots", {}).get("47") or {}
+        FIND.test("Ein Klick auf die Glocke schaltet das Gaestebuch aus",
+                  gesagt(hier, r"Guestbook off") and "Now: off" in item_text(glocke) and not glocke.get("glint"),
+                  f"{zeige(hier)} / {item_text(glocke)}")
+        bot.call("close_window", wait=10)
+        seit = bot.mark()
+        befehl(zuschauer, f"/cam spot {label}", warten=2.0)
+        hier = zeilen_seit(bot, seit)
+        FIND.test("Ausgeschaltet erfaehrt der Besitzer nichts", not gesagt(hier, r"Guestbook"), zeige(hier))
+        punkte(bot)
+        seit = bot.mark()
+        klick(bot, 47)
+        hier = zeilen_seit(bot, seit)
+        FIND.test("Ein zweiter Klick schaltet es wieder an", gesagt(hier, r"Guestbook on"), zeige(hier))
+        bot.call("close_window", wait=10)
+
+        cam_off(zuschauer)
+        console(env, f"tp {ZUSCHAUER_NAME} {x - 2} {y} {z} 90 0", pause=1.0)
+        befehl(zuschauer, "/cam spot set Gast")
+        befehl(zuschauer, "/cam spot share Gast all")
+        zuschauer.stop()
+        time.sleep(2.0)
+        befehl(bot, f"/cam spot {ZUSCHAUER_NAME}:Gast", warten=3.0)
+        befehl(bot, f"/cam spot like {ZUSCHAUER_NAME}:Gast")
+        cam_off(bot)
+        text = gaestebuch_datei(env)
+        FIND.test("Ist der Besitzer offline, steht es in playerdata/spot-guestbook.yml",
+                  re.search(r"(?s)news:\s*\n\s*gast:\s*\n\s*views:\s*1\b", text) is not None, text[-300:] or "keine Datei")
+        zuschauer.start()
+        da = zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned")
+        time.sleep(4.0)
+        dort = zeilen_seit(zuschauer, 0)
+        FIND.test("Kommt er wieder, liest er, was seine Punkte seitdem bekamen",
+                  bool(da) and gesagt(dort, r"Guestbook: what your spots got since you were last here")
+                  and gesagt(dort, r"- Gast: 1 views, 1 likes"), zeige(dort))
+        FIND.test("Danach steht es nicht mehr in der Datei", "gast:" not in gaestebuch_datei(env),
+                  gaestebuch_datei(env)[-300:])
+        befehl(zuschauer, "/cam spot delete Gast")
+
+        set_option(env, "guestbook", "false", "viewpoints")
+        knopf = punkte(bot)
+        FIND.test("viewpoints.guestbook: false - keine Glocke", "47" not in knopf, str(sorted(knopf)))
+        bot.call("close_window", wait=10)
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                zuschauer.call("close_window", wait=10)
+                cam_off(zuschauer)
+                befehl(zuschauer, "/cam spot delete Gast")
+                zuschauer.stop()
+            bot.call("close_window", wait=10)
+            cam_off(bot)
+            spots_loeschen(bot, "Buch")
+            set_options(env, [("guestbook", "true", "viewpoints"), ("views-cooldown-minutes", "10", "viewpoints")])
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test des Gaestebuchs: {exc}")
+
+
 def flugtempo(env, name):
     """Das Flugtempo eines Spielers, wie der Server es fuehrt - ueber die
     Konsole gefragt, die jeden fragen darf."""
@@ -6556,6 +6732,259 @@ def fuehrung_checks(env, bot):
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test der Fuehrung: {exc}")
+
+
+def fuehrung_ohne_cam_checks(env, bot):
+    """tour.lead-without-cam: wer nicht im Cam-Modus ist, fuehrt trotzdem -
+    die Kamera des Gastes folgt ihm, waehrend er herumlaeuft und baut.
+
+    Voreingestellt ist es an, mit guide-name: replace und mirror-health,
+    -main-hand und -off-hand an - nachgesehen in der Datei, die das Plugin
+    mitbringt. Der Bot laedt ohne Cam-Modus ein, die Tab-Vervollstaendigung
+    bietet den zweiten Spieler an, der nimmt an und folgt ihm. Ueber dem Bot
+    stehen die Namen gestapelt - der Gast mit (Follower) ueber
+    "CamFlyTester (Guide)" (player.tour-builder-format) -, sein eigener Name
+    ist im Team cam_guide ausgeblendet, und ein dritter Spieler sieht den
+    Stapel, nur nicht, solange der Bot unsichtbar ist. Der Gast bekommt die
+    Herzen des Bots auf seinen Bildschirm (max_health 10: 10 statt seiner 20,
+    am Server bleiben es 20), das Item in seiner Hand und das in der zweiten
+    als eigene Ausruestung - am Server bleiben seine Haende leer. Verlaesst
+    er die Fuehrung, hat er seine Herzen wieder, und sein Inventar kommt neu.
+
+    Startet der Bot den Cam-Modus, geht die Fuehrung weiter, der Gast sieht
+    seine eigenen Herzen, und der Bot ist aus dem Team; endet der Cam-Modus,
+    endet sie. Im Zuschauermodus fuehrt keiner, und wechselt der Bot dahin,
+    endet die Fuehrung. Mit mirror-main-hand: false kommt nur die zweite
+    Hand. Mit guide-name: above bleibt sein Name, ueber ihm steht nur der
+    Gast, und das Team gibt es nicht. Mit lead-without-cam: false heisst es
+    wieder "Only in cam mode".
+    """
+    ueber_name = float(NAME_UEBER_SPIELER)
+
+    def tab(client, text):
+        return client.call("tab", text=text).get("matches", [])
+
+    def zuschauer_pos():
+        return bot.call("server_pos", selector=ZUSCHAUER_NAME).get("pos")
+
+    def nahe(a, b, weit=1.0):
+        return a is not None and b is not None and math.dist(a, b) < weit
+
+    def namen_texte(hoeher=0.0):
+        """Was die Namen an der Stelle des Namens des Bots sagen, oder hoeher
+        darueber, am Server gelesen - jeder fuer sich: Der Gast, der dem Bot
+        folgt, hat dort seinen eigenen Namen, ausgeblendet, aber da."""
+        since = bot.mark()
+        bot.chat(f"/execute at {BOT_NAME} positioned ~ ~{ueber_name + hoeher:.3f} ~ as "
+                 f"@e[type=minecraft:text_display,distance=..0.2] run data get entity @s text")
+        time.sleep(1.5)
+        return [z for z in zeilen_seit(bot, since) if "entity data" in z]
+
+    def stapel(texte):
+        """Der Text des Stapels mit "(Guide)" darin, oder der mit "(Follower)", oder leer."""
+        return next((t for t in texte if "(Guide)" in t), next((t for t in texte if "(Follower)" in t), ""))
+
+    def im_team():
+        return server_says(bot, f"/execute if entity @a[name={BOT_NAME},team=cam_guide] run say {{marke}}")
+
+    def gast_herzen():
+        """Was der Client des Gastes fuer seine Herzen haelt, und was der Server."""
+        bildschirm = zuschauer.call("state").get("health")
+        since = bot.mark()
+        bot.chat(f"/data get entity {ZUSCHAUER_NAME} Health")
+        hit = bot.expect("entity data", since, 4000)
+        treffer = re.search(r"entity data:\s*(-?[\d.]+)", strip_colors(hit["text"])) if hit else None
+        return bildschirm, float(treffer.group(1)) if treffer else None
+
+    def stapel_beim_dritten(wo):
+        """Ob der dritte Spieler eine Entitaet an der Stelle des Namens des
+        Bots kennt - dort steht sonst nichts. Nach der Art wird nicht gefragt:
+        Die Nummern der Arten kennt mineflayer nur aus den Daten von 26.1."""
+        ziel = (wo[0], wo[1] + ueber_name, wo[2])
+        return any(math.dist(e.get("pos") or (0, 0, 0), ziel) < 0.6 and not e.get("username")
+                   for e in dritter.call("entities", radius=12).get("entities", []))
+
+    def einladen_und_annehmen():
+        befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=3.0)
+        return gesagt(dort, rf"You follow {BOT_NAME} now")
+
+    if not FIND.test("Cam-Modus ist vor dem Test der Fuehrung ohne Cam-Modus aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    spielmodus = bot.call("state").get("gameMode") or "survival"
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    gast = (x - 6, y, z)
+    console(env, f"fill {_floor(x) - 10} {y} {_floor(z) - 4} {_floor(x) + 10} {y + 8} {_floor(z) + 4} "
+                 f"minecraft:air", pause=0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    dritter = BotClient(env, name=DRITTER_NAME)
+    try:
+        quelle = quelle_config(env)
+        FIND.test("Voreingestellt stehen lead-without-cam: true, guide-name: replace und die drei mirror-... auf "
+                  "true da",
+                  all(re.search(rf"(?m)^\s+{schluessel}:\s*{wert}\s*$", quelle) is not None
+                      for schluessel, wert in (("lead-without-cam", "true"), ("guide-name", "replace"),
+                                               ("mirror-health", "true"), ("mirror-main-hand", "true"),
+                                               ("mirror-off-hand", "true"))), "")
+        zuschauer.start()
+        dritter.start()
+        if not FIND.test("Zweiter und dritter Spieler fuer die Fuehrung ohne Cam-Modus kommen herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned")
+                         and dritter.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        hinstellen(bot, x, y, z)
+        console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
+        console(env, f"tp {DRITTER_NAME} {x + 6} {y} {z}", pause=0.5)
+        console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:diamond_sword", pause=0.3)
+        console(env, f"item replace entity {BOT_NAME} weapon.offhand with minecraft:shield", pause=0.3)
+        console(env, f"attribute {BOT_NAME} minecraft:max_health base set 10", pause=1.0)
+
+        tabs = tab(bot, "/cam tour invite ")
+        FIND.test("Ohne Cam-Modus: Tab nach /cam tour invite bietet den Spieler daneben an",
+                  ZUSCHAUER_NAME in tabs, str(tabs))
+        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        FIND.test("Ohne Cam-Modus einladen geht",
+                  gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to your tour") and not im_cam_modus(bot, BOT_NAME),
+                  zeige(zeilen))
+        ausruestung = zuschauer.call("own_equipment").get("count", 0)
+        seit = bot.mark()
+        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=3.0)
+        hier = zeilen_seit(bot, seit)
+        FIND.test("Der Gast nimmt an und folgt dem Bot, der nicht im Cam-Modus ist",
+                  gesagt(dort, rf"You follow {BOT_NAME} now") and gesagt(hier, rf"{ZUSCHAUER_NAME} follows you now")
+                  and nahe(zuschauer_pos(), bot.server_pos(), 1.5),
+                  f"{zeige(dort)} / {zeige(hier)} / {zuschauer_pos()}")
+        text = stapel(namen_texte())
+        FIND.test("Ueber dem Bot stehen die Namen gestapelt: der Gast mit (Follower) ueber "
+                  "\"CamFlyTester (Guide)\"",
+                  ZUSCHAUER_NAME in text and "(Follower)" in text and BOT_NAME in text and "(Guide)" in text
+                  and f"{BOT_NAME}'s Cam" not in text
+                  and text.index(ZUSCHAUER_NAME) < text.index("(Follower)") < text.index(BOT_NAME)
+                  < text.index("(Guide)"), text)
+        FIND.test("guide-name: replace - sein eigener Name ist im Team cam_guide ausgeblendet", im_team(), "")
+        FIND.test("Ein dritter Spieler sieht den Namensstapel ueber dem Bot", stapel_beim_dritten((x, y, z)), "")
+        console(env, f"effect give {BOT_NAME} minecraft:invisibility 30 0 true", pause=1.0)
+        FIND.test("Ist der Bot unsichtbar, sieht der dritte den Stapel nicht", not stapel_beim_dritten((x, y, z)), "")
+        console(env, f"effect clear {BOT_NAME} minecraft:invisibility", pause=1.0)
+        FIND.test("Wieder sichtbar: der Stapel ist wieder da", stapel_beim_dritten((x, y, z)), "")
+
+        bildschirm, server = gast_herzen()
+        FIND.test("mirror-health: der Gast sieht die Herzen des Bots (10), am Server bleiben seine 20",
+                  bildschirm is not None and abs(bildschirm - 10.0) < 0.01 and server is not None
+                  and abs(server - 20.0) < 0.01, f"{bildschirm} / {server}")
+        pakete = zuschauer.call("own_equipment", since=ausruestung).get("packets", [])
+        haupt = [p for p in pakete if p.get("slot") == 0]
+        neben = [p for p in pakete if p.get("slot") == 1]
+        FIND.test("mirror-main-hand und -off-hand: Schwert und Schild des Bots kommen als eigene Ausruestung",
+                  bool(haupt) and haupt[-1].get("count", 0) > 0 and bool(neben) and neben[-1].get("count", 0) > 0
+                  and haupt[-1].get("id") != neben[-1].get("id"), str(pakete[-6:]))
+        FIND.test("Am Server bleiben die Haende des Gastes leer",
+                  not server_says(bot, f"/execute if items entity {ZUSCHAUER_NAME} weapon.* * run say {{marke}}"),
+                  "")
+
+        resends = zuschauer.call("own_equipment").get("resends", 0)
+        seit = bot.mark()
+        dort = befehl(zuschauer, "/cam tour leave", warten=2.0)
+        bildschirm, server = gast_herzen()
+        FIND.test("Nach dem Verlassen: seine eigenen Herzen wieder, und sein Inventar kommt neu",
+                  gesagt(dort, rf"You left the tour of {BOT_NAME}") and bildschirm is not None
+                  and abs(bildschirm - 20.0) < 0.01
+                  and zuschauer.call("own_equipment").get("resends", 0) > resends,
+                  f"{zeige(dort)} / {bildschirm}")
+        time.sleep(1.5)
+        texte = namen_texte()
+        FIND.test("Ohne Gaeste: der Stapel ist weg, und der Bot ist aus dem Team",
+                  stapel(texte) == "" and not im_team(), zeige(texte))
+
+        cam_off(zuschauer)
+        hinstellen(bot, x, y, z)
+        console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
+        FIND.test("Wieder einladen und annehmen", einladen_und_annehmen(), "")
+        time.sleep(1.0)
+        seit = zuschauer.mark()
+        cam_on(bot)
+        time.sleep(1.5)
+        dort = zeilen_seit(zuschauer, seit)
+        bildschirm, _ = gast_herzen()
+        FIND.test("Startet der Bot den Cam-Modus, geht die Fuehrung weiter - der Gast sieht seine eigenen Herzen, "
+                  "und der Bot ist aus dem Team",
+                  not gesagt(dort, r"ended the tour") and bildschirm is not None and abs(bildschirm - 20.0) < 0.01
+                  and not im_team(), f"{zeige(dort)} / {bildschirm}")
+        seit = zuschauer.mark()
+        cam_off(bot)
+        dort = zeilen_seit(zuschauer, seit)
+        FIND.test("Endet der Cam-Modus des Bots, endet die Fuehrung", gesagt(dort, rf"{BOT_NAME} ended the tour"),
+                  zeige(dort))
+
+        cam_off(zuschauer)
+        hinstellen(bot, x, y, z)
+        console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
+        console(env, f"gamemode spectator {BOT_NAME}", pause=1.0)
+        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        FIND.test("Im Zuschauermodus fuehrt keiner", gesagt(zeilen, r"Not in spectator mode"), zeige(zeilen))
+        console(env, f"gamemode {spielmodus} {BOT_NAME}", pause=1.0)
+        hinstellen(bot, x, y, z)
+        einladen_und_annehmen()
+        seit = zuschauer.mark()
+        console(env, f"gamemode spectator {BOT_NAME}", pause=1.5)
+        dort = zeilen_seit(zuschauer, seit)
+        FIND.test("Wechselt der Fuehrer in den Zuschauermodus, endet die Fuehrung",
+                  gesagt(dort, rf"{BOT_NAME} ended the tour"), zeige(dort))
+        console(env, f"gamemode {spielmodus} {BOT_NAME}", pause=1.0)
+
+        # Jeder Reload beendet den Cam-Modus des Gastes: danach von vorn.
+        set_option(env, "mirror-main-hand", "false", "tour")
+        hinstellen(bot, x, y, z)
+        console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
+        ausruestung = zuschauer.call("own_equipment").get("count", 0)
+        einladen_und_annehmen()
+        time.sleep(1.5)
+        pakete = zuschauer.call("own_equipment", since=ausruestung).get("packets", [])
+        FIND.test("mirror-main-hand: false - nur die zweite Hand kommt",
+                  not any(p.get("slot") == 0 and p.get("count", 0) > 0 for p in pakete)
+                  and any(p.get("slot") == 1 and p.get("count", 0) > 0 for p in pakete), str(pakete[-6:]))
+        befehl(zuschauer, "/cam tour leave")
+
+        set_options(env, [("mirror-main-hand", "true", "tour"), ("guide-name", "above", "tour")])
+        hinstellen(bot, x, y, z)
+        console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
+        einladen_und_annehmen()
+        time.sleep(1.5)
+        text = stapel(namen_texte(0.25875))
+        FIND.test("guide-name: above - sein Name bleibt: ueber ihm steht nur der Gast, und das Team gibt es nicht",
+                  ZUSCHAUER_NAME in text and "(Follower)" in text and "(Guide)" not in text and not im_team(),
+                  text)
+        befehl(zuschauer, "/cam tour leave")
+        cam_off(zuschauer)
+
+        set_options(env, [("guide-name", "replace", "tour"), ("lead-without-cam", "false", "tour")])
+        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        FIND.test("lead-without-cam: false - ohne Cam-Modus fuehrt keiner", gesagt(zeilen, r"Only in cam mode"),
+                  zeige(zeilen))
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                zuschauer.call("close_window", wait=10)
+                cam_off(zuschauer)
+                zuschauer.stop()
+            if dritter.proc is not None:
+                dritter.stop()
+            cam_off(bot)
+            console(env, f"gamemode {spielmodus} {BOT_NAME}", pause=0.3)
+            console(env, f"effect clear {BOT_NAME}", pause=0.3)
+            console(env, f"attribute {BOT_NAME} minecraft:max_health base set 20", pause=0.3)
+            console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:air", pause=0.3)
+            console(env, f"item replace entity {BOT_NAME} weapon.offhand with minecraft:air", pause=0.3)
+            set_options(env, [("lead-without-cam", "true", "tour"), ("guide-name", "replace", "tour"),
+                              ("mirror-main-hand", "true", "tour")])
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Fuehrung ohne Cam-Modus: {exc}")
 
 
 def weiter_checks(env, bot):
@@ -7241,8 +7670,9 @@ def spotreiter_checks(env, bot):
 
     Der Bot setzt Alpha zwei Bloecke weiter, dann Beta an seinem Platz, dann
     Cee sechs Bloecke weiter, und stellt sich wieder an seinen Platz. Unten
-    stehen zurueck auf 45, die Reiter auf 48, 49 und 50, der Filter auf 51,
-    52 frei und das Buch fuer einen neuen Punkt auf 53. Auf dem Reiter der
+    stehen zurueck auf 45, die Glocke des Gaestebuchs auf 47, die Reiter auf
+    48, 49 und 50, der Filter auf 51, 52 frei (die Seite danach, es gibt nur
+    eine) und das Buch fuer einen neuen Punkt auf 53. Auf dem Reiter der
     eigenen stehen die Punkte, der neueste zuerst, mit dem Tag, an dem er
     entstand, und wie nah man fuer den Sprung sein muss; das Buch sagt, wie viele Punkte er hat und wie viele noch gehen.
     Der Filter zeigt alle Sortierungen, die gewaehlte markiert, und sortiert
@@ -7345,9 +7775,10 @@ def spotreiter_checks(env, bot):
         FIND.test("Der Filter zeigt alle Sortierungen, die gewaehlte markiert",
                   "» newest first" in filter_text and "by name" in filter_text and "nearest first" in filter_text
                   and "» by name" not in filter_text and "» nearest first" not in filter_text, filter_text)
-        FIND.test("Unten: zurueck auf 45, die Reiter auf 48 bis 50 (der offene glaenzt), der Filter auf 51, "
-                  "52 frei, das Buch auf 53",
-                  all(str(i) in knopf for i in (45, 48, 49, 50, 51, 53)) and "52" not in knopf
+        FIND.test("Unten: zurueck auf 45, die Glocke des Gaestebuchs auf 47, die Reiter auf 48 bis 50 (der offene "
+                  "glaenzt), der Filter auf 51, 52 frei, das Buch auf 53",
+                  all(str(i) in knopf for i in (45, 47, 48, 49, 50, 51, 53)) and "52" not in knopf
+                  and "Guestbook" in item_text(knopf.get("47"))
                   and (knopf.get("48") or {}).get("glint") is True and not (knopf.get("49") or {}).get("glint")
                   and "Save a spot here" in item_text(knopf.get("53")), str(sorted(knopf)))
         klick(bot, 51)
@@ -13568,6 +13999,8 @@ ABSCHNITTE = [
     Abschnitt("einstellungen", einstellungen_checks, "preferences speed sky storage session/SessionListener"),
     Abschnitt("teilen", teilen_checks, "spot visit"),
     Abschnitt("fuehrung", fuehrung_checks, "tour speed"),
+    Abschnitt("fuehrung_ohne_cam", fuehrung_ohne_cam_checks, "tour display/CamNameTag scoreboard/GuideTeam"),
+    Abschnitt("gaestebuch", gaestebuch_checks, "spot/SpotGuestbook spot/CamSpots spot/SpotViews menu/CamMenu"),
     Abschnitt("weiter", weiter_checks, "resume"),
     Abschnitt("ausspaehen", ausspaeh_checks, "scout"),
     Abschnitt("menue", menue_checks, "menu"),

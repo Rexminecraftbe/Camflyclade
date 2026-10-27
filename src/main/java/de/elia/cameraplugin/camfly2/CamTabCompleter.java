@@ -257,7 +257,7 @@ public class CamTabCompleter implements TabCompleter {
             completions.add("visit");
         }
         if (own != null && plugin.getTour().isEnabled() && "tour".startsWith(partial)
-                && (plugin.isInCameraMode(own) || !plugin.getTour().invitationsOf(own).isEmpty())) {
+                && (plugin.getTour().canLead(own) || !plugin.getTour().invitationsOf(own).isEmpty())) {
             completions.add("tour");
         }
         if (player != null && plugin.getMenu().isOpenable() && "menu".startsWith(partial)) {

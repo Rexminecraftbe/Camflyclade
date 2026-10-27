@@ -6,6 +6,7 @@ import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
@@ -16,14 +17,18 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.util.Transformation;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -46,6 +51,19 @@ import java.util.UUID;
  * {@code player.tour-follower-format}. Their own names are hidden while
  * they do.</p>
  *
+ * <p>A guide out of camera mode, {@code tour.lead-without-cam}, carries the
+ * same names while guests follow him closely, with his own at the bottom,
+ * {@code player.tour-builder-format}. His name tag, which the client draws
+ * over a player who is not invisible, gives way to them: the team
+ * {@code cam_guide} hides it, see
+ * {@link de.elia.cameraplugin.scoreboard.GuideTeam}. With
+ * {@code tour.guide-name: above} - or while he is in the team of another
+ * plugin - it stays, and the names of the guests stand over it instead. They
+ * never show more than his name tag would: not while he is invisible, and not
+ * through walls while he sneaks. They always keep to him in mode FOLLOW: a
+ * passenger would keep other plugins from teleporting a player who plays on as
+ * ever.</p>
+ *
  * <p>How it keeps to him is the {@link NameMode}: put back over his head every
  * tick, or sitting on him as a passenger. A passenger has to come off before a
  * teleport. Spigot turns down every {@code player.teleport()} of a player who
@@ -56,6 +74,12 @@ import java.util.UUID;
  * on.</p>
  */
 public final class CamNameTag implements Listener {
+
+    /**
+     * How far one line of a name tag reaches, in blocks: the step the game
+     * lifts the name of a player by when a score stands under it.
+     */
+    private static final double NAME_TAG_LINE = 9 * 1.15 * 0.025;
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
@@ -71,6 +95,10 @@ public final class CamNameTag implements Listener {
     /** What each name says right now, so it is only sent anew when that changes. */
     private final Map<UUID, String> texts = new HashMap<>();
     private final Map<UUID, BukkitRunnable> tasks = new HashMap<>();
+    /** The guides out of camera mode the names of their tour stand over. */
+    private final Set<UUID> guides = new HashSet<>();
+    /** Those of them whose name tag the team hides, the names standing in its place. */
+    private final Set<UUID> replacing = new HashSet<>();
 
     public CamNameTag(CameraPlugin plugin, CamSettings settings, Messages messages, CameraPlayers cameraPlayers) {
         this.plugin = plugin;
@@ -85,17 +113,60 @@ public final class CamNameTag implements Listener {
         if (!settings.showsPlayerName()) {
             return;
         }
+        follow(player);
+    }
+
+    /**
+     * Over a guide out of camera mode, asked by the tour every tick: the
+     * names of his tour once guests follow him closely, see
+     * {@link de.elia.cameraplugin.tour.CamTour#stackedOver}. Once none do any
+     * more, or the tour is over, they go again by themselves, and his name
+     * tag comes back.
+     */
+    public void keepOverGuide(Player guide) {
+        UUID id = guide.getUniqueId();
+        if (tasks.containsKey(id) || !settings.showsPlayerName() || !overGuide(guide)) {
+            return;
+        }
+        guides.add(id);
+        if (settings.isTourGuideNameReplacing() && plugin.getGuideTeam().hide(guide)) {
+            replacing.add(id);
+        }
+        follow(guide);
+    }
+
+    /** Whether the names of a tour belong over him: he guides out of camera mode, with guests close behind him. */
+    private boolean overGuide(Player player) {
+        return !cameraPlayers.contains(player.getUniqueId()) && plugin.getTour().guidesWithoutCam(player)
+                && !plugin.getTour().stackedOver(player).isEmpty();
+    }
+
+    /** Whether a name stands over him: in camera mode, or as a guide out of it, see {@link #overGuide}. */
+    private boolean carriesName(Player player) {
+        return guides.contains(player.getUniqueId()) ? overGuide(player)
+                : cameraPlayers.contains(player.getUniqueId());
+    }
+
+    /** Puts the name up and keeps it on him every tick, for as long as he carries one. */
+    private void follow(Player player) {
         TextDisplay name = putUp(player);
         if (name == null) {
+            // Nothing to say: whatever was set up for it goes again.
+            stopFor(player);
             return;
         }
         names.put(player.getUniqueId(), name);
         BukkitRunnable task = new BukkitRunnable() {
             @Override
             public void run() {
-                if (!cameraPlayers.contains(player.getUniqueId()) || !player.isOnline()) {
+                if (!player.isOnline() || !carriesName(player)) {
                     stopFor(player);
                     return;
+                }
+                if (replacing.contains(player.getUniqueId()) && !plugin.getGuideTeam().hides(player)) {
+                    // Another plugin took him into its team: his name tag is
+                    // back, and the names stand over it from now on.
+                    replacing.remove(player.getUniqueId());
                 }
                 TextDisplay current = keepToPlayer(player);
                 if (current == null) {
@@ -106,6 +177,13 @@ public final class CamNameTag implements Listener {
                 if (!text.equals(texts.get(player.getUniqueId()))) {
                     current.setText(text);
                     texts.put(player.getUniqueId(), text);
+                }
+                if (guides.contains(player.getUniqueId())) {
+                    // Like his name tag: not through walls while he sneaks.
+                    boolean through = settings.getPlayerNameStyle().throughWalls() && !player.isSneaking();
+                    if (current.isSeeThrough() != through) {
+                        current.setSeeThrough(through);
+                    }
                 }
                 showToViewers(player, current);
             }
@@ -123,7 +201,7 @@ public final class CamNameTag implements Listener {
      */
     private TextDisplay putUp(Player player) {
         String text = textFor(player);
-        boolean rides = rides();
+        boolean rides = rides(player);
         TextDisplay name = NameDisplay.spawnStyled(nameLocation(player), text, settings.getPlayerNameStyle(), nameKey,
                 display -> {
                     display.setVisibleByDefault(false);
@@ -142,12 +220,14 @@ public final class CamNameTag implements Listener {
      * What the name over him says, coloured: his {@code player.name-format}.
      * Over the camera of a guide, the names of the guests who follow him
      * stand over it, the one who joined first right above his - a text
-     * display writes its lines upwards from where it stands.
+     * display writes its lines upwards from where it stands. Over a guide
+     * out of camera mode, his own line is {@code player.tour-builder-format},
+     * and none at all while his name tag stays.
      */
     private String textFor(Player player) {
         String own = nameOf(player);
         List<Player> guests = plugin.getTour().stackedOver(player);
-        if (guests.isEmpty()) {
+        if (guests.isEmpty() && !guides.contains(player.getUniqueId())) {
             return NameDisplay.styled(own, settings.getPlayerNameStyle());
         }
         List<String> lines = new ArrayList<>();
@@ -157,6 +237,15 @@ public final class CamNameTag implements Listener {
             if (!ChatColor.stripColor(line).isBlank()) {
                 lines.add(line);
             }
+        }
+        if (guides.contains(player.getUniqueId())) {
+            if (replacing.contains(player.getUniqueId())) {
+                String builder = messages.getMessage("player.tour-builder-format").replace("{player}",
+                        player.getName());
+                lines.add(ChatColor.stripColor(builder).isBlank()
+                        ? NameDisplay.styled(player.getName(), settings.getPlayerNameStyle()) : builder);
+            }
+            return String.join("\n", lines);
         }
         String guide = onTour("player.tour-guide-format", player);
         lines.add(ChatColor.stripColor(guide).isBlank() ? NameDisplay.styled(own, settings.getPlayerNameStyle())
@@ -179,17 +268,32 @@ public final class CamNameTag implements Listener {
                 .replace("{player}", player.getName());
     }
 
-    private boolean rides() {
-        return settings.getPlayerNameMode() == NameMode.RIDE;
+    /** Whether his name sits on him as a passenger: in mode RIDE, and never over a guide out of camera mode. */
+    private boolean rides(Player player) {
+        return settings.getPlayerNameMode() == NameMode.RIDE && !guides.contains(player.getUniqueId());
     }
 
     /**
      * Where the name of the camera player stands: over his head, where the game
      * would put his name tag. Measured from his height of the moment, which
-     * shrinks while he swims or crawls.
+     * shrinks while he swims or crawls. Over a guide whose name tag stays, as
+     * much higher as it reaches, see {@link #overNameTag()}.
      */
     private Location nameLocation(Player player) {
-        return player.getLocation().add(0.0, player.getHeight() + NameDisplay.ABOVE_HEAD, 0.0);
+        double over = guides.contains(player.getUniqueId()) && !replacing.contains(player.getUniqueId())
+                ? overNameTag() : 0.0;
+        return player.getLocation().add(0.0, player.getHeight() + NameDisplay.ABOVE_HEAD + over, 0.0);
+    }
+
+    /**
+     * How high the name tag of a player reaches over where it starts, in
+     * blocks: one line, and the game lifts the name a line more for the score
+     * of {@code below_name}, where the scoreboard shows one.
+     */
+    private static double overNameTag() {
+        boolean score = Bukkit.getScoreboardManager().getMainScoreboard()
+                .getObjective(DisplaySlot.BELOW_NAME) != null;
+        return NAME_TAG_LINE * (score ? 2 : 1);
     }
 
     /**
@@ -228,7 +332,7 @@ public final class CamNameTag implements Listener {
             names.put(player.getUniqueId(), name);
             return name;
         }
-        if (rides()) {
+        if (rides(player)) {
             if (!player.getPassengers().contains(name)) {
                 name.teleport(nameLocation(player));
                 player.addPassenger(name);
@@ -266,10 +370,18 @@ public final class CamNameTag implements Listener {
      * Whether this viewer is shown the name: everybody the camera player is
      * shown to, which {@code player_visibility_mode} decides, but not he
      * himself - nobody has a name tag over his own head either -, and not
-     * whoever is on the same tour, mostly at the same spot.
+     * whoever is on the same tour, mostly at the same spot. Over a guide out
+     * of camera mode nobody while his name tag would not show either.
      */
     private boolean showsNameTo(Player owner, Player viewer) {
-        return !viewer.equals(owner) && viewer.canSee(owner) && !plugin.getTour().hidesCamera(viewer, owner);
+        return !viewer.equals(owner) && viewer.canSee(owner) && !plugin.getTour().hidesCamera(viewer, owner)
+                && !(guides.contains(owner.getUniqueId()) && hidesNameTag(owner));
+    }
+
+    /** Whether the client draws no name tag over him: while he is invisible, or in spectator mode. */
+    private static boolean hidesNameTag(Player player) {
+        return player.isInvisible() || player.hasPotionEffect(PotionEffectType.INVISIBILITY)
+                || player.getGameMode() == GameMode.SPECTATOR;
     }
 
     /**
@@ -281,7 +393,7 @@ public final class CamNameTag implements Listener {
      * is fired.</p>
      */
     public void takeOffForTeleport(Player player) {
-        if (!rides()) {
+        if (!rides(player)) {
             return;
         }
         TextDisplay name = names.get(player.getUniqueId());
@@ -311,7 +423,11 @@ public final class CamNameTag implements Listener {
         takeOffForTeleport(event.getPlayer());
     }
 
-    /** Takes the name away, at the end of camera mode. */
+    /**
+     * Takes the name away, at the end of camera mode - or once a guide out of
+     * camera mode no longer carries the names of his tour, whose name tag
+     * comes back.
+     */
     public void stopFor(Player player) {
         BukkitRunnable task = tasks.remove(player.getUniqueId());
         if (task != null) {
@@ -322,6 +438,10 @@ public final class CamNameTag implements Listener {
             takeDown(name);
         }
         texts.remove(player.getUniqueId());
+        guides.remove(player.getUniqueId());
+        if (replacing.remove(player.getUniqueId())) {
+            plugin.getGuideTeam().show(player);
+        }
     }
 
     /**
@@ -343,5 +463,13 @@ public final class CamNameTag implements Listener {
         }
         names.clear();
         texts.clear();
+        for (UUID id : replacing) {
+            Player guide = Bukkit.getPlayer(id);
+            if (guide != null) {
+                plugin.getGuideTeam().show(guide);
+            }
+        }
+        guides.clear();
+        replacing.clear();
     }
 }

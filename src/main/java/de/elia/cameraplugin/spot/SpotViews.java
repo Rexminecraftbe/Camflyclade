@@ -83,14 +83,16 @@ public final class SpotViews {
      * A player looked at a spot: jumped there or visited it. It counts unless
      * he did the same less than {@code viewpoints.views-cooldown-minutes}
      * ago.
+     *
+     * @return whether it counted
      */
-    public void count(UUID owner, String key, UUID viewer) {
+    public boolean count(UUID owner, String key, UUID viewer) {
         long now = System.currentTimeMillis();
         long again = TimeUnit.MINUTES.toMillis(settings.getViewsCooldownMinutes());
         String who = owner + "/" + key + "/" + viewer;
         Long last = lastCounted.get(who);
         if (last != null && now - last < again) {
-            return;
+            return false;
         }
         lastCounted.values().removeIf(at -> now - at >= again);
         if (again > 0L) {
@@ -98,6 +100,7 @@ public final class SpotViews {
         }
         views.computeIfAbsent(owner, id -> new LinkedHashMap<>()).merge(key, 1L, Long::sum);
         save();
+        return true;
     }
 
     /** A spot its owner has deleted starts at 0 again, should he save one of the same name. */

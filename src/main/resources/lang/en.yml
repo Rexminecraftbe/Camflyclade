@@ -192,7 +192,9 @@ messages:
   # menu-spot-reach-lore stands under every spot that can be jumped to: how close one has to be to jump there.
   # menu-spot-views: how often the spot was looked at ({views}): every jump and every visit, by anybody, the same
   # player at the same spot once in viewpoints.views-cooldown-minutes at most, which menu-spot-views-hint says under
-  # it ({minutes}; not at 0, when every jump counts).
+  # it ({minutes}; not at 0, when every jump counts). menu-guestbook is the bell on the pages of the spots that
+  # switches the guestbook (viewpoints.guestbook) on and off for him: menu-state with menu-state-on or -off, then
+  # menu-guestbook-action.
   # menu-new-spot-count says on the button of a new spot how many spots he has ({count}), may have ({max},
   # viewpoints.max-per-player) and may still save ({left}); -full once there is no room left, -unlimited without a
   # limit. menu-sort is the button that sorts a list, {sort} being one of the menu-sort-... orders; under it every
@@ -381,6 +383,9 @@ messages:
   menu-end: "&cEnd cam mode"
   menu-end-lore: "&7Back to your body."
   menu-features-off: "&cThat is switched off on this server."
+  menu-guestbook: "&6Guestbook"
+  menu-guestbook-action: "&eClick: switch on or off"
+  menu-guestbook-lore: "&7Hear who looks at your spots\n&7and who likes them: right away,\n&7or when you come back."
   menu-new-spot: "&aSave a spot here"
   menu-new-spot-count: "&7Your spots: &f{count} of {max} &7- &a{left} more &7possible"
   menu-new-spot-count-full: "&cYour spots: {count} of {max} - delete one first"
@@ -523,9 +528,9 @@ messages:
   menu-tour-disabled-lore: "&7It is off for everybody\n&7{time}{reason}."
   menu-tour-empty: "&7Nobody to invite"
   # {start} = tour.start-distance, {radius} = tour.radius.
-  menu-tour-empty-lore: "&7Players on no tour show up here\n&7when they are close to your camera:\n&7- without cam mode: within {start} blocks\n&7- in cam mode: within {radius} blocks"
+  menu-tour-empty-lore: "&7Players on no tour show up here\n&7when they are close to you:\n&7- without cam mode: within {start} blocks\n&7- in cam mode: within {radius} blocks"
   # The same while tour.start-distance is 0: only who is in cam mode can come along.
-  menu-tour-empty-lore-cam-only: "&7Players on no tour show up here\n&7when they are in cam mode and their\n&7camera is within {radius} blocks of yours."
+  menu-tour-empty-lore-cam-only: "&7Players on no tour show up here\n&7when they are in cam mode and their\n&7camera is within {radius} blocks of you."
   menu-tour-end: "&cEnd the tour"
   menu-tour-end-lore: "&7Every guest goes their own way."
   menu-tour-following: "&aYou follow {player}"
@@ -545,7 +550,7 @@ messages:
   menu-tour-lead-restricted-lore: "&7You are restricted\n&7{time}{reason}."
   menu-tour-leave: "&cLeave the tour"
   menu-tour-leave-lore: "&7Your camera stays where it is,\n&7your keys move it again."
-  menu-tour-lore: "&7Show others round in cam mode,\n&7or follow someone who does."
+  menu-tour-lore: "&7Show others round, or follow\n&7someone who does."
   menu-tour-not-in-cam: "&7Not in cam mode"
   menu-tour-not-in-cam-lore: "&7Start cam mode to show\n&7others round."
   menu-tour-title: "&8Tour"
@@ -586,7 +591,10 @@ messages:
   player.name-format: "{player}'s Cam"
   # On a tour, the names of the guests stand over the guide's camera, stacked over the guide's: {name} = what
   # player.name-format says (without its colour), {player} = the player's name. The follower lines take the colour of
-  # camera-mode.name.color, the guide's line brings its own.
+  # camera-mode.name.color, the guide's line brings its own. Over a guide out of cam mode (tour.lead-without-cam), his
+  # own line is player.tour-builder-format ({player} = his name) - with tour.guide-name: replace, in place of his name
+  # tag; with above his name tag stays, and only the follower lines stand over it.
+  player.tour-builder-format: "&6{player} &7(Guide)"
   player.tour-follower-format: "{name} &7(Follower)"
   player.tour-guide-format: "&6{name} &7(Guide)"
   portal-blocked: "&cYou cannot go through {portal} portals in camera mode."
@@ -635,6 +643,9 @@ messages:
   # with spot-accepted-owner or spot-declined-owner what came of it. spot-removed: he took a spot he had accepted off
   # his list. spot-too-far: in cam mode, the spot is out of reach of the camera; spot-start-too-far: out of cam mode,
   # the spot is further than viewpoints.start-distance, {blocks} being by how much.
+  # The guestbook (viewpoints.guestbook): spot-guestbook-viewed and -liked tell an owner online who ({player}) looked
+  # at his spot or liked it; back on the server after being offline, spot-guestbook-header and a spot-guestbook-entry
+  # for each spot that got any since ({views}, {likes}). spot-guestbook-on and -off answer the bell in the menu.
   spot-accepted: "&aYou accepted {spot}: you find it among the spots shared with you."
   spot-accepted-owner: "&a{player} accepted your spot {spot}."
   # The moderation of the spots on the admin page: spot-admin-... and spot-restrict-... / spot-unrestrict-... tell the
@@ -684,6 +695,12 @@ messages:
   spot-disabled-shared-new: "&cSharing spots is switched off {time}{reason}."
   spot-enabled-now: "&a{player} switched spots on again for everybody."
   spot-full: "&cYou have {max} spots already, the most there may be. Delete one first."
+  spot-guestbook-entry: "&7- &f{spot}&7: &e{views} &7views, &d{likes} &7likes"
+  spot-guestbook-header: "&6Guestbook: &7what your spots got since you were last here"
+  spot-guestbook-liked: "&6Guestbook: &e{player} &7likes your spot &f{spot}&7."
+  spot-guestbook-off: "&eGuestbook off: you no longer hear who looks at your spots."
+  spot-guestbook-on: "&aGuestbook on: you hear who looks at your spots and who likes them."
+  spot-guestbook-viewed: "&6Guestbook: &e{player} &7looked at your spot &f{spot}&7."
   spot-jumped: "&aAt spot {spot}"
   spot-like-own: "&cYou cannot like your own spot."
   spot-liked: "&dYou like {spot} now. It has {likes} likes."
@@ -794,6 +811,9 @@ messages:
   # tour-reach-lost and tour-reach-lost-guide say when it is over. tour-invitation has the buttons tour-button-accept
   # and tour-button-decline behind it, and what hovering over them says. tour-view-guide and tour-view-free answer
   # /cam tour view, tour-view-unavailable says that the guide's view does not work on the server (tour.guide-view).
+  # tour-guide-spectator: a player out of cam mode (tour.lead-without-cam) can't lead a tour in spectator mode;
+  # tour-guide-cannot-lead: the guide can't lead one any more when he is accepted (tour-guide-gone while only who is
+  # in cam mode may lead).
   # tour-full and tour-full-guide: the tour has tour.max-guests ({max}) already. tour-body-locked: a guest clicked or hit
   # his own body, which he cannot use while he follows the guide.
   # The moderation of the tours on the admin page (camplugin.touradmin): tour-restrict-... / tour-unrestrict-... tell
@@ -823,8 +843,10 @@ messages:
   tour-ended-guide: "&eYour tour is over."
   tour-full: "&cThe tour of {player} is full right now."
   tour-full-guide: "&cYour tour is full. Guests at most: {max}."
+  tour-guide-cannot-lead: "&c{player} can't show anybody round right now."
   tour-guide-gone: "&c{player} is no longer in cam mode."
   tour-guide-out-of-reach: "&c{player} is out of the reach of your camera."
+  tour-guide-spectator: "&cNot in spectator mode: it flies through walls."
   tour-invitation: "&e{player} invites you to a tour: your camera follows theirs."
   tour-invited: "&aYou invited {player} to your tour."
   tour-joined: "&aYou follow {player} now. Leave with /cam tour leave, /cam back or the menu."
@@ -1371,6 +1393,12 @@ message-settings:
   spot-disabled-shared-new: true
   spot-enabled-now: true
   spot-full: true
+  spot-guestbook-entry: true
+  spot-guestbook-header: true
+  spot-guestbook-liked: true
+  spot-guestbook-off: true
+  spot-guestbook-on: true
+  spot-guestbook-viewed: true
   spot-jumped: true
   spot-like-own: true
   spot-liked: true
@@ -1480,8 +1508,10 @@ message-settings:
   tour-ended-guide: true
   tour-full: true
   tour-full-guide: true
+  tour-guide-cannot-lead: true
   tour-guide-gone: true
   tour-guide-out-of-reach: true
+  tour-guide-spectator: true
   tour-invitation: true
   tour-invited: true
   tour-joined: true

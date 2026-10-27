@@ -365,6 +365,22 @@ public final class CamSettings {
     private double tourStartDistance;
     /** How many guests one tour takes at once, {@code tour.max-guests}; 0 for no limit. */
     private int tourMaxGuests;
+    /** Whether a player out of camera mode may show others round as well, {@code tour.lead-without-cam}. */
+    private boolean tourLeadWithoutCam;
+    /**
+     * Whether the names of a tour take the place of the name tag of a guide
+     * out of camera mode, {@code tour.guide-name: replace}, rather than
+     * standing over it, {@code above}.
+     */
+    private boolean tourGuideNameReplaces;
+    /** Whether the guests of a guide out of camera mode see his hearts as theirs, {@code tour.mirror-health}. */
+    private boolean tourMirrorHealth;
+    /** Whether they see the item in his hand in theirs, {@code tour.mirror-main-hand}. */
+    private boolean tourMirrorMainHand;
+    /** Whether they see the item in his off hand in theirs, {@code tour.mirror-off-hand}. */
+    private boolean tourMirrorOffHand;
+    /** Whether the owner of a spot hears who looked at it and liked it, {@code viewpoints.guestbook}. */
+    private boolean viewpointsGuestbook;
     /** How close a player out of camera mode has to be to a spot to jump there, {@code viewpoints.start-distance}. */
     private double viewpointsStartDistance;
     /** How long the same player at the same spot is no new view, {@code viewpoints.views-cooldown-minutes}. */
@@ -727,6 +743,13 @@ public final class CamSettings {
         tourGuideView = config.getBoolean("tour.guide-view", true);
         tourStartDistance = config.getDouble("tour.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
         tourMaxGuests = config.getInt("tour.max-guests", 5, 0, MAX_TOUR_GUESTS);
+        tourLeadWithoutCam = config.getBoolean("tour.lead-without-cam", true);
+        tourGuideNameReplaces = config.getChoice("tour.guide-name", "replace", "replace", "above")
+                .equalsIgnoreCase("replace");
+        tourMirrorHealth = config.getBoolean("tour.mirror-health", true);
+        tourMirrorMainHand = config.getBoolean("tour.mirror-main-hand", true);
+        tourMirrorOffHand = config.getBoolean("tour.mirror-off-hand", true);
+        viewpointsGuestbook = config.getBoolean("viewpoints.guestbook", true);
         viewpointsStartDistance = config.getDouble("viewpoints.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
         viewsCooldownMinutes = config.getInt("viewpoints.views-cooldown-minutes", 10, 0, MAX_VIEWS_COOLDOWN_MINUTES);
         resumeEnabled = config.getBoolean("resume-command.enabled", true);
@@ -1650,6 +1673,42 @@ public final class CamSettings {
     /** How many guests one tour takes at once; 0 for no limit. */
     public int getTourMaxGuests() {
         return tourMaxGuests;
+    }
+
+    /** Whether a player out of camera mode may show others round as well, while he builds, say. */
+    public boolean isTourLeadWithoutCam() {
+        return tourLeadWithoutCam;
+    }
+
+    /**
+     * Whether the names of a tour take the place of the name tag of a guide
+     * out of camera mode; otherwise they stand over it.
+     */
+    public boolean isTourGuideNameReplacing() {
+        return tourGuideNameReplaces;
+    }
+
+    /** Whether the guests of a guide out of camera mode see his hearts on their screen. */
+    public boolean isTourMirrorHealth() {
+        return tourMirrorHealth;
+    }
+
+    /** Whether they see the item in his hand in theirs. */
+    public boolean isTourMirrorMainHand() {
+        return tourMirrorMainHand;
+    }
+
+    /** Whether they see the item in his off hand in theirs. */
+    public boolean isTourMirrorOffHand() {
+        return tourMirrorOffHand;
+    }
+
+    /**
+     * Whether the owner of a spot hears who looked at it and liked it -
+     * which only others do, so only while spots may be shared.
+     */
+    public boolean isGuestbookEnabled() {
+        return isViewpointsSharing() && viewpointsGuestbook;
     }
 
     /**

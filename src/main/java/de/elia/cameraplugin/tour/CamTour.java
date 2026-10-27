@@ -10,12 +10,14 @@ import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.session.ClientFrost;
 import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
+import de.elia.cameraplugin.visibility.VisibilityMode;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.chat.hover.content.Text;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
@@ -43,6 +45,14 @@ import java.util.UUID;
  * The tour, {@code /cam tour}: one camera player shows others round, and
  * their cameras fly along with his - for a build its builder shows to his
  * friends himself.
+ *
+ * <p>With {@code tour.lead-without-cam} the guide need not be in camera mode
+ * himself: the cameras of his guests follow him while he walks round and
+ * builds, and his guests see his hearts and the items in his hands on their
+ * own screen, see {@link GuideMirror}. The names of the tour stand over him as
+ * they would over his camera, see
+ * {@link de.elia.cameraplugin.display.CamNameTag}. Nobody leads a tour in
+ * spectator mode, which flies through walls; nor once he dies.</p>
  *
  * <p>Who may come along is kept fair: a player in camera mode whose camera
  * is close to the guide's, {@code tour.radius}, or one out of camera mode
@@ -151,6 +161,8 @@ public final class CamTour implements Listener {
     private final GuideView view = new GuideView(sender);
     /** The internals that hide players from a client and leave them in its tab list. */
     private final OutOfSight outOfSight = new OutOfSight(sender);
+    /** What the guests of a guide out of camera mode see of him on their own screen. */
+    private final GuideMirror mirror;
     /** Who looks round freely on tours instead of through the guide's eyes, while he is online. */
     private final Set<UUID> freeLook = new HashSet<>();
     /** The players the tour hid from each viewer with {@code hidePlayer}, see {@link #syncVisibility}. */
@@ -195,6 +207,7 @@ public final class CamTour implements Listener {
         this.settings = plugin.getSettings();
         this.messages = plugin.getMessages();
         this.cameraPlayers = plugin.getCameraPlayers();
+        this.mirror = new GuideMirror(settings);
     }
 
     /** Whether {@code /cam tour} is there at all. */
@@ -456,6 +469,23 @@ public final class CamTour implements Listener {
         return tours.containsKey(player.getUniqueId());
     }
 
+    /**
+     * Whether he could show others round from where he is, follows no tour
+     * aside: in camera mode, or - with {@code tour.lead-without-cam} - out of
+     * it, as long as he is alive and not in spectator mode.
+     */
+    public boolean canLead(Player player) {
+        if (cameraPlayers.contains(player.getUniqueId())) {
+            return true;
+        }
+        return settings.isTourLeadWithoutCam() && !player.isDead() && player.getGameMode() != GameMode.SPECTATOR;
+    }
+
+    /** Whether he shows others round right now out of camera mode, while he walks round and builds, say. */
+    public boolean guidesWithoutCam(Player player) {
+        return isGuiding(player) && !cameraPlayers.contains(player.getUniqueId());
+    }
+
     /** The guide he follows, or {@code null}. */
     public Player guideOf(Player player) {
         UUID guide = guideOf.get(player.getUniqueId());
@@ -555,11 +585,11 @@ public final class CamTour implements Listener {
      * is within {@code tour.radius} of his, and players out of camera mode
      * within {@code tour.start-distance} of it - on no tour, and able to
      * follow him from where they are. Nobody while he follows a tour himself
-     * or is not in camera mode.
+     * or cannot lead one, see {@link #canLead}.
      */
     public List<Player> candidates(Player guide) {
         List<Player> found = new ArrayList<>();
-        if (!cameraPlayers.contains(guide.getUniqueId()) || guideOf.containsKey(guide.getUniqueId())) {
+        if (!canLead(guide) || guideOf.containsKey(guide.getUniqueId())) {
             return found;
         }
         Tour tour = tours.get(guide.getUniqueId());
@@ -631,11 +661,15 @@ public final class CamTour implements Listener {
 
     /**
      * Whether the guide would see the other one but for camera mode: a
-     * player a vanish plugin hides is no one to invite.
+     * player a vanish plugin hides is no one to invite. A guide out of camera
+     * mode does not see a camera player under
+     * {@code player_visibility_mode: cam}, which is camera mode as well.
      */
     private boolean seen(Player guide, Player other) {
         return guide.canSee(other) || plugin.getPhotoMode().hides(guide, other)
-                || plugin.getScoutGuard().hides(guide, other);
+                || plugin.getScoutGuard().hides(guide, other)
+                || settings.getPlayerVisibilityMode() == VisibilityMode.CAM
+                && cameraPlayers.contains(other.getUniqueId()) && !cameraPlayers.contains(guide.getUniqueId());
     }
 
     /**
@@ -753,9 +787,10 @@ public final class CamTour implements Listener {
     }
 
     /**
-     * Whether he may show others round: no restriction keeps him from it, in
-     * camera mode, and following no tour himself. If not, he has been told
-     * why.
+     * Whether he may show others round: no restriction keeps him from it, he
+     * can lead one from where he is - in camera mode, or out of it with
+     * {@code tour.lead-without-cam} -, and he follows no tour himself. If not,
+     * he has been told why.
      */
     private boolean checkGuide(Player guide) {
         if (!isEnabled()) {
@@ -765,8 +800,9 @@ public final class CamTour implements Listener {
         if (!plugin.getTourModeration().check(guide, TourBans.What.LEAD)) {
             return false;
         }
-        if (!cameraPlayers.contains(guide.getUniqueId())) {
-            messages.sendConfiguredMessage(guide, "tour-not-in-cam");
+        if (!canLead(guide)) {
+            messages.sendConfiguredMessage(guide, settings.isTourLeadWithoutCam() ? "tour-guide-spectator"
+                    : "tour-not-in-cam");
             return false;
         }
         if (guideOf.containsKey(guide.getUniqueId())) {
@@ -835,9 +871,10 @@ public final class CamTour implements Listener {
                     : guide.getName());
             return;
         }
-        if (!cameraPlayers.contains(guide.getUniqueId()) || guideOf.containsKey(guide.getUniqueId())) {
+        if (!canLead(guide) || guideOf.containsKey(guide.getUniqueId())) {
             invitations.get(guest.getUniqueId()).remove(guide.getUniqueId());
-            messages.sendConfiguredMessage(guest, "tour-guide-gone", "{player}", guide.getName());
+            messages.sendConfiguredMessage(guest, settings.isTourLeadWithoutCam() ? "tour-guide-cannot-lead"
+                    : "tour-guide-gone", "{player}", guide.getName());
             return;
         }
         if (isFull(guide)) {
@@ -885,7 +922,7 @@ public final class CamTour implements Listener {
         }
         plugin.getStarter().startThen(guest, () -> {
             if (cameraPlayers.contains(guest.getUniqueId()) && hasInvited(guide, guest)
-                    && cameraPlayers.contains(guide.getUniqueId()) && !guideOf.containsKey(guide.getUniqueId())) {
+                    && canLead(guide) && !guideOf.containsKey(guide.getUniqueId())) {
                 join(guest, guide);
             }
         });
@@ -1013,7 +1050,11 @@ public final class CamTour implements Listener {
         }
         guideOf.remove(guestId);
         Player guest = Bukkit.getPlayer(guestId);
-        if (guest != null) {
+        if (guest == null) {
+            mirror.forget(guestId);
+        } else {
+            // His own hearts and hands back on his screen.
+            mirror.clear(guest);
             // His own camera back, whatever the tour thought his client saw:
             // a client left seeing through a guide would stay there, through
             // the end of camera mode and the guide leaving, until he joins
@@ -1089,6 +1130,7 @@ public final class CamTour implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         stopFor(event.getPlayer());
+        mirror.forget(event.getPlayer().getUniqueId());
         freeLook.remove(event.getPlayer().getUniqueId());
         hidden.remove(event.getPlayer().getUniqueId());
         forgotten.remove(event.getPlayer().getUniqueId());
@@ -1133,10 +1175,11 @@ public final class CamTour implements Listener {
             UUID guideId = entry.getKey();
             Tour tour = entry.getValue();
             Player guide = Bukkit.getPlayer(guideId);
-            if (guide == null || !cameraPlayers.contains(guideId)) {
+            if (guide == null || !canLead(guide)) {
                 endTour(guideId, guide == null ? "" : guide.getName());
                 continue;
             }
+            boolean mirrored = !cameraPlayers.contains(guideId) && mirror.isOn();
             Location at = guide.getLocation();
             Vector step = tour.last != null && tour.last.getWorld().equals(at.getWorld())
                     ? at.toVector().subtract(tour.last.toVector()) : new Vector();
@@ -1158,6 +1201,16 @@ public final class CamTour implements Listener {
                     away.add(guest.getName());
                     soonest = Math.min(soonest, left);
                 }
+                if (!tour.guests.containsKey(next.getKey())) {
+                    continue;
+                }
+                if (mirrored) {
+                    mirror.update(guide, guest);
+                } else {
+                    // Nothing to see of him: a guide who started camera mode
+                    // holds nothing any more.
+                    mirror.clear(guest);
+                }
                 if (++state.sinceFrost >= FROST_REFRESH) {
                     state.sinceFrost = 0;
                     ClientFrost.resend(guest);
@@ -1167,6 +1220,10 @@ public final class CamTour implements Listener {
                 continue;
             }
             warnGuide(guide, tour, away, soonest);
+            if (!cameraPlayers.contains(guideId)) {
+                // Over a guide out of camera mode only while guests follow him closely.
+                plugin.getNameTag().keepOverGuide(guide);
+            }
         }
         syncVisibility();
         if (!tickEnd) {

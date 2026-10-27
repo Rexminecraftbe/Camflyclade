@@ -51,7 +51,8 @@ import java.util.regex.Pattern;
  * down or drop it again, {@code /cam spot decline}, see {@link SharedSpots}.
  * Every jump to a spot and every visit is a view of it, see
  * {@link SpotViews}: the menu shows them under each spot and sorts by
- * them.
+ * them. Who looked at his spots and liked them, he hears from the
+ * guestbook, see {@link SpotGuestbook}.
  * Others jump to a spot they may use as to one of their own,
  * {@code /cam spot Owner:spot} - by the same rules, held from their own body
  * -, and with {@code visitor-camera} they visit it from wherever they are,
@@ -79,6 +80,7 @@ public final class CamSpots {
     private final PlayerStore store;
     private final SharedSpots shared;
     private final SpotViews views;
+    private final SpotGuestbook guestbook;
     private final JumpCheck jumpCheck;
     /** The spots of each player, by {@link Spot#key()}, on {@code storage: memory}. */
     private final Map<UUID, Map<String, Spot>> inMemory = new HashMap<>();
@@ -94,13 +96,14 @@ public final class CamSpots {
     private int ownerReadings;
 
     public CamSpots(CameraPlugin plugin, PlayerStore store, SharedSpots shared, SpotViews views,
-                    JumpCheck jumpCheck) {
+                    SpotGuestbook guestbook, JumpCheck jumpCheck) {
         this.plugin = plugin;
         this.settings = plugin.getSettings();
         this.messages = plugin.getMessages();
         this.store = store;
         this.shared = shared;
         this.views = views;
+        this.guestbook = guestbook;
         this.jumpCheck = jumpCheck;
     }
 
@@ -109,9 +112,15 @@ public final class CamSpots {
         return views.of(owner, spot.key());
     }
 
-    /** A player looked at a spot of this owner - jumped there or visited it -, see {@link SpotViews}. */
+    /**
+     * A player looked at a spot of this owner - jumped there or visited it -,
+     * see {@link SpotViews}. A view that counts goes into the guestbook of
+     * the owner, see {@link SpotGuestbook}.
+     */
     public void viewed(Player viewer, UUID owner, Spot spot) {
-        views.count(owner, spot.key(), viewer.getUniqueId());
+        if (views.count(owner, spot.key(), viewer.getUniqueId())) {
+            guestbook.viewed(owner, spot, viewer);
+        }
     }
 
     /** Whether {@code /cam spot} is there at all. */
@@ -309,6 +318,7 @@ public final class CamSpots {
         // A spot that is gone is shared with nobody, and nobody visits it.
         shared.deleted(player.getUniqueId(), spot.key());
         views.deleted(player.getUniqueId(), spot.key());
+        guestbook.deleted(player.getUniqueId(), spot.key());
         plugin.getVisit().checkVisitors(player.getUniqueId(), spot.key());
         countOwner(player);
         messages.sendConfiguredMessage(player, "spot-deleted", "{spot}", spot.name());
@@ -542,6 +552,7 @@ public final class CamSpots {
         boolean likes = shared.toggleLike(share, player.getUniqueId());
         messages.sendConfiguredMessage(player, likes ? "spot-liked" : "spot-unliked", "{spot}", share.label(),
                 "{likes}", String.valueOf(share.likes()));
+        guestbook.liked(share.getOwner(), share.getSpot(), player, likes);
     }
 
     /**
@@ -785,7 +796,7 @@ public final class CamSpots {
         if (!guard.jumpTo(player, data, target)) {
             return;
         }
-        views.count(owner, spot.key(), player.getUniqueId());
+        viewed(player, owner, spot);
         settings.getSpotSound().play(player);
         if (messages.isMessageEnabled("spot-jumped")) {
             plugin.getActionBar().flash(player, messages.getMessage("spot-jumped").replace("{spot}", label));
@@ -959,6 +970,7 @@ public final class CamSpots {
         }
         shared.deleted(owner, key);
         views.deleted(owner, key);
+        guestbook.deleted(owner, key);
         plugin.getVisit().checkVisitors(owner, key);
         Owner before = owners.get(owner);
         if (before != null) {

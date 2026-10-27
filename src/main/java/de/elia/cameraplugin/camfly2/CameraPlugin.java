@@ -46,6 +46,7 @@ import de.elia.cameraplugin.potion.CamPotionGuard;
 import de.elia.cameraplugin.preferences.CamPreferences;
 import de.elia.cameraplugin.resume.CamResume;
 import de.elia.cameraplugin.scoreboard.CamModeObjective;
+import de.elia.cameraplugin.scoreboard.GuideTeam;
 import de.elia.cameraplugin.scoreboard.NoCollisionTeam;
 import de.elia.cameraplugin.scout.CamScoutGuard;
 import de.elia.cameraplugin.session.CameraHead;
@@ -62,6 +63,7 @@ import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.spot.JumpCheck;
 import de.elia.cameraplugin.spot.SharedSpots;
 import de.elia.cameraplugin.spot.SpotBans;
+import de.elia.cameraplugin.spot.SpotGuestbook;
 import de.elia.cameraplugin.spot.SpotModeration;
 import de.elia.cameraplugin.spot.SpotViews;
 import de.elia.cameraplugin.start.CamStarter;
@@ -112,6 +114,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CameraPlayers cameraPlayers = new CameraPlayers();
 
     private final NoCollisionTeam noCollisionTeam = new NoCollisionTeam(settings, cameraPlayers);
+    private final GuideTeam guideTeam = new GuideTeam();
     private final CamModeObjective camModeObjective = new CamModeObjective();
     private final CamVisibility visibility = new CamVisibility(this, settings, cameraPlayers);
     private final CamParticles particles = new CamParticles(this, settings, cameraPlayers);
@@ -144,9 +147,10 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamBack back = new CamBack(this);
     private final SharedSpots sharedSpots = new SharedSpots(this, log, settings);
     private final SpotViews spotViews = new SpotViews(this, log, settings);
+    private final SpotGuestbook guestbook = new SpotGuestbook(this, log);
     private final SpotModeration spotModeration = new SpotModeration(this, new SpotBans(this, log));
     private final JumpCheck jumpCheck = new JumpCheck(this);
-    private final CamSpots spots = new CamSpots(this, playerStore, sharedSpots, spotViews, jumpCheck);
+    private final CamSpots spots = new CamSpots(this, playerStore, sharedSpots, spotViews, guestbook, jumpCheck);
     private final CamVisit visit = new CamVisit(this, sharedSpots, jumpCheck);
     private final CamResume resume = new CamResume(this, playerStore, sharedSpots, jumpCheck);
     private final CamTour tour = new CamTour(this);
@@ -203,6 +207,7 @@ public final class CameraPlugin extends JavaPlugin {
         ban.reload();
         sharedSpots.load();
         spotViews.load();
+        guestbook.load();
         spotModeration.reload();
         spots.indexOwners();
         tour.load(log);
@@ -214,6 +219,8 @@ public final class CameraPlugin extends JavaPlugin {
         warmUpProfileService();
         // Nobody is in camera mode at startup -> remove a team left over.
         noCollisionTeam.deleteNoCollisionTeam();
+        // Nobody shows anybody round either: a name tag a crash left hidden comes back.
+        guideTeam.delete();
         this.getCommand("cam").setExecutor(new CamCommand(this));
         this.getCommand("cam").setTabCompleter(new CamTabCompleter(this));
         registerListeners();
@@ -262,6 +269,7 @@ public final class CameraPlugin extends JavaPlugin {
                 scoutGuard,
                 menu,
                 tour,
+                guestbook,
                 new CamSuggestionFilter(this));
         for (Listener listener : listeners) {
             pluginManager.registerEvents(listener, this);
@@ -375,6 +383,7 @@ public final class CameraPlugin extends JavaPlugin {
         resume.onDisable();
         // No player left in camera mode -> remove the team.
         noCollisionTeam.deleteNoCollisionTeam();
+        guideTeam.delete();
         bodySpawner.removeLeftoverEntities();
         getLogger().info("CameraPlugin has been disabled!");
     }
@@ -452,6 +461,7 @@ public final class CameraPlugin extends JavaPlugin {
         spots.onReload();
         sharedSpots.load();
         spotViews.load();
+        guestbook.load();
         spotModeration.reload();
         spots.indexOwners();
         tour.load(log);
@@ -620,6 +630,10 @@ public final class CameraPlugin extends JavaPlugin {
         return camInventoryGuard;
     }
 
+    public GuideTeam getGuideTeam() {
+        return guideTeam;
+    }
+
     public NoCollisionTeam getNoCollisionTeam() {
         return noCollisionTeam;
     }
@@ -658,6 +672,10 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamBack getBack() {
         return back;
+    }
+
+    public SpotGuestbook getGuestbook() {
+        return guestbook;
     }
 
     public CamSpots getSpots() {
