@@ -178,7 +178,11 @@ public final class CamTour implements Listener {
         long shownSeconds = -1L;
         /** Whether he was last sent no speed at all, so standing still is not sent again every tick. */
         boolean resting;
-        /** Whether he sees through the eyes of the guide right now. */
+        /**
+         * Whether his client may see through the eyes of the guide: from the
+         * first time the guide's view went out until his own camera is sent
+         * back.
+         */
         boolean viewing;
         /** Ticks since the guide's view was last sent. */
         int sinceView;
@@ -982,9 +986,8 @@ public final class CamTour implements Listener {
      */
     private void drop(UUID guideId, UUID guestId) {
         Tour tour = tours.get(guideId);
-        Guest state = null;
         if (tour != null) {
-            state = tour.guests.remove(guestId);
+            tour.guests.remove(guestId);
             if (tour.guests.isEmpty()) {
                 tours.remove(guideId);
                 Player guide = Bukkit.getPlayer(guideId);
@@ -996,8 +999,12 @@ public final class CamTour implements Listener {
         guideOf.remove(guestId);
         Player guest = Bukkit.getPlayer(guestId);
         if (guest != null) {
-            if (state != null) {
-                unview(guest, state);
+            // His own camera back, whatever the tour thought his client saw:
+            // a client left seeing through a guide would stay there, through
+            // the end of camera mode and the guide leaving, until he joins
+            // anew.
+            if (view.isAvailable()) {
+                view.show(guest, guest);
             }
             plugin.getFlightSpeed().release(guest);
             guest.setVelocity(new Vector());
@@ -1179,8 +1186,12 @@ public final class CamTour implements Listener {
             plugin.getMovementGuard().jumpTo(guest, data, target);
             guest.setVelocity(new Vector());
             state.resting = true;
-            // After the jump the client may have to find the guide anew.
-            state.viewing = false;
+            // After the jump the client may have to find the guide anew: the
+            // guide's view goes out again the next tick he follows him. Until
+            // then his client may still see through the guide, so the tour
+            // goes on thinking it does - and gives him his own camera back
+            // when it ends.
+            state.sinceView = VIEW_REFRESH;
             return null;
         }
         Vector speed = step.clone().add(gap.multiply(PULL));
@@ -1212,7 +1223,11 @@ public final class CamTour implements Listener {
         if (state.viewing && ++state.sinceView < VIEW_REFRESH) {
             return;
         }
-        state.viewing = view.show(guest, guide);
+        // A send that fails changes nothing on the client: whatever it saw
+        // through before, it still does.
+        if (view.show(guest, guide)) {
+            state.viewing = true;
+        }
         state.sinceView = 0;
     }
 

@@ -6116,7 +6116,9 @@ def fuehrung_checks(env, bot):
     beenden die Fuehrung fuer den Gast, jedes mit seiner Meldung; ablehnen
     sagt es dem Fuehrer. Im Menue steht der Gast auf der Seite der Fuehrung,
     ein Klick laedt ihn ein, bei ihm steht die Einladung, und ein Linksklick
-    nimmt sie an. Mit tour.enabled: false ist /cam tour aus.
+    nimmt sie an. Endet der Cam-Modus des Gastes ohne /cam - ein Treffer auf
+    seinen Koerper -, ist er von der Fuehrung und sieht wieder aus seiner
+    eigenen Kamera. Mit tour.enabled: false ist /cam tour aus.
 
     Ist niemand nah genug, sagt die Seite der Fuehrung, wie nah: ohne
     Cam-Modus start-distance, im Cam-Modus radius. Auf der Fuehrung bleiben
@@ -6473,6 +6475,19 @@ def fuehrung_checks(env, bot):
         klick(zuschauer, 0, warten=2.0)
         FIND.test("Menue: ein Linksklick nimmt die Einladung an", nahe(zuschauer_pos(), bot.server_pos(), 1.0),
                   f"{zuschauer_pos()} / {bot.server_pos()}")
+        zuschauer.call("close_window", wait=10)
+        time.sleep(1.0)
+        # Ein Ende ohne /cam: ein Treffer auf den Koerper des Gastes, der
+        # noch bei gast steht.
+        kamera = kamera_marke()
+        seit = bot.mark()
+        console(env, f"damage @e[type=minecraft:mannequin,x={gast[0]},y={y},z={z},distance=..1,limit=1] 1 "
+                     f"minecraft:cactus", pause=2.0)
+        hier = zeilen_seit(bot, seit)
+        FIND.test("Endet der Cam-Modus des Gastes ohne /cam (ein Treffer auf seinen Koerper): er ist von der "
+                  "Fuehrung und sieht wieder aus seiner eigenen Kamera",
+                  not im_cam_modus(bot, ZUSCHAUER_NAME) and gesagt(hier, rf"{ZUSCHAUER_NAME} left your tour")
+                  and kameras_seit(kamera)[-1:] == ["selbst"], f"{zeige(hier)} / {kameras_seit(kamera)}")
         cam_off(zuschauer)
         cam_off(bot)
 
