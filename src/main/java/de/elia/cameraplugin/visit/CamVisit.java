@@ -128,6 +128,7 @@ public final class CamVisit {
         if (!plugin.getMovementGuard().jumpTo(player, data, visit.anchor(), visit)) {
             return;
         }
+        plugin.getSpots().viewed(player, share.getOwner(), share.getSpot());
         settings.getSpotSound().play(player);
         if (messages.isMessageEnabled("visit-started")) {
             plugin.getActionBar().flash(player, messages.getMessage("visit-started")

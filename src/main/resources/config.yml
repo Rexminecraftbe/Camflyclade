@@ -772,6 +772,9 @@ resume-command:
 # (bei max-distance-mode: signal nur, wohin das Signal reicht), nicht in ein Gebiet, das cam-area auf Stufe 2 verbietet,
 # nicht in gesperrte Lava, Wasser oder Pulverschnee und nicht in einen Block, der dort inzwischen steht. Sonst sagt
 # eine Meldung, warum nicht. Wie bei /cam back zählt der Sprung nicht als geflogen, und /cam trail hat dort eine Lücke.
+# Aufrufe: Jeder Sprung zu einem Punkt und jeder Besuch (/cam visit) zählt als Aufruf - von jedem, auch vom Besitzer,
+# derselbe Spieler am selben Punkt höchstens einmal in 10 Minuten. Das Menü zeigt sie unter jedem Punkt und sortiert
+# auf allen drei Reitern danach (die meisten zuerst). Verschoben behält ein Punkt seine Aufrufe, gelöscht sind sie weg.
 viewpoints:
   enabled: true
   # Wie nah man einem Punkt sein muss, um ohne Cam-Modus hinzuspringen, in Blöcken (0 bis 128, 0 = nur im
@@ -783,8 +786,10 @@ viewpoints:
   max-per-player: 10
   # Wo die Punkte liegen:
   #   file   = in plugins/CamFly/playerdata/stats/<UUID>.yml - sie bleiben nach /cam reload und einem Neustart
-  #            (die geteilten zusätzlich in plugins/CamFly/playerdata/shared-spots.yml)
-  #   memory = nur im Arbeitsspeicher - nach /cam reload oder einem Neustart sind sie weg, auch das Teilen
+  #            (die geteilten zusätzlich in plugins/CamFly/playerdata/shared-spots.yml, die Aufrufe in
+  #            plugins/CamFly/playerdata/spot-views.yml)
+  #   memory = nur im Arbeitsspeicher - nach /cam reload oder einem Neustart sind sie weg, auch das Teilen und die
+  #            Aufrufe
   storage: file
   # Ob Spieler ihre Punkte öffentlich machen und anderen anbieten dürfen (/cam spot share). Verschiebt der Besitzer einen
   # geteilten Punkt, wandert er für alle mit, löscht er ihn, ist er auch für alle weg. Mit false gibt es nur private

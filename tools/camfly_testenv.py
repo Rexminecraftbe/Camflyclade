@@ -7244,14 +7244,16 @@ def spotreiter_checks(env, bot):
     eigenen stehen die Punkte, der neueste zuerst, mit dem Tag, an dem er
     entstand, und wie nah man fuer den Sprung sein muss; das Buch sagt, wie viele Punkte er hat und wie viele noch gehen.
     Der Filter zeigt alle Sortierungen, die gewaehlte markiert, und sortiert
-    nach dem Namen und dann nach der Reichweite, die naechsten zuerst. Ein Rechtsklick auf das Buch fragt nach
+    nach dem Namen, nach den Aufrufen (noch keiner hat einen, "Views: 0")
+    und dann nach der Reichweite, die naechsten zuerst. Ein Rechtsklick auf das Buch fragt nach
     einem oeffentlichen Punkt, Gamma ist danach oeffentlich und steht bei den
     eigenen - dort mit "Public" darunter - und bei den oeffentlichen, als
     seiner. Der zweite Spieler sieht ihn dort und liked ihn mit einem
     Rechtsklick; danach steht das Like darunter, und der Punkt glaenzt. Ein
     Linksklick springt wie zu einem eigenen Punkt: ohne Cam-Modus, aber nah
     dran, startet er dort, und seine Kamera steht danach am Punkt. Der Filter des Bots auf den
-    oeffentlichen kommt nach drei Klicks zu den meisten Likes. Umschalt-Klick
+    oeffentlichen kommt nach drei Klicks zu den meisten Likes, nach vier zu
+    den meisten Aufrufen - der Sprung des anderen hat Gamma einen gegeben. Umschalt-Klick
     auf den eigenen oeffentlichen loescht ihn dort nicht, ein Rechtsklick
     nimmt ihn offline - bei den eigenen bleibt er.
 
@@ -7340,6 +7342,13 @@ def spotreiter_checks(env, bot):
                   and "» newest first" not in item_text(f.get("slots", {}).get("51")), str(namen(f)))
         klick(bot, 51)
         f = fenster(bot)
+        FIND.test("Noch ein Klick: nach den Aufrufen, die meisten zuerst - noch keiner hat einen, also der neueste "
+                  "zuerst; unter jedem steht \"Views: 0\"",
+                  namen(f)[:3] == ["Cee", "Beta", "Alpha"]
+                  and "» most views first" in item_text(f.get("slots", {}).get("51"))
+                  and "Views: 0" in item_text(f.get("slots", {}).get("0")), str(namen(f)))
+        klick(bot, 51)
+        f = fenster(bot)
         FIND.test("Noch ein Klick: nach der Reichweite, die naechsten zuerst",
                   namen(f)[:3] == ["Beta", "Alpha", "Cee"]
                   and "» nearest first" in item_text(f.get("slots", {}).get("51")), str(namen(f)))
@@ -7392,7 +7401,13 @@ def spotreiter_checks(env, bot):
         f = fenster(bot)
         FIND.test("Auf den oeffentlichen sortiert der Filter nach drei Klicks nach den Likes",
                   "» most likes first" in item_text(f.get("slots", {}).get("51")), item_text(f.get("slots", {}).get("51")))
+        klick(bot, 51)
+        f = fenster(bot)
         platz = platz_von(f, "Gamma (yours)") or 0
+        FIND.test("Noch ein Klick: nach den Aufrufen - der Sprung des anderen zu Gamma zaehlt als Aufruf",
+                  "» most views first" in item_text(f.get("slots", {}).get("51"))
+                  and "Views: 1" in item_text(f.get("slots", {}).get(str(platz))),
+                  item_text(f.get("slots", {}).get(str(platz))))
         seit = bot.mark()
         klick(bot, platz, mode=1)
         geklickt = zeilen_seit(bot, seit)

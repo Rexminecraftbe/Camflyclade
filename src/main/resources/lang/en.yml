@@ -190,6 +190,8 @@ messages:
   # writes it), menu-spots-offers how many spots wait for him to accept them, menu-spot-public-lore that one of his
   # own is public ({likes}); menu-spot-visit-action stands under the spots of others while visitor-camera is on.
   # menu-spot-reach-lore stands under every spot that can be jumped to: how close one has to be to jump there.
+  # menu-spot-views: how often the spot was looked at ({views}): every jump and every visit, by anybody, the same
+  # player at the same spot once in 10 minutes at most.
   # menu-new-spot-count says on the button of a new spot how many spots he has ({count}), may have ({max},
   # viewpoints.max-per-player) and may still save ({left}); -full once there is no room left, -unlimited without a
   # limit. menu-sort is the button that sorts a list, {sort} being one of the menu-sort-... orders; under it every
@@ -329,6 +331,7 @@ messages:
   menu-sort-option: "&7   {sort}"
   menu-sort-option-current: "&a» {sort}"
   menu-sort-owner: "by player"
+  menu-sort-views: "most views first"
   menu-spot: "&f{spot}"
   menu-spot-actions: "&eLeft-click: jump there\n&cShift-click: delete"
   menu-spot-actions-share: "&eLeft-click: jump there\n&aRight-click: share or make public\n&cShift-click: delete"
@@ -344,6 +347,7 @@ messages:
   menu-spot-reach-lore: "&7To jump there: within {start} blocks\n&7of it, or in cam mode within\n&7reach of your camera"
   menu-spot-reach-lore-cam-only: "&7To jump there: in cam mode,\n&7within reach of your camera"
   menu-spot-shared-lore: "&7Shared with: {players}"
+  menu-spot-views: "&7Views: &f{views}"
   menu-spot-visit-action: "&bShift-click: visit it, from wherever you are"
   menu-spots: "&aSpots"
   menu-spots-empty-private: "&7No spots yet"

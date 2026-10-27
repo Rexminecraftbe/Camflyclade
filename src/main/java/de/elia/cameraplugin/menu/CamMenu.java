@@ -148,9 +148,10 @@ public final class CamMenu implements Listener {
      * and the orders it can be sorted in, the first being where it starts.
      */
     private enum SpotTab {
-        PRIVATE("private", Material.FILLED_MAP, 48, List.of("date", "name", "near")),
-        PUBLIC("public", Material.GLOBE_BANNER_PATTERN, 49, List.of("date", "name", "owner", "likes", "near")),
-        SHARED("shared", Material.MAP, 50, List.of("date", "name", "owner", "near"));
+        PRIVATE("private", Material.FILLED_MAP, 48, List.of("date", "name", "views", "near")),
+        PUBLIC("public", Material.GLOBE_BANNER_PATTERN, 49,
+                List.of("date", "name", "owner", "likes", "views", "near")),
+        SHARED("shared", Material.MAP, 50, List.of("date", "name", "owner", "views", "near"));
 
         final String key;
         final Material icon;
@@ -167,10 +168,10 @@ public final class CamMenu implements Listener {
 
     /**
      * The orders of the spots: the newest first, by name, by the name of the
-     * owner, the most liked first, the nearest first.
+     * owner, the most liked first, the most viewed first, the nearest first.
      */
     private enum SpotSort {
-        DATE("date"), NAME("name"), OWNER("owner"), LIKES("likes"), NEAR("near");
+        DATE("date"), NAME("name"), OWNER("owner"), LIKES("likes"), VIEWS("views"), NEAR("near");
 
         final String key;
 
@@ -476,13 +477,14 @@ public final class CamMenu implements Listener {
         Page page = new Page();
         switch (tab) {
             case PRIVATE -> {
-                for (Spot spot : sorted(spots.own(player), sort, own -> own, own -> "", own -> 0, from)) {
+                for (Spot spot : sorted(spots.own(player), sort, own -> own, own -> "", own -> 0,
+                        own -> spots.views(player.getUniqueId(), own), from)) {
                     entries.add(slot -> putOwnSpot(player, page, slot, spot));
                 }
             }
             case PUBLIC -> {
                 for (Share share : sorted(spots.publicSpots(), sort, Share::getSpot, Share::getOwnerName,
-                        Share::likes, from)) {
+                        Share::likes, share -> spots.views(share.getOwner(), share.getSpot()), from)) {
                     entries.add(slot -> putPublicSpot(player, page, slot, share));
                 }
             }
@@ -491,7 +493,7 @@ public final class CamMenu implements Listener {
                     entries.add(slot -> putOffer(player, page, slot, share));
                 }
                 for (Share share : sorted(spots.accepted(player), sort, Share::getSpot, Share::getOwnerName,
-                        Share::likes, from)) {
+                        Share::likes, share -> spots.views(share.getOwner(), share.getSpot()), from)) {
                     entries.add(slot -> putSharedSpot(player, page, slot, share));
                 }
             }
@@ -577,7 +579,7 @@ public final class CamMenu implements Listener {
      */
     private void putOwnSpot(Player player, Page page, int slot, Spot spot) {
         CamSpots spots = plugin.getSpots();
-        List<String> lore = spotLore(spot);
+        List<String> lore = spotLore(player.getUniqueId(), spot);
         Share share = spots.shareOf(player, spot);
         if (share != null && share.isEveryone()) {
             lore.addAll(lines(messages.getMessage("menu-spot-public-lore")
@@ -619,7 +621,7 @@ public final class CamMenu implements Listener {
         CamSpots spots = plugin.getSpots();
         Spot spot = share.getSpot();
         boolean own = share.getOwner().equals(player.getUniqueId());
-        List<String> lore = spotLore(spot);
+        List<String> lore = spotLore(share.getOwner(), spot);
         lore.addAll(lines(messages.getMessage("menu-spot-likes").replace("{likes}", String.valueOf(share.likes()))));
         if (own) {
             lore.addAll(reachLore());
@@ -668,7 +670,7 @@ public final class CamMenu implements Listener {
     /** A spot offered to him: left-click accepts it, right-click turns it down. */
     private void putOffer(Player player, Page page, int slot, Share share) {
         CamSpots spots = plugin.getSpots();
-        List<String> lore = spotLore(share.getSpot());
+        List<String> lore = spotLore(share.getOwner(), share.getSpot());
         lore.addAll(lines(messages.getMessage("menu-offer-actions")));
         String name = messages.getMessage("menu-offer").replace("{owner}", share.getOwnerName())
                 .replace("{spot}", share.getSpot().name());
@@ -694,7 +696,7 @@ public final class CamMenu implements Listener {
      */
     private void putSharedSpot(Player player, Page page, int slot, Share share) {
         CamSpots spots = plugin.getSpots();
-        List<String> lore = spotLore(share.getSpot());
+        List<String> lore = spotLore(share.getOwner(), share.getSpot());
         lore.addAll(reachLore());
         lore.addAll(lines(messages.getMessage("menu-shared-spot-actions")));
         lore.addAll(visitLore());
@@ -738,12 +740,14 @@ public final class CamMenu implements Listener {
         }
     }
 
-    /** Where a spot is, and since when, as lines under it. */
-    private List<String> spotLore(Spot spot) {
+    /** Where a spot of this owner is, since when, and how often it was looked at, as lines under it. */
+    private List<String> spotLore(UUID owner, Spot spot) {
         List<String> lore = new ArrayList<>(lines(place(messages.getMessage("menu-spot-lore"), spot)));
         if (spot.created() > 0L) {
             lore.addAll(lines(messages.getMessage("menu-spot-created").replace("{date}", date(spot.created()))));
         }
+        lore.addAll(lines(messages.getMessage("menu-spot-views")
+                .replace("{views}", String.valueOf(plugin.getSpots().views(owner, spot)))));
         return lore;
     }
 
@@ -844,13 +848,15 @@ public final class CamMenu implements Listener {
     /**
      * Spots in an order: the newest first - those without a date, saved
      * before dates were kept, last -, by name, by owner, the most liked
-     * first, or the nearest first - those in another world last. What is the
-     * same in one order goes by name, then by owner.
+     * first, the most viewed first, or the nearest first - those in another
+     * world last. What is the same in one order goes by name, then by owner.
      *
-     * @param from what "nearest first" measures from, see {@link #nearFrom}
+     * @param views how often each was looked at, see {@link de.elia.cameraplugin.spot.SpotViews}
+     * @param from  what "nearest first" measures from, see {@link #nearFrom}
      */
     private static <T> List<T> sorted(Collection<T> items, SpotSort sort, Function<T, Spot> spot,
-                                      Function<T, String> owner, ToIntFunction<T> likes, Location from) {
+                                      Function<T, String> owner, ToIntFunction<T> likes, ToLongFunction<T> views,
+                                      Location from) {
         Comparator<T> byName = Comparator.comparing(item -> spot.apply(item).name(), String.CASE_INSENSITIVE_ORDER);
         Comparator<T> byOwner = Comparator.comparing(owner, String.CASE_INSENSITIVE_ORDER);
         Comparator<T> newest = Comparator.comparingLong((T item) -> spot.apply(item).created()).reversed();
@@ -859,6 +865,7 @@ public final class CamMenu implements Listener {
             case NAME -> byName.thenComparing(byOwner);
             case OWNER -> byOwner.thenComparing(byName);
             case LIKES -> Comparator.comparingInt(likes).reversed().thenComparing(newest).thenComparing(byName);
+            case VIEWS -> Comparator.comparingLong(views).reversed().thenComparing(newest).thenComparing(byName);
             case NEAR -> Comparator.comparingDouble((T item) -> distance(spot.apply(item), from))
                     .thenComparing(byName).thenComparing(byOwner);
         };

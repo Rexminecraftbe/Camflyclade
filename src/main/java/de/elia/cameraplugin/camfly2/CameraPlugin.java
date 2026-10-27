@@ -61,6 +61,7 @@ import de.elia.cameraplugin.speed.CamFlightSpeed;
 import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.spot.JumpCheck;
 import de.elia.cameraplugin.spot.SharedSpots;
+import de.elia.cameraplugin.spot.SpotViews;
 import de.elia.cameraplugin.start.CamStarter;
 import de.elia.cameraplugin.start.StartChecks;
 import de.elia.cameraplugin.start.StartDelay;
@@ -138,8 +139,9 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamAfk afk = new CamAfk(this);
     private final CamBack back = new CamBack(this);
     private final SharedSpots sharedSpots = new SharedSpots(this, log, settings);
+    private final SpotViews spotViews = new SpotViews(this, log, settings);
     private final JumpCheck jumpCheck = new JumpCheck(this);
-    private final CamSpots spots = new CamSpots(this, playerStore, sharedSpots, jumpCheck);
+    private final CamSpots spots = new CamSpots(this, playerStore, sharedSpots, spotViews, jumpCheck);
     private final CamVisit visit = new CamVisit(this, sharedSpots, jumpCheck);
     private final CamResume resume = new CamResume(this, playerStore, sharedSpots, jumpCheck);
     private final CamTour tour = new CamTour(this);
@@ -194,6 +196,7 @@ public final class CameraPlugin extends JavaPlugin {
         configFile.reportConfigWarnings(loadConfigValues(), null);
         ban.reload();
         sharedSpots.load();
+        spotViews.load();
         tour.load(log);
         bodySpawner = new BodySpawner(this, settings, messages, log, cameraPlayers);
         camModeObjective.setUp();
@@ -439,6 +442,7 @@ public final class CameraPlugin extends JavaPlugin {
         trail.onReload();
         spots.onReload();
         sharedSpots.load();
+        spotViews.load();
         tour.load(log);
         return true;
     }
