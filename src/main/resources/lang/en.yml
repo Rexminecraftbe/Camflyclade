@@ -496,7 +496,8 @@ messages:
   # (spot-list-offers-...), with spot-button-accept and spot-button-decline; {owner} is whose it is.
   # spot-offered-to-you tells a player online that a spot is offered to him, with the same two buttons; its owner hears
   # with spot-accepted-owner or spot-declined-owner what came of it. spot-removed: he took a spot he had accepted off
-  # his list.
+  # his list. spot-too-far: in cam mode, the spot is out of reach of the camera; spot-start-too-far: out of cam mode,
+  # the spot is further than viewpoints.start-distance, {blocks} being by how much.
   spot-accepted: "&aYou accepted {spot}: you find it among the spots shared with you."
   spot-accepted-owner: "&a{player} accepted your spot {spot}."
   spot-area: "&cSpot {spot} lies in {area}, cam mode is not allowed there."
@@ -557,7 +558,8 @@ messages:
   spot-shared-all: "&aSpot {spot} is public now: everybody finds it among the public spots."
   spot-shared-already: "&e{player} has spot {spot} already."
   spot-shared-unknown: "&cNobody shares a spot called {spot} with you."
-  spot-too-far: "&cSpot {spot} is more than {distance} blocks from your body."
+  spot-start-too-far: "&cYou are {blocks} blocks too far away."
+  spot-too-far: "&cYou are too far away."
   spot-unknown: "&cYou have no spot called {spot}."
   spot-unliked: "&7You no longer like {spot}. It has {likes} likes."
   spot-unshared: "&aSpot {spot} is no longer shared with {player}."
@@ -601,8 +603,9 @@ messages:
   time-set: "&aYour own time: {time}. Only you see it, until cam mode ends."
   time-set-kept: "&aYour own time: {time}. Only you see it, in every flight until you reset it."
   time-usage: "&eUse /cam time day, noon, sunset, night, midnight, sunrise or a time in ticks from 0 to 23999, or /cam time reset."
-  # /cam tour (tour): {player} is the other one - the guide, a guest or whom he invites -, {radius} tour.radius,
-  # {players} the guests the guide leaves behind and {time} the time left before the tour ends for them:
+  # /cam tour (tour): {player} is the other one - the guide, a guest or whom he invites -, {blocks} by how much he
+  # stands further than tour.start-distance from the guide out of cam mode (tour-start-too-far; tour-too-far-guest is
+  # the same in cam mode, further than tour.radius), {players} the guests the guide leaves behind and {time} the time left before the tour ends for them:
   # tour-reach-warning (for the guest) and tour-reach-warning-guide (for the guide) count it down in the action bar,
   # tour-reach-lost and tour-reach-lost-guide say when it is over. tour-invitation has the buttons tour-button-accept
   # and tour-button-decline behind it, and what hovering over them says. tour-view-guide and tour-view-free answer
@@ -642,7 +645,9 @@ messages:
   tour-reach-warning: "&c{player} is out of your reach: the tour ends in {time}"
   tour-reach-warning-guide: "&c{players} cannot follow: the tour ends for them in {time}"
   tour-self: "&cYou cannot invite yourself."
-  tour-too-far: "&cThe camera of {player} is more than {radius} blocks from yours."
+  tour-start-too-far: "&cYou are {blocks} blocks too far away."
+  tour-too-far: "&c{player} is too far away."
+  tour-too-far-guest: "&cYou are too far away."
   tour-unknown-player: "&cNobody called {player} is online."
   tour-usage: "&eUse /cam tour invite|accept|decline|kick <player>, /cam tour leave, /cam tour end or /cam tour view."
   # /cam trail: {number} which of the kept flights (1 the newest), {distance} in blocks, {time} how long the flight
@@ -1166,6 +1171,7 @@ message-settings:
   spot-shared-all: true
   spot-shared-already: true
   spot-shared-unknown: true
+  spot-start-too-far: true
   spot-too-far: true
   spot-unknown: true
   spot-unliked: true
@@ -1240,7 +1246,9 @@ message-settings:
   tour-reach-warning: true
   tour-reach-warning-guide: true
   tour-self: true
+  tour-start-too-far: true
   tour-too-far: true
+  tour-too-far-guest: true
   tour-unknown-player: true
   tour-usage: true
   tour-view-free: true

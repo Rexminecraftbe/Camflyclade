@@ -652,7 +652,8 @@ menu:
     # (sortieren), ein freier Platz und ganz rechts der Knopf für einen neuen Punkt: Linksklick privat, Rechtsklick
     # öffentlich - ein öffentlicher bleibt einer der eigenen und lässt sich auf der öffentlichen Seite mit Rechtsklick
     # wieder offline nehmen, ohne ihn zu löschen. Ein Linksklick auf einen Punkt springt hin, auf einen geteilten oder
-    # öffentlichen genauso wie auf einen eigenen: nur im Cam-Modus und nur, wohin die Kamera auch fliegen dürfte.
+    # öffentlichen genauso wie auf einen eigenen: nur, wohin die Kamera auch fliegen dürfte; ohne Cam-Modus startet er
+    # erst, wenn der Punkt nah genug ist (viewpoints.start-distance).
     # Umschalt-Klick besucht einen Punkt eines anderen (visitor-camera). Wartet ein Angebot, glänzt der Knopf.
     spots:
       item: filled_map
@@ -746,7 +747,9 @@ resume-command:
 # derselben Stelle aus ansieht.
 #   /cam spot set <Name>     = die Stelle, an der man gerade ist (als Kamera oder zu Fuß), mit der Blickrichtung.
 #                              Gibt es den Namen schon, wandert er hierher.
-#   /cam spot <Name>         = die Kamera springt dorthin (nur im Cam-Modus, Ton: sounds.spot, Text: spot-jumped)
+#   /cam spot <Name>         = die Kamera springt dorthin (Ton: sounds.spot, Text: spot-jumped). Ohne Cam-Modus
+#                              startet er dafür erst, dort wo man steht - wenn der Punkt nicht weiter als
+#                              start-distance weg ist (sonst: "You are X blocks too far away.")
 #   /cam spot delete <Name>  = den Punkt löschen
 #   /cam spot list           = alle eigenen, mit Knöpfen zum Hinspringen, Teilen und Löschen, darunter die, die andere
 #                              mit einem teilen, die öffentlichen der anderen und was einem angeboten wird
@@ -771,6 +774,10 @@ resume-command:
 # eine Meldung, warum nicht. Wie bei /cam back zählt der Sprung nicht als geflogen, und /cam trail hat dort eine Lücke.
 viewpoints:
   enabled: true
+  # Wie nah man einem Punkt sein muss, um ohne Cam-Modus hinzuspringen, in Blöcken (0 bis 128, 0 = nur im
+  # Cam-Modus). Der Cam-Modus startet dann dort, wo man steht, mit allem, was ein Start mit /cam prüft und kostet
+  # (z. B. nicht direkt nach Schaden). Auch der Linksklick im Menü.
+  start-distance: 16
   # Wie viele Punkte jeder Spieler höchstens hat (1 bis 100, 0 = kein Limit). Öffentliche zählen mit. Der Knopf für
   # einen neuen Punkt im Menü zeigt, wie viele man hat und wie viele noch gehen (ohne Limit nur, wie viele man hat).
   max-per-player: 10
@@ -799,10 +806,12 @@ visitor-camera:
   enabled: true
 
 # Führung: /cam tour - einer zeigt anderen seinen Bau, und ihre Kameras fliegen mit seiner mit.
-#   /cam tour invite <Spieler>   = einen Spieler einladen: nur einen, der schon im Cam-Modus ist und dessen Kamera
-#                                  nicht weiter als radius Blöcke von der eigenen weg ist (im Menü stehen nur solche)
-#   /cam tour accept <Spieler>   = eine Einladung annehmen (sie gilt eine Minute): die Kamera geht zum Führer, schaut
-#                                  wie er und fliegt von da an mit ihm mit
+#   /cam tour invite <Spieler>   = einen Spieler einladen: einen im Cam-Modus, dessen Kamera nicht weiter als radius
+#                                  Blöcke von der eigenen weg ist, oder einen ohne Cam-Modus, der nicht weiter als
+#                                  start-distance von ihr steht (im Menü stehen nur solche)
+#   /cam tour accept <Spieler>   = eine Einladung annehmen (sie gilt eine Minute; auch der Knopf im Chat, der sie
+#                                  gleich annimmt): die Kamera geht zum Führer, schaut wie er und fliegt von da an
+#                                  mit ihm mit. Ohne Cam-Modus startet er dafür erst, dort wo man steht.
 #   /cam tour decline <Spieler>  = eine Einladung ablehnen
 #   /cam tour kick <Spieler>     = einen Gast wegschicken
 #   /cam tour leave              = die Führung verlassen (auch /cam back, ein Sprung zu einem Aussichtspunkt, ein Besuch
@@ -819,6 +828,10 @@ tour:
   enabled: true
   # Wie nah die Kamera eines anderen der eigenen sein muss, damit man ihn einladen kann, in Blöcken (1 bis 128)
   radius: 16.0
+  # Wie nah ein Spieler ohne Cam-Modus der Kamera des Führers sein muss, um mitzukommen, in Blöcken (0 bis 128,
+  # 0 = nur wer schon im Cam-Modus ist). Nimmt er an, startet sein Cam-Modus dort, wo er steht, mit allem, was ein
+  # Start mit /cam prüft und kostet (z. B. nicht direkt nach Schaden). Zu weit weg: "You are X blocks too far away."
+  start-distance: 16
   # Wie viele Sekunden der Führer außer Reichweite eines Gastes sein darf, bevor die Führung für den Gast endet
   # (1 bis 60)
   out-of-reach-seconds: 5

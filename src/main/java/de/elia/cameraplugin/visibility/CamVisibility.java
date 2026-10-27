@@ -44,12 +44,14 @@ public final class CamVisibility {
      * his picture, camera players as well, and hands him back to this when it
      * ends, see {@link de.elia.cameraplugin.photo.CamPhotoMode}. So is a
      * camera player {@code anti-scouting} hides from the viewer, being too
-     * far away, see {@link de.elia.cameraplugin.scout.CamScoutGuard}.</p>
+     * far away, see {@link de.elia.cameraplugin.scout.CamScoutGuard}, and one
+     * on the same tour, see {@link de.elia.cameraplugin.tour.CamTour}.</p>
      */
     private void applyVisibility(Player camPlayer, Player viewer) {
         if (camPlayer.equals(viewer)) return;
         if (plugin.getPhotoMode().hidesPlayersFrom(viewer)) return;
         if (plugin.getScoutGuard().hides(viewer, camPlayer)) return;
+        if (plugin.getTour().hidesPlayer(viewer, camPlayer)) return;
         switch (settings.getPlayerVisibilityMode()) {
             case CAM -> {
                 if (cameraPlayers.contains(viewer.getUniqueId())) {

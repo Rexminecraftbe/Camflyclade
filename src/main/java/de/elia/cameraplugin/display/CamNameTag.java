@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.display;
 
+import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraPlayers;
@@ -14,7 +15,6 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Transformation;
 import org.joml.Vector3f;
@@ -46,7 +46,7 @@ import java.util.UUID;
  */
 public final class CamNameTag implements Listener {
 
-    private final JavaPlugin plugin;
+    private final CameraPlugin plugin;
     private final CamSettings settings;
     private final Messages messages;
     private final CameraPlayers cameraPlayers;
@@ -59,7 +59,7 @@ public final class CamNameTag implements Listener {
     private final Map<UUID, TextDisplay> names = new HashMap<>();
     private final Map<UUID, BukkitRunnable> tasks = new HashMap<>();
 
-    public CamNameTag(JavaPlugin plugin, CamSettings settings, Messages messages, CameraPlayers cameraPlayers) {
+    public CamNameTag(CameraPlugin plugin, CamSettings settings, Messages messages, CameraPlayers cameraPlayers) {
         this.plugin = plugin;
         this.settings = settings;
         this.messages = messages;
@@ -200,10 +200,11 @@ public final class CamNameTag implements Listener {
     /**
      * Whether this viewer is shown the name: everybody the camera player is
      * shown to, which {@code player_visibility_mode} decides, but not he
-     * himself - nobody has a name tag over his own head either.
+     * himself - nobody has a name tag over his own head either -, and not
+     * whoever is on the same tour, mostly at the same spot.
      */
     private boolean showsNameTo(Player owner, Player viewer) {
-        return !viewer.equals(owner) && viewer.canSee(owner);
+        return !viewer.equals(owner) && viewer.canSee(owner) && !plugin.getTour().hidesCamera(viewer, owner);
     }
 
     /**

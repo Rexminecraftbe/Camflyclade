@@ -5053,7 +5053,10 @@ def aussichtspunkt_checks(env, bot):
     woanders springt er mit "/cam spot turm" zurueck - gross und klein zaehlt
     nicht -, im Cam-Modus, mit dem Ton von sounds.spot und "At spot Turm" in
     der Action-Bar, und schaut danach wieder nach Osten. Ohne Cam-Modus
-    springt er nicht. /cam spot list zeigt den Punkt mit einem Klick auf
+    springt er hin, wenn der Punkt nicht weiter als start-distance (16) weg
+    ist: der Cam-Modus startet dort, wo er steht; weiter weg sagt "You are X
+    blocks too far away", mit start-distance: 0 geht es nur im Cam-Modus.
+    /cam spot list zeigt den Punkt mit einem Klick auf
     "/cam spot Turm" und einem, der "/cam spot delete Turm" in die Zeile
     legt, und in der Datei des Bots steht er unter spots.
 
@@ -5134,8 +5137,22 @@ def aussichtspunkt_checks(env, bot):
         FIND.test("sounds.spot - der Ton beim Sprung", ton_da(bot, seit, "item.chorus_fruit.teleport"), "")
 
         cam_off(bot)
+        zeilen = befehl(bot, "/cam spot Turm", warten=2.5)
+        FIND.test("/cam spot ohne Cam-Modus, nah dran: er startet dort, und die Kamera steht am Punkt",
+                  gesagt(zeilen, r"Cam mode activated") and bleibt(punkt, bot.server_pos()), zeige(zeilen))
+        cam_off(bot)
+        FIND.test("Voreingestellt steht viewpoints.start-distance: 16 da",
+                  re.search(r"(?m)^  start-distance:\s*16\s*$", quelle_config(env)) is not None, "")
+        set_option(env, "start-distance", "3", "viewpoints")
         zeilen = befehl(bot, "/cam spot Turm")
-        FIND.test("/cam spot ohne Cam-Modus springt nicht", gesagt(zeilen, r"only works in cam mode"), zeige(zeilen))
+        FIND.test("start-distance: 3 - weiter weg: \"You are X blocks too far away\", und nichts startet",
+                  gesagt(zeilen, r"You are \d+ blocks too far away") and not spielmodus_ist(bot, "adventure"),
+                  zeige(zeilen))
+        set_option(env, "start-distance", "0", "viewpoints")
+        zeilen = befehl(bot, "/cam spot Turm")
+        FIND.test("start-distance: 0 - ohne Cam-Modus springt er nicht", gesagt(zeilen, r"only works in cam mode"),
+                  zeige(zeilen))
+        set_option(env, "start-distance", "16", "viewpoints")
         seit = bot.call("chat_packets", since=10 ** 9).get("count", 0)
         zeilen = befehl(bot, "/cam spot list")
         pakete = " ".join(p["text"] for p in bot.call("chat_packets", since=seit).get("packets", []))
@@ -5176,7 +5193,7 @@ def aussichtspunkt_checks(env, bot):
         # Jeder reload beendet den Cam-Modus, gesperrt() startet ihn neu.
         set_option(env, "max-distance", "6.0")
         gesperrt("max-distance: 6 - der Punkt ist zu weit, die Kamera bleibt",
-                 r"Spot Weit is more than 6\.0 blocks from your body", "max-distance 6")
+                 r"You are too far away", "max-distance 6")
         set_option(env, "max-distance", "100.0")
 
         bot.chat(f"/fillbiome {biom} minecraft:lush_caves")
@@ -5249,7 +5266,8 @@ def aussichtspunkt_checks(env, bot):
         try:
             cam_off(bot)
             set_options(env, [("max-distance", "100.0"), ("max-distance-mode", "fixed"),
-                              ("max-per-player", "10"), ("storage", "file", "viewpoints")])
+                              ("max-per-player", "10"), ("storage", "file", "viewpoints"),
+                              ("start-distance", "16", "viewpoints")])
             spots_loeschen(bot, "Turm", "Weit", "Mem", "Dritter")
             bot.chat(f"/fill {wand} minecraft:air")
             bot.chat(f"/setblock {bx} {y} {bz} minecraft:air")
@@ -5901,7 +5919,7 @@ def teilen_checks(env, bot):
             return
         dort = befehl(zuschauer, f"/cam spot {label}")
         FIND.test("/cam spot Besitzer:Name springt nur wie zu einem eigenen Punkt: zu weit vom eigenen Koerper",
-                  gesagt(dort, rf"Spot {label} is more than 100\.0 blocks from your body")
+                  gesagt(dort, r"You are too far away")
                   and nahe(zuschauer_pos(), fern, 1.5), zeige(dort))
         dort = befehl(zuschauer, f"/cam visit {label}", warten=2.0)
         FIND.test("/cam visit im Cam-Modus - die Kamera steht am geteilten Punkt",
@@ -6052,13 +6070,15 @@ def fuehrung_checks(env, bot):
 
     Voreingestellt ist es an, mit radius 16 und out-of-reach-seconds 5 -
     nachgesehen in der Datei, die das Plugin mitbringt; der Test stellt
-    max-distance auf 20 und out-of-reach-seconds auf 8. Eingeladen wird nur,
-    wer schon im Cam-Modus ist und dessen Kamera nicht weiter als 16 Bloecke
-    weg ist, sonst sagt die Meldung warum, und die Tab-Vervollstaendigung
-    bietet ihn nicht an. Sein Koerper steht sechs Bloecke hinter dem des
-    Fuehrers. Nah dabei bietet sie ihn an, die Einladung kommt mit
-    Knoepfen und dem Ton von sounds.tour-invite. Nimmt er an, steht seine
-    Kamera beim Fuehrer, der es erfaehrt, und sein Flugtempo ist 0. Fliegt
+    max-distance auf 20, out-of-reach-seconds auf 8 und schaltet die
+    Partikel der Kameras an. Im Cam-Modus 30 Bloecke weg, und ohne ihn
+    ebenso (start-distance 16), wird er nicht eingeladen, und die
+    Tab-Vervollstaendigung bietet ihn nicht an. Ohne Cam-Modus sechs Bloecke
+    hinter dem Fuehrer bietet sie ihn an, die Einladung kommt mit Knoepfen
+    und dem Ton von sounds.tour-invite. Steht er beim Annehmen 30 Bloecke
+    weg, heisst es "You are X blocks too far away", und nichts startet; nah
+    dran startet sein Cam-Modus dort, wo er steht, seine Kamera steht beim
+    Fuehrer, der es erfaehrt, und sein Flugtempo ist 0. Fliegt
     der Fuehrer acht Bloecke, fliegt der Gast mit; im Menue sagt der Knopf
     der Fuehrung, wem er folgt.
 
@@ -6069,7 +6089,10 @@ def fuehrung_checks(env, bot):
     Augen des Fuehrers - der Bot bekommt das Paket camera mit dessen Nummer,
     und der Start meldet nichts dazu -, ausser Reichweite und nach dem
     Verlassen wieder aus seiner eigenen Kamera; der Knopf im Menue und
-    /cam tour view schalten zwischen beidem um. Bleibt er weg, ist die
+    /cam tour view schalten zwischen beidem um. Auf der Fuehrung bekommt
+    keiner Namen und Partikel des anderen, der Fuehrer sieht den Gast nicht,
+    der Gast den Fuehrer nur mit dessen Blick (er braucht ihn als Kamera);
+    nach der Fuehrung sehen sich beide wieder. Bleibt er weg, ist die
     Fuehrung fuer den Gast vorbei, beide
     erfahren es, und das Flugtempo des Gastes ist wieder seins. Einladen
     geht dann nicht, solange der Fuehrer ausser seiner Reichweite ist.
@@ -6109,6 +6132,14 @@ def fuehrung_checks(env, bot):
         return ["fuehrer" if p.get("id") == fuehrer else "selbst" if p.get("id") == antwort.get("self")
                 else p.get("id") for p in antwort.get("packets", [])]
 
+    def kennt(client, wen, radius=24):
+        """Ob der Client die Entitaet mit dieser Nummer kennt, also sieht."""
+        return any(e.get("id") == wen for e in client.call("entities", radius=radius).get("entities", []))
+
+    def namen_nah(client):
+        """Die Text-Displays nah an der Kamera - die Namen anderer Kameras."""
+        return [e for e in client.call("entities", radius=3).get("entities", []) if "text_display" in (e.get("type") or "")]
+
     def einladen_und_annehmen():
         befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
         dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=2.0)
@@ -6131,7 +6162,9 @@ def fuehrung_checks(env, bot):
         FIND.test("Voreingestellt steht tour mit enabled: true, radius: 16 und out-of-reach-seconds: 5 da",
                   re.search(r"(?m)^tour:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*radius:\s*16\.0\s*\n"
                             r"(?:\s*#.*\n)*\s*out-of-reach-seconds:\s*5\s*$", quelle_config(env)) is not None, "")
-        set_options(env, [("max-distance", "20.0"), ("out-of-reach-seconds", "8", "tour")])
+        # Die Partikel der Kameras, die der Testserver sonst abschaltet.
+        set_options(env, [("max-distance", "20.0"), ("out-of-reach-seconds", "8", "tour"),
+                          ("particles-per-tick", "1", "camera-particles")])
         zuschauer.start()
         if not FIND.test("Zweiter Spieler fuer die Fuehrung kommt herein",
                          zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
@@ -6140,27 +6173,24 @@ def fuehrung_checks(env, bot):
         cam_off(zuschauer)
         hinstellen(bot, x, y, z)
         cam_on(bot)
-        console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
-        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
-        FIND.test("Eingeladen wird nur, wer schon im Cam-Modus ist", gesagt(zeilen, r"is not in cam mode"),
-                  zeige(zeilen))
         if not FIND.test("Der zweite Spieler ist 30 Bloecke weit weg im Cam-Modus",
                          zuschauer_cam_an(env, zuschauer, x + 30, y, z), ""):
             return
         zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
         tabs = tab(bot, "/cam tour invite ")
-        FIND.test("tour.radius: 16 - wer weiter weg ist, wird nicht eingeladen und nicht angeboten",
-                  gesagt(zeilen, r"more than 16 blocks from yours") and ZUSCHAUER_NAME not in tabs,
+        FIND.test("tour.radius: 16 - wer im Cam-Modus weiter weg ist, wird nicht eingeladen und nicht angeboten",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} is too far away") and ZUSCHAUER_NAME not in tabs,
                   f"{zeige(zeilen)} / {tabs}")
         cam_off(zuschauer)
-        if not FIND.test("Der zweite Spieler ist sechs Bloecke daneben im Cam-Modus",
-                         zuschauer_cam_an(env, zuschauer, gast[0], y, z), ""):
-            return
+        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        FIND.test("tour.start-distance: 16 - ohne Cam-Modus 30 Bloecke weg wird er auch nicht eingeladen",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} is too far away"), zeige(zeilen))
+        console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
         tabs = tab(bot, "/cam tour invite ")
-        FIND.test("Tab nach /cam tour invite: der Spieler daneben", tabs == [ZUSCHAUER_NAME], str(tabs))
+        FIND.test("Tab nach /cam tour invite: der Spieler daneben, auch ohne Cam-Modus", tabs == [ZUSCHAUER_NAME],
+                  str(tabs))
         # Wie ein echter Client im Flug: die Geschwindigkeit des Servers, ohne Schwerkraft.
         zuschauer.call("velocity", on=True)
-        eigenes_tempo = flugtempo(env, ZUSCHAUER_NAME)
         seit = zuschauer.mark()
         ton = toene_marke(zuschauer)
         pakete_seit = zuschauer.call("chat_packets", since=10 ** 9).get("count", 0)
@@ -6174,10 +6204,18 @@ def fuehrung_checks(env, bot):
                   f"{zeige(zeilen)} / {zeige(dort)} / {pakete[-300:]}")
         FIND.test("sounds.tour-invite - der Eingeladene hoert den Ton", ton_da(zuschauer, ton, "block.note_block.bell"),
                   "")
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 30} {y} {z}", pause=1.0)
+        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=2.0)
+        FIND.test("Ohne Cam-Modus zu weit weg: \"You are X blocks too far away\", und nichts startet",
+                  gesagt(dort, r"You are \d+ blocks too far away") and not im_cam_modus(bot, ZUSCHAUER_NAME),
+                  zeige(dort))
+        console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
         seit = bot.mark()
         kamera = kamera_marke()
-        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=2.0)
+        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=3.0)
         hier = zeilen_seit(bot, seit)
+        FIND.test("Ohne Cam-Modus nah dran: annehmen startet den Cam-Modus dort, wo er steht",
+                  gesagt(dort, r"Cam mode activated") and im_cam_modus(bot, ZUSCHAUER_NAME), zeige(dort))
         FIND.test("tour.guide-view: der Gast sieht durch die Augen des Fuehrers (Paket camera mit dessen Nummer)",
                   "fuehrer" in kameras_seit(kamera), str(kameras_seit(kamera)))
         FIND.test("Auf Paper meldet der Start nichts zum Blick des Fuehrers",
@@ -6193,6 +6231,17 @@ def fuehrung_checks(env, bot):
         time.sleep(2.0)
         FIND.test("Der Fuehrer fliegt acht Bloecke - die Kamera des Gastes fliegt mit",
                   nahe(zuschauer_pos(), bot.server_pos(), 2.5), f"{zuschauer_pos()} / {bot.server_pos()}")
+        fuehrer_nr = bot.call("cameras").get("self")
+        gast_nr = zuschauer.call("cameras").get("self")
+        marke_bot, marke_gast = partikel_marke(bot), partikel_marke(zuschauer)
+        time.sleep(2.0)
+        FIND.test("Auf der Fuehrung bekommt keiner die Partikel des anderen",
+                  not partikel_seit(bot, marke_bot) and not partikel_seit(zuschauer, marke_gast),
+                  f"{len(partikel_seit(bot, marke_bot))} / {len(partikel_seit(zuschauer, marke_gast))}")
+        FIND.test("Auf der Fuehrung sieht keiner den Namen des anderen",
+                  not namen_nah(bot) and not namen_nah(zuschauer), f"{namen_nah(bot)} / {namen_nah(zuschauer)}")
+        FIND.test("Der Fuehrer sieht den Gast nicht; der Gast mit dem Blick des Fuehrers kennt ihn (seine Kamera)",
+                  not kennt(bot, gast_nr) and kennt(zuschauer, fuehrer_nr), f"{gast_nr} / {fuehrer_nr}")
         befehl(zuschauer, "/cam menu", warten=1.0)
         knopf = fenster(zuschauer).get("slots", {})
         FIND.test("Im Menue sagt der Knopf der Fuehrung auf Platz 9, wem er folgt",
@@ -6211,6 +6260,8 @@ def fuehrung_checks(env, bot):
                   gesagt(dort, r"On tours you look round freely now") and kameras_seit(kamera)[-1:] == ["selbst"]
                   and "Now: free" in item_text(knopf.get("13")), f"{zeige(dort)} / {kameras_seit(kamera)}")
         zuschauer.call("close_window", wait=10)
+        time.sleep(1.0)
+        FIND.test("Beim freien Umsehen sieht auch der Gast den Fuehrer nicht", not kennt(zuschauer, fuehrer_nr), "")
         kamera = kamera_marke()
         dort = befehl(zuschauer, "/cam tour view", warten=2.0)
         FIND.test("/cam tour view schaltet zurueck auf den Blick des Fuehrers",
@@ -6255,8 +6306,7 @@ def fuehrung_checks(env, bot):
                   f"{zeige(dort)} / {zeige(hier)}")
         tempo = flugtempo(env, ZUSCHAUER_NAME)
         FIND.test("Danach fliegt der Gast wieder mit seinem eigenen Tempo",
-                  tempo is not None and eigenes_tempo is not None and tempo > 0.0
-                  and abs(tempo - eigenes_tempo) < 1e-6, f"{tempo} / vorher {eigenes_tempo}")
+                  tempo is not None and tempo > 0.0, str(tempo))
         zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
         FIND.test("Einladen geht nicht, solange der Fuehrer ausser seiner Reichweite ist",
                   gesagt(zeilen, rf"{ZUSCHAUER_NAME} could not follow you from there"), zeige(zeilen))
@@ -6273,6 +6323,11 @@ def fuehrung_checks(env, bot):
                   "eigenen Kamera",
                   gesagt(dort, rf"You left the tour of {BOT_NAME}") and gesagt(hier, rf"{ZUSCHAUER_NAME} left your tour")
                   and kameras_seit(kamera)[-1:] == ["selbst"], f"{zeige(dort)} / {zeige(hier)} / {kameras_seit(kamera)}")
+        marke_bot = partikel_marke(bot)
+        time.sleep(2.0)
+        FIND.test("Nach der Fuehrung sehen sich beide wieder, mit Partikeln",
+                  kennt(bot, gast_nr) and kennt(zuschauer, fuehrer_nr) and len(partikel_seit(bot, marke_bot)) > 0,
+                  f"{kennt(bot, gast_nr)} / {kennt(zuschauer, fuehrer_nr)} / {len(partikel_seit(bot, marke_bot))}")
         einladen_und_annehmen()
         seit = bot.mark()
         dort = befehl(zuschauer, "/cam back", warten=2.0)
@@ -6342,7 +6397,7 @@ def fuehrung_checks(env, bot):
                 zuschauer.stop()
             cam_off(bot)
             set_options(env, [("max-distance", "100.0"), ("out-of-reach-seconds", "5", "tour"),
-                              ("enabled", "true", "tour")])
+                              ("enabled", "true", "tour"), ("particles-per-tick", "0", "camera-particles")])
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test der Fuehrung: {exc}")
@@ -7041,8 +7096,8 @@ def spotreiter_checks(env, bot):
     eigenen - dort mit "Public" darunter - und bei den oeffentlichen, als
     seiner. Der zweite Spieler sieht ihn dort und liked ihn mit einem
     Rechtsklick; danach steht das Like darunter, und der Punkt glaenzt. Ein
-    Linksklick springt wie zu einem eigenen Punkt: ohne Cam-Modus nicht, im
-    Cam-Modus steht seine Kamera danach am Punkt. Der Filter des Bots auf den
+    Linksklick springt wie zu einem eigenen Punkt: ohne Cam-Modus, aber nah
+    dran, startet er dort, und seine Kamera steht danach am Punkt. Der Filter des Bots auf den
     oeffentlichen kommt nach drei Klicks zu den meisten Likes. Umschalt-Klick
     auf den eigenen oeffentlichen loescht ihn dort nicht, ein Rechtsklick
     nimmt ihn offline - bei den eigenen bleibt er.
@@ -7162,18 +7217,13 @@ def spotreiter_checks(env, bot):
                   gesagt(dort, rf"You like {label} now\. It has 1 likes") and "1 likes" in item_text(eintrag)
                   and eintrag.get("glint") is True, f"{zeige(dort)} / {item_text(eintrag)}")
         seit = zuschauer.mark()
-        klick(zuschauer, platz, warten=2.0)
+        klick(zuschauer, platz, warten=3.0)
         dort = zeilen_seit(zuschauer, seit)
-        FIND.test("Linksklick springt wie zu einem eigenen Punkt: ohne Cam-Modus nicht",
-                  gesagt(dort, r"only works in cam mode"), zeige(dort))
-        if FIND.test("Der andere ist im Cam-Modus", cam_on(zuschauer), ""):
-            f = punkte(zuschauer)
-            klick(zuschauer, 49)
-            klick(zuschauer, platz_von(fenster(zuschauer), label) or 0, warten=2.0)
-            wo = zuschauer_pos()
-            FIND.test("Im Cam-Modus springt ein Linksklick zum oeffentlichen Punkt",
-                      wo is not None and math.dist(wo, (x, y, z)) < 0.6, str(wo))
-            cam_off(zuschauer)
+        wo = zuschauer_pos()
+        FIND.test("Linksklick springt wie zu einem eigenen Punkt: ohne Cam-Modus nah dran startet er dort und springt",
+                  gesagt(dort, r"Cam mode activated") and wo is not None and math.dist(wo, (x, y, z)) < 0.6,
+                  f"{zeige(dort)} / {wo}")
+        cam_off(zuschauer)
         zuschauer.call("close_window", wait=10)
 
         punkte(bot)

@@ -149,6 +149,12 @@ public final class CamSettings {
      */
     private static final double MAX_TOUR_RADIUS = 128.0;
 
+    /**
+     * The farthest {@code viewpoints.start-distance} and
+     * {@code tour.start-distance} reach: as far as a tour invites.
+     */
+    private static final double MAX_START_DISTANCE = 128.0;
+
     /** The longest {@code tour.out-of-reach-seconds} accepts, like {@code signal.lost-seconds}. */
     private static final int MAX_TOUR_OUT_OF_REACH_SECONDS = 60;
 
@@ -349,6 +355,10 @@ public final class CamSettings {
     private int tourOutOfReachSeconds;
     /** Whether a guest sees through the eyes of his guide, {@code tour.guide-view}. */
     private boolean tourGuideView;
+    /** How close a player out of camera mode has to be to the guide to come along, {@code tour.start-distance}. */
+    private double tourStartDistance;
+    /** How close a player out of camera mode has to be to a spot to jump there, {@code viewpoints.start-distance}. */
+    private double viewpointsStartDistance;
 
     /** Whether {@code /cam resume} goes on where the last flight ended, {@code resume-command.enabled}. */
     private boolean resumeEnabled;
@@ -705,6 +715,8 @@ public final class CamSettings {
         tourRadius = config.getDouble("tour.radius", 16.0, 1.0, MAX_TOUR_RADIUS);
         tourOutOfReachSeconds = config.getInt("tour.out-of-reach-seconds", 5, 1, MAX_TOUR_OUT_OF_REACH_SECONDS);
         tourGuideView = config.getBoolean("tour.guide-view", true);
+        tourStartDistance = config.getDouble("tour.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
+        viewpointsStartDistance = config.getDouble("viewpoints.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
         resumeEnabled = config.getBoolean("resume-command.enabled", true);
         resumeStorage = readStorage(config, "resume-command.storage");
         playerSettingsStorage = readStorage(config, "player-settings.storage");
@@ -1612,6 +1624,24 @@ public final class CamSettings {
     /** Whether a guest may see through the eyes of his guide, where the server lets it. */
     public boolean isTourGuideView() {
         return tourGuideView;
+    }
+
+    /**
+     * How close, in blocks, a player out of camera mode has to be to the
+     * guide's camera to accept an invitation, which starts camera mode for
+     * him; 0 while only who is in camera mode may come along.
+     */
+    public double getTourStartDistance() {
+        return tourStartDistance;
+    }
+
+    /**
+     * How close, in blocks, a player out of camera mode has to be to a spot
+     * to jump there, which starts camera mode for him; 0 while only who is in
+     * camera mode may jump.
+     */
+    public double getViewpointsStartDistance() {
+        return viewpointsStartDistance;
     }
 
     public boolean isResumeEnabled() {

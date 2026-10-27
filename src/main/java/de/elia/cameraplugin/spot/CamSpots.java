@@ -694,14 +694,12 @@ public final class CamSpots {
 
     /**
      * Puts the camera down at one of his spots, or at one shared with him -
-     * {@code Owner:spot} -, if it may be there.
+     * {@code Owner:spot} -, if it may be there. Out of camera mode, it starts
+     * first, where he stands, if the spot is no further than
+     * {@code viewpoints.start-distance} from him - with every check and cost
+     * of a start of {@code /cam}.
      */
     public void jump(Player player, String name) {
-        CameraData data = plugin.getCameraPlayers().get(player.getUniqueId());
-        if (data == null) {
-            messages.sendConfiguredMessage(player, "not-in-cam");
-            return;
-        }
         Spot spot;
         String label;
         if (name.indexOf(':') >= 0) {
@@ -719,6 +717,11 @@ public final class CamSpots {
                 return;
             }
             label = spot.name();
+        }
+        CameraData data = plugin.getCameraPlayers().get(player.getUniqueId());
+        if (data == null) {
+            startThenJump(player, name, spot, label);
+            return;
         }
         Location target = spot.toLocation();
         if (target == null || !target.getWorld().equals(data.getBody().getWorld())) {
@@ -739,6 +742,45 @@ public final class CamSpots {
         if (messages.isMessageEnabled("spot-jumped")) {
             plugin.getActionBar().flash(player, messages.getMessage("spot-jumped").replace("{spot}", label));
         }
+    }
+
+    /**
+     * A jump out of camera mode: if the spot is close enough, camera mode
+     * starts where he stands, and the camera jumps from there. What a jump
+     * from there would turn down is asked before anything starts - his body
+     * will stand where he stands -, and once more by the jump itself.
+     */
+    private void startThenJump(Player player, String name, Spot spot, String label) {
+        double reach = settings.getViewpointsStartDistance();
+        if (reach <= 0.0) {
+            messages.sendConfiguredMessage(player, "not-in-cam");
+            return;
+        }
+        Location target = spot.toLocation();
+        if (target == null || !target.getWorld().equals(player.getWorld())) {
+            messages.sendConfiguredMessage(player, "spot-other-world", "{spot}", label);
+            return;
+        }
+        double distance = target.distance(player.getLocation());
+        if (distance > reach) {
+            messages.sendConfiguredMessage(player, "spot-start-too-far", "{spot}", label,
+                    "{blocks}", String.valueOf(blocksTooFar(distance, reach)));
+            return;
+        }
+        if (!jumpCheck.mayGo(player, player.getLocation(), player.getEyeLocation(), target, "spot",
+                "{spot}", label)) {
+            return;
+        }
+        plugin.getStarter().startThen(player, () -> {
+            if (plugin.isInCameraMode(player)) {
+                jump(player, name);
+            }
+        });
+    }
+
+    /** How many blocks too far away he is, rounded up: never 0 for whoever is too far at all. */
+    public static long blocksTooFar(double distance, double reach) {
+        return Math.max(1L, (long) Math.ceil(distance - reach));
     }
 
     /** After a reload: on {@code storage: memory} every spot is forgotten. */

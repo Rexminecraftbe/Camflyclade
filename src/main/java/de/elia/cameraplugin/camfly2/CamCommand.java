@@ -173,11 +173,21 @@ public class CamCommand implements CommandExecutor {
         } else {
             return true;
         }
-        if (access.allowsCommands()) {
+        if (access.allowsCommands() || (access.allowsMenu() && answersInvitation(args))) {
             return true;
         }
         messages.sendConfiguredMessage(player, access.allowsMenu() ? "menu-only" : "menu-features-off");
         return false;
+    }
+
+    /**
+     * Whether the command answers an invitation to a tour, which the buttons
+     * of the invitation in the chat run: it goes while only the menu goes as
+     * well, so that a click on them starts the tour right away.
+     */
+    private static boolean answersInvitation(String[] args) {
+        return args.length == 3 && args[0].equalsIgnoreCase("tour")
+                && (args[1].equalsIgnoreCase("accept") || args[1].equalsIgnoreCase("decline"));
     }
 
     /** Whether the command is one for admins, {@code /cam stats player} among them. */
