@@ -48,7 +48,7 @@ public final class CamVisibility {
      * a tour hides from him with {@code hidePlayer}, see
      * {@link de.elia.cameraplugin.tour.CamTour#hidesPlayer}.</p>
      */
-    private void applyVisibility(Player camPlayer, Player viewer) {
+    public void applyVisibility(Player camPlayer, Player viewer) {
         if (camPlayer.equals(viewer)) return;
         if (plugin.getPhotoMode().hidesPlayersFrom(viewer)) return;
         if (plugin.getScoutGuard().hides(viewer, camPlayer)) return;

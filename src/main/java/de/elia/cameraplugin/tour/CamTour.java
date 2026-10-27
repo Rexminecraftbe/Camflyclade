@@ -27,6 +27,7 @@ import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -78,9 +79,13 @@ import java.util.UUID;
  * work, they are hidden with {@code hidePlayer}, which takes them out of
  * it.</p>
  *
- * <p>Outside the tour, the names of those who follow the guide stand over
- * his camera, stacked over his own, see {@link #stackedOver}: the guests fly
- * where he flies, and their names would be written over each other.</p>
+ * <p>Outside the tour, only the guide is seen: his guests fly where he
+ * flies, and another client would draw them trailing behind him, a moment
+ * late, and jumping after him. So nobody sees the camera of a guest who
+ * follows him closely - neither the player nor his particles -, and his name
+ * stands over the guide's camera, stacked over the guide's own, see
+ * {@link #stackedOver}. A guest left behind at the border of his reach is
+ * seen at his own camera again, with his own name.</p>
  *
  * <p>A jump of his own - {@code /cam back}, a spot, a visit, {@code resume} -
  * takes a guest off the tour, as does the end of his camera mode. The end of
@@ -251,12 +256,17 @@ public final class CamTour implements Listener {
 
     /**
      * Whether a tour keeps the camera of one player out of the sight of
-     * another: the two are on the same tour, guide and guest or two guests.
-     * Neither sees the other's name or particles then.
+     * another: the two are on the same tour, guide and guest or two guests -
+     * or the other one is a guest who follows his guide closely, whom nobody
+     * sees, see {@link #followsClosely}. The viewer sees neither his name nor
+     * his particles then.
      */
     public boolean hidesCamera(Player viewer, Player other) {
+        if (viewer.equals(other)) {
+            return false;
+        }
         UUID tour = tourOf(viewer.getUniqueId());
-        return tour != null && !viewer.equals(other) && tour.equals(tourOf(other.getUniqueId()));
+        return tour != null && tour.equals(tourOf(other.getUniqueId())) || followsClosely(other);
     }
 
     /**
@@ -288,15 +298,19 @@ public final class CamTour implements Listener {
      * Hides from each one on a tour the others {@link #keepsApart} says, and
      * shows back whom the tour no longer hides - once the tour is over, say.
      * Asked every tick and after every change of a tour: photo mode or the
-     * end of camera mode may have shown somebody back in between.
+     * end of camera mode may have shown somebody back in between. Everybody
+     * online is a viewer: outside the tour, nobody sees a guest who follows
+     * closely.
      *
      * <p>Where {@link OutOfSight} works, the client is told they are gone and
      * they stay in its tab list. Otherwise they are hidden with
      * {@code hidePlayer}: only who the viewer sees at all, and only that is
-     * shown back, as far as photo mode and {@code anti-scouting} let it.</p>
+     * shown back, as far as visibility, photo mode and {@code anti-scouting}
+     * let it.</p>
      */
     private void syncVisibility() {
         Map<UUID, Set<UUID>> wanted = new HashMap<>();
+        Collection<? extends Player> online = Bukkit.getOnlinePlayers();
         for (Map.Entry<UUID, Tour> tour : tours.entrySet()) {
             List<Player> members = new ArrayList<>();
             members.add(Bukkit.getPlayer(tour.getKey()));
@@ -304,7 +318,7 @@ public final class CamTour implements Listener {
                 members.add(Bukkit.getPlayer(guest));
             }
             members.removeIf(member -> member == null);
-            for (Player viewer : members) {
+            for (Player viewer : online) {
                 for (Player other : members) {
                     if (keepsApart(viewer, other)) {
                         wanted.computeIfAbsent(viewer.getUniqueId(), id -> new HashSet<>()).add(other.getUniqueId());
@@ -367,6 +381,10 @@ public final class CamTour implements Listener {
                         viewer.hidePlayer(plugin, other);
                         viewer.showPlayer(plugin, other);
                     }
+                } else if (cameraPlayers.contains(other.getUniqueId())) {
+                    // As visibility has him: outside camera mode, a viewer
+                    // may not see a camera player at all.
+                    plugin.getVisibility().applyVisibility(other, viewer);
                 } else if (!plugin.getPhotoMode().hides(viewer, other)
                         && !plugin.getScoutGuard().hides(viewer, other)) {
                     viewer.showPlayer(plugin, other);
@@ -381,7 +399,8 @@ public final class CamTour implements Listener {
     /**
      * Tells every client once more who is gone: the server sends a player
      * anew whenever it pairs him with a client again, see
-     * {@link OutOfSight}. Only those the server shows him count.
+     * {@link OutOfSight}. Only those the server shows him count, in his
+     * world.
      */
     private void forgetAgain() {
         for (Map.Entry<UUID, Set<UUID>> entry : forgotten.entrySet()) {
@@ -392,7 +411,7 @@ public final class CamTour implements Listener {
             List<Player> gone = new ArrayList<>();
             for (UUID id : entry.getValue()) {
                 Player other = Bukkit.getPlayer(id);
-                if (other != null && viewer.canSee(other)) {
+                if (other != null && viewer.canSee(other) && viewer.getWorld().equals(other.getWorld())) {
                     gone.add(other);
                 }
             }
@@ -457,9 +476,8 @@ public final class CamTour implements Listener {
 
     /**
      * The guests whose names stand over the guide's camera, stacked over his
-     * own, in the order they joined: those who follow him right now, within
-     * their reach. A guest left behind at the border of his reach has his own
-     * name over his own camera again.
+     * own, in the order they joined: those who follow him closely, see
+     * {@link #followsClosely}.
      */
     public List<Player> stackedOver(Player guide) {
         List<Player> stacked = new ArrayList<>();
@@ -467,19 +485,28 @@ public final class CamTour implements Listener {
         if (tour == null) {
             return stacked;
         }
-        for (Map.Entry<UUID, Guest> entry : tour.guests.entrySet()) {
-            Player guest = Bukkit.getPlayer(entry.getKey());
-            if (guest != null && entry.getValue().outSince == 0L && guest.getWorld().equals(guide.getWorld())) {
+        for (UUID id : tour.guests.keySet()) {
+            Player guest = Bukkit.getPlayer(id);
+            if (guest != null && followsClosely(guest)) {
                 stacked.add(guest);
             }
         }
         return stacked;
     }
 
-    /** Whether his name stands over his guide's camera instead of his own, see {@link #stackedOver}. */
-    public boolean stacksName(Player guest) {
-        Player guide = guideOf(guest);
-        return guide != null && stackedOver(guide).contains(guest);
+    /**
+     * Whether he follows his guide closely right now: within his reach, in
+     * the guide's world. Nobody sees his camera then, and his name stands
+     * over the guide's. A guest left behind at the border of his reach does
+     * not.
+     */
+    public boolean followsClosely(Player guest) {
+        Guest state = stateOf(guest.getUniqueId());
+        if (state == null || state.outSince != 0L) {
+            return false;
+        }
+        Player guide = Bukkit.getPlayer(guideOf.get(guest.getUniqueId()));
+        return guide != null && guest.getWorld().equals(guide.getWorld());
     }
 
     /** The guides whose invitations he has and that still hold, by name. */

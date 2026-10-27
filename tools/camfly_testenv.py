@@ -6115,7 +6115,9 @@ def fuehrung_checks(env, bot):
     seinen eigenen Koerper weder anklicken noch schlagen: der Cam-Modus bleibt
     an, mit tour-body-locked. Mit max-guests: 1 kommt ein dritter Spieler
     nicht mehr mit, der Fuehrer kann ihn nicht mehr einladen, und der Knopf
-    der Fuehrung sagt "Guests: 1/1".
+    der Fuehrung sagt "Guests: 1/1". Der dritte sieht von aussen nur den
+    Fuehrer - der Gast, der ihm folgt, steht nur in der Tab-Liste -, nach
+    der Fuehrung wieder beide.
     """
     def zuschauer_pos():
         return bot.call("server_pos", selector=ZUSCHAUER_NAME).get("pos")
@@ -6270,7 +6272,7 @@ def fuehrung_checks(env, bot):
                   in_tab(bot, ZUSCHAUER_NAME) and in_tab(zuschauer, BOT_NAME),
                   f"{bot.call('players').get('players')} / {zuschauer.call('players').get('players')}")
         FIND.test("Auf Paper meldet der Start nichts zur Tab-Liste der Fuehrung",
-                  "cannot keep the ones on a tour" not in server_log(env), "")
+                  "cannot keep the players it hides" not in server_log(env), "")
         text = name_text(BOT_NAME)
         FIND.test("Ueber der Kamera des Fuehrers stehen die Namen gestapelt: der Gast mit (Follower) ueber dem "
                   "Fuehrer mit (Guide)",
@@ -6464,6 +6466,14 @@ def fuehrung_checks(env, bot):
             dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=3.0)
             FIND.test("max-guests: 1 - der erste Gast kommt mit", gesagt(dort, rf"You follow {BOT_NAME} now"),
                       zeige(dort))
+            time.sleep(1.5)
+            fuehrer_nr = bot.call("cameras").get("self")
+            gast_nr = zuschauer.call("cameras").get("self")
+            FIND.test("Von aussen sieht man nur den Fuehrer: der Gast, der ihm folgt, ist ausgeblendet - in der "
+                      "Tab-Liste steht er",
+                      kennt(dritter, fuehrer_nr) and not kennt(dritter, gast_nr) and in_tab(dritter, ZUSCHAUER_NAME),
+                      f"{kennt(dritter, fuehrer_nr)} / {kennt(dritter, gast_nr)} / "
+                      f"{dritter.call('players').get('players')}")
             zeilen = befehl(dritter, f"/cam tour accept {BOT_NAME}", warten=2.0)
             FIND.test("Die Fuehrung ist voll: wer eingeladen ist, kommt nicht mehr mit, und nichts startet",
                       gesagt(zeilen, rf"The tour of {BOT_NAME} is full right now")
@@ -6475,6 +6485,9 @@ def fuehrung_checks(env, bot):
             knopf = item_text(fenster(bot).get("slots", {}).get("9"))
             FIND.test("Im Menue sagt der Knopf der Fuehrung \"Guests: 1/1\"", "Guests: 1/1" in knopf, knopf)
             bot.call("close_window", wait=10)
+            befehl(zuschauer, "/cam tour leave")
+            time.sleep(1.0)
+            FIND.test("Nach der Fuehrung sieht man den Gast von aussen wieder", kennt(dritter, gast_nr), "")
             cam_off(zuschauer)
             cam_off(bot)
         dritter.stop()

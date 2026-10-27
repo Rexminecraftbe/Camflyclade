@@ -248,7 +248,7 @@ public final class CamNameTag implements Listener {
      * rest - from everybody, while it stands over the camera of his guide.
      */
     private void showToViewers(Player owner, TextDisplay name) {
-        boolean stacked = plugin.getTour().stacksName(owner);
+        boolean stacked = plugin.getTour().followsClosely(owner);
         for (Player viewer : Bukkit.getOnlinePlayers()) {
             boolean shown = !stacked && showsNameTo(owner, viewer);
             if (shown == viewer.canSee(name)) {

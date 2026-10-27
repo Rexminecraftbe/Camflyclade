@@ -826,13 +826,14 @@ visitor-camera:
 # Gastes nicht, das Mausrad ändert sein Tempo nicht, und seinen eigenen Körper kann er nicht anklicken oder schlagen,
 # solange er folgt (Text: tour-body-locked) - zurück zum Körper geht es nach dem Verlassen. Der Führer bleibt frei.
 # Die Teilnehmer einer Führung sehen sich gegenseitig nicht: weder die Kamera noch ihren Namen, ihre Partikel oder
-# ihren Umriss. In der Tab-Liste bleiben sie - auf Paper über das Innere des Servers (wie guide-view). Geht das nach
-# einem Update von Minecraft nicht mehr, meldet der Start das in der Konsole, und sie verschwinden füreinander auch
-# aus der Tab-Liste, bis das Plugin angepasst ist. Auf Spigot immer so.
-# Wer nicht dabei ist, sieht die Namen der Gäste über der Kamera des Führers gestapelt: ganz unten seiner, darüber
-# die der Gäste in der Reihenfolge, in der sie dazukamen (Texte: player.tour-guide-format und
-# player.tour-follower-format, nur mit camera-mode.name-visible: true). Ton der Einladung: sounds.tour-invite,
-# Texte: tour-...
+# ihren Umriss. Wer nicht dabei ist, sieht nur den Führer: Die Kameras der Gäste, die ihm folgen, sind für alle
+# ausgeblendet, mit ihren Partikeln - bei anderen kämen sie sonst etwas zu spät hinter ihm her. Ihre Namen stehen
+# über der Kamera des Führers gestapelt: ganz unten seiner, darüber die der Gäste in der Reihenfolge, in der sie
+# dazukamen (Texte: player.tour-guide-format und player.tour-follower-format, nur mit camera-mode.name-visible:
+# true). Ist ein Gast außer Reichweite, sieht man ihn wieder an seiner eigenen Kamera, mit seinem eigenen Namen.
+# In der Tab-Liste bleiben alle - auf Paper über das Innere des Servers (wie guide-view). Geht das nach einem Update
+# von Minecraft nicht mehr, meldet der Start das in der Konsole, und Ausgeblendete fehlen dann auch in der Tab-Liste,
+# bis das Plugin angepasst ist. Auf Spigot immer so. Ton der Einladung: sounds.tour-invite, Texte: tour-...
 tour:
   enabled: true
   # Wie nah die Kamera eines anderen der eigenen sein muss, damit man ihn einladen kann, in Blöcken (1 bis 128)
