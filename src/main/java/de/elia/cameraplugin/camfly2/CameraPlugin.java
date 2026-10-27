@@ -61,6 +61,9 @@ import de.elia.cameraplugin.speed.CamFlightSpeed;
 import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.spot.JumpCheck;
 import de.elia.cameraplugin.spot.SharedSpots;
+import de.elia.cameraplugin.spot.SpotBans;
+import de.elia.cameraplugin.spot.SpotModeration;
+import de.elia.cameraplugin.spot.SpotViews;
 import de.elia.cameraplugin.start.CamStarter;
 import de.elia.cameraplugin.start.StartChecks;
 import de.elia.cameraplugin.start.StartDelay;
@@ -72,6 +75,9 @@ import de.elia.cameraplugin.teleport.CamTeleportGuard;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import de.elia.cameraplugin.timelimit.EndWarning;
 import de.elia.cameraplugin.trail.CamTrail;
+import de.elia.cameraplugin.tour.CamTour;
+import de.elia.cameraplugin.tour.TourBans;
+import de.elia.cameraplugin.tour.TourModeration;
 import de.elia.cameraplugin.visit.CamVisit;
 import de.elia.cameraplugin.visibility.CamVisibility;
 import org.bukkit.Bukkit;
@@ -137,10 +143,14 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamAfk afk = new CamAfk(this);
     private final CamBack back = new CamBack(this);
     private final SharedSpots sharedSpots = new SharedSpots(this, log, settings);
+    private final SpotViews spotViews = new SpotViews(this, log, settings);
+    private final SpotModeration spotModeration = new SpotModeration(this, new SpotBans(this, log));
     private final JumpCheck jumpCheck = new JumpCheck(this);
-    private final CamSpots spots = new CamSpots(this, playerStore, sharedSpots, jumpCheck);
+    private final CamSpots spots = new CamSpots(this, playerStore, sharedSpots, spotViews, jumpCheck);
     private final CamVisit visit = new CamVisit(this, sharedSpots, jumpCheck);
     private final CamResume resume = new CamResume(this, playerStore, sharedSpots, jumpCheck);
+    private final CamTour tour = new CamTour(this);
+    private final TourModeration tourModeration = new TourModeration(this, new TourBans(this, log));
     private final CamScoutGuard scoutGuard = new CamScoutGuard(this);
     private final CamMenu menu = new CamMenu(this);
     private final CamPhotoMode photoMode = new CamPhotoMode(this);
@@ -192,6 +202,11 @@ public final class CameraPlugin extends JavaPlugin {
         configFile.reportConfigWarnings(loadConfigValues(), null);
         ban.reload();
         sharedSpots.load();
+        spotViews.load();
+        spotModeration.reload();
+        spots.indexOwners();
+        tour.load(log);
+        tourModeration.reload();
         bodySpawner = new BodySpawner(this, settings, messages, log, cameraPlayers);
         camModeObjective.setUp();
         bodySpawner.removeLeftoverEntities();
@@ -246,6 +261,7 @@ public final class CameraPlugin extends JavaPlugin {
                 photoMode,
                 scoutGuard,
                 menu,
+                tour,
                 new CamSuggestionFilter(this));
         for (Listener listener : listeners) {
             pluginManager.registerEvents(listener, this);
@@ -256,6 +272,7 @@ public final class CameraPlugin extends JavaPlugin {
         swingStrength.register();
         damageMirror.watchBursts();
         mobTargeting.watchWardenAnger();
+        tour.watchTickEnd();
         mobGaze.start();
     }
 
@@ -345,6 +362,7 @@ public final class CameraPlugin extends JavaPlugin {
         nudge.onDisable();
         signal.onDisable();
         afk.onDisable();
+        tour.onDisable();
         photoMode.onDisable();
         scoutGuard.onDisable();
         startDelay.onDisable();
@@ -433,6 +451,11 @@ public final class CameraPlugin extends JavaPlugin {
         trail.onReload();
         spots.onReload();
         sharedSpots.load();
+        spotViews.load();
+        spotModeration.reload();
+        spots.indexOwners();
+        tour.load(log);
+        tourModeration.reload();
         return true;
     }
 
@@ -569,6 +592,10 @@ public final class CameraPlugin extends JavaPlugin {
         return ban;
     }
 
+    public SpotModeration getSpotModeration() {
+        return spotModeration;
+    }
+
     public CamCrashGuard getCrashGuard() {
         return crashGuard;
     }
@@ -639,6 +666,14 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamVisit getVisit() {
         return visit;
+    }
+
+    public CamTour getTour() {
+        return tour;
+    }
+
+    public TourModeration getTourModeration() {
+        return tourModeration;
     }
 
     public CamResume getResume() {

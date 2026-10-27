@@ -23,7 +23,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.logging.Level;
+import java.util.stream.Stream;
 
 /**
  * Keeps the {@link PlayerRecord} of every player in a file of its own,
@@ -93,6 +95,75 @@ public final class PlayerStore {
         return Bukkit.getPlayer(playerId) != null ? get(playerId) : peek(playerId);
     }
 
+    /**
+     * Changes the record of a player who need not be online, and writes it
+     * straight away: the one in memory while he is online, else the one in
+     * his file, read for it and let go of again.
+     *
+     * @param change what to change, saying whether it changed anything
+     * @return what the change said
+     */
+    public boolean change(UUID playerId, Predicate<PlayerRecord> change) {
+        PlayerRecord record = loaded.get(playerId);
+        if (record != null) {
+            boolean changed = change.test(record);
+            save(playerId);
+            return changed;
+        }
+        record = read(playerId);
+        boolean changed = change.test(record);
+        if (changed) {
+            write(playerId, record);
+        }
+        return changed;
+    }
+
+    /** A player and how many spots his file has, see {@link #countSpots()}. */
+    public record SpotCount(String name, int spots) {
+    }
+
+    /**
+     * Who has spots in his file, and how many, by the id of the player - for
+     * the admin page of the spots. Reads every file and touches nothing else,
+     * so it may run in the background; a file that cannot be read is skipped
+     * and left where it is.
+     */
+    public Map<UUID, SpotCount> countSpots() {
+        Map<UUID, SpotCount> found = new HashMap<>();
+        Path folder = plugin.getDataFolder().toPath().resolve(PLAYER_FOLDER).resolve(FOLDER);
+        if (!Files.isDirectory(folder)) {
+            return found;
+        }
+        List<Path> files;
+        try (Stream<Path> list = Files.list(folder)) {
+            files = list.filter(path -> path.getFileName().toString().endsWith(".yml")).toList();
+        } catch (IOException ex) {
+            log.log(Level.WARNING, "The files of the players could not be listed for the spots: " + ex);
+            return found;
+        }
+        for (Path path : files) {
+            String fileName = path.getFileName().toString();
+            UUID id;
+            try {
+                id = UUID.fromString(fileName.substring(0, fileName.length() - ".yml".length()));
+            } catch (IllegalArgumentException ex) {
+                continue;
+            }
+            YamlConfiguration file = new YamlConfiguration();
+            try {
+                file.loadFromString(Files.readString(path, StandardCharsets.UTF_8));
+            } catch (IOException | InvalidConfigurationException ex) {
+                continue;
+            }
+            ConfigurationSection spots = file.getConfigurationSection("spots");
+            int count = spots == null ? 0 : spots.getKeys(false).size();
+            if (count > 0) {
+                found.put(id, new SpotCount(file.getString("name", id.toString()), count));
+            }
+        }
+        return found;
+    }
+
     /** Writes the record of a player, if anything in it has changed. */
     public void save(UUID playerId) {
         PlayerRecord record = loaded.get(playerId);
@@ -141,6 +212,7 @@ public final class PlayerStore {
                 Math.max(0L, file.getLong("stats.longest-seconds")),
                 Math.max(0.0, file.getDouble("stats.distance-flown")),
                 Math.max(0.0, file.getDouble("stats.farthest-from-body")),
+                Math.max(0L, file.getLong("stats.last-flight")),
                 charge == null ? null : Math.max(0.0, charge),
                 file.getLong("battery.updated"),
                 cooldown);
@@ -226,7 +298,7 @@ public final class PlayerStore {
                 continue;
             }
             record.loadSpot(new Spot(name, world, spot.getDouble("x"), spot.getDouble("y"), spot.getDouble("z"),
-                    (float) spot.getDouble("yaw"), (float) spot.getDouble("pitch")));
+                    (float) spot.getDouble("yaw"), (float) spot.getDouble("pitch"), spot.getLong("created")));
         }
     }
 
@@ -240,6 +312,9 @@ public final class PlayerStore {
         file.set("stats.longest-seconds", record.getLongestSeconds());
         file.set("stats.distance-flown", Math.round(record.getDistanceFlown() * 10.0) / 10.0);
         file.set("stats.farthest-from-body", Math.round(record.getFarthestFromBody() * 10.0) / 10.0);
+        if (record.getLastFlightEnded() > 0L) {
+            file.set("stats.last-flight", record.getLastFlightEnded());
+        }
         if (record.getBatteryCharge() != null) {
             file.set("battery.charge", record.getBatteryCharge());
             file.set("battery.updated", record.getBatteryUpdated());
@@ -256,6 +331,9 @@ public final class PlayerStore {
             file.set(path + ".z", spot.z());
             file.set(path + ".yaw", (double) spot.yaw());
             file.set(path + ".pitch", (double) spot.pitch());
+            if (spot.created() > 0L) {
+                file.set(path + ".created", spot.created());
+            }
         }
         if (record.getNightVision() != null) {
             file.set("settings.night-vision", nightVisionWord(record.getNightVision()));

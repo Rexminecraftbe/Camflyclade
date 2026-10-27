@@ -272,6 +272,7 @@ public final class CameraMode {
             // their hunger back even if the CameraData has already been
             // cleaned up by another call. updateViewerTeam takes him out of
             // the team, he is no camera player any more.
+            plugin.getTour().stopFor(player);
             plugin.getHungerGuard().stopFor(player);
             plugin.getGhastGuard().stopFor(player);
             plugin.getSulfurCubeGuard().stopFor(player);
@@ -289,6 +290,8 @@ public final class CameraMode {
             plugin.getCamModeObjective().setScore(player, 0);
             return;
         }
+        // First: his guests are dropped while he is still where his camera is.
+        plugin.getTour().stopFor(player);
         plugin.getTimeLimit().cancelTimeLimit(player);
         plugin.getBattery().stopFor(player);
         plugin.getAfk().stopFor(player);
@@ -359,10 +362,12 @@ public final class CameraMode {
         player.setGlowing(cameraData.getOriginalGlowing());
         plugin.getFlightSpeed().stopFor(player);
         // He stands where the mannequin stood, in the same water or powder
-        // snow: what air it has left and how frozen it got is his now.
+        // snow: what air it has left and how frozen it got is his now. The
+        // frost goes to his client even where the count stays the same: the
+        // client of the camera may have counted some up by itself.
         LivingEntity standIn = cameraData.getDamageTarget();
         player.setRemainingAir(standIn.getRemainingAir());
-        player.setFreezeTicks(standIn.getFreezeTicks());
+        ClientFrost.resend(player, standIn.getFreezeTicks());
         plugin.getHungerGuard().stopFor(player);
 
         cameraPlayers.remove(player.getUniqueId());

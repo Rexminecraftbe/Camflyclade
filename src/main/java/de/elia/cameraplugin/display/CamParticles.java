@@ -1,11 +1,11 @@
 package de.elia.cameraplugin.display;
 
+import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
@@ -18,12 +18,12 @@ import java.util.UUID;
  */
 public final class CamParticles {
 
-    private final JavaPlugin plugin;
+    private final CameraPlugin plugin;
     private final CamSettings settings;
     private final CameraPlayers cameraPlayers;
     private final Map<UUID, BukkitRunnable> particleTasks = new HashMap<>();
 
-    public CamParticles(JavaPlugin plugin, CamSettings settings, CameraPlayers cameraPlayers) {
+    public CamParticles(CameraPlugin plugin, CamSettings settings, CameraPlayers cameraPlayers) {
         this.plugin = plugin;
         this.settings = settings;
         this.cameraPlayers = cameraPlayers;
@@ -83,10 +83,12 @@ public final class CamParticles {
      *
      * <p>Nobody gets them who does not see the camera player himself: they
      * would show where he is to a viewer he is hidden from - in photo mode,
-     * say, or by a vanish plugin.</p>
+     * say, or by a vanish plugin. Nor does whoever is on the same tour, at
+     * the same spot mostly: they would fly right before his eyes.</p>
      */
     private boolean shouldShowParticlesTo(Player viewer, Player camPlayer, Location particleLoc) {
-        if (!viewer.getWorld().equals(particleLoc.getWorld()) || !viewer.canSee(camPlayer)) {
+        if (!viewer.getWorld().equals(particleLoc.getWorld()) || !viewer.canSee(camPlayer)
+                || plugin.getTour().hidesCamera(viewer, camPlayer)) {
             return false;
         }
         return switch (settings.getPlayerVisibilityMode()) {

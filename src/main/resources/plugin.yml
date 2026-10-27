@@ -10,7 +10,7 @@ softdepend: [Vault]
 commands:
   cam:
     description: Enables or disables camera mode
-    usage: /<command> [menu|back|resume|spot [set|delete] <name>|spot share|unshare <name> <player|all>|spot list|visit <player>:<spot>|photo|time <time>|reset|weather clear|rain|reset|nightvision [on|off|dark|reset]|list|reload|stats [reset|player <name>]|stop <name>|all|ban <name>|all [time] [reason]|unban <name>|all|banlist|tp <name> camera|body|trail [name [number|all]]]
+    usage: /<command> [menu|back|resume|spot [set|delete] <name>|spot share|unshare <name> <player|all>|spot accept|decline|like <player>:<spot>|spot list|visit <player>:<spot>|tour invite|accept|decline|kick <player>|tour leave|end|photo|time <time>|reset|weather clear|rain|reset|nightvision [on|off|dark|reset]|list|reload|stats [reset|player <name>]|stop <name>|all|ban <name>|all [time] [reason]|unban <name>|all|banlist|tp <name> camera|body|trail [name [number|all]]]
     permission: camplugin.use
     permission-message: "You do not have permission for this command.!"
 
@@ -38,6 +38,18 @@ permissions:
     default: op
   camplugin.trail:
     description: Allows /cam trail, to see where the camera of a player flew, while cam-trail is on
+    default: op
+  camplugin.spotadmin:
+    description: Allows the spots page of the admin menu, to take down or delete the spots of others and restrict them
+    default: op
+  camplugin.spotadmin.bypass:
+    description: Lets a player do everything with spots while the admin menu restricts everybody
+    default: op
+  camplugin.touradmin:
+    description: Allows the tours page of the admin menu, to keep players or everybody from leading or joining tours
+    default: op
+  camplugin.touradmin.bypass:
+    description: Lets a player lead and join tours while the admin menu restricts everybody
     default: op
   camplugin.antiscout.bypass:
     description: Sees every player in cam mode while anti-scouting hides those far away from the others

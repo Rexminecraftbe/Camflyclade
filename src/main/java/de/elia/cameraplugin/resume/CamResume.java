@@ -141,11 +141,15 @@ public final class CamResume {
         Location anchor;
         Location signalFrom;
         if (flight.wasVisit()) {
+            // Going on with a visit is a visit.
             Share share = shared.get(flight.visitOwner(), flight.visitSpot());
             Location spot = share == null ? null : share.getSpot().toLocation();
             if (!settings.isVisitorCameraEnabled() || share == null || !share.isFor(player.getUniqueId())
                     || spot == null || !spot.getWorld().equals(home)) {
                 messages.sendConfiguredMessage(player, "resume-visit-gone");
+                return null;
+            }
+            if (!plugin.getSpotModeration().checkLook(player, share)) {
                 return null;
             }
             visit = new Visit(share.getOwner(), share.getOwnerName(), share.getSpot().key(),
@@ -168,7 +172,12 @@ public final class CamResume {
     /** Puts the camera down where the flight ended and holds it from there. */
     private void go(Player player, CameraData data, LastFlight flight) {
         Plan plan = planned(player, data, flight);
-        if (plan == null || !plugin.getMovementGuard().jumpTo(player, data, plan.target(), plan.visit())) {
+        if (plan == null) {
+            return;
+        }
+        // A jump of his own takes him off a tour he follows.
+        plugin.getTour().leave(player);
+        if (!plugin.getMovementGuard().jumpTo(player, data, plan.target(), plan.visit())) {
             return;
         }
         settings.getSpotSound().play(player);

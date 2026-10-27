@@ -21,10 +21,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 
 /**
- * Every spot that is shared, {@code viewpoints.sharing}: by whom, with whom,
+ * Every spot that is shared, {@code viewpoints.sharing}: by whom, whether it
+ * is public, with whom - accepted, or offered and waiting -, who likes it,
  * and a copy of the spot itself.
  *
  * <p>The copy is kept here and not looked up in the file of its owner: a
@@ -48,8 +50,9 @@ public final class SharedSpots {
 
     /** What stands at the top of the file, for whoever finds it and wonders. */
     private static final List<String> HEADER = List.of(
-            "CamFly: the spots of /cam spot that players share with others (/cam spot share), by the id of",
-            "their owner. Deleting it takes every share back; the spots themselves stay with their owners.");
+            "CamFly: the spots of /cam spot that players make public or share with others (/cam spot share), by",
+            "the id of their owner, with who accepted them, who has yet to and who likes them. Deleting it takes",
+            "every share back; the spots themselves stay with their owners.");
 
     private final JavaPlugin plugin;
     private final ConsoleLog log;
@@ -77,12 +80,40 @@ public final class SharedSpots {
         return own == null ? null : own.get(key);
     }
 
-    /** What others share with this player, by the name of the owner and then of the spot. */
+    /**
+     * What this player may use of what others share: the public spots and
+     * those he accepted, by the name of the owner and then of the spot.
+     */
     public List<Share> sharedWith(UUID viewer) {
+        return collect(share -> share.isFor(viewer));
+    }
+
+    /** What others offered him and he has not accepted yet, by owner and then spot. */
+    public List<Share> offeredTo(UUID viewer) {
+        return collect(share -> share.isOfferedTo(viewer));
+    }
+
+    /** What others share with him by name and he accepted, not the public spots, by owner and then spot. */
+    public List<Share> acceptedBy(UUID viewer) {
+        return collect(share -> share.isAcceptedBy(viewer));
+    }
+
+    /** What one player shares, public or by name, in the order he shared it. */
+    public List<Share> of(UUID owner) {
+        Map<String, Share> own = shares.get(owner);
+        return own == null ? List.of() : new ArrayList<>(own.values());
+    }
+
+    /** Every public spot, his own among them, by owner and then spot. */
+    public List<Share> publicSpots() {
+        return collect(Share::isEveryone);
+    }
+
+    private List<Share> collect(Predicate<Share> which) {
         List<Share> found = new ArrayList<>();
         for (Map<String, Share> own : shares.values()) {
             for (Share share : own.values()) {
-                if (share.isFor(viewer)) {
+                if (which.test(share)) {
                     found.add(share);
                 }
             }
@@ -97,13 +128,27 @@ public final class SharedSpots {
      * counting, or {@code null} when there is none of that name.
      */
     public Share find(UUID viewer, String label) {
+        return find(sharedWith(viewer), label);
+    }
+
+    /** A spot offered to this player and not accepted yet, by {@code Owner:spot}, or {@code null}. */
+    public Share findOffer(UUID viewer, String label) {
+        return find(offeredTo(viewer), label);
+    }
+
+    /** A public spot, by {@code Owner:spot}, or {@code null}. */
+    public Share findPublic(String label) {
+        return find(publicSpots(), label);
+    }
+
+    private static Share find(List<Share> among, String label) {
         int colon = label.indexOf(':');
         if (colon <= 0 || colon == label.length() - 1) {
             return null;
         }
         String owner = label.substring(0, colon);
         String key = Spot.key(label.substring(colon + 1));
-        for (Share share : sharedWith(viewer)) {
+        for (Share share : among) {
             if (share.getOwnerName().equalsIgnoreCase(owner) && share.getSpot().key().equals(key)) {
                 return share;
             }
@@ -112,11 +157,13 @@ public final class SharedSpots {
     }
 
     /**
-     * Shares one of his spots with a player, or with everybody.
+     * Makes one of his spots public, or offers it to a player, who has it
+     * once he accepts it, see {@link #accept}.
      *
      * @param with     whom, or {@code null} for everybody
      * @param withName his name
-     * @return whether it was not shared with him before
+     * @return whether it is new: not public before, or neither offered to
+     *         him nor accepted by him
      */
     public boolean share(UUID owner, String ownerName, Spot spot, UUID with, String withName) {
         Share share = shares.computeIfAbsent(owner, id -> new LinkedHashMap<>())
@@ -127,20 +174,60 @@ public final class SharedSpots {
         if (with == null) {
             added = !share.isEveryone();
             share.setEveryone(true);
+        } else if (share.isAcceptedBy(with)) {
+            added = false;
         } else {
-            added = !share.getPlayers().containsKey(with);
-            share.addPlayer(with, withName);
+            added = !share.isOfferedTo(with);
+            share.addPending(with, withName);
         }
         save();
         return added;
+    }
+
+    /** He accepts a spot offered to him: from now on it is shared with him. */
+    public void accept(Share share, UUID viewer, String viewerName) {
+        share.addPlayer(viewer, viewerName);
+        save();
+    }
+
+    /**
+     * He turns down a spot offered to him, or no longer wants one he accepted.
+     *
+     * @return whether it was offered to him or his
+     */
+    public boolean decline(Share share, UUID viewer) {
+        boolean removed = share.removePlayer(viewer);
+        if (share.isEmpty()) {
+            drop(share.getOwner(), share.getSpot().key());
+        }
+        if (removed) {
+            save();
+        }
+        return removed;
+    }
+
+    /**
+     * He likes a public spot, or no longer does.
+     *
+     * @return whether he likes it now
+     */
+    public boolean toggleLike(Share share, UUID viewer) {
+        boolean likes = !share.removeLike(viewer);
+        if (likes) {
+            share.addLike(viewer);
+        } else if (share.isEmpty()) {
+            drop(share.getOwner(), share.getSpot().key());
+        }
+        save();
+        return likes;
     }
 
     /**
      * Takes a share back, from a player or from everybody. Shared with
      * nobody any more, the share is gone.
      *
-     * @param with whom, or {@code null} for everybody - the players it is
-     *             shared with by name keep it
+     * @param with whom - accepted or still offered -, or {@code null} for
+     *             everybody: the players it is shared with by name keep it
      * @return whether it was shared with him
      */
     public boolean unshare(UUID owner, String key, UUID with) {
@@ -162,6 +249,27 @@ public final class SharedSpots {
             save();
         }
         return removed;
+    }
+
+    /**
+     * Takes a spot down, from the admin page of the spots: no longer public,
+     * shared with nobody and offered to nobody. Its likes stay, as when its
+     * owner makes it private himself.
+     *
+     * @return whether it was shared at all
+     */
+    public boolean takeBack(UUID owner, String key) {
+        Share share = get(owner, key);
+        if (share == null || !share.isEveryone() && share.getPlayers().isEmpty() && share.getPending().isEmpty()) {
+            return false;
+        }
+        share.setEveryone(false);
+        share.clearPlayers();
+        if (share.isEmpty()) {
+            drop(owner, key);
+        }
+        save();
+        return true;
     }
 
     /** Follows a spot its owner has moved, or given a name of other capitals. */
@@ -233,9 +341,20 @@ public final class SharedSpots {
             return;
         }
         Spot spot = new Spot(name, world, entry.getDouble("x"), entry.getDouble("y"), entry.getDouble("z"),
-                (float) entry.getDouble("yaw"), (float) entry.getDouble("pitch"));
+                (float) entry.getDouble("yaw"), (float) entry.getDouble("pitch"), entry.getLong("created"));
         Share share = new Share(owner, ownerName, spot);
         share.setEveryone(entry.getBoolean("everyone"));
+        ConfigurationSection pending = entry.getConfigurationSection("pending");
+        if (pending != null) {
+            for (String id : pending.getKeys(false)) {
+                UUID player = parseId(id);
+                if (player != null) {
+                    share.addPending(player, pending.getString(id, id));
+                }
+            }
+        }
+        // After the offers: one that is both, from a file written by hand,
+        // counts as accepted.
         ConfigurationSection players = entry.getConfigurationSection("players");
         if (players != null) {
             for (String id : players.getKeys(false)) {
@@ -243,6 +362,12 @@ public final class SharedSpots {
                 if (player != null) {
                     share.addPlayer(player, players.getString(id, id));
                 }
+            }
+        }
+        for (String id : entry.getStringList("likes")) {
+            UUID player = parseId(id);
+            if (player != null) {
+                share.addLike(player);
             }
         }
         if (!share.isEmpty()) {
@@ -281,9 +406,22 @@ public final class SharedSpots {
                 file.set(path + ".z", spot.z());
                 file.set(path + ".yaw", (double) spot.yaw());
                 file.set(path + ".pitch", (double) spot.pitch());
+                if (spot.created() > 0L) {
+                    file.set(path + ".created", spot.created());
+                }
                 file.set(path + ".everyone", share.isEveryone());
                 for (Map.Entry<UUID, String> player : share.getPlayers().entrySet()) {
                     file.set(path + ".players." + player.getKey(), player.getValue());
+                }
+                for (Map.Entry<UUID, String> player : share.getPending().entrySet()) {
+                    file.set(path + ".pending." + player.getKey(), player.getValue());
+                }
+                if (share.likes() > 0) {
+                    List<String> likes = new ArrayList<>();
+                    for (UUID player : share.likers()) {
+                        likes.add(player.toString());
+                    }
+                    file.set(path + ".likes", likes);
                 }
             }
         }

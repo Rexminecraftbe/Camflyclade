@@ -23,6 +23,8 @@ import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -30,12 +32,24 @@ import java.util.UUID;
  * shoots, attacks and rides nothing. His own body is the one thing left to
  * him - clicking it ends camera mode. Anybody else clicking it nudges him,
  * see {@link de.elia.cameraplugin.nudge.CamNudge}.
+ *
+ * <p>Not even that is left to a guest on a tour, while he follows the
+ * guide: the guide steers his camera, and he leaves the tour before he goes
+ * back to his body. The guide himself goes on as ever.</p>
  */
 public final class CamInteractionGuard implements Listener {
+
+    /**
+     * How long the note that his body is out of reach on a tour is not sent
+     * again, in milliseconds: one click fires two events at once.
+     */
+    private static final long LOCK_NOTE_MILLIS = 500L;
 
     private final CameraPlugin plugin;
     private final Messages messages;
     private final CameraPlayers cameraPlayers;
+    /** When each guest last heard that his body is out of reach on a tour. */
+    private final Map<UUID, Long> lockNotes = new HashMap<>();
 
     public CamInteractionGuard(CameraPlugin plugin) {
         this.plugin = plugin;
@@ -96,7 +110,9 @@ public final class CamInteractionGuard implements Listener {
         // nothing to it. A player out in the world nudges its camera player
         // with it, see CamNudge; a camera player has no hands for that either.
         Player owner = Bukkit.getPlayer(ownerUUID);
-        if (player.getUniqueId().equals(ownerUUID)) {
+        if (player.getUniqueId().equals(ownerUUID) && plugin.getTour().isFollowing(player)) {
+            lockedOnTour(player);
+        } else if (player.getUniqueId().equals(ownerUUID)) {
             messages.sendConfiguredMessage(player, "camera-off");
             if (owner != null) {
                 plugin.exitCameraMode(owner, EndReason.COMMAND);
@@ -194,7 +210,26 @@ public final class CamInteractionGuard implements Listener {
             if (ownerUUID != null && !ownerUUID.equals(attacker.getUniqueId())) {
                 messages.sendConfiguredMessage(attacker, "cant-attack-other-body");
             }
+        } else if (plugin.getTour().isFollowing(attacker)) {
+            // A hit on his own body would end camera mode, as a click does.
+            event.setCancelled(true);
+            lockedOnTour(attacker);
         }
+    }
+
+    /**
+     * Tells a guest on a tour that his body is out of his reach while he
+     * follows the guide - once per click, which fires two events.
+     */
+    private void lockedOnTour(Player guest) {
+        long now = System.currentTimeMillis();
+        Long last = lockNotes.get(guest.getUniqueId());
+        if (last != null && now - last < LOCK_NOTE_MILLIS) {
+            return;
+        }
+        lockNotes.put(guest.getUniqueId(), now);
+        Player guide = plugin.getTour().guideOf(guest);
+        messages.sendConfiguredMessage(guest, "tour-body-locked", "{player}", guide == null ? "" : guide.getName());
     }
 
     @EventHandler

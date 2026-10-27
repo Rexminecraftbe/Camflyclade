@@ -33,6 +33,7 @@ Alles, was es herunterlaedt, liegt unter --workdir (Standard:
 import argparse
 import contextlib
 import gzip
+import hashlib
 import io
 import json
 import math
@@ -44,6 +45,7 @@ import struct
 import subprocess
 import sys
 import time
+import uuid
 import zipfile
 from pathlib import Path
 
@@ -1130,6 +1132,10 @@ let spawned = false;
 let dead = false;
 // Was knock_start gerade mitschreibt, bis knock_stop es abholt.
 let knock = null;
+// Was 'velocity' an die Pakete der Geschwindigkeit haengt, solange es laeuft.
+let follower = null;
+// Durch welche Entitaet der Server den Bot sehen liess (Paket camera), mit der Zeit.
+const cameras = [];
 // Was watch_blocks gerade mitschreibt, bis watch_stop es abholt.
 let watched = null;
 // Die Toene, die der Server schickt, als Text des ganzen Pakets: Wo der Name
@@ -1212,6 +1218,17 @@ bot._client.on('boss_bar', (packet) => {
 // Toenen, dazu was mineflayer daraus liest.
 let skyTime = null;
 bot._client.on('update_time', (packet) => { skyTime = soundText(packet); });
+// Das Paket camera: durch welche Entitaet der Client sieht.
+bot._client.on('camera', (packet) => cameras.push({ t: Date.now(), id: packet.cameraId }));
+// Der Frost des eigenen Spielers (Eintrag 7 der Entitaetsdaten), wie der
+// Server ihn diesem Client schickt.
+const frosts = [];
+bot._client.on('entity_metadata', (packet) => {
+  if (!bot.entity || packet.entityId !== bot.entity.id) return;
+  for (const m of packet.metadata || []) {
+    if (m.key === 7) frosts.push({ t: Date.now(), value: m.value });
+  }
+});
 // Wie stark es regnet, so wie der echte Client es rechnet: Ereignis 1
 // (START_RAINING) setzt den Regen auf 0, von wo ihn die Ereignisse 7 steigen
 // lassen, Ereignis 2 (STOP_RAINING) auf 1, von wo sie ihn fallen lassen.
@@ -1473,6 +1490,42 @@ async function handle(cmd) {
       await new Promise((r) => setTimeout(r, 500));
       const now = bot.entity.position;
       return { forced, pos: [now.x, now.y, now.z] };
+    }
+    case 'cameras': {
+      // Die Pakete camera seit einer Marke, dazu die eigene Nummer und die
+      // der Spieler, wie der Bot sie kennt.
+      const players = {};
+      for (const [name, p] of Object.entries(bot.players)) {
+        players[name] = p.entity ? p.entity.id : null;
+      }
+      return { count: cameras.length, packets: cameras.slice(cmd.since || 0),
+               self: bot.entity ? bot.entity.id : null, players };
+    }
+    case 'players':
+      // Wer in der Tab-Liste steht: hidePlayer nimmt einen Spieler dort heraus.
+      return { players: Object.keys(bot.players) };
+    case 'frosts':
+      return { count: frosts.length, values: frosts.slice(cmd.since || 0).map((f) => f.value) };
+    case 'velocity': {
+      // Fliegt mit der Geschwindigkeit, die der Server schickt, wie ein
+      // echter Client im Flug: ohne Schwerkraft, und mit der Zahl aus dem
+      // Paket - mineflayer teilt das lpVec3 von 26.x noch durch 8000, siehe
+      // knock_start. 'on: false' hoert damit auf.
+      if (follower) {
+        bot._client.removeListener('entity_velocity', follower);
+        follower = null;
+      }
+      if (cmd.on) {
+        follower = (packet) => {
+          if (!bot.entity || packet.entityId !== bot.entity.id) return;
+          const v = packet.velocity;
+          bot.entity.velocity.set(v.x, v.y, v.z);
+        };
+        bot._client.on('entity_velocity', follower);
+        try { bot.creative.startFlying(); } catch (e) { /* egal */ }
+        bot.physics.gravity = 0;
+      }
+      return { ok: true };
     }
     case 'knock_start': {
       // Schreibt mit, was den Bot nach einem Treffer bewegt: jedes Paket mit
@@ -5016,7 +5069,10 @@ def aussichtspunkt_checks(env, bot):
     woanders springt er mit "/cam spot turm" zurueck - gross und klein zaehlt
     nicht -, im Cam-Modus, mit dem Ton von sounds.spot und "At spot Turm" in
     der Action-Bar, und schaut danach wieder nach Osten. Ohne Cam-Modus
-    springt er nicht. /cam spot list zeigt den Punkt mit einem Klick auf
+    springt er hin, wenn der Punkt nicht weiter als start-distance (16) weg
+    ist: der Cam-Modus startet dort, wo er steht; weiter weg sagt "You are X
+    blocks too far away", mit start-distance: 0 geht es nur im Cam-Modus.
+    /cam spot list zeigt den Punkt mit einem Klick auf
     "/cam spot Turm" und einem, der "/cam spot delete Turm" in die Zeile
     legt, und in der Datei des Bots steht er unter spots.
 
@@ -5029,7 +5085,8 @@ def aussichtspunkt_checks(env, bot):
 
     Ein falscher Name, ein voller Platz, ein unbekannter Punkt und das
     Loeschen sagen, was los ist; ein Name, den es schon gibt, wandert, auch
-    wenn kein Platz mehr frei ist. Die Tab-Vervollstaendigung bietet nach
+    wenn kein Platz mehr frei ist; mit max-per-player: 0 gibt es kein Limit.
+    In der Datei steht bei jedem Punkt, wann er entstand. Die Tab-Vervollstaendigung bietet nach
     /cam spot set, delete, list und die Namen an, nach /cam spot delete die
     Namen. Mit storage: memory steht der Punkt nicht in der Datei, und nach
     /cam reload ist er weg.
@@ -5058,7 +5115,8 @@ def aussichtspunkt_checks(env, bot):
     wand = f"{_floor(x) + 5} {y} {bz - 3} {_floor(x) + 5} {y + 4} {bz + 3}"
     try:
         FIND.test("Voreingestellt steht viewpoints mit enabled: true, max-per-player: 10 und storage: file da",
-                  re.search(r"(?m)^viewpoints:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*max-per-player:\s*10\s*\n"
+                  re.search(r"(?m)^viewpoints:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*start-distance:\s*16\s*\n"
+                            r"(?:\s*#.*\n)*\s*max-per-player:\s*10\s*\n"
                             r"(?:\s*#.*\n)*\s*storage:\s*file\s*$", ausgeliefert(env)) is not None, "")
         spots_loeschen(bot, "Turm", "Weit", "Mem")
         zeilen = befehl(bot, "/cam spot")
@@ -5096,8 +5154,22 @@ def aussichtspunkt_checks(env, bot):
         FIND.test("sounds.spot - der Ton beim Sprung", ton_da(bot, seit, "item.chorus_fruit.teleport"), "")
 
         cam_off(bot)
+        zeilen = befehl(bot, "/cam spot Turm", warten=2.5)
+        FIND.test("/cam spot ohne Cam-Modus, nah dran: er startet dort, und die Kamera steht am Punkt",
+                  gesagt(zeilen, r"Cam mode activated") and bleibt(punkt, bot.server_pos()), zeige(zeilen))
+        cam_off(bot)
+        FIND.test("Voreingestellt steht viewpoints.start-distance: 16 da",
+                  re.search(r"(?m)^  start-distance:\s*16\s*$", quelle_config(env)) is not None, "")
+        set_option(env, "start-distance", "3", "viewpoints")
         zeilen = befehl(bot, "/cam spot Turm")
-        FIND.test("/cam spot ohne Cam-Modus springt nicht", gesagt(zeilen, r"only works in cam mode"), zeige(zeilen))
+        FIND.test("start-distance: 3 - weiter weg: \"You are X blocks too far away\", und nichts startet",
+                  gesagt(zeilen, r"You are \d+ blocks too far away") and not spielmodus_ist(bot, "adventure"),
+                  zeige(zeilen))
+        set_option(env, "start-distance", "0", "viewpoints")
+        zeilen = befehl(bot, "/cam spot Turm")
+        FIND.test("start-distance: 0 - ohne Cam-Modus springt er nicht", gesagt(zeilen, r"only works in cam mode"),
+                  zeige(zeilen))
+        set_option(env, "start-distance", "16", "viewpoints")
         seit = bot.call("chat_packets", since=10 ** 9).get("count", 0)
         zeilen = befehl(bot, "/cam spot list")
         pakete = " ".join(p["text"] for p in bot.call("chat_packets", since=seit).get("packets", []))
@@ -5106,9 +5178,9 @@ def aussichtspunkt_checks(env, bot):
                   and "/cam spot Turm" in pakete and "/cam spot delete Turm" in pakete,
                   f"{zeige(zeilen)} / {pakete[-300:]}")
         text = datei_text()
-        FIND.test("storage: file - der Punkt steht in der Datei des Bots unter spots",
-                  re.search(r"(?m)^spots:\s*$", text) is not None and re.search(r"name:\s*Turm", text) is not None,
-                  text[-300:] or "keine Datei")
+        FIND.test("storage: file - der Punkt steht in der Datei des Bots unter spots, mit dem Tag, an dem er entstand",
+                  re.search(r"(?m)^spots:\s*$", text) is not None and re.search(r"name:\s*Turm", text) is not None
+                  and re.search(r"created:\s*\d{13}", text) is not None, text[-300:] or "keine Datei")
 
         hinstellen(bot, bx + 0.5, y, z)
         zeilen = befehl(bot, "/cam spot set Weit")
@@ -5138,7 +5210,7 @@ def aussichtspunkt_checks(env, bot):
         # Jeder reload beendet den Cam-Modus, gesperrt() startet ihn neu.
         set_option(env, "max-distance", "6.0")
         gesperrt("max-distance: 6 - der Punkt ist zu weit, die Kamera bleibt",
-                 r"Spot Weit is more than 6\.0 blocks from your body", "max-distance 6")
+                 r"You are too far away", "max-distance 6")
         set_option(env, "max-distance", "100.0")
 
         bot.chat(f"/fillbiome {biom} minecraft:lush_caves")
@@ -5179,6 +5251,13 @@ def aussichtspunkt_checks(env, bot):
         zeilen = befehl(bot, "/cam spot set turm")
         FIND.test("max-per-player: 2 - ein Name, den es schon gibt, wandert trotzdem",
                   gesagt(zeilen, r"Spot turm moved here"), zeige(zeilen))
+        set_option(env, "max-per-player", "0")
+        zeilen = befehl(bot, "/cam spot set Dritter")
+        liste = befehl(bot, "/cam spot list")
+        FIND.test("max-per-player: 0 - kein Limit, und die Liste nennt keins",
+                  gesagt(zeilen, r"Spot Dritter saved here") and gesagt(liste, r"Your spots \(3\):"),
+                  f"{zeige(zeilen)} / {zeige(liste)}")
+        befehl(bot, "/cam spot delete Dritter")
         set_option(env, "max-per-player", "10")
         zeilen = befehl(bot, "/cam spot delete Turm")
         FIND.test("/cam spot delete Turm - der Punkt ist geloescht", gesagt(zeilen, r"Spot turm deleted"),
@@ -5204,7 +5283,8 @@ def aussichtspunkt_checks(env, bot):
         try:
             cam_off(bot)
             set_options(env, [("max-distance", "100.0"), ("max-distance-mode", "fixed"),
-                              ("max-per-player", "10"), ("storage", "file", "viewpoints")])
+                              ("max-per-player", "10"), ("storage", "file", "viewpoints"),
+                              ("start-distance", "16", "viewpoints")])
             spots_loeschen(bot, "Turm", "Weit", "Mem", "Dritter")
             bot.chat(f"/fill {wand} minecraft:air")
             bot.chat(f"/setblock {bx} {y} {bz} minecraft:air")
@@ -5732,16 +5812,19 @@ def im_cam_modus(bot, name):
 
 
 def teilen_checks(env, bot):
-    """viewpoints.sharing und visitor-camera: Aussichtspunkte teilen und die
-    eines anderen besuchen.
+    """viewpoints.sharing und visitor-camera: Aussichtspunkte anbieten,
+    oeffentlich machen, liken und die eines anderen besuchen.
 
     Voreingestellt sind beide an - nachgesehen in der ausgelieferten Datei.
-    Der Bot setzt den Punkt "Haus" sechs Bloecke neben seinem Platz und teilt
-    ihn mit dem zweiten Spieler, der zweihundert Bloecke weiter steht: Der
-    erfaehrt es mit einem Knopf, der /cam visit CamFlyTester:Haus schickt, in
-    /cam spot list steht der Punkt unter "Shared with you", die
-    Tab-Vervollstaendigung bietet ihn nach /cam visit an, und in
-    playerdata/shared-spots.yml steht er. Springen wie zu einem eigenen
+    Der Bot setzt den Punkt "Haus" sechs Bloecke neben seinem Platz und bietet
+    ihn dem zweiten Spieler an, der zweihundert Bloecke weiter steht: Der
+    erfaehrt es mit Knoepfen, die /cam spot accept und decline
+    CamFlyTester:Haus schicken, in playerdata/shared-spots.yml steht er unter
+    pending, /cam spot list zeigt ihn unter "Offered to you", und besuchen
+    kann er ihn noch nicht. Nimmt er ihn an, erfaehrt es der Bot, in der Datei
+    steht er unter players, /cam spot list hat ihn unter "Shared with you",
+    und die Tab-Vervollstaendigung bietet ihn nach /cam visit an. Noch einmal
+    angeboten heisst es, dass er ihn schon hat. Springen wie zu einem eigenen
     Punkt geht von dort nicht, er ist mehr als max-distance vom eigenen
     Koerper weg.
 
@@ -5752,8 +5835,13 @@ def teilen_checks(env, bot):
     waehrend der zweite Spieler zu Besuch ist, ist dessen Kamera wieder beim
     Koerper, mit der Meldung, und der Punkt ist fuer ihn weg.
 
-    Mit all teilt der Bot mit allen, seine Liste sagt "shared with
-    everybody", die Tab-Vervollstaendigung bietet all und die Spieler an.
+    Mit all macht der Bot ihn oeffentlich: Der andere sieht ihn ohne
+    annehmen unter "Public spots of others", die Liste des Bots sagt
+    "public". Der andere liked ihn, die Liste des Bots zaehlt das Like,
+    noch einmal nimmt es zurueck; den eigenen liked keiner. Ein neues Angebot
+    lehnt er ab - der Bot erfaehrt es, danach ist nichts mehr anzunehmen -,
+    ein angenommenes nimmt er mit decline wieder von seiner Liste. Die
+    Tab-Vervollstaendigung bietet nach share all und die Spieler an.
     Ein unbekannter Name und der eigene werden abgewiesen. Ein verbotenes
     Biom am Punkt sperrt den Besuch, und der Cam-Modus startet dafuer nicht.
     Mit visitor-camera.enabled: false ist /cam visit aus, mit
@@ -5803,28 +5891,52 @@ def teilen_checks(env, bot):
         seit = zuschauer.mark()
         pakete_seit = zuschauer.call("chat_packets", since=10 ** 9).get("count", 0)
         zeilen = befehl(bot, f"/cam spot share Haus {ZUSCHAUER_NAME}")
-        FIND.test("/cam spot share Haus <Spieler> - geteilt",
-                  gesagt(zeilen, rf"Spot Haus is shared with {ZUSCHAUER_NAME} now"), zeige(zeilen))
+        FIND.test("/cam spot share Haus <Spieler> - angeboten, noch nicht geteilt",
+                  gesagt(zeilen, rf"Spot Haus is offered to {ZUSCHAUER_NAME} now"), zeige(zeilen))
         dort = zeilen_seit(zuschauer, seit)
         pakete = " ".join(p["text"] for p in zuschauer.call("chat_packets", since=pakete_seit).get("packets", []))
-        FIND.test("Wer online ist, erfaehrt es - mit einem Knopf, der den Punkt besucht",
-                  gesagt(dort, rf"{BOT_NAME} shared the spot Haus with you") and f"/cam visit {label}" in pakete,
+        FIND.test("Wer online ist, erfaehrt es - mit Knoepfen zum Annehmen und Ablehnen",
+                  gesagt(dort, rf"{BOT_NAME} wants to share the spot Haus with you")
+                  and f"/cam spot accept {label}" in pakete and f"/cam spot decline {label}" in pakete,
                   f"{zeige(dort)} / {pakete[-300:]}")
         text = geteilte_datei(env)
-        FIND.test("storage: file - der geteilte Punkt steht in playerdata/shared-spots.yml",
-                  re.search(r"name:\s*Haus", text) is not None and ZUSCHAUER_NAME in text, text[-300:] or "keine Datei")
+        FIND.test("storage: file - das Angebot steht in playerdata/shared-spots.yml unter pending",
+                  re.search(r"name:\s*Haus", text) is not None and re.search(r"pending:", text) is not None
+                  and ZUSCHAUER_NAME in text, text[-300:] or "keine Datei")
+        dort = befehl(zuschauer, f"/cam visit {label}")
+        FIND.test("Vor dem Annehmen ist der Punkt nicht seiner: kein Besuch",
+                  gesagt(dort, rf"Nobody shares a spot called {label}"), zeige(dort))
+        dort = befehl(zuschauer, "/cam spot list")
+        FIND.test("/cam spot list beim anderen: der Punkt unter \"Offered to you\"",
+                  gesagt(dort, r"Offered to you \(1\)") and gesagt(dort, rf"- {label}: ")
+                  and not gesagt(dort, r"Shared with you"), zeige(dort))
+        tabs = tab(zuschauer, "/cam spot accept ")
+        FIND.test("Tab nach /cam spot accept: das Angebot", tabs == [label], str(tabs))
+        seit = bot.mark()
+        dort = befehl(zuschauer, f"/cam spot accept {label}")
+        hier = zeilen_seit(bot, seit)
+        FIND.test("/cam spot accept - angenommen, und der Bot erfaehrt es",
+                  gesagt(dort, rf"You accepted {label}") and gesagt(hier, rf"{ZUSCHAUER_NAME} accepted your spot Haus"),
+                  f"{zeige(dort)} / {zeige(hier)}")
+        text = geteilte_datei(env)
+        FIND.test("Angenommen steht er in playerdata/shared-spots.yml unter players, nicht mehr unter pending",
+                  re.search(r"players:", text) is not None and re.search(r"pending:", text) is None,
+                  text[-300:] or "keine Datei")
         dort = befehl(zuschauer, "/cam spot list")
         FIND.test("/cam spot list beim anderen: der Punkt unter \"Shared with you\"",
                   gesagt(dort, r"Shared with you \(1\)") and gesagt(dort, rf"- {label}: "), zeige(dort))
         tabs = tab(zuschauer, "/cam visit ")
         FIND.test("Tab nach /cam visit: der geteilte Punkt", tabs == [label], str(tabs))
+        zeilen = befehl(bot, f"/cam spot share Haus {ZUSCHAUER_NAME}")
+        FIND.test("Noch einmal angeboten - er hat ihn schon",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} has spot Haus already"), zeige(zeilen))
 
         if not FIND.test("Der zweite Spieler ist weit weg im Cam-Modus",
                          zuschauer_cam_an(env, zuschauer, fern[0], y, z), ""):
             return
         dort = befehl(zuschauer, f"/cam spot {label}")
         FIND.test("/cam spot Besitzer:Name springt nur wie zu einem eigenen Punkt: zu weit vom eigenen Koerper",
-                  gesagt(dort, rf"Spot {label} is more than 100\.0 blocks from your body")
+                  gesagt(dort, r"You are too far away")
                   and nahe(zuschauer_pos(), fern, 1.5), zeige(dort))
         dort = befehl(zuschauer, f"/cam visit {label}", warten=2.0)
         FIND.test("/cam visit im Cam-Modus - die Kamera steht am geteilten Punkt",
@@ -5869,10 +5981,22 @@ def teilen_checks(env, bot):
         zeilen = befehl(bot, "/cam spot share Haus all")
         dort = befehl(zuschauer, "/cam spot list")
         eigene = befehl(bot, "/cam spot list")
-        FIND.test("/cam spot share Haus all - mit allen geteilt, auch er sieht ihn",
-                  gesagt(zeilen, r"Spot Haus is shared with everybody now") and gesagt(dort, rf"- {label}: ")
-                  and gesagt(eigene, r"- Haus: .*\(shared with everybody\)"),
+        FIND.test("/cam spot share Haus all - oeffentlich, er sieht ihn ohne annehmen",
+                  gesagt(zeilen, r"Spot Haus is public now") and gesagt(dort, r"Public spots of others \(1\)")
+                  and gesagt(dort, rf"- {label}: ") and gesagt(eigene, r"- Haus: .*\(public, 0 likes\)"),
                   f"{zeige(zeilen)} / {zeige(dort)} / {zeige(eigene)}")
+        tabs = tab(zuschauer, "/cam spot like ")
+        FIND.test("Tab nach /cam spot like: der oeffentliche Punkt", tabs == [label], str(tabs))
+        dort = befehl(zuschauer, f"/cam spot like {label}")
+        eigene = befehl(bot, "/cam spot list")
+        FIND.test("/cam spot like - er liked ihn, und die Liste des Bots zaehlt es",
+                  gesagt(dort, rf"You like {label} now\. It has 1 likes") and gesagt(eigene, r"\(public, 1 likes\)"),
+                  f"{zeige(dort)} / {zeige(eigene)}")
+        zeilen = befehl(bot, f"/cam spot like {label}")
+        FIND.test("Den eigenen Punkt liked keiner", gesagt(zeilen, r"You cannot like your own spot"), zeige(zeilen))
+        dort = befehl(zuschauer, f"/cam spot like {label}")
+        FIND.test("Noch einmal like nimmt es zurueck", gesagt(dort, rf"You no longer like {label}\. It has 0 likes"),
+                  zeige(dort))
         for name, eingabe, muster in (
                 ("Ein unbekannter Name wird abgewiesen", "/cam spot share Haus Niemand123",
                  r"Nobody called Niemand123 has been on this server"),
@@ -5884,6 +6008,25 @@ def teilen_checks(env, bot):
                   "all" in tabs and ZUSCHAUER_NAME in tabs, str(tabs))
         tabs = tab(bot, "/cam spot unshare Haus ")
         FIND.test("Tab nach /cam spot unshare Haus: mit wem er geteilt ist", tabs == ["all"], str(tabs))
+
+        seit = bot.mark()
+        befehl(bot, f"/cam spot share Haus {ZUSCHAUER_NAME}")
+        dort = befehl(zuschauer, f"/cam spot decline {label}")
+        hier = zeilen_seit(bot, seit)
+        FIND.test("/cam spot decline - abgelehnt, und der Bot erfaehrt es",
+                  gesagt(dort, rf"You turned down {label}")
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} turned down your spot Haus"), f"{zeige(dort)} / {zeige(hier)}")
+        dort = befehl(zuschauer, f"/cam spot accept {label}")
+        FIND.test("Danach ist nichts mehr anzunehmen", gesagt(dort, rf"Nobody offers you a spot called {label}"),
+                  zeige(dort))
+        befehl(bot, f"/cam spot share Haus {ZUSCHAUER_NAME}")
+        befehl(zuschauer, f"/cam spot accept {label}")
+        dort = befehl(zuschauer, f"/cam spot decline {label}")
+        liste = befehl(zuschauer, "/cam spot list")
+        FIND.test("decline bei einem angenommenen Punkt nimmt ihn von seiner Liste - oeffentlich bleibt er",
+                  gesagt(dort, rf"Spot {label} is no longer among the spots shared with you")
+                  and not gesagt(liste, r"Shared with you") and gesagt(liste, r"Public spots of others \(1\)"),
+                  f"{zeige(dort)} / {zeige(liste)}")
 
         bot.chat(f"/fillbiome {biom} minecraft:lush_caves")
         time.sleep(1.5)
@@ -5925,6 +6068,494 @@ def teilen_checks(env, bot):
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test des Teilens: {exc}")
+
+
+def flugtempo(env, name):
+    """Das Flugtempo eines Spielers, wie der Server es fuehrt - ueber die
+    Konsole gefragt, die jeden fragen darf."""
+    vorher = len(server_log(env))
+    console(env, f"data get entity {name} abilities.flySpeed", pause=1.0)
+    # Die Konsole faerbt die Zahl mit ANSI-Folgen ein.
+    text = re.sub(r"\x1b\[[0-9;]*m", "", strip_colors(server_log(env)[vorher:]))
+    treffer = re.search(rf"{name} has the following entity data: (-?[\d.]+)f?", text)
+    return float(treffer.group(1)) if treffer else None
+
+
+def fuehrung_checks(env, bot):
+    """tour: /cam tour - einer zeigt seinen Bau, und die Kamera eines
+    anderen fliegt mit seiner mit.
+
+    Voreingestellt ist es an, mit radius 16 und out-of-reach-seconds 5 -
+    nachgesehen in der Datei, die das Plugin mitbringt; der Test stellt
+    max-distance auf 20, out-of-reach-seconds auf 8 und schaltet die
+    Partikel der Kameras an. Im Cam-Modus 30 Bloecke weg, und ohne ihn
+    ebenso (start-distance 16), wird er nicht eingeladen, und die
+    Tab-Vervollstaendigung bietet ihn nicht an. Ohne Cam-Modus sechs Bloecke
+    hinter dem Fuehrer bietet sie ihn an, die Einladung kommt mit Knoepfen
+    und dem Ton von sounds.tour-invite. Steht er beim Annehmen 30 Bloecke
+    weg, heisst es "You are X blocks too far away", und nichts startet; nah
+    dran startet sein Cam-Modus dort, wo er steht, seine Kamera steht beim
+    Fuehrer, der es erfaehrt, und sein Flugtempo ist 0. Fliegt
+    der Fuehrer acht Bloecke, fliegt der Gast mit; im Menue sagt der Knopf
+    der Fuehrung, wem er folgt.
+
+    Fliegt der Fuehrer weiter, als die Kamera des Gastes von ihrem Koerper
+    aus darf, lesen beide in der Action-Bar, dass die Fuehrung endet, mit dem
+    Ton von sounds.tour-reach. Kommt er rechtzeitig zurueck, fliegt der Gast
+    wieder mit. Mit tour.guide-view (voreingestellt) sieht der Gast durch die
+    Augen des Fuehrers - der Bot bekommt das Paket camera mit dessen Nummer,
+    und der Start meldet nichts dazu -, ausser Reichweite und nach dem
+    Verlassen wieder aus seiner eigenen Kamera; der Knopf im Menue und
+    /cam tour view schalten zwischen beidem um. Auf der Fuehrung bekommt
+    keiner Namen und Partikel des anderen, der Fuehrer sieht den Gast nicht,
+    der Gast den Fuehrer nur mit dessen Blick (er braucht ihn als Kamera);
+    nach der Fuehrung sehen sich beide wieder. Bleibt er weg, ist die
+    Fuehrung fuer den Gast vorbei, beide
+    erfahren es, und das Flugtempo des Gastes ist wieder seins. Einladen
+    geht dann nicht, solange der Fuehrer ausser seiner Reichweite ist.
+
+    /cam tour leave, /cam back, kick und das Ende des Cam-Modus des Fuehrers
+    beenden die Fuehrung fuer den Gast, jedes mit seiner Meldung; ablehnen
+    sagt es dem Fuehrer. Im Menue steht der Gast auf der Seite der Fuehrung,
+    ein Klick laedt ihn ein, bei ihm steht die Einladung, und ein Linksklick
+    nimmt sie an. Endet der Cam-Modus des Gastes ohne /cam - ein Treffer auf
+    seinen Koerper -, ist er von der Fuehrung und sieht wieder aus seiner
+    eigenen Kamera. Mit tour.enabled: false ist /cam tour aus.
+
+    Ist niemand nah genug, sagt die Seite der Fuehrung, wie nah: ohne
+    Cam-Modus start-distance, im Cam-Modus radius. Auf der Fuehrung bleiben
+    beide in der Tab-Liste des anderen (auf Paper meldet der Start nichts
+    dazu), ueber der Kamera des Fuehrers stehen die Namen gestapelt - der
+    Gast mit (Follower) ueber dem Fuehrer mit (Guide) -, und der Gast kann
+    seinen eigenen Koerper weder anklicken noch schlagen: der Cam-Modus bleibt
+    an, mit tour-body-locked. Sein Client bekommt seinen Frost immer wieder
+    geschickt, und jeder am Ende des Cam-Modus: was ein Client in Pulverschnee
+    selbst hochzaehlt, wo der Server ihn nicht hatte, bleibt sonst bis zum
+    naechsten Beitritt auf dem Bildschirm. Mit max-guests: 1 kommt ein dritter Spieler
+    nicht mehr mit, der Fuehrer kann ihn nicht mehr einladen, und der Knopf
+    der Fuehrung sagt "Guests: 1/1". Der dritte sieht von aussen nur den
+    Fuehrer - der Gast, der ihm folgt, steht nur in der Tab-Liste -, nach
+    der Fuehrung wieder beide.
+    """
+    def zuschauer_pos():
+        return bot.call("server_pos", selector=ZUSCHAUER_NAME).get("pos")
+
+    def nahe(a, b, weit=1.0):
+        return a is not None and b is not None and math.dist(a, b) < weit
+
+    def tab(client, text):
+        return client.call("tab", text=text).get("matches", [])
+
+    def fenster(client):
+        return client.call("window_slots", wait=10)
+
+    def klick(client, slot, button=0, mode=0, warten=1.5):
+        client.call("click_window", wait=15, slot=slot, button=button, mode=mode)
+        time.sleep(warten)
+
+    def kamera_marke():
+        return zuschauer.call("cameras").get("count", 0)
+
+    def kameras_seit(marke):
+        """Durch wen der Server den Gast seit der Marke sehen liess: 'fuehrer',
+        'selbst' oder die Nummer, der Reihe nach."""
+        antwort = zuschauer.call("cameras", since=marke)
+        # Die Nummer einer Entitaet vergibt der Server fuer alle gleich: der
+        # Fuehrer kennt seine eigene.
+        fuehrer = bot.call("cameras").get("self")
+        return ["fuehrer" if p.get("id") == fuehrer else "selbst" if p.get("id") == antwort.get("self")
+                else p.get("id") for p in antwort.get("packets", [])]
+
+    def kennt(client, wen, radius=24):
+        """Ob der Client die Entitaet mit dieser Nummer kennt, also sieht."""
+        return any(e.get("id") == wen for e in client.call("entities", radius=radius).get("entities", []))
+
+    def namen_nah(client):
+        """Die Text-Displays nah an der Kamera - die Namen anderer Kameras."""
+        return [e for e in client.call("entities", radius=3).get("entities", []) if "text_display" in (e.get("type") or "")]
+
+    def in_tab(client, wer):
+        return wer in client.call("players").get("players", [])
+
+    def name_text(wer):
+        """Was der Name ueber dieser Kamera sagt, am Server gelesen: das
+        TextDisplay, das ihrer Stelle am naechsten ist - die eines Gastes
+        steht nur fast dort."""
+        since = bot.mark()
+        bot.chat(f"/execute at {wer} positioned ~ ~{NAME_UEBER_SPIELER} ~ run data get entity "
+                 f"@e[type=minecraft:text_display,distance=..0.3,limit=1,sort=nearest] text")
+        hit = bot.expect("entity data", since, 4000)
+        return strip_colors(hit["text"]) if hit else ""
+
+    def einladen_und_annehmen():
+        befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=2.0)
+        return gesagt(dort, rf"You follow {BOT_NAME} now")
+
+    if not FIND.test("Cam-Modus ist vor dem Test der Fuehrung aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    # Der Koerper des Gastes steht sechs Bloecke hinter dem des Fuehrers: So
+    # kommt der Fuehrer aus der Reichweite des Gastes heraus und bleibt in
+    # seiner eigenen - max-distance haelt auch ihn.
+    gast = (x - 6, y, z)
+    console(env, f"fill {_floor(x) - 10} {y} {_floor(z) - 4} {_floor(x) + 40} {y + 8} {_floor(z) + 4} "
+                 f"minecraft:air", pause=0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    dritter = BotClient(env, name=DRITTER_NAME)
+    try:
+        FIND.test("Voreingestellt steht tour mit enabled: true, radius: 16, start-distance: 16, "
+                  "out-of-reach-seconds: 5 und max-guests: 5 da",
+                  re.search(r"(?m)^tour:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*radius:\s*16\.0\s*\n"
+                            r"(?:\s*#.*\n)*\s*start-distance:\s*16\s*\n"
+                            r"(?:\s*#.*\n)*\s*out-of-reach-seconds:\s*5\s*\n"
+                            r"(?:\s*#.*\n)*\s*max-guests:\s*5\s*$", quelle_config(env)) is not None, "")
+        # Die Partikel der Kameras, die der Testserver sonst abschaltet.
+        set_options(env, [("max-distance", "20.0"), ("out-of-reach-seconds", "8", "tour"),
+                          ("particles-per-tick", "1", "camera-particles")])
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Fuehrung kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        hinstellen(bot, x, y, z)
+        cam_on(bot)
+        if not FIND.test("Der zweite Spieler ist 30 Bloecke weit weg im Cam-Modus",
+                         zuschauer_cam_an(env, zuschauer, x + 30, y, z), ""):
+            return
+        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        tabs = tab(bot, "/cam tour invite ")
+        FIND.test("tour.radius: 16 - wer im Cam-Modus weiter weg ist, wird nicht eingeladen und nicht angeboten",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} is too far away") and ZUSCHAUER_NAME not in tabs,
+                  f"{zeige(zeilen)} / {tabs}")
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 9)
+        leer = item_text(fenster(bot).get("slots", {}).get("22"))
+        FIND.test("Menue: niemand nah genug - die Seite sagt, wie nah: ohne Cam-Modus start-distance, im Cam-Modus "
+                  "radius",
+                  "Nobody to invite" in leer and "- without cam mode: within 16 blocks" in leer
+                  and "- in cam mode: within 16 blocks" in leer, leer)
+        bot.call("close_window", wait=10)
+        cam_off(zuschauer)
+        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        FIND.test("tour.start-distance: 16 - ohne Cam-Modus 30 Bloecke weg wird er auch nicht eingeladen",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} is too far away"), zeige(zeilen))
+        console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
+        tabs = tab(bot, "/cam tour invite ")
+        FIND.test("Tab nach /cam tour invite: der Spieler daneben, auch ohne Cam-Modus", tabs == [ZUSCHAUER_NAME],
+                  str(tabs))
+        # Wie ein echter Client im Flug: die Geschwindigkeit des Servers, ohne Schwerkraft.
+        zuschauer.call("velocity", on=True)
+        seit = zuschauer.mark()
+        ton = toene_marke(zuschauer)
+        pakete_seit = zuschauer.call("chat_packets", since=10 ** 9).get("count", 0)
+        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        dort = zeilen_seit(zuschauer, seit)
+        pakete = " ".join(p["text"] for p in zuschauer.call("chat_packets", since=pakete_seit).get("packets", []))
+        FIND.test("Die Einladung kommt an - mit Knoepfen zum Annehmen und Ablehnen",
+                  gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to your tour")
+                  and gesagt(dort, rf"{BOT_NAME} invites you to a tour")
+                  and f"/cam tour accept {BOT_NAME}" in pakete and f"/cam tour decline {BOT_NAME}" in pakete,
+                  f"{zeige(zeilen)} / {zeige(dort)} / {pakete[-300:]}")
+        FIND.test("sounds.tour-invite - der Eingeladene hoert den Ton", ton_da(zuschauer, ton, "block.note_block.bell"),
+                  "")
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 30} {y} {z}", pause=1.0)
+        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=2.0)
+        FIND.test("Ohne Cam-Modus zu weit weg: \"You are X blocks too far away\", und nichts startet",
+                  gesagt(dort, r"You are \d+ blocks too far away") and not im_cam_modus(bot, ZUSCHAUER_NAME),
+                  zeige(dort))
+        console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
+        seit = bot.mark()
+        kamera = kamera_marke()
+        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=3.0)
+        hier = zeilen_seit(bot, seit)
+        FIND.test("Ohne Cam-Modus nah dran: annehmen startet den Cam-Modus dort, wo er steht",
+                  gesagt(dort, r"Cam mode activated") and im_cam_modus(bot, ZUSCHAUER_NAME), zeige(dort))
+        FIND.test("tour.guide-view: der Gast sieht durch die Augen des Fuehrers (Paket camera mit dessen Nummer)",
+                  "fuehrer" in kameras_seit(kamera), str(kameras_seit(kamera)))
+        FIND.test("Auf Paper meldet der Start nichts zum Blick des Fuehrers",
+                  "guide's view of /cam tour does not work" not in server_log(env), "")
+        FIND.test("/cam tour accept - seine Kamera steht beim Fuehrer, und der erfaehrt es",
+                  gesagt(dort, rf"You follow {BOT_NAME} now") and gesagt(hier, rf"{ZUSCHAUER_NAME} follows you now")
+                  and nahe(zuschauer_pos(), bot.server_pos(), 1.0),
+                  f"{zeige(dort)} / {zeige(hier)} / {zuschauer_pos()} / {bot.server_pos()}")
+        tempo = flugtempo(env, ZUSCHAUER_NAME)
+        FIND.test("Auf der Fuehrung bewegen die eigenen Tasten die Kamera nicht: Flugtempo 0",
+                  tempo is not None and abs(tempo) < 1e-6, str(tempo))
+        frost = zuschauer.call("frosts").get("count", 0)
+        time.sleep(1.0)
+        werte = zuschauer.call("frosts", since=frost).get("values", [])
+        FIND.test("Auf der Fuehrung bekommt der Client des Gastes seinen Frost immer wieder geschickt (0) - was er "
+                  "selbst hochzaehlt, bleibt nicht stehen",
+                  len(werte) >= 2 and all(w == 0 for w in werte), str(werte))
+        FIND.test("Auf der Fuehrung bleiben beide in der Tab-Liste des anderen",
+                  in_tab(bot, ZUSCHAUER_NAME) and in_tab(zuschauer, BOT_NAME),
+                  f"{bot.call('players').get('players')} / {zuschauer.call('players').get('players')}")
+        FIND.test("Auf Paper meldet der Start nichts zur Tab-Liste der Fuehrung",
+                  "cannot keep the players it hides" not in server_log(env), "")
+        text = name_text(BOT_NAME)
+        FIND.test("Ueber der Kamera des Fuehrers stehen die Namen gestapelt: der Gast mit (Follower) ueber dem "
+                  "Fuehrer mit (Guide)",
+                  "(Follower)" in text and "(Guide)" in text and ZUSCHAUER_NAME in text
+                  and text.index(ZUSCHAUER_NAME) < text.index("(Follower)") < text.index(BOT_NAME)
+                  < text.index("(Guide)"), text)
+        # Der Koerper des Gastes steht sechs Bloecke hinter dem Fuehrer: Der
+        # fliegt hin, die Kamera des Gastes mit.
+        bot.call("fly", wait=30, dx=-5, timeout=15000)
+        time.sleep(1.5)
+        seit = zuschauer.mark()
+        zuschauer.call("activate_entity", wait=20, at=list(gast), radius=2)
+        time.sleep(1.0)
+        zuschauer.call("attack_entity", wait=20, at=list(gast), radius=2)
+        time.sleep(1.0)
+        dort = zeilen_seit(zuschauer, seit)
+        gesperrt = sum(1 for z in dort if re.search(rf"You follow the tour of {BOT_NAME}: leave it first", z))
+        FIND.test("Wer folgt, kann seinen eigenen Koerper weder anklicken noch schlagen: der Cam-Modus bleibt an",
+                  im_cam_modus(bot, ZUSCHAUER_NAME) and gesperrt == 2, f"{gesperrt} / {zeige(dort)}")
+        bot.call("fly", wait=30, dx=5, timeout=15000)
+        time.sleep(1.5)
+        bot.call("fly", wait=30, dx=8, dy=2, timeout=15000)
+        time.sleep(2.0)
+        FIND.test("Der Fuehrer fliegt acht Bloecke - die Kamera des Gastes fliegt mit",
+                  nahe(zuschauer_pos(), bot.server_pos(), 2.5), f"{zuschauer_pos()} / {bot.server_pos()}")
+        fuehrer_nr = bot.call("cameras").get("self")
+        gast_nr = zuschauer.call("cameras").get("self")
+        marke_bot, marke_gast = partikel_marke(bot), partikel_marke(zuschauer)
+        time.sleep(2.0)
+        FIND.test("Auf der Fuehrung bekommt keiner die Partikel des anderen",
+                  not partikel_seit(bot, marke_bot) and not partikel_seit(zuschauer, marke_gast),
+                  f"{len(partikel_seit(bot, marke_bot))} / {len(partikel_seit(zuschauer, marke_gast))}")
+        FIND.test("Auf der Fuehrung sieht keiner den Namen des anderen",
+                  not namen_nah(bot) and not namen_nah(zuschauer), f"{namen_nah(bot)} / {namen_nah(zuschauer)}")
+        FIND.test("Der Fuehrer sieht den Gast nicht; der Gast mit dem Blick des Fuehrers kennt ihn (seine Kamera)",
+                  not kennt(bot, gast_nr) and kennt(zuschauer, fuehrer_nr), f"{gast_nr} / {fuehrer_nr}")
+        befehl(zuschauer, "/cam menu", warten=1.0)
+        knopf = fenster(zuschauer).get("slots", {})
+        FIND.test("Im Menue sagt der Knopf der Fuehrung auf Platz 9, wem er folgt",
+                  f"You follow {BOT_NAME}" in item_text(knopf.get("9")), item_text(knopf.get("9")))
+        klick(zuschauer, 9)
+        knopf = fenster(zuschauer).get("slots", {})
+        FIND.test("Auf der Seite der Fuehrung: der Knopf des Blicks, er steht auf dem des Fuehrers",
+                  "View on tours" in item_text(knopf.get("13")) and "Now: the guide's" in item_text(knopf.get("13")),
+                  item_text(knopf.get("13")))
+        kamera = kamera_marke()
+        seit = zuschauer.mark()
+        klick(zuschauer, 13)
+        dort = zeilen_seit(zuschauer, seit)
+        knopf = fenster(zuschauer).get("slots", {})
+        FIND.test("Ein Klick schaltet auf freies Umsehen: die eigene Kamera wieder",
+                  gesagt(dort, r"On tours you look round freely now") and kameras_seit(kamera)[-1:] == ["selbst"]
+                  and "Now: free" in item_text(knopf.get("13")), f"{zeige(dort)} / {kameras_seit(kamera)}")
+        zuschauer.call("close_window", wait=10)
+        time.sleep(1.0)
+        FIND.test("Beim freien Umsehen sieht auch der Gast den Fuehrer nicht - in der Tab-Liste steht er",
+                  not kennt(zuschauer, fuehrer_nr) and in_tab(zuschauer, BOT_NAME), "")
+        kamera = kamera_marke()
+        dort = befehl(zuschauer, "/cam tour view", warten=2.0)
+        FIND.test("/cam tour view schaltet zurueck auf den Blick des Fuehrers",
+                  gesagt(dort, r"On tours you see through the eyes of the guide")
+                  and "fuehrer" in kameras_seit(kamera), f"{zeige(dort)} / {kameras_seit(kamera)}")
+
+        # Der Fuehrer ist bei x + 8, max-distance ist 20: Bei x + 16 ist er 22
+        # Bloecke vom Koerper des Gastes weg und 16 von seinem eigenen.
+        seit, seit_bot = zuschauer.mark(), bot.mark()
+        ton = toene_marke(zuschauer)
+        kamera = kamera_marke()
+        bot.call("fly", wait=30, dx=8, timeout=15000)
+        time.sleep(1.0)
+        dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, seit_bot)
+        FIND.test("Ausser Reichweite: beide lesen in der Action-Bar, dass die Fuehrung endet",
+                  gesagt(dort, rf"{BOT_NAME} is out of your reach: the tour ends in")
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} cannot follow: the tour ends for them in"),
+                  f"{zeige(dort)} / {zeige(hier)}")
+        FIND.test("sounds.tour-reach - der Gast hoert den Ton", ton_da(zuschauer, ton, "block.conduit.deactivate"), "")
+        FIND.test("Ausser Reichweite sieht der Gast wieder aus seiner eigenen Kamera",
+                  kameras_seit(kamera)[-1:] == ["selbst"], str(kameras_seit(kamera)))
+        wo = zuschauer_pos()
+        FIND.test("Die Kamera des Gastes bleibt in ihrer eigenen Reichweite",
+                  wo is not None and math.dist(wo, gast) <= 21.0, str(wo))
+        kamera = kamera_marke()
+        bot.call("fly", wait=30, dx=-6, timeout=15000)
+        time.sleep(2.0)
+        dort = zeilen_seit(zuschauer, seit)
+        FIND.test("Wieder in Reichweite: wieder der Blick des Fuehrers", "fuehrer" in kameras_seit(kamera),
+                  str(kameras_seit(kamera)))
+        FIND.test("Rechtzeitig zurueck: der Gast fliegt wieder mit, die Fuehrung geht weiter",
+                  nahe(zuschauer_pos(), bot.server_pos(), 2.5) and not gesagt(dort, r"for too long"),
+                  f"{zuschauer_pos()} / {bot.server_pos()} / {zeige(dort)}")
+
+        seit, seit_bot = zuschauer.mark(), bot.mark()
+        bot.call("fly", wait=30, dx=8, timeout=15000)
+        time.sleep(10.0)
+        dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, seit_bot)
+        FIND.test("Zu lange ausser Reichweite: die Fuehrung ist fuer den Gast vorbei, beide erfahren es",
+                  gesagt(dort, rf"{BOT_NAME} was out of your reach for too long")
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} could not follow you for too long"),
+                  f"{zeige(dort)} / {zeige(hier)}")
+        tempo = flugtempo(env, ZUSCHAUER_NAME)
+        FIND.test("Danach fliegt der Gast wieder mit seinem eigenen Tempo",
+                  tempo is not None and tempo > 0.0, str(tempo))
+        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        FIND.test("Einladen geht nicht, solange der Fuehrer ausser seiner Reichweite ist",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} could not follow you from there"), zeige(zeilen))
+
+        bot.call("fly", wait=30, dx=-8, timeout=15000)
+        time.sleep(1.0)
+        FIND.test("Wieder in Reichweite: einladen und annehmen", einladen_und_annehmen(), "")
+        seit = bot.mark()
+        time.sleep(1.0)
+        kamera = kamera_marke()
+        dort = befehl(zuschauer, "/cam tour leave")
+        hier = zeilen_seit(bot, seit)
+        FIND.test("/cam tour leave - er verlaesst die Fuehrung, der Fuehrer erfaehrt es, und er sieht aus seiner "
+                  "eigenen Kamera",
+                  gesagt(dort, rf"You left the tour of {BOT_NAME}") and gesagt(hier, rf"{ZUSCHAUER_NAME} left your tour")
+                  and kameras_seit(kamera)[-1:] == ["selbst"], f"{zeige(dort)} / {zeige(hier)} / {kameras_seit(kamera)}")
+        marke_bot = partikel_marke(bot)
+        time.sleep(2.0)
+        FIND.test("Nach der Fuehrung sehen sich beide wieder, mit Partikeln",
+                  kennt(bot, gast_nr) and kennt(zuschauer, fuehrer_nr) and len(partikel_seit(bot, marke_bot)) > 0,
+                  f"{kennt(bot, gast_nr)} / {kennt(zuschauer, fuehrer_nr)} / {len(partikel_seit(bot, marke_bot))}")
+        einladen_und_annehmen()
+        seit = bot.mark()
+        dort = befehl(zuschauer, "/cam back", warten=2.0)
+        hier = zeilen_seit(bot, seit)
+        FIND.test("/cam back - zurueck am Koerper und nicht mehr auf der Fuehrung",
+                  gesagt(dort, rf"You left the tour of {BOT_NAME}") and gesagt(hier, rf"{ZUSCHAUER_NAME} left your tour")
+                  and nahe(zuschauer_pos(), gast, 1.5), f"{zeige(dort)} / {zuschauer_pos()}")
+        # Wieder nah an den Gast heran, der jetzt an seinem Koerper ist.
+        bot.call("fly", wait=30, dx=-8, timeout=15000)
+        time.sleep(1.0)
+        einladen_und_annehmen()
+        seit = zuschauer.mark()
+        zeilen = befehl(bot, f"/cam tour kick {ZUSCHAUER_NAME}")
+        dort = zeilen_seit(zuschauer, seit)
+        FIND.test("/cam tour kick - der Gast ist weggeschickt",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} is off your tour") and gesagt(dort, rf"{BOT_NAME} took you off"),
+                  f"{zeige(zeilen)} / {zeige(dort)}")
+        einladen_und_annehmen()
+        seit = zuschauer.mark()
+        frost = bot.call("frosts").get("count", 0)
+        cam_off(bot)
+        dort = zeilen_seit(zuschauer, seit)
+        FIND.test("Endet der Cam-Modus des Fuehrers, endet die Fuehrung", gesagt(dort, rf"{BOT_NAME} ended the tour"),
+                  zeige(dort))
+        FIND.test("Am Ende des Cam-Modus bekommt der Client seinen Frost geschickt, auch wenn er gleich bleibt (0)",
+                  0 in bot.call("frosts", since=frost).get("values", []),
+                  str(bot.call("frosts", since=frost).get("values")))
+        hinstellen(bot, x + 8, y, z)
+        cam_on(bot)
+        befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        seit = bot.mark()
+        dort = befehl(zuschauer, f"/cam tour decline {BOT_NAME}")
+        hier = zeilen_seit(bot, seit)
+        FIND.test("/cam tour decline - abgelehnt, der Fuehrer erfaehrt es",
+                  gesagt(dort, rf"You turned down the tour of {BOT_NAME}")
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} turned your tour down"), f"{zeige(dort)} / {zeige(hier)}")
+
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 9)
+        f = fenster(bot)
+        FIND.test("Menue: auf der Seite der Fuehrung steht der Spieler daneben, zum Einladen, mit seinem Abstand",
+                  "Tour" in (f.get("title") or "") and ZUSCHAUER_NAME in item_text(f.get("slots", {}).get("0"))
+                  and "Click: invite" in item_text(f.get("slots", {}).get("0"))
+                  and re.search(r"In cam mode, \d+ blocks away", item_text(f.get("slots", {}).get("0"))),
+                  item_text(f.get("slots", {}).get("0")))
+        klick(bot, 0)
+        bot.call("close_window", wait=10)
+        befehl(zuschauer, "/cam menu", warten=1.0)
+        klick(zuschauer, 9)
+        f = fenster(zuschauer)
+        FIND.test("Menue: beim Eingeladenen steht die Einladung",
+                  BOT_NAME in item_text(f.get("slots", {}).get("0"))
+                  and "Invites you to a tour" in item_text(f.get("slots", {}).get("0")),
+                  item_text(f.get("slots", {}).get("0")))
+        klick(zuschauer, 0, warten=2.0)
+        FIND.test("Menue: ein Linksklick nimmt die Einladung an", nahe(zuschauer_pos(), bot.server_pos(), 1.0),
+                  f"{zuschauer_pos()} / {bot.server_pos()}")
+        zuschauer.call("close_window", wait=10)
+        time.sleep(1.0)
+        # Ein Ende ohne /cam: ein Treffer auf den Koerper des Gastes, der
+        # noch bei gast steht.
+        kamera = kamera_marke()
+        seit = bot.mark()
+        console(env, f"damage @e[type=minecraft:mannequin,x={gast[0]},y={y},z={z},distance=..1,limit=1] 1 "
+                     f"minecraft:cactus", pause=2.0)
+        hier = zeilen_seit(bot, seit)
+        FIND.test("Endet der Cam-Modus des Gastes ohne /cam (ein Treffer auf seinen Koerper): er ist von der "
+                  "Fuehrung und sieht wieder aus seiner eigenen Kamera",
+                  not im_cam_modus(bot, ZUSCHAUER_NAME) and gesagt(hier, rf"{ZUSCHAUER_NAME} left your tour")
+                  and kameras_seit(kamera)[-1:] == ["selbst"], f"{zeige(hier)} / {kameras_seit(kamera)}")
+        cam_off(zuschauer)
+        cam_off(bot)
+
+        set_option(env, "max-guests", "1", "tour")
+        dritter.start()
+        if FIND.test("Dritter Spieler fuer tour.max-guests kommt herein",
+                     dritter.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            time.sleep(1.5)
+            hinstellen(bot, x, y, z)
+            cam_on(bot)
+            console(env, f"tp {DRITTER_NAME} {x - 3} {y} {z}", pause=0.5)
+            console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
+            befehl(bot, f"/cam tour invite {DRITTER_NAME}")
+            befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+            dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=3.0)
+            FIND.test("max-guests: 1 - der erste Gast kommt mit", gesagt(dort, rf"You follow {BOT_NAME} now"),
+                      zeige(dort))
+            time.sleep(1.5)
+            fuehrer_nr = bot.call("cameras").get("self")
+            gast_nr = zuschauer.call("cameras").get("self")
+            FIND.test("Von aussen sieht man nur den Fuehrer: der Gast, der ihm folgt, ist ausgeblendet - in der "
+                      "Tab-Liste steht er",
+                      kennt(dritter, fuehrer_nr) and not kennt(dritter, gast_nr) and in_tab(dritter, ZUSCHAUER_NAME),
+                      f"{kennt(dritter, fuehrer_nr)} / {kennt(dritter, gast_nr)} / "
+                      f"{dritter.call('players').get('players')}")
+            zeilen = befehl(dritter, f"/cam tour accept {BOT_NAME}", warten=2.0)
+            FIND.test("Die Fuehrung ist voll: wer eingeladen ist, kommt nicht mehr mit, und nichts startet",
+                      gesagt(zeilen, rf"The tour of {BOT_NAME} is full right now")
+                      and not im_cam_modus(bot, DRITTER_NAME), zeige(zeilen))
+            zeilen = befehl(bot, f"/cam tour invite {DRITTER_NAME}")
+            FIND.test("Die Fuehrung ist voll: der Fuehrer kann niemanden mehr einladen",
+                      gesagt(zeilen, r"Your tour is full\. Guests at most: 1\."), zeige(zeilen))
+            befehl(bot, "/cam menu", warten=1.0)
+            knopf = item_text(fenster(bot).get("slots", {}).get("9"))
+            FIND.test("Im Menue sagt der Knopf der Fuehrung \"Guests: 1/1\"", "Guests: 1/1" in knopf, knopf)
+            bot.call("close_window", wait=10)
+            befehl(zuschauer, "/cam tour leave")
+            time.sleep(1.0)
+            FIND.test("Nach der Fuehrung sieht man den Gast von aussen wieder", kennt(dritter, gast_nr), "")
+            cam_off(zuschauer)
+            cam_off(bot)
+        dritter.stop()
+        set_option(env, "max-guests", "5", "tour")
+
+        set_option(env, "enabled", "false", "tour")
+        zeilen = befehl(bot, "/cam tour leave")
+        FIND.test("tour.enabled: false - /cam tour ist aus", gesagt(zeilen, r"/cam tour is switched off"),
+                  zeige(zeilen))
+    finally:
+        try:
+            for client in (zuschauer, bot):
+                if client.proc is not None:
+                    client.call("close_window", wait=10)
+            if zuschauer.proc is not None:
+                zuschauer.call("velocity", on=False)
+                cam_off(zuschauer)
+                zuschauer.stop()
+            if dritter.proc is not None:
+                dritter.stop()
+            cam_off(bot)
+            set_options(env, [("max-distance", "100.0"), ("out-of-reach-seconds", "5", "tour"),
+                              ("max-guests", "5", "tour"), ("enabled", "true", "tour"),
+                              ("particles-per-tick", "0", "camera-particles")])
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Fuehrung: {exc}")
 
 
 def weiter_checks(env, bot):
@@ -6184,7 +6815,8 @@ def menue_checks(env, bot):
     Voreingestellt steht access: menu da - nachgesehen in der Datei, die das
     Plugin mitbringt: der Testserver stellt fuer alle anderen Abschnitte both
     ein, sie tippen ihre Befehle. Ohne Cam-Modus oeffnet /cam menu das Menue
-    mit den Knoepfen auf ihren Plaetzen; der auf Platz 22 - der Kamera-Kopf -
+    mit den Knoepfen auf ihren Plaetzen - die Fuehrung auf 9, die Punkte auf
+    10, die Nachtsicht auf 17, Platz 13 frei -; der auf Platz 22 - der Kamera-Kopf -
     startet den Cam-Modus und schliesst das Fenster. Im Cam-Modus oeffnet es trotzdem, wo jedes andere Fenster zu
     bleibt, und nichts kommt dabei ins Inventar. Zeit, dann Sonnenuntergang
     gibt dem Bot 12000. Aussichtspunkte, "Save a spot here" fragt im Chat
@@ -6272,10 +6904,11 @@ def menue_checks(env, bot):
         FIND.test("Vor dem Cam-Modus: Zeit der Welt, Foto-Modus aus, Nachtsicht nur im Dunkeln",
                   "Now: the time of the world" in item_text(knopf.get("15"))
                   and "Now: off" in item_text(knopf.get("14"))
-                  and "Now: Only in the dark" in item_text(knopf.get("10")),
-                  f"{item_text(knopf.get('15'))} / {item_text(knopf.get('14'))} / {item_text(knopf.get('10'))}")
+                  and "Now: Only in the dark" in item_text(knopf.get("17")),
+                  f"{item_text(knopf.get('15'))} / {item_text(knopf.get('14'))} / {item_text(knopf.get('17'))}")
         FIND.test("Die Knoepfe stehen auf ihren Plaetzen",
-                  all(str(i) in f.get("slots", {}) for i in (10, 11, 12, 13, 14, 15, 16, 22)),
+                  all(str(i) in f.get("slots", {}) for i in (9, 10, 11, 12, 14, 15, 16, 17, 22))
+                  and "13" not in f.get("slots", {}),
                   str(sorted(f.get("slots", {})))[:200])
         klick(22, warten=2.0)
         FIND.test("Der Knopf auf Platz 22 startet den Cam-Modus und schliesst das Fenster",
@@ -6311,12 +6944,12 @@ def menue_checks(env, bot):
         bot.call("close_window", wait=10)
 
         menue()
-        klick(13)
+        klick(10)
         f = fenster()
         FIND.test("Aussichtspunkte - die Seite der Punkte", f.get("open") and "Spots" in (f.get("title") or ""),
                   str(f)[:300])
         seit = bot.mark()
-        klick(49)
+        klick(53)
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Save a spot here - das Fenster ist zu, und der Chat fragt nach dem Namen",
                   gesagt(zeilen, r"Type the name of the new spot in the chat") and not fenster().get("open"),
@@ -6327,13 +6960,13 @@ def menue_checks(env, bot):
         bot.call("fly", wait=30, dx=-5, timeout=15000)
         time.sleep(1.0)
         menue()
-        klick(13)
+        klick(10)
         klick(0, warten=2.0)
         da = bot.server_pos()
         FIND.test("Linksklick auf den Punkt springt hin",
                   punkt is not None and da is not None and math.dist(punkt, da) < 0.5, f"{punkt} / {da}")
         menue()
-        klick(13)
+        klick(10)
         seit = bot.mark()
         klick(0, mode=1)
         zeilen = zeilen_seit(bot, seit)
@@ -6534,7 +7167,7 @@ def menue_checks(env, bot):
 
         original = datei.read_text(encoding="utf-8")
         text = menue_knopf(original, "start", slot=4)
-        text = menue_knopf(text, "back", slot=10)
+        text = menue_knopf(text, "back", slot=17)
         text = menue_knopf(text, "time", item="kein_item")
         text = menue_knopf(text, "list", slot=4)
         datei.write_text(text, encoding="utf-8")
@@ -6542,7 +7175,7 @@ def menue_checks(env, bot):
         console(env, "cam reload", pause=2)
         log = strip_colors(server_log(env)[vorher:])
         FIND.test("menu.buttons: ein Knopf auf einem besetzten Platz wird gemeldet und kommt auf seinen eigenen",
-                  "menu.buttons.back.slot: slot 10 is taken by menu.buttons.nightvision.slot already. "
+                  "menu.buttons.back.slot: slot 17 is taken by menu.buttons.nightvision.slot already. "
                   "Using slot 11 instead." in log, log.strip()[-300:] or "nichts im Log")
         FIND.test("menu.buttons: ein unbekanntes Item wird gemeldet",
                   "Unknown value for menu.buttons.time.item: 'kein_item'" in log, log.strip()[-300:] or "nichts im Log")
@@ -6600,6 +7233,830 @@ def menue_checks(env, bot):
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test des Menues: {exc}")
+
+
+def spotreiter_checks(env, bot):
+    """menu: die Aussichtspunkte auf drei Reitern - die eigenen, oeffentlich
+    und geteilt - und das Sortieren der Listen.
+
+    Der Bot setzt Alpha zwei Bloecke weiter, dann Beta an seinem Platz, dann
+    Cee sechs Bloecke weiter, und stellt sich wieder an seinen Platz. Unten
+    stehen zurueck auf 45, die Reiter auf 48, 49 und 50, der Filter auf 51,
+    52 frei und das Buch fuer einen neuen Punkt auf 53. Auf dem Reiter der
+    eigenen stehen die Punkte, der neueste zuerst, mit dem Tag, an dem er
+    entstand, und wie nah man fuer den Sprung sein muss; das Buch sagt, wie viele Punkte er hat und wie viele noch gehen.
+    Der Filter zeigt alle Sortierungen, die gewaehlte markiert, und sortiert
+    nach dem Namen, nach den Aufrufen (noch keiner hat einen, "Views: 0")
+    und dann nach der Reichweite, die naechsten zuerst. Ein Rechtsklick auf das Buch fragt nach
+    einem oeffentlichen Punkt, Gamma ist danach oeffentlich und steht bei den
+    eigenen - dort mit "Public" darunter - und bei den oeffentlichen, als
+    seiner. Der zweite Spieler sieht ihn dort und liked ihn mit einem
+    Rechtsklick; danach steht das Like darunter, und der Punkt glaenzt. Ein
+    Linksklick springt wie zu einem eigenen Punkt: ohne Cam-Modus, aber nah
+    dran, startet er dort, und seine Kamera steht danach am Punkt. Der Filter des Bots auf den
+    oeffentlichen kommt nach drei Klicks zu den meisten Likes, nach vier zu
+    den meisten Aufrufen - der Sprung des anderen hat Gamma einen gegeben. Umschalt-Klick
+    auf den eigenen oeffentlichen loescht ihn dort nicht, ein Rechtsklick
+    nimmt ihn offline - bei den eigenen bleibt er.
+
+    Bietet der Bot Alpha an, glaenzt beim anderen der Knopf der Punkte und
+    sagt, dass einer wartet, und er oeffnet auf dem Reiter der geteilten: vorn
+    das Angebot, ein Linksklick nimmt es an, danach steht der Punkt dort, und
+    ein Rechtsklick nimmt ihn von der Liste.
+
+    Auf der Admin-Seite sortiert der Trichter die Statistik der Spieler nach
+    dem Namen oder dem letzten Flug: der zweite Spieler, der gerade geflogen
+    ist, steht dann vorn.
+
+    viewpoints.views-cooldown-minutes steht voreingestellt auf 10: springt
+    der Bot zweimal gleich hintereinander zu Beta, zaehlt das einmal; mit 0
+    zaehlt jeder Sprung.
+    """
+    def fenster(client):
+        return client.call("window_slots", wait=10)
+
+    def klick(client, slot, button=0, mode=0, warten=1.5):
+        client.call("click_window", wait=15, slot=slot, button=button, mode=mode)
+        time.sleep(warten)
+
+    def punkte(client):
+        befehl(client, "/cam menu", warten=1.0)
+        klick(client, 10)
+        return fenster(client)
+
+    def namen(f):
+        """Die Namen der Eintraege einer Liste, nach ihrem Platz."""
+        slots = f.get("slots", {})
+        return [item_text(slots.get(str(i))).split("\n")[0] for i in range(45) if str(i) in slots]
+
+    def platz_von(f, text):
+        return next((i for i, n in enumerate(namen(f)) if text in n), None)
+
+    def zuschauer_pos():
+        return bot.call("server_pos", selector=ZUSCHAUER_NAME).get("pos")
+
+    def aufrufe(name):
+        """Wie oft der Punkt des Bots aufgerufen wurde, wie das Menue es sagt."""
+        f = punkte(bot)
+        platz = platz_von(f, name)
+        text = item_text(f.get("slots", {}).get(str(platz))) if platz is not None else ""
+        bot.call("close_window", wait=10)
+        treffer = re.search(r"Views: (\d+)", text)
+        return int(treffer.group(1)) if treffer else None
+
+    if not FIND.test("Cam-Modus ist vor dem Test der Reiter aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    console(env, f"fill {_floor(x) - 2} {y} {_floor(z) - 2} {_floor(x) + 8} {y + 4} {_floor(z) + 2} minecraft:air",
+            pause=0.5)
+    label = f"{BOT_NAME}:Gamma"
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    try:
+        spots_loeschen(bot, "Alpha", "Beta", "Cee", "Gamma")
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Reiter kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 3} {y} {z + 1}", pause=1.0)
+        for name, dx in (("Alpha", 2), ("Beta", 0), ("Cee", 6)):
+            hinstellen(bot, x + dx, y, z)
+            befehl(bot, f"/cam spot set {name}")
+            time.sleep(1.2)
+        hinstellen(bot, x, y, z)
+
+        f = punkte(bot)
+        knopf = f.get("slots", {})
+        FIND.test("Reiter der eigenen: der neueste zuerst, mit dem Tag, an dem er entstand",
+                  "Spots: yours" in (f.get("title") or "") and namen(f)[:3] == ["Cee", "Beta", "Alpha"]
+                  and "Saved:" in item_text(knopf.get("0")) and "newest first" in item_text(knopf.get("51")),
+                  f"{f.get('title')} / {namen(f)} / {item_text(knopf.get('51'))}")
+        FIND.test("Unter jedem Punkt steht, wie nah man fuer den Sprung sein muss: viewpoints.start-distance (16) "
+                  "ohne Cam-Modus, im Cam-Modus in Reichweite der Kamera",
+                  "To jump there: within 16 blocks" in item_text(knopf.get("0"))
+                  and "reach of your camera" in item_text(knopf.get("0")), item_text(knopf.get("0")))
+        FIND.test("Das Buch sagt, wie viele Punkte er hat und wie viele noch gehen",
+                  "Your spots: 3 of 10 - 7 more possible" in item_text(knopf.get("53")), item_text(knopf.get("53")))
+        filter_text = item_text(knopf.get("51"))
+        FIND.test("Der Filter zeigt alle Sortierungen, die gewaehlte markiert",
+                  "» newest first" in filter_text and "by name" in filter_text and "nearest first" in filter_text
+                  and "» by name" not in filter_text and "» nearest first" not in filter_text, filter_text)
+        FIND.test("Unten: zurueck auf 45, die Reiter auf 48 bis 50 (der offene glaenzt), der Filter auf 51, "
+                  "52 frei, das Buch auf 53",
+                  all(str(i) in knopf for i in (45, 48, 49, 50, 51, 53)) and "52" not in knopf
+                  and (knopf.get("48") or {}).get("glint") is True and not (knopf.get("49") or {}).get("glint")
+                  and "Save a spot here" in item_text(knopf.get("53")), str(sorted(knopf)))
+        klick(bot, 51)
+        f = fenster(bot)
+        FIND.test("Der Filter sortiert nach dem Namen, jetzt ist der Name markiert",
+                  namen(f)[:3] == ["Alpha", "Beta", "Cee"] and "» by name" in item_text(f.get("slots", {}).get("51"))
+                  and "» newest first" not in item_text(f.get("slots", {}).get("51")), str(namen(f)))
+        klick(bot, 51)
+        f = fenster(bot)
+        FIND.test("Noch ein Klick: nach den Aufrufen, die meisten zuerst - noch keiner hat einen, also der neueste "
+                  "zuerst; unter jedem steht \"Views: 0\" und, wie oft ein Spieler zaehlt",
+                  namen(f)[:3] == ["Cee", "Beta", "Alpha"]
+                  and "» most views first" in item_text(f.get("slots", {}).get("51"))
+                  and "Views: 0" in item_text(f.get("slots", {}).get("0"))
+                  and "One view per player every 10 min" in item_text(f.get("slots", {}).get("0")), str(namen(f)))
+        klick(bot, 51)
+        f = fenster(bot)
+        FIND.test("Noch ein Klick: nach der Reichweite, die naechsten zuerst",
+                  namen(f)[:3] == ["Beta", "Alpha", "Cee"]
+                  and "» nearest first" in item_text(f.get("slots", {}).get("51")), str(namen(f)))
+        seit = bot.mark()
+        klick(bot, 53, button=1)
+        befehl(bot, "Gamma")
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Rechtsklick auf das Buch: ein oeffentlicher Punkt",
+                  gesagt(zeilen, r"Type the name of the new public spot") and gesagt(zeilen, r"Spot Gamma saved here")
+                  and gesagt(zeilen, r"Spot Gamma is public now"), zeige(zeilen))
+        f = punkte(bot)
+        platz = platz_von(f, "Gamma")
+        eigene = item_text(f.get("slots", {}).get(str(platz))) if platz is not None else ""
+        klick(bot, 49)
+        f = fenster(bot)
+        FIND.test("Gamma bleibt bei den eigenen, mit \"Public\" darunter, und steht bei den oeffentlichen, als seiner",
+                  "Public, 0 likes" in eigene and "Spots: public" in (f.get("title") or "")
+                  and any("Gamma (yours)" in n for n in namen(f)), f"{eigene} / {namen(f)}")
+        bot.call("close_window", wait=10)
+
+        f = punkte(zuschauer)
+        klick(zuschauer, 49)
+        f = fenster(zuschauer)
+        FIND.test("Der andere sieht den oeffentlichen Punkt", label in " ".join(namen(f)), str(namen(f)))
+        platz = platz_von(f, label) or 0
+        seit = zuschauer.mark()
+        klick(zuschauer, platz, button=1)
+        dort = zeilen_seit(zuschauer, seit)
+        f = fenster(zuschauer)
+        eintrag = f.get("slots", {}).get(str(platz)) or {}
+        FIND.test("Rechtsklick liked ihn: danach steht das Like darunter, und er glaenzt",
+                  gesagt(dort, rf"You like {label} now\. It has 1 likes") and "1 likes" in item_text(eintrag)
+                  and eintrag.get("glint") is True, f"{zeige(dort)} / {item_text(eintrag)}")
+        FIND.test("Auch unter dem oeffentlichen Punkt eines anderen steht, wie nah man fuer den Sprung sein muss",
+                  "To jump there: within 16 blocks" in item_text(eintrag), item_text(eintrag))
+        seit = zuschauer.mark()
+        klick(zuschauer, platz, warten=3.0)
+        dort = zeilen_seit(zuschauer, seit)
+        wo = zuschauer_pos()
+        FIND.test("Linksklick springt wie zu einem eigenen Punkt: ohne Cam-Modus nah dran startet er dort und springt",
+                  gesagt(dort, r"Cam mode activated") and wo is not None and math.dist(wo, (x, y, z)) < 0.6,
+                  f"{zeige(dort)} / {wo}")
+        cam_off(zuschauer)
+        zuschauer.call("close_window", wait=10)
+
+        punkte(bot)
+        klick(bot, 49)
+        for _ in range(3):
+            klick(bot, 51)
+        f = fenster(bot)
+        FIND.test("Auf den oeffentlichen sortiert der Filter nach drei Klicks nach den Likes",
+                  "» most likes first" in item_text(f.get("slots", {}).get("51")), item_text(f.get("slots", {}).get("51")))
+        klick(bot, 51)
+        f = fenster(bot)
+        platz = platz_von(f, "Gamma (yours)") or 0
+        FIND.test("Noch ein Klick: nach den Aufrufen - der Sprung des anderen zu Gamma zaehlt als Aufruf",
+                  "» most views first" in item_text(f.get("slots", {}).get("51"))
+                  and "Views: 1" in item_text(f.get("slots", {}).get(str(platz))),
+                  item_text(f.get("slots", {}).get(str(platz))))
+        seit = bot.mark()
+        klick(bot, platz, mode=1)
+        geklickt = zeilen_seit(bot, seit)
+        FIND.test("Umschalt-Klick auf den eigenen oeffentlichen loescht ihn dort nicht",
+                  not gesagt(geklickt, r"Spot Gamma deleted")
+                  and any("Gamma (yours)" in n for n in namen(fenster(bot))), zeige(geklickt))
+        seit = bot.mark()
+        klick(bot, platz_von(fenster(bot), "Gamma (yours)") or 0, button=1)
+        zeilen = zeilen_seit(bot, seit)
+        bot.call("close_window", wait=10)
+        f = punkte(bot)
+        platz = platz_von(f, "Gamma")
+        eigene = item_text(f.get("slots", {}).get(str(platz))) if platz is not None else ""
+        FIND.test("Rechtsklick nimmt den eigenen oeffentlichen offline - bei den eigenen bleibt er",
+                  gesagt(zeilen, r"Spot Gamma is private again") and platz is not None and "Public" not in eigene,
+                  f"{zeige(zeilen)} / {namen(f)}")
+        bot.call("close_window", wait=10)
+
+        befehl(bot, f"/cam spot share Alpha {ZUSCHAUER_NAME}")
+        befehl(zuschauer, "/cam menu", warten=1.0)
+        knopf = fenster(zuschauer).get("slots", {})
+        FIND.test("Ein Angebot: beim anderen glaenzt der Knopf der Punkte und sagt, dass eins wartet",
+                  (knopf.get("10") or {}).get("glint") is True
+                  and "New, offered to you: 1" in item_text(knopf.get("10")), item_text(knopf.get("10")))
+        klick(zuschauer, 10)
+        f = fenster(zuschauer)
+        FIND.test("Er oeffnet auf dem Reiter der geteilten, vorn das Angebot",
+                  "shared with you" in (f.get("title") or "")
+                  and f"{BOT_NAME}:Alpha" in item_text(f.get("slots", {}).get("0"))
+                  and "Offered to you" in item_text(f.get("slots", {}).get("0")),
+                  f"{f.get('title')} / {item_text(f.get('slots', {}).get('0'))}")
+        seit = zuschauer.mark()
+        klick(zuschauer, 0)
+        dort = zeilen_seit(zuschauer, seit)
+        f = fenster(zuschauer)
+        FIND.test("Linksklick nimmt es an, danach steht der Punkt dort",
+                  gesagt(dort, rf"You accepted {BOT_NAME}:Alpha")
+                  and "take it off your list" in item_text(f.get("slots", {}).get("0")),
+                  f"{zeige(dort)} / {item_text(f.get('slots', {}).get('0'))}")
+        seit = zuschauer.mark()
+        klick(zuschauer, 0, button=1)
+        dort = zeilen_seit(zuschauer, seit)
+        FIND.test("Rechtsklick nimmt ihn von der Liste",
+                  gesagt(dort, rf"Spot {BOT_NAME}:Alpha is no longer among the spots shared with you"), zeige(dort))
+        zuschauer.call("close_window", wait=10)
+
+        cam_on(zuschauer)
+        time.sleep(1.0)
+        cam_off(zuschauer)
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 23)
+        klick(bot, 14)
+        f = fenster(bot)
+        FIND.test("Admin-Seite, Statistik: nach dem Namen", namen(f)[:2] == [BOT_NAME, ZUSCHAUER_NAME]
+                  and "» by name" in item_text(f.get("slots", {}).get("53")), str(namen(f)))
+        klick(bot, 53)
+        f = fenster(bot)
+        FIND.test("Der Trichter sortiert nach dem letzten Flug: wer gerade geflogen ist, steht vorn",
+                  namen(f)[:1] == [ZUSCHAUER_NAME] and "» last flight first" in item_text(f.get("slots", {}).get("53")),
+                  f"{namen(f)} / {item_text(f.get('slots', {}).get('53'))}")
+        bot.call("close_window", wait=10)
+
+        FIND.test("Voreingestellt steht viewpoints.views-cooldown-minutes: 10 da",
+                  re.search(r"(?m)^\s*views-cooldown-minutes:\s*10\s*$", ausgeliefert(env)) is not None, "")
+        hinstellen(bot, x, y, z)
+        befehl(bot, "/cam spot Beta", warten=2.5)
+        befehl(bot, "/cam spot Beta", warten=1.0)
+        einmal = aufrufe("Beta")
+        set_option(env, "views-cooldown-minutes", "0", "viewpoints")
+        hinstellen(bot, x, y, z)
+        befehl(bot, "/cam spot Beta", warten=2.5)
+        befehl(bot, "/cam spot Beta", warten=1.0)
+        jeder = aufrufe("Beta")
+        set_option(env, "views-cooldown-minutes", "10", "viewpoints")
+        FIND.test("views-cooldown-minutes: 10 - zweimal gleich hintereinander zaehlt einmal; mit 0 zaehlt jeder Sprung",
+                  einmal == 1 and jeder == 3, f"{einmal} / {jeder}")
+    finally:
+        try:
+            for client in (zuschauer, bot):
+                if client.proc is not None:
+                    client.call("close_window", wait=10)
+            if zuschauer.proc is not None:
+                cam_off(zuschauer)
+                zuschauer.stop()
+            cam_off(bot)
+            spots_loeschen(bot, "Alpha", "Beta", "Cee", "Gamma")
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Reiter: {exc}")
+
+
+def offline_uuid(name):
+    """Die Nummer eines Spielers auf einem Server ohne Anmeldung bei Mojang,
+    wie Java sie bildet: UUID.nameUUIDFromBytes("OfflinePlayer:" + name)."""
+    roh = bytearray(hashlib.md5(("OfflinePlayer:" + name).encode("utf-8")).digest())
+    roh[6] = (roh[6] & 0x0F) | 0x30
+    roh[8] = (roh[8] & 0x3F) | 0x80
+    return str(uuid.UUID(bytes=bytes(roh)))
+
+
+def spotmoderation_checks(env, bot):
+    """menu: die Seite der Punkte auf der Admin-Seite (camplugin.spotadmin).
+
+    Der zweite Spieler setzt drei Punkte: ModA privat, ModB oeffentlich, ModC
+    dem Bot angeboten. Auf der Admin-Seite (Knopf auf 20) steht er unter den
+    Spielern mit Punkten, mit "Spots: 3, public: 1, shared: 1", und ein Klick
+    zeigt seine Punkte: ModA privat, ModB oeffentlich, ModC angeboten. Ein
+    Linksklick nimmt ModB herunter - er ist wieder privat, und der Besitzer
+    erfaehrt es -, ein Umschalt-Klick loescht ModA, auch das erfaehrt er.
+    Ein Rechtsklick auf ModC teleportiert den Bot hin, auch 30 Bloecke
+    weit. Der Trichter sortiert seine Punkte, erst die neuesten, nach einem
+    Klick nach dem Namen.
+
+    Der Knopf der Einschraenkung (49) oeffnet ihre Seite, mit je einem Knopf
+    fuer seine eigenen Punkte (11), die oeffentlichen (13) und die geteilten
+    (15), den man weiterklickt: erlaubt, keine neuen, gar keine - ein
+    Rechtsklick geht zurueck. Eigene auf "keine neuen", oeffentliche auf
+    "gar keine", fuer immer, bestaetigt - er erfaehrt es, /cam spot set
+    eines neuen Punkts sagt ihm, dass er keine neuen speichern darf,
+    /cam spot share ... all, dass er nichts oeffentlich machen darf, der
+    Sprung zum oeffentlichen Punkt AdmPub des Bots, dass er keine
+    oeffentlichen anschauen darf; einen Punkt verschieben und teilen darf er
+    weiter. In seinem Spot-Menue zeigt der Reiter der oeffentlichen nur das
+    graue Zeichen, dass er gesperrt ist, der der privaten seine Punkte. Der
+    Knopf glaenzt danach, und auf seiner Seite hebt der Milcheimer (35) die
+    Einschraenkung auf: er darf wieder speichern.
+
+    Geht er offline, steht er weiter in der Liste, und ein Umschalt-Klick
+    loescht seine Punkte aus seiner Datei. Die Koepfe der Seite fragen nicht
+    bei Mojang nach: die Spieler dieses Servers haben keine Skin.
+    """
+    def fenster(client):
+        return client.call("window_slots", wait=10)
+
+    def klick(client, slot, button=0, mode=0, warten=1.5):
+        client.call("click_window", wait=15, slot=slot, button=button, mode=mode)
+        time.sleep(warten)
+
+    def texte(f):
+        """Der Text jedes Eintrags einer Liste, nach seinem Platz."""
+        slots = f.get("slots", {})
+        return {i: item_text(slots.get(str(i))) for i in range(45) if str(i) in slots}
+
+    def platz(f, anfang):
+        return next((i for i, t in texte(f).items() if t.startswith(anfang)), None)
+
+    def seine_punkte():
+        """Die Admin-Seite der Punkte, und darauf der zweite Spieler."""
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 23)
+        klick(bot, 20)
+        liste = fenster(bot)
+        wo = platz(liste, ZUSCHAUER_NAME)
+        if wo is not None:
+            klick(bot, wo)
+        return liste, fenster(bot)
+
+    if not FIND.test("Cam-Modus ist vor dem Test der Moderation aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    datei = env.server / "plugins" / "CamFly" / "playerdata" / "stats" / f"{offline_uuid(ZUSCHAUER_NAME)}.yml"
+    log_vorher = len(server_log(env))
+    try:
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Moderation kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 2} {y} {z}", pause=1.0)
+        spots_loeschen(zuschauer, "ModA", "ModB", "ModC", "ModD")
+        spots_loeschen(bot, "AdmPub")
+        befehl(bot, "/cam spot set AdmPub", warten=0.8)
+        befehl(bot, "/cam spot share AdmPub all", warten=0.8)
+        for zeile in ("/cam spot set ModA", "/cam spot set ModB", "/cam spot share ModB all", "/cam spot set ModC",
+                      f"/cam spot share ModC {BOT_NAME}"):
+            befehl(zuschauer, zeile, warten=0.8)
+
+        liste, f = seine_punkte()
+        eintrag = texte(liste).get(platz(liste, ZUSCHAUER_NAME), "")
+        FIND.test("Admin-Seite, Punkte (20): der zweite Spieler steht dort, mit seinen Punkten",
+                  "Spots: 3, public: 1, shared: 1" in eintrag and "No restrictions" in eintrag, eintrag)
+        alle = texte(f)
+        a, b, c = (alle.get(platz(f, n), "") for n in ("ModA", "ModB", "ModC"))
+        FIND.test("Ein Klick zeigt seine Punkte: privat, oeffentlich, angeboten",
+                  f"Spots of {ZUSCHAUER_NAME}" in (f.get("title") or "") and "Private" in a
+                  and "Public, 0 likes" in b and f"Offered to: {BOT_NAME}" in c
+                  and "Left-click: take it down" in b and "Shift-click: delete" in a,
+                  f"{f.get('title')} / {a} / {b} / {c}")
+
+        seit = zuschauer.mark()
+        klick(bot, platz(f, "ModB"))
+        dort = zeilen_seit(zuschauer, seit)
+        f = fenster(bot)
+        b = texte(f).get(platz(f, "ModB"), "")
+        FIND.test("Linksklick nimmt einen oeffentlichen herunter: wieder privat, und der Besitzer erfaehrt es",
+                  "Private" in b and gesagt(dort, rf"{BOT_NAME} took your spot ModB down"), f"{b} / {zeige(dort)}")
+        seit = zuschauer.mark()
+        klick(bot, platz(f, "ModA"), mode=1)
+        dort = zeilen_seit(zuschauer, seit)
+        f = fenster(bot)
+        FIND.test("Umschalt-Klick loescht einen Punkt, und der Besitzer erfaehrt es",
+                  platz(f, "ModA") is None and gesagt(dort, rf"{BOT_NAME} deleted your spot ModA"),
+                  f"{list(texte(f).values())} / {zeige(dort)}")
+
+        # Weit weg vom Punkt: der Rechtsklick fragt nicht, wie weit.
+        bot.call("close_window", wait=10)
+        hinstellen(bot, x - 30, y, z)
+        liste, f = seine_punkte()
+        seit = bot.mark()
+        klick(bot, platz(f, "ModC"), button=1, warten=2.0)
+        wo = bot.server_pos()
+        FIND.test("Rechtsklick teleportiert den Admin zum Punkt, von wo er auch ist",
+                  wo is not None and math.dist(wo, (x + 2, y, z)) < 0.6
+                  and gesagt(zeilen_seit(bot, seit), rf"You are at spot ModC of {ZUSCHAUER_NAME}"),
+                  f"{wo} / {zeige(zeilen_seit(bot, seit))}")
+        liste, f = seine_punkte()
+
+        def reihe(f):
+            return [t.split("\n")[0] for _, t in sorted(texte(f).items())]
+
+        vorher = reihe(f)
+        klick(bot, 53)
+        f = fenster(bot)
+        sortierung = item_text(f.get("slots", {}).get("53"))
+        FIND.test("Der Trichter (53) sortiert seine Punkte: erst die neuesten, dann nach dem Namen",
+                  vorher[:2] == ["ModC", "ModB"] and reihe(f)[:2] == ["ModB", "ModC"]
+                  and "» by name" in sortierung and "most views first" in sortierung
+                  and "most likes first" in sortierung and "nearest first" in sortierung,
+                  f"{vorher} / {reihe(f)} / {sortierung}")
+
+        klick(bot, 49)
+        f = fenster(bot)
+
+        def stufe(f, slot):
+            return item_text(f.get("slots", {}).get(str(slot)))
+
+        FIND.test("Der Knopf der Einschraenkung (49) oeffnet ihre Seite: je ein Knopf fuer eigene, oeffentliche "
+                  "und geteilte Punkte, alle erlaubt",
+                  f"Restrict the spots of {ZUSCHAUER_NAME}" in (f.get("title") or "")
+                  and stufe(f, 11).startswith("His own spots") and stufe(f, 13).startswith("Public spots")
+                  and stufe(f, 15).startswith("Shared spots")
+                  and all("» allowed" in stufe(f, slot) for slot in (11, 13, 15)),
+                  f"{f.get('title')} / {stufe(f, 11)} / {stufe(f, 13)} / {stufe(f, 15)}")
+        klick(bot, 11)
+        klick(bot, 13)
+        klick(bot, 13)
+        f = fenster(bot)
+        FIND.test("Weiterklicken: eigene - keine neuen, oeffentliche - gar keine, geteilte bleiben erlaubt",
+                  "» no new spots" in stufe(f, 11) and "» no public spots at all" in stufe(f, 13)
+                  and "» allowed" in stufe(f, 15)
+                  and (f.get("slots", {}).get("13") or {}).get("glint") is True
+                  and (f.get("slots", {}).get("15") or {}).get("glint") is not True
+                  and "no new spots, no public spots at all" in stufe(f, 31),
+                  f"{stufe(f, 11)} / {stufe(f, 13)} / {stufe(f, 15)} / {stufe(f, 31)}")
+        klick(bot, 13, button=1)
+        zurueck = stufe(fenster(bot), 13)
+        klick(bot, 13)
+        FIND.test("Rechtsklick geht eine Stufe zurueck",
+                  "» nothing public" in zurueck and "» no public spots at all" in stufe(fenster(bot), 13), zurueck)
+        seit = zuschauer.mark()
+        klick(bot, 31)
+        dort = zeilen_seit(zuschauer, seit)
+        f = fenster(bot)
+        FIND.test("Bestaetigt: er erfaehrt es, und der Knopf glaenzt",
+                  gesagt(dort, rf"{BOT_NAME} restricted your spots: no new spots, no public spots at all for good")
+                  and (f.get("slots", {}).get("49") or {}).get("glint") is True, zeige(dort))
+        bot.call("close_window", wait=10)
+        zeilen = befehl(zuschauer, "/cam spot set ModD")
+        FIND.test("Eingeschraenkt: keinen neuen Punkt speichern",
+                  gesagt(zeilen, r"You may not save new spots for good"), zeige(zeilen))
+        zeilen = befehl(zuschauer, "/cam spot share ModC all")
+        FIND.test("Eingeschraenkt: nichts oeffentlich machen",
+                  gesagt(zeilen, r"You may not make spots public for good"), zeige(zeilen))
+        zeilen = befehl(zuschauer, f"/cam spot {BOT_NAME}:AdmPub")
+        FIND.test("Eingeschraenkt: keinen oeffentlichen Punkt anschauen",
+                  gesagt(zeilen, r"You may not look at public spots for good")
+                  and not im_cam_modus(bot, ZUSCHAUER_NAME), zeige(zeilen))
+        zeilen = befehl(zuschauer, "/cam spot set ModC") + befehl(zuschauer, f"/cam spot share ModB {BOT_NAME}")
+        FIND.test("Verschieben und teilen darf er weiter", gesagt(zeilen, r"Spot ModC moved here")
+                  and gesagt(zeilen, rf"offered|{BOT_NAME}"), zeige(zeilen))
+
+        befehl(zuschauer, "/cam menu", warten=1.0)
+        klick(zuschauer, 10)
+        klick(zuschauer, 49)
+        f = fenster(zuschauer)
+        gesperrt = item_text(f.get("slots", {}).get("22"))
+        FIND.test("Im Spot-Menue zeigt ihm der Reiter der oeffentlichen nur das graue Zeichen: gesperrt",
+                  "Sorry, you can't look at these" in gesperrt and "You are restricted" in gesperrt
+                  and "for good" in gesperrt and platz(f, "AdmPub") is None, f"{gesperrt} / {texte(f)}")
+        klick(zuschauer, 48)
+        f = fenster(zuschauer)
+        FIND.test("Seine eigenen Punkte zeigt der Reiter der privaten weiter",
+                  platz(f, "ModC") is not None and platz(f, "ModB") is not None, str(texte(f)))
+        zuschauer.call("close_window", wait=10)
+
+        liste, f = seine_punkte()
+        eintrag = texte(liste).get(platz(liste, ZUSCHAUER_NAME), "")
+        FIND.test("In der Liste steht die Einschraenkung unter ihm",
+                  "Restricted: no new spots, no public spots at all for good" in eintrag, eintrag)
+        klick(bot, 49)
+        seit = zuschauer.mark()
+        klick(bot, 35)
+        dort = zeilen_seit(zuschauer, seit)
+        bot.call("close_window", wait=10)
+        zeilen = befehl(zuschauer, "/cam spot set ModD")
+        FIND.test("Der Milcheimer hebt sie auf: er erfaehrt es und darf wieder speichern",
+                  gesagt(dort, rf"{BOT_NAME} lifted the restriction of your spots")
+                  and gesagt(zeilen, r"Spot ModD saved"), f"{zeige(dort)} / {zeige(zeilen)}")
+
+        # Alle auf einmal: vorn in der Liste der Spieler.
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 23)
+        klick(bot, 20)
+        alle = texte(fenster(bot)).get(0, "")
+        FIND.test("Vorn in der Liste der Punkte steht \"Everybody\", ohne Einschraenkung",
+                  alle.startswith("Everybody") and "No restrictions" in alle, alle)
+        klick(bot, 0)
+        f = fenster(bot)
+        FIND.test("Ein Klick oeffnet die Einschraenkung von allen, mit denselben Knoepfen",
+                  "Restrict the spots of Everybody" in (f.get("title") or "")
+                  and stufe(f, 13).startswith("Public spots"), str(f.get("title")))
+        klick(bot, 13)
+        klick(bot, 13)
+        seit = zuschauer.mark()
+        hier_seit = bot.mark()
+        klick(bot, 31)
+        dort = zeilen_seit(zuschauer, seit)
+        hier = zeilen_seit(bot, hier_seit)
+        FIND.test("Fuer alle bestaetigt: er liest, dass es abgeschaltet ist, der Admin, dass es fuer alle gilt",
+                  gesagt(dort, rf"{BOT_NAME} switched spots off for everybody: no public spots at all for good")
+                  and gesagt(hier, r"Spots are restricted for everybody: no public spots at all for good"),
+                  f"{zeige(dort)} / {zeige(hier)}")
+        bot.call("close_window", wait=10)
+        zeilen = befehl(zuschauer, "/cam spot share ModC all")
+        FIND.test("Fuer alle: oeffentlich machen ist abgeschaltet",
+                  gesagt(zeilen, r"Making spots public is switched off for good"), zeige(zeilen))
+        zeilen = befehl(zuschauer, f"/cam spot {BOT_NAME}:AdmPub")
+        FIND.test("Fuer alle: oeffentliche Punkte anschauen ist abgeschaltet",
+                  gesagt(zeilen, r"Looking at public spots is switched off for good")
+                  and not im_cam_modus(bot, ZUSCHAUER_NAME), zeige(zeilen))
+        befehl(zuschauer, "/cam menu", warten=1.0)
+        klick(zuschauer, 10)
+        klick(zuschauer, 49)
+        aus = item_text(fenster(zuschauer).get("slots", {}).get("22"))
+        FIND.test("Fuer alle: der Reiter der oeffentlichen sagt, dass es abgeschaltet ist",
+                  "Looking at these is switched off" in aus and "It is off for everybody" in aus
+                  and "for good" in aus, aus)
+        zuschauer.call("close_window", wait=10)
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 10)
+        klick(bot, 49)
+        FIND.test("camplugin.spotadmin.bypass (op): der Bot sieht die oeffentlichen weiter",
+                  platz(fenster(bot), "AdmPub") is not None, str(texte(fenster(bot))))
+        bot.call("close_window", wait=10)
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 23)
+        klick(bot, 20)
+        alle = texte(fenster(bot)).get(0, "")
+        klick(bot, 0)
+        seit = zuschauer.mark()
+        klick(bot, 35)
+        dort = zeilen_seit(zuschauer, seit)
+        bot.call("close_window", wait=10)
+        zeilen = befehl(zuschauer, "/cam spot share ModC all")
+        FIND.test("Unter \"Everybody\" steht die Einschraenkung; der Milcheimer hebt sie fuer alle auf",
+                  "Restricted: no public spots at all for good" in alle
+                  and gesagt(dort, rf"{BOT_NAME} switched spots on again for everybody")
+                  and gesagt(zeilen, r"Spot ModC is public now"), f"{alle} / {zeige(dort)} / {zeige(zeilen)}")
+
+        zuschauer.stop()
+        time.sleep(2.0)
+        liste, f = seine_punkte()
+        FIND.test("Offline steht er weiter in der Liste, mit seinen Punkten",
+                  platz(liste, ZUSCHAUER_NAME) is not None and platz(f, "ModD") is not None,
+                  f"{list(texte(liste).values())} / {list(texte(f).values())}")
+        seit = bot.mark()
+        for name in ("ModD", "ModC", "ModB"):
+            wo = platz(fenster(bot), name)
+            if wo is not None:
+                klick(bot, wo, mode=1)
+        hier = zeilen_seit(bot, seit)
+        bot.call("close_window", wait=10)
+        text = datei.read_text(encoding="utf-8") if datei.exists() else ""
+        FIND.test("Offline loescht der Umschalt-Klick seine Punkte aus seiner Datei",
+                  gesagt(hier, rf"Spot ModD of {ZUSCHAUER_NAME} deleted") and "ModD" not in text
+                  and "ModB" not in text, f"{zeige(hier)} / {text[-300:]}")
+        # Die Koepfe der Spieler ohne Skin - auf diesem Server alle - fragt
+        # der Server nicht bei Mojang nach: das ginge nur ins Leere.
+        neu = server_log(env)[log_vorher:]
+        FIND.test("Die Koepfe der Seite fragen nicht bei Mojang nach (kein \"Couldn't look up profile properties\")",
+                  "Couldn't look up profile properties" not in neu and "sessionserver.mojang.com/session" not in neu,
+                  "")
+    finally:
+        try:
+            bot.call("close_window", wait=10)
+            spots_loeschen(bot, "AdmPub")
+            if zuschauer.proc is not None and zuschauer.proc.poll() is None:
+                spots_loeschen(zuschauer, "ModA", "ModB", "ModC", "ModD")
+                zuschauer.stop()
+            einschraenkungen_weg(env, "spot-bans.yml")
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Moderation: {exc}")
+
+
+def tourmoderation_checks(env, bot):
+    """menu: die Seite der Fuehrungen auf der Admin-Seite (camplugin.touradmin).
+
+    Der zweite Spieler folgt der Fuehrung des Bots. Auf der Admin-Seite
+    oeffnet der Knopf der Fuehrungen (24) die Liste: vorn "Everybody", dann
+    die Spieler, unter dem zweiten, wem er folgt, und dass nichts ihn
+    einschraenkt. Ein Klick oeffnet seine Einschraenkung: fuehren (12) und
+    teilnehmen (14), beide erlaubt. Teilnehmen verboten, fuer immer,
+    bestaetigt: er erfaehrt es, ist von der Fuehrung, und der Bot erfaehrt
+    es. Der Bot kann ihn nicht mehr einladen - im Menue steht er trotzdem in
+    der Liste, mit "You can't invite him" -, annehmen sagt ihm, dass er nicht
+    teilnehmen darf, und sein Menue sagt es unten (49).
+
+    Geaendert auf fuehren: er erfaehrt es, einladen sagt ihm, dass er nicht
+    fuehren darf, und die Seite der Fuehrung sagt es in der Mitte (22). Der
+    Milcheimer hebt es auf.
+
+    "Everybody" hat nur einen Schalter (13), an oder aus. Aus: er liest,
+    dass Fuehrungen fuer alle abgeschaltet sind, einladen und annehmen sagen
+    es ihm, seine Seite der Fuehrung einmal in der Mitte. Der Bot (op,
+    camplugin.touradmin.bypass) darf weiter fuehren, kann den zweiten aber
+    nicht einladen, und die Liste sagt, warum. Wieder an hoert er es, unter
+    "Everybody" steht "on", und der Bot laedt ihn wieder ein.
+    """
+    def fenster(client):
+        return client.call("window_slots", wait=10)
+
+    def klick(client, slot, button=0, mode=0, warten=1.5):
+        client.call("click_window", wait=15, slot=slot, button=button, mode=mode)
+        time.sleep(warten)
+
+    def texte(f):
+        slots = f.get("slots", {})
+        return {i: item_text(slots.get(str(i))) for i in range(54) if str(i) in slots}
+
+    def platz(f, anfang):
+        return next((i for i, t in texte(f).items() if t.startswith(anfang) and i < 45), None)
+
+    def liste():
+        """Die Admin-Seite der Fuehrungen."""
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 23)
+        klick(bot, 24)
+        return fenster(bot)
+
+    def seine_seite():
+        """Die Seite der Einschraenkung des zweiten Spielers."""
+        f = liste()
+        klick(bot, platz(f, ZUSCHAUER_NAME))
+        return fenster(bot)
+
+    def fuehrung_seite(client):
+        befehl(client, "/cam menu", warten=1.0)
+        klick(client, 9)
+        f = fenster(client)
+        client.call("close_window", wait=10)
+        return f
+
+    if not FIND.test("Cam-Modus ist vor dem Test der Fuehrungs-Moderation aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    try:
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Fuehrungs-Moderation kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        hinstellen(bot, x, y, z)
+        cam_on(bot)
+        if not FIND.test("Der zweite Spieler ist drei Bloecke daneben im Cam-Modus",
+                         zuschauer_cam_an(env, zuschauer, x + 3, y, z), ""):
+            return
+        befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=2.0)
+        if not FIND.test("Er folgt der Fuehrung des Bots", gesagt(dort, rf"You follow {BOT_NAME} now"), zeige(dort)):
+            return
+
+        f = liste()
+        alle = texte(f).get(0, "")
+        er = texte(f).get(platz(f, ZUSCHAUER_NAME), "")
+        FIND.test("Admin-Seite, Fuehrungen (24): vorn Everybody, dann er - wem er folgt, ohne Einschraenkung",
+                  "Tours: players" in (f.get("title") or "") and alle.startswith("Everybody")
+                  and "Tours are on" in alle and f"On the tour of {BOT_NAME}" in er and "No restrictions" in er,
+                  f"{f.get('title')} / {alle} / {er}")
+        klick(bot, platz(f, ZUSCHAUER_NAME))
+        f = fenster(bot)
+        fuehren, teilnehmen = item_text(f.get("slots", {}).get("12")), item_text(f.get("slots", {}).get("14"))
+        FIND.test("Ein Klick oeffnet seine Einschraenkung: fuehren (12) und teilnehmen (14), beide erlaubt",
+                  f"Restrict the tours of {ZUSCHAUER_NAME}" in (f.get("title") or "")
+                  and fuehren.startswith("Leading tours") and teilnehmen.startswith("Taking part")
+                  and "» allowed" in fuehren and "» allowed" in teilnehmen, f"{fuehren} / {teilnehmen}")
+        klick(bot, 14)
+        f = fenster(bot)
+        teilnehmen = item_text(f.get("slots", {}).get("14"))
+        FIND.test("Teilnehmen umgeschaltet: nicht erlaubt, der Knopf glaenzt",
+                  "» no taking part" in teilnehmen and (f.get("slots", {}).get("14") or {}).get("glint") is True
+                  and "no taking part for good" in item_text(f.get("slots", {}).get("31")), teilnehmen)
+        seit, hier_seit = zuschauer.mark(), bot.mark()
+        klick(bot, 31, warten=2.0)
+        dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, hier_seit)
+        bot.call("close_window", wait=10)
+        FIND.test("Bestaetigt: er erfaehrt es und ist von der Fuehrung, der Bot erfaehrt beides",
+                  gesagt(dort, rf"{BOT_NAME} restricted your tours: no taking part for good")
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} left your tour")
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} is restricted from tours: no taking part for good"),
+                  f"{zeige(dort)} / {zeige(hier)}")
+        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        FIND.test("Der Bot kann ihn nicht mehr einladen",
+                  gesagt(zeilen, rf"You can't invite {ZUSCHAUER_NAME}: he is restricted from tours"), zeige(zeilen))
+        f = fuehrung_seite(bot)
+        er = texte(f).get(platz(f, ZUSCHAUER_NAME), "")
+        FIND.test("Im Menue steht er trotzdem in der Liste, mit dem Grund, warum er nicht eingeladen werden kann",
+                  "You can't invite him" in er and "he is restricted from tours" in er, er)
+        zeilen = befehl(zuschauer, f"/cam tour accept {BOT_NAME}")
+        f = fuehrung_seite(zuschauer)
+        unten = item_text(f.get("slots", {}).get("49"))
+        FIND.test("Annehmen sagt ihm, dass er nicht teilnehmen darf, und seine Seite der Fuehrung sagt es unten",
+                  gesagt(zeilen, r"You may not take part in tours for good")
+                  and "Sorry, you may not take part in tours" in unten and "You are restricted" in unten,
+                  f"{zeige(zeilen)} / {unten}")
+
+        f = seine_seite()
+        FIND.test("Seine Seite heisst nun Aendern", f"Change the tour restriction of {ZUSCHAUER_NAME}"
+                  in (f.get("title") or ""), str(f.get("title")))
+        klick(bot, 12)
+        klick(bot, 14)
+        seit = zuschauer.mark()
+        klick(bot, 31)
+        dort = zeilen_seit(zuschauer, seit)
+        bot.call("close_window", wait=10)
+        zeilen = befehl(zuschauer, f"/cam tour invite {BOT_NAME}")
+        mitte = item_text(fuehrung_seite(zuschauer).get("slots", {}).get("22"))
+        FIND.test("Geaendert auf fuehren: er erfaehrt es, einladen sagt, dass er nicht fuehren darf, die Seite "
+                  "der Fuehrung sagt es in der Mitte",
+                  gesagt(dort, rf"{BOT_NAME} changed the restriction of your tours: no leading for good")
+                  and gesagt(zeilen, r"You may not lead tours for good")
+                  and "Sorry, you may not lead tours" in mitte, f"{zeige(dort)} / {zeige(zeilen)} / {mitte}")
+        seine_seite()
+        seit = zuschauer.mark()
+        klick(bot, 35)
+        dort = zeilen_seit(zuschauer, seit)
+        bot.call("close_window", wait=10)
+        FIND.test("Der Milcheimer hebt sie auf", gesagt(dort, rf"{BOT_NAME} lifted the restriction of your tours"),
+                  zeige(dort))
+
+        liste()
+        klick(bot, 0)
+        f = fenster(bot)
+        schalter = item_text(f.get("slots", {}).get("13"))
+        FIND.test("Everybody oeffnet den Schalter fuer alle: ein Knopf (13), an",
+                  "Switch tours off for everybody" in (f.get("title") or "")
+                  and schalter.startswith("Tours for everybody") and "» on" in schalter
+                  and "12" not in f.get("slots", {}) and "14" not in f.get("slots", {}),
+                  f"{f.get('title')} / {schalter}")
+        klick(bot, 13)
+        f = fenster(bot)
+        schalter = item_text(f.get("slots", {}).get("13"))
+        FIND.test("Umgeschaltet: aus, der Knopf glaenzt, unten steht, was es tut",
+                  "» switched off" in schalter and (f.get("slots", {}).get("13") or {}).get("glint") is True
+                  and "Tours: switched off for good" in item_text(f.get("slots", {}).get("31")), schalter)
+        seit, hier_seit = zuschauer.mark(), bot.mark()
+        klick(bot, 31)
+        dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, hier_seit)
+        bot.call("close_window", wait=10)
+        FIND.test("Fuer alle aus: er liest es, der Admin auch",
+                  gesagt(dort, rf"{BOT_NAME} switched tours off for everybody for good")
+                  and gesagt(hier, r"Tours are switched off for everybody for good"), f"{zeige(dort)} / {zeige(hier)}")
+        zeilen = befehl(zuschauer, f"/cam tour invite {BOT_NAME}")
+        seite = fuehrung_seite(zuschauer)
+        mitte = item_text(seite.get("slots", {}).get("22"))
+        FIND.test("Aus: einladen sagt, dass Fuehrungen abgeschaltet sind, seine Seite sagt es einmal, in der Mitte",
+                  gesagt(zeilen, r"Tours are switched off for good")
+                  and "Tours are switched off" in mitte and "It is off for everybody" in mitte
+                  and "switched off" not in item_text(seite.get("slots", {}).get("49")),
+                  f"{zeige(zeilen)} / {mitte} / {item_text(seite.get('slots', {}).get('49'))}")
+        zeilen = befehl(zuschauer, f"/cam tour accept {BOT_NAME}")
+        FIND.test("Aus: annehmen geht auch nicht", gesagt(zeilen, r"Tours are switched off for good"), zeige(zeilen))
+        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        f = fuehrung_seite(bot)
+        er = texte(f).get(platz(f, ZUSCHAUER_NAME), "")
+        FIND.test("camplugin.touradmin.bypass (op): der Bot darf weiter fuehren - den zweiten aber nicht einladen, "
+                  "die Liste sagt warum",
+                  gesagt(zeilen, rf"You can't invite {ZUSCHAUER_NAME}: tours are switched off")
+                  and "You can't invite him" in er and "tours are switched off" in er
+                  and "Tours are switched off" not in item_text(f.get("slots", {}).get("22")),
+                  f"{zeige(zeilen)} / {er}")
+        liste()
+        klick(bot, 0)
+        seit = zuschauer.mark()
+        klick(bot, 35)
+        dort = zeilen_seit(zuschauer, seit)
+        alle = texte(liste()).get(0, "")
+        bot.call("close_window", wait=10)
+        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        FIND.test("Der Milcheimer schaltet sie fuer alle wieder an: er hoert es, unter Everybody steht \"on\", "
+                  "der Bot laedt wieder ein",
+                  gesagt(dort, rf"{BOT_NAME} switched tours on again for everybody") and "Tours are on" in alle
+                  and gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to your tour"),
+                  f"{zeige(dort)} / {alle} / {zeige(zeilen)}")
+    finally:
+        try:
+            bot.call("close_window", wait=10)
+            if zuschauer.proc is not None and zuschauer.proc.poll() is None:
+                cam_off(zuschauer)
+                zuschauer.stop()
+            cam_off(bot)
+            einschraenkungen_weg(env, "tour-bans.yml")
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Fuehrungs-Moderation: {exc}")
+
+
+def einschraenkungen_weg(env, datei):
+    """Was ein abgebrochener Test an Einschraenkungen stehen liess, weg: die
+    Datei unter playerdata, und /cam reload, damit das Plugin sie vergisst -
+    sonst hielte sie die Spieler in den folgenden Tests auf."""
+    pfad = env.server / "plugins" / "CamFly" / "playerdata" / datei
+    if pfad.exists() and "until" in pfad.read_text(encoding="utf-8"):
+        pfad.unlink()
+        console(env, "cam reload", pause=2.0)
 
 
 def naehe_checks(env, bot):
@@ -10881,6 +12338,9 @@ GROSSER_RADIUS = 32
 # kickt der eine den anderen mit duplicate_login.
 ZUSCHAUER_NAME = "CamFlyZuschauer"
 
+# Ein dritter Spieler, fuer das Limit der Gaeste einer Fuehrung.
+DRITTER_NAME = "CamFlyDritter"
+
 
 def grenz_lauf(bot, heim, ms=GRENZ_LAUF_MS):
     """Bei heim in den Cam-Modus und mit der Physik des Clients nach Osten
@@ -12107,9 +13567,13 @@ ABSCHNITTE = [
     Abschnitt("naehe", naehe_checks, "start/StartChecks"),
     Abschnitt("einstellungen", einstellungen_checks, "preferences speed sky storage session/SessionListener"),
     Abschnitt("teilen", teilen_checks, "spot visit"),
+    Abschnitt("fuehrung", fuehrung_checks, "tour speed"),
     Abschnitt("weiter", weiter_checks, "resume"),
     Abschnitt("ausspaehen", ausspaeh_checks, "scout"),
     Abschnitt("menue", menue_checks, "menu"),
+    Abschnitt("spotreiter", spotreiter_checks, "menu spot"),
+    Abschnitt("spotmoderation", spotmoderation_checks, "menu spot/SpotModeration spot/SpotBans spot/CamSpots"),
+    Abschnitt("tourmoderation", tourmoderation_checks, "menu tour/TourModeration tour/TourBans tour/CamTour"),
     Abschnitt("anstupsen", anstups_checks, "nudge", koerpertypen=True),
     Abschnitt("funk", funk_checks, "signal"),
     Abschnitt("traenke", potion_checks, "potion", koerpertypen=True),
@@ -12250,6 +13714,11 @@ def step_tests(env):
                 Log.detail(str(e))
             return False
         time.sleep(2)
+        # Ein abgebrochener Lauf kann den Bot im Nether zurueckgelassen haben,
+        # auf dessen Dach: Dort startet /cam nicht, und die Grundprobe
+        # schluege fehl. Zurueck in die Overworld, an dieselbe Stelle.
+        console(env, f"execute as {BOT_NAME} at @s unless dimension minecraft:overworld "
+                     f"in minecraft:overworld run tp @s ~ {BODEN_Y + 1} ~", pause=1.5)
 
         # --- /cam ohne op: camplugin.use ist Standardrecht ---
         since = bot.mark()

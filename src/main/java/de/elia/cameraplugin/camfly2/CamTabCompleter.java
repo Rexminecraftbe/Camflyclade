@@ -10,6 +10,7 @@ import de.elia.cameraplugin.sky.CamSky;
 import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.stats.CamStats;
 import de.elia.cameraplugin.stop.CamStop;
+import de.elia.cameraplugin.tour.CamTour;
 import de.elia.cameraplugin.trail.CamTrail;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
@@ -136,6 +137,15 @@ public class CamTabCompleter implements TabCompleter {
                     startingWith(args[1].toLowerCase(Locale.ROOT), "set", "delete", "list"));
             if (sharing) {
                 words.addAll(startingWith(args[1].toLowerCase(Locale.ROOT), "share", "unshare"));
+                if (!spots.offers(own).isEmpty()) {
+                    words.addAll(startingWith(args[1].toLowerCase(Locale.ROOT), "accept"));
+                }
+                if (!spots.declinableLabels(own).isEmpty()) {
+                    words.addAll(startingWith(args[1].toLowerCase(Locale.ROOT), "decline"));
+                }
+                if (!spots.likeableLabels(own).isEmpty()) {
+                    words.addAll(startingWith(args[1].toLowerCase(Locale.ROOT), "like"));
+                }
             }
             words.addAll(spotNames(own, args[1]));
             words.addAll(matching(spots.sharedLabels(own), args[1]));
@@ -144,6 +154,15 @@ public class CamTabCompleter implements TabCompleter {
         if (spotCommand && args.length == 3 && (args[1].equalsIgnoreCase("delete")
                 || (sharing && (args[1].equalsIgnoreCase("share") || args[1].equalsIgnoreCase("unshare"))))) {
             return spotNames(own, args[2]);
+        }
+        if (spotCommand && args.length == 3 && sharing && args[1].equalsIgnoreCase("accept")) {
+            return matching(spots.offerLabels(own), args[2]);
+        }
+        if (spotCommand && args.length == 3 && sharing && args[1].equalsIgnoreCase("decline")) {
+            return matching(spots.declinableLabels(own), args[2]);
+        }
+        if (spotCommand && args.length == 3 && sharing && args[1].equalsIgnoreCase("like")) {
+            return matching(spots.likeableLabels(own), args[2]);
         }
         if (spotCommand && args.length == 4 && sharing && args[1].equalsIgnoreCase("share")) {
             List<String> names = new ArrayList<>(startingWith(args[3].toLowerCase(Locale.ROOT), "all"));
@@ -160,6 +179,40 @@ public class CamTabCompleter implements TabCompleter {
         if (args.length == 2 && args[0].equalsIgnoreCase("visit") && own != null
                 && plugin.getSettings().isVisitorCameraEnabled()) {
             return matching(spots.sharedLabels(own), args[1]);
+        }
+        CamTour tour = plugin.getTour();
+        if (args.length == 2 && args[0].equalsIgnoreCase("tour") && own != null && tour.isEnabled()) {
+            List<String> words = new ArrayList<>();
+            if (tour.viewWorks()) {
+                words.add("view");
+            }
+            if (tour.guideOf(own) != null) {
+                words.add("leave");
+            } else {
+                if (!tour.candidates(own).isEmpty()) {
+                    words.add("invite");
+                }
+                if (!tour.invitationsOf(own).isEmpty()) {
+                    words.addAll(List.of("accept", "decline"));
+                }
+                if (tour.isGuiding(own)) {
+                    words.addAll(List.of("kick", "end"));
+                }
+            }
+            return startingWith(args[1].toLowerCase(Locale.ROOT), words.toArray(new String[0]));
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("tour") && own != null && tour.isEnabled()) {
+            List<Player> whom = switch (args[1].toLowerCase(Locale.ROOT)) {
+                case "invite" -> tour.candidates(own);
+                case "accept", "decline" -> tour.invitationsOf(own);
+                case "kick" -> tour.guestsOf(own);
+                default -> List.of();
+            };
+            List<String> names = new ArrayList<>();
+            for (Player other : whom) {
+                names.add(other.getName());
+            }
+            return matching(names, args[2]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("time") && own != null && sky.mayUseTime(own)) {
             return startingWith(args[1].toLowerCase(Locale.ROOT), CamSky.timeWords());
@@ -202,6 +255,10 @@ public class CamTabCompleter implements TabCompleter {
         if (own != null && plugin.getSettings().isVisitorCameraEnabled() && !spots.sharedWith(own).isEmpty()
                 && "visit".startsWith(partial)) {
             completions.add("visit");
+        }
+        if (own != null && plugin.getTour().isEnabled() && "tour".startsWith(partial)
+                && (plugin.isInCameraMode(own) || !plugin.getTour().invitationsOf(own).isEmpty())) {
+            completions.add("tour");
         }
         if (player != null && plugin.getMenu().isOpenable() && "menu".startsWith(partial)) {
             completions.add("menu");

@@ -164,6 +164,11 @@ public final class NameDisplay {
      * comes after them.
      */
     public static String styled(String format, NameStyle style) {
-        return style.color() + LEADING_COLOR.matcher(format).replaceFirst("");
+        return style.color() + withoutLeadingColor(format);
+    }
+
+    /** The text without the colour codes at its very start, for a text that brings a colour of its own. */
+    public static String withoutLeadingColor(String text) {
+        return LEADING_COLOR.matcher(text).replaceFirst("");
     }
 }

@@ -77,6 +77,9 @@ public final class CamVisit {
             messages.sendConfiguredMessage(player, "visit-off");
             return;
         }
+        if (!plugin.getSpotModeration().checkLook(player, share)) {
+            return;
+        }
         if (planned(player, share) == null) {
             return;
         }
@@ -120,9 +123,15 @@ public final class CamVisit {
     /** Puts the camera down at the spot of a share and holds it from there. */
     private void go(Player player, CameraData data, Share share) {
         Visit visit = planned(player, share);
-        if (visit == null || !plugin.getMovementGuard().jumpTo(player, data, visit.anchor(), visit)) {
+        if (visit == null) {
             return;
         }
+        // A jump of his own takes him off a tour he follows.
+        plugin.getTour().leave(player);
+        if (!plugin.getMovementGuard().jumpTo(player, data, visit.anchor(), visit)) {
+            return;
+        }
+        plugin.getSpots().viewed(player, share.getOwner(), share.getSpot());
         settings.getSpotSound().play(player);
         if (messages.isMessageEnabled("visit-started")) {
             plugin.getActionBar().flash(player, messages.getMessage("visit-started")
@@ -144,6 +153,7 @@ public final class CamVisit {
                     || (share != null && share.isFor(id) && settings.isVisitorCameraEnabled())) {
                 continue;
             }
+            plugin.getTour().leave(visitor);
             if (plugin.getMovementGuard().returnToBody(visitor, data)) {
                 settings.getBackSound().play(visitor);
             }

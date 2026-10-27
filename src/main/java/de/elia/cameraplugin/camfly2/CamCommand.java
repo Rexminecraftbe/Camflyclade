@@ -18,8 +18,8 @@ public class CamCommand implements CommandExecutor {
      * The words after {@code /cam} for what {@code /cam menu} offers as
      * well, which {@code menu.access} may keep to the menu.
      */
-    public static final Set<String> MENU_WORDS = Set.of("back", "resume", "spot", "visit", "photo", "time",
-            "weather", "nightvision", "stats");
+    public static final Set<String> MENU_WORDS = Set.of("back", "resume", "spot", "visit", "tour", "photo",
+            "time", "weather", "nightvision", "stats");
 
     /**
      * The words after {@code /cam} of the commands for admins, which
@@ -116,6 +116,10 @@ public class CamCommand implements CommandExecutor {
             plugin.getVisit().command(player, Arrays.copyOfRange(args, 1, args.length));
             return true;
         }
+        if (args.length > 0 && args[0].equalsIgnoreCase("tour")) {
+            plugin.getTour().command(player, Arrays.copyOfRange(args, 1, args.length));
+            return true;
+        }
         if (args.length > 0 && args[0].equalsIgnoreCase("back")) {
             plugin.getBack().command(player);
             return true;
@@ -169,11 +173,21 @@ public class CamCommand implements CommandExecutor {
         } else {
             return true;
         }
-        if (access.allowsCommands()) {
+        if (access.allowsCommands() || (access.allowsMenu() && answersInvitation(args))) {
             return true;
         }
         messages.sendConfiguredMessage(player, access.allowsMenu() ? "menu-only" : "menu-features-off");
         return false;
+    }
+
+    /**
+     * Whether the command answers an invitation to a tour, which the buttons
+     * of the invitation in the chat run: it goes while only the menu goes as
+     * well, so that a click on them starts the tour right away.
+     */
+    private static boolean answersInvitation(String[] args) {
+        return args.length == 3 && args[0].equalsIgnoreCase("tour")
+                && (args[1].equalsIgnoreCase("accept") || args[1].equalsIgnoreCase("decline"));
     }
 
     /** Whether the command is one for admins, {@code /cam stats player} among them. */

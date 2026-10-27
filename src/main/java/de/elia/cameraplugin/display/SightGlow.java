@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.display;
 
+import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
@@ -7,7 +8,6 @@ import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
@@ -23,12 +23,12 @@ public final class SightGlow {
      */
     private static final long SIGHT_GLOW_INTERVAL = 5L;
 
-    private final JavaPlugin plugin;
+    private final CameraPlugin plugin;
     private final CamSettings settings;
     private final CameraPlayers cameraPlayers;
     private final Map<UUID, BukkitRunnable> sightGlowTasks = new HashMap<>();
 
-    public SightGlow(JavaPlugin plugin, CamSettings settings, CameraPlayers cameraPlayers) {
+    public SightGlow(CameraPlugin plugin, CamSettings settings, CameraPlayers cameraPlayers) {
         this.plugin = plugin;
         this.settings = settings;
         this.cameraPlayers = cameraPlayers;
@@ -72,14 +72,16 @@ public final class SightGlow {
      * Whether another player has the camera player in sight right now. Only
      * players he is shown to count, which leaves out everybody outside camera
      * mode in mode CAM. Spectators do not count either: they are not part of
-     * the game and would switch the outline on for everybody else.
+     * the game and would switch the outline on for everybody else; nor does
+     * whoever is on the same tour, who sees him close by all the time.
      */
     private boolean isInSightOfAnyone(Player camPlayer) {
         for (Player viewer : Bukkit.getOnlinePlayers()) {
             if (viewer.equals(camPlayer)
                     || viewer.getGameMode() == GameMode.SPECTATOR
                     || !viewer.getWorld().equals(camPlayer.getWorld())
-                    || !viewer.canSee(camPlayer)) {
+                    || !viewer.canSee(camPlayer)
+                    || plugin.getTour().hidesCamera(viewer, camPlayer)) {
                 continue;
             }
             // Eye to eye, the same check hostile mobs use to spot a player.

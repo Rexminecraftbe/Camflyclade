@@ -106,11 +106,15 @@ public final class CamSettings {
     private static final int MAX_TRAIL_FLIGHTS = 20;
 
     /**
-     * The most spots {@code viewpoints.max-per-player} lets each player keep.
-     * {@code /cam spot list} sends a line for each of them, and more than this
-     * no longer fits into the chat a player scrolls back through.
+     * The most spots {@code viewpoints.max-per-player} lets each player keep,
+     * short of no limit at all, 0. {@code /cam spot list} sends a line for
+     * each of them, and more than this no longer fits into the chat a player
+     * scrolls back through.
      */
     private static final int MAX_VIEWPOINTS = 100;
+
+    /** The longest {@code viewpoints.views-cooldown-minutes} accepts: a day. */
+    private static final int MAX_VIEWS_COOLDOWN_MINUTES = 1440;
 
     /** The levels of {@code signal.levels}, from the most bars down, as the config file names them. */
     private static final String[] SIGNAL_LEVEL_NAMES = {"excellent", "good", "medium", "weak"};
@@ -141,6 +145,24 @@ public final class CamSettings {
 
     /** The most {@code menu.ban-shift-step} takes. */
     private static final int MAX_BAN_SHIFT_STEP = 100;
+
+    /**
+     * The widest {@code tour.radius}: about as far as the server sends other
+     * players to a client, and a guest is to be seen close by anyway.
+     */
+    private static final double MAX_TOUR_RADIUS = 128.0;
+
+    /**
+     * The farthest {@code viewpoints.start-distance} and
+     * {@code tour.start-distance} reach: as far as a tour invites.
+     */
+    private static final double MAX_START_DISTANCE = 128.0;
+
+    /** The longest {@code tour.out-of-reach-seconds} accepts, like {@code signal.lost-seconds}. */
+    private static final int MAX_TOUR_OUT_OF_REACH_SECONDS = 60;
+
+    /** The most guests {@code tour.max-guests} lets one tour take. */
+    private static final int MAX_TOUR_GUESTS = 100;
 
     /**
      * Keys that are read although the config file built into the jar leaves
@@ -292,6 +314,8 @@ public final class CamSettings {
     private CamSound signalLostSound;
     private CamSound signalBackSound;
     private CamSound spotSound;
+    private CamSound tourInviteSound;
+    private CamSound tourReachSound;
 
     /** Whether camera mode leaves a file to recover from a crash, {@code crash-protection.enabled}. */
     private boolean crashProtectionEnabled;
@@ -329,6 +353,22 @@ public final class CamSettings {
     private boolean viewpointsSharing;
     /** Whether {@code /cam visit} takes the camera to a spot shared with him, {@code visitor-camera.enabled}. */
     private boolean visitorCameraEnabled;
+    /** Whether {@code /cam tour} lets a camera player show others round, {@code tour.enabled}. */
+    private boolean tourEnabled;
+    /** How close a camera has to be to be invited, {@code tour.radius}. */
+    private double tourRadius;
+    /** How long a guest may be out of reach before his tour ends, {@code tour.out-of-reach-seconds}. */
+    private int tourOutOfReachSeconds;
+    /** Whether a guest sees through the eyes of his guide, {@code tour.guide-view}. */
+    private boolean tourGuideView;
+    /** How close a player out of camera mode has to be to the guide to come along, {@code tour.start-distance}. */
+    private double tourStartDistance;
+    /** How many guests one tour takes at once, {@code tour.max-guests}; 0 for no limit. */
+    private int tourMaxGuests;
+    /** How close a player out of camera mode has to be to a spot to jump there, {@code viewpoints.start-distance}. */
+    private double viewpointsStartDistance;
+    /** How long the same player at the same spot is no new view, {@code viewpoints.views-cooldown-minutes}. */
+    private int viewsCooldownMinutes;
 
     /** Whether {@code /cam resume} goes on where the last flight ended, {@code resume-command.enabled}. */
     private boolean resumeEnabled;
@@ -664,6 +704,8 @@ public final class CamSettings {
         signalBackSound = CamSound.read(config, "sounds.signal-back", allowedSounds,
                 "block.conduit.activate", 1.0);
         spotSound = CamSound.read(config, "sounds.spot", allowedSounds, "item.chorus_fruit.teleport", 1.0);
+        tourInviteSound = CamSound.read(config, "sounds.tour-invite", allowedSounds, "block.note_block.bell", 1.0);
+        tourReachSound = CamSound.read(config, "sounds.tour-reach", allowedSounds, "block.conduit.deactivate", 1.0);
         crashProtectionEnabled = config.getBoolean("crash-protection.enabled", true);
         camListAccess = readAccess(config, "cam-list.access");
         camListTeleport = config.getBoolean("cam-list.teleport", true);
@@ -675,10 +717,18 @@ public final class CamSettings {
         afkWarningPercent = config.getInt("afk-end.warning-percent", 80, 0, 99);
         backCommandEnabled = config.getBoolean("back-command.enabled", true);
         viewpointsEnabled = config.getBoolean("viewpoints.enabled", true);
-        viewpointsMax = config.getInt("viewpoints.max-per-player", 10, 1, MAX_VIEWPOINTS);
+        viewpointsMax = config.getInt("viewpoints.max-per-player", 10, 0, MAX_VIEWPOINTS);
         viewpointsStorage = readStorage(config, "viewpoints.storage");
         viewpointsSharing = config.getBoolean("viewpoints.sharing", true);
         visitorCameraEnabled = config.getBoolean("visitor-camera.enabled", true);
+        tourEnabled = config.getBoolean("tour.enabled", true);
+        tourRadius = config.getDouble("tour.radius", 16.0, 1.0, MAX_TOUR_RADIUS);
+        tourOutOfReachSeconds = config.getInt("tour.out-of-reach-seconds", 5, 1, MAX_TOUR_OUT_OF_REACH_SECONDS);
+        tourGuideView = config.getBoolean("tour.guide-view", true);
+        tourStartDistance = config.getDouble("tour.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
+        tourMaxGuests = config.getInt("tour.max-guests", 5, 0, MAX_TOUR_GUESTS);
+        viewpointsStartDistance = config.getDouble("viewpoints.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
+        viewsCooldownMinutes = config.getInt("viewpoints.views-cooldown-minutes", 10, 0, MAX_VIEWS_COOLDOWN_MINUTES);
         resumeEnabled = config.getBoolean("resume-command.enabled", true);
         resumeStorage = readStorage(config, "resume-command.storage");
         playerSettingsStorage = readStorage(config, "player-settings.storage");
@@ -1490,6 +1540,14 @@ public final class CamSettings {
         return spotSound;
     }
 
+    public CamSound getTourInviteSound() {
+        return tourInviteSound;
+    }
+
+    public CamSound getTourReachSound() {
+        return tourReachSound;
+    }
+
     public ListAccess getCamListAccess() {
         return camListAccess;
     }
@@ -1536,8 +1594,14 @@ public final class CamSettings {
         return viewpointsEnabled;
     }
 
+    /** How many spots each player may keep, {@code viewpoints.max-per-player}; 0 for no limit. */
     public int getViewpointsMax() {
         return viewpointsMax;
+    }
+
+    /** Whether there is a limit to how many spots a player may keep. */
+    public boolean limitsViewpoints() {
+        return viewpointsMax > 0;
     }
 
     public StorageMode getViewpointsStorage() {
@@ -1552,6 +1616,57 @@ public final class CamSettings {
     /** Whether {@code /cam visit} goes, which only goes while spots may be shared. */
     public boolean isVisitorCameraEnabled() {
         return isViewpointsSharing() && visitorCameraEnabled;
+    }
+
+    /** Whether {@code /cam tour} is there. */
+    public boolean isTourEnabled() {
+        return tourEnabled;
+    }
+
+    /** How close, camera to camera, a player has to be to be invited to a tour, in blocks. */
+    public double getTourRadius() {
+        return tourRadius;
+    }
+
+    /** How long the guide may be out of a guest's reach before the tour ends for him, in seconds. */
+    public int getTourOutOfReachSeconds() {
+        return tourOutOfReachSeconds;
+    }
+
+    /** Whether a guest may see through the eyes of his guide, where the server lets it. */
+    public boolean isTourGuideView() {
+        return tourGuideView;
+    }
+
+    /**
+     * How close, in blocks, a player out of camera mode has to be to the
+     * guide's camera to accept an invitation, which starts camera mode for
+     * him; 0 while only who is in camera mode may come along.
+     */
+    public double getTourStartDistance() {
+        return tourStartDistance;
+    }
+
+    /** How many guests one tour takes at once; 0 for no limit. */
+    public int getTourMaxGuests() {
+        return tourMaxGuests;
+    }
+
+    /**
+     * How close, in blocks, a player out of camera mode has to be to a spot
+     * to jump there, which starts camera mode for him; 0 while only who is in
+     * camera mode may jump.
+     */
+    public double getViewpointsStartDistance() {
+        return viewpointsStartDistance;
+    }
+
+    /**
+     * How long, in minutes, the same player at the same spot does not count
+     * as a view again; 0 while every jump and every visit counts.
+     */
+    public int getViewsCooldownMinutes() {
+        return viewsCooldownMinutes;
     }
 
     public boolean isResumeEnabled() {
