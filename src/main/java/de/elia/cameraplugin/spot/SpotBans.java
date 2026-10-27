@@ -20,9 +20,9 @@ import java.util.logging.Level;
 
 /**
  * What single players may not do with spots, set on the admin page of the
- * spots, see {@link SpotModeration}: save new ones, make them public, share
- * them with others, look at spots at all - for good or for a while, with a
- * reason. Kept in
+ * spots, see {@link SpotModeration}: for each kind of spots - his own, the
+ * public ones, those shared by name - no new ones, or none at all, not even to
+ * look at - for good or for a while, with a reason. Kept in
  * {@code playerdata/spot-bans.yml}, whatever {@code viewpoints.storage}
  * says: a restriction outlasts {@code /cam reload} and a restart, like a
  * ban of camera mode.
@@ -41,30 +41,92 @@ public final class SpotBans {
 
     /** What stands at the top of the file, for whoever finds it and wonders. */
     private static final List<String> HEADER = List.of(
-            "CamFly: what single players may not do with spots - create: save new ones, public: make them",
-            "public, share: share them with others, view: jump to spots or visit them -, set on the admin page",
-            "of the spots.",
+            "CamFly: what single players may not do with spots, set on the admin page of the spots. For each",
+            "kind - private: his own, public: the public ones, shared: those shared by name - no-new: he may",
+            "make no new ones, no-look: nor look at them; left out: nothing keeps him.",
             "until: when it ends (milliseconds since 1970), 0 = for good. Changes made here by hand count after",
             "/cam reload.");
+
+    /** The kinds of spots a restriction goes by, with the word of the file and the texts. */
+    public enum Kind {
+        /**
+         * His own: saving new ones; looking at them is jumping to them -
+         * the public ones among them as well.
+         */
+        PRIVATE("private"),
+        /** The public ones: making his public; looking at them is jumping to or visiting those of others. */
+        PUBLIC("public"),
+        /** Those shared by name: sharing his; looking at them is jumping to or visiting those shared with him. */
+        SHARED("shared");
+
+        public final String key;
+
+        Kind(String key) {
+            this.key = key;
+        }
+    }
+
+    /** How far a restriction keeps him from one kind of spots, by the word of the file. */
+    public enum Stage {
+        /** Not at all; never written to the file. */
+        FREE("free"),
+        /** He may make no new ones. */
+        NO_NEW("no-new"),
+        /** He may make no new ones, nor look at them. */
+        NO_LOOK("no-look");
+
+        public final String key;
+
+        Stage(String key) {
+            this.key = key;
+        }
+
+        /** The next one, after {@link #NO_LOOK} {@link #FREE} again; with {@code back}, the one before. */
+        public Stage next(boolean back) {
+            Stage[] all = values();
+            return all[(ordinal() + (back ? all.length - 1 : 1)) % all.length];
+        }
+
+        static Stage of(String key) {
+            for (Stage stage : values()) {
+                if (stage.key.equalsIgnoreCase(key)) {
+                    return stage;
+                }
+            }
+            return FREE;
+        }
+    }
 
     /**
      * What one player may not do, and for how long.
      *
      * @param name    the name of the player, as he was called then
-     * @param create  whether he may not save new spots
-     * @param publish whether he may not make spots public
-     * @param share   whether he may not share spots with others
-     * @param view    whether he may not look at spots: jump to them, his own as well, or visit them
+     * @param own     how far it keeps him from his own spots
+     * @param open    how far it keeps him from the public ones
+     * @param shared  how far it keeps him from those shared by name
      * @param until   when it ends, as {@link System#currentTimeMillis()} counts, 0 for good
      * @param reason  why, or an empty text
      * @param by      who set it
      */
-    public record Ban(String name, boolean create, boolean publish, boolean share, boolean view, long until,
-                      String reason, String by) {
+    public record Ban(String name, Stage own, Stage open, Stage shared, long until, String reason, String by) {
+
+        /** How far it keeps him from this kind of spots. */
+        public Stage stage(Kind kind) {
+            return switch (kind) {
+                case PRIVATE -> own;
+                case PUBLIC -> open;
+                case SHARED -> shared;
+            };
+        }
+
+        /** Whether it keeps him from anything at all. */
+        public boolean any() {
+            return own != Stage.FREE || open != Stage.FREE || shared != Stage.FREE;
+        }
 
         /** Whether it still holds at {@code now}, and keeps him from anything at all. */
         boolean holds(long now) {
-            return (create || publish || share || view) && (until <= 0L || until > now);
+            return any() && (until <= 0L || until > now);
         }
 
         /** Whether it holds for good, rather than for a while. */
@@ -163,8 +225,8 @@ public final class SpotBans {
                 log.log(Level.WARNING, "An entry of " + FILE + " is no restriction and is left out: players." + key);
                 continue;
             }
-            players.put(id, new Ban(entry.getString("name"), entry.getBoolean("create"),
-                    entry.getBoolean("public"), entry.getBoolean("share"), entry.getBoolean("view"),
+            players.put(id, new Ban(entry.getString("name"), Stage.of(entry.getString(Kind.PRIVATE.key)),
+                    Stage.of(entry.getString(Kind.PUBLIC.key)), Stage.of(entry.getString(Kind.SHARED.key)),
                     entry.getLong("until"), entry.getString("reason", ""), entry.getString("by", "")));
         }
     }
@@ -184,10 +246,11 @@ public final class SpotBans {
             if (ban.name() != null) {
                 out.set("name", ban.name());
             }
-            out.set("create", ban.create());
-            out.set("public", ban.publish());
-            out.set("share", ban.share());
-            out.set("view", ban.view());
+            for (Kind kind : Kind.values()) {
+                if (ban.stage(kind) != Stage.FREE) {
+                    out.set(kind.key, ban.stage(kind).key);
+                }
+            }
             out.set("until", ban.until());
             out.set("reason", ban.reason());
             out.set("by", ban.by());

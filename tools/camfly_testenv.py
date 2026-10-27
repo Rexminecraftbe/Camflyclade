@@ -7537,15 +7537,19 @@ def spotmoderation_checks(env, bot):
     weit. Der Trichter sortiert seine Punkte, erst die neuesten, nach einem
     Klick nach dem Namen.
 
-    Der Knopf der Einschraenkung (49) oeffnet ihre Seite: "New spots",
-    "Making public" und "Looking at spots" angewaehlt, fuer immer, bestaetigt
-    - er erfaehrt es, /cam spot set eines neuen Punkts sagt ihm, dass er
-    keine neuen speichern darf, /cam spot share ... all, dass er nichts
-    oeffentlich machen darf, der Sprung zu einem eigenen, dass er keine
-    Punkte anschauen darf;
-    einen Punkt verschieben und teilen darf er weiter. Der Knopf glaenzt
-    danach, und auf seiner Seite hebt der Milcheimer (35) die Einschraenkung
-    auf: er darf wieder speichern.
+    Der Knopf der Einschraenkung (49) oeffnet ihre Seite, mit je einem Knopf
+    fuer seine eigenen Punkte (11), die oeffentlichen (13) und die geteilten
+    (15), den man weiterklickt: erlaubt, keine neuen, gar keine - ein
+    Rechtsklick geht zurueck. Eigene auf "keine neuen", oeffentliche auf
+    "gar keine", fuer immer, bestaetigt - er erfaehrt es, /cam spot set
+    eines neuen Punkts sagt ihm, dass er keine neuen speichern darf,
+    /cam spot share ... all, dass er nichts oeffentlich machen darf, der
+    Sprung zum oeffentlichen Punkt AdmPub des Bots, dass er keine
+    oeffentlichen anschauen darf; einen Punkt verschieben und teilen darf er
+    weiter. In seinem Spot-Menue zeigt der Reiter der oeffentlichen nur das
+    graue Zeichen, dass er gesperrt ist, der der privaten seine Punkte. Der
+    Knopf glaenzt danach, und auf seiner Seite hebt der Milcheimer (35) die
+    Einschraenkung auf: er darf wieder speichern.
 
     Geht er offline, steht er weiter in der Liste, und ein Umschalt-Klick
     loescht seine Punkte aus seiner Datei. Die Koepfe der Seite fragen nicht
@@ -7595,6 +7599,9 @@ def spotmoderation_checks(env, bot):
         cam_off(zuschauer)
         console(env, f"tp {ZUSCHAUER_NAME} {x + 2} {y} {z}", pause=1.0)
         spots_loeschen(zuschauer, "ModA", "ModB", "ModC", "ModD")
+        spots_loeschen(bot, "AdmPub")
+        befehl(bot, "/cam spot set AdmPub", warten=0.8)
+        befehl(bot, "/cam spot share AdmPub all", warten=0.8)
         for zeile in ("/cam spot set ModA", "/cam spot set ModB", "/cam spot share ModB all", "/cam spot set ModC",
                       f"/cam spot share ModC {BOT_NAME}"):
             befehl(zuschauer, zeile, warten=0.8)
@@ -7654,27 +7661,39 @@ def spotmoderation_checks(env, bot):
 
         klick(bot, 49)
         f = fenster(bot)
-        FIND.test("Der Knopf der Einschraenkung (49) oeffnet ihre Seite",
+
+        def stufe(f, slot):
+            return item_text(f.get("slots", {}).get(str(slot)))
+
+        FIND.test("Der Knopf der Einschraenkung (49) oeffnet ihre Seite: je ein Knopf fuer eigene, oeffentliche "
+                  "und geteilte Punkte, alle erlaubt",
                   f"Restrict the spots of {ZUSCHAUER_NAME}" in (f.get("title") or "")
-                  and "Allowed" in item_text(f.get("slots", {}).get("10")), str(f.get("title")))
-        klick(bot, 10)
-        klick(bot, 12)
-        klick(bot, 16)
+                  and stufe(f, 11).startswith("His own spots") and stufe(f, 13).startswith("Public spots")
+                  and stufe(f, 15).startswith("Shared spots")
+                  and all("» allowed" in stufe(f, slot) for slot in (11, 13, 15)),
+                  f"{f.get('title')} / {stufe(f, 11)} / {stufe(f, 13)} / {stufe(f, 15)}")
+        klick(bot, 11)
+        klick(bot, 13)
+        klick(bot, 13)
         f = fenster(bot)
-        FIND.test("Anwaehlen: neue Punkte, oeffentlich machen und Punkte anschauen sind nicht erlaubt, teilen schon",
-                  "Not allowed" in item_text(f.get("slots", {}).get("10"))
-                  and "Not allowed" in item_text(f.get("slots", {}).get("12"))
-                  and "Allowed" in item_text(f.get("slots", {}).get("14"))
-                  and "Not allowed" in item_text(f.get("slots", {}).get("16"))
-                  and "no new spots, nothing public, no looking at spots" in item_text(f.get("slots", {}).get("31")),
-                  item_text(f.get("slots", {}).get("31")))
+        FIND.test("Weiterklicken: eigene - keine neuen, oeffentliche - gar keine, geteilte bleiben erlaubt",
+                  "» no new spots" in stufe(f, 11) and "» no public spots at all" in stufe(f, 13)
+                  and "» allowed" in stufe(f, 15)
+                  and (f.get("slots", {}).get("13") or {}).get("glint") is True
+                  and (f.get("slots", {}).get("15") or {}).get("glint") is not True
+                  and "no new spots, no public spots at all" in stufe(f, 31),
+                  f"{stufe(f, 11)} / {stufe(f, 13)} / {stufe(f, 15)} / {stufe(f, 31)}")
+        klick(bot, 13, button=1)
+        zurueck = stufe(fenster(bot), 13)
+        klick(bot, 13)
+        FIND.test("Rechtsklick geht eine Stufe zurueck",
+                  "» nothing public" in zurueck and "» no public spots at all" in stufe(fenster(bot), 13), zurueck)
         seit = zuschauer.mark()
         klick(bot, 31)
         dort = zeilen_seit(zuschauer, seit)
         f = fenster(bot)
         FIND.test("Bestaetigt: er erfaehrt es, und der Knopf glaenzt",
-                  gesagt(dort, rf"{BOT_NAME} restricted your spots: no new spots, nothing public, no looking at "
-                               r"spots for good")
+                  gesagt(dort, rf"{BOT_NAME} restricted your spots: no new spots, no public spots at all for good")
                   and (f.get("slots", {}).get("49") or {}).get("glint") is True, zeige(dort))
         bot.call("close_window", wait=10)
         zeilen = befehl(zuschauer, "/cam spot set ModD")
@@ -7683,18 +7702,33 @@ def spotmoderation_checks(env, bot):
         zeilen = befehl(zuschauer, "/cam spot share ModC all")
         FIND.test("Eingeschraenkt: nichts oeffentlich machen",
                   gesagt(zeilen, r"You may not make spots public for good"), zeige(zeilen))
-        zeilen = befehl(zuschauer, "/cam spot ModC")
-        FIND.test("Eingeschraenkt: keinen Punkt anschauen, auch keinen eigenen",
-                  gesagt(zeilen, r"You may not look at spots - jump to them or visit them - for good")
+        zeilen = befehl(zuschauer, f"/cam spot {BOT_NAME}:AdmPub")
+        FIND.test("Eingeschraenkt: keinen oeffentlichen Punkt anschauen",
+                  gesagt(zeilen, r"You may not look at public spots for good")
                   and not im_cam_modus(bot, ZUSCHAUER_NAME), zeige(zeilen))
         zeilen = befehl(zuschauer, "/cam spot set ModC") + befehl(zuschauer, f"/cam spot share ModB {BOT_NAME}")
         FIND.test("Verschieben und teilen darf er weiter", gesagt(zeilen, r"Spot ModC moved here")
                   and gesagt(zeilen, rf"offered|{BOT_NAME}"), zeige(zeilen))
 
+        befehl(zuschauer, "/cam menu", warten=1.0)
+        klick(zuschauer, 10)
+        klick(zuschauer, 49)
+        f = fenster(zuschauer)
+        gesperrt = item_text(f.get("slots", {}).get("22"))
+        FIND.test("Im Spot-Menue zeigt ihm der Reiter der oeffentlichen nur das graue Zeichen: gesperrt",
+                  (f.get("slots", {}).get("22") or {}).get("name") == "gray_dye"
+                  and "Sorry, you can't look at these" in gesperrt and "You are restricted" in gesperrt
+                  and "for good" in gesperrt and platz(f, "AdmPub") is None, f"{gesperrt} / {texte(f)}")
+        klick(zuschauer, 48)
+        f = fenster(zuschauer)
+        FIND.test("Seine eigenen Punkte zeigt der Reiter der privaten weiter",
+                  platz(f, "ModC") is not None and platz(f, "ModB") is not None, str(texte(f)))
+        zuschauer.call("close_window", wait=10)
+
         liste, f = seine_punkte()
         eintrag = texte(liste).get(platz(liste, ZUSCHAUER_NAME), "")
         FIND.test("In der Liste steht die Einschraenkung unter ihm",
-                  "Restricted: no new spots, nothing public, no looking at spots for good" in eintrag, eintrag)
+                  "Restricted: no new spots, no public spots at all for good" in eintrag, eintrag)
         klick(bot, 49)
         seit = zuschauer.mark()
         klick(bot, 35)
@@ -7731,6 +7765,7 @@ def spotmoderation_checks(env, bot):
     finally:
         try:
             bot.call("close_window", wait=10)
+            spots_loeschen(bot, "AdmPub")
             if zuschauer.proc is not None and zuschauer.proc.poll() is None:
                 spots_loeschen(zuschauer, "ModA", "ModB", "ModC", "ModD")
                 zuschauer.stop()

@@ -7,7 +7,6 @@ import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.spot.JumpCheck;
 import de.elia.cameraplugin.spot.Share;
 import de.elia.cameraplugin.spot.SharedSpots;
-import de.elia.cameraplugin.spot.SpotModeration;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -78,7 +77,7 @@ public final class CamVisit {
             messages.sendConfiguredMessage(player, "visit-off");
             return;
         }
-        if (!plugin.getSpotModeration().check(player, SpotModeration.What.VIEW)) {
+        if (!plugin.getSpotModeration().checkLook(player, share)) {
             return;
         }
         if (planned(player, share) == null) {

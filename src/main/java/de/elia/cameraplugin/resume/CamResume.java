@@ -7,7 +7,6 @@ import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.spot.JumpCheck;
 import de.elia.cameraplugin.spot.Share;
 import de.elia.cameraplugin.spot.SharedSpots;
-import de.elia.cameraplugin.spot.SpotModeration;
 import de.elia.cameraplugin.storage.PlayerStore;
 import de.elia.cameraplugin.storage.StorageMode;
 import de.elia.cameraplugin.visit.Visit;
@@ -143,14 +142,14 @@ public final class CamResume {
         Location signalFrom;
         if (flight.wasVisit()) {
             // Going on with a visit is a visit.
-            if (!plugin.getSpotModeration().check(player, SpotModeration.What.VIEW)) {
-                return null;
-            }
             Share share = shared.get(flight.visitOwner(), flight.visitSpot());
             Location spot = share == null ? null : share.getSpot().toLocation();
             if (!settings.isVisitorCameraEnabled() || share == null || !share.isFor(player.getUniqueId())
                     || spot == null || !spot.getWorld().equals(home)) {
                 messages.sendConfiguredMessage(player, "resume-visit-gone");
+                return null;
+            }
+            if (!plugin.getSpotModeration().checkLook(player, share)) {
                 return null;
             }
             visit = new Visit(share.getOwner(), share.getOwnerName(), share.getSpot().key(),

@@ -269,7 +269,7 @@ public final class CamSpots {
         }
         Map<String, Spot> spots = spotsOf(player);
         Spot before = spots.get(Spot.key(name));
-        if (before == null && !plugin.getSpotModeration().check(player, SpotModeration.What.CREATE)) {
+        if (before == null && !plugin.getSpotModeration().checkNew(player, SpotBans.Kind.PRIVATE)) {
             return null;
         }
         if (before == null && settings.limitsViewpoints() && spots.size() >= settings.getViewpointsMax()) {
@@ -347,7 +347,7 @@ public final class CamSpots {
      * the menu. One who accepted it already keeps it as it is.
      */
     public void shareWith(Player player, Spot spot, OfflinePlayer other) {
-        if (!plugin.getSpotModeration().check(player, SpotModeration.What.SHARE)) {
+        if (!plugin.getSpotModeration().checkNew(player, SpotBans.Kind.SHARED)) {
             return;
         }
         if (other.getUniqueId().equals(player.getUniqueId())) {
@@ -432,7 +432,7 @@ public final class CamSpots {
             return;
         }
         if (everybody) {
-            if (!plugin.getSpotModeration().check(player, SpotModeration.What.PUBLIC)) {
+            if (!plugin.getSpotModeration().checkNew(player, SpotBans.Kind.PUBLIC)) {
                 return;
             }
             shared.share(player.getUniqueId(), player.getName(), spot, null, null);
@@ -738,9 +738,6 @@ public final class CamSpots {
      * of a start of {@code /cam}.
      */
     public void jump(Player player, String name) {
-        if (!plugin.getSpotModeration().check(player, SpotModeration.What.VIEW)) {
-            return;
-        }
         Spot spot;
         String label;
         UUID owner;
@@ -750,6 +747,9 @@ public final class CamSpots {
                 messages.sendConfiguredMessage(player, "spot-shared-unknown", "{spot}", name);
                 return;
             }
+            if (!plugin.getSpotModeration().checkLook(player, share)) {
+                return;
+            }
             spot = share.getSpot();
             label = share.label();
             owner = share.getOwner();
@@ -757,6 +757,9 @@ public final class CamSpots {
             spot = spotsOf(player).get(Spot.key(name));
             if (spot == null) {
                 messages.sendConfiguredMessage(player, "spot-unknown", "{spot}", name);
+                return;
+            }
+            if (!plugin.getSpotModeration().checkLook(player)) {
                 return;
             }
             label = spot.name();

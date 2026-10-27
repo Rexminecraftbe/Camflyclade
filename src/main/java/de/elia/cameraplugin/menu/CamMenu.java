@@ -94,6 +94,8 @@ public final class CamMenu implements Listener {
     private static final int LIST = 54;
     /** The size of the page of a restriction of the spots: four rows, for what it keeps him from as well. */
     private static final int MEDIUM = 36;
+    /** Where the page of a restriction has the buttons of his own spots, the public ones and the shared ones. */
+    private static final int[] RESTRICT_SLOTS = {11, 13, 15};
 
     /** The slots of a list page that hold entries; the last row holds the buttons to go on. */
     private static final int ENTRIES = 45;
@@ -269,17 +271,20 @@ public final class CamMenu implements Listener {
         final String name;
         /** Whether something keeps him already, and the page changes it. */
         final boolean change;
-        boolean create;
-        boolean publish;
-        boolean share;
-        boolean view;
+        /** How far it keeps him from each kind of spots. */
+        final Map<SpotBans.Kind, SpotBans.Stage> stages = new EnumMap<>(SpotBans.Kind.class);
         /** How long, in minutes; 0 for good. */
         long minutes;
         String reason = "";
 
+        /** How far it keeps him from this kind of spots. */
+        SpotBans.Stage stage(SpotBans.Kind kind) {
+            return stages.getOrDefault(kind, SpotBans.Stage.FREE);
+        }
+
         /** Whether it keeps him from anything at all. */
         boolean any() {
-            return create || publish || share || view;
+            return stages.values().stream().anyMatch(stage -> stage != SpotBans.Stage.FREE);
         }
 
         SpotBanDraft(UUID id, String name, boolean change) {
@@ -520,26 +525,30 @@ public final class CamMenu implements Listener {
         Location from = nearFrom(player);
         List<Consumer<Integer>> entries = new ArrayList<>();
         Page page = new Page();
-        switch (tab) {
-            case PRIVATE -> {
-                for (Spot spot : sorted(spots.own(player), sort, own -> own, own -> "", own -> 0,
-                        own -> spots.views(player.getUniqueId(), own), from)) {
-                    entries.add(slot -> putOwnSpot(player, page, slot, spot));
+        // A tab of the spots a restriction keeps him from looking at shows him only that.
+        boolean mayLook = plugin.getSpotModeration().mayLook(player, SpotBans.Kind.valueOf(tab.name()));
+        if (mayLook) {
+            switch (tab) {
+                case PRIVATE -> {
+                    for (Spot spot : sorted(spots.own(player), sort, own -> own, own -> "", own -> 0,
+                            own -> spots.views(player.getUniqueId(), own), from)) {
+                        entries.add(slot -> putOwnSpot(player, page, slot, spot));
+                    }
                 }
-            }
-            case PUBLIC -> {
-                for (Share share : sorted(spots.publicSpots(), sort, Share::getSpot, Share::getOwnerName,
-                        Share::likes, share -> spots.views(share.getOwner(), share.getSpot()), from)) {
-                    entries.add(slot -> putPublicSpot(player, page, slot, share));
+                case PUBLIC -> {
+                    for (Share share : sorted(spots.publicSpots(), sort, Share::getSpot, Share::getOwnerName,
+                            Share::likes, share -> spots.views(share.getOwner(), share.getSpot()), from)) {
+                        entries.add(slot -> putPublicSpot(player, page, slot, share));
+                    }
                 }
-            }
-            case SHARED -> {
-                for (Share share : spots.offers(player)) {
-                    entries.add(slot -> putOffer(player, page, slot, share));
-                }
-                for (Share share : sorted(spots.accepted(player), sort, Share::getSpot, Share::getOwnerName,
-                        Share::likes, share -> spots.views(share.getOwner(), share.getSpot()), from)) {
-                    entries.add(slot -> putSharedSpot(player, page, slot, share));
+                case SHARED -> {
+                    for (Share share : spots.offers(player)) {
+                        entries.add(slot -> putOffer(player, page, slot, share));
+                    }
+                    for (Share share : sorted(spots.accepted(player), sort, Share::getSpot, Share::getOwnerName,
+                            Share::likes, share -> spots.views(share.getOwner(), share.getSpot()), from)) {
+                        entries.add(slot -> putSharedSpot(player, page, slot, share));
+                    }
                 }
             }
         }
@@ -550,7 +559,11 @@ public final class CamMenu implements Listener {
         for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < entries.size(); slot++) {
             entries.get(number * ENTRIES + slot).accept(slot);
         }
-        if (entries.isEmpty()) {
+        if (!mayLook) {
+            put(page, 22, Material.GRAY_DYE, messages.getMessage("menu-spots-restricted"),
+                    lines(plugin.getSpotModeration().fill(messages.getMessage("menu-spots-restricted-lore"),
+                            player.getUniqueId())), click -> { });
+        } else if (entries.isEmpty()) {
             put(page, 22, Material.GRAY_DYE, "menu-spots-empty-" + tab.key, click -> { });
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
@@ -1756,10 +1769,9 @@ public final class CamMenu implements Listener {
         SpotBans.Ban now = plugin.getSpotModeration().banOf(id);
         SpotBanDraft draft = new SpotBanDraft(id, name, now != null);
         if (now != null) {
-            draft.create = now.create();
-            draft.publish = now.publish();
-            draft.share = now.share();
-            draft.view = now.view();
+            for (SpotBans.Kind kind : SpotBans.Kind.values()) {
+                draft.stages.put(kind, now.stage(kind));
+            }
             draft.minutes = now.forGood() ? 0L
                     : Math.max(1L, (now.secondsLeft(System.currentTimeMillis()) + 59L) / 60L);
             draft.reason = now.reason();
@@ -1768,12 +1780,12 @@ public final class CamMenu implements Listener {
     }
 
     /**
-     * What a player may not do with spots, before it is set or changed: save
-     * new ones, make them public, share them, look at spots at all - each
-     * switched on its button -,
-     * for good or for days, hours and minutes, as on the page of a ban, and
-     * why; then the button that sets it. While something keeps him already,
-     * the last row has the button that lifts it.
+     * What a player may not do with spots, before it is set or changed: for
+     * his own spots, the public ones and those shared by name, each on its
+     * button, step by step: nothing, no new ones, none at all - not even to
+     * look at -; for good or for days, hours and minutes, as on the page of a
+     * ban, and why; then the button that sets it. While something keeps him
+     * already, the last row has the button that lifts it.
      */
     private void openSpotBan(Player player) {
         SpotBanDraft draft = spotDrafts.get(player.getUniqueId());
@@ -1787,11 +1799,9 @@ public final class CamMenu implements Listener {
                 ? "menu-admin-spot-restrict-change-title" : "menu-admin-spot-restrict-title")
                 .replace("{player}", draft.name));
         put(page, 4, playerItem(draft.id, draft.name, restrictionLines(draft.id), draft.change), click -> { });
-        restrictToggle(player, page, 10, Material.WRITABLE_BOOK, "create", draft.create, () -> draft.create ^= true);
-        restrictToggle(player, page, 12, Material.GLOBE_BANNER_PATTERN, "public", draft.publish,
-                () -> draft.publish ^= true);
-        restrictToggle(player, page, 14, Material.MAP, "share", draft.share, () -> draft.share ^= true);
-        restrictToggle(player, page, 16, Material.SPYGLASS, "view", draft.view, () -> draft.view ^= true);
+        for (SpotTab tab : SpotTab.values()) {
+            restrictStage(player, page, draft, tab);
+        }
         boolean forGood = draft.minutes == 0L;
         List<String> foreverLore = forGood ? lines(messages.getMessage("menu-state-current")) : List.of();
         put(page, 19, shine(item(Material.BEDROCK, messages.getMessage("menu-admin-ban-forever"), foreverLore),
@@ -1823,7 +1833,8 @@ public final class CamMenu implements Listener {
             }
         });
         if (draft.any()) {
-            String summary = moderation.whatText(draft.create, draft.publish, draft.share, draft.view) + " " + time;
+            String summary = moderation.whatText(draft.stage(SpotBans.Kind.PRIVATE),
+                    draft.stage(SpotBans.Kind.PUBLIC), draft.stage(SpotBans.Kind.SHARED)) + " " + time;
             if (!draft.reason.isEmpty()) {
                 summary += messages.getMessage("ban-reason").replace("{reason}", draft.reason);
             }
@@ -1833,8 +1844,9 @@ public final class CamMenu implements Listener {
                             .replace("{player}", draft.name).replace("{ban}", summary)),
                     click -> later(() -> {
                         spotDrafts.remove(player.getUniqueId());
-                        moderation.ban(player, draft.id, draft.name, draft.create, draft.publish, draft.share,
-                                draft.view, draft.minutes, draft.reason);
+                        moderation.ban(player, draft.id, draft.name, draft.stage(SpotBans.Kind.PRIVATE),
+                                draft.stage(SpotBans.Kind.PUBLIC), draft.stage(SpotBans.Kind.SHARED), draft.minutes,
+                                draft.reason);
                         openSpotsOf(player, draft.id, draft.name, 0);
                     }));
         } else {
@@ -1857,20 +1869,26 @@ public final class CamMenu implements Listener {
     }
 
     /**
-     * One of the buttons of what a restriction keeps him from: whether he
-     * may not do it - then it shines -, and a click that switches it.
-     *
-     * @param what the word of the texts: create, public, share or view
+     * The button of one kind of spots on the page of a restriction, with the
+     * icon of its tab: the steps it can keep him at, the one it does marked -
+     * it shines while it keeps him at all -; a left-click goes one step
+     * further, after the last back to nothing, a right-click one back.
      */
-    private void restrictToggle(Player player, Page page, int slot, Material icon, String what, boolean kept,
-                                Runnable flip) {
-        List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-spot-restrict-" + what + "-lore")));
-        lore.addAll(lines(messages.getMessage(kept ? "menu-admin-spot-restrict-kept"
-                : "menu-admin-spot-restrict-free")));
-        lore.addAll(lines(messages.getMessage("menu-admin-spot-restrict-toggle")));
-        put(page, slot, shine(item(icon, messages.getMessage("menu-admin-spot-restrict-" + what), lore), kept),
-                click -> later(() -> {
-                    flip.run();
+    private void restrictStage(Player player, Page page, SpotBanDraft draft, SpotTab tab) {
+        SpotBans.Kind kind = SpotBans.Kind.valueOf(tab.name());
+        SpotBans.Stage now = draft.stage(kind);
+        String what = "menu-admin-spot-restrict-" + kind.key;
+        List<String> lore = new ArrayList<>(lines(messages.getMessage(what + "-lore")));
+        for (SpotBans.Stage stage : SpotBans.Stage.values()) {
+            String label = messages.getMessage(stage == SpotBans.Stage.FREE ? "menu-admin-spot-restrict-free"
+                    : "spot-restriction-" + kind.key + "-" + stage.key);
+            lore.addAll(lines(messages.getMessage(stage == now ? "menu-admin-spot-restrict-stage-now"
+                    : "menu-admin-spot-restrict-stage").replace("{stage}", label)));
+        }
+        lore.addAll(lines(messages.getMessage("menu-admin-spot-restrict-steps")));
+        put(page, RESTRICT_SLOTS[kind.ordinal()], shine(item(tab.icon, messages.getMessage(what), lore),
+                now != SpotBans.Stage.FREE), click -> later(() -> {
+                    draft.stages.put(kind, now.next(click.isRightClick()));
                     openSpotBan(player);
                 }));
     }
@@ -2054,7 +2072,7 @@ public final class CamMenu implements Listener {
      * it. A public one is made public once it is saved.
      */
     private void askName(Player player, boolean makePublic) {
-        if (makePublic && !plugin.getSpotModeration().check(player, SpotModeration.What.PUBLIC)) {
+        if (makePublic && !plugin.getSpotModeration().checkNew(player, SpotBans.Kind.PUBLIC)) {
             return;
         }
         ask(player, makePublic ? "menu-spot-name-public" : "menu-spot-name", name -> {

@@ -260,8 +260,9 @@ messages:
   # The admin page of the spots (camplugin.spotadmin): menu-admin-spots-... is the list of the players who have spots
   # ({count} spots, {public} of them public, {shared} shared by name), menu-admin-spots-restricted what keeps one
   # ({ban}: {what} as spot-restriction-..., the time as ban-for or ban-for-good, the reason as ban-reason);
-  # menu-admin-spot-... the page of one player's spots and the page that restricts them, with its three switches
-  # (-create, -public, -share, -view), -kept or -free under each.
+  # menu-admin-spot-... the page of one player's spots and the page that restricts them, with a button for each kind
+  # of spots (-private, -public, -shared): its steps under it, -free and spot-restriction-..., the one it is at as
+  # -stage-now, the others as -stage.
   menu-admin-spot-actions: "&bRight-click: go there\n&cShift-click: delete"
   menu-admin-spot-actions-shared: "&eLeft-click: take it down -\n&eprivate again\n&bRight-click: go there\n&cShift-click: delete"
   menu-admin-spot-private: "&7Private"
@@ -272,22 +273,21 @@ messages:
   menu-admin-spot-restrict-change-title: "&8Change the restriction of {player}"
   menu-admin-spot-restrict-confirm: "&4Restrict"
   menu-admin-spot-restrict-confirm-lore: "&7{player}: {ban}"
-  menu-admin-spot-restrict-create: "&fNew spots"
-  menu-admin-spot-restrict-create-lore: "&7Saving new spots"
-  menu-admin-spot-restrict-free: "&aAllowed"
-  menu-admin-spot-restrict-kept: "&cNot allowed"
+  menu-admin-spot-restrict-free: "allowed"
   menu-admin-spot-restrict-lore: "&7Keep him from saving spots, making\n&7them public, sharing them or\n&7looking at spots."
   menu-admin-spot-restrict-nothing: "&7Nothing picked"
   menu-admin-spot-restrict-nothing-lore: "&7Pick at least one thing\n&7he may not do."
-  menu-admin-spot-restrict-public: "&eMaking public"
-  menu-admin-spot-restrict-public-lore: "&7Making spots public"
+  menu-admin-spot-restrict-private: "&fHis own spots"
+  menu-admin-spot-restrict-private-lore: "&7Saving spots, and jumping\n&7to his own"
+  menu-admin-spot-restrict-public: "&ePublic spots"
+  menu-admin-spot-restrict-public-lore: "&7Making his spots public, and\n&7jumping to or visiting\n&7the public ones"
   menu-admin-spot-restrict-reason-question: "&eType in the chat why the spots of {player} are restricted, or {cancel}."
-  menu-admin-spot-restrict-share: "&bSharing"
-  menu-admin-spot-restrict-share-lore: "&7Sharing spots with players"
+  menu-admin-spot-restrict-shared: "&bShared spots"
+  menu-admin-spot-restrict-shared-lore: "&7Sharing his spots by name, and\n&7jumping to or visiting those\n&7shared with him"
+  menu-admin-spot-restrict-stage: "&8- {stage}"
+  menu-admin-spot-restrict-stage-now: "&a» {stage}"
+  menu-admin-spot-restrict-steps: "&eLeft-click: next step\n&eRight-click: step back"
   menu-admin-spot-restrict-title: "&8Restrict the spots of {player}"
-  menu-admin-spot-restrict-toggle: "&eClick: switch"
-  menu-admin-spot-restrict-view: "&dLooking at spots"
-  menu-admin-spot-restrict-view-lore: "&7Jumping to spots, his own as well,\n&7visiting the spots of others"
   menu-admin-spot-unrestrict: "&aLift the restriction"
   menu-admin-spot-unrestrict-lore: "&7{player} may do everything\n&7with spots again."
   menu-admin-spots: "&aSpots of everybody"
@@ -403,8 +403,11 @@ messages:
   menu-spots-empty-public-lore: "&7Right-click the book on the right\n&7to save a public one."
   menu-spots-empty-shared: "&7Nothing shared with you"
   menu-spots-empty-shared-lore: "&7What others offer you\n&7shows up here."
+  # In place of the spots of a tab a restriction keeps him from looking at ({time} and {reason} as with /cam ban).
   menu-spots-lore: "&7Your own spots, the public ones\n&7and those shared with you."
   menu-spots-offers: "&eNew, offered to you: {count}"
+  menu-spots-restricted: "&7Sorry, you can't look at these"
+  menu-spots-restricted-lore: "&7You are restricted\n&7{time}{reason}."
   menu-spots-tab-private: "&fYour spots"
   menu-spots-tab-private-lore: "&7All your own spots,\n&7the public ones among them."
   menu-spots-tab-public: "&ePublic"
@@ -572,10 +575,11 @@ messages:
   # The moderation of the spots on the admin page: spot-admin-... and spot-restrict-... / spot-unrestrict-done tell the
   # admin ({player} is the owner; spot-admin-teleported: he went there with a right-click, spot-admin-tp-no-world: its
   # world {world} is not loaded), spot-taken-down, spot-deleted-by-admin, spot-restricted-now, -changed and
-  # spot-unrestricted-now the owner ({player} is the admin). spot-restricted-create, -public and -share answer him when
-  # a restriction keeps him from it ({time} and {reason} as with /cam ban; -view: jumping to a spot, his own as well,
-  # a visit, and /cam resume of a visit); {what} lists spot-restriction-create, -public, -share and -view, joined by
-  # spot-restriction-separator.
+  # spot-unrestricted-now the owner ({player} is the admin). spot-restricted-<kind>-new and -look answer him when a
+  # restriction keeps him from it ({time} and {reason} as with /cam ban): -private-new saving a spot, -public-new making
+  # one public, -shared-new sharing one; -private-look jumping to one of his own, -public-look and -shared-look jumping
+  # to or visiting one of another, also with /cam resume of a visit. {what} lists spot-restriction-<kind>-no-new or
+  # -no-look of each kind, joined by spot-restriction-separator.
   spot-admin-deleted: "&aSpot {spot} of {player} deleted."
   spot-admin-teleported: "&aYou are at spot {spot} of {player}."
   spot-admin-took-down: "&aSpot {spot} of {player} is private now."
@@ -634,16 +638,20 @@ messages:
   spot-restrict-changed: "&aThe restriction of {player} is changed: {what} {time}{reason}."
   spot-restrict-done: "&a{player} is restricted: {what} {time}{reason}."
   spot-restricted-changed: "&e{player} changed the restriction of your spots: {what} {time}{reason}."
-  spot-restricted-create: "&cYou may not save new spots {time}{reason}."
   spot-restricted-now: "&c{player} restricted your spots: {what} {time}{reason}."
-  spot-restricted-public: "&cYou may not make spots public {time}{reason}."
-  spot-restricted-share: "&cYou may not share spots {time}{reason}."
-  spot-restricted-view: "&cYou may not look at spots - jump to them or visit them - {time}{reason}."
-  spot-restriction-create: "no new spots"
-  spot-restriction-public: "nothing public"
+  spot-restricted-private-look: "&cYou may not look at your own spots {time}{reason}."
+  spot-restricted-private-new: "&cYou may not save new spots {time}{reason}."
+  spot-restricted-public-look: "&cYou may not look at public spots {time}{reason}."
+  spot-restricted-public-new: "&cYou may not make spots public {time}{reason}."
+  spot-restricted-shared-look: "&cYou may not look at spots shared with you {time}{reason}."
+  spot-restricted-shared-new: "&cYou may not share spots {time}{reason}."
+  spot-restriction-private-no-look: "no own spots at all"
+  spot-restriction-private-no-new: "no new spots"
+  spot-restriction-public-no-look: "no public spots at all"
+  spot-restriction-public-no-new: "nothing public"
   spot-restriction-separator: ", "
-  spot-restriction-share: "no sharing"
-  spot-restriction-view: "no looking at spots"
+  spot-restriction-shared-no-look: "nothing shared at all"
+  spot-restriction-shared-no-new: "no sharing"
   spot-saved: "&aSpot {spot} saved here, looking the way you look now."
   spot-share-everybody: "everybody"
   spot-share-off: "&cSharing spots is switched off."
@@ -1275,11 +1283,13 @@ message-settings:
   spot-restrict-changed: true
   spot-restrict-done: true
   spot-restricted-changed: true
-  spot-restricted-create: true
   spot-restricted-now: true
-  spot-restricted-public: true
-  spot-restricted-share: true
-  spot-restricted-view: true
+  spot-restricted-private-look: true
+  spot-restricted-private-new: true
+  spot-restricted-public-look: true
+  spot-restricted-public-new: true
+  spot-restricted-shared-look: true
+  spot-restricted-shared-new: true
   spot-saved: true
   spot-share-off: true
   spot-share-self: true

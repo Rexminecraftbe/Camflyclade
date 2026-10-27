@@ -713,12 +713,14 @@ menu:
     # offline ist -, ein Klick zeigt seine Punkte, privat, öffentlich und geteilt. Linksklick nimmt einen öffentlichen
     # oder geteilten herunter (er ist wieder privat), Rechtsklick teleportiert einen selbst hin - von überall, ohne die
     # Regeln eines Sprungs; im Cam-Modus endet der erst, wie bei /cam tp -, Umschalt-Klick löscht einen. Der Trichter
-    # sortiert seine Punkte: die neuesten zuerst, nach Namen, die meisten Likes, die meisten Aufrufe, die nächsten. Unten der Knopf, der ihn
-    # einschränkt: keine neuen Punkte, nichts öffentlich machen, nichts teilen, keine Punkte anschauen (kein Sprung zu
-    # einem Punkt, auch nicht zu einem eigenen, kein Besuch) - einzeln anwählbar, für immer oder Tage, Stunden und
-    # Minuten wie bei einer Sperre, mit Grund; steht schon etwas, ändert oder hebt man es dort auf.
-    # Er erfährt alles davon, wenn er online ist, und jedes Mal, wenn ihn eine Einschränkung aufhält, was, wie lange
-    # noch und warum (in plugins/CamFly/playerdata/spot-bans.yml).
+    # sortiert seine Punkte: die neuesten zuerst, nach Namen, die meisten Likes, die meisten Aufrufe, die nächsten.
+    # Unten der Knopf, der ihn einschränkt, für seine eigenen Punkte, die öffentlichen und die geteilten je ein Knopf,
+    # den man weiterklickt (Linksklick weiter, Rechtsklick zurück): erlaubt - keine neuen (keinen Punkt speichern,
+    # keinen öffentlich machen, keinen teilen) - auch keine anschauen (kein Sprung zu seinen eigenen, kein Sprung zu
+    # öffentlichen oder geteilten und kein Besuch dort; der Reiter im Spot-Menü zeigt ihm dann nur, dass er gesperrt
+    # ist). Für immer oder Tage, Stunden und Minuten wie bei einer Sperre, mit Grund; steht schon etwas, ändert oder
+    # hebt man es dort auf. Er erfährt alles davon, wenn er online ist, und jedes Mal, wenn ihn eine Einschränkung
+    # aufhält, was, wie lange noch und warum (in plugins/CamFly/playerdata/spot-bans.yml).
     spots:
       item: filled_map
       slot: 20
