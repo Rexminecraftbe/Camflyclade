@@ -15,33 +15,33 @@ import java.util.UUID;
 
 /**
  * The moderation of the tours, on the admin page of the tours
- * ({@value #PERMISSION}): an admin keeps a player, or everybody at once, from
- * leading tours, from taking part in them, or both - for good or for a while
- * and why, see {@link TourBans}. The restriction of everybody leaves out
- * whoever has {@value #BYPASS}.
+ * ({@value #PERMISSION}): an admin keeps a player from leading tours, from
+ * taking part in them, or both, or switches tours off for everybody at once
+ * - for good or for a while and why, see {@link TourBans}. Switched off,
+ * nobody leads tours or takes part in them but whoever has {@value #BYPASS}.
  *
  * <p>It holds at once: a guide it keeps from leading loses his tour and the
  * invitations he gave, a guest it keeps from taking part leaves the tour he
  * follows and loses his invitations, see {@link CamTour#keepOut}. He hears
  * about it while he is online, and every time it keeps him from something:
  * what, for how long still and why - with the texts of a ban of camera mode
- * for the time and the reason; one of everybody tells him that it is
- * switched off. A guide who would invite a player it keeps is told so, and
- * the menu shows it under him.</p>
+ * for the time and the reason; switched off, that tours are switched off. A
+ * guide who would invite a player it keeps is told so, and the menu shows it
+ * under him.</p>
  */
 public final class TourModeration {
 
     /** The right of the admin page of the tours. Operators have it by default. */
     public static final String PERMISSION = "camplugin.touradmin";
 
-    /** Whoever has this right is not kept by the restriction of everybody. Operators have it by default. */
+    /** Whoever has this right may lead tours and take part while they are off. Operators have it by default. */
     public static final String BYPASS = "camplugin.touradmin.bypass";
 
     /**
      * What keeps a player from something.
      *
      * @param ban       the restriction
-     * @param everybody whether it is the one of everybody, rather than his own
+     * @param everybody whether tours are switched off for everybody, rather than his own restriction
      */
     public record Hold(TourBans.Ban ban, boolean everybody) {
     }
@@ -93,8 +93,8 @@ public final class TourModeration {
     /**
      * Whether he may do this - invite players to his tour, accept an
      * invitation. If not, he has been told for how long still and why: his
-     * own restriction as {@code tour-restricted-...}, that of everybody as
-     * {@code tour-disabled-...}.
+     * own restriction as {@code tour-restricted-...}, tours switched off as
+     * {@code tour-disabled}.
      */
     public boolean check(Player player, TourBans.What what) {
         Hold hold = hold(player, what);
@@ -102,7 +102,7 @@ public final class TourModeration {
             return true;
         }
         long now = System.currentTimeMillis();
-        messages.sendMessage(player, (hold.everybody() ? "tour-disabled-" : "tour-restricted-") + what.key,
+        messages.sendMessage(player, hold.everybody() ? "tour-disabled" : "tour-restricted-" + what.key,
                 "{time}", messageTime(hold.ban(), now), "{reason}", messageReason(hold.ban()));
         return false;
     }
@@ -154,9 +154,13 @@ public final class TourModeration {
         return text(bans.get(playerId));
     }
 
-    /** How the restriction of everybody stands, as {@link #banText} has it. */
-    public String everybodyText() {
-        return text(bans.everybody());
+    /**
+     * For how long still and why tours are switched off for everybody, for
+     * the menu - or {@code null} while they are on.
+     */
+    public String offText() {
+        TourBans.Ban ban = bans.everybody();
+        return ban == null ? null : time(ban, System.currentTimeMillis()) + reason(ban);
     }
 
     private String text(TourBans.Ban ban) {
@@ -210,33 +214,32 @@ public final class TourModeration {
     }
 
     /**
-     * Restricts everybody but those with {@value #BYPASS}, or changes that
-     * restriction: as {@link #ban} does a single player.
+     * Switches tours off for everybody but those with {@value #BYPASS} - no
+     * leading, no taking part -, for so many minutes, 0 for good, and why;
+     * or changes for how long and why while they are off. It holds at once,
+     * and whoever it keeps hears about it while he is online.
      */
-    public void banEverybody(CommandSender admin, boolean lead, boolean join, long minutes, String reason) {
-        long now = System.currentTimeMillis();
-        TourBans.Ban ban = new TourBans.Ban(null, lead, join, minutes > 0L ? now + minutes * 60_000L : 0L,
-                reason.trim(), name(admin));
-        if (!mayUse(admin) || !ban.any()) {
+    public void switchOff(CommandSender admin, long minutes, String reason) {
+        if (!mayUse(admin)) {
             return;
         }
+        long now = System.currentTimeMillis();
+        TourBans.Ban ban = new TourBans.Ban(null, true, true, minutes > 0L ? now + minutes * 60_000L : 0L,
+                reason.trim(), name(admin));
         boolean change = bans.everybody() != null;
         bans.banEverybody(ban);
-        String what = whatText(lead, join);
         for (Player online : Bukkit.getOnlinePlayers()) {
             if (online.hasPermission(BYPASS)) {
                 continue;
             }
             if (!online.equals(admin)) {
                 messages.sendMessage(online, change ? "tour-disabled-changed" : "tour-disabled-now",
-                        "{player}", name(admin), "{what}", what, "{time}", messageTime(ban, now),
-                        "{reason}", messageReason(ban));
+                        "{player}", name(admin), "{time}", messageTime(ban, now), "{reason}", messageReason(ban));
             }
             plugin.getTour().keepOut(online);
         }
-        messages.sendConfiguredMessage(admin, change ? "tour-restrict-everybody-changed"
-                : "tour-restrict-everybody-done", "{what}", what, "{time}", messageTime(ban, now),
-                "{reason}", messageReason(ban));
+        messages.sendConfiguredMessage(admin, change ? "tour-off-changed" : "tour-off-done",
+                "{time}", messageTime(ban, now), "{reason}", messageReason(ban));
     }
 
     /** Lets a player lead tours and take part in them again. He hears about it while he is online. */
@@ -252,10 +255,10 @@ public final class TourModeration {
     }
 
     /**
-     * Lets everybody lead tours and take part in them again; single players
-     * stay restricted. Whoever it kept hears about it while he is online.
+     * Switches tours on again for everybody; single players stay restricted.
+     * Whoever it kept hears about it while he is online.
      */
-    public void unbanEverybody(CommandSender admin) {
+    public void switchOn(CommandSender admin) {
         if (!mayUse(admin) || !bans.unbanEverybody()) {
             return;
         }
@@ -264,7 +267,7 @@ public final class TourModeration {
                 messages.sendMessage(online, "tour-enabled-now", "{player}", name(admin));
             }
         }
-        messages.sendConfiguredMessage(admin, "tour-unrestrict-everybody-done");
+        messages.sendConfiguredMessage(admin, "tour-on-done");
     }
 
     /** How long it still holds, the way the texts of a ban put it: "for 2h 0m 0s" or "for good". */

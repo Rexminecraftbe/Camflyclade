@@ -198,9 +198,9 @@ messages:
   # limit. menu-sort is the button that sorts a list, {sort} being one of the menu-sort-... orders; under it every
   # order, the one in use as menu-sort-option-current, the others as menu-sort-option. menu-tour-... are the page
   # of /cam tour, menu-tour-view the button that switches between the guide's view and looking round freely;
-  # menu-tour-lead-... and menu-tour-join-... what keeps him from leading or taking part (-restricted his own
-  # restriction, -disabled the one of everybody, {time} and {reason} as with /cam ban), menu-tour-candidate-restricted-
-  # and -disabled-lore under a player he cannot invite for that.
+  # menu-tour-lead-restricted and menu-tour-join-restricted what keeps him from leading or taking part,
+  # menu-tour-disabled that tours are switched off ({time} and {reason} as with /cam ban);
+  # menu-tour-candidate-restricted- and -disabled-lore under a player he cannot invite for that.
   # menu-only is what the commands say under menu.access or menu.admin-access: menu, menu-features-off under false. menu-spot-name asks for the name of a new spot in the chat,
   # menu-admin-ban-reason-question why a player is banned ({player}), {cancel} being the word that calls either off,
   # with menu-answer-cancelled. Under menu-stats and the heads of menu-admin-stats stand the lines of /cam stats;
@@ -324,8 +324,20 @@ messages:
   menu-admin-target-title: "&8{player}"
   menu-admin-title: "&8Cam admin"
   # The admin page of the tours (camplugin.touradmin): menu-admin-tours-... the list of the players, everybody first
-  # (-everybody-lore), under each whether he shows others round ({count} guests) or follows a tour ({player} is the
-  # guide); menu-admin-tour-... the page that restricts one, with the buttons -lead and -join.
+  # (-everybody-..., with -on or -off: {ban} for how long and why), under each player whether he shows others round
+  # ({count} guests) or follows a tour ({player} is the guide). menu-admin-tour-off-... is the page that switches tours
+  # off for everybody, with the button -switch (-switch-on or -switch-off) and menu-admin-tour-on, which switches them
+  # on again; menu-admin-tour-restrict-... the page that restricts one player, with the buttons -lead and -join.
+  menu-admin-tour-off-change-confirm: "&4Save the change"
+  menu-admin-tour-off-change-title: "&8Tours are off for everybody"
+  menu-admin-tour-off-confirm: "&4Switch tours off"
+  menu-admin-tour-off-confirm-lore: "&7Tours: {ban}"
+  menu-admin-tour-off-nothing: "&7Nothing to switch off"
+  menu-admin-tour-off-nothing-lore: "&7Switch tours off above first."
+  menu-admin-tour-off-reason-question: "&eType in the chat why tours are switched off, or {cancel}."
+  menu-admin-tour-off-title: "&8Switch tours off for everybody"
+  menu-admin-tour-on: "&aSwitch tours on again"
+  menu-admin-tour-on-everybody-lore: "&7Everybody may lead tours and\n&7take part in them again."
   menu-admin-tour-restrict-change-confirm: "&4Change the restriction"
   menu-admin-tour-restrict-change-title: "&8Change the tour restriction of {player}"
   menu-admin-tour-restrict-confirm: "&4Restrict"
@@ -338,16 +350,22 @@ messages:
   menu-admin-tour-restrict-nothing-lore: "&7Pick at least one thing\n&7he may not do."
   menu-admin-tour-restrict-reason-question: "&eType in the chat why the tours of {player} are restricted, or {cancel}."
   menu-admin-tour-restrict-title: "&8Restrict the tours of {player}"
+  menu-admin-tour-switch: "&6Tours for everybody"
+  menu-admin-tour-switch-lore: "&7Leading tours and taking part,\n&7for every player but those\n&7with camplugin.touradmin.bypass"
+  menu-admin-tour-switch-off: "switched off"
+  menu-admin-tour-switch-on: "on"
   menu-admin-tour-unrestrict: "&aLift the restriction"
-  menu-admin-tour-unrestrict-everybody-lore: "&7Everybody may lead tours and\n&7take part in them again."
   menu-admin-tour-unrestrict-lore: "&7{player} may lead tours and\n&7take part in them again."
   menu-admin-tours: "&6Tours"
   menu-admin-tours-actions: "&eClick: restrict"
-  menu-admin-tours-everybody-lore: "&7Restrict tours for every player\n&7at once, but those with\n&7camplugin.touradmin.bypass"
+  menu-admin-tours-everybody-actions: "&eClick: switch on or off"
+  menu-admin-tours-everybody-lore: "&7Switch tours off for every\n&7player at once, but those with\n&7camplugin.touradmin.bypass"
   menu-admin-tours-following: "&7On the tour of {player}"
   menu-admin-tours-guiding: "&7Showing {count} round"
   menu-admin-tours-lore: "&7Keep players, or everybody,\n&7from leading tours or\n&7taking part in them."
   menu-admin-tours-none: "&7On no tour"
+  menu-admin-tours-off: "&cTours are off {ban}"
+  menu-admin-tours-on: "&aTours are on"
   menu-admin-tours-title: "&8Tours: players"
   menu-admin-trails: "&aFlights"
   menu-admin-trails-actions: "&eClick: his flights"
@@ -495,12 +513,14 @@ messages:
   menu-to-spots: "&7« Back to the spots"
   menu-tour: "&aTour"
   menu-tour-candidate: "&f{player}"
-  menu-tour-candidate-disabled-lore: "&cYou can't invite him: taking\n&cpart in tours is switched off"
+  menu-tour-candidate-disabled-lore: "&cYou can't invite him:\n&ctours are switched off"
   menu-tour-candidate-full-lore: "&cYour tour is full.\n&7Guests at most: {max}"
   menu-tour-candidate-invited-lore: "&eInvited, no answer yet.\n&7Click: invite again"
   menu-tour-candidate-lore: "&7In cam mode, {blocks} blocks away.\n&eClick: invite"
   menu-tour-candidate-outside-lore: "&7Not in cam mode, {blocks} blocks away.\n&7Cam mode starts where they stand\n&7once they accept.\n&eClick: invite"
   menu-tour-candidate-restricted-lore: "&cYou can't invite him:\n&che is restricted from tours"
+  menu-tour-disabled: "&7Tours are switched off"
+  menu-tour-disabled-lore: "&7It is off for everybody\n&7{time}{reason}."
   menu-tour-empty: "&7Nobody to invite"
   # {start} = tour.start-distance, {radius} = tour.radius.
   menu-tour-empty-lore: "&7Players on no tour show up here\n&7when they are close to your camera:\n&7- without cam mode: within {start} blocks\n&7- in cam mode: within {radius} blocks"
@@ -519,12 +539,8 @@ messages:
   menu-tour-invitation: "&e{player}"
   menu-tour-invitation-lore: "&7Invites you to a tour.\n&aLeft-click: come along\n&cRight-click: turn down"
   menu-tour-invitations: "&eInvitations for you: {count}"
-  menu-tour-join-disabled: "&7Taking part in tours is switched off"
-  menu-tour-join-disabled-lore: "&7It is off for everybody\n&7{time}{reason}."
   menu-tour-join-restricted: "&7Sorry, you may not take part in tours"
   menu-tour-join-restricted-lore: "&7You are restricted\n&7{time}{reason}."
-  menu-tour-lead-disabled: "&7Leading tours is switched off"
-  menu-tour-lead-disabled-lore: "&7It is off for everybody\n&7{time}{reason}."
   menu-tour-lead-restricted: "&7Sorry, you may not lead tours"
   menu-tour-lead-restricted-lore: "&7You are restricted\n&7{time}{reason}."
   menu-tour-leave: "&cLeave the tour"
@@ -784,9 +800,10 @@ messages:
   # the admin ({player} is the player), tour-restricted-now, -changed and tour-unrestricted-now the player ({player} is
   # the admin). tour-restricted-lead and -join answer him when a restriction keeps him from inviting or accepting
   # ({time} and {reason} as with /cam ban), tour-restricted-guest the guide who would invite him. {what} lists
-  # tour-restriction-lead and -join, joined by tour-restriction-separator. The restriction of everybody:
-  # tour-disabled-... in place of tour-restricted-..., tour-disabled-now, -changed and tour-enabled-now to every player
-  # but those with camplugin.touradmin.bypass.
+  # tour-restriction-lead and -join, joined by tour-restriction-separator. Tours switched off for everybody:
+  # tour-off-done, -changed and tour-on-done tell the admin; tour-disabled-now, -changed and tour-enabled-now every
+  # player but those with camplugin.touradmin.bypass; tour-disabled and tour-disabled-guest in place of
+  # tour-restricted-....
   tour-already-guest: "&e{player} is on your tour already."
   tour-body-locked: "&cYou follow the tour of {player}: leave it first to use your body."
   tour-busy: "&cYou are on a tour already."
@@ -797,11 +814,10 @@ messages:
   tour-button-decline-hover: "&7Turn the tour of {player} down"
   tour-declined: "&eYou turned down the tour of {player}."
   tour-declined-guide: "&e{player} turned your tour down."
-  tour-disabled-changed: "&e{player} changed what is switched off of tours for everybody: {what} {time}{reason}."
-  tour-disabled-guest: "&cYou can't invite {player}: taking part in tours is switched off."
-  tour-disabled-join: "&cTaking part in tours is switched off {time}{reason}."
-  tour-disabled-lead: "&cLeading tours is switched off {time}{reason}."
-  tour-disabled-now: "&c{player} switched tours off for everybody: {what} {time}{reason}."
+  tour-disabled: "&cTours are switched off {time}{reason}."
+  tour-disabled-changed: "&e{player} changed it: tours are switched off for everybody {time}{reason}."
+  tour-disabled-guest: "&cYou can't invite {player}: tours are switched off."
+  tour-disabled-now: "&c{player} switched tours off for everybody {time}{reason}."
   tour-enabled-now: "&a{player} switched tours on again for everybody."
   tour-ended: "&e{player} ended the tour."
   tour-ended-guide: "&eYour tour is over."
@@ -823,6 +839,9 @@ messages:
   tour-not-guiding: "&cYou show nobody round."
   tour-not-in-cam: "&cOnly in cam mode: start it first."
   tour-off: "&c/cam tour is switched off."
+  tour-off-changed: "&aTours stay switched off for everybody, now {time}{reason}."
+  tour-off-done: "&aTours are switched off for everybody {time}{reason}."
+  tour-on-done: "&aTours are switched on again for everybody."
   tour-other-busy: "&c{player} is on a tour already."
   tour-other-not-in-cam: "&c{player} is not in cam mode. Only who flies as a camera already can come along."
   tour-out-of-reach: "&c{player} could not follow you from there: you are out of the reach of their camera."
@@ -832,8 +851,6 @@ messages:
   tour-reach-warning-guide: "&c{players} cannot follow: the tour ends for them in {time}"
   tour-restrict-changed: "&aThe tour restriction of {player} is changed: {what} {time}{reason}."
   tour-restrict-done: "&a{player} is restricted from tours: {what} {time}{reason}."
-  tour-restrict-everybody-changed: "&aThe tour restriction of everybody is changed: {what} {time}{reason}."
-  tour-restrict-everybody-done: "&aTours are restricted for everybody: {what} {time}{reason}."
   tour-restricted-changed: "&e{player} changed the restriction of your tours: {what} {time}{reason}."
   tour-restricted-guest: "&cYou can't invite {player}: he is restricted from tours."
   tour-restricted-join: "&cYou may not take part in tours {time}{reason}."
@@ -848,7 +865,6 @@ messages:
   tour-too-far-guest: "&cYou are too far away."
   tour-unknown-player: "&cNobody called {player} is online."
   tour-unrestrict-done: "&a{player} may lead tours and take part in them again."
-  tour-unrestrict-everybody-done: "&aEverybody may lead tours and take part in them again."
   tour-unrestricted-now: "&a{player} lifted the restriction of your tours."
   tour-usage: "&eUse /cam tour invite|accept|decline|kick <player>, /cam tour leave, /cam tour end or /cam tour view."
   # /cam trail: {number} which of the kept flights (1 the newest), {distance} in blocks, {time} how long the flight
@@ -1284,6 +1300,7 @@ message-settings:
   flight-speed: true
   menu-admin-ban-reason-question: true
   menu-admin-spot-restrict-reason-question: true
+  menu-admin-tour-off-reason-question: true
   menu-admin-tour-restrict-reason-question: true
   menu-answer-cancelled: true
   menu-features-off: true
@@ -1454,10 +1471,9 @@ message-settings:
   tour-button-decline: true
   tour-declined: true
   tour-declined-guide: true
+  tour-disabled: true
   tour-disabled-changed: true
   tour-disabled-guest: true
-  tour-disabled-join: true
-  tour-disabled-lead: true
   tour-disabled-now: true
   tour-enabled-now: true
   tour-ended: true
@@ -1480,6 +1496,9 @@ message-settings:
   tour-not-guiding: true
   tour-not-in-cam: true
   tour-off: true
+  tour-off-changed: true
+  tour-off-done: true
+  tour-on-done: true
   tour-other-busy: true
   tour-other-not-in-cam: true
   tour-out-of-reach: true
@@ -1489,8 +1508,6 @@ message-settings:
   tour-reach-warning-guide: true
   tour-restrict-changed: true
   tour-restrict-done: true
-  tour-restrict-everybody-changed: true
-  tour-restrict-everybody-done: true
   tour-restricted-changed: true
   tour-restricted-guest: true
   tour-restricted-join: true
@@ -1502,7 +1519,6 @@ message-settings:
   tour-too-far-guest: true
   tour-unknown-player: true
   tour-unrestrict-done: true
-  tour-unrestrict-everybody-done: true
   tour-unrestricted-now: true
   tour-usage: true
   tour-view-free: true

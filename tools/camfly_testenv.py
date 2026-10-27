@@ -7850,10 +7850,12 @@ def tourmoderation_checks(env, bot):
     fuehren darf, und die Seite der Fuehrung sagt es in der Mitte (22). Der
     Milcheimer hebt es auf.
 
-    "Everybody" mit fuehren verboten: er liest, dass es fuer alle
-    abgeschaltet ist, einladen sagt "Leading tours is switched off", seine
-    Seite der Fuehrung ebenso; der Bot (op, camplugin.touradmin.bypass) laedt
-    ihn weiter ein. Aufgehoben hoert er, dass es wieder an ist.
+    "Everybody" hat nur einen Schalter (13), an oder aus. Aus: er liest,
+    dass Fuehrungen fuer alle abgeschaltet sind, einladen und annehmen sagen
+    es ihm, seine Seite der Fuehrung einmal in der Mitte. Der Bot (op,
+    camplugin.touradmin.bypass) darf weiter fuehren, kann den zweiten aber
+    nicht einladen, und die Liste sagt, warum. Wieder an hoert er es, unter
+    "Everybody" steht "on", und der Bot laedt ihn wieder ein.
     """
     def fenster(client):
         return client.call("window_slots", wait=10)
@@ -7918,7 +7920,7 @@ def tourmoderation_checks(env, bot):
         er = texte(f).get(platz(f, ZUSCHAUER_NAME), "")
         FIND.test("Admin-Seite, Fuehrungen (24): vorn Everybody, dann er - wem er folgt, ohne Einschraenkung",
                   "Tours: players" in (f.get("title") or "") and alle.startswith("Everybody")
-                  and "No restrictions" in alle and f"On the tour of {BOT_NAME}" in er and "No restrictions" in er,
+                  and "Tours are on" in alle and f"On the tour of {BOT_NAME}" in er and "No restrictions" in er,
                   f"{f.get('title')} / {alle} / {er}")
         klick(bot, platz(f, ZUSCHAUER_NAME))
         f = fenster(bot)
@@ -7984,26 +7986,44 @@ def tourmoderation_checks(env, bot):
         liste()
         klick(bot, 0)
         f = fenster(bot)
-        FIND.test("Everybody oeffnet die Einschraenkung von allen",
-                  "Restrict the tours of Everybody" in (f.get("title") or ""), str(f.get("title")))
-        klick(bot, 12)
+        schalter = item_text(f.get("slots", {}).get("13"))
+        FIND.test("Everybody oeffnet den Schalter fuer alle: ein Knopf (13), an",
+                  "Switch tours off for everybody" in (f.get("title") or "")
+                  and schalter.startswith("Tours for everybody") and "» on" in schalter
+                  and "12" not in f.get("slots", {}) and "14" not in f.get("slots", {}),
+                  f"{f.get('title')} / {schalter}")
+        klick(bot, 13)
+        f = fenster(bot)
+        schalter = item_text(f.get("slots", {}).get("13"))
+        FIND.test("Umgeschaltet: aus, der Knopf glaenzt, unten steht, was es tut",
+                  "» switched off" in schalter and (f.get("slots", {}).get("13") or {}).get("glint") is True
+                  and "Tours: switched off for good" in item_text(f.get("slots", {}).get("31")), schalter)
         seit, hier_seit = zuschauer.mark(), bot.mark()
         klick(bot, 31)
         dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, hier_seit)
         bot.call("close_window", wait=10)
-        FIND.test("Fuer alle: er liest, dass es abgeschaltet ist, der Admin, dass es fuer alle gilt",
-                  gesagt(dort, rf"{BOT_NAME} switched tours off for everybody: no leading for good")
-                  and gesagt(hier, r"Tours are restricted for everybody: no leading for good"),
-                  f"{zeige(dort)} / {zeige(hier)}")
+        FIND.test("Fuer alle aus: er liest es, der Admin auch",
+                  gesagt(dort, rf"{BOT_NAME} switched tours off for everybody for good")
+                  and gesagt(hier, r"Tours are switched off for everybody for good"), f"{zeige(dort)} / {zeige(hier)}")
         zeilen = befehl(zuschauer, f"/cam tour invite {BOT_NAME}")
-        mitte = item_text(fuehrung_seite(zuschauer).get("slots", {}).get("22"))
-        FIND.test("Fuer alle: einladen sagt, dass fuehren abgeschaltet ist, die Seite der Fuehrung ebenso",
-                  gesagt(zeilen, r"Leading tours is switched off for good")
-                  and "Leading tours is switched off" in mitte and "It is off for everybody" in mitte,
-                  f"{zeige(zeilen)} / {mitte}")
+        seite = fuehrung_seite(zuschauer)
+        mitte = item_text(seite.get("slots", {}).get("22"))
+        FIND.test("Aus: einladen sagt, dass Fuehrungen abgeschaltet sind, seine Seite sagt es einmal, in der Mitte",
+                  gesagt(zeilen, r"Tours are switched off for good")
+                  and "Tours are switched off" in mitte and "It is off for everybody" in mitte
+                  and "switched off" not in item_text(seite.get("slots", {}).get("49")),
+                  f"{zeige(zeilen)} / {mitte} / {item_text(seite.get('slots', {}).get('49'))}")
+        zeilen = befehl(zuschauer, f"/cam tour accept {BOT_NAME}")
+        FIND.test("Aus: annehmen geht auch nicht", gesagt(zeilen, r"Tours are switched off for good"), zeige(zeilen))
         zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
-        FIND.test("camplugin.touradmin.bypass (op): der Bot laedt weiter ein",
-                  gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to your tour"), zeige(zeilen))
+        f = fuehrung_seite(bot)
+        er = texte(f).get(platz(f, ZUSCHAUER_NAME), "")
+        FIND.test("camplugin.touradmin.bypass (op): der Bot darf weiter fuehren - den zweiten aber nicht einladen, "
+                  "die Liste sagt warum",
+                  gesagt(zeilen, rf"You can't invite {ZUSCHAUER_NAME}: tours are switched off")
+                  and "You can't invite him" in er and "tours are switched off" in er
+                  and "Tours are switched off" not in item_text(f.get("slots", {}).get("22")),
+                  f"{zeige(zeilen)} / {er}")
         liste()
         klick(bot, 0)
         seit = zuschauer.mark()
@@ -8011,9 +8031,12 @@ def tourmoderation_checks(env, bot):
         dort = zeilen_seit(zuschauer, seit)
         alle = texte(liste()).get(0, "")
         bot.call("close_window", wait=10)
-        FIND.test("Der Milcheimer hebt sie fuer alle auf, und unter Everybody steht nichts mehr",
-                  gesagt(dort, rf"{BOT_NAME} switched tours on again for everybody") and "No restrictions" in alle,
-                  f"{zeige(dort)} / {alle}")
+        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        FIND.test("Der Milcheimer schaltet sie fuer alle wieder an: er hoert es, unter Everybody steht \"on\", "
+                  "der Bot laedt wieder ein",
+                  gesagt(dort, rf"{BOT_NAME} switched tours on again for everybody") and "Tours are on" in alle
+                  and gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to your tour"),
+                  f"{zeige(dort)} / {alle} / {zeige(zeilen)}")
     finally:
         try:
             bot.call("close_window", wait=10)

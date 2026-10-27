@@ -727,13 +727,14 @@ menu:
       item: filled_map
       slot: 20
     # Die Führungen (camplugin.touradmin, nur mit tour.enabled): zuerst "Alle", dann die Spieler - wer online ist
-    # und wer eingeschränkt ist, auch offline -, darunter, ob er gerade führt oder folgt. Ein Klick öffnet die
-    # Einschränkung: führen (einladen, also eine Führung starten) und teilnehmen (Einladungen annehmen), je ein Knopf
-    # zum Umschalten, für immer oder Tage, Stunden und Minuten wie bei einer Sperre, mit Grund; steht schon etwas,
-    # ändert oder hebt man es dort auf. Sie gilt sofort: wer nicht mehr führen darf, dessen Führung endet, wer nicht
-    # mehr teilnehmen darf, verlässt die, der er folgt. Im Menü steht ihm dann "darfst du nicht" (bei "Alle":
-    # "gerade abgeschaltet"), und wer nicht teilnehmen darf, steht in der Liste zum Einladen mit dem Hinweis, dass
-    # man ihn nicht einladen kann. "Alle" lässt aus, wer camplugin.touradmin.bypass hat (in
+    # und wer eingeschränkt ist, auch offline -, darunter, ob er gerade führt oder folgt. Ein Klick auf einen Spieler
+    # öffnet seine Einschränkung: führen (einladen, also eine Führung starten) und teilnehmen (Einladungen annehmen),
+    # je ein Knopf zum Umschalten; ein Klick auf "Alle" schaltet Führungen für alle an oder aus - aus heißt weder
+    # führen noch teilnehmen, außer wer camplugin.touradmin.bypass hat. Beides für immer oder Tage, Stunden und Minuten
+    # wie bei einer Sperre, mit Grund; steht schon etwas, ändert oder hebt man es dort auf. Es gilt sofort: wer nicht
+    # mehr führen darf, dessen Führung endet, wer nicht mehr teilnehmen darf, verlässt die, der er folgt. Im Menü
+    # steht ihm dann "darfst du nicht" (bei "Alle": "gerade abgeschaltet"), und wer nicht teilnehmen darf, steht in
+    # der Liste zum Einladen mit dem Hinweis, dass man ihn nicht einladen kann (in
     # plugins/CamFly/playerdata/tour-bans.yml).
     tours:
       item: saddle

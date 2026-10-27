@@ -1068,6 +1068,10 @@ public final class CamMenu implements Listener {
         TourModeration moderation = plugin.getTourModeration();
         TourModeration.Hold lead = moderation.hold(player, TourBans.What.LEAD);
         TourModeration.Hold join = moderation.hold(player, TourBans.What.JOIN);
+        if (lead != null && lead.everybody() && join != null && join.everybody()) {
+            // Tours switched off keep him from both: said once.
+            join = null;
+        }
         List<Player> guests = tour.guestsOf(player);
         for (Player guest : guests) {
             String name = guest.getName();
@@ -1137,11 +1141,11 @@ public final class CamMenu implements Listener {
 
     /**
      * A grey item that says what keeps him from leading tours or taking part
-     * in them: his own restriction, or that it is switched off for everybody
-     * - for how long still and why.
+     * in them: his own restriction, or that tours are switched off - for how
+     * long still and why.
      */
     private ItemStack tourKept(TourBans.What what, TourModeration.Hold hold) {
-        String key = "menu-tour-" + what.key + (hold.everybody() ? "-disabled" : "-restricted");
+        String key = hold.everybody() ? "menu-tour-disabled" : "menu-tour-" + what.key + "-restricted";
         return item(Material.GRAY_DYE, messages.getMessage(key),
                 lines(plugin.getTourModeration().fill(messages.getMessage(key + "-lore"), hold)));
     }
@@ -1918,7 +1922,8 @@ public final class CamMenu implements Listener {
         SpotBans.Stage own = draft.stage(SpotBans.Kind.PRIVATE);
         SpotBans.Stage open = draft.stage(SpotBans.Kind.PUBLIC);
         SpotBans.Stage shared = draft.stage(SpotBans.Kind.SHARED);
-        restrictConfirm(page, draft, "menu-admin-spot-restrict", moderation.whatText(own, open, shared), () -> {
+        restrictConfirm(page, draft, "menu-admin-spot-restrict", "menu-admin-spot-unrestrict",
+                moderation.whatText(own, open, shared), () -> {
             if (draft.everybody()) {
                 moderation.banEverybody(player, own, open, shared, draft.minutes, draft.reason);
             } else {
@@ -1992,12 +1997,12 @@ public final class CamMenu implements Listener {
      * grey one that says so -, and while one holds already the one that
      * lifts it. Both go back to the page before.
      *
-     * @param prefix the texts of the page, such as {@code menu-admin-spot-restrict}; the button that lifts
-     *               it has those of {@code menu-admin-spot-unrestrict}
+     * @param prefix the texts of the button that sets it, such as {@code menu-admin-spot-restrict}
+     * @param lifts  the texts of the button that lifts it, such as {@code menu-admin-spot-unrestrict}
      * @param what   what it keeps him from, as its messages put it
      */
-    private void restrictConfirm(Page page, RestrictDraft draft, String prefix, String what, Runnable set,
-                                 Runnable lift, Runnable back) {
+    private void restrictConfirm(Page page, RestrictDraft draft, String prefix, String lifts, String what,
+                                 Runnable set, Runnable lift, Runnable back) {
         if (draft.any()) {
             String summary = what + " " + banTime(draft.minutes);
             if (!draft.reason.isEmpty()) {
@@ -2015,9 +2020,8 @@ public final class CamMenu implements Listener {
             put(page, 31, Material.GRAY_DYE, prefix + "-nothing", click -> { });
         }
         if (draft.change) {
-            String unrestrict = prefix.replace("-restrict", "-unrestrict");
-            put(page, 35, Material.MILK_BUCKET, messages.getMessage(unrestrict),
-                    lines(messages.getMessage(draft.everybody() ? unrestrict + "-everybody-lore" : unrestrict + "-lore")
+            put(page, 35, Material.MILK_BUCKET, messages.getMessage(lifts),
+                    lines(messages.getMessage(draft.everybody() ? lifts + "-everybody-lore" : lifts + "-lore")
                             .replace("{player}", draft.name)),
                     click -> later(() -> {
                         lift.run();
@@ -2092,13 +2096,18 @@ public final class CamMenu implements Listener {
                     : list.get(index - 1).getValue();
             List<String> lore = new ArrayList<>(id == null
                     ? lines(messages.getMessage("menu-admin-tours-everybody-lore")) : tourLines(id));
-            lore.addAll(restrictionLines(id == null ? moderation.everybodyText() : moderation.banText(id)));
-            lore.addAll(lines(messages.getMessage("menu-admin-tours-actions")));
+            lore.addAll(id == null ? switchLines(moderation.offText()) : restrictionLines(moderation.banText(id)));
+            lore.addAll(lines(messages.getMessage(id == null ? "menu-admin-tours-everybody-actions"
+                    : "menu-admin-tours-actions")));
             ItemStack item = id == null ? everybodyItem(lore, moderation.everybodyBan() != null)
                     : playerItem(id, name, lore, moderation.banOf(id) != null);
             put(page, slot, item, click -> later(() -> {
                 tourDrafts.put(player.getUniqueId(), tourDraft(id, name));
-                openTourBan(player);
+                if (id == null) {
+                    openTourSwitch(player);
+                } else {
+                    openTourBan(player);
+                }
             }));
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
@@ -2124,9 +2133,16 @@ public final class CamMenu implements Listener {
                 : messages.getMessage("menu-admin-tours-none"));
     }
 
+    /** Whether tours are on for everybody, or off - for how long still and why -, as lines. */
+    private List<String> switchLines(String off) {
+        return lines(off == null ? messages.getMessage("menu-admin-tours-on")
+                : messages.getMessage("menu-admin-tours-off").replace("{ban}", off));
+    }
+
     /**
-     * A new restriction of tours for him, or for everybody - nothing picked
-     * yet, for good, without a reason - or the one that holds, to be changed.
+     * A new restriction of tours for him - nothing picked yet, for good,
+     * without a reason - or the one that holds, to be changed; for everybody,
+     * tours on, or off as they are.
      *
      * @param id the player, {@code null} for everybody
      */
@@ -2146,11 +2162,11 @@ public final class CamMenu implements Listener {
     }
 
     /**
-     * What a player, or everybody, may not do with tours, before it is set or
-     * changed: lead them - invite players, which starts one - and take part
-     * in them - accept an invitation -, each switched on its button; then the
-     * time and the reason, see {@link #restrictTimeAndReason}, and the button
-     * that sets it.
+     * What a player may not do with tours, before it is set or changed: lead
+     * them - invite players, which starts one - and take part in them -
+     * accept an invitation -, each switched on its button; then the time and
+     * the reason, see {@link #restrictTimeAndReason}, and the button that
+     * sets it.
      */
     private void openTourBan(Player player) {
         TourBanDraft draft = tourDrafts.get(player.getUniqueId());
@@ -2167,27 +2183,64 @@ public final class CamMenu implements Listener {
         Inventory inventory = create(page, MEDIUM, messages.getMessage(draft.change
                 ? "menu-admin-tour-restrict-change-title" : "menu-admin-tour-restrict-title")
                 .replace("{player}", draft.name));
-        String now = draft.everybody() ? moderation.everybodyText() : moderation.banText(draft.id);
-        put(page, 4, restrictTarget(draft, restrictionLines(now)), click -> { });
+        put(page, 4, restrictTarget(draft, restrictionLines(moderation.banText(draft.id))), click -> { });
         restrictToggle(player, page, draft, TourBans.What.LEAD, 12, Material.LEAD);
         restrictToggle(player, page, draft, TourBans.What.JOIN, 14, Material.SADDLE);
         restrictTimeAndReason(player, page, draft, "menu-admin-tour-restrict-reason-question",
                 () -> openTourBan(player));
         boolean lead = draft.kept.contains(TourBans.What.LEAD);
         boolean join = draft.kept.contains(TourBans.What.JOIN);
-        restrictConfirm(page, draft, "menu-admin-tour-restrict", moderation.whatText(lead, join), () -> {
-            if (draft.everybody()) {
-                moderation.banEverybody(player, lead, join, draft.minutes, draft.reason);
-            } else {
-                moderation.ban(player, draft.id, draft.name, lead, join, draft.minutes, draft.reason);
-            }
-        }, () -> {
-            if (draft.everybody()) {
-                moderation.unbanEverybody(player);
-            } else {
-                moderation.unban(player, draft.id, draft.name);
-            }
-        }, back);
+        restrictConfirm(page, draft, "menu-admin-tour-restrict", "menu-admin-tour-unrestrict",
+                moderation.whatText(lead, join),
+                () -> moderation.ban(player, draft.id, draft.name, lead, join, draft.minutes, draft.reason),
+                () -> moderation.unban(player, draft.id, draft.name), back);
+        put(page, 27, Material.ARROW, "menu-to-tour-players", click -> later(back));
+        player.openInventory(inventory);
+    }
+
+    /**
+     * Tours for everybody, on or off, before it is set or changed: one
+     * button switches between the two - off, nobody leads tours or takes part
+     * in them but whoever has {@value TourModeration#BYPASS} -; then for how
+     * long and why, see {@link #restrictTimeAndReason}, and the button that
+     * switches them off. While they are off, the last row has the button that
+     * switches them on again.
+     */
+    private void openTourSwitch(Player player) {
+        TourBanDraft draft = tourDrafts.get(player.getUniqueId());
+        TourModeration moderation = plugin.getTourModeration();
+        if (draft == null || !draft.everybody() || !moderation.mayUse(player)) {
+            openTourPlayers(player, 0);
+            return;
+        }
+        Runnable back = () -> {
+            tourDrafts.remove(player.getUniqueId());
+            openTourPlayers(player, 0);
+        };
+        Page page = new Page();
+        Inventory inventory = create(page, MEDIUM, messages.getMessage(draft.change
+                ? "menu-admin-tour-off-change-title" : "menu-admin-tour-off-title"));
+        put(page, 4, everybodyItem(switchLines(moderation.offText()), draft.change), click -> { });
+        boolean off = draft.any();
+        List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-tour-switch-lore")));
+        lore.addAll(stateLine(messages.getMessage("menu-admin-tour-switch-on"), !off));
+        lore.addAll(stateLine(messages.getMessage("menu-admin-tour-switch-off"), off));
+        lore.addAll(lines(messages.getMessage("menu-admin-restrict-switch")));
+        put(page, 13, shine(item(Material.SADDLE, messages.getMessage("menu-admin-tour-switch"), lore), off),
+                click -> later(() -> {
+                    if (off) {
+                        draft.kept.clear();
+                    } else {
+                        draft.kept.addAll(EnumSet.allOf(TourBans.What.class));
+                    }
+                    openTourSwitch(player);
+                }));
+        restrictTimeAndReason(player, page, draft, "menu-admin-tour-off-reason-question",
+                () -> openTourSwitch(player));
+        restrictConfirm(page, draft, "menu-admin-tour-off", "menu-admin-tour-on",
+                messages.getMessage("menu-admin-tour-switch-off"),
+                () -> moderation.switchOff(player, draft.minutes, draft.reason), () -> moderation.switchOn(player),
+                back);
         put(page, 27, Material.ARROW, "menu-to-tour-players", click -> later(back));
         player.openInventory(inventory);
     }
