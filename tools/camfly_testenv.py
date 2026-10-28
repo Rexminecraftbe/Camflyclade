@@ -1233,9 +1233,12 @@ bot._client.on('entity_metadata', (packet) => {
 // (Paket entity_equipment mit der eigenen Nummer: Platz 0 die Hand, 1 die
 // zweite Hand) - eine Fuehrung ohne Cam-Modus malt ihm so die Items des
 // Fuehrers hinein. Dazu, wie oft das ganze eigene Inventar neu kam
-// (window_items von Fenster 0), was das Bild wieder wegnimmt.
+// (window_items von Fenster 0), was das Bild wieder wegnimmt, und wann der
+// Server zuletzt etwas davon schickte - das ganze oder einen Platz daraus
+// (set_slot von Fenster 0).
 const ownEquipment = [];
 let inventoryResends = 0;
+let lastInventoryResend = 0;
 bot._client.on('entity_equipment', (packet) => {
   if (!bot.entity || packet.entityId !== bot.entity.id) return;
   for (const e of packet.equipments || []) {
@@ -1246,7 +1249,13 @@ bot._client.on('entity_equipment', (packet) => {
   }
 });
 bot._client.on('window_items', (packet) => {
-  if (Number(packet.windowId) === 0) inventoryResends++;
+  if (Number(packet.windowId) === 0) {
+    inventoryResends++;
+    lastInventoryResend = Date.now();
+  }
+});
+bot._client.on('set_slot', (packet) => {
+  if (Number(packet.windowId) === 0) lastInventoryResend = Date.now();
 });
 // Wie stark es regnet, so wie der echte Client es rechnet: Ereignis 1
 // (START_RAINING) setzt den Regen auf 0, von wo ihn die Ereignisse 7 steigen
@@ -1843,7 +1852,7 @@ async function handle(cmd) {
     }
     case 'own_equipment':
       return { packets: ownEquipment.slice(cmd.since || 0), count: ownEquipment.length,
-               resends: inventoryResends };
+               resends: inventoryResends, last_resend: lastInventoryResend };
     case 'quit':
       setTimeout(() => process.exit(0), 200);
       try { bot.quit(); } catch (e) { /* egal */ }
@@ -6099,24 +6108,28 @@ def gaestebuch_datei(env):
 
 
 def gaestebuch_checks(env, bot):
-    """viewpoints.guestbook: wer einen Punkt hat, erfaehrt, wer ihn sich
-    ansieht und wer ihn liked.
+    """viewpoints.guestbook: wer einen Punkt hat, erfaehrt, wie oft er
+    angesehen und geliked wurde - gesammelt, nicht sofort.
 
-    Voreingestellt ist es an - nachgesehen in der Datei, die das Plugin
-    mitbringt; der Test stellt views-cooldown-minutes auf 0. Der Bot macht
-    den Punkt "Buch" oeffentlich. Springt der zweite Spieler hin, liest der
-    Bot "Guestbook: CamFlyZuschauer looked at your spot Buch", liked er ihn,
-    dass er ihn liked; nimmt er das Like zurueck, steht nichts da, und der
-    eigene Sprung des Bots auch nicht. Im Menue steht auf der Seite der Punkte
-    unten auf Platz 47, links neben den Reitern, die Glocke - an, und sie
-    glaenzt; ein Klick schaltet sie aus, und der Bot erfaehrt vom naechsten
-    Sprung nichts mehr; ein zweiter schaltet sie wieder an.
+    Voreingestellt ist es an, mit guestbook-interval-minutes: 10 -
+    nachgesehen in der Datei, die das Plugin mitbringt; der Test stellt
+    views-cooldown-minutes auf 0 und guestbook-interval-minutes auf 1. Der Bot
+    macht den Punkt "Buch" oeffentlich. Springt der zweite Spieler zweimal
+    hin, liked ihn, nimmt das Like zurueck und liked ihn wieder, liest der
+    Bot davon nichts sofort, sondern mit der naechsten Minute ein einziges
+    Mal "Guestbook: what your spots got in the last 1 minutes" und
+    "- Buch: 2 views, 1 likes" - der eigene Sprung des Bots zaehlt nicht.
 
-    Ist der Besitzer offline, sammelt das Gaestebuch: der zweite Spieler macht
-    seinen Punkt "Gast" oeffentlich und geht, der Bot springt hin und liked
-    ihn - in playerdata/spot-guestbook.yml steht es -, und kommt er wieder,
-    liest er "- Gast: 1 views, 1 likes", und die Datei hat es nicht mehr.
-    Mit viewpoints.guestbook: false fehlt die Glocke.
+    Im Menue steht auf der Seite der Punkte unten auf Platz 47, links neben
+    den Reitern, die Glocke: an, sie glaenzt, und sie sagt, dass es jede
+    Minute kommt. Ein Klick stellt sie auf "nur beim Login", noch einer auf
+    aus. Der zweite Spieler macht seinen Punkt "Gast" oeffentlich und stellt
+    seine Glocke auf "nur beim Login". Springt jeder zum Punkt des anderen -
+    der Bot liked "Gast" -, liest auch nach der naechsten Minute keiner
+    etwas; playerdata/spot-guestbook.yml hat beider Einstellung und was
+    "Gast" bekam. Kommt der zweite Spieler neu herein, liest er
+    "- Gast: 1 views, 1 likes", und die Datei hat es nicht mehr. Mit
+    viewpoints.guestbook: false fehlt die Glocke.
     """
     def fenster(client):
         return client.call("window_slots", wait=10)
@@ -6130,6 +6143,16 @@ def gaestebuch_checks(env, bot):
         klick(client, 10)
         return fenster(client).get("slots", {})
 
+    def glocke_klicken(client):
+        """Ein Klick auf die Glocke: was er liest, und wie sie danach aussieht."""
+        punkte(client)
+        seit = client.mark()
+        klick(client, 47)
+        glocke = fenster(client).get("slots", {}).get("47") or {}
+        gelesen = zeilen_seit(client, seit)
+        client.call("close_window", wait=10)
+        return gelesen, glocke
+
     if not FIND.test("Cam-Modus ist vor dem Test des Gaestebuchs aus", cam_off(bot), ""):
         return
     heim = bot.server_pos()
@@ -6142,9 +6165,10 @@ def gaestebuch_checks(env, bot):
             pause=0.5)
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
     try:
-        FIND.test("Voreingestellt steht viewpoints.guestbook: true da",
-                  re.search(r"(?m)^\s+guestbook:\s*true\s*$", quelle_config(env)) is not None, "")
-        set_option(env, "views-cooldown-minutes", "0", "viewpoints")
+        quelle = quelle_config(env)
+        FIND.test("Voreingestellt stehen viewpoints.guestbook: true und guestbook-interval-minutes: 10 da",
+                  re.search(r"(?m)^\s+guestbook:\s*true\s*$", quelle) is not None
+                  and re.search(r"(?m)^\s+guestbook-interval-minutes:\s*10\s*$", quelle) is not None, "")
         spots_loeschen(bot, "Buch")
         bot.chat(f"/tp {BOT_NAME} {punkt[0]} {y} {z} -90 0")
         time.sleep(1.0)
@@ -6160,66 +6184,76 @@ def gaestebuch_checks(env, bot):
         befehl(zuschauer, "/cam spot delete Gast")
         console(env, f"tp {ZUSCHAUER_NAME} {x + 2} {y} {z + 2}", pause=1.0)
 
+        # Die Uhr des Gaestebuchs startet mit dem Neuladen: Alles hier
+        # geschieht in ihrer ersten Minute.
+        set_options(env, [("views-cooldown-minutes", "0", "viewpoints"),
+                          ("guestbook-interval-minutes", "1", "viewpoints")])
         seit = bot.mark()
         dort = befehl(zuschauer, f"/cam spot {label}", warten=3.0)
-        hier = zeilen_seit(bot, seit)
-        FIND.test("Springt ein anderer zum Punkt, liest der Besitzer, wer es war",
-                  gesagt(dort, r"At spot") and gesagt(hier, rf"Guestbook: {ZUSCHAUER_NAME} looked at your spot Buch"),
-                  f"{zeige(dort)} / {zeige(hier)}")
-        seit = bot.mark()
+        befehl(zuschauer, f"/cam spot {label}", warten=3.0)
         befehl(zuschauer, f"/cam spot like {label}")
-        hier = zeilen_seit(bot, seit)
-        FIND.test("Liked er ihn, liest der Besitzer auch das",
-                  gesagt(hier, rf"Guestbook: {ZUSCHAUER_NAME} likes your spot Buch"), zeige(hier))
-        seit = bot.mark()
+        befehl(zuschauer, f"/cam spot like {label}")
         befehl(zuschauer, f"/cam spot like {label}")
         befehl(bot, "/cam spot Buch", warten=3.0)
         hier = zeilen_seit(bot, seit)
-        FIND.test("Ein zurueckgenommenes Like und der eigene Sprung stehen nicht im Gaestebuch",
-                  not gesagt(hier, r"Guestbook"), zeige(hier))
+        FIND.test("Springt ein anderer zum Punkt und liked ihn, liest der Besitzer davon nicht sofort etwas",
+                  gesagt(dort, r"At spot") and not gesagt(hier, r"Guestbook"), f"{zeige(dort)} / {zeige(hier)}")
         cam_off(bot)
+        bot.expect(r"Guestbook: what your spots got in the last 1 minutes", seit, timeout=75000)
+        um = time.time()
+        time.sleep(1.0)
+        hier = zeilen_seit(bot, seit)
+        FIND.test("Mit der naechsten Minute liest er es einmal: zwei Aufrufe und ein Like - das zurueckgenommene "
+                  "und sein eigener Sprung zaehlen nicht",
+                  sum(1 for zeile in hier if "Guestbook" in zeile) == 1
+                  and gesagt(hier, r"Guestbook: what your spots got in the last 1 minutes")
+                  and gesagt(hier, r"- Buch: 2 views, 1 likes"), zeige(hier))
 
         knopf = punkte(bot)
         glocke = knopf.get("47") or {}
-        FIND.test("Im Menue: unten auf 47, links neben den Reitern, die Glocke - an, und sie glaenzt",
-                  "Guestbook" in item_text(glocke) and "Now: on" in item_text(glocke) and glocke.get("glint") is True,
+        FIND.test("Im Menue: unten auf 47, links neben den Reitern, die Glocke - an, sie glaenzt und sagt, wie oft "
+                  "es kommt",
+                  "Guestbook" in item_text(glocke) and "Now: on" in item_text(glocke)
+                  and "Updates every 1 min while you play" in item_text(glocke) and glocke.get("glint") is True,
                   item_text(glocke))
-        seit = bot.mark()
-        klick(bot, 47)
-        hier = zeilen_seit(bot, seit)
-        glocke = fenster(bot).get("slots", {}).get("47") or {}
-        FIND.test("Ein Klick auf die Glocke schaltet das Gaestebuch aus",
+        bot.call("close_window", wait=10)
+        hier, glocke = glocke_klicken(bot)
+        FIND.test("Ein Klick auf die Glocke: nur beim Login",
+                  gesagt(hier, r"Guestbook only at login") and "Now: only at login" in item_text(glocke)
+                  and glocke.get("glint") is True, f"{zeige(hier)} / {item_text(glocke)}")
+        hier, glocke = glocke_klicken(bot)
+        FIND.test("Noch ein Klick: aus",
                   gesagt(hier, r"Guestbook off") and "Now: off" in item_text(glocke) and not glocke.get("glint"),
                   f"{zeige(hier)} / {item_text(glocke)}")
-        bot.call("close_window", wait=10)
-        seit = bot.mark()
-        befehl(zuschauer, f"/cam spot {label}", warten=2.0)
-        hier = zeilen_seit(bot, seit)
-        FIND.test("Ausgeschaltet erfaehrt der Besitzer nichts", not gesagt(hier, r"Guestbook"), zeige(hier))
-        punkte(bot)
-        seit = bot.mark()
-        klick(bot, 47)
-        hier = zeilen_seit(bot, seit)
-        FIND.test("Ein zweiter Klick schaltet es wieder an", gesagt(hier, r"Guestbook on"), zeige(hier))
-        bot.call("close_window", wait=10)
 
-        cam_off(zuschauer)
         console(env, f"tp {ZUSCHAUER_NAME} {x - 2} {y} {z} 90 0", pause=1.0)
         befehl(zuschauer, "/cam spot set Gast")
         befehl(zuschauer, "/cam spot share Gast all")
-        zuschauer.stop()
-        time.sleep(2.0)
+        dort, _ = glocke_klicken(zuschauer)
+        seit, seit_gast = bot.mark(), zuschauer.mark()
+        befehl(zuschauer, f"/cam spot {label}", warten=3.0)
+        cam_off(zuschauer)
         befehl(bot, f"/cam spot {ZUSCHAUER_NAME}:Gast", warten=3.0)
         befehl(bot, f"/cam spot like {ZUSCHAUER_NAME}:Gast")
         cam_off(bot)
+        # Bis nach dem naechsten Schlag der Uhr, eine Minute nach dem letzten.
+        time.sleep(max(0.0, 63.0 - (time.time() - um) % 60.0))
+        hier, dort = zeilen_seit(bot, seit), zeilen_seit(zuschauer, seit_gast)
+        FIND.test("Aus und \"nur beim Login\": nach der naechsten Minute liest keiner etwas",
+                  not gesagt(hier, r"Guestbook") and not gesagt(dort, r"Guestbook"), f"{zeige(hier)} / {zeige(dort)}")
         text = gaestebuch_datei(env)
-        FIND.test("Ist der Besitzer offline, steht es in playerdata/spot-guestbook.yml",
-                  re.search(r"(?s)news:\s*\n\s*gast:\s*\n\s*views:\s*1\b", text) is not None, text[-300:] or "keine Datei")
+        FIND.test("In playerdata/spot-guestbook.yml stehen beider Einstellung und was \"Gast\" bekam",
+                  re.search(r"(?m)^\s*mode:\s*'off'\s*$", text) is not None
+                  and re.search(r"(?m)^\s*mode:\s*login\s*$", text) is not None
+                  and re.search(r"(?s)news:\s*\n\s*gast:\s*\n\s*views:\s*1\b", text) is not None,
+                  text[-400:] or "keine Datei")
+        zuschauer.stop()
+        time.sleep(2.0)
         zuschauer.start()
         da = zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned")
         time.sleep(4.0)
         dort = zeilen_seit(zuschauer, 0)
-        FIND.test("Kommt er wieder, liest er, was seine Punkte seitdem bekamen",
+        FIND.test("\"Nur beim Login\": kommt er neu herein, liest er, was sein Punkt bekam",
                   bool(da) and gesagt(dort, r"Guestbook: what your spots got since you were last here")
                   and gesagt(dort, r"- Gast: 1 views, 1 likes"), zeige(dort))
         FIND.test("Danach steht es nicht mehr in der Datei", "gast:" not in gaestebuch_datei(env),
@@ -6240,7 +6274,12 @@ def gaestebuch_checks(env, bot):
             bot.call("close_window", wait=10)
             cam_off(bot)
             spots_loeschen(bot, "Buch")
-            set_options(env, [("guestbook", "true", "viewpoints"), ("views-cooldown-minutes", "10", "viewpoints")])
+            # Die Glocken beider wieder auf an: Das Neuladen liest die Datei neu.
+            datei = env.server / "plugins" / "CamFly" / "playerdata" / "spot-guestbook.yml"
+            if datei.exists():
+                datei.unlink()
+            set_options(env, [("guestbook", "true", "viewpoints"), ("views-cooldown-minutes", "10", "viewpoints"),
+                              ("guestbook-interval-minutes", "10", "viewpoints")])
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test des Gaestebuchs: {exc}")
@@ -6908,6 +6947,30 @@ def fuehrung_ohne_cam_checks(env, bot):
         FIND.test("Am Server bleiben die Haende des Gastes leer",
                   not server_says(bot, f"/execute if items entity {ZUSCHAUER_NAME} weapon.* * run say {{marke}}"),
                   "")
+
+        # Sein Client haelt Schwert und Schild fuer seine eigenen und klickt
+        # damit. Den Klick auf seinen Koerper lehnt der Server ab und schickt
+        # ihm dafuer seine eigene, leere Hand - im selben Tick kommen beide
+        # wieder, und nicht erst bei der naechsten Auffrischung, bis zu zehn
+        # Ticks spaeter: Bis dahin flackerten sie weg.
+        hinstellen(bot, x - 5, y, z)
+        time.sleep(1.5)
+        vorher = zuschauer.call("own_equipment")
+        seit = zuschauer.mark()
+        zuschauer.call("activate_entity", wait=20, at=list(gast), radius=2)
+        time.sleep(1.0)
+        dort = zeilen_seit(zuschauer, seit)
+        nachher = zuschauer.call("own_equipment", since=vorher.get("count", 0))
+        neu_um = nachher.get("last_resend", 0)
+        wieder = {p.get("slot") for p in nachher.get("packets", [])
+                  if p.get("count", 0) > 0 and 0 <= p.get("t", 0) - neu_um < 40}
+        FIND.test("Klickt der Gast seinen Koerper an, schickt der Server seine leere Hand - Schwert und Schild "
+                  "kommen im selben Tick wieder",
+                  gesagt(dort, rf"You follow {BOT_NAME}: stop that first")
+                  and neu_um > vorher.get("last_resend", 0) and wieder == {0, 1},
+                  f"{zeige(dort)} / {neu_um} / {nachher.get('packets', [])[-6:]}")
+        hinstellen(bot, x, y, z)
+        time.sleep(1.5)
 
         resends = zuschauer.call("own_equipment").get("resends", 0)
         seit = bot.mark()
@@ -8386,8 +8449,8 @@ def tourmoderation_checks(env, bot):
         f = fenster(bot)
         teilnehmen = item_text(f.get("slots", {}).get("14"))
         FIND.test("Teilnehmen umgeschaltet: nicht erlaubt, der Knopf glaenzt",
-                  "» no taking part" in teilnehmen and (f.get("slots", {}).get("14") or {}).get("glint") is True
-                  and "no taking part for good" in item_text(f.get("slots", {}).get("31")), teilnehmen)
+                  "» no following" in teilnehmen and (f.get("slots", {}).get("14") or {}).get("glint") is True
+                  and "no following for good" in item_text(f.get("slots", {}).get("31")), teilnehmen)
         seit, hier_seit = zuschauer.mark(), bot.mark()
         klick(bot, 31, warten=2.0)
         dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, hier_seit)

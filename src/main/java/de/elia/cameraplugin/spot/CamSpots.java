@@ -51,7 +51,7 @@ import java.util.regex.Pattern;
  * down or drop it again, {@code /cam spot decline}, see {@link SharedSpots}.
  * Every jump to a spot and every visit is a view of it, see
  * {@link SpotViews}: the menu shows them under each spot and sorts by
- * them. Who looked at his spots and liked them, he hears from the
+ * them. How often his spots were looked at and liked, he hears from the
  * guestbook, see {@link SpotGuestbook}.
  * Others jump to a spot they may use as to one of their own,
  * {@code /cam spot Owner:spot} - by the same rules, held from their own body

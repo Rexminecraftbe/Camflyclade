@@ -116,6 +116,9 @@ public final class CamSettings {
     /** The longest {@code viewpoints.views-cooldown-minutes} accepts: a day. */
     private static final int MAX_VIEWS_COOLDOWN_MINUTES = 1440;
 
+    /** The longest {@code viewpoints.guestbook-interval-minutes} accepts: a day. */
+    private static final int MAX_GUESTBOOK_INTERVAL_MINUTES = 1440;
+
     /** The levels of {@code signal.levels}, from the most bars down, as the config file names them. */
     private static final String[] SIGNAL_LEVEL_NAMES = {"excellent", "good", "medium", "weak"};
 
@@ -392,8 +395,10 @@ public final class CamSettings {
     private boolean tourMirrorMainHand;
     /** Whether they see the item in his off hand in theirs, {@code follow.mirror-off-hand}. */
     private boolean tourMirrorOffHand;
-    /** Whether the owner of a spot hears who looked at it and liked it, {@code viewpoints.guestbook}. */
+    /** Whether the owner of a spot hears how often it was looked at and liked, {@code viewpoints.guestbook}. */
     private boolean viewpointsGuestbook;
+    /** How often the guestbook tells the owners online what came, {@code viewpoints.guestbook-interval-minutes}. */
+    private int guestbookIntervalMinutes;
     /** How close a player out of camera mode has to be to a spot to jump there, {@code viewpoints.start-distance}. */
     private double viewpointsStartDistance;
     /** How long the same player at the same spot is no new view, {@code viewpoints.views-cooldown-minutes}. */
@@ -770,6 +775,8 @@ public final class CamSettings {
         tourMirrorMainHand = config.getBoolean(follow + ".mirror-main-hand", true);
         tourMirrorOffHand = config.getBoolean(follow + ".mirror-off-hand", true);
         viewpointsGuestbook = config.getBoolean("viewpoints.guestbook", true);
+        guestbookIntervalMinutes = config.getInt("viewpoints.guestbook-interval-minutes", 10, 1,
+                MAX_GUESTBOOK_INTERVAL_MINUTES);
         viewpointsStartDistance = config.getDouble("viewpoints.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
         viewsCooldownMinutes = config.getInt("viewpoints.views-cooldown-minutes", 10, 0, MAX_VIEWS_COOLDOWN_MINUTES);
         resumeEnabled = config.getBoolean("resume-command.enabled", true);
@@ -1730,6 +1737,10 @@ public final class CamSettings {
      */
     public boolean isGuestbookEnabled() {
         return isViewpointsSharing() && viewpointsGuestbook;
+    }
+
+    public int getGuestbookIntervalMinutes() {
+        return guestbookIntervalMinutes;
     }
 
     /**

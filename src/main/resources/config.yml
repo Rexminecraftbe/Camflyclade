@@ -647,13 +647,14 @@ menu:
       item: recovery_compass
       slot: 12
     # Die Aussichtspunkte auf drei Reitern: die eigenen (alle, auch die öffentlichen - sie zählen zu max-per-player),
-    # öffentlich (die von allen, eigene dabei) und geteilt (was andere einem geteilt haben, und was sie einem
-    # anbieten - das muss man erst annehmen). Unten von links: zurück, die Seite davor, die Glocke des Gästebuchs
-    # (viewpoints.guestbook: an oder aus), die drei Reiter, der Filter (sortieren), die Seite danach und ganz rechts der
-    # Knopf für einen neuen Punkt: Linksklick privat, Rechtsklick öffentlich - ein öffentlicher bleibt einer der
-    # eigenen und lässt sich auf der öffentlichen Seite mit Rechtsklick wieder offline nehmen, ohne ihn zu löschen. Ein Linksklick auf einen Punkt springt hin, auf einen geteilten oder
-    # öffentlichen genauso wie auf einen eigenen: nur, wohin die Kamera auch fliegen dürfte; ohne Cam-Modus startet er
-    # erst, wenn der Punkt nah genug ist (viewpoints.start-distance).
+    # öffentlich (die von allen, eigene dabei) und geteilt (was andere einem geteilt haben, und was sie einem anbieten -
+    # das muss man erst annehmen). Unten von links: zurück, die Seite davor, die Glocke des Gästebuchs
+    # (viewpoints.guestbook: an, nur beim Login oder aus), die drei Reiter, der Filter (sortieren), die Seite danach und
+    # ganz rechts der Knopf für einen neuen Punkt: Linksklick privat, Rechtsklick öffentlich - ein öffentlicher bleibt
+    # einer der eigenen und lässt sich auf der öffentlichen Seite mit Rechtsklick wieder offline nehmen, ohne ihn zu
+    # löschen. Ein Linksklick auf einen Punkt springt hin, auf einen geteilten oder öffentlichen genauso wie auf einen
+    # eigenen: nur, wohin die Kamera auch fliegen dürfte; ohne Cam-Modus startet er erst, wenn der Punkt nah genug ist
+    # (viewpoints.start-distance).
     # Umschalt-Klick besucht einen Punkt eines anderen (visitor-camera). Wartet ein Angebot, glänzt der Knopf.
     spots:
       item: filled_map
@@ -829,15 +830,22 @@ viewpoints:
   # Wie lange derselbe Spieler am selben Punkt nicht noch einmal als Aufruf zählt, in Minuten (0 bis 1440, 0 = jeder
   # Sprung und jeder Besuch zählt). So treibt Hin- und Herspringen die Zahl nicht hoch.
   views-cooldown-minutes: 10
-  # Das Gästebuch: Wer einen Punkt hat, erfährt, wer ihn sich ansieht (springt hin oder besucht ihn) und wer ihn liked -
-  # nur andere zählen, und nur so oft, wie es als Aufruf zählt (views-cooldown-minutes). Ist der Besitzer online, steht
-  # es gleich im Chat, mit dem Namen (Texte: spot-guestbook-viewed, spot-guestbook-liked). Ist er offline, steht beim
-  # nächsten Beitritt, wie viele Aufrufe und Likes jeder seiner Punkte seitdem bekam (Texte: spot-guestbook-header,
-  # spot-guestbook-entry); ein Like, das bis dahin zurückgenommen wurde, zählt nicht. Jeder schaltet es für sich mit
-  # der Glocke im Menü aus und wieder an (unten auf den Seiten der Punkte, links neben den Reitern) - ausgeschaltet
-  # wird für ihn auch nichts gesammelt. Gespeichert nach storage, in plugins/CamFly/playerdata/spot-guestbook.yml.
-  # Geht nur mit sharing: true - private Punkte sieht sich niemand sonst an.
+  # Das Gästebuch: Wer einen Punkt hat, erfährt, wie oft er angesehen (hingesprungen oder besucht) und geliked wurde -
+  # nur andere zählen, und nur so oft, wie es als Aufruf zählt (views-cooldown-minutes). Nichts davon kommt sofort: Es
+  # wird gesammelt und als Zahl je Punkt erzählt (Text: spot-guestbook-entry), so kann niemand einem anderen mit
+  # Springen oder Liken und Entliken den Chat füllen - ein Like, das bis dahin zurückgenommen wurde, zählt nicht. Jeder
+  # stellt mit der Glocke im Menü ein (unten auf den Seiten der Punkte, links neben den Reitern), wie er es erfährt:
+  #   an                = alle guestbook-interval-minutes, solange er spielt (Text: spot-guestbook-update), und was
+  #                       kam, während er weg war, wenn er beitritt (Text: spot-guestbook-header) - so steht es am
+  #                       Anfang
+  #   nur beim Login    = alles erst, wenn er beitritt
+  #   aus               = gar nicht, und für ihn wird auch nichts gesammelt
+  # Gespeichert nach storage, in plugins/CamFly/playerdata/spot-guestbook.yml. Geht nur mit sharing: true - private
+  # Punkte sieht sich niemand sonst an.
   guestbook: true
+  # Wie oft das Gästebuch denen, die es auf "an" haben, während sie spielen erzählt, was ihre Punkte bekamen, in
+  # Minuten (1 bis 1440). Die Glocke im Menü nennt es.
+  guestbook-interval-minutes: 10
 
 # Besucher-Kamera: /cam visit <Spieler>:<Name> - die Kamera geht zu einem Punkt, den ein anderer mit einem teilt oder
 # der öffentlich ist, von überall aus, z. B. um sich den Bau eines Freundes zeigen zu lassen. Ohne Cam-Modus startet er dafür erst (mit allem,

@@ -19,12 +19,14 @@ import java.util.UUID;
  * <p>All of it goes to the client of the guest only, through
  * {@code sendHealthUpdate} and {@code sendEquipmentChange}: on the server his
  * health stays his, and his hands stay as empty as camera mode keeps them.
- * There is nothing he could take, drop or use, the rest of the guide's
- * inventory he never sees, and a click into his own takes the pictures away
- * until they are sent again. They are sent again every
- * {@value #REFRESH} ticks anyway, and whenever the guide's hearts or items
- * change, so whatever the server sends him of his own in between - a hit on
- * his body - does not stay either.</p>
+ * There is nothing he could take, drop or use, and the rest of the guide's
+ * inventory he never sees. His client does use the pictures like his own,
+ * though, and whatever the server turns down of that - a click on a block, on
+ * a body, into his inventory - it answers with his own empty hands: the tour
+ * has the pictures sent again in the same tick, see {@link #again}. They are
+ * sent again every {@value #REFRESH} ticks anyway, and whenever the guide's
+ * hearts or items change, so whatever else the server sends him of his own in
+ * between - a hit on his body - does not stay either.</p>
  *
  * <p>Once he is off the tour, or his guide starts camera mode, which empties
  * the guide's hands, the client is sent his own health and his own empty hands
@@ -54,6 +56,8 @@ final class GuideMirror {
         int slot = -1;
         /** Ticks since everything was last sent. */
         int sinceRefresh;
+        /** Whether everything is sent at the next update, whatever the time. */
+        boolean again;
     }
 
     GuideMirror(CamSettings settings) {
@@ -66,9 +70,10 @@ final class GuideMirror {
      */
     void update(Player guide, Player guest) {
         Shown state = shown.computeIfAbsent(guest.getUniqueId(), id -> new Shown());
-        boolean refresh = ++state.sinceRefresh >= REFRESH;
+        boolean refresh = state.again || ++state.sinceRefresh >= REFRESH;
         if (refresh) {
             state.sinceRefresh = 0;
+            state.again = false;
         }
         if (settings.isTourMirrorHealth()) {
             double health = guide.getHealth();
@@ -112,6 +117,17 @@ final class GuideMirror {
             guest.sendEquipmentChange(guest, hand, now);
         }
         return now.clone();
+    }
+
+    /**
+     * Has everything sent to the guest again at the next update: the server
+     * has just sent him his own empty hands.
+     */
+    void again(UUID guest) {
+        Shown state = shown.get(guest);
+        if (state != null) {
+            state.again = true;
+        }
     }
 
     /** Puts back on his client what is his: his own health and his own hands. */

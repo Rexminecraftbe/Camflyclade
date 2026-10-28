@@ -192,9 +192,10 @@ messages:
   # menu-spot-reach-lore stands under every spot that can be jumped to: how close one has to be to jump there.
   # menu-spot-views: how often the spot was looked at ({views}): every jump and every visit, by anybody, the same
   # player at the same spot once in viewpoints.views-cooldown-minutes at most, which menu-spot-views-hint says under
-  # it ({minutes}; not at 0, when every jump counts). menu-guestbook is the bell on the pages of the spots that
-  # switches the guestbook (viewpoints.guestbook) on and off for him: menu-state with menu-state-on or -off, then
-  # menu-guestbook-action.
+  # it ({minutes}; not at 0, when every jump counts). menu-guestbook is the bell on the pages of the spots that sets
+  # how the guestbook (viewpoints.guestbook) tells him of his spots: menu-guestbook-interval says how often while he
+  # plays ({minutes}, viewpoints.guestbook-interval-minutes), menu-state how it stands - menu-state-on,
+  # menu-guestbook-login or menu-state-off -, then menu-guestbook-action.
   # menu-new-spot-count says on the button of a new spot how many spots he has ({count}), may have ({max},
   # viewpoints.max-per-player) and may still save ({left}); -full once there is no room left, -unlimited without a
   # limit. menu-sort is the button that sorts a list, {sort} being one of the menu-sort-... orders; under it every
@@ -384,8 +385,10 @@ messages:
   menu-end-lore: "&7Back to your body."
   menu-features-off: "&cThat is switched off on this server."
   menu-guestbook: "&6Guestbook"
-  menu-guestbook-action: "&eClick: switch on or off"
-  menu-guestbook-lore: "&7Hear who looks at your spots\n&7and who likes them: right away,\n&7or when you come back."
+  menu-guestbook-action: "&eClick: on, only at login, off"
+  menu-guestbook-interval: "&8Updates every {minutes} min while you play"
+  menu-guestbook-login: "&eonly at login"
+  menu-guestbook-lore: "&7Hear how often your spots\n&7are looked at and liked."
   menu-new-spot: "&aSave a spot here"
   menu-new-spot-count: "&7Your spots: &f{count} of {max} &7- &a{left} more &7possible"
   menu-new-spot-count-full: "&cYour spots: {count} of {max} - delete one first"
@@ -644,9 +647,10 @@ messages:
   # with spot-accepted-owner or spot-declined-owner what came of it. spot-removed: he took a spot he had accepted off
   # his list. spot-too-far: in cam mode, the spot is out of reach of the camera; spot-start-too-far: out of cam mode,
   # the spot is further than viewpoints.start-distance, {blocks} being by how much.
-  # The guestbook (viewpoints.guestbook): spot-guestbook-viewed and -liked tell an owner online who ({player}) looked
-  # at his spot or liked it; back on the server after being offline, spot-guestbook-header and a spot-guestbook-entry
-  # for each spot that got any since ({views}, {likes}). spot-guestbook-on and -off answer the bell in the menu.
+  # The guestbook (viewpoints.guestbook) tells an owner how often his spots were looked at and liked since he was last
+  # told: a spot-guestbook-entry for each spot that got any ({views}, {likes}), under spot-guestbook-update every
+  # viewpoints.guestbook-interval-minutes while he plays ({minutes}), or under spot-guestbook-header once he joins.
+  # spot-guestbook-on ({minutes}), -login and -off answer the bell in the menu.
   spot-accepted: "&aYou accepted {spot}: you find it among the spots shared with you."
   spot-accepted-owner: "&a{player} accepted your spot {spot}."
   # The moderation of the spots on the admin page: spot-admin-... and spot-restrict-... / spot-unrestrict-... tell the
@@ -698,10 +702,10 @@ messages:
   spot-full: "&cYou have {max} spots already, the most there may be. Delete one first."
   spot-guestbook-entry: "&7- &f{spot}&7: &e{views} &7views, &d{likes} &7likes"
   spot-guestbook-header: "&6Guestbook: &7what your spots got since you were last here"
-  spot-guestbook-liked: "&6Guestbook: &e{player} &7likes your spot &f{spot}&7."
-  spot-guestbook-off: "&eGuestbook off: you no longer hear who looks at your spots."
-  spot-guestbook-on: "&aGuestbook on: you hear who looks at your spots and who likes them."
-  spot-guestbook-viewed: "&6Guestbook: &e{player} &7looked at your spot &f{spot}&7."
+  spot-guestbook-login: "&aGuestbook only at login: you hear what your spots got when you join."
+  spot-guestbook-off: "&eGuestbook off: you no longer hear how often your spots are looked at."
+  spot-guestbook-on: "&aGuestbook on: you hear every {minutes} minutes what your spots got, and when you join."
+  spot-guestbook-update: "&6Guestbook: &7what your spots got in the last {minutes} minutes"
   spot-jumped: "&aAt spot {spot}"
   spot-like-own: "&cYou cannot like your own spot."
   spot-liked: "&dYou like {spot} now. It has {likes} likes."
@@ -1396,10 +1400,10 @@ message-settings:
   spot-full: true
   spot-guestbook-entry: true
   spot-guestbook-header: true
-  spot-guestbook-liked: true
+  spot-guestbook-login: true
   spot-guestbook-off: true
   spot-guestbook-on: true
-  spot-guestbook-viewed: true
+  spot-guestbook-update: true
   spot-jumped: true
   spot-like-own: true
   spot-liked: true

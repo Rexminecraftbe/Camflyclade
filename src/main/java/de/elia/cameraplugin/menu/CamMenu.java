@@ -629,20 +629,28 @@ public final class CamMenu implements Listener {
     }
 
     /**
-     * The bell of the guestbook: whether he hears who looks at his spots and
-     * likes them, see {@link SpotGuestbook}, under its name - it shines while
-     * on -; a click switches it.
+     * The bell of the guestbook: how he hears how often his spots are looked
+     * at and liked, see {@link SpotGuestbook.Mode}, under its name - it
+     * shines unless he hears nothing -, and how often it tells him while he
+     * plays; a click goes on to the next way.
      *
      * @param again opens the page anew, with the bell as it stands then
      */
     private void guestbookButton(Player player, Page page, Runnable again) {
         SpotGuestbook guestbook = plugin.getGuestbook();
-        boolean on = guestbook.isOn(player.getUniqueId());
+        SpotGuestbook.Mode mode = guestbook.modeOf(player.getUniqueId());
+        String state = switch (mode) {
+            case ON -> "menu-state-on";
+            case LOGIN -> "menu-guestbook-login";
+            case OFF -> "menu-state-off";
+        };
         List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-guestbook-lore")));
-        lore.addAll(lines(messages.getMessage("menu-state").replace("{state}",
-                messages.getMessage(on ? "menu-state-on" : "menu-state-off"))));
+        lore.addAll(lines(messages.getMessage("menu-guestbook-interval")
+                .replace("{minutes}", String.valueOf(settings.getGuestbookIntervalMinutes()))));
+        lore.addAll(lines(messages.getMessage("menu-state").replace("{state}", messages.getMessage(state))));
         lore.addAll(lines(messages.getMessage("menu-guestbook-action")));
-        put(page, SLOT_SPOT_GUESTBOOK, shine(item(Material.BELL, messages.getMessage("menu-guestbook"), lore), on),
+        put(page, SLOT_SPOT_GUESTBOOK, shine(item(Material.BELL, messages.getMessage("menu-guestbook"), lore),
+                        mode != SpotGuestbook.Mode.OFF),
                 click -> later(() -> {
                     guestbook.toggle(player);
                     again.run();

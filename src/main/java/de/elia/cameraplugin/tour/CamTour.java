@@ -19,11 +19,17 @@ import net.md_5.bungee.api.chat.hover.content.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerInteractAtEntityEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
@@ -1124,6 +1130,49 @@ public final class CamTour implements Listener {
             for (Map<UUID, Long> own : invitations.values()) {
                 own.remove(id);
             }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onGuestInteract(PlayerInteractEvent event) {
+        mirrorAgain(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onGuestInteractEntity(PlayerInteractEntityEvent event) {
+        mirrorAgain(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onGuestInteractAtEntity(PlayerInteractAtEntityEvent event) {
+        mirrorAgain(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onGuestInventoryClick(InventoryClickEvent event) {
+        mirrorAgain(event.getWhoClicked());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onGuestInventoryDrag(InventoryDragEvent event) {
+        mirrorAgain(event.getWhoClicked());
+    }
+
+    /**
+     * Sends the guide's items and hearts to this guest again at the next
+     * tick of the tour, if he is shown them.
+     *
+     * <p>What he holds is only a picture of the guide's items, see
+     * {@link GuideMirror}, and his client uses it like his own. Whatever the
+     * server turns down of that - a click on a block, on a body, into his
+     * inventory - it answers with his own empty hands, and the pictures would
+     * be gone until their next refresh, flickering away. Paper handles what
+     * the clients sent at the start of a tick, before the tour's own tick, so
+     * they go out again in that very tick.</p>
+     */
+    private void mirrorAgain(HumanEntity guest) {
+        if (guideOf.containsKey(guest.getUniqueId())) {
+            mirror.again(guest.getUniqueId());
         }
     }
 

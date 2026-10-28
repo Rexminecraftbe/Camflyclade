@@ -13,6 +13,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -26,6 +27,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -33,19 +35,19 @@ import java.util.logging.Level;
 
 /**
  * The guestbook of the spots, {@code viewpoints.guestbook}: the owner of a
- * spot hears who looked at it - jumped there or visited it - and who liked
- * it. Only others count, and only with the views {@link SpotViews} counts: the
- * same player at the same spot is heard of once in
+ * spot hears how often it was looked at - jumped to or visited - and liked.
+ * Only others count, and only with the views {@link SpotViews} counts: the
+ * same player at the same spot is one view in
  * {@code viewpoints.views-cooldown-minutes} at most.
  *
- * <p>An owner who is online hears it straight away, with the name of whoever
- * it was. One who is offline finds it when he comes back: how many views and
- * likes each of his spots got since he was last here, see
- * {@link #onJoin}. A like taken back before then does not count.</p>
- *
- * <p>Each owner switches it off and on again for himself, with the bell on the
- * pages of the spots in the menu. Switched off, nothing is kept for him
- * either: switched on again, it starts from nothing.</p>
+ * <p>Nothing of it is told straight away: it is collected, and told as how
+ * many views and likes each of his spots got, so nobody can fill another's
+ * chat by jumping to his spots or liking one and taking it back - a like
+ * taken back before it is told does not count. How he hears it, each owner
+ * sets for himself with the bell on the pages of the spots in the menu, see
+ * {@link Mode}: every {@code viewpoints.guestbook-interval-minutes} while he
+ * plays, and what came while he was away once he joins; only once he joins;
+ * or not at all, and then nothing is collected for him either.</p>
  *
  * <p>Where it is kept follows {@code viewpoints.storage}, like
  * {@link SpotViews}: in one file for everybody,
@@ -62,8 +64,9 @@ public final class SpotGuestbook implements Listener {
 
     /** What stands at the top of the file, for whoever finds it and wonders. */
     private static final List<String> HEADER = List.of(
-            "CamFly: the guestbook of /cam spot - who switched it off, and what happened to the spots of each owner",
-            "while he was offline, by his id and the name of the spot. Deleting it forgets that news.");
+            "CamFly: the guestbook of /cam spot - how each owner hears of his spots, if not every few minutes (mode),",
+            "and what happened to them since he was last told, by his id and the name of the spot. Deleting it forgets",
+            "that news.");
 
     /**
      * How long after he joins an owner hears what happened while he was
@@ -72,16 +75,38 @@ public final class SpotGuestbook implements Listener {
      */
     private static final long JOIN_DELAY = 40L;
 
+    /** Ticks in a minute. */
+    private static final long MINUTE = 20L * 60L;
+
+    /** How an owner hears of his spots, from the bell in the menu - which goes through them in this order. */
+    public enum Mode {
+        /** Every {@code viewpoints.guestbook-interval-minutes} while he plays, and when he joins. */
+        ON,
+        /** Only when he joins: everything since he last heard of it. */
+        LOGIN,
+        /** Not at all, and nothing is collected for him. */
+        OFF;
+
+        /** The one after it on the bell, the first after the last. */
+        Mode next() {
+            return values()[(ordinal() + 1) % values().length];
+        }
+    }
+
     private final CameraPlugin plugin;
     private final ConsoleLog log;
     private final CamSettings settings;
     private final Messages messages;
-    /** The owners who switched the guestbook off. */
-    private final Set<UUID> off = new HashSet<>();
-    /** What happened to the spots of each owner while he was offline, by {@link Spot#key()}. */
+    /** How each owner hears of his spots who set the bell to anything but {@link Mode#ON}. */
+    private final Map<UUID, Mode> modes = new HashMap<>();
+    /** What happened to the spots of each owner since he was last told, by {@link Spot#key()}. */
     private final Map<UUID, Map<String, News>> news = new LinkedHashMap<>();
+    /** The owners who just joined: they hear what came while they were away first, see {@link #onJoin}. */
+    private final Set<UUID> joining = new HashSet<>();
+    /** Tells the owners online what came, every {@code viewpoints.guestbook-interval-minutes}. */
+    private BukkitTask updates;
 
-    /** What happened to one spot while its owner was offline. */
+    /** What happened to one spot since its owner was last told. */
     private static final class News {
         long views;
         /** Who liked it since, and still does. */
@@ -107,23 +132,40 @@ public final class SpotGuestbook implements Listener {
         return plugin.getDataFolder().toPath().resolve(PLAYER_FOLDER).resolve(FILE);
     }
 
-    /** Whether the owner hears about his spots: the guestbook is there, and he did not switch it off. */
-    public boolean isOn(UUID owner) {
-        return settings.isGuestbookEnabled() && !off.contains(owner);
+    /** How the owner hears of his spots: {@link Mode#OFF} for everybody while there is no guestbook. */
+    public Mode modeOf(UUID owner) {
+        return settings.isGuestbookEnabled() ? modes.getOrDefault(owner, Mode.ON) : Mode.OFF;
     }
 
-    /** Switches it off for him, or on again, from the bell in the menu. He is told how it stands now. */
+    /** Whether the owner hears of his spots at all: the guestbook is there, and he did not switch it off. */
+    public boolean isOn(UUID owner) {
+        return modeOf(owner) != Mode.OFF;
+    }
+
+    /**
+     * Sets the next way of hearing of his spots for him, from the bell in
+     * the menu, and tells him how it stands now. Switched off, what was
+     * collected for him is gone.
+     */
     public void toggle(Player owner) {
         if (!settings.isGuestbookEnabled()) {
             return;
         }
         UUID id = owner.getUniqueId();
-        if (off.remove(id)) {
-            messages.sendConfiguredMessage(owner, "spot-guestbook-on");
+        Mode mode = modeOf(id).next();
+        if (mode == Mode.ON) {
+            modes.remove(id);
         } else {
-            off.add(id);
-            news.remove(id);
-            messages.sendConfiguredMessage(owner, "spot-guestbook-off");
+            modes.put(id, mode);
+        }
+        switch (mode) {
+            case ON -> messages.sendConfiguredMessage(owner, "spot-guestbook-on",
+                    "{minutes}", String.valueOf(settings.getGuestbookIntervalMinutes()));
+            case LOGIN -> messages.sendConfiguredMessage(owner, "spot-guestbook-login");
+            case OFF -> {
+                news.remove(id);
+                messages.sendConfiguredMessage(owner, "spot-guestbook-off");
+            }
         }
         save();
     }
@@ -136,30 +178,16 @@ public final class SpotGuestbook implements Listener {
         if (viewer.getUniqueId().equals(owner) || !isOn(owner)) {
             return;
         }
-        Player online = Bukkit.getPlayer(owner);
-        if (online != null) {
-            messages.sendConfiguredMessage(online, "spot-guestbook-viewed", "{player}", viewer.getName(),
-                    "{spot}", spot.name());
-            return;
-        }
         newsOf(owner, spot.key()).views++;
         save();
     }
 
     /**
-     * A player liked a public spot of the owner, or no longer does. An owner
-     * offline does not hear of a like taken back before he returns.
+     * A player liked a public spot of the owner, or no longer does. A like
+     * taken back before the owner is told was never there.
      */
     public void liked(UUID owner, Spot spot, Player liker, boolean likes) {
         if (liker.getUniqueId().equals(owner) || !isOn(owner)) {
-            return;
-        }
-        Player online = Bukkit.getPlayer(owner);
-        if (online != null) {
-            if (likes) {
-                messages.sendConfiguredMessage(online, "spot-guestbook-liked", "{player}", liker.getName(),
-                        "{spot}", spot.name());
-            }
             return;
         }
         if (likes) {
@@ -207,19 +235,42 @@ public final class SpotGuestbook implements Listener {
 
     /**
      * Back on the server: once the greetings are through, what happened to
-     * his spots while he was offline - one line for each of them that is
-     * still there -, and then it is no news any more.
+     * his spots since he last heard of it, see {@link #tellNews}.
      */
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        if (!news.containsKey(player.getUniqueId())) {
+        UUID id = player.getUniqueId();
+        if (!news.containsKey(id)) {
             return;
         }
-        Bukkit.getScheduler().runTaskLater(plugin, () -> tellNews(player), JOIN_DELAY);
+        joining.add(id);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            joining.remove(id);
+            tellNews(player, "spot-guestbook-header");
+        }, JOIN_DELAY);
     }
 
-    private void tellNews(Player owner) {
+    /**
+     * Every {@code viewpoints.guestbook-interval-minutes}: what came for the
+     * owners online who hear of it while they play - not for one who just
+     * joined, he hears all of it once the greetings are through.
+     */
+    private void tellUpdates() {
+        for (UUID owner : new ArrayList<>(news.keySet())) {
+            Player online = Bukkit.getPlayer(owner);
+            if (online != null && modeOf(owner) == Mode.ON && !joining.contains(owner)) {
+                tellNews(online, "spot-guestbook-update");
+            }
+        }
+    }
+
+    /**
+     * Tells the owner what happened to his spots since he was last told,
+     * under this header - one line for each of them that is still there -,
+     * and then it is no news any more.
+     */
+    private void tellNews(Player owner, String header) {
         if (!owner.isOnline() || !isOn(owner.getUniqueId())) {
             return;
         }
@@ -242,10 +293,11 @@ public final class SpotGuestbook implements Listener {
                     .replace("{views}", String.valueOf(entry.getValue().views))
                     .replace("{likes}", String.valueOf(entry.getValue().likes.size())));
         }
-        if (lines.isEmpty() || !messages.isMessageEnabled("spot-guestbook-header")) {
+        if (lines.isEmpty() || !messages.isMessageEnabled(header)) {
             return;
         }
-        messages.sendConfiguredMessage(owner, "spot-guestbook-header");
+        messages.sendConfiguredMessage(owner, header,
+                "{minutes}", String.valueOf(settings.getGuestbookIntervalMinutes()));
         if (messages.isMessageEnabled("spot-guestbook-entry")) {
             for (String line : lines) {
                 owner.sendMessage(line);
@@ -253,10 +305,23 @@ public final class SpotGuestbook implements Listener {
         }
     }
 
-    /** At the start and after a reload: the guestbook of the file, or nothing on {@code storage: memory}. */
+    /**
+     * At the start and after a reload: the guestbook of the file, or nothing
+     * on {@code storage: memory} - and the clock of the updates, which starts
+     * anew.
+     */
     public void load() {
-        off.clear();
+        modes.clear();
         news.clear();
+        joining.clear();
+        if (updates != null) {
+            updates.cancel();
+            updates = null;
+        }
+        if (settings.isGuestbookEnabled()) {
+            long every = settings.getGuestbookIntervalMinutes() * MINUTE;
+            updates = Bukkit.getScheduler().runTaskTimer(plugin, this::tellUpdates, every, every);
+        }
         if (!inFile() || !Files.exists(file())) {
             return;
         }
@@ -274,8 +339,11 @@ public final class SpotGuestbook implements Listener {
             } catch (IllegalArgumentException ex) {
                 continue;
             }
-            if (file.getBoolean(ownerKey + ".off")) {
-                off.add(owner);
+            Mode mode = modeIn(file, ownerKey);
+            if (mode != Mode.ON) {
+                modes.put(owner, mode);
+            }
+            if (mode == Mode.OFF) {
                 continue;
             }
             ConfigurationSection spots = file.getConfigurationSection(ownerKey + ".news");
@@ -300,6 +368,23 @@ public final class SpotGuestbook implements Listener {
     }
 
     /**
+     * How this owner hears of his spots, as the file has it: {@code mode},
+     * or the {@code off: true} of the time the bell only switched it on and
+     * off. An {@code off} written by hand without quotes reads as
+     * {@code false}; what it cannot read at all is {@link Mode#ON}.
+     */
+    private static Mode modeIn(YamlConfiguration file, String ownerKey) {
+        if (file.getBoolean(ownerKey + ".off")) {
+            return Mode.OFF;
+        }
+        return switch (file.getString(ownerKey + ".mode", "on").toLowerCase(Locale.ROOT)) {
+            case "login" -> Mode.LOGIN;
+            case "off", "false" -> Mode.OFF;
+            default -> Mode.ON;
+        };
+    }
+
+    /**
      * Writes all of it, on {@code storage: file}. Like the views it goes
      * under another name first and is then moved into place.
      */
@@ -309,8 +394,8 @@ public final class SpotGuestbook implements Listener {
         }
         YamlConfiguration file = new YamlConfiguration();
         file.options().setHeader(HEADER);
-        for (UUID owner : off) {
-            file.set(owner + ".off", true);
+        for (Map.Entry<UUID, Mode> mode : modes.entrySet()) {
+            file.set(mode.getKey() + ".mode", mode.getValue().name().toLowerCase(Locale.ROOT));
         }
         for (Map.Entry<UUID, Map<String, News>> own : news.entrySet()) {
             for (Map.Entry<String, News> spot : own.getValue().entrySet()) {
