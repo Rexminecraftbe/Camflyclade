@@ -191,6 +191,8 @@ public final class CamTour implements Listener {
     private final GuideMirror mirror;
     /** The internals that swing a guest's arm on his own client as his guide swings his. */
     private final GuideSwing swing = new GuideSwing(sender);
+    /** Holds guests who see through the guide's eyes turned between the ticks too. */
+    private final FineHold fineHold = new FineHold(sender);
     /** Who looks round freely on tours instead of through the guide's eyes, while he is online. */
     private final Set<UUID> freeLook = new HashSet<>();
     /** The players the tour hid from each viewer with {@code hidePlayer}, see {@link #syncVisibility}. */
@@ -256,6 +258,7 @@ public final class CamTour implements Listener {
         view.load(settings.isTourEnabled() && settings.isTourGuideView() ? log : null);
         outOfSight.load(settings.isTourEnabled() ? log : null);
         swing.load(settings.isTourEnabled() && settings.isTourMirrorSwing() ? log : null);
+        fineHold.load(settings.isTourEnabled() && settings.isTourGuideView() && settings.isTourFineHold() ? log : null);
     }
 
     /**
@@ -1307,6 +1310,7 @@ public final class CamTour implements Listener {
         invitations.clear();
         lastInvited.clear();
         stopTask();
+        fineHold.stop();
     }
 
     // ------------------------------------------------------------ following
@@ -1516,14 +1520,20 @@ public final class CamTour implements Listener {
      * sees - but his client draws the items in his hands after it, see
      * {@link GuideMirror}, and while he does not look through his own eyes,
      * it lets them sway by every turn without ever bringing them back: they
-     * would hang askew in the guide's view.
+     * would hang askew in the guide's view. Turned back every tick, they still
+     * tremble while he moves the mouse - less so held between the ticks too,
+     * see {@link FineHold}.
      */
-    private static void holdTurned(Player guest, Guest state) {
+    private void holdTurned(Player guest, Guest state) {
         guest.setRotation(state.yaw, state.pitch);
+        if (state.viewing && settings.isTourFineHold()) {
+            fineHold.hold(guest, state.yaw, state.pitch);
+        }
     }
 
     /** Gives a guest who sees through the eyes of his guide his own camera back. */
     private void unview(Player guest, Guest state) {
+        fineHold.release(guest);
         state.centered = 0;
         if (state.viewing) {
             view.show(guest, guest);

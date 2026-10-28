@@ -940,6 +940,13 @@ follow:
   # offizielle Schnittstelle). Ändert ein Update von Minecraft dort etwas, meldet der Start das in der Konsole, und
   # die Follower sehen sich frei um, bis das Plugin angepasst ist - sonst läuft alles weiter. Auf Spigot immer frei.
   guide-view: true
+  # Im Blick des Leaders dreht die Maus eines Followers nur ihn selbst, unsichtbar - aber die Items in seinen Händen
+  # schwingen dabei mit. Darum dreht der Server ihn zurück: in jedem Tick (20 mal pro Sekunde), mit fine-hold auch
+  # dazwischen, etwa alle 8 Millisekunden. Dann zittern die Items kaum noch, wenn er die Maus bewegt - ganz still
+  # stehen sie nie, sein Client dreht ihn bei jedem Bild. Sein Client antwortet auf jedes Zurückdrehen mit einem
+  # kleinen Paket, mit fine-hold also etwa 125 statt 20 pro Sekunde. Meldet ein Anti-Cheat-Plugin Follower deswegen,
+  # hier ausschalten. Geht wie guide-view nur auf Paper.
+  fine-hold: true
   # Ob auch führen darf, wer nicht im Cam-Modus ist (siehe oben)
   lead-without-cam: true
   # Wie die Namen über einem Leader ohne Cam-Modus stehen, solange ihm Follower folgen:

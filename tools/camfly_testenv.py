@@ -2365,6 +2365,15 @@ def set_options(env, changes):
     console(env, "cam reload", pause=2)
 
 
+def drehungen_pro_sekunde(pakete):
+    """Wie viele Pakete player_rotation in der letzten Sekunde der Liste
+    kamen (Zeitstempel des Bots)."""
+    if not pakete:
+        return 0
+    ende = pakete[-1].get("t", 0)
+    return sum(1 for p in pakete if p.get("t", 0) > ende - 1000)
+
+
 def set_option(env, key, value, section=None):
     """Einen Wert in der Konfiguration des Testservers setzen und neu laden."""
     set_options(env, [(key, value, section)])
@@ -6938,25 +6947,29 @@ def fuehrung_ohne_cam_checks(env, bot):
     die Kamera des Gastes folgt ihm, waehrend er herumlaeuft und baut.
 
     Voreingestellt ist es an, mit guide-name: replace und mirror-health,
-    -main-hand, -off-hand und -swing an - nachgesehen in der Datei, die das Plugin
-    mitbringt. Der Bot laedt ohne Cam-Modus ein, die Tab-Vervollstaendigung
-    bietet den zweiten Spieler an, der nimmt an und folgt ihm. Ueber dem Bot
-    stehen die Namen gestapelt - der Gast mit (Follower) ueber
-    "CamFlyTester (Leader)" (player.tour-builder-format) -, sein eigener Name
-    ist im Team cam_guide ausgeblendet, und ein dritter Spieler sieht den
-    Stapel, nur nicht, solange der Bot unsichtbar ist. Der Gast bekommt die
-    Herzen des Bots auf seinen Bildschirm (max_health 10: 10 statt seiner 20,
-    am Server bleiben es 20), das Item in seiner Hand und das in der zweiten
-    als eigene Ausruestung - am Server bleiben seine Haende leer. Schwingt
-    der Bot den Arm, schwingt der Gast seinen mit (Paket animation mit der
-    eigenen Nummer: 0, und 3 fuer die zweite Hand). Verlaesst er die
-    Fuehrung, hat er seine Herzen wieder, und sein Inventar kommt neu.
+    -main-hand, -off-hand und -swing sowie fine-hold an - nachgesehen in der
+    Datei, die das Plugin mitbringt. Der Bot laedt ohne Cam-Modus ein, die
+    Tab-Vervollstaendigung bietet den zweiten Spieler an, der nimmt an und
+    folgt ihm. Ueber dem Bot stehen die Namen gestapelt - der Gast mit
+    (Follower) ueber "CamFlyTester (Leader)" (player.tour-builder-format) -,
+    sein eigener Name ist im Team cam_guide ausgeblendet, und ein dritter
+    Spieler sieht den Stapel, nur nicht, solange der Bot unsichtbar ist. Der
+    Gast bekommt die Herzen des Bots auf seinen Bildschirm (max_health 10: 10
+    statt seiner 20, am Server bleiben es 20), das Item in seiner Hand und das
+    in der zweiten als eigene Ausruestung - am Server bleiben seine Haende
+    leer. Schwingt der Bot den Arm, schwingt der Gast seinen mit (Paket
+    animation mit der eigenen Nummer: 0, und 3 fuer die zweite Hand). Im Blick
+    des Bots haelt ihn der Server gedreht - mit fine-hold auch zwischen den
+    Ticks, weit oefter als 20 Mal in der Sekunde, ohne nur jeden Tick.
+    Verlaesst er die Fuehrung, hat er seine Herzen wieder, und sein Inventar
+    kommt neu.
 
     Startet der Bot den Cam-Modus, geht die Fuehrung weiter, der Gast sieht
     seine eigenen Herzen, und der Bot ist aus dem Team; endet der Cam-Modus,
     endet sie. Im Zuschauermodus fuehrt keiner, und wechselt der Bot dahin,
     endet die Fuehrung. Mit mirror-main-hand: false kommt nur die zweite
-    Hand, mit mirror-swing: false schwingt nichts mit. Mit guide-name: above bleibt sein Name, ueber ihm steht nur der
+    Hand, mit mirror-swing: false schwingt nichts mit, mit fine-hold: false
+    haelt ihn der Server nur jeden Tick fest. Mit guide-name: above bleibt sein Name, ueber ihm steht nur der
     Gast, und das Team gibt es nicht. Mit lead-without-cam: false heisst es
     wieder "Only in cam mode".
     """
@@ -7024,12 +7037,13 @@ def fuehrung_ohne_cam_checks(env, bot):
     dritter = BotClient(env, name=DRITTER_NAME)
     try:
         quelle = quelle_config(env)
-        FIND.test("Voreingestellt stehen lead-without-cam: true, guide-name: replace und die vier mirror-... auf "
-                  "true da",
+        FIND.test("Voreingestellt stehen lead-without-cam: true, guide-name: replace, die vier mirror-... und "
+                  "fine-hold auf true da",
                   all(re.search(rf"(?m)^\s+{schluessel}:\s*{wert}\s*$", quelle) is not None
                       for schluessel, wert in (("lead-without-cam", "true"), ("guide-name", "replace"),
                                                ("mirror-health", "true"), ("mirror-main-hand", "true"),
-                                               ("mirror-off-hand", "true"), ("mirror-swing", "true"))), "")
+                                               ("mirror-off-hand", "true"), ("mirror-swing", "true"),
+                                               ("fine-hold", "true"))), "")
         zuschauer.start()
         dritter.start()
         if not FIND.test("Zweiter und dritter Spieler fuer die Fuehrung ohne Cam-Modus kommen herein",
@@ -7122,6 +7136,13 @@ def fuehrung_ohne_cam_checks(env, bot):
                   "er sich gedreht hat",
                   len(gedreht) >= 15 and len(werte) == 1 and (135.0, 30.0) not in werte,
                   f"{len(gedreht)} / {sorted(werte)[:4]}")
+        # Dazwischen zittern die Items, solange er die Maus bewegt - mit
+        # fine-hold dreht ihn der Server auch zwischen den Ticks zurueck,
+        # etwa alle 8 Millisekunden.
+        FIND.test("follow.fine-hold: auch zwischen den Ticks - in einer Sekunde weit mehr als 20 Drehungen",
+                  drehungen_pro_sekunde(gedreht) >= 60, str(drehungen_pro_sekunde(gedreht)))
+        FIND.test("Auf Paper meldet der Start nichts zum feinen Festhalten",
+                  "held turned every tick only" not in server_log(env), "")
 
         # Sein Client haelt Schwert und Schild fuer seine eigenen und klickt
         # damit. Den Klick auf seinen Koerper lehnt der Server ab und schickt
@@ -7203,7 +7224,8 @@ def fuehrung_ohne_cam_checks(env, bot):
         console(env, f"gamemode {spielmodus} {BOT_NAME}", pause=1.0)
 
         # Jeder Reload beendet den Cam-Modus des Gastes: danach von vorn.
-        set_options(env, [("mirror-main-hand", "false", "follow"), ("mirror-swing", "false", "follow")])
+        set_options(env, [("mirror-main-hand", "false", "follow"), ("mirror-swing", "false", "follow"),
+                          ("fine-hold", "false", "follow")])
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         ausruestung = zuschauer.call("own_equipment").get("count", 0)
@@ -7218,10 +7240,15 @@ def fuehrung_ohne_cam_checks(env, bot):
         time.sleep(1.0)
         neu = zuschauer.call("own_swings", since=schwuenge).get("packets", [])
         FIND.test("mirror-swing: false - der Arm des Gastes schwingt nicht mit", not neu, str(neu))
+        drehung = zuschauer.call("rotations").get("count", 0)
+        time.sleep(1.5)
+        gedreht = zuschauer.call("rotations", since=drehung).get("packets", [])
+        FIND.test("fine-hold: false - der Server haelt den Gast nur jeden Tick fest, etwa 20 Mal in der Sekunde",
+                  10 <= drehungen_pro_sekunde(gedreht) <= 30, str(drehungen_pro_sekunde(gedreht)))
         befehl(zuschauer, "/cam follow leave")
 
         set_options(env, [("mirror-main-hand", "true", "follow"), ("mirror-swing", "true", "follow"),
-                          ("guide-name", "above", "follow")])
+                          ("fine-hold", "true", "follow"), ("guide-name", "above", "follow")])
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         einladen_und_annehmen()

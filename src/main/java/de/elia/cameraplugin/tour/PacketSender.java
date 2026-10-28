@@ -48,9 +48,14 @@ final class PacketSender {
         return handle.invoke(player);
     }
 
+    /** The connection of the player of the server behind a Bukkit player: what {@link #send} sends over. */
+    Object listenerOf(Player player) throws ReflectiveOperationException {
+        return connection.get(handleOf(player));
+    }
+
     /** Sends the packet to the player. */
     void send(Player to, Object packet) throws ReflectiveOperationException {
-        send.invoke(connection.get(handleOf(to)), packet);
+        send.invoke(listenerOf(to), packet);
     }
 
     /** Whether the server is Paper, where the internals go by Mojang's names. */
