@@ -1235,9 +1235,9 @@ public final class CamTour implements Listener {
     }
 
     /**
-     * A guide out of camera mode swings his arm - hits, digs, places a
-     * block -: his guests who are shown his items see the arm that holds them
-     * swing, with {@code follow.mirror-swing}, see {@link GuideSwing}. Their
+     * A guide out of camera mode swings his arm - hits, digs -: his guests
+     * who are shown his items see the arm that holds them swing, with
+     * {@code follow.mirror-swing}, see {@link GuideSwing}. Up to 26.2 their
      * clients answer with a swing of their own, which leads no tour.
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -1251,7 +1251,7 @@ public final class CamTour implements Listener {
         for (UUID id : tour.guests.keySet()) {
             Player guest = Bukkit.getPlayer(id);
             if (guest != null && mirror.isShown(id)) {
-                swing.swing(guest, offHand);
+                swing.swing(guest, guide, offHand);
             }
         }
     }

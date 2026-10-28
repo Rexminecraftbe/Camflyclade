@@ -954,7 +954,7 @@ follow:
   mirror-health: true
   mirror-main-hand: true
   mirror-off-hand: true
-  # Ob ihr Arm mit seinem Item schwingt, wenn seiner schwingt (schlagen, abbauen, Blöcke setzen). Nur der Schwung:
+  # Ob ihr Arm mit seinem Item schwingt, wenn seiner schwingt (schlagen, abbauen). Nur der Schwung:
   # Wie das Item nach einem Schlag absinkt und wieder hochkommt, zeigt ein Client nur bei eigenen Schlägen. Geht wie
   # guide-view nur auf Paper (ein Paket über das Innere des Servers).
   mirror-swing: true
