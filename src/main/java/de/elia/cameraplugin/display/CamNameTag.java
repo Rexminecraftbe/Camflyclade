@@ -51,13 +51,13 @@ import java.util.UUID;
  * {@code player.tour-follower-format}. Their own names are hidden while
  * they do.</p>
  *
- * <p>A guide out of camera mode, {@code tour.lead-without-cam}, carries the
+ * <p>A guide out of camera mode, {@code follow.lead-without-cam}, carries the
  * same names while guests follow him closely, with his own at the bottom,
  * {@code player.tour-builder-format}. His name tag, which the client draws
  * over a player who is not invisible, gives way to them: the team
  * {@code cam_guide} hides it, see
  * {@link de.elia.cameraplugin.scoreboard.GuideTeam}. With
- * {@code tour.guide-name: above} - or while he is in the team of another
+ * {@code follow.guide-name: above} - or while he is in the team of another
  * plugin - it stays, and the names of the guests stand over it instead. They
  * never show more than his name tag would: not while he is invisible, and not
  * through walls while he sneaks. They always keep to him in mode FOLLOW: a

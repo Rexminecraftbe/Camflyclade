@@ -42,11 +42,11 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * The tour, {@code /cam tour}: one camera player shows others round, and
+ * The tour, {@code /cam follow}: one camera player shows others round, and
  * their cameras fly along with his - for a build its builder shows to his
  * friends himself.
  *
- * <p>With {@code tour.lead-without-cam} the guide need not be in camera mode
+ * <p>With {@code follow.lead-without-cam} the guide need not be in camera mode
  * himself: the cameras of his guests follow him while he walks round and
  * builds, and his guests see his hearts and the items in his hands on their
  * own screen, see {@link GuideMirror}. The names of the tour stand over him as
@@ -55,8 +55,8 @@ import java.util.UUID;
  * spectator mode, which flies through walls; nor once he dies.</p>
  *
  * <p>Who may come along is kept fair: a player in camera mode whose camera
- * is close to the guide's, {@code tour.radius}, or one out of camera mode
- * who stands close to it, {@code tour.start-distance} - his camera mode
+ * is close to the guide's, {@code follow.radius}, or one out of camera mode
+ * who stands close to it, {@code follow.start-distance} - his camera mode
  * starts where he stands once he accepts, with every check and cost of a
  * start of {@code /cam} -, and only once he has accepted the invitation. On the tour his camera keeps
  * every limit of its own - {@code max-distance} and the signal from his own
@@ -64,7 +64,7 @@ import java.util.UUID;
  * guide steers it, but no further than it could fly by itself. Whoever the
  * guide leaves behind that way, his camera stops at its own border, and he
  * and the guide are told in the action bar that the tour ends for him in
- * {@code tour.out-of-reach-seconds}; should the guide come back in time, the
+ * {@code follow.out-of-reach-seconds}; should the guide come back in time, the
  * tour goes on.</p>
  *
  * <p>The camera of a guest is not teleported along every tick: it is given
@@ -74,11 +74,11 @@ import java.util.UUID;
  * behind - the guide jumped to a spot, say - is it put next to him, if he is
  * within its reach.</p>
  *
- * <p>What the guest sees: with {@code tour.guide-view}, on Paper, the world
+ * <p>What the guest sees: with {@code follow.guide-view}, on Paper, the world
  * through the eyes of the guide, as smoothly as spectator mode shows another
  * player, see {@link GuideView}; while the guide is out of his reach, his own
  * camera again, which stands at its border. Otherwise - on Spigot, or after
- * {@code /cam tour view} - he looks round as he likes from his own camera,
+ * {@code /cam follow view} - he looks round as he likes from his own camera,
  * which starts looking the way the guide looks.</p>
  *
  * <p>Those on the same tour - the guide and his guests - are mostly at the
@@ -210,7 +210,7 @@ public final class CamTour implements Listener {
         this.mirror = new GuideMirror(settings);
     }
 
-    /** Whether {@code /cam tour} is there at all. */
+    /** Whether {@code /cam follow} is there at all. */
     public boolean isEnabled() {
         return settings.isTourEnabled();
     }
@@ -259,7 +259,7 @@ public final class CamTour implements Listener {
     }
 
     /**
-     * {@code /cam tour view}: switches between the guide's view and looking
+     * {@code /cam follow view}: switches between the guide's view and looking
      * round freely, for the tour he follows and the ones after it.
      */
     public void toggleView(Player guest) {
@@ -471,7 +471,7 @@ public final class CamTour implements Listener {
 
     /**
      * Whether he could show others round from where he is, follows no tour
-     * aside: in camera mode, or - with {@code tour.lead-without-cam} - out of
+     * aside: in camera mode, or - with {@code follow.lead-without-cam} - out of
      * it, as long as he is alive and not in spectator mode.
      */
     public boolean canLead(Player player) {
@@ -512,7 +512,7 @@ public final class CamTour implements Listener {
         return guideOf.containsKey(player.getUniqueId());
     }
 
-    /** Whether his tour takes no more guests: {@code tour.max-guests}, 0 for no limit. */
+    /** Whether his tour takes no more guests: {@code follow.max-guests}, 0 for no limit. */
     public boolean isFull(Player guide) {
         Tour tour = tours.get(guide.getUniqueId());
         int max = settings.getTourMaxGuests();
@@ -582,8 +582,8 @@ public final class CamTour implements Listener {
 
     /**
      * Whom he could invite now, by name: players in camera mode whose camera
-     * is within {@code tour.radius} of his, and players out of camera mode
-     * within {@code tour.start-distance} of it - on no tour, and able to
+     * is within {@code follow.radius} of his, and players out of camera mode
+     * within {@code follow.start-distance} of it - on no tour, and able to
      * follow him from where they are. Nobody while he follows a tour himself
      * or cannot lead one, see {@link #canLead}.
      */
@@ -606,7 +606,7 @@ public final class CamTour implements Listener {
     /**
      * Whether a player could come along on the guide's tour from where he is:
      * in camera mode, on no tour, close and within reach; out of camera mode,
-     * within {@code tour.start-distance} of the guide's camera, which his
+     * within {@code follow.start-distance} of the guide's camera, which his
      * camera could reach once it starts where he stands.
      */
     private boolean mayJoin(Player guide, Player other) {
@@ -651,7 +651,7 @@ public final class CamTour implements Listener {
                 && !tours.containsKey(player.getUniqueId());
     }
 
-    /** Whether the cameras of the two are within {@code tour.radius} of each other. */
+    /** Whether the cameras of the two are within {@code follow.radius} of each other. */
     private boolean near(Player guide, Player other) {
         Location a = guide.getLocation();
         Location b = other.getLocation();
@@ -701,7 +701,7 @@ public final class CamTour implements Listener {
 
     // ------------------------------------------------------------ commands
 
-    /** {@code /cam tour}, with what follows it. */
+    /** {@code /cam follow}, with what follows it. */
     public void command(Player player, String[] args) {
         if (!isEnabled()) {
             messages.sendConfiguredMessage(player, "tour-off");
@@ -789,7 +789,7 @@ public final class CamTour implements Listener {
     /**
      * Whether he may show others round: no restriction keeps him from it, he
      * can lead one from where he is - in camera mode, or out of it with
-     * {@code tour.lead-without-cam} -, and he follows no tour himself. If not,
+     * {@code follow.lead-without-cam} -, and he follows no tour himself. If not,
      * he has been told why.
      */
     private boolean checkGuide(Player guide) {
@@ -819,8 +819,8 @@ public final class CamTour implements Listener {
         }
         String text = messages.getMessage("tour-invitation").replace("{player}", guide.getName());
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
-        line.addAll(button("tour-button-accept", guide.getName(), "/cam tour accept " + guide.getName()));
-        line.addAll(button("tour-button-decline", guide.getName(), "/cam tour decline " + guide.getName()));
+        line.addAll(button("tour-button-accept", guide.getName(), "/cam follow accept " + guide.getName()));
+        line.addAll(button("tour-button-decline", guide.getName(), "/cam follow decline " + guide.getName()));
         other.spigot().sendMessage(line.toArray(new BaseComponent[0]));
     }
 
@@ -899,7 +899,7 @@ public final class CamTour implements Listener {
 
     /**
      * Accepts an invitation out of camera mode: if he stands within
-     * {@code tour.start-distance} of the guide's camera, which his camera
+     * {@code follow.start-distance} of the guide's camera, which his camera
      * could reach from there, camera mode starts where he stands, and he
      * joins once it has.
      */
@@ -978,7 +978,7 @@ public final class CamTour implements Listener {
 
     /**
      * Takes him off the tour he follows, if he follows one: from
-     * {@code /cam tour leave}, the menu, or a jump of his own. The guide
+     * {@code /cam follow leave}, the menu, or a jump of his own. The guide
      * hears about it.
      */
     public void leave(Player guest) {
@@ -994,7 +994,7 @@ public final class CamTour implements Listener {
         }
     }
 
-    /** {@code /cam tour kick <player>}: sends one of his guests away. */
+    /** {@code /cam follow kick <player>}: sends one of his guests away. */
     public void kick(Player guide, Player guest, String name) {
         Tour tour = tours.get(guide.getUniqueId());
         if (guest == null || tour == null || !tour.guests.containsKey(guest.getUniqueId())) {
@@ -1007,7 +1007,7 @@ public final class CamTour implements Listener {
         messages.sendConfiguredMessage(guide, "tour-kicked-guide", "{player}", guest.getName());
     }
 
-    /** {@code /cam tour end}: ends his tour for every guest. */
+    /** {@code /cam follow end}: ends his tour for every guest. */
     public void end(Player guide) {
         if (!tours.containsKey(guide.getUniqueId())) {
             messages.sendConfiguredMessage(guide, "tour-not-guiding");

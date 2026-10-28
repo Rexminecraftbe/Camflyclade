@@ -69,7 +69,7 @@ import java.util.function.ToLongFunction;
  * {@code /cam menu}: what camera mode offers, in a window to click instead of
  * commands to type - starting and ending it, {@code back}, {@code resume},
  * the spots of {@code /cam spot} - private, public and shared with him, each
- * on a tab of its own -, the tour of {@code /cam tour}, {@code photo},
+ * on a tab of its own -, the tour of {@code /cam follow}, {@code photo},
  * {@code time}, {@code weather}, {@code nightvision} and the own
  * {@code stats}; and for admins a page of their own: who is in camera mode
  * ({@code list}, {@code tp}, {@code stop}), the statistics of others, the
@@ -508,9 +508,9 @@ public final class CamMenu implements Listener {
             lore.addAll(lines(messages.getMessage("menu-tour-invitations").replace("{count}",
                     String.valueOf(invited))));
         }
-        ItemStack item = labelled(settings.getMenuIcon(MenuButton.TOUR).create(plugin.getLogger()),
+        ItemStack item = labelled(settings.getMenuIcon(MenuButton.FOLLOW).create(plugin.getLogger()),
                 messages.getMessage("menu-tour"), lore);
-        put(page, settings.getMenuSlot(MenuButton.TOUR), shine(item, invited > 0),
+        put(page, settings.getMenuSlot(MenuButton.FOLLOW), shine(item, invited > 0),
                 click -> later(() -> openTour(player, 0)));
     }
 
@@ -1310,7 +1310,7 @@ public final class CamMenu implements Listener {
             adminButton(page, AdminButton.SPOTS, "menu-admin-spots", click -> later(() -> openSpotOwners(player, 0)));
         }
         if (plugin.getTourModeration().mayUse(player)) {
-            adminButton(page, AdminButton.TOURS, "menu-admin-tours", click -> later(() -> openTourPlayers(player, 0)));
+            adminButton(page, AdminButton.FOLLOW, "menu-admin-tours", click -> later(() -> openTourPlayers(player, 0)));
         }
         adminButton(page, AdminButton.BACK, "menu-to-main", click -> later(() -> openMain(player)));
         player.openInventory(inventory);

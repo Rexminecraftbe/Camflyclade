@@ -6258,7 +6258,7 @@ def flugtempo(env, name):
 
 
 def fuehrung_checks(env, bot):
-    """tour: /cam tour - einer zeigt seinen Bau, und die Kamera eines
+    """follow (frueher tour): /cam follow - einer zeigt seinen Bau, und die Kamera eines
     anderen fliegt mit seiner mit.
 
     Voreingestellt ist es an, mit radius 16 und out-of-reach-seconds 5 -
@@ -6268,7 +6268,7 @@ def fuehrung_checks(env, bot):
     ebenso (start-distance 16), wird er nicht eingeladen, und die
     Tab-Vervollstaendigung bietet ihn nicht an. Ohne Cam-Modus sechs Bloecke
     hinter dem Fuehrer bietet sie ihn an, die Einladung kommt mit Knoepfen
-    und dem Ton von sounds.tour-invite. Steht er beim Annehmen 30 Bloecke
+    und dem Ton von sounds.follow-invite. Steht er beim Annehmen 30 Bloecke
     weg, heisst es "You are X blocks too far away", und nichts startet; nah
     dran startet sein Cam-Modus dort, wo er steht, seine Kamera steht beim
     Fuehrer, der es erfaehrt, und sein Flugtempo ist 0. Fliegt
@@ -6277,12 +6277,12 @@ def fuehrung_checks(env, bot):
 
     Fliegt der Fuehrer weiter, als die Kamera des Gastes von ihrem Koerper
     aus darf, lesen beide in der Action-Bar, dass die Fuehrung endet, mit dem
-    Ton von sounds.tour-reach. Kommt er rechtzeitig zurueck, fliegt der Gast
-    wieder mit. Mit tour.guide-view (voreingestellt) sieht der Gast durch die
+    Ton von sounds.follow-reach. Kommt er rechtzeitig zurueck, fliegt der Gast
+    wieder mit. Mit follow.guide-view (voreingestellt) sieht der Gast durch die
     Augen des Fuehrers - der Bot bekommt das Paket camera mit dessen Nummer,
     und der Start meldet nichts dazu -, ausser Reichweite und nach dem
     Verlassen wieder aus seiner eigenen Kamera; der Knopf im Menue und
-    /cam tour view schalten zwischen beidem um. Auf der Fuehrung bekommt
+    /cam follow view schalten zwischen beidem um. Auf der Fuehrung bekommt
     keiner Namen und Partikel des anderen, der Fuehrer sieht den Gast nicht,
     der Gast den Fuehrer nur mit dessen Blick (er braucht ihn als Kamera);
     nach der Fuehrung sehen sich beide wieder. Bleibt er weg, ist die
@@ -6290,28 +6290,30 @@ def fuehrung_checks(env, bot):
     erfahren es, und das Flugtempo des Gastes ist wieder seins. Einladen
     geht dann nicht, solange der Fuehrer ausser seiner Reichweite ist.
 
-    /cam tour leave, /cam back, kick und das Ende des Cam-Modus des Fuehrers
+    /cam follow leave, /cam back, kick und das Ende des Cam-Modus des Fuehrers
     beenden die Fuehrung fuer den Gast, jedes mit seiner Meldung; ablehnen
     sagt es dem Fuehrer. Im Menue steht der Gast auf der Seite der Fuehrung,
     ein Klick laedt ihn ein, bei ihm steht die Einladung, und ein Linksklick
     nimmt sie an. Endet der Cam-Modus des Gastes ohne /cam - ein Treffer auf
     seinen Koerper -, ist er von der Fuehrung und sieht wieder aus seiner
-    eigenen Kamera. Mit tour.enabled: false ist /cam tour aus.
+    eigenen Kamera. Mit follow.enabled: false ist /cam follow aus.
 
     Ist niemand nah genug, sagt die Seite der Fuehrung, wie nah: ohne
     Cam-Modus start-distance, im Cam-Modus radius. Auf der Fuehrung bleiben
     beide in der Tab-Liste des anderen (auf Paper meldet der Start nichts
     dazu), ueber der Kamera des Fuehrers stehen die Namen gestapelt - der
-    Gast mit (Follower) ueber dem Fuehrer mit (Guide) -, und der Gast kann
+    Gast mit (Follower) ueber dem Fuehrer mit (Leader) -, und der Gast kann
     seinen eigenen Koerper weder anklicken noch schlagen: der Cam-Modus bleibt
     an, mit tour-body-locked. Sein Client bekommt seinen Frost immer wieder
     geschickt, und jeder am Ende des Cam-Modus: was ein Client in Pulverschnee
     selbst hochzaehlt, wo der Server ihn nicht hatte, bleibt sonst bis zum
     naechsten Beitritt auf dem Bildschirm. Mit max-guests: 1 kommt ein dritter Spieler
     nicht mehr mit, der Fuehrer kann ihn nicht mehr einladen, und der Knopf
-    der Fuehrung sagt "Guests: 1/1". Der dritte sieht von aussen nur den
+    der Fuehrung sagt "Followers: 1/1". Der dritte sieht von aussen nur den
     Fuehrer - der Gast, der ihm folgt, steht nur in der Tab-Liste -, nach
-    der Fuehrung wieder beide.
+    der Fuehrung wieder beide. Der alte Befehl /cam tour geht weiter, und
+    eine aeltere Datei mit tour: statt follow: wird gelesen, ohne Hinweis auf
+    eine unbekannte Einstellung.
     """
     def zuschauer_pos():
         return bot.call("server_pos", selector=ZUSCHAUER_NAME).get("pos")
@@ -6364,8 +6366,8 @@ def fuehrung_checks(env, bot):
         return strip_colors(hit["text"]) if hit else ""
 
     def einladen_und_annehmen():
-        befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
-        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=2.0)
+        befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=2.0)
         return gesagt(dort, rf"You follow {BOT_NAME} now")
 
     if not FIND.test("Cam-Modus ist vor dem Test der Fuehrung aus", cam_off(bot), ""):
@@ -6383,14 +6385,14 @@ def fuehrung_checks(env, bot):
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
     dritter = BotClient(env, name=DRITTER_NAME)
     try:
-        FIND.test("Voreingestellt steht tour mit enabled: true, radius: 16, start-distance: 16, "
+        FIND.test("Voreingestellt steht follow mit enabled: true, radius: 16, start-distance: 16, "
                   "out-of-reach-seconds: 5 und max-guests: 5 da",
-                  re.search(r"(?m)^tour:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*radius:\s*16\.0\s*\n"
+                  re.search(r"(?m)^follow:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*radius:\s*16\.0\s*\n"
                             r"(?:\s*#.*\n)*\s*start-distance:\s*16\s*\n"
                             r"(?:\s*#.*\n)*\s*out-of-reach-seconds:\s*5\s*\n"
                             r"(?:\s*#.*\n)*\s*max-guests:\s*5\s*$", quelle_config(env)) is not None, "")
         # Die Partikel der Kameras, die der Testserver sonst abschaltet.
-        set_options(env, [("max-distance", "20.0"), ("out-of-reach-seconds", "8", "tour"),
+        set_options(env, [("max-distance", "20.0"), ("out-of-reach-seconds", "8", "follow"),
                           ("particles-per-tick", "1", "camera-particles")])
         zuschauer.start()
         if not FIND.test("Zweiter Spieler fuer die Fuehrung kommt herein",
@@ -6403,9 +6405,9 @@ def fuehrung_checks(env, bot):
         if not FIND.test("Der zweite Spieler ist 30 Bloecke weit weg im Cam-Modus",
                          zuschauer_cam_an(env, zuschauer, x + 30, y, z), ""):
             return
-        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
-        tabs = tab(bot, "/cam tour invite ")
-        FIND.test("tour.radius: 16 - wer im Cam-Modus weiter weg ist, wird nicht eingeladen und nicht angeboten",
+        zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        tabs = tab(bot, "/cam follow invite ")
+        FIND.test("follow.radius: 16 - wer im Cam-Modus weiter weg ist, wird nicht eingeladen und nicht angeboten",
                   gesagt(zeilen, rf"{ZUSCHAUER_NAME} is too far away") and ZUSCHAUER_NAME not in tabs,
                   f"{zeige(zeilen)} / {tabs}")
         befehl(bot, "/cam menu", warten=1.0)
@@ -6417,45 +6419,45 @@ def fuehrung_checks(env, bot):
                   and "- in cam mode: within 16 blocks" in leer, leer)
         bot.call("close_window", wait=10)
         cam_off(zuschauer)
-        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
-        FIND.test("tour.start-distance: 16 - ohne Cam-Modus 30 Bloecke weg wird er auch nicht eingeladen",
+        zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        FIND.test("follow.start-distance: 16 - ohne Cam-Modus 30 Bloecke weg wird er auch nicht eingeladen",
                   gesagt(zeilen, rf"{ZUSCHAUER_NAME} is too far away"), zeige(zeilen))
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
-        tabs = tab(bot, "/cam tour invite ")
-        FIND.test("Tab nach /cam tour invite: der Spieler daneben, auch ohne Cam-Modus", tabs == [ZUSCHAUER_NAME],
+        tabs = tab(bot, "/cam follow invite ")
+        FIND.test("Tab nach /cam follow invite: der Spieler daneben, auch ohne Cam-Modus", tabs == [ZUSCHAUER_NAME],
                   str(tabs))
         # Wie ein echter Client im Flug: die Geschwindigkeit des Servers, ohne Schwerkraft.
         zuschauer.call("velocity", on=True)
         seit = zuschauer.mark()
         ton = toene_marke(zuschauer)
         pakete_seit = zuschauer.call("chat_packets", since=10 ** 9).get("count", 0)
-        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         dort = zeilen_seit(zuschauer, seit)
         pakete = " ".join(p["text"] for p in zuschauer.call("chat_packets", since=pakete_seit).get("packets", []))
         FIND.test("Die Einladung kommt an - mit Knoepfen zum Annehmen und Ablehnen",
-                  gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to your tour")
-                  and gesagt(dort, rf"{BOT_NAME} invites you to a tour")
-                  and f"/cam tour accept {BOT_NAME}" in pakete and f"/cam tour decline {BOT_NAME}" in pakete,
+                  gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to follow you")
+                  and gesagt(dort, rf"{BOT_NAME} invites you to follow them")
+                  and f"/cam follow accept {BOT_NAME}" in pakete and f"/cam follow decline {BOT_NAME}" in pakete,
                   f"{zeige(zeilen)} / {zeige(dort)} / {pakete[-300:]}")
-        FIND.test("sounds.tour-invite - der Eingeladene hoert den Ton", ton_da(zuschauer, ton, "block.note_block.bell"),
+        FIND.test("sounds.follow-invite - der Eingeladene hoert den Ton", ton_da(zuschauer, ton, "block.note_block.bell"),
                   "")
         console(env, f"tp {ZUSCHAUER_NAME} {x + 30} {y} {z}", pause=1.0)
-        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=2.0)
+        dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=2.0)
         FIND.test("Ohne Cam-Modus zu weit weg: \"You are X blocks too far away\", und nichts startet",
                   gesagt(dort, r"You are \d+ blocks too far away") and not im_cam_modus(bot, ZUSCHAUER_NAME),
                   zeige(dort))
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
         seit = bot.mark()
         kamera = kamera_marke()
-        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=3.0)
+        dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
         hier = zeilen_seit(bot, seit)
         FIND.test("Ohne Cam-Modus nah dran: annehmen startet den Cam-Modus dort, wo er steht",
                   gesagt(dort, r"Cam mode activated") and im_cam_modus(bot, ZUSCHAUER_NAME), zeige(dort))
-        FIND.test("tour.guide-view: der Gast sieht durch die Augen des Fuehrers (Paket camera mit dessen Nummer)",
+        FIND.test("follow.guide-view: der Gast sieht durch die Augen des Fuehrers (Paket camera mit dessen Nummer)",
                   "fuehrer" in kameras_seit(kamera), str(kameras_seit(kamera)))
         FIND.test("Auf Paper meldet der Start nichts zum Blick des Fuehrers",
-                  "guide's view of /cam tour does not work" not in server_log(env), "")
-        FIND.test("/cam tour accept - seine Kamera steht beim Fuehrer, und der erfaehrt es",
+                  "view of /cam follow does not work" not in server_log(env), "")
+        FIND.test("/cam follow accept - seine Kamera steht beim Fuehrer, und der erfaehrt es",
                   gesagt(dort, rf"You follow {BOT_NAME} now") and gesagt(hier, rf"{ZUSCHAUER_NAME} follows you now")
                   and nahe(zuschauer_pos(), bot.server_pos(), 1.0),
                   f"{zeige(dort)} / {zeige(hier)} / {zuschauer_pos()} / {bot.server_pos()}")
@@ -6475,10 +6477,10 @@ def fuehrung_checks(env, bot):
                   "cannot keep the players it hides" not in server_log(env), "")
         text = name_text(BOT_NAME)
         FIND.test("Ueber der Kamera des Fuehrers stehen die Namen gestapelt: der Gast mit (Follower) ueber dem "
-                  "Fuehrer mit (Guide)",
-                  "(Follower)" in text and "(Guide)" in text and ZUSCHAUER_NAME in text
+                  "Fuehrer mit (Leader)",
+                  "(Follower)" in text and "(Leader)" in text and ZUSCHAUER_NAME in text
                   and text.index(ZUSCHAUER_NAME) < text.index("(Follower)") < text.index(BOT_NAME)
-                  < text.index("(Guide)"), text)
+                  < text.index("(Leader)"), text)
         # Der Koerper des Gastes steht sechs Bloecke hinter dem Fuehrer: Der
         # fliegt hin, die Kamera des Gastes mit.
         bot.call("fly", wait=30, dx=-5, timeout=15000)
@@ -6489,7 +6491,7 @@ def fuehrung_checks(env, bot):
         zuschauer.call("attack_entity", wait=20, at=list(gast), radius=2)
         time.sleep(1.0)
         dort = zeilen_seit(zuschauer, seit)
-        gesperrt = sum(1 for z in dort if re.search(rf"You follow the tour of {BOT_NAME}: leave it first", z))
+        gesperrt = sum(1 for z in dort if re.search(rf"You follow {BOT_NAME}: stop that first", z))
         FIND.test("Wer folgt, kann seinen eigenen Koerper weder anklicken noch schlagen: der Cam-Modus bleibt an",
                   im_cam_modus(bot, ZUSCHAUER_NAME) and gesperrt == 2, f"{gesperrt} / {zeige(dort)}")
         bot.call("fly", wait=30, dx=5, timeout=15000)
@@ -6516,7 +6518,7 @@ def fuehrung_checks(env, bot):
         klick(zuschauer, 9)
         knopf = fenster(zuschauer).get("slots", {})
         FIND.test("Auf der Seite der Fuehrung: der Knopf des Blicks, er steht auf dem des Fuehrers",
-                  "View on tours" in item_text(knopf.get("13")) and "Now: the guide's" in item_text(knopf.get("13")),
+                  "View when following" in item_text(knopf.get("13")) and "Now: the leader's" in item_text(knopf.get("13")),
                   item_text(knopf.get("13")))
         kamera = kamera_marke()
         seit = zuschauer.mark()
@@ -6524,16 +6526,16 @@ def fuehrung_checks(env, bot):
         dort = zeilen_seit(zuschauer, seit)
         knopf = fenster(zuschauer).get("slots", {})
         FIND.test("Ein Klick schaltet auf freies Umsehen: die eigene Kamera wieder",
-                  gesagt(dort, r"On tours you look round freely now") and kameras_seit(kamera)[-1:] == ["selbst"]
+                  gesagt(dort, r"When following you look round freely now") and kameras_seit(kamera)[-1:] == ["selbst"]
                   and "Now: free" in item_text(knopf.get("13")), f"{zeige(dort)} / {kameras_seit(kamera)}")
         zuschauer.call("close_window", wait=10)
         time.sleep(1.0)
         FIND.test("Beim freien Umsehen sieht auch der Gast den Fuehrer nicht - in der Tab-Liste steht er",
                   not kennt(zuschauer, fuehrer_nr) and in_tab(zuschauer, BOT_NAME), "")
         kamera = kamera_marke()
-        dort = befehl(zuschauer, "/cam tour view", warten=2.0)
-        FIND.test("/cam tour view schaltet zurueck auf den Blick des Fuehrers",
-                  gesagt(dort, r"On tours you see through the eyes of the guide")
+        dort = befehl(zuschauer, "/cam follow view", warten=2.0)
+        FIND.test("/cam follow view schaltet zurueck auf den Blick des Fuehrers",
+                  gesagt(dort, r"When following you see through the eyes of the leader")
                   and "fuehrer" in kameras_seit(kamera), f"{zeige(dort)} / {kameras_seit(kamera)}")
 
         # Der Fuehrer ist bei x + 8, max-distance ist 20: Bei x + 16 ist er 22
@@ -6545,10 +6547,10 @@ def fuehrung_checks(env, bot):
         time.sleep(1.0)
         dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, seit_bot)
         FIND.test("Ausser Reichweite: beide lesen in der Action-Bar, dass die Fuehrung endet",
-                  gesagt(dort, rf"{BOT_NAME} is out of your reach: the tour ends in")
-                  and gesagt(hier, rf"{ZUSCHAUER_NAME} cannot follow: the tour ends for them in"),
+                  gesagt(dort, rf"{BOT_NAME} is out of your reach: following ends in")
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} cannot follow: it ends for them in"),
                   f"{zeige(dort)} / {zeige(hier)}")
-        FIND.test("sounds.tour-reach - der Gast hoert den Ton", ton_da(zuschauer, ton, "block.conduit.deactivate"), "")
+        FIND.test("sounds.follow-reach - der Gast hoert den Ton", ton_da(zuschauer, ton, "block.conduit.deactivate"), "")
         FIND.test("Ausser Reichweite sieht der Gast wieder aus seiner eigenen Kamera",
                   kameras_seit(kamera)[-1:] == ["selbst"], str(kameras_seit(kamera)))
         wo = zuschauer_pos()
@@ -6575,7 +6577,7 @@ def fuehrung_checks(env, bot):
         tempo = flugtempo(env, ZUSCHAUER_NAME)
         FIND.test("Danach fliegt der Gast wieder mit seinem eigenen Tempo",
                   tempo is not None and tempo > 0.0, str(tempo))
-        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         FIND.test("Einladen geht nicht, solange der Fuehrer ausser seiner Reichweite ist",
                   gesagt(zeilen, rf"{ZUSCHAUER_NAME} could not follow you from there"), zeige(zeilen))
 
@@ -6585,11 +6587,11 @@ def fuehrung_checks(env, bot):
         seit = bot.mark()
         time.sleep(1.0)
         kamera = kamera_marke()
-        dort = befehl(zuschauer, "/cam tour leave")
+        dort = befehl(zuschauer, "/cam follow leave")
         hier = zeilen_seit(bot, seit)
-        FIND.test("/cam tour leave - er verlaesst die Fuehrung, der Fuehrer erfaehrt es, und er sieht aus seiner "
+        FIND.test("/cam follow leave - er verlaesst die Fuehrung, der Fuehrer erfaehrt es, und er sieht aus seiner "
                   "eigenen Kamera",
-                  gesagt(dort, rf"You left the tour of {BOT_NAME}") and gesagt(hier, rf"{ZUSCHAUER_NAME} left your tour")
+                  gesagt(dort, rf"You no longer follow {BOT_NAME}") and gesagt(hier, rf"{ZUSCHAUER_NAME} stopped following you")
                   and kameras_seit(kamera)[-1:] == ["selbst"], f"{zeige(dort)} / {zeige(hier)} / {kameras_seit(kamera)}")
         marke_bot = partikel_marke(bot)
         time.sleep(2.0)
@@ -6601,43 +6603,43 @@ def fuehrung_checks(env, bot):
         dort = befehl(zuschauer, "/cam back", warten=2.0)
         hier = zeilen_seit(bot, seit)
         FIND.test("/cam back - zurueck am Koerper und nicht mehr auf der Fuehrung",
-                  gesagt(dort, rf"You left the tour of {BOT_NAME}") and gesagt(hier, rf"{ZUSCHAUER_NAME} left your tour")
+                  gesagt(dort, rf"You no longer follow {BOT_NAME}") and gesagt(hier, rf"{ZUSCHAUER_NAME} stopped following you")
                   and nahe(zuschauer_pos(), gast, 1.5), f"{zeige(dort)} / {zuschauer_pos()}")
         # Wieder nah an den Gast heran, der jetzt an seinem Koerper ist.
         bot.call("fly", wait=30, dx=-8, timeout=15000)
         time.sleep(1.0)
         einladen_und_annehmen()
         seit = zuschauer.mark()
-        zeilen = befehl(bot, f"/cam tour kick {ZUSCHAUER_NAME}")
+        zeilen = befehl(bot, f"/cam follow kick {ZUSCHAUER_NAME}")
         dort = zeilen_seit(zuschauer, seit)
-        FIND.test("/cam tour kick - der Gast ist weggeschickt",
-                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} is off your tour") and gesagt(dort, rf"{BOT_NAME} took you off"),
+        FIND.test("/cam follow kick - der Gast ist weggeschickt",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} no longer follows you") and gesagt(dort, rf"{BOT_NAME} sent you away"),
                   f"{zeige(zeilen)} / {zeige(dort)}")
         einladen_und_annehmen()
         seit = zuschauer.mark()
         frost = bot.call("frosts").get("count", 0)
         cam_off(bot)
         dort = zeilen_seit(zuschauer, seit)
-        FIND.test("Endet der Cam-Modus des Fuehrers, endet die Fuehrung", gesagt(dort, rf"{BOT_NAME} ended the tour"),
+        FIND.test("Endet der Cam-Modus des Fuehrers, endet die Fuehrung", gesagt(dort, rf"{BOT_NAME} let everybody go"),
                   zeige(dort))
         FIND.test("Am Ende des Cam-Modus bekommt der Client seinen Frost geschickt, auch wenn er gleich bleibt (0)",
                   0 in bot.call("frosts", since=frost).get("values", []),
                   str(bot.call("frosts", since=frost).get("values")))
         hinstellen(bot, x + 8, y, z)
         cam_on(bot)
-        befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         seit = bot.mark()
-        dort = befehl(zuschauer, f"/cam tour decline {BOT_NAME}")
+        dort = befehl(zuschauer, f"/cam follow decline {BOT_NAME}")
         hier = zeilen_seit(bot, seit)
-        FIND.test("/cam tour decline - abgelehnt, der Fuehrer erfaehrt es",
-                  gesagt(dort, rf"You turned down the tour of {BOT_NAME}")
-                  and gesagt(hier, rf"{ZUSCHAUER_NAME} turned your tour down"), f"{zeige(dort)} / {zeige(hier)}")
+        FIND.test("/cam follow decline - abgelehnt, der Fuehrer erfaehrt es",
+                  gesagt(dort, rf"You turned {BOT_NAME} down")
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} does not want to follow you"), f"{zeige(dort)} / {zeige(hier)}")
 
         befehl(bot, "/cam menu", warten=1.0)
         klick(bot, 9)
         f = fenster(bot)
         FIND.test("Menue: auf der Seite der Fuehrung steht der Spieler daneben, zum Einladen, mit seinem Abstand",
-                  "Tour" in (f.get("title") or "") and ZUSCHAUER_NAME in item_text(f.get("slots", {}).get("0"))
+                  "Follow" in (f.get("title") or "") and ZUSCHAUER_NAME in item_text(f.get("slots", {}).get("0"))
                   and "Click: invite" in item_text(f.get("slots", {}).get("0"))
                   and re.search(r"In cam mode, \d+ blocks away", item_text(f.get("slots", {}).get("0"))),
                   item_text(f.get("slots", {}).get("0")))
@@ -6648,7 +6650,7 @@ def fuehrung_checks(env, bot):
         f = fenster(zuschauer)
         FIND.test("Menue: beim Eingeladenen steht die Einladung",
                   BOT_NAME in item_text(f.get("slots", {}).get("0"))
-                  and "Invites you to a tour" in item_text(f.get("slots", {}).get("0")),
+                  and "Invites you to follow them" in item_text(f.get("slots", {}).get("0")),
                   item_text(f.get("slots", {}).get("0")))
         klick(zuschauer, 0, warten=2.0)
         FIND.test("Menue: ein Linksklick nimmt die Einladung an", nahe(zuschauer_pos(), bot.server_pos(), 1.0),
@@ -6664,23 +6666,23 @@ def fuehrung_checks(env, bot):
         hier = zeilen_seit(bot, seit)
         FIND.test("Endet der Cam-Modus des Gastes ohne /cam (ein Treffer auf seinen Koerper): er ist von der "
                   "Fuehrung und sieht wieder aus seiner eigenen Kamera",
-                  not im_cam_modus(bot, ZUSCHAUER_NAME) and gesagt(hier, rf"{ZUSCHAUER_NAME} left your tour")
+                  not im_cam_modus(bot, ZUSCHAUER_NAME) and gesagt(hier, rf"{ZUSCHAUER_NAME} stopped following you")
                   and kameras_seit(kamera)[-1:] == ["selbst"], f"{zeige(hier)} / {kameras_seit(kamera)}")
         cam_off(zuschauer)
         cam_off(bot)
 
-        set_option(env, "max-guests", "1", "tour")
+        set_option(env, "max-guests", "1", "follow")
         dritter.start()
-        if FIND.test("Dritter Spieler fuer tour.max-guests kommt herein",
+        if FIND.test("Dritter Spieler fuer follow.max-guests kommt herein",
                      dritter.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
             time.sleep(1.5)
             hinstellen(bot, x, y, z)
             cam_on(bot)
             console(env, f"tp {DRITTER_NAME} {x - 3} {y} {z}", pause=0.5)
             console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
-            befehl(bot, f"/cam tour invite {DRITTER_NAME}")
-            befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
-            dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=3.0)
+            befehl(bot, f"/cam follow invite {DRITTER_NAME}")
+            befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+            dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
             FIND.test("max-guests: 1 - der erste Gast kommt mit", gesagt(dort, rf"You follow {BOT_NAME} now"),
                       zeige(dort))
             time.sleep(1.5)
@@ -6691,29 +6693,49 @@ def fuehrung_checks(env, bot):
                       kennt(dritter, fuehrer_nr) and not kennt(dritter, gast_nr) and in_tab(dritter, ZUSCHAUER_NAME),
                       f"{kennt(dritter, fuehrer_nr)} / {kennt(dritter, gast_nr)} / "
                       f"{dritter.call('players').get('players')}")
-            zeilen = befehl(dritter, f"/cam tour accept {BOT_NAME}", warten=2.0)
+            zeilen = befehl(dritter, f"/cam follow accept {BOT_NAME}", warten=2.0)
             FIND.test("Die Fuehrung ist voll: wer eingeladen ist, kommt nicht mehr mit, und nichts startet",
-                      gesagt(zeilen, rf"The tour of {BOT_NAME} is full right now")
+                      gesagt(zeilen, rf"Nobody else can follow {BOT_NAME} right now")
                       and not im_cam_modus(bot, DRITTER_NAME), zeige(zeilen))
-            zeilen = befehl(bot, f"/cam tour invite {DRITTER_NAME}")
+            zeilen = befehl(bot, f"/cam follow invite {DRITTER_NAME}")
             FIND.test("Die Fuehrung ist voll: der Fuehrer kann niemanden mehr einladen",
-                      gesagt(zeilen, r"Your tour is full\. Guests at most: 1\."), zeige(zeilen))
+                      gesagt(zeilen, r"You have as many followers as there may be: 1\."), zeige(zeilen))
             befehl(bot, "/cam menu", warten=1.0)
             knopf = item_text(fenster(bot).get("slots", {}).get("9"))
-            FIND.test("Im Menue sagt der Knopf der Fuehrung \"Guests: 1/1\"", "Guests: 1/1" in knopf, knopf)
+            FIND.test("Im Menue sagt der Knopf der Fuehrung \"Guests: 1/1\"", "Followers: 1/1" in knopf, knopf)
             bot.call("close_window", wait=10)
-            befehl(zuschauer, "/cam tour leave")
+            befehl(zuschauer, "/cam follow leave")
             time.sleep(1.0)
             FIND.test("Nach der Fuehrung sieht man den Gast von aussen wieder", kennt(dritter, gast_nr), "")
             cam_off(zuschauer)
             cam_off(bot)
         dritter.stop()
-        set_option(env, "max-guests", "5", "tour")
+        set_option(env, "max-guests", "5", "follow")
 
-        set_option(env, "enabled", "false", "tour")
-        zeilen = befehl(bot, "/cam tour leave")
-        FIND.test("tour.enabled: false - /cam tour ist aus", gesagt(zeilen, r"/cam tour is switched off"),
+        set_option(env, "enabled", "false", "follow")
+        zeilen = befehl(bot, "/cam follow leave")
+        FIND.test("follow.enabled: false - /cam follow ist aus", gesagt(zeilen, r"/cam follow is switched off"),
                   zeige(zeilen))
+        set_option(env, "enabled", "true", "follow")
+
+        # Die alten Namen aus der Zeit, als es /cam tour hiess.
+        zeilen = befehl(bot, "/cam tour leave")
+        FIND.test("Der alte Befehl /cam tour geht weiter", gesagt(zeilen, r"You follow nobody"), zeige(zeilen))
+        datei = env.server / "plugins" / "CamFly" / "config.yml"
+        text = datei.read_text(encoding="utf-8")
+        alt, umbenannt = re.subn(r"(?m)^follow:", "tour:", text)
+        alt, gesetzt = replace_option(alt, "enabled", "false", "tour")
+        try:
+            datei.write_text(alt, encoding="utf-8")
+            neu_geladen = befehl(bot, "/cam reload", warten=2.5)
+            zeilen = befehl(bot, "/cam follow leave")
+            FIND.test("Eine aeltere Datei mit tour: statt follow: wird gelesen (dort enabled: false), ohne Hinweis "
+                      "auf eine unbekannte Einstellung",
+                      umbenannt == 1 and gesetzt == 1 and gesagt(zeilen, r"/cam follow is switched off")
+                      and not gesagt(neu_geladen, r"Unknown setting"), f"{zeige(neu_geladen)} / {zeige(zeilen)}")
+        finally:
+            datei.write_text(text, encoding="utf-8")
+            console(env, "cam reload", pause=2)
     finally:
         try:
             for client in (zuschauer, bot):
@@ -6726,8 +6748,8 @@ def fuehrung_checks(env, bot):
             if dritter.proc is not None:
                 dritter.stop()
             cam_off(bot)
-            set_options(env, [("max-distance", "100.0"), ("out-of-reach-seconds", "5", "tour"),
-                              ("max-guests", "5", "tour"), ("enabled", "true", "tour"),
+            set_options(env, [("max-distance", "100.0"), ("out-of-reach-seconds", "5", "follow"),
+                              ("max-guests", "5", "follow"), ("enabled", "true", "follow"),
                               ("particles-per-tick", "0", "camera-particles")])
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
@@ -6735,7 +6757,7 @@ def fuehrung_checks(env, bot):
 
 
 def fuehrung_ohne_cam_checks(env, bot):
-    """tour.lead-without-cam: wer nicht im Cam-Modus ist, fuehrt trotzdem -
+    """follow.lead-without-cam: wer nicht im Cam-Modus ist, fuehrt trotzdem -
     die Kamera des Gastes folgt ihm, waehrend er herumlaeuft und baut.
 
     Voreingestellt ist es an, mit guide-name: replace und mirror-health,
@@ -6743,7 +6765,7 @@ def fuehrung_ohne_cam_checks(env, bot):
     mitbringt. Der Bot laedt ohne Cam-Modus ein, die Tab-Vervollstaendigung
     bietet den zweiten Spieler an, der nimmt an und folgt ihm. Ueber dem Bot
     stehen die Namen gestapelt - der Gast mit (Follower) ueber
-    "CamFlyTester (Guide)" (player.tour-builder-format) -, sein eigener Name
+    "CamFlyTester (Leader)" (player.tour-builder-format) -, sein eigener Name
     ist im Team cam_guide ausgeblendet, und ein dritter Spieler sieht den
     Stapel, nur nicht, solange der Bot unsichtbar ist. Der Gast bekommt die
     Herzen des Bots auf seinen Bildschirm (max_health 10: 10 statt seiner 20,
@@ -6781,8 +6803,8 @@ def fuehrung_ohne_cam_checks(env, bot):
         return [z for z in zeilen_seit(bot, since) if "entity data" in z]
 
     def stapel(texte):
-        """Der Text des Stapels mit "(Guide)" darin, oder der mit "(Follower)", oder leer."""
-        return next((t for t in texte if "(Guide)" in t), next((t for t in texte if "(Follower)" in t), ""))
+        """Der Text des Stapels mit "(Leader)" darin, oder der mit "(Follower)", oder leer."""
+        return next((t for t in texte if "(Leader)" in t), next((t for t in texte if "(Follower)" in t), ""))
 
     def im_team():
         return server_says(bot, f"/execute if entity @a[name={BOT_NAME},team=cam_guide] run say {{marke}}")
@@ -6805,8 +6827,8 @@ def fuehrung_ohne_cam_checks(env, bot):
                    for e in dritter.call("entities", radius=12).get("entities", []))
 
     def einladen_und_annehmen():
-        befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
-        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=3.0)
+        befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
         return gesagt(dort, rf"You follow {BOT_NAME} now")
 
     if not FIND.test("Cam-Modus ist vor dem Test der Fuehrung ohne Cam-Modus aus", cam_off(bot), ""):
@@ -6844,16 +6866,16 @@ def fuehrung_ohne_cam_checks(env, bot):
         console(env, f"item replace entity {BOT_NAME} weapon.offhand with minecraft:shield", pause=0.3)
         console(env, f"attribute {BOT_NAME} minecraft:max_health base set 10", pause=1.0)
 
-        tabs = tab(bot, "/cam tour invite ")
-        FIND.test("Ohne Cam-Modus: Tab nach /cam tour invite bietet den Spieler daneben an",
+        tabs = tab(bot, "/cam follow invite ")
+        FIND.test("Ohne Cam-Modus: Tab nach /cam follow invite bietet den Spieler daneben an",
                   ZUSCHAUER_NAME in tabs, str(tabs))
-        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         FIND.test("Ohne Cam-Modus einladen geht",
-                  gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to your tour") and not im_cam_modus(bot, BOT_NAME),
+                  gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to follow you") and not im_cam_modus(bot, BOT_NAME),
                   zeige(zeilen))
         ausruestung = zuschauer.call("own_equipment").get("count", 0)
         seit = bot.mark()
-        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=3.0)
+        dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
         hier = zeilen_seit(bot, seit)
         FIND.test("Der Gast nimmt an und folgt dem Bot, der nicht im Cam-Modus ist",
                   gesagt(dort, rf"You follow {BOT_NAME} now") and gesagt(hier, rf"{ZUSCHAUER_NAME} follows you now")
@@ -6861,11 +6883,11 @@ def fuehrung_ohne_cam_checks(env, bot):
                   f"{zeige(dort)} / {zeige(hier)} / {zuschauer_pos()}")
         text = stapel(namen_texte())
         FIND.test("Ueber dem Bot stehen die Namen gestapelt: der Gast mit (Follower) ueber "
-                  "\"CamFlyTester (Guide)\"",
-                  ZUSCHAUER_NAME in text and "(Follower)" in text and BOT_NAME in text and "(Guide)" in text
+                  "\"CamFlyTester (Leader)\"",
+                  ZUSCHAUER_NAME in text and "(Follower)" in text and BOT_NAME in text and "(Leader)" in text
                   and f"{BOT_NAME}'s Cam" not in text
                   and text.index(ZUSCHAUER_NAME) < text.index("(Follower)") < text.index(BOT_NAME)
-                  < text.index("(Guide)"), text)
+                  < text.index("(Leader)"), text)
         FIND.test("guide-name: replace - sein eigener Name ist im Team cam_guide ausgeblendet", im_team(), "")
         FIND.test("Ein dritter Spieler sieht den Namensstapel ueber dem Bot", stapel_beim_dritten((x, y, z)), "")
         console(env, f"effect give {BOT_NAME} minecraft:invisibility 30 0 true", pause=1.0)
@@ -6889,10 +6911,10 @@ def fuehrung_ohne_cam_checks(env, bot):
 
         resends = zuschauer.call("own_equipment").get("resends", 0)
         seit = bot.mark()
-        dort = befehl(zuschauer, "/cam tour leave", warten=2.0)
+        dort = befehl(zuschauer, "/cam follow leave", warten=2.0)
         bildschirm, server = gast_herzen()
         FIND.test("Nach dem Verlassen: seine eigenen Herzen wieder, und sein Inventar kommt neu",
-                  gesagt(dort, rf"You left the tour of {BOT_NAME}") and bildschirm is not None
+                  gesagt(dort, rf"You no longer follow {BOT_NAME}") and bildschirm is not None
                   and abs(bildschirm - 20.0) < 0.01
                   and zuschauer.call("own_equipment").get("resends", 0) > resends,
                   f"{zeige(dort)} / {bildschirm}")
@@ -6913,19 +6935,19 @@ def fuehrung_ohne_cam_checks(env, bot):
         bildschirm, _ = gast_herzen()
         FIND.test("Startet der Bot den Cam-Modus, geht die Fuehrung weiter - der Gast sieht seine eigenen Herzen, "
                   "und der Bot ist aus dem Team",
-                  not gesagt(dort, r"ended the tour") and bildschirm is not None and abs(bildschirm - 20.0) < 0.01
+                  not gesagt(dort, r"let everybody go") and bildschirm is not None and abs(bildschirm - 20.0) < 0.01
                   and not im_team(), f"{zeige(dort)} / {bildschirm}")
         seit = zuschauer.mark()
         cam_off(bot)
         dort = zeilen_seit(zuschauer, seit)
-        FIND.test("Endet der Cam-Modus des Bots, endet die Fuehrung", gesagt(dort, rf"{BOT_NAME} ended the tour"),
+        FIND.test("Endet der Cam-Modus des Bots, endet die Fuehrung", gesagt(dort, rf"{BOT_NAME} let everybody go"),
                   zeige(dort))
 
         cam_off(zuschauer)
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         console(env, f"gamemode spectator {BOT_NAME}", pause=1.0)
-        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         FIND.test("Im Zuschauermodus fuehrt keiner", gesagt(zeilen, r"Not in spectator mode"), zeige(zeilen))
         console(env, f"gamemode {spielmodus} {BOT_NAME}", pause=1.0)
         hinstellen(bot, x, y, z)
@@ -6934,11 +6956,11 @@ def fuehrung_ohne_cam_checks(env, bot):
         console(env, f"gamemode spectator {BOT_NAME}", pause=1.5)
         dort = zeilen_seit(zuschauer, seit)
         FIND.test("Wechselt der Fuehrer in den Zuschauermodus, endet die Fuehrung",
-                  gesagt(dort, rf"{BOT_NAME} ended the tour"), zeige(dort))
+                  gesagt(dort, rf"{BOT_NAME} let everybody go"), zeige(dort))
         console(env, f"gamemode {spielmodus} {BOT_NAME}", pause=1.0)
 
         # Jeder Reload beendet den Cam-Modus des Gastes: danach von vorn.
-        set_option(env, "mirror-main-hand", "false", "tour")
+        set_option(env, "mirror-main-hand", "false", "follow")
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         ausruestung = zuschauer.call("own_equipment").get("count", 0)
@@ -6948,22 +6970,22 @@ def fuehrung_ohne_cam_checks(env, bot):
         FIND.test("mirror-main-hand: false - nur die zweite Hand kommt",
                   not any(p.get("slot") == 0 and p.get("count", 0) > 0 for p in pakete)
                   and any(p.get("slot") == 1 and p.get("count", 0) > 0 for p in pakete), str(pakete[-6:]))
-        befehl(zuschauer, "/cam tour leave")
+        befehl(zuschauer, "/cam follow leave")
 
-        set_options(env, [("mirror-main-hand", "true", "tour"), ("guide-name", "above", "tour")])
+        set_options(env, [("mirror-main-hand", "true", "follow"), ("guide-name", "above", "follow")])
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         einladen_und_annehmen()
         time.sleep(1.5)
         text = stapel(namen_texte(0.25875))
         FIND.test("guide-name: above - sein Name bleibt: ueber ihm steht nur der Gast, und das Team gibt es nicht",
-                  ZUSCHAUER_NAME in text and "(Follower)" in text and "(Guide)" not in text and not im_team(),
+                  ZUSCHAUER_NAME in text and "(Follower)" in text and "(Leader)" not in text and not im_team(),
                   text)
-        befehl(zuschauer, "/cam tour leave")
+        befehl(zuschauer, "/cam follow leave")
         cam_off(zuschauer)
 
-        set_options(env, [("guide-name", "replace", "tour"), ("lead-without-cam", "false", "tour")])
-        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        set_options(env, [("guide-name", "replace", "follow"), ("lead-without-cam", "false", "follow")])
+        zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         FIND.test("lead-without-cam: false - ohne Cam-Modus fuehrt keiner", gesagt(zeilen, r"Only in cam mode"),
                   zeige(zeilen))
     finally:
@@ -6980,8 +7002,8 @@ def fuehrung_ohne_cam_checks(env, bot):
             console(env, f"attribute {BOT_NAME} minecraft:max_health base set 20", pause=0.3)
             console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:air", pause=0.3)
             console(env, f"item replace entity {BOT_NAME} weapon.offhand with minecraft:air", pause=0.3)
-            set_options(env, [("lead-without-cam", "true", "tour"), ("guide-name", "replace", "tour"),
-                              ("mirror-main-hand", "true", "tour")])
+            set_options(env, [("lead-without-cam", "true", "follow"), ("guide-name", "replace", "follow"),
+                              ("mirror-main-hand", "true", "follow")])
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test der Fuehrung ohne Cam-Modus: {exc}")
@@ -8265,7 +8287,7 @@ def spotmoderation_checks(env, bot):
 
 
 def tourmoderation_checks(env, bot):
-    """menu: die Seite der Fuehrungen auf der Admin-Seite (camplugin.touradmin).
+    """menu: die Seite der Fuehrungen auf der Admin-Seite (camplugin.followadmin).
 
     Der zweite Spieler folgt der Fuehrung des Bots. Auf der Admin-Seite
     oeffnet der Knopf der Fuehrungen (24) die Liste: vorn "Everybody", dann
@@ -8284,7 +8306,7 @@ def tourmoderation_checks(env, bot):
     "Everybody" hat nur einen Schalter (13), an oder aus. Aus: er liest,
     dass Fuehrungen fuer alle abgeschaltet sind, einladen und annehmen sagen
     es ihm, seine Seite der Fuehrung einmal in der Mitte. Der Bot (op,
-    camplugin.touradmin.bypass) darf weiter fuehren, kann den zweiten aber
+    camplugin.followadmin.bypass) darf weiter fuehren, kann den zweiten aber
     nicht einladen, und die Liste sagt, warum. Wieder an hoert er es, unter
     "Everybody" steht "on", und der Bot laedt ihn wieder ein.
     """
@@ -8341,8 +8363,8 @@ def tourmoderation_checks(env, bot):
         if not FIND.test("Der zweite Spieler ist drei Bloecke daneben im Cam-Modus",
                          zuschauer_cam_an(env, zuschauer, x + 3, y, z), ""):
             return
-        befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
-        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=2.0)
+        befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=2.0)
         if not FIND.test("Er folgt der Fuehrung des Bots", gesagt(dort, rf"You follow {BOT_NAME} now"), zeige(dort)):
             return
 
@@ -8350,15 +8372,15 @@ def tourmoderation_checks(env, bot):
         alle = texte(f).get(0, "")
         er = texte(f).get(platz(f, ZUSCHAUER_NAME), "")
         FIND.test("Admin-Seite, Fuehrungen (24): vorn Everybody, dann er - wem er folgt, ohne Einschraenkung",
-                  "Tours: players" in (f.get("title") or "") and alle.startswith("Everybody")
-                  and "Tours are on" in alle and f"On the tour of {BOT_NAME}" in er and "No restrictions" in er,
+                  "Follow: players" in (f.get("title") or "") and alle.startswith("Everybody")
+                  and "Following is on" in alle and f"Follows {BOT_NAME}" in er and "No restrictions" in er,
                   f"{f.get('title')} / {alle} / {er}")
         klick(bot, platz(f, ZUSCHAUER_NAME))
         f = fenster(bot)
         fuehren, teilnehmen = item_text(f.get("slots", {}).get("12")), item_text(f.get("slots", {}).get("14"))
         FIND.test("Ein Klick oeffnet seine Einschraenkung: fuehren (12) und teilnehmen (14), beide erlaubt",
-                  f"Restrict the tours of {ZUSCHAUER_NAME}" in (f.get("title") or "")
-                  and fuehren.startswith("Leading tours") and teilnehmen.startswith("Taking part")
+                  f"Restrict the following of {ZUSCHAUER_NAME}" in (f.get("title") or "")
+                  and fuehren.startswith("Leading") and teilnehmen.startswith("Following")
                   and "» allowed" in fuehren and "» allowed" in teilnehmen, f"{fuehren} / {teilnehmen}")
         klick(bot, 14)
         f = fenster(bot)
@@ -8371,27 +8393,27 @@ def tourmoderation_checks(env, bot):
         dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, hier_seit)
         bot.call("close_window", wait=10)
         FIND.test("Bestaetigt: er erfaehrt es und ist von der Fuehrung, der Bot erfaehrt beides",
-                  gesagt(dort, rf"{BOT_NAME} restricted your tours: no taking part for good")
-                  and gesagt(hier, rf"{ZUSCHAUER_NAME} left your tour")
-                  and gesagt(hier, rf"{ZUSCHAUER_NAME} is restricted from tours: no taking part for good"),
+                  gesagt(dort, rf"{BOT_NAME} restricted your following: no following for good")
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} stopped following you")
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} is restricted: no following for good"),
                   f"{zeige(dort)} / {zeige(hier)}")
-        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         FIND.test("Der Bot kann ihn nicht mehr einladen",
-                  gesagt(zeilen, rf"You can't invite {ZUSCHAUER_NAME}: he is restricted from tours"), zeige(zeilen))
+                  gesagt(zeilen, rf"You can't invite {ZUSCHAUER_NAME}: he may not follow anybody"), zeige(zeilen))
         f = fuehrung_seite(bot)
         er = texte(f).get(platz(f, ZUSCHAUER_NAME), "")
         FIND.test("Im Menue steht er trotzdem in der Liste, mit dem Grund, warum er nicht eingeladen werden kann",
-                  "You can't invite him" in er and "he is restricted from tours" in er, er)
-        zeilen = befehl(zuschauer, f"/cam tour accept {BOT_NAME}")
+                  "You can't invite him" in er and "he may not follow anybody" in er, er)
+        zeilen = befehl(zuschauer, f"/cam follow accept {BOT_NAME}")
         f = fuehrung_seite(zuschauer)
         unten = item_text(f.get("slots", {}).get("49"))
         FIND.test("Annehmen sagt ihm, dass er nicht teilnehmen darf, und seine Seite der Fuehrung sagt es unten",
-                  gesagt(zeilen, r"You may not take part in tours for good")
-                  and "Sorry, you may not take part in tours" in unten and "You are restricted" in unten,
+                  gesagt(zeilen, r"You may not follow anybody for good")
+                  and "Sorry, you may not follow anybody" in unten and "You are restricted" in unten,
                   f"{zeige(zeilen)} / {unten}")
 
         f = seine_seite()
-        FIND.test("Seine Seite heisst nun Aendern", f"Change the tour restriction of {ZUSCHAUER_NAME}"
+        FIND.test("Seine Seite heisst nun Aendern", f"Change the follow restriction of {ZUSCHAUER_NAME}"
                   in (f.get("title") or ""), str(f.get("title")))
         klick(bot, 12)
         klick(bot, 14)
@@ -8399,19 +8421,19 @@ def tourmoderation_checks(env, bot):
         klick(bot, 31)
         dort = zeilen_seit(zuschauer, seit)
         bot.call("close_window", wait=10)
-        zeilen = befehl(zuschauer, f"/cam tour invite {BOT_NAME}")
+        zeilen = befehl(zuschauer, f"/cam follow invite {BOT_NAME}")
         mitte = item_text(fuehrung_seite(zuschauer).get("slots", {}).get("22"))
         FIND.test("Geaendert auf fuehren: er erfaehrt es, einladen sagt, dass er nicht fuehren darf, die Seite "
                   "der Fuehrung sagt es in der Mitte",
-                  gesagt(dort, rf"{BOT_NAME} changed the restriction of your tours: no leading for good")
-                  and gesagt(zeilen, r"You may not lead tours for good")
-                  and "Sorry, you may not lead tours" in mitte, f"{zeige(dort)} / {zeige(zeilen)} / {mitte}")
+                  gesagt(dort, rf"{BOT_NAME} changed your follow restriction: no leading for good")
+                  and gesagt(zeilen, r"You may not lead for good")
+                  and "Sorry, you may not lead" in mitte, f"{zeige(dort)} / {zeige(zeilen)} / {mitte}")
         seine_seite()
         seit = zuschauer.mark()
         klick(bot, 35)
         dort = zeilen_seit(zuschauer, seit)
         bot.call("close_window", wait=10)
-        FIND.test("Der Milcheimer hebt sie auf", gesagt(dort, rf"{BOT_NAME} lifted the restriction of your tours"),
+        FIND.test("Der Milcheimer hebt sie auf", gesagt(dort, rf"{BOT_NAME} lifted your follow restriction"),
                   zeige(dort))
 
         liste()
@@ -8419,8 +8441,8 @@ def tourmoderation_checks(env, bot):
         f = fenster(bot)
         schalter = item_text(f.get("slots", {}).get("13"))
         FIND.test("Everybody oeffnet den Schalter fuer alle: ein Knopf (13), an",
-                  "Switch tours off for everybody" in (f.get("title") or "")
-                  and schalter.startswith("Tours for everybody") and "» on" in schalter
+                  "Switch following off for everybody" in (f.get("title") or "")
+                  and schalter.startswith("Following for everybody") and "» on" in schalter
                   and "12" not in f.get("slots", {}) and "14" not in f.get("slots", {}),
                   f"{f.get('title')} / {schalter}")
         klick(bot, 13)
@@ -8428,32 +8450,32 @@ def tourmoderation_checks(env, bot):
         schalter = item_text(f.get("slots", {}).get("13"))
         FIND.test("Umgeschaltet: aus, der Knopf glaenzt, unten steht, was es tut",
                   "» switched off" in schalter and (f.get("slots", {}).get("13") or {}).get("glint") is True
-                  and "Tours: switched off for good" in item_text(f.get("slots", {}).get("31")), schalter)
+                  and "Following: switched off for good" in item_text(f.get("slots", {}).get("31")), schalter)
         seit, hier_seit = zuschauer.mark(), bot.mark()
         klick(bot, 31)
         dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, hier_seit)
         bot.call("close_window", wait=10)
         FIND.test("Fuer alle aus: er liest es, der Admin auch",
-                  gesagt(dort, rf"{BOT_NAME} switched tours off for everybody for good")
-                  and gesagt(hier, r"Tours are switched off for everybody for good"), f"{zeige(dort)} / {zeige(hier)}")
-        zeilen = befehl(zuschauer, f"/cam tour invite {BOT_NAME}")
+                  gesagt(dort, rf"{BOT_NAME} switched following off for everybody for good")
+                  and gesagt(hier, r"Following is switched off for everybody for good"), f"{zeige(dort)} / {zeige(hier)}")
+        zeilen = befehl(zuschauer, f"/cam follow invite {BOT_NAME}")
         seite = fuehrung_seite(zuschauer)
         mitte = item_text(seite.get("slots", {}).get("22"))
         FIND.test("Aus: einladen sagt, dass Fuehrungen abgeschaltet sind, seine Seite sagt es einmal, in der Mitte",
-                  gesagt(zeilen, r"Tours are switched off for good")
-                  and "Tours are switched off" in mitte and "It is off for everybody" in mitte
+                  gesagt(zeilen, r"Following is switched off for good")
+                  and "Following is switched off" in mitte and "It is off for everybody" in mitte
                   and "switched off" not in item_text(seite.get("slots", {}).get("49")),
                   f"{zeige(zeilen)} / {mitte} / {item_text(seite.get('slots', {}).get('49'))}")
-        zeilen = befehl(zuschauer, f"/cam tour accept {BOT_NAME}")
-        FIND.test("Aus: annehmen geht auch nicht", gesagt(zeilen, r"Tours are switched off for good"), zeige(zeilen))
-        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        zeilen = befehl(zuschauer, f"/cam follow accept {BOT_NAME}")
+        FIND.test("Aus: annehmen geht auch nicht", gesagt(zeilen, r"Following is switched off for good"), zeige(zeilen))
+        zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         f = fuehrung_seite(bot)
         er = texte(f).get(platz(f, ZUSCHAUER_NAME), "")
-        FIND.test("camplugin.touradmin.bypass (op): der Bot darf weiter fuehren - den zweiten aber nicht einladen, "
+        FIND.test("camplugin.followadmin.bypass (op): der Bot darf weiter fuehren - den zweiten aber nicht einladen, "
                   "die Liste sagt warum",
-                  gesagt(zeilen, rf"You can't invite {ZUSCHAUER_NAME}: tours are switched off")
-                  and "You can't invite him" in er and "tours are switched off" in er
-                  and "Tours are switched off" not in item_text(f.get("slots", {}).get("22")),
+                  gesagt(zeilen, rf"You can't invite {ZUSCHAUER_NAME}: following is switched off")
+                  and "You can't invite him" in er and "following is switched off" in er
+                  and "Following is switched off" not in item_text(f.get("slots", {}).get("22")),
                   f"{zeige(zeilen)} / {er}")
         liste()
         klick(bot, 0)
@@ -8462,11 +8484,11 @@ def tourmoderation_checks(env, bot):
         dort = zeilen_seit(zuschauer, seit)
         alle = texte(liste()).get(0, "")
         bot.call("close_window", wait=10)
-        zeilen = befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         FIND.test("Der Milcheimer schaltet sie fuer alle wieder an: er hoert es, unter Everybody steht \"on\", "
                   "der Bot laedt wieder ein",
-                  gesagt(dort, rf"{BOT_NAME} switched tours on again for everybody") and "Tours are on" in alle
-                  and gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to your tour"),
+                  gesagt(dort, rf"{BOT_NAME} switched following on again for everybody") and "Following is on" in alle
+                  and gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to follow you"),
                   f"{zeige(dort)} / {alle} / {zeige(zeilen)}")
     finally:
         try:

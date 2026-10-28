@@ -61,6 +61,15 @@ public final class ConfigReader {
         return warnings;
     }
 
+    /**
+     * Where a value is read that has been renamed: under its new name, or
+     * under the old one while the file has only that - an older file goes on
+     * as it was written.
+     */
+    public String renamed(String path, String old) {
+        return config.contains(path, true) || !config.contains(old, true) ? path : old;
+    }
+
     // ------------------------------------------------------------ truth values
 
     public boolean getBoolean(String path, boolean def) {

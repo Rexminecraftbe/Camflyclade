@@ -12,7 +12,7 @@ import java.util.UUID;
 
 /**
  * What a guest of a guide out of camera mode sees of the guide on his own
- * screen, {@code tour.mirror-...}: the guide's hearts as his own, the item in
+ * screen, {@code follow.mirror-...}: the guide's hearts as his own, the item in
  * the guide's hand in his, and the one in the guide's off hand in his. His
  * hunger stays his.
  *

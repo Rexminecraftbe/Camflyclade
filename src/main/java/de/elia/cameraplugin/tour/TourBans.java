@@ -39,9 +39,9 @@ public final class TourBans {
 
     /** What stands at the top of the file, for whoever finds it and wonders. */
     private static final List<String> HEADER = List.of(
-            "CamFly: who may not lead tours or take part in them, set on the admin page of the tours.",
-            "lead: true - he may not show others round; join: true - he may not come along on a tour.",
-            "everybody: the same for every player but those with camplugin.touradmin.bypass.",
+            "CamFly: who may not lead or follow with /cam follow, set on the admin page of following.",
+            "lead: true - he may not let others follow him; join: true - he may not follow anybody.",
+            "everybody: the same for every player but those with camplugin.followadmin.bypass.",
             "until: when it ends (milliseconds since 1970), 0 = for good. Changes made here by hand count after",
             "/cam reload.");
 
@@ -245,7 +245,7 @@ public final class TourBans {
                 Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException ex) {
-            log.log(Level.WARNING, "The restrictions of the tours could not be written: " + ex);
+            log.log(Level.WARNING, "The restrictions of /cam follow could not be written: " + ex);
         }
     }
 
@@ -271,7 +271,7 @@ public final class TourBans {
         } catch (IOException ex) {
             aside = path;
         }
-        log.log(Level.WARNING, "The restrictions of the tours could not be read and were put aside, nobody is"
+        log.log(Level.WARNING, "The restrictions of /cam follow could not be read and were put aside, nobody is"
                 + " restricted until they are repaired: " + aside + " (" + reason + ")");
     }
 }

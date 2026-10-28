@@ -147,32 +147,45 @@ public final class CamSettings {
     private static final int MAX_BAN_SHIFT_STEP = 100;
 
     /**
-     * The widest {@code tour.radius}: about as far as the server sends other
+     * The widest {@code follow.radius}: about as far as the server sends other
      * players to a client, and a guest is to be seen close by anyway.
      */
     private static final double MAX_TOUR_RADIUS = 128.0;
 
     /**
      * The farthest {@code viewpoints.start-distance} and
-     * {@code tour.start-distance} reach: as far as a tour invites.
+     * {@code follow.start-distance} reach: as far as a tour invites.
      */
     private static final double MAX_START_DISTANCE = 128.0;
 
-    /** The longest {@code tour.out-of-reach-seconds} accepts, like {@code signal.lost-seconds}. */
+    /** The longest {@code follow.out-of-reach-seconds} accepts, like {@code signal.lost-seconds}. */
     private static final int MAX_TOUR_OUT_OF_REACH_SECONDS = 60;
 
-    /** The most guests {@code tour.max-guests} lets one tour take. */
+    /** The most guests {@code follow.max-guests} lets one tour take. */
     private static final int MAX_TOUR_GUESTS = 100;
+
+    /** The section of {@code /cam follow}. */
+    private static final String FOLLOW_SECTION = "follow";
+
+    /**
+     * What the section of {@code /cam follow} was called while it was
+     * {@code /cam follow}: an older file is read as it was written, see
+     * {@link ConfigReader#renamed}.
+     */
+    private static final String OLD_FOLLOW_SECTION = "tour";
 
     /**
      * Keys that are read although the config file built into the jar leaves
      * them out on purpose, so that they are not reported as unknown, see
      * {@link ConfigReader#warnUnknownKeys}. Also sections whose keys are names
      * the file chooses itself, such as the items of {@code start-cost.items}:
-     * everything below them is checked when it is read instead.
+     * everything below them is checked when it is read instead. And the old
+     * names of what {@code /cam follow} renamed, which an older file still
+     * has.
      */
     public static final Set<String> UNLISTED_KEYS = Set.of("mirror-damage.debug", "start-cost.items",
-            "signal.block-costs");
+            "signal.block-costs", OLD_FOLLOW_SECTION, "sounds.tour-invite", "sounds.tour-reach",
+            "menu.buttons.tour", "menu.admin-buttons.tours");
 
     /**
      * The most of one item {@code start-cost.items} accepts: a full inventory
@@ -353,31 +366,31 @@ public final class CamSettings {
     private boolean viewpointsSharing;
     /** Whether {@code /cam visit} takes the camera to a spot shared with him, {@code visitor-camera.enabled}. */
     private boolean visitorCameraEnabled;
-    /** Whether {@code /cam tour} lets a camera player show others round, {@code tour.enabled}. */
+    /** Whether {@code /cam follow} lets a camera player show others round, {@code follow.enabled}. */
     private boolean tourEnabled;
-    /** How close a camera has to be to be invited, {@code tour.radius}. */
+    /** How close a camera has to be to be invited, {@code follow.radius}. */
     private double tourRadius;
-    /** How long a guest may be out of reach before his tour ends, {@code tour.out-of-reach-seconds}. */
+    /** How long a guest may be out of reach before his tour ends, {@code follow.out-of-reach-seconds}. */
     private int tourOutOfReachSeconds;
-    /** Whether a guest sees through the eyes of his guide, {@code tour.guide-view}. */
+    /** Whether a guest sees through the eyes of his guide, {@code follow.guide-view}. */
     private boolean tourGuideView;
-    /** How close a player out of camera mode has to be to the guide to come along, {@code tour.start-distance}. */
+    /** How close a player out of camera mode has to be to the guide to come along, {@code follow.start-distance}. */
     private double tourStartDistance;
-    /** How many guests one tour takes at once, {@code tour.max-guests}; 0 for no limit. */
+    /** How many guests one tour takes at once, {@code follow.max-guests}; 0 for no limit. */
     private int tourMaxGuests;
-    /** Whether a player out of camera mode may show others round as well, {@code tour.lead-without-cam}. */
+    /** Whether a player out of camera mode may show others round as well, {@code follow.lead-without-cam}. */
     private boolean tourLeadWithoutCam;
     /**
      * Whether the names of a tour take the place of the name tag of a guide
-     * out of camera mode, {@code tour.guide-name: replace}, rather than
+     * out of camera mode, {@code follow.guide-name: replace}, rather than
      * standing over it, {@code above}.
      */
     private boolean tourGuideNameReplaces;
-    /** Whether the guests of a guide out of camera mode see his hearts as theirs, {@code tour.mirror-health}. */
+    /** Whether the guests of a guide out of camera mode see his hearts as theirs, {@code follow.mirror-health}. */
     private boolean tourMirrorHealth;
-    /** Whether they see the item in his hand in theirs, {@code tour.mirror-main-hand}. */
+    /** Whether they see the item in his hand in theirs, {@code follow.mirror-main-hand}. */
     private boolean tourMirrorMainHand;
-    /** Whether they see the item in his off hand in theirs, {@code tour.mirror-off-hand}. */
+    /** Whether they see the item in his off hand in theirs, {@code follow.mirror-off-hand}. */
     private boolean tourMirrorOffHand;
     /** Whether the owner of a spot hears who looked at it and liked it, {@code viewpoints.guestbook}. */
     private boolean viewpointsGuestbook;
@@ -720,8 +733,11 @@ public final class CamSettings {
         signalBackSound = CamSound.read(config, "sounds.signal-back", allowedSounds,
                 "block.conduit.activate", 1.0);
         spotSound = CamSound.read(config, "sounds.spot", allowedSounds, "item.chorus_fruit.teleport", 1.0);
-        tourInviteSound = CamSound.read(config, "sounds.tour-invite", allowedSounds, "block.note_block.bell", 1.0);
-        tourReachSound = CamSound.read(config, "sounds.tour-reach", allowedSounds, "block.conduit.deactivate", 1.0);
+        // Called tour-invite and tour-reach before /cam tour became /cam follow.
+        tourInviteSound = CamSound.read(config, config.renamed("sounds.follow-invite", "sounds.tour-invite"),
+                allowedSounds, "block.note_block.bell", 1.0);
+        tourReachSound = CamSound.read(config, config.renamed("sounds.follow-reach", "sounds.tour-reach"),
+                allowedSounds, "block.conduit.deactivate", 1.0);
         crashProtectionEnabled = config.getBoolean("crash-protection.enabled", true);
         camListAccess = readAccess(config, "cam-list.access");
         camListTeleport = config.getBoolean("cam-list.teleport", true);
@@ -737,18 +753,22 @@ public final class CamSettings {
         viewpointsStorage = readStorage(config, "viewpoints.storage");
         viewpointsSharing = config.getBoolean("viewpoints.sharing", true);
         visitorCameraEnabled = config.getBoolean("visitor-camera.enabled", true);
-        tourEnabled = config.getBoolean("tour.enabled", true);
-        tourRadius = config.getDouble("tour.radius", 16.0, 1.0, MAX_TOUR_RADIUS);
-        tourOutOfReachSeconds = config.getInt("tour.out-of-reach-seconds", 5, 1, MAX_TOUR_OUT_OF_REACH_SECONDS);
-        tourGuideView = config.getBoolean("tour.guide-view", true);
-        tourStartDistance = config.getDouble("tour.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
-        tourMaxGuests = config.getInt("tour.max-guests", 5, 0, MAX_TOUR_GUESTS);
-        tourLeadWithoutCam = config.getBoolean("tour.lead-without-cam", true);
-        tourGuideNameReplaces = config.getChoice("tour.guide-name", "replace", "replace", "above")
+        // The section of /cam follow, which was called tour before: an older
+        // file is read as it was written.
+        String follow = config.renamed(FOLLOW_SECTION, OLD_FOLLOW_SECTION);
+        tourEnabled = config.getBoolean(follow + ".enabled", true);
+        tourRadius = config.getDouble(follow + ".radius", 16.0, 1.0, MAX_TOUR_RADIUS);
+        tourOutOfReachSeconds = config.getInt(follow + ".out-of-reach-seconds", 5, 1,
+                MAX_TOUR_OUT_OF_REACH_SECONDS);
+        tourGuideView = config.getBoolean(follow + ".guide-view", true);
+        tourStartDistance = config.getDouble(follow + ".start-distance", 16.0, 0.0, MAX_START_DISTANCE);
+        tourMaxGuests = config.getInt(follow + ".max-guests", 5, 0, MAX_TOUR_GUESTS);
+        tourLeadWithoutCam = config.getBoolean(follow + ".lead-without-cam", true);
+        tourGuideNameReplaces = config.getChoice(follow + ".guide-name", "replace", "replace", "above")
                 .equalsIgnoreCase("replace");
-        tourMirrorHealth = config.getBoolean("tour.mirror-health", true);
-        tourMirrorMainHand = config.getBoolean("tour.mirror-main-hand", true);
-        tourMirrorOffHand = config.getBoolean("tour.mirror-off-hand", true);
+        tourMirrorHealth = config.getBoolean(follow + ".mirror-health", true);
+        tourMirrorMainHand = config.getBoolean(follow + ".mirror-main-hand", true);
+        tourMirrorOffHand = config.getBoolean(follow + ".mirror-off-hand", true);
         viewpointsGuestbook = config.getBoolean("viewpoints.guestbook", true);
         viewpointsStartDistance = config.getDouble("viewpoints.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
         viewsCooldownMinutes = config.getInt("viewpoints.views-cooldown-minutes", 10, 0, MAX_VIEWS_COOLDOWN_MINUTES);
@@ -1007,7 +1027,8 @@ public final class CamSettings {
         slots.clear();
         String allowed = messages.configMessage("config-allowed-menu-items");
         for (B button : buttons) {
-            String path = section + "." + button.key();
+            String path = button.oldKey() == null ? section + "." + button.key()
+                    : config.renamed(section + "." + button.key(), section + "." + button.oldKey());
             String raw = config.getString(path + ".item", button.defaultItem());
             MenuIcon icon = MenuIcon.parse(raw);
             if (icon == null) {
@@ -1641,7 +1662,7 @@ public final class CamSettings {
         return isViewpointsSharing() && visitorCameraEnabled;
     }
 
-    /** Whether {@code /cam tour} is there. */
+    /** Whether {@code /cam follow} is there. */
     public boolean isTourEnabled() {
         return tourEnabled;
     }

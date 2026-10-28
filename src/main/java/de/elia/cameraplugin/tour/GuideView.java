@@ -59,8 +59,8 @@ final class GuideView {
             available = true;
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
             if (log != null && PacketSender.isPaper()) {
-                log.log(Level.WARNING, "The guide's view of /cam tour does not work on this version of the server,"
-                        + " guests look round freely: " + ex);
+                log.log(Level.WARNING, "The leader's view of /cam follow does not work on this version of the server,"
+                        + " followers look round freely: " + ex);
             }
         }
     }

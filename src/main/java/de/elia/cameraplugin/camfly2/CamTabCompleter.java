@@ -181,7 +181,7 @@ public class CamTabCompleter implements TabCompleter {
             return matching(spots.sharedLabels(own), args[1]);
         }
         CamTour tour = plugin.getTour();
-        if (args.length == 2 && args[0].equalsIgnoreCase("tour") && own != null && tour.isEnabled()) {
+        if (args.length == 2 && CamCommand.isFollowWord(args[0]) && own != null && tour.isEnabled()) {
             List<String> words = new ArrayList<>();
             if (tour.viewWorks()) {
                 words.add("view");
@@ -201,7 +201,7 @@ public class CamTabCompleter implements TabCompleter {
             }
             return startingWith(args[1].toLowerCase(Locale.ROOT), words.toArray(new String[0]));
         }
-        if (args.length == 3 && args[0].equalsIgnoreCase("tour") && own != null && tour.isEnabled()) {
+        if (args.length == 3 && CamCommand.isFollowWord(args[0]) && own != null && tour.isEnabled()) {
             List<Player> whom = switch (args[1].toLowerCase(Locale.ROOT)) {
                 case "invite" -> tour.candidates(own);
                 case "accept", "decline" -> tour.invitationsOf(own);
@@ -256,9 +256,10 @@ public class CamTabCompleter implements TabCompleter {
                 && "visit".startsWith(partial)) {
             completions.add("visit");
         }
-        if (own != null && plugin.getTour().isEnabled() && "tour".startsWith(partial)
+        // Offered under its new name only; /cam tour goes all the same.
+        if (own != null && plugin.getTour().isEnabled() && "follow".startsWith(partial)
                 && (plugin.getTour().canLead(own) || !plugin.getTour().invitationsOf(own).isEmpty())) {
-            completions.add("tour");
+            completions.add("follow");
         }
         if (player != null && plugin.getMenu().isOpenable() && "menu".startsWith(partial)) {
             completions.add("menu");

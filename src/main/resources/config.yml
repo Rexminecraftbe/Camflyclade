@@ -408,7 +408,7 @@ sounds:
     pitch: 1.0
   # Wenn die Kamera rechtzeitig zurück ins Funksignal fliegt, es also von null wieder auf einen Balken kommt -
   # nicht beim Sprung zurück zum Körper (signal.lost: back) und nicht beim Ende (signal.lost: end). Auch für einen
-  # Gast einer Führung (tour), wenn der Führer rechtzeitig wieder in seine Reichweite kommt.
+  # Follower (follow), wenn der Leader rechtzeitig wieder in seine Reichweite kommt.
   signal-back:
     enabled: true
     sound: block.conduit.activate
@@ -421,14 +421,14 @@ sounds:
     sound: item.chorus_fruit.teleport
     volume: 1.0
     pitch: 1.0
-  # Wenn einen jemand zu einer Führung einlädt (tour)
-  tour-invite:
+  # Wenn einen jemand einlädt, ihm zu folgen (follow; hieß früher tour-invite, das geht weiter)
+  follow-invite:
     enabled: true
     sound: block.note_block.bell
     volume: 1.0
     pitch: 1.0
-  # Wenn der Führer einer Führung aus der Reichweite eines Gastes fliegt (tour) - beide hören ihn
-  tour-reach:
+  # Wenn der Leader aus der Reichweite eines Followers fliegt (follow) - beide hören ihn (hieß früher tour-reach)
+  follow-reach:
     enabled: true
     sound: block.conduit.deactivate
     volume: 1.0
@@ -594,7 +594,7 @@ camera-head:
   enabled: false
 
 # /cam menu: ein Menü zum Anklicken statt Befehlen zum Tippen - Cam-Modus an und aus, back, resume, die Aussichtspunkte
-# (privat, öffentlich und geteilt, je auf einem eigenen Reiter), die Führung (tour), photo, time, weather, nightvision
+# (privat, öffentlich und geteilt, je auf einem eigenen Reiter), das Folgen (follow), photo, time, weather, nightvision
 # und die eigene Statistik, und für Admins eine eigene Seite: wer im Cam-Modus ist (hinfliegen, zum Körper, beenden),
 # die Statistik anderer, Sperren und Flugspuren. Jeder Knopf tut, was sein Befehl tut, mit denselben
 # Prüfungen und Meldungen; was in dieser Datei aus ist, fehlt im Menü. Listen haben einen Knopf zum Sortieren (ein
@@ -604,7 +604,7 @@ camera-head:
 # man nach dem Klick in den Chat (abbrechen mit cancel), lesen tut ihn niemand sonst. Im Menü landet nichts im Inventar
 # und nichts kommt heraus, auch nicht im Cam-Modus, wo sonst jedes Fenster zu bleibt. Texte: menu-... in der Sprachdatei.
 menu:
-  # Wie die Spieler an back, resume, spot, visit, tour, photo, time, weather, nightvision und stats kommen:
+  # Wie die Spieler an back, resume, spot, visit, follow, photo, time, weather, nightvision und stats kommen:
   #   menu    = nur über das Menü - die Befehle sagen, dass es dafür /cam menu gibt (Text: menu-only)
   #   both    = über das Menü und über die Befehle
   #   command = nur über die Befehle, /cam menu ist aus
@@ -658,9 +658,9 @@ menu:
     spots:
       item: filled_map
       slot: 10
-    # Die Führung (tour): einladen, Einladungen annehmen, Gäste wegschicken, verlassen, beenden, und der Blick
-    # (des Führers oder frei)
-    tour:
+    # Folgen (follow): einladen, Einladungen annehmen, Follower wegschicken, aufhören, alle gehen lassen, und der
+    # Blick (des Leaders oder frei). Hieß früher tour - ein Abschnitt unter dem alten Namen geht weiter.
+    follow:
       item: lead
       slot: 9
     # /cam photo
@@ -726,17 +726,17 @@ menu:
     spots:
       item: filled_map
       slot: 20
-    # Die Führungen (camplugin.touradmin, nur mit tour.enabled): zuerst "Alle", dann die Spieler - wer online ist
-    # und wer eingeschränkt ist, auch offline -, darunter, ob er gerade führt oder folgt. Ein Klick auf einen Spieler
-    # öffnet seine Einschränkung: führen (einladen, also eine Führung starten) und teilnehmen (Einladungen annehmen),
-    # je ein Knopf zum Umschalten; ein Klick auf "Alle" schaltet Führungen für alle an oder aus - aus heißt weder
-    # führen noch teilnehmen, außer wer camplugin.touradmin.bypass hat. Beides für immer oder Tage, Stunden und Minuten
-    # wie bei einer Sperre, mit Grund; steht schon etwas, ändert oder hebt man es dort auf. Es gilt sofort: wer nicht
-    # mehr führen darf, dessen Führung endet, wer nicht mehr teilnehmen darf, verlässt die, der er folgt. Im Menü
-    # steht ihm dann "darfst du nicht" (bei "Alle": "gerade abgeschaltet"), und wer nicht teilnehmen darf, steht in
-    # der Liste zum Einladen mit dem Hinweis, dass man ihn nicht einladen kann (in
-    # plugins/CamFly/playerdata/tour-bans.yml).
-    tours:
+    # Folgen (camplugin.followadmin, nur mit follow.enabled): zuerst "Alle", dann die Spieler - wer online ist
+    # und wer eingeschränkt ist, auch offline -, darunter, ob er gerade führt (Leader) oder folgt. Ein Klick auf einen
+    # Spieler öffnet seine Einschränkung: führen (einladen, also Leader werden) und folgen (Einladungen annehmen), je
+    # ein Knopf zum Umschalten; ein Klick auf "Alle" schaltet das Folgen für alle an oder aus - aus heißt weder führen
+    # noch folgen, außer wer camplugin.followadmin.bypass hat. Beides für immer oder Tage, Stunden und Minuten wie bei
+    # einer Sperre, mit Grund; steht schon etwas, ändert oder hebt man es dort auf. Es gilt sofort: wer nicht mehr
+    # führen darf, dessen Follower gehen ihrer Wege, wer nicht mehr folgen darf, hört damit auf. Im Menü steht ihm
+    # dann "darfst du nicht" (bei "Alle": "gerade abgeschaltet"), und wer nicht folgen darf, steht in der Liste zum
+    # Einladen mit dem Hinweis, dass man ihn nicht einladen kann (in plugins/CamFly/playerdata/tour-bans.yml).
+    # Die alten Rechte camplugin.touradmin und camplugin.touradmin.bypass gelten weiter. Hieß früher tours.
+    follow:
       item: saddle
       slot: 24
     # Zurück zur ersten Seite
@@ -853,82 +853,86 @@ viewpoints:
 visitor-camera:
   enabled: true
 
-# Führung: /cam tour - einer zeigt anderen seinen Bau, und ihre Kameras fliegen mit seiner mit.
-#   /cam tour invite <Spieler>   = einen Spieler einladen: einen im Cam-Modus, dessen Kamera nicht weiter als radius
-#                                  Blöcke von der eigenen weg ist, oder einen ohne Cam-Modus, der nicht weiter als
-#                                  start-distance von ihr steht (im Menü stehen nur solche)
-#   /cam tour accept <Spieler>   = eine Einladung annehmen (sie gilt eine Minute; auch der Knopf im Chat, der sie
-#                                  gleich annimmt): die Kamera geht zum Führer, schaut wie er und fliegt von da an
-#                                  mit ihm mit. Ohne Cam-Modus startet er dafür erst, dort wo man steht.
-#   /cam tour decline <Spieler>  = eine Einladung ablehnen
-#   /cam tour kick <Spieler>     = einen Gast wegschicken
-#   /cam tour leave              = die Führung verlassen (auch /cam back, ein Sprung zu einem Aussichtspunkt, ein Besuch
-#                                  oder /cam resume)
-#   /cam tour end                = die Führung für alle beenden (auch, wenn der Cam-Modus des Führers endet, er stirbt
-#                                  oder in den Zuschauermodus wechselt)
-#   /cam tour view               = zwischen dem Blick des Führers und freiem Umsehen umschalten (auch im Menü)
-# Fair bleibt es so: Für die Kamera eines Gastes gelten alle ihre eigenen Grenzen weiter - max-distance und das
-# Funksignal von ihrem Körper aus, die Wand, cam-area, gesperrte Lava, Wasser und Pulverschnee. Der Führer lenkt sie,
-# aber nicht weiter, als sie selbst fliegen dürfte. Fliegt er aus der Reichweite eines Gastes, bleibt dessen Kamera an
-# ihrer Grenze stehen, und beide lesen in der Action-Bar, dass die Führung für ihn in out-of-reach-seconds endet (Ton:
-# sounds.tour-reach). Kommt der Führer rechtzeitig zurück, geht sie weiter. Die eigenen Tasten bewegen die Kamera eines
-# Gastes nicht, das Mausrad ändert sein Tempo nicht, und seinen eigenen Körper kann er nicht anklicken oder schlagen,
-# solange er folgt (Text: tour-body-locked) - zurück zum Körper geht es nach dem Verlassen. Der Führer bleibt frei.
-# Die Teilnehmer einer Führung sehen sich gegenseitig nicht: weder die Kamera noch ihren Namen, ihre Partikel oder
-# ihren Umriss. Wer nicht dabei ist, sieht nur den Führer: Die Kameras der Gäste, die ihm folgen, sind für alle
+# Folgen: /cam follow - die Kameras anderer folgen einem Spieler, dem Leader: z. B. durch den Bau, den er zeigt, oder
+# beim Bauen und im Kampf, wenn er nicht im Cam-Modus ist (lead-without-cam). Hieß früher /cam tour - der alte Befehl
+# geht weiter, und ein Abschnitt tour: in einer älteren Datei wird gelesen, solange es follow: dort nicht gibt.
+#   /cam follow invite <Spieler>   = einen Spieler einladen: einen im Cam-Modus, dessen Kamera nicht weiter als radius
+#                                    Blöcke von der eigenen weg ist, oder einen ohne Cam-Modus, der nicht weiter als
+#                                    start-distance vom Leader steht (im Menü stehen nur solche)
+#   /cam follow accept <Spieler>   = eine Einladung annehmen (sie gilt eine Minute; auch der Knopf im Chat, der sie
+#                                    gleich annimmt): die Kamera geht zum Leader, schaut wie er und fliegt von da an
+#                                    mit ihm mit. Ohne Cam-Modus startet er dafür erst, dort wo man steht.
+#   /cam follow decline <Spieler>  = eine Einladung ablehnen
+#   /cam follow kick <Spieler>     = einen Follower wegschicken
+#   /cam follow leave              = aufhören zu folgen (auch /cam back, ein Sprung zu einem Aussichtspunkt, ein Besuch
+#                                    oder /cam resume)
+#   /cam follow end                = alle Follower gehen lassen (auch, wenn der Cam-Modus des Leaders endet, er stirbt
+#                                    oder in den Zuschauermodus wechselt)
+#   /cam follow view               = zwischen dem Blick des Leaders und freiem Umsehen umschalten (auch im Menü)
+# Fair bleibt es so: Für die Kamera eines Followers gelten alle ihre eigenen Grenzen weiter - max-distance und das
+# Funksignal von ihrem Körper aus, die Wand, cam-area, gesperrte Lava, Wasser und Pulverschnee. Der Leader lenkt sie,
+# aber nicht weiter, als sie selbst fliegen dürfte. Kommt er aus der Reichweite eines Followers, bleibt dessen Kamera
+# an ihrer Grenze stehen, und beide lesen in der Action-Bar, dass das Folgen für ihn in out-of-reach-seconds endet
+# (Ton: sounds.follow-reach). Kommt der Leader rechtzeitig zurück, geht es weiter. Die eigenen Tasten bewegen die
+# Kamera eines Followers nicht, das Mausrad ändert sein Tempo nicht, und seinen eigenen Körper kann er nicht anklicken
+# oder schlagen, solange er folgt (Text: tour-body-locked) - zurück zum Körper geht es, wenn er aufhört. Der Leader
+# bleibt frei.
+# Leader und Follower sehen sich gegenseitig nicht: weder die Kamera noch ihren Namen, ihre Partikel oder ihren
+# Umriss. Wer nicht dabei ist, sieht nur den Leader: Die Kameras der Follower, die ihm folgen, sind für alle
 # ausgeblendet, mit ihren Partikeln - bei anderen kämen sie sonst etwas zu spät hinter ihm her. Ihre Namen stehen
-# über der Kamera des Führers gestapelt: ganz unten seiner, darüber die der Gäste in der Reihenfolge, in der sie
+# über dem Leader gestapelt: ganz unten seiner (Leader), darüber die der Follower in der Reihenfolge, in der sie
 # dazukamen (Texte: player.tour-guide-format und player.tour-follower-format, nur mit camera-mode.name-visible:
-# true). Ist ein Gast außer Reichweite, sieht man ihn wieder an seiner eigenen Kamera, mit seinem eigenen Namen.
+# true). Ist ein Follower außer Reichweite, sieht man ihn wieder an seiner eigenen Kamera, mit seinem eigenen Namen.
 # In der Tab-Liste bleiben alle - auf Paper über das Innere des Servers (wie guide-view). Geht das nach einem Update
 # von Minecraft nicht mehr, meldet der Start das in der Konsole, und Ausgeblendete fehlen dann auch in der Tab-Liste,
-# bis das Plugin angepasst ist. Auf Spigot immer so. Ton der Einladung: sounds.tour-invite, Texte: tour-...
-# Führen ohne Cam-Modus (lead-without-cam): Der Führer muss nicht selbst im Cam-Modus sein - die Kameras seiner Gäste
-# folgen ihm, während er herumläuft und baut. Für die Gäste gilt alles wie oben, auch ihre eigenen Grenzen. Im
-# Zuschauermodus führt niemand (er flöge durch Wände, Text: tour-guide-spectator), und stirbt er, endet die Führung.
-# Startet er doch den Cam-Modus, geht die Führung mit seiner Kamera weiter; endet der Cam-Modus, endet auch sie.
-# Über ihm stehen die Namen gestapelt wie über der Kamera eines Führers, solange Gäste ihm folgen - ganz unten seiner
-# (Text: player.tour-builder-format), siehe guide-name. Nie mehr, als sein eigener Name zeigen würde: nicht, solange er
-# unsichtbar ist, und nicht durch Wände, solange er schleicht.
-# Seine Gäste sehen auf ihrem eigenen Bildschirm seine Herzen und die Items in seinen Händen (mirror-...) - nur auf
+# bis das Plugin angepasst ist. Auf Spigot immer so. Ton der Einladung: sounds.follow-invite, Texte: tour-...
+# (die Schlüssel in der Sprachdatei behalten den alten Namen).
+# Führen ohne Cam-Modus (lead-without-cam): Der Leader muss nicht selbst im Cam-Modus sein - die Kameras seiner
+# Follower folgen ihm, während er herumläuft, baut oder kämpft. Für die Follower gilt alles wie oben, auch ihre eigenen
+# Grenzen. Im Zuschauermodus führt niemand (er flöge durch Wände, Text: tour-guide-spectator), und stirbt er, endet
+# das Folgen. Startet er doch den Cam-Modus, geht es mit seiner Kamera weiter; endet der Cam-Modus, endet auch das
+# Folgen. Über ihm stehen die Namen gestapelt wie über der Kamera eines Leaders, solange Follower ihm folgen - ganz
+# unten seiner (Text: player.tour-builder-format), siehe guide-name. Nie mehr, als sein eigener Name zeigen würde:
+# nicht, solange er unsichtbar ist, und nicht durch Wände, solange er schleicht.
+# Seine Follower sehen auf ihrem eigenen Bildschirm seine Herzen und die Items in seinen Händen (mirror-...) - nur auf
 # ihrem Bildschirm: Am Server bleiben ihre Herzen ihre, und ihre Hände bleiben leer wie im Cam-Modus; nehmen,
 # wegwerfen oder benutzen lässt sich nichts davon, und sein übriges Inventar sehen sie nicht. Der Hunger bleibt ihrer.
-# Mit dem Ende der Führung (oder wenn er den Cam-Modus startet) sehen sie wieder ihre eigenen Herzen und Hände.
-# Mit guide-view sieht ein Gast durch seine Augen: Die Herzen dort zeichnet das Spiel selbst - und den Hunger dabei
-# immer voll, den schickt das Spiel von niemandem an andere.
-tour:
+# Hören sie auf zu folgen (oder startet er den Cam-Modus), sehen sie wieder ihre eigenen Herzen und Hände.
+# Mit guide-view sieht ein Follower durch seine Augen: Die Herzen dort zeichnet das Spiel selbst - und den Hunger
+# dabei immer voll, den schickt das Spiel von niemandem an andere.
+follow:
   enabled: true
   # Wie nah die Kamera eines anderen der eigenen sein muss, damit man ihn einladen kann, in Blöcken (1 bis 128)
   radius: 16.0
-  # Wie nah ein Spieler ohne Cam-Modus der Kamera des Führers sein muss, um mitzukommen, in Blöcken (0 bis 128,
+  # Wie nah ein Spieler ohne Cam-Modus dem Leader sein muss, um ihm zu folgen, in Blöcken (0 bis 128,
   # 0 = nur wer schon im Cam-Modus ist). Nimmt er an, startet sein Cam-Modus dort, wo er steht, mit allem, was ein
   # Start mit /cam prüft und kostet (z. B. nicht direkt nach Schaden). Zu weit weg: "You are X blocks too far away."
   start-distance: 16
-  # Wie viele Sekunden der Führer außer Reichweite eines Gastes sein darf, bevor die Führung für den Gast endet
+  # Wie viele Sekunden der Leader außer Reichweite eines Followers sein darf, bevor das Folgen für ihn endet
   # (1 bis 60)
   out-of-reach-seconds: 5
-  # Wie viele Gäste höchstens gleichzeitig auf einer Führung mitkommen (0 = kein Limit, bis 100). Ist sie voll,
-  # kann der Führer niemanden mehr einladen, und wer schon eingeladen ist, kommt erst mit, wenn wieder Platz ist
+  # Wie viele Follower einem Leader höchstens gleichzeitig folgen (0 = kein Limit, bis 100). Sind es so viele, kann
+  # der Leader niemanden mehr einladen, und wer schon eingeladen ist, kommt erst dazu, wenn wieder Platz ist
   # (Texte: tour-full, tour-full-guide).
   max-guests: 5
-  # Ob ein Gast durch die Augen des Führers sieht - so flüssig wie im Zuschauermodus, nur ohne ihn: kein Fliegen durch
-  # Wände, kein Teleport-Menü. Jeder Gast kann mit /cam tour view auf freies Umsehen umschalten. Ist der Führer außer
-  # seiner Reichweite, sieht er wieder aus seiner eigenen Kamera, die an ihrer Grenze steht.
+  # Ob ein Follower durch die Augen des Leaders sieht - so flüssig wie im Zuschauermodus, nur ohne ihn: kein Fliegen
+  # durch Wände, kein Teleport-Menü. Jeder Follower kann mit /cam follow view auf freies Umsehen umschalten. Ist der
+  # Leader außer seiner Reichweite, sieht er wieder aus seiner eigenen Kamera, die an ihrer Grenze steht.
   # Geht nur auf Paper: Das Spiel hat dafür ein Paket, das nur über das Innere des Servers zu schicken ist (keine
   # offizielle Schnittstelle). Ändert ein Update von Minecraft dort etwas, meldet der Start das in der Konsole, und
-  # die Gäste sehen sich frei um, bis das Plugin angepasst ist - sonst läuft alles weiter. Auf Spigot immer frei.
+  # die Follower sehen sich frei um, bis das Plugin angepasst ist - sonst läuft alles weiter. Auf Spigot immer frei.
   guide-view: true
   # Ob auch führen darf, wer nicht im Cam-Modus ist (siehe oben)
   lead-without-cam: true
-  # Wie die Namen über einem Führer ohne Cam-Modus stehen, solange ihm Gäste folgen:
+  # Wie die Namen über einem Leader ohne Cam-Modus stehen, solange ihm Follower folgen:
   #   replace = an der Stelle seines eigenen Namens: Den blendet das Team cam_guide aus, und ganz unten steht
   #             player.tour-builder-format. Ist er schon in einem Team eines anderen Plugins (z. B. für einen Rang mit
   #             Farbe und Präfix) oder hat er ein eigenes Scoreboard, nimmt CamFly ihn da nicht heraus - dann wie above.
   #             Plugins, die Namen nur über Pakete setzen (z. B. TAB), sieht der Server nicht: dort above nehmen.
-  #   above   = sein eigener Name bleibt, die Namen der Gäste stehen darüber
+  #   above   = sein eigener Name bleibt, die Namen der Follower stehen darüber
   guide-name: replace
-  # Was die Gäste eines Führers ohne Cam-Modus von ihm sehen: seine Herzen, das Item in seiner Hand und das in seiner
-  # zweiten Hand
+  # Was die Follower eines Leaders ohne Cam-Modus von ihm sehen: seine Herzen, das Item in seiner Hand und das in
+  # seiner zweiten Hand
   mirror-health: true
   mirror-main-hand: true
   mirror-off-hand: true

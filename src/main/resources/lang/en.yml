@@ -199,9 +199,9 @@ messages:
   # viewpoints.max-per-player) and may still save ({left}); -full once there is no room left, -unlimited without a
   # limit. menu-sort is the button that sorts a list, {sort} being one of the menu-sort-... orders; under it every
   # order, the one in use as menu-sort-option-current, the others as menu-sort-option. menu-tour-... are the page
-  # of /cam tour, menu-tour-view the button that switches between the guide's view and looking round freely;
-  # menu-tour-lead-restricted and menu-tour-join-restricted what keeps him from leading or taking part,
-  # menu-tour-disabled that tours are switched off ({time} and {reason} as with /cam ban);
+  # of /cam follow (the keys keep the name it had, tour), menu-tour-view the button that switches between the leader's
+  # view and looking round freely; menu-tour-lead-restricted and menu-tour-join-restricted what keeps him from leading
+  # or following, menu-tour-disabled that following is switched off ({time} and {reason} as with /cam ban);
   # menu-tour-candidate-restricted- and -disabled-lore under a player he cannot invite for that.
   # menu-only is what the commands say under menu.access or menu.admin-access: menu, menu-features-off under false. menu-spot-name asks for the name of a new spot in the chat,
   # menu-admin-ban-reason-question why a player is banned ({player}), {cancel} being the word that calls either off,
@@ -262,10 +262,10 @@ messages:
   menu-admin-players-actions: "&eClick: stop or ban"
   menu-admin-players-lore: "&7End the cam mode of a player,\n&7ban him, change or lift his ban."
   menu-admin-players-title: "&8Players"
-  # The pages that restrict the spots or the tours of a player, or of everybody: menu-admin-restricted what keeps him
+  # The pages that restrict the spots or the following of a player, or of everybody: menu-admin-restricted what keeps him
   # ({ban}: {what} as spot-restriction-... or tour-restriction-..., the time as ban-for or ban-for-good, the reason as
   # ban-reason), -restrict-free that nothing does. Under each button what it can keep him at, the one it is at as
-  # -stage-now, the others as -stage ({stage}: -allowed or the restriction), then -steps (spots) or -switch (tours).
+  # -stage-now, the others as -stage ({stage}: -allowed or the restriction), then -steps (spots) or -switch (follow).
   menu-admin-restrict-allowed: "allowed"
   menu-admin-restrict-free: "&7No restrictions"
   menu-admin-restrict-stage: "&8- {stage}"
@@ -325,50 +325,50 @@ messages:
   menu-admin-stop-none-lore: "&7There is no cam mode to end."
   menu-admin-target-title: "&8{player}"
   menu-admin-title: "&8Cam admin"
-  # The admin page of the tours (camplugin.touradmin): menu-admin-tours-... the list of the players, everybody first
-  # (-everybody-..., with -on or -off: {ban} for how long and why), under each player whether he shows others round
-  # ({count} guests) or follows a tour ({player} is the guide). menu-admin-tour-off-... is the page that switches tours
-  # off for everybody, with the button -switch (-switch-on or -switch-off) and menu-admin-tour-on, which switches them
+  # The admin page of /cam follow (camplugin.followadmin): menu-admin-tours-... the list of the players, everybody first
+  # (-everybody-..., with -on or -off: {ban} for how long and why), under each player whether he leads ({count}
+  # followers) or follows somebody ({player} is the leader). menu-admin-tour-off-... is the page that switches following
+  # off for everybody, with the button -switch (-switch-on or -switch-off) and menu-admin-tour-on, which switches it
   # on again; menu-admin-tour-restrict-... the page that restricts one player, with the buttons -lead and -join.
   menu-admin-tour-off-change-confirm: "&4Save the change"
-  menu-admin-tour-off-change-title: "&8Tours are off for everybody"
-  menu-admin-tour-off-confirm: "&4Switch tours off"
-  menu-admin-tour-off-confirm-lore: "&7Tours: {ban}"
+  menu-admin-tour-off-change-title: "&8Following is off for everybody"
+  menu-admin-tour-off-confirm: "&4Switch following off"
+  menu-admin-tour-off-confirm-lore: "&7Following: {ban}"
   menu-admin-tour-off-nothing: "&7Nothing to switch off"
-  menu-admin-tour-off-nothing-lore: "&7Switch tours off above first."
-  menu-admin-tour-off-reason-question: "&eType in the chat why tours are switched off, or {cancel}."
-  menu-admin-tour-off-title: "&8Switch tours off for everybody"
-  menu-admin-tour-on: "&aSwitch tours on again"
-  menu-admin-tour-on-everybody-lore: "&7Everybody may lead tours and\n&7take part in them again."
+  menu-admin-tour-off-nothing-lore: "&7Switch following off above first."
+  menu-admin-tour-off-reason-question: "&eType in the chat why following is switched off, or {cancel}."
+  menu-admin-tour-off-title: "&8Switch following off for everybody"
+  menu-admin-tour-on: "&aSwitch following on again"
+  menu-admin-tour-on-everybody-lore: "&7Everybody may lead and\n&7follow again."
   menu-admin-tour-restrict-change-confirm: "&4Change the restriction"
-  menu-admin-tour-restrict-change-title: "&8Change the tour restriction of {player}"
+  menu-admin-tour-restrict-change-title: "&8Change the follow restriction of {player}"
   menu-admin-tour-restrict-confirm: "&4Restrict"
   menu-admin-tour-restrict-confirm-lore: "&7{player}: {ban}"
-  menu-admin-tour-restrict-join: "&bTaking part"
-  menu-admin-tour-restrict-join-lore: "&7Accepting invitations,\n&7coming along on tours"
-  menu-admin-tour-restrict-lead: "&6Leading tours"
-  menu-admin-tour-restrict-lead-lore: "&7Inviting players to his tour,\n&7which starts it"
+  menu-admin-tour-restrict-join: "&bFollowing"
+  menu-admin-tour-restrict-join-lore: "&7Accepting invitations,\n&7following a leader"
+  menu-admin-tour-restrict-lead: "&6Leading"
+  menu-admin-tour-restrict-lead-lore: "&7Inviting players to follow him,\n&7which makes him a leader"
   menu-admin-tour-restrict-nothing: "&7Nothing picked"
   menu-admin-tour-restrict-nothing-lore: "&7Pick at least one thing\n&7he may not do."
-  menu-admin-tour-restrict-reason-question: "&eType in the chat why the tours of {player} are restricted, or {cancel}."
-  menu-admin-tour-restrict-title: "&8Restrict the tours of {player}"
-  menu-admin-tour-switch: "&6Tours for everybody"
-  menu-admin-tour-switch-lore: "&7Leading tours and taking part,\n&7for every player but those\n&7with camplugin.touradmin.bypass"
+  menu-admin-tour-restrict-reason-question: "&eType in the chat why {player} may not lead or follow, or {cancel}."
+  menu-admin-tour-restrict-title: "&8Restrict the following of {player}"
+  menu-admin-tour-switch: "&6Following for everybody"
+  menu-admin-tour-switch-lore: "&7Leading and following,\n&7for every player but those\n&7with camplugin.followadmin.bypass"
   menu-admin-tour-switch-off: "switched off"
   menu-admin-tour-switch-on: "on"
   menu-admin-tour-unrestrict: "&aLift the restriction"
-  menu-admin-tour-unrestrict-lore: "&7{player} may lead tours and\n&7take part in them again."
-  menu-admin-tours: "&6Tours"
+  menu-admin-tour-unrestrict-lore: "&7{player} may lead and\n&7follow again."
+  menu-admin-tours: "&6Follow"
   menu-admin-tours-actions: "&eClick: restrict"
   menu-admin-tours-everybody-actions: "&eClick: switch on or off"
-  menu-admin-tours-everybody-lore: "&7Switch tours off for every\n&7player at once, but those with\n&7camplugin.touradmin.bypass"
-  menu-admin-tours-following: "&7On the tour of {player}"
-  menu-admin-tours-guiding: "&7Showing {count} round"
-  menu-admin-tours-lore: "&7Keep players, or everybody,\n&7from leading tours or\n&7taking part in them."
-  menu-admin-tours-none: "&7On no tour"
-  menu-admin-tours-off: "&cTours are off {ban}"
-  menu-admin-tours-on: "&aTours are on"
-  menu-admin-tours-title: "&8Tours: players"
+  menu-admin-tours-everybody-lore: "&7Switch following off for every\n&7player at once, but those with\n&7camplugin.followadmin.bypass"
+  menu-admin-tours-following: "&7Follows {player}"
+  menu-admin-tours-guiding: "&7Leads {count}"
+  menu-admin-tours-lore: "&7Keep players, or everybody,\n&7from leading or following."
+  menu-admin-tours-none: "&7Neither leads nor follows"
+  menu-admin-tours-off: "&cFollowing is off {ban}"
+  menu-admin-tours-on: "&aFollowing is on"
+  menu-admin-tours-title: "&8Follow: players"
   menu-admin-trails: "&aFlights"
   menu-admin-trails-actions: "&eClick: his flights"
   menu-admin-trails-count: "&7{count} flights kept, the last at {date}"
@@ -516,48 +516,48 @@ messages:
   menu-to-trails: "&7« Back"
   menu-to-main: "&7« Back"
   menu-to-spots: "&7« Back to the spots"
-  menu-tour: "&aTour"
+  menu-tour: "&aFollow"
   menu-tour-candidate: "&f{player}"
-  menu-tour-candidate-disabled-lore: "&cYou can't invite him:\n&ctours are switched off"
-  menu-tour-candidate-full-lore: "&cYour tour is full.\n&7Guests at most: {max}"
+  menu-tour-candidate-disabled-lore: "&cYou can't invite him:\n&cfollowing is switched off"
+  menu-tour-candidate-full-lore: "&cYou have as many followers\n&cas there may be: {max}"
   menu-tour-candidate-invited-lore: "&eInvited, no answer yet.\n&7Click: invite again"
   menu-tour-candidate-lore: "&7In cam mode, {blocks} blocks away.\n&eClick: invite"
   menu-tour-candidate-outside-lore: "&7Not in cam mode, {blocks} blocks away.\n&7Cam mode starts where they stand\n&7once they accept.\n&eClick: invite"
-  menu-tour-candidate-restricted-lore: "&cYou can't invite him:\n&che is restricted from tours"
-  menu-tour-disabled: "&7Tours are switched off"
+  menu-tour-candidate-restricted-lore: "&cYou can't invite him:\n&che may not follow anybody"
+  menu-tour-disabled: "&7Following is switched off"
   menu-tour-disabled-lore: "&7It is off for everybody\n&7{time}{reason}."
   menu-tour-empty: "&7Nobody to invite"
-  # {start} = tour.start-distance, {radius} = tour.radius.
-  menu-tour-empty-lore: "&7Players on no tour show up here\n&7when they are close to you:\n&7- without cam mode: within {start} blocks\n&7- in cam mode: within {radius} blocks"
-  # The same while tour.start-distance is 0: only who is in cam mode can come along.
-  menu-tour-empty-lore-cam-only: "&7Players on no tour show up here\n&7when they are in cam mode and their\n&7camera is within {radius} blocks of you."
-  menu-tour-end: "&cEnd the tour"
-  menu-tour-end-lore: "&7Every guest goes their own way."
+  # {start} = follow.start-distance, {radius} = follow.radius.
+  menu-tour-empty-lore: "&7Players free to follow show up\n&7here when they are close to you:\n&7- without cam mode: within {start} blocks\n&7- in cam mode: within {radius} blocks"
+  # The same while follow.start-distance is 0: only who is in cam mode can follow.
+  menu-tour-empty-lore-cam-only: "&7Players free to follow show up\n&7here when they are in cam mode and\n&7their camera is within {radius} blocks of you."
+  menu-tour-end: "&cLet everybody go"
+  menu-tour-end-lore: "&7Every follower goes their own way."
   menu-tour-following: "&aYou follow {player}"
   menu-tour-guest: "&a{player}"
-  menu-tour-guest-lore: "&7On your tour.\n&cClick: send away"
+  menu-tour-guest-lore: "&7Follows you.\n&cClick: send away"
   menu-tour-guide: "&a{player}"
   menu-tour-guide-lore: "&7Your camera follows theirs."
-  menu-tour-guiding: "&aGuests: {count}"
-  # The same while tour.max-guests is set.
-  menu-tour-guiding-max: "&aGuests: {count}/{max}"
+  menu-tour-guiding: "&aFollowers: {count}"
+  # The same while follow.max-guests is set.
+  menu-tour-guiding-max: "&aFollowers: {count}/{max}"
   menu-tour-invitation: "&e{player}"
-  menu-tour-invitation-lore: "&7Invites you to a tour.\n&aLeft-click: come along\n&cRight-click: turn down"
+  menu-tour-invitation-lore: "&7Invites you to follow them.\n&aLeft-click: follow\n&cRight-click: turn down"
   menu-tour-invitations: "&eInvitations for you: {count}"
-  menu-tour-join-restricted: "&7Sorry, you may not take part in tours"
+  menu-tour-join-restricted: "&7Sorry, you may not follow anybody"
   menu-tour-join-restricted-lore: "&7You are restricted\n&7{time}{reason}."
-  menu-tour-lead-restricted: "&7Sorry, you may not lead tours"
+  menu-tour-lead-restricted: "&7Sorry, you may not lead"
   menu-tour-lead-restricted-lore: "&7You are restricted\n&7{time}{reason}."
-  menu-tour-leave: "&cLeave the tour"
+  menu-tour-leave: "&cStop following"
   menu-tour-leave-lore: "&7Your camera stays where it is,\n&7your keys move it again."
-  menu-tour-lore: "&7Show others round, or follow\n&7someone who does."
+  menu-tour-lore: "&7Let others follow you,\n&7or follow someone."
   menu-tour-not-in-cam: "&7Not in cam mode"
-  menu-tour-not-in-cam-lore: "&7Start cam mode to show\n&7others round."
-  menu-tour-title: "&8Tour"
-  menu-tour-view: "&bView on tours"
+  menu-tour-not-in-cam-lore: "&7Start cam mode to let\n&7others follow you."
+  menu-tour-title: "&8Follow"
+  menu-tour-view: "&bView when following"
   menu-tour-view-free: "&efree"
-  menu-tour-view-guide: "&athe guide's"
-  menu-tour-view-lore: "&7Through the eyes of the guide,\n&7or look round freely."
+  menu-tour-view-guide: "&athe leader's"
+  menu-tour-view-lore: "&7Through the eyes of the leader,\n&7or look round freely."
   menu-weather: "&bWeather"
   menu-weather-clear: "&eClear"
   menu-weather-lore: "&7A weather of your own, only you see it."
@@ -589,14 +589,15 @@ messages:
   photo-off: "&c/cam photo is switched off."
   photo-started: "&aPhoto mode on: the other players and the bodies are out of the picture for you. F1 hides the rest, photo mode once more ends it."
   player.name-format: "{player}'s Cam"
-  # On a tour, the names of the guests stand over the guide's camera, stacked over the guide's: {name} = what
+  # While others follow a leader (/cam follow), their names stand over his camera, stacked over his: {name} = what
   # player.name-format says (without its colour), {player} = the player's name. The follower lines take the colour of
-  # camera-mode.name.color, the guide's line brings its own. Over a guide out of cam mode (tour.lead-without-cam), his
-  # own line is player.tour-builder-format ({player} = his name) - with tour.guide-name: replace, in place of his name
-  # tag; with above his name tag stays, and only the follower lines stand over it.
-  player.tour-builder-format: "&6{player} &7(Guide)"
+  # camera-mode.name.color, the leader's line brings its own. Over a leader out of cam mode (follow.lead-without-cam),
+  # his own line is player.tour-builder-format ({player} = his name) - with follow.guide-name: replace, in place of his
+  # name tag; with above his name tag stays, and only the follower lines stand over it. The keys keep the name /cam
+  # follow had before, tour.
+  player.tour-builder-format: "&6{player} &7(Leader)"
   player.tour-follower-format: "{name} &7(Follower)"
-  player.tour-guide-format: "&6{name} &7(Guide)"
+  player.tour-guide-format: "&6{name} &7(Leader)"
   portal-blocked: "&cYou cannot go through {portal} portals in camera mode."
   portal-return-area: "&cCam mode is not allowed in {area}, you were brought back."
   portal-return-distance: "&cYou ended up more than {distance} blocks away from {from} and were brought back."
@@ -804,81 +805,81 @@ messages:
   time-set: "&aYour own time: {time}. Only you see it, until cam mode ends."
   time-set-kept: "&aYour own time: {time}. Only you see it, in every flight until you reset it."
   time-usage: "&eUse /cam time day, noon, sunset, night, midnight, sunrise or a time in ticks from 0 to 23999, or /cam time reset."
-  # /cam tour (tour): {player} is the other one - the guide, a guest or whom he invites -, {blocks} by how much he
-  # stands further than tour.start-distance from the guide out of cam mode (tour-start-too-far; tour-too-far-guest is
-  # the same in cam mode, further than tour.radius), {players} the guests the guide leaves behind and {time} the time left before the tour ends for them:
-  # tour-reach-warning (for the guest) and tour-reach-warning-guide (for the guide) count it down in the action bar,
-  # tour-reach-lost and tour-reach-lost-guide say when it is over. tour-invitation has the buttons tour-button-accept
-  # and tour-button-decline behind it, and what hovering over them says. tour-view-guide and tour-view-free answer
-  # /cam tour view, tour-view-unavailable says that the guide's view does not work on the server (tour.guide-view).
-  # tour-guide-spectator: a player out of cam mode (tour.lead-without-cam) can't lead a tour in spectator mode;
-  # tour-guide-cannot-lead: the guide can't lead one any more when he is accepted (tour-guide-gone while only who is
-  # in cam mode may lead).
-  # tour-full and tour-full-guide: the tour has tour.max-guests ({max}) already. tour-body-locked: a guest clicked or hit
-  # his own body, which he cannot use while he follows the guide.
-  # The moderation of the tours on the admin page (camplugin.touradmin): tour-restrict-... / tour-unrestrict-... tell
-  # the admin ({player} is the player), tour-restricted-now, -changed and tour-unrestricted-now the player ({player} is
-  # the admin). tour-restricted-lead and -join answer him when a restriction keeps him from inviting or accepting
-  # ({time} and {reason} as with /cam ban), tour-restricted-guest the guide who would invite him. {what} lists
-  # tour-restriction-lead and -join, joined by tour-restriction-separator. Tours switched off for everybody:
+  # /cam follow (follow; the keys keep the name it had before, tour): {player} is the other one - the leader, a follower
+  # or whom he invites -, {blocks} by how much he stands further than follow.start-distance from the leader out of cam
+  # mode (tour-start-too-far; tour-too-far-guest is the same in cam mode, further than follow.radius), {players} the
+  # followers the leader leaves behind and {time} the time left before it ends for them: tour-reach-warning (for the
+  # follower) and tour-reach-warning-guide (for the leader) count it down in the action bar, tour-reach-lost and
+  # tour-reach-lost-guide say when it is over. tour-invitation has the buttons tour-button-accept and
+  # tour-button-decline behind it, and what hovering over them says. tour-view-guide and tour-view-free answer
+  # /cam follow view, tour-view-unavailable says that the leader's view does not work on the server
+  # (follow.guide-view). tour-guide-spectator: a player out of cam mode (follow.lead-without-cam) can't lead in
+  # spectator mode; tour-guide-cannot-lead: the leader can't lead any more when he is accepted (tour-guide-gone while
+  # only who is in cam mode may lead). tour-full and tour-full-guide: the leader has follow.max-guests ({max})
+  # followers already. tour-body-locked: a follower clicked or hit his own body, which he cannot use while he follows.
+  # The moderation on the admin page (camplugin.followadmin): tour-restrict-... / tour-unrestrict-... tell the admin
+  # ({player} is the player), tour-restricted-now, -changed and tour-unrestricted-now the player ({player} is the
+  # admin). tour-restricted-lead and -join answer him when a restriction keeps him from inviting or accepting ({time}
+  # and {reason} as with /cam ban), tour-restricted-guest the leader who would invite him. {what} lists
+  # tour-restriction-lead and -join, joined by tour-restriction-separator. Following switched off for everybody:
   # tour-off-done, -changed and tour-on-done tell the admin; tour-disabled-now, -changed and tour-enabled-now every
-  # player but those with camplugin.touradmin.bypass; tour-disabled and tour-disabled-guest in place of
+  # player but those with camplugin.followadmin.bypass; tour-disabled and tour-disabled-guest in place of
   # tour-restricted-....
-  tour-already-guest: "&e{player} is on your tour already."
-  tour-body-locked: "&cYou follow the tour of {player}: leave it first to use your body."
-  tour-busy: "&cYou are on a tour already."
-  tour-busy-following: "&cYou follow a tour yourself. Leave it first."
-  tour-button-accept: "&a[Come along]"
-  tour-button-accept-hover: "&7Follow the camera of {player}"
+  tour-already-guest: "&e{player} follows you already."
+  tour-body-locked: "&cYou follow {player}: stop that first to use your body."
+  tour-busy: "&cYou lead or follow already."
+  tour-busy-following: "&cYou follow somebody yourself. Stop that first."
+  tour-button-accept: "&a[Follow]"
+  tour-button-accept-hover: "&7Your camera follows {player}"
   tour-button-decline: "&c[Decline]"
-  tour-button-decline-hover: "&7Turn the tour of {player} down"
-  tour-declined: "&eYou turned down the tour of {player}."
-  tour-declined-guide: "&e{player} turned your tour down."
-  tour-disabled: "&cTours are switched off {time}{reason}."
-  tour-disabled-changed: "&e{player} changed it: tours are switched off for everybody {time}{reason}."
-  tour-disabled-guest: "&cYou can't invite {player}: tours are switched off."
-  tour-disabled-now: "&c{player} switched tours off for everybody {time}{reason}."
-  tour-enabled-now: "&a{player} switched tours on again for everybody."
-  tour-ended: "&e{player} ended the tour."
-  tour-ended-guide: "&eYour tour is over."
-  tour-full: "&cThe tour of {player} is full right now."
-  tour-full-guide: "&cYour tour is full. Guests at most: {max}."
-  tour-guide-cannot-lead: "&c{player} can't show anybody round right now."
+  tour-button-decline-hover: "&7Turn {player} down"
+  tour-declined: "&eYou turned {player} down."
+  tour-declined-guide: "&e{player} does not want to follow you."
+  tour-disabled: "&cFollowing is switched off {time}{reason}."
+  tour-disabled-changed: "&e{player} changed it: following is switched off for everybody {time}{reason}."
+  tour-disabled-guest: "&cYou can't invite {player}: following is switched off."
+  tour-disabled-now: "&c{player} switched following off for everybody {time}{reason}."
+  tour-enabled-now: "&a{player} switched following on again for everybody."
+  tour-ended: "&e{player} let everybody go: you no longer follow them."
+  tour-ended-guide: "&eNobody follows you any more."
+  tour-full: "&cNobody else can follow {player} right now."
+  tour-full-guide: "&cYou have as many followers as there may be: {max}."
+  tour-guide-cannot-lead: "&c{player} can't lead anybody right now."
   tour-guide-gone: "&c{player} is no longer in cam mode."
   tour-guide-out-of-reach: "&c{player} is out of the reach of your camera."
   tour-guide-spectator: "&cNot in spectator mode: it flies through walls."
-  tour-invitation: "&e{player} invites you to a tour: your camera follows theirs."
-  tour-invited: "&aYou invited {player} to your tour."
-  tour-joined: "&aYou follow {player} now. Leave with /cam tour leave, /cam back or the menu."
+  tour-invitation: "&e{player} invites you to follow them with your camera."
+  tour-invited: "&aYou invited {player} to follow you."
+  tour-joined: "&aYou follow {player} now. Stop with /cam follow leave, /cam back or the menu."
   tour-joined-guide: "&a{player} follows you now."
-  tour-kicked: "&e{player} took you off their tour."
-  tour-kicked-guide: "&e{player} is off your tour."
-  tour-left: "&eYou left the tour of {player}."
-  tour-left-guide: "&e{player} left your tour."
+  tour-kicked: "&e{player} sent you away: you no longer follow them."
+  tour-kicked-guide: "&e{player} no longer follows you."
+  tour-left: "&eYou no longer follow {player}."
+  tour-left-guide: "&e{player} stopped following you."
   tour-no-invitation: "&c{player} has not invited you, or the invitation ran out."
-  tour-not-following: "&cYou follow no tour."
-  tour-not-guest: "&c{player} is not on your tour."
-  tour-not-guiding: "&cYou show nobody round."
+  tour-not-following: "&cYou follow nobody."
+  tour-not-guest: "&c{player} does not follow you."
+  tour-not-guiding: "&cNobody follows you."
   tour-not-in-cam: "&cOnly in cam mode: start it first."
-  tour-off: "&c/cam tour is switched off."
-  tour-off-changed: "&aTours stay switched off for everybody, now {time}{reason}."
-  tour-off-done: "&aTours are switched off for everybody {time}{reason}."
-  tour-on-done: "&aTours are switched on again for everybody."
-  tour-other-busy: "&c{player} is on a tour already."
-  tour-other-not-in-cam: "&c{player} is not in cam mode. Only who flies as a camera already can come along."
+  tour-off: "&c/cam follow is switched off."
+  tour-off-changed: "&aFollowing stays switched off for everybody, now {time}{reason}."
+  tour-off-done: "&aFollowing is switched off for everybody {time}{reason}."
+  tour-on-done: "&aFollowing is switched on again for everybody."
+  tour-other-busy: "&c{player} leads or follows already."
+  tour-other-not-in-cam: "&c{player} is not in cam mode. Only who flies as a camera already can follow."
   tour-out-of-reach: "&c{player} could not follow you from there: you are out of the reach of their camera."
-  tour-reach-lost: "&c{player} was out of your reach for too long: the tour is over for you."
-  tour-reach-lost-guide: "&c{player} could not follow you for too long and is off your tour."
-  tour-reach-warning: "&c{player} is out of your reach: the tour ends in {time}"
-  tour-reach-warning-guide: "&c{players} cannot follow: the tour ends for them in {time}"
-  tour-restrict-changed: "&aThe tour restriction of {player} is changed: {what} {time}{reason}."
-  tour-restrict-done: "&a{player} is restricted from tours: {what} {time}{reason}."
-  tour-restricted-changed: "&e{player} changed the restriction of your tours: {what} {time}{reason}."
-  tour-restricted-guest: "&cYou can't invite {player}: he is restricted from tours."
-  tour-restricted-join: "&cYou may not take part in tours {time}{reason}."
-  tour-restricted-lead: "&cYou may not lead tours {time}{reason}."
-  tour-restricted-now: "&c{player} restricted your tours: {what} {time}{reason}."
-  tour-restriction-join: "no taking part"
+  tour-reach-lost: "&c{player} was out of your reach for too long: you no longer follow them."
+  tour-reach-lost-guide: "&c{player} could not follow you for too long and no longer does."
+  tour-reach-warning: "&c{player} is out of your reach: following ends in {time}"
+  tour-reach-warning-guide: "&c{players} cannot follow: it ends for them in {time}"
+  tour-restrict-changed: "&aThe follow restriction of {player} is changed: {what} {time}{reason}."
+  tour-restrict-done: "&a{player} is restricted: {what} {time}{reason}."
+  tour-restricted-changed: "&e{player} changed your follow restriction: {what} {time}{reason}."
+  tour-restricted-guest: "&cYou can't invite {player}: he may not follow anybody."
+  tour-restricted-join: "&cYou may not follow anybody {time}{reason}."
+  tour-restricted-lead: "&cYou may not lead {time}{reason}."
+  tour-restricted-now: "&c{player} restricted your following: {what} {time}{reason}."
+  tour-restriction-join: "no following"
   tour-restriction-lead: "no leading"
   tour-restriction-separator: ", "
   tour-self: "&cYou cannot invite yourself."
@@ -886,17 +887,17 @@ messages:
   tour-too-far: "&c{player} is too far away."
   tour-too-far-guest: "&cYou are too far away."
   tour-unknown-player: "&cNobody called {player} is online."
-  tour-unrestrict-done: "&a{player} may lead tours and take part in them again."
-  tour-unrestricted-now: "&a{player} lifted the restriction of your tours."
-  tour-usage: "&eUse /cam tour invite|accept|decline|kick <player>, /cam tour leave, /cam tour end or /cam tour view."
+  tour-unrestrict-done: "&a{player} may lead and follow again."
+  tour-unrestricted-now: "&a{player} lifted your follow restriction."
+  tour-usage: "&eUse /cam follow invite|accept|decline|kick <player>, /cam follow leave, /cam follow end or /cam follow view."
   # /cam trail: {number} which of the kept flights (1 the newest), {distance} in blocks, {time} how long the flight
   # took, {when} trail-flying or trail-ago (with {time} how long ago it ended), {place} as trail-place has it, {world}
   # the worlds of the flight in trail-elsewhere. trail-flights is followed by a button for each kept flight,
   # trail-button, and one for all of them, trail-button-all; hovering over them shows the -hover texts. From the menu,
   # trail-at-start says that he was taken to where the flight began, trail-gone that it is no longer kept.
-  tour-view-free: "&aOn tours you look round freely now."
-  tour-view-guide: "&aOn tours you see through the eyes of the guide."
-  tour-view-unavailable: "&cThe guide's view does not work on this server: on tours you look round freely."
+  tour-view-free: "&aWhen following you look round freely now."
+  tour-view-guide: "&aWhen following you see through the eyes of the leader."
+  tour-view-unavailable: "&cThe leader's view does not work on this server: when following you look round freely."
   trail-ago: "ended {time} ago"
   trail-all-entry: "&7#{number}: &f{distance} blocks in {time}, {when}, camera last at {place}"
   trail-all-header: "&eThe last {count} cam flights of {player}:"
