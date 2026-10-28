@@ -47,7 +47,10 @@ import java.util.logging.Level;
  * sets for himself with the bell on the pages of the spots in the menu, see
  * {@link Mode}: every {@code viewpoints.guestbook-interval-minutes} while he
  * plays, and what came while he was away once he joins; only once he joins;
- * or not at all, and then nothing is collected for him either.</p>
+ * or not at all, and then nothing is collected for him either. Nor is
+ * anything collected for, or told to, one a restriction keeps from looking at
+ * the public spots or at those shared by name, see {@link #isLocked}: the
+ * spots of others are closed to him, and so is what others make of his.</p>
  *
  * <p>Where it is kept follows {@code viewpoints.storage}, like
  * {@link SpotViews}: in one file for everybody,
@@ -85,12 +88,7 @@ public final class SpotGuestbook implements Listener {
         /** Only when he joins: everything since he last heard of it. */
         LOGIN,
         /** Not at all, and nothing is collected for him. */
-        OFF;
-
-        /** The one after it on the bell, the first after the last. */
-        Mode next() {
-            return values()[(ordinal() + 1) % values().length];
-        }
+        OFF
     }
 
     private final CameraPlugin plugin;
@@ -143,16 +141,26 @@ public final class SpotGuestbook implements Listener {
     }
 
     /**
-     * Sets the next way of hearing of his spots for him, from the bell in
-     * the menu, and tells him how it stands now. Switched off, what was
-     * collected for him is gone.
+     * Whether a restriction keeps the owner from looking at the public spots
+     * or at those shared by name, see {@link SpotModeration}: then nothing is
+     * collected for him and nothing told, however he set the bell.
      */
-    public void toggle(Player owner) {
-        if (!settings.isGuestbookEnabled()) {
+    public boolean isLocked(UUID owner) {
+        SpotModeration moderation = plugin.getSpotModeration();
+        return moderation.keepsFromLooking(owner, SpotBans.Kind.PUBLIC)
+                || moderation.keepsFromLooking(owner, SpotBans.Kind.SHARED);
+    }
+
+    /**
+     * Sets how he hears of his spots, from the bell in the menu, and tells
+     * him how it stands now. Switched off, what was collected for him is
+     * gone.
+     */
+    public void set(Player owner, Mode mode) {
+        if (!settings.isGuestbookEnabled() || isLocked(owner.getUniqueId())) {
             return;
         }
         UUID id = owner.getUniqueId();
-        Mode mode = modeOf(id).next();
         if (mode == Mode.ON) {
             modes.remove(id);
         } else {
@@ -175,7 +183,7 @@ public final class SpotGuestbook implements Listener {
      * {@link SpotViews#count}. The owner himself is no guest.
      */
     public void viewed(UUID owner, Spot spot, Player viewer) {
-        if (viewer.getUniqueId().equals(owner) || !isOn(owner)) {
+        if (viewer.getUniqueId().equals(owner) || !isOn(owner) || isLocked(owner)) {
             return;
         }
         newsOf(owner, spot.key()).views++;
@@ -187,7 +195,7 @@ public final class SpotGuestbook implements Listener {
      * taken back before the owner is told was never there.
      */
     public void liked(UUID owner, Spot spot, Player liker, boolean likes) {
-        if (liker.getUniqueId().equals(owner) || !isOn(owner)) {
+        if (liker.getUniqueId().equals(owner) || !isOn(owner) || isLocked(owner)) {
             return;
         }
         if (likes) {
@@ -268,7 +276,8 @@ public final class SpotGuestbook implements Listener {
     /**
      * Tells the owner what happened to his spots since he was last told,
      * under this header - one line for each of them that is still there -,
-     * and then it is no news any more.
+     * and then it is no news any more. One locked out of the spots of others
+     * is told nothing, and it is gone all the same.
      */
     private void tellNews(Player owner, String header) {
         if (!owner.isOnline() || !isOn(owner.getUniqueId())) {
@@ -279,6 +288,9 @@ public final class SpotGuestbook implements Listener {
             return;
         }
         save();
+        if (isLocked(owner.getUniqueId())) {
+            return;
+        }
         Map<String, Spot> spots = new HashMap<>();
         for (Spot spot : plugin.getSpots().own(owner)) {
             spots.put(spot.key(), spot);

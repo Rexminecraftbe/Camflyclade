@@ -54,6 +54,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -630,31 +631,45 @@ public final class CamMenu implements Listener {
 
     /**
      * The bell of the guestbook: how he hears how often his spots are looked
-     * at and liked, see {@link SpotGuestbook.Mode}, under its name - it
-     * shines unless he hears nothing -, and how often it tells him while he
-     * plays; a click goes on to the next way.
+     * at and liked, see {@link SpotGuestbook.Mode}, under its name, and under
+     * it every way there is - the one he set marked, the others greyed out -
+     * with how often it tells him while he plays. It shines unless he hears
+     * nothing. A click takes the next way, a right-click the one before, as
+     * the button that sorts a list does. While a restriction keeps him from
+     * the spots of others, it says so instead, and a click does nothing.
      *
      * @param again opens the page anew, with the bell as it stands then
      */
     private void guestbookButton(Player player, Page page, Runnable again) {
         SpotGuestbook guestbook = plugin.getGuestbook();
-        SpotGuestbook.Mode mode = guestbook.modeOf(player.getUniqueId());
-        String state = switch (mode) {
-            case ON -> "menu-state-on";
-            case LOGIN -> "menu-guestbook-login";
-            case OFF -> "menu-state-off";
-        };
+        UUID id = player.getUniqueId();
+        SpotGuestbook.Mode now = guestbook.modeOf(id);
+        List<SpotGuestbook.Mode> modes = List.of(SpotGuestbook.Mode.values());
+        String minutes = String.valueOf(settings.getGuestbookIntervalMinutes());
+        String name = messages.getMessage("menu-guestbook").replace("{mode}", guestbookMode(now));
         List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-guestbook-lore")));
-        lore.addAll(lines(messages.getMessage("menu-guestbook-interval")
-                .replace("{minutes}", String.valueOf(settings.getGuestbookIntervalMinutes()))));
-        lore.addAll(lines(messages.getMessage("menu-state").replace("{state}", messages.getMessage(state))));
+        if (guestbook.isLocked(id)) {
+            lore.addAll(lines(messages.getMessage("menu-guestbook-locked")));
+            put(page, SLOT_SPOT_GUESTBOOK, item(Material.BELL, name, lore), null);
+            return;
+        }
+        for (SpotGuestbook.Mode mode : modes) {
+            lore.addAll(lines(messages.getMessage(mode == now ? "menu-guestbook-option-current"
+                    : "menu-guestbook-option").replace("{mode}", guestbookMode(mode))));
+        }
+        lore.addAll(lines(messages.getMessage("menu-guestbook-interval").replace("{minutes}", minutes)));
         lore.addAll(lines(messages.getMessage("menu-guestbook-action")));
-        put(page, SLOT_SPOT_GUESTBOOK, shine(item(Material.BELL, messages.getMessage("menu-guestbook"), lore),
-                        mode != SpotGuestbook.Mode.OFF),
+        put(page, SLOT_SPOT_GUESTBOOK, shine(item(Material.BELL, name, lore), now != SpotGuestbook.Mode.OFF),
                 click -> later(() -> {
-                    guestbook.toggle(player);
+                    int step = click.isRightClick() ? modes.size() - 1 : 1;
+                    guestbook.set(player, modes.get((modes.indexOf(now) + step) % modes.size()));
                     again.run();
                 }));
+    }
+
+    /** What a way of the guestbook is called on the bell. */
+    private String guestbookMode(SpotGuestbook.Mode mode) {
+        return messages.getMessage("menu-guestbook-" + mode.name().toLowerCase(Locale.ROOT));
     }
 
     /**

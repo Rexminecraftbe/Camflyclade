@@ -1220,6 +1220,10 @@ let skyTime = null;
 bot._client.on('update_time', (packet) => { skyTime = soundText(packet); });
 // Das Paket camera: durch welche Entitaet der Client sieht.
 bot._client.on('camera', (packet) => cameras.push({ t: Date.now(), id: packet.cameraId }));
+// Das Paket player_rotation: wohin der Server den eigenen Spieler dreht.
+const rotations = [];
+bot._client.on('player_rotation', (packet) => rotations.push({ t: Date.now(), yaw: packet.yaw,
+                                                              pitch: packet.pitch }));
 // Der Frost des eigenen Spielers (Eintrag 7 der Entitaetsdaten), wie der
 // Server ihn diesem Client schickt.
 const frosts = [];
@@ -1529,6 +1533,14 @@ async function handle(cmd) {
       return { count: cameras.length, packets: cameras.slice(cmd.since || 0),
                self: bot.entity ? bot.entity.id : null, players };
     }
+    case 'rotations':
+      return { count: rotations.length, packets: rotations.slice(cmd.since || 0) };
+    case 'look':
+      // Sich drehen, in Grad wie im Spiel; mineflayer rechnet im Bogenmass
+      // und mit der Blickrichtung andersherum.
+      await bot.look(-(cmd.yaw || 0) * Math.PI / 180 + Math.PI, -(cmd.pitch || 0) * Math.PI / 180, true);
+      await new Promise((r) => setTimeout(r, 200));
+      return { yaw: bot.entity.yaw, pitch: bot.entity.pitch };
     case 'players':
       // Wer in der Tab-Liste steht: hidePlayer nimmt einen Spieler dort heraus.
       return { players: Object.keys(bot.players) };
@@ -6107,6 +6119,14 @@ def gaestebuch_datei(env):
     return datei.read_text(encoding="utf-8") if datei.exists() else ""
 
 
+def gaestebuch_weg(env):
+    """playerdata/spot-guestbook.yml des Testservers weg - erst das naechste
+    Neuladen vergisst, was darin stand."""
+    datei = env.server / "plugins" / "CamFly" / "playerdata" / "spot-guestbook.yml"
+    if datei.exists():
+        datei.unlink()
+
+
 def gaestebuch_checks(env, bot):
     """viewpoints.guestbook: wer einen Punkt hat, erfaehrt, wie oft er
     angesehen und geliked wurde - gesammelt, nicht sofort.
@@ -6121,15 +6141,20 @@ def gaestebuch_checks(env, bot):
     "- Buch: 2 views, 1 likes" - der eigene Sprung des Bots zaehlt nicht.
 
     Im Menue steht auf der Seite der Punkte unten auf Platz 47, links neben
-    den Reitern, die Glocke: an, sie glaenzt, und sie sagt, dass es jede
-    Minute kommt. Ein Klick stellt sie auf "nur beim Login", noch einer auf
-    aus. Der zweite Spieler macht seinen Punkt "Gast" oeffentlich und stellt
-    seine Glocke auf "nur beim Login". Springt jeder zum Punkt des anderen -
-    der Bot liked "Gast" -, liest auch nach der naechsten Minute keiner
-    etwas; playerdata/spot-guestbook.yml hat beider Einstellung und was
-    "Gast" bekam. Kommt der zweite Spieler neu herein, liest er
-    "- Gast: 1 views, 1 likes", und die Datei hat es nicht mehr. Mit
-    viewpoints.guestbook: false fehlt die Glocke.
+    den Reitern, die Glocke wie der Knopf zum Sortieren: "Guestbook: on",
+    darunter alle drei Stufen, die eingestellte markiert, und dass "on" jede
+    Minute kommt; sie glaenzt. Ein Klick stellt sie auf "nur beim Login",
+    noch einer auf aus, ein Rechtsklick wieder zurueck. Der zweite Spieler
+    macht seinen Punkt "Gast" oeffentlich und stellt seine Glocke auf "nur
+    beim Login". Springt jeder zum Punkt des anderen - der Bot liked
+    "Gast" -, liest auch nach der naechsten Minute keiner etwas;
+    playerdata/spot-guestbook.yml hat beider Einstellung und was "Gast"
+    bekam. Kommt der zweite Spieler neu herein, liest er
+    "- Gast: 1 views, 1 likes", und die Datei hat es nicht mehr.
+
+    Darf der Bot keine oeffentlichen Punkte ansehen (playerdata/spot-bans.yml,
+    public: no-look), sagt die Glocke das, ein Klick tut nichts, und fuer ihn
+    wird nichts gesammelt. Mit viewpoints.guestbook: false fehlt die Glocke.
     """
     def fenster(client):
         return client.call("window_slots", wait=10)
@@ -6143,11 +6168,11 @@ def gaestebuch_checks(env, bot):
         klick(client, 10)
         return fenster(client).get("slots", {})
 
-    def glocke_klicken(client):
+    def glocke_klicken(client, button=0):
         """Ein Klick auf die Glocke: was er liest, und wie sie danach aussieht."""
         punkte(client)
         seit = client.mark()
-        klick(client, 47)
+        klick(client, 47, button=button)
         glocke = fenster(client).get("slots", {}).get("47") or {}
         gelesen = zeilen_seit(client, seit)
         client.call("close_window", wait=10)
@@ -6211,20 +6236,26 @@ def gaestebuch_checks(env, bot):
 
         knopf = punkte(bot)
         glocke = knopf.get("47") or {}
-        FIND.test("Im Menue: unten auf 47, links neben den Reitern, die Glocke - an, sie glaenzt und sagt, wie oft "
-                  "es kommt",
-                  "Guestbook" in item_text(glocke) and "Now: on" in item_text(glocke)
-                  and "Updates every 1 min while you play" in item_text(glocke) and glocke.get("glint") is True,
-                  item_text(glocke))
+        FIND.test("Im Menue: unten auf 47, links neben den Reitern, die Glocke wie der Knopf zum Sortieren - "
+                  "\"Guestbook: on\", alle drei Stufen, wie oft \"on\" kommt, und sie glaenzt",
+                  "Guestbook: on" in item_text(glocke) and "» on" in item_text(glocke)
+                  and "only at login" in item_text(glocke) and "On: updates every 1 min" in item_text(glocke)
+                  and glocke.get("glint") is True, item_text(glocke))
         bot.call("close_window", wait=10)
         hier, glocke = glocke_klicken(bot)
         FIND.test("Ein Klick auf die Glocke: nur beim Login",
-                  gesagt(hier, r"Guestbook only at login") and "Now: only at login" in item_text(glocke)
-                  and glocke.get("glint") is True, f"{zeige(hier)} / {item_text(glocke)}")
+                  gesagt(hier, r"Guestbook only at login") and "Guestbook: only at login" in item_text(glocke)
+                  and "» only at login" in item_text(glocke) and glocke.get("glint") is True,
+                  f"{zeige(hier)} / {item_text(glocke)}")
         hier, glocke = glocke_klicken(bot)
         FIND.test("Noch ein Klick: aus",
-                  gesagt(hier, r"Guestbook off") and "Now: off" in item_text(glocke) and not glocke.get("glint"),
+                  gesagt(hier, r"Guestbook off") and "Guestbook: off" in item_text(glocke)
+                  and not glocke.get("glint"), f"{zeige(hier)} / {item_text(glocke)}")
+        hier, glocke = glocke_klicken(bot, button=1)
+        FIND.test("Ein Rechtsklick: zurueck auf nur beim Login",
+                  gesagt(hier, r"Guestbook only at login") and "Guestbook: only at login" in item_text(glocke),
                   f"{zeige(hier)} / {item_text(glocke)}")
+        glocke_klicken(bot)
 
         console(env, f"tp {ZUSCHAUER_NAME} {x - 2} {y} {z} 90 0", pause=1.0)
         befehl(zuschauer, "/cam spot set Gast")
@@ -6260,6 +6291,28 @@ def gaestebuch_checks(env, bot):
                   gaestebuch_datei(env)[-300:])
         befehl(zuschauer, "/cam spot delete Gast")
 
+        # Beide Glocken wieder auf an: Das Neuladen liest die Datei neu.
+        gaestebuch_weg(env)
+        sperren = env.server / "plugins" / "CamFly" / "playerdata" / "spot-bans.yml"
+        sperren.write_text(f"players:\n  {offline_uuid(BOT_NAME)}:\n    name: {BOT_NAME}\n"
+                           f"    public: no-look\n    until: 0\n", encoding="utf-8")
+        console(env, "cam reload", pause=2.0)
+        knopf = punkte(bot)
+        glocke = knopf.get("47") or {}
+        seit = bot.mark()
+        klick(bot, 47)
+        hier = zeilen_seit(bot, seit)
+        bot.call("close_window", wait=10)
+        FIND.test("Darf er keine oeffentlichen Punkte ansehen, sagt die Glocke es, und ein Klick tut nichts",
+                  "Closed while you may not look" in item_text(glocke) and "» on" not in item_text(glocke)
+                  and not glocke.get("glint") and not gesagt(hier, r"Guestbook"),
+                  f"{item_text(glocke)} / {zeige(hier)}")
+        befehl(zuschauer, f"/cam spot {label}", warten=3.0)
+        cam_off(zuschauer)
+        FIND.test("Fuer ihn wird dann nichts gesammelt", "buch:" not in gaestebuch_datei(env),
+                  gaestebuch_datei(env)[-300:] or "keine Datei")
+        einschraenkungen_weg(env, "spot-bans.yml")
+
         set_option(env, "guestbook", "false", "viewpoints")
         knopf = punkte(bot)
         FIND.test("viewpoints.guestbook: false - keine Glocke", "47" not in knopf, str(sorted(knopf)))
@@ -6274,10 +6327,9 @@ def gaestebuch_checks(env, bot):
             bot.call("close_window", wait=10)
             cam_off(bot)
             spots_loeschen(bot, "Buch")
+            einschraenkungen_weg(env, "spot-bans.yml")
             # Die Glocken beider wieder auf an: Das Neuladen liest die Datei neu.
-            datei = env.server / "plugins" / "CamFly" / "playerdata" / "spot-guestbook.yml"
-            if datei.exists():
-                datei.unlink()
+            gaestebuch_weg(env)
             set_options(env, [("guestbook", "true", "viewpoints"), ("views-cooldown-minutes", "10", "viewpoints"),
                               ("guestbook-interval-minutes", "10", "viewpoints")])
             hinstellen(bot, heim[0], heim[1], heim[2])
@@ -6947,6 +6999,20 @@ def fuehrung_ohne_cam_checks(env, bot):
         FIND.test("Am Server bleiben die Haende des Gastes leer",
                   not server_says(bot, f"/execute if items entity {ZUSCHAUER_NAME} weapon.* * run say {{marke}}"),
                   "")
+
+        # Seine Maus dreht seinen Spieler weiter, auch wenn er durch die
+        # Augen des Bots sieht - und sein Client liesse die Items in seinen
+        # Haenden danach schief haengen. Der Server dreht ihn jeden Tick
+        # zurueck, wie er stand, als der Blick anfing.
+        drehung = zuschauer.call("rotations").get("count", 0)
+        zuschauer.call("look", wait=10, yaw=135, pitch=30)
+        time.sleep(1.0)
+        gedreht = zuschauer.call("rotations", since=drehung).get("packets", [])
+        werte = {(round(p.get("yaw", 0), 1), round(p.get("pitch", 0), 1)) for p in gedreht}
+        FIND.test("Im Blick des Bots haelt der Server die Drehung des Gastes fest: jeden Tick dieselbe, auch nachdem "
+                  "er sich gedreht hat",
+                  len(gedreht) >= 15 and len(werte) == 1 and (135.0, 30.0) not in werte,
+                  f"{len(gedreht)} / {sorted(werte)[:4]}")
 
         # Sein Client haelt Schwert und Schild fuer seine eigenen und klickt
         # damit. Den Klick auf seinen Koerper lehnt der Server ab und schickt

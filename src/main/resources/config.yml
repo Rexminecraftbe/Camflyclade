@@ -834,14 +834,17 @@ viewpoints:
   # nur andere zählen, und nur so oft, wie es als Aufruf zählt (views-cooldown-minutes). Nichts davon kommt sofort: Es
   # wird gesammelt und als Zahl je Punkt erzählt (Text: spot-guestbook-entry), so kann niemand einem anderen mit
   # Springen oder Liken und Entliken den Chat füllen - ein Like, das bis dahin zurückgenommen wurde, zählt nicht. Jeder
-  # stellt mit der Glocke im Menü ein (unten auf den Seiten der Punkte, links neben den Reitern), wie er es erfährt:
+  # stellt mit der Glocke im Menü ein (unten auf den Seiten der Punkte, links neben den Reitern; Linksklick die nächste
+  # Stufe, Rechtsklick die davor), wie er es erfährt:
   #   an                = alle guestbook-interval-minutes, solange er spielt (Text: spot-guestbook-update), und was
   #                       kam, während er weg war, wenn er beitritt (Text: spot-guestbook-header) - so steht es am
   #                       Anfang
   #   nur beim Login    = alles erst, wenn er beitritt
   #   aus               = gar nicht, und für ihn wird auch nichts gesammelt
-  # Gespeichert nach storage, in plugins/CamFly/playerdata/spot-guestbook.yml. Geht nur mit sharing: true - private
-  # Punkte sieht sich niemand sonst an.
+  # Hält ihn eine Sperre der Punkte (Admin-Seite der Punkte) davon ab, öffentliche oder geteilte Punkte anzusehen, erfährt
+  # er nichts, und für ihn wird nichts gesammelt; die Glocke sagt es. Gespeichert nach storage, in
+  # plugins/CamFly/playerdata/spot-guestbook.yml. Geht nur mit sharing: true - private Punkte sieht sich niemand sonst
+  # an.
   guestbook: true
   # Wie oft das Gästebuch denen, die es auf "an" haben, während sie spielen erzählt, was ihre Punkte bekamen, in
   # Minuten (1 bis 1440). Die Glocke im Menü nennt es.

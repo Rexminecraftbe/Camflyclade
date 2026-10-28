@@ -204,6 +204,9 @@ public final class CamTour implements Listener {
         boolean viewing;
         /** Ticks since the guide's view was last sent. */
         int sinceView;
+        /** Where he was turned when he started to see through the guide's eyes, see {@link #holdTurned}. */
+        float yaw;
+        float pitch;
         /** Ticks since his frost was last sent to his client. */
         int sinceFrost;
     }
@@ -1371,15 +1374,32 @@ public final class CamTour implements Listener {
             unview(guest, state);
             return;
         }
-        if (state.viewing && ++state.sinceView < VIEW_REFRESH) {
-            return;
+        if (!state.viewing || ++state.sinceView >= VIEW_REFRESH) {
+            // A send that fails changes nothing on the client: whatever it saw
+            // through before, it still does.
+            if (view.show(guest, guide) && !state.viewing) {
+                state.viewing = true;
+                Location at = guest.getLocation();
+                state.yaw = at.getYaw();
+                state.pitch = at.getPitch();
+            }
+            state.sinceView = 0;
         }
-        // A send that fails changes nothing on the client: whatever it saw
-        // through before, it still does.
-        if (view.show(guest, guide)) {
-            state.viewing = true;
+        if (state.viewing) {
+            holdTurned(guest, state);
         }
-        state.sinceView = 0;
+    }
+
+    /**
+     * Turns a guest who sees through the guide's eyes back to where he was
+     * turned when he started to, every tick. His mouse still turns him on his
+     * client, which nobody sees - but his client draws the items in his hands
+     * after it, see {@link GuideMirror}, and while he does not look through
+     * his own eyes, it lets them sway by every turn without ever bringing
+     * them back: they would hang askew in the guide's view.
+     */
+    private static void holdTurned(Player guest, Guest state) {
+        guest.setRotation(state.yaw, state.pitch);
     }
 
     /** Gives a guest who sees through the eyes of his guide his own camera back. */
