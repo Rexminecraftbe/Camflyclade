@@ -1140,15 +1140,19 @@ public final class CamMenu implements Listener {
             for (Player other : tour.candidates(player)) {
                 String name = other.getName();
                 TourModeration.Hold kept = moderation.hold(other, TourBans.What.JOIN);
+                long holds = tour.invitationLeft(player, other);
+                long wait = tour.inviteWait(player, other);
                 String key = kept != null ? kept.everybody() ? "menu-tour-candidate-disabled-lore"
                         : "menu-tour-candidate-restricted-lore"
                         : full ? "menu-tour-candidate-full-lore"
-                        : tour.hasInvited(player, other) ? "menu-tour-candidate-invited-lore"
+                        : holds > 0L ? "menu-tour-candidate-invited-lore"
+                        : wait > 0L ? "menu-tour-candidate-wait-lore"
                         : plugin.isInCameraMode(other) ? "menu-tour-candidate-lore"
                         : "menu-tour-candidate-outside-lore";
                 long blocks = Math.round(player.getLocation().distance(other.getLocation()));
                 String lore = messages.getMessage(key).replace("{blocks}", String.valueOf(blocks))
-                        .replace("{max}", String.valueOf(settings.getTourMaxGuests()));
+                        .replace("{max}", String.valueOf(settings.getTourMaxGuests()))
+                        .replace("{expires}", String.valueOf(holds)).replace("{seconds}", String.valueOf(wait));
                 entries.add(slot -> put(page, slot, head(other,
                         messages.getMessage("menu-tour-candidate").replace("{player}", name), lines(lore)),
                         click -> later(() -> {

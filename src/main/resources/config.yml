@@ -926,6 +926,13 @@ follow:
   # der Leader niemanden mehr einladen, und wer schon eingeladen ist, kommt erst dazu, wenn wieder Platz ist
   # (Texte: tour-full, tour-full-guide).
   max-guests: 5
+  # Wie lange eine Einladung gilt, in Sekunden (5 bis 3600). Die Einladung sagt, wann sie abläuft; danach muss der
+  # Leader neu einladen.
+  invitation-seconds: 60
+  # Wie lange ein Leader denselben Spieler nach einer Einladung nicht noch einmal einladen kann, in Sekunden (0 bis
+  # 3600, 0 = sofort wieder) - auch nicht, wenn er abgelehnt hat. So kann niemand einen anderen mit Einladungen
+  # zuschütten (Text: tour-invite-wait).
+  invite-cooldown-seconds: 60
   # Ob ein Follower durch die Augen des Leaders sieht - so flüssig wie im Zuschauermodus, nur ohne ihn: kein Fliegen
   # durch Wände, kein Teleport-Menü. Jeder Follower kann mit /cam follow view auf freies Umsehen umschalten. Ist der
   # Leader außer seiner Reichweite, sieht er wieder aus seiner eigenen Kamera, die an ihrer Grenze steht.

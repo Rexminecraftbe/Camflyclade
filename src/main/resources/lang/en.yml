@@ -205,7 +205,9 @@ messages:
   # of /cam follow (the keys keep the name it had, tour), menu-tour-view the button that switches between the leader's
   # view and looking round freely; menu-tour-lead-restricted and menu-tour-join-restricted what keeps him from leading
   # or following, menu-tour-disabled that following is switched off ({time} and {reason} as with /cam ban);
-  # menu-tour-candidate-restricted- and -disabled-lore under a player he cannot invite for that.
+  # menu-tour-candidate-restricted- and -disabled-lore under a player he cannot invite for that;
+  # menu-tour-candidate-invited-lore under one whose invitation still holds ({expires}, the seconds it still does),
+  # -wait-lore under one he may not invite again yet (follow.invite-cooldown-seconds, {seconds} left).
   # menu-only is what the commands say under menu.access or menu.admin-access: menu, menu-features-off under false. menu-spot-name asks for the name of a new spot in the chat,
   # menu-admin-ban-reason-question why a player is banned ({player}), {cancel} being the word that calls either off,
   # with menu-answer-cancelled. Under menu-stats and the heads of menu-admin-stats stand the lines of /cam stats;
@@ -530,10 +532,11 @@ messages:
   menu-tour-candidate: "&f{player}"
   menu-tour-candidate-disabled-lore: "&cYou can't invite him:\n&cfollowing is switched off"
   menu-tour-candidate-full-lore: "&cYou have as many followers\n&cas there may be: {max}"
-  menu-tour-candidate-invited-lore: "&eInvited, no answer yet.\n&7Click: invite again"
+  menu-tour-candidate-invited-lore: "&eInvited, no answer yet.\n&7The invitation runs out\n&7in {expires} s."
   menu-tour-candidate-lore: "&7In cam mode, {blocks} blocks away.\n&eClick: invite"
   menu-tour-candidate-outside-lore: "&7Not in cam mode, {blocks} blocks away.\n&7Cam mode starts where they stand\n&7once they accept.\n&eClick: invite"
   menu-tour-candidate-restricted-lore: "&cYou can't invite him:\n&che may not follow anybody"
+  menu-tour-candidate-wait-lore: "&7Invited a moment ago.\n&7You can invite them again\n&7in {seconds} s."
   menu-tour-disabled: "&7Following is switched off"
   menu-tour-disabled-lore: "&7It is off for everybody\n&7{time}{reason}."
   menu-tour-empty: "&7Nobody to invite"
@@ -822,7 +825,9 @@ messages:
   # followers the leader leaves behind and {time} the time left before it ends for them: tour-reach-warning (for the
   # follower) and tour-reach-warning-guide (for the leader) count it down in the action bar, tour-reach-lost and
   # tour-reach-lost-guide say when it is over. tour-invitation has the buttons tour-button-accept and
-  # tour-button-decline behind it, and what hovering over them says. tour-view-guide and tour-view-free answer
+  # tour-button-decline behind it, and what hovering over them says; it and tour-invited say for how many seconds it
+  # holds ({seconds}, follow.invitation-seconds). tour-invite-wait: he invited that player too short a time ago
+  # (follow.invite-cooldown-seconds, {seconds} left). tour-view-guide and tour-view-free answer
   # /cam follow view, tour-view-unavailable says that the leader's view does not work on the server
   # (follow.guide-view). tour-guide-spectator: a player out of cam mode (follow.lead-without-cam) can't lead in
   # spectator mode; tour-guide-cannot-lead: the leader can't lead any more when he is accepted (tour-guide-gone while
@@ -859,8 +864,9 @@ messages:
   tour-guide-gone: "&c{player} is no longer in cam mode."
   tour-guide-out-of-reach: "&c{player} is out of the reach of your camera."
   tour-guide-spectator: "&cNot in spectator mode: it flies through walls."
-  tour-invitation: "&e{player} invites you to follow them with your camera."
-  tour-invited: "&aYou invited {player} to follow you."
+  tour-invitation: "&e{player} invites you to follow them with your camera - it runs out in {seconds} seconds."
+  tour-invite-wait: "&cYou invited {player} a moment ago: you can invite them again in {seconds} seconds."
+  tour-invited: "&aYou invited {player} to follow you. The invitation runs out in {seconds} seconds."
   tour-joined: "&aYou follow {player} now. Stop with /cam follow leave, /cam back or the menu."
   tour-joined-guide: "&a{player} follows you now."
   tour-kicked: "&e{player} sent you away: you no longer follow them."
@@ -1525,6 +1531,7 @@ message-settings:
   tour-guide-out-of-reach: true
   tour-guide-spectator: true
   tour-invitation: true
+  tour-invite-wait: true
   tour-invited: true
   tour-joined: true
   tour-joined-guide: true

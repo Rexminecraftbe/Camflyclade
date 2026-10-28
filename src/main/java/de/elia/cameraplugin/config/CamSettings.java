@@ -167,6 +167,15 @@ public final class CamSettings {
     /** The most guests {@code follow.max-guests} lets one tour take. */
     private static final int MAX_TOUR_GUESTS = 100;
 
+    /**
+     * The longest {@code follow.invitation-seconds} and
+     * {@code follow.invite-cooldown-seconds} accept: an hour.
+     */
+    private static final int MAX_TOUR_INVITATION_SECONDS = 3600;
+
+    /** The shortest {@code follow.invitation-seconds} accepts: time enough to read it and click. */
+    private static final int MIN_TOUR_INVITATION_SECONDS = 5;
+
     /** The section of {@code /cam follow}. */
     private static final String FOLLOW_SECTION = "follow";
 
@@ -381,6 +390,10 @@ public final class CamSettings {
     private double tourStartDistance;
     /** How many guests one tour takes at once, {@code follow.max-guests}; 0 for no limit. */
     private int tourMaxGuests;
+    /** How long an invitation holds, {@code follow.invitation-seconds}. */
+    private int tourInvitationSeconds;
+    /** How long before a guide may invite the same player again, {@code follow.invite-cooldown-seconds}. */
+    private int tourInviteCooldownSeconds;
     /** Whether a player out of camera mode may show others round as well, {@code follow.lead-without-cam}. */
     private boolean tourLeadWithoutCam;
     /**
@@ -768,6 +781,10 @@ public final class CamSettings {
         tourGuideView = config.getBoolean(follow + ".guide-view", true);
         tourStartDistance = config.getDouble(follow + ".start-distance", 16.0, 0.0, MAX_START_DISTANCE);
         tourMaxGuests = config.getInt(follow + ".max-guests", 5, 0, MAX_TOUR_GUESTS);
+        tourInvitationSeconds = config.getInt(follow + ".invitation-seconds", 60, MIN_TOUR_INVITATION_SECONDS,
+                MAX_TOUR_INVITATION_SECONDS);
+        tourInviteCooldownSeconds = config.getInt(follow + ".invite-cooldown-seconds", 60, 0,
+                MAX_TOUR_INVITATION_SECONDS);
         tourLeadWithoutCam = config.getBoolean(follow + ".lead-without-cam", true);
         tourGuideNameReplaces = config.getChoice(follow + ".guide-name", "replace", "replace", "above")
                 .equalsIgnoreCase("replace");
@@ -1701,6 +1718,16 @@ public final class CamSettings {
     /** How many guests one tour takes at once; 0 for no limit. */
     public int getTourMaxGuests() {
         return tourMaxGuests;
+    }
+
+    /** How long an invitation holds, in seconds. */
+    public int getTourInvitationSeconds() {
+        return tourInvitationSeconds;
+    }
+
+    /** How long after inviting a player a guide may not invite him again, in seconds; 0 at once. */
+    public int getTourInviteCooldownSeconds() {
+        return tourInviteCooldownSeconds;
     }
 
     /** Whether a player out of camera mode may show others round as well, while he builds, say. */

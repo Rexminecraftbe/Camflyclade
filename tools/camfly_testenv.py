@@ -1000,6 +1000,12 @@ def prepare_server_files(env):
         text, n = replace_option(text, "enabled", "false", abschnitt)
         if n != 1:
             Log.warn(f"{abschnitt}.enabled nicht in der Konfiguration gefunden")
+    # Ein Leader laedt denselben Spieler voreingestellt erst nach einer Minute
+    # wieder ein. Die Abschnitte laden ihn immer wieder ein; nur
+    # fuehrung_checks stellt die Wartezeit fuer sich ein und prueft sie.
+    text, n = replace_option(text, "invite-cooldown-seconds", "0", "follow")
+    if n != 1:
+        Log.warn("follow.invite-cooldown-seconds nicht in der Konfiguration gefunden")
     data_dir = plugins / "CamFly"
     data_dir.mkdir(exist_ok=True)
     (data_dir / "config.yml").write_text(text, encoding="utf-8")
@@ -6525,9 +6531,10 @@ def fuehrung_checks(env, bot):
         zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         dort = zeilen_seit(zuschauer, seit)
         pakete = " ".join(p["text"] for p in zuschauer.call("chat_packets", since=pakete_seit).get("packets", []))
-        FIND.test("Die Einladung kommt an - mit Knoepfen zum Annehmen und Ablehnen",
-                  gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to follow you")
-                  and gesagt(dort, rf"{BOT_NAME} invites you to follow them")
+        FIND.test("Die Einladung kommt an - mit Knoepfen zum Annehmen und Ablehnen, und beide lesen, dass sie in "
+                  "60 Sekunden ablaeuft (follow.invitation-seconds)",
+                  gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to follow you\. The invitation runs out in 60 seconds")
+                  and gesagt(dort, rf"{BOT_NAME} invites you to follow them with your camera - it runs out in 60 seconds")
                   and f"/cam follow accept {BOT_NAME}" in pakete and f"/cam follow decline {BOT_NAME}" in pakete,
                   f"{zeige(zeilen)} / {zeige(dort)} / {pakete[-300:]}")
         FIND.test("sounds.follow-invite - der Eingeladene hoert den Ton", ton_da(zuschauer, ton, "block.note_block.bell"),
@@ -6540,12 +6547,22 @@ def fuehrung_checks(env, bot):
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
         seit = bot.mark()
         kamera = kamera_marke()
+        drehung = zuschauer.call("rotations").get("count", 0)
         dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
         hier = zeilen_seit(bot, seit)
         FIND.test("Ohne Cam-Modus nah dran: annehmen startet den Cam-Modus dort, wo er steht",
                   gesagt(dort, r"Cam mode activated") and im_cam_modus(bot, ZUSCHAUER_NAME), zeige(dort))
         FIND.test("follow.guide-view: der Gast sieht durch die Augen des Fuehrers (Paket camera mit dessen Nummer)",
                   "fuehrer" in kameras_seit(kamera), str(kameras_seit(kamera)))
+        # Vorher haelt ihn der Server ein paar Ticks fest, waehrend er noch
+        # durch seine eigenen Augen sieht: Nur so holt sein Client die Items
+        # in seinen Haenden in die Mitte.
+        erste = next((p.get("t", 0) for p in zuschauer.call("cameras", since=kamera).get("packets", [])), None)
+        gedreht = zuschauer.call("rotations", since=drehung).get("packets", [])
+        vorher = [p for p in gedreht if erste is not None and p.get("t", 0) < erste]
+        FIND.test("Bevor er durch die Augen des Fuehrers sieht, haelt ihn der Server einige Ticks gleich gedreht",
+                  len(vorher) >= 8 and len({(round(p.get("yaw", 0), 1), round(p.get("pitch", 0), 1))
+                                            for p in vorher}) == 1, f"{len(vorher)} / {vorher[:2]}")
         FIND.test("Auf Paper meldet der Start nichts zum Blick des Fuehrers",
                   "view of /cam follow does not work" not in server_log(env), "")
         FIND.test("/cam follow accept - seine Kamera steht beim Fuehrer, und der erfaehrt es",
@@ -6801,7 +6818,47 @@ def fuehrung_checks(env, bot):
             cam_off(zuschauer)
             cam_off(bot)
         dritter.stop()
-        set_option(env, "max-guests", "5", "follow")
+
+        # Eine Einladung gilt invitation-seconds, und denselben Spieler laedt
+        # der Fuehrer erst nach invite-cooldown-seconds wieder ein - der
+        # Testserver startet ohne Wartezeit.
+        set_options(env, [("max-guests", "5", "follow"), ("invitation-seconds", "5", "follow"),
+                          ("invite-cooldown-seconds", "60", "follow")])
+        cam_off(zuschauer)
+        cam_off(bot)
+        hinstellen(bot, x, y, z)
+        console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
+        seit = zuschauer.mark()
+        zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        dort = zeilen_seit(zuschauer, seit)
+        FIND.test("invitation-seconds: 5 - beide lesen, dass die Einladung in 5 Sekunden ablaeuft",
+                  gesagt(zeilen, r"The invitation runs out in 5 seconds") and gesagt(dort, r"it runs out in 5 seconds"),
+                  f"{zeige(zeilen)} / {zeige(dort)}")
+        zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        FIND.test("invite-cooldown-seconds: 60 - gleich noch einmal einladen geht nicht, und er liest, wie lange noch",
+                  gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} a moment ago: you can invite them again in "
+                                 r"(5[89]|60) seconds"), zeige(zeilen))
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 9)
+        f = fenster(bot)
+        FIND.test("Menue: unter ihm steht, wann die Einladung ablaeuft",
+                  ZUSCHAUER_NAME in item_text(f.get("slots", {}).get("0"))
+                  and re.search(r"The invitation runs out\s*in [1-5] s", item_text(f.get("slots", {}).get("0"))),
+                  item_text(f.get("slots", {}).get("0")))
+        bot.call("close_window", wait=10)
+        time.sleep(5.0)
+        dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}")
+        FIND.test("Nach 5 Sekunden ist die Einladung abgelaufen",
+                  gesagt(dort, rf"{BOT_NAME} has not invited you, or the invitation ran out")
+                  and not im_cam_modus(bot, ZUSCHAUER_NAME), zeige(dort))
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 9)
+        f = fenster(bot)
+        FIND.test("Menue: danach steht unter ihm, wann der Fuehrer ihn wieder einladen kann",
+                  re.search(r"You can invite them again\s*in \d+ s", item_text(f.get("slots", {}).get("0"))),
+                  item_text(f.get("slots", {}).get("0")))
+        bot.call("close_window", wait=10)
+        set_options(env, [("invitation-seconds", "60", "follow"), ("invite-cooldown-seconds", "0", "follow")])
 
         set_option(env, "enabled", "false", "follow")
         zeilen = befehl(bot, "/cam follow leave")
