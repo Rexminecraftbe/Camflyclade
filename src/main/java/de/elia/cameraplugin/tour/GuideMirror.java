@@ -14,7 +14,7 @@ import java.util.UUID;
  * What a guest of a guide out of camera mode sees of the guide on his own
  * screen, {@code follow.mirror-...}: the guide's hearts as his own, the item in
  * the guide's hand in his, and the one in the guide's off hand in his. His
- * hunger stays his.
+ * hunger stays his. How the guide swings them, {@link GuideSwing} shows.
  *
  * <p>All of it goes to the client of the guest only, through
  * {@code sendHealthUpdate} and {@code sendEquipmentChange}: on the server his
@@ -142,6 +142,11 @@ final class GuideMirror {
         if (state.mainHand != null || state.offHand != null) {
             guest.updateInventory();
         }
+    }
+
+    /** Whether this guest is shown the guide's hearts or items right now. */
+    boolean isShown(UUID guest) {
+        return shown.containsKey(guest);
     }
 
     /** A guest who left the server: his client gets what is his when he joins again. */

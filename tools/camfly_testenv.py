@@ -1267,6 +1267,15 @@ bot._client.on('window_items', (packet) => {
 bot._client.on('set_slot', (packet) => {
   if (Number(packet.windowId) === 0) lastInventoryResend = Date.now();
 });
+// Wie der Server den eigenen Arm schwingen laesst (Paket animation mit der
+// eigenen Nummer: 0 die Hand, 3 die zweite Hand) - so schwingt eine Fuehrung
+// ohne Cam-Modus ihn mit dem Arm des Fuehrers.
+const ownSwings = [];
+bot._client.on('animation', (packet) => {
+  if (bot.entity && packet.entityId === bot.entity.id) {
+    ownSwings.push({ t: Date.now(), animation: packet.animation });
+  }
+});
 // Wie stark es regnet, so wie der echte Client es rechnet: Ereignis 1
 // (START_RAINING) setzt den Regen auf 0, von wo ihn die Ereignisse 7 steigen
 // lassen, Ereignis 2 (STOP_RAINING) auf 1, von wo sie ihn fallen lassen.
@@ -1868,6 +1877,12 @@ async function handle(cmd) {
       const items = bot.inventory ? bot.inventory.items() : [];
       return { count: items.length, names: items.map((i) => i.name) };
     }
+    case 'own_swings':
+      return { packets: ownSwings.slice(cmd.since || 0), count: ownSwings.length };
+    case 'swing':
+      // Den Arm schwingen, wie ein echter Client beim Schlagen und Abbauen.
+      bot._client.write('arm_animation', { hand: cmd.off ? 'off_hand' : 'main_hand' });
+      return { swung: true };
     case 'own_equipment':
       return { packets: ownEquipment.slice(cmd.since || 0), count: ownEquipment.length,
                resends: inventoryResends, last_resend: lastInventoryResend };
@@ -6912,7 +6927,7 @@ def fuehrung_ohne_cam_checks(env, bot):
     die Kamera des Gastes folgt ihm, waehrend er herumlaeuft und baut.
 
     Voreingestellt ist es an, mit guide-name: replace und mirror-health,
-    -main-hand und -off-hand an - nachgesehen in der Datei, die das Plugin
+    -main-hand, -off-hand und -swing an - nachgesehen in der Datei, die das Plugin
     mitbringt. Der Bot laedt ohne Cam-Modus ein, die Tab-Vervollstaendigung
     bietet den zweiten Spieler an, der nimmt an und folgt ihm. Ueber dem Bot
     stehen die Namen gestapelt - der Gast mit (Follower) ueber
@@ -6921,14 +6936,16 @@ def fuehrung_ohne_cam_checks(env, bot):
     Stapel, nur nicht, solange der Bot unsichtbar ist. Der Gast bekommt die
     Herzen des Bots auf seinen Bildschirm (max_health 10: 10 statt seiner 20,
     am Server bleiben es 20), das Item in seiner Hand und das in der zweiten
-    als eigene Ausruestung - am Server bleiben seine Haende leer. Verlaesst
-    er die Fuehrung, hat er seine Herzen wieder, und sein Inventar kommt neu.
+    als eigene Ausruestung - am Server bleiben seine Haende leer. Schwingt
+    der Bot den Arm, schwingt der Gast seinen mit (Paket animation mit der
+    eigenen Nummer: 0, und 3 fuer die zweite Hand). Verlaesst er die
+    Fuehrung, hat er seine Herzen wieder, und sein Inventar kommt neu.
 
     Startet der Bot den Cam-Modus, geht die Fuehrung weiter, der Gast sieht
     seine eigenen Herzen, und der Bot ist aus dem Team; endet der Cam-Modus,
     endet sie. Im Zuschauermodus fuehrt keiner, und wechselt der Bot dahin,
     endet die Fuehrung. Mit mirror-main-hand: false kommt nur die zweite
-    Hand. Mit guide-name: above bleibt sein Name, ueber ihm steht nur der
+    Hand, mit mirror-swing: false schwingt nichts mit. Mit guide-name: above bleibt sein Name, ueber ihm steht nur der
     Gast, und das Team gibt es nicht. Mit lead-without-cam: false heisst es
     wieder "Only in cam mode".
     """
@@ -6996,12 +7013,12 @@ def fuehrung_ohne_cam_checks(env, bot):
     dritter = BotClient(env, name=DRITTER_NAME)
     try:
         quelle = quelle_config(env)
-        FIND.test("Voreingestellt stehen lead-without-cam: true, guide-name: replace und die drei mirror-... auf "
+        FIND.test("Voreingestellt stehen lead-without-cam: true, guide-name: replace und die vier mirror-... auf "
                   "true da",
                   all(re.search(rf"(?m)^\s+{schluessel}:\s*{wert}\s*$", quelle) is not None
                       for schluessel, wert in (("lead-without-cam", "true"), ("guide-name", "replace"),
                                                ("mirror-health", "true"), ("mirror-main-hand", "true"),
-                                               ("mirror-off-hand", "true"))), "")
+                                               ("mirror-off-hand", "true"), ("mirror-swing", "true"))), "")
         zuschauer.start()
         dritter.start()
         if not FIND.test("Zweiter und dritter Spieler fuer die Fuehrung ohne Cam-Modus kommen herein",
@@ -7059,6 +7076,15 @@ def fuehrung_ohne_cam_checks(env, bot):
         FIND.test("Am Server bleiben die Haende des Gastes leer",
                   not server_says(bot, f"/execute if items entity {ZUSCHAUER_NAME} weapon.* * run say {{marke}}"),
                   "")
+
+        schwuenge = zuschauer.call("own_swings").get("count", 0)
+        bot.call("swing")
+        time.sleep(0.5)
+        bot.call("swing", off=True)
+        time.sleep(1.0)
+        neu = [p.get("animation") for p in zuschauer.call("own_swings", since=schwuenge).get("packets", [])]
+        FIND.test("mirror-swing: schwingt der Bot den Arm, schwingt beim Gast der eigene mit dem Item darin - erst die "
+                  "Hand, dann die zweite Hand", neu == [0, 3], str(neu))
 
         # Seine Maus dreht seinen Spieler weiter, auch wenn er durch die
         # Augen des Bots sieht - und sein Client liesse die Items in seinen
@@ -7154,7 +7180,7 @@ def fuehrung_ohne_cam_checks(env, bot):
         console(env, f"gamemode {spielmodus} {BOT_NAME}", pause=1.0)
 
         # Jeder Reload beendet den Cam-Modus des Gastes: danach von vorn.
-        set_option(env, "mirror-main-hand", "false", "follow")
+        set_options(env, [("mirror-main-hand", "false", "follow"), ("mirror-swing", "false", "follow")])
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         ausruestung = zuschauer.call("own_equipment").get("count", 0)
@@ -7164,9 +7190,15 @@ def fuehrung_ohne_cam_checks(env, bot):
         FIND.test("mirror-main-hand: false - nur die zweite Hand kommt",
                   not any(p.get("slot") == 0 and p.get("count", 0) > 0 for p in pakete)
                   and any(p.get("slot") == 1 and p.get("count", 0) > 0 for p in pakete), str(pakete[-6:]))
+        schwuenge = zuschauer.call("own_swings").get("count", 0)
+        bot.call("swing")
+        time.sleep(1.0)
+        neu = zuschauer.call("own_swings", since=schwuenge).get("packets", [])
+        FIND.test("mirror-swing: false - der Arm des Gastes schwingt nicht mit", not neu, str(neu))
         befehl(zuschauer, "/cam follow leave")
 
-        set_options(env, [("mirror-main-hand", "true", "follow"), ("guide-name", "above", "follow")])
+        set_options(env, [("mirror-main-hand", "true", "follow"), ("mirror-swing", "true", "follow"),
+                          ("guide-name", "above", "follow")])
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         einladen_und_annehmen()

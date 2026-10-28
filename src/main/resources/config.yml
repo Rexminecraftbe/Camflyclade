@@ -954,6 +954,10 @@ follow:
   mirror-health: true
   mirror-main-hand: true
   mirror-off-hand: true
+  # Ob ihr Arm mit seinem Item schwingt, wenn seiner schwingt (schlagen, abbauen, Blöcke setzen). Nur der Schwung:
+  # Wie das Item nach einem Schlag absinkt und wieder hochkommt, zeigt ein Client nur bei eigenen Schlägen. Geht wie
+  # guide-view nur auf Paper (ein Paket über das Innere des Servers).
+  mirror-swing: true
 
 # /cam photo: der Foto-Modus, an und wieder aus, nur im Cam-Modus. Für Bilder und Videos der eigenen Bauten blendet er
 # nur für den Spieler selbst aus, was im Bild stört - alle anderen sehen weiter alles wie vorher, und an der Welt ändert

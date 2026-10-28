@@ -27,6 +27,8 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerAnimationEvent;
+import org.bukkit.event.player.PlayerAnimationType;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -183,6 +185,8 @@ public final class CamTour implements Listener {
     private final OutOfSight outOfSight = new OutOfSight(sender);
     /** What the guests of a guide out of camera mode see of him on their own screen. */
     private final GuideMirror mirror;
+    /** The internals that swing a guest's arm on his own client as his guide swings his. */
+    private final GuideSwing swing = new GuideSwing(sender);
     /** Who looks round freely on tours instead of through the guide's eyes, while he is online. */
     private final Set<UUID> freeLook = new HashSet<>();
     /** The players the tour hid from each viewer with {@code hidePlayer}, see {@link #syncVisibility}. */
@@ -247,6 +251,7 @@ public final class CamTour implements Listener {
     public void load(ConsoleLog log) {
         view.load(settings.isTourEnabled() && settings.isTourGuideView() ? log : null);
         outOfSight.load(settings.isTourEnabled() ? log : null);
+        swing.load(settings.isTourEnabled() && settings.isTourMirrorSwing() ? log : null);
     }
 
     /**
@@ -1223,6 +1228,28 @@ public final class CamTour implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onGuestInventoryDrag(InventoryDragEvent event) {
         mirrorAgain(event.getWhoClicked());
+    }
+
+    /**
+     * A guide out of camera mode swings his arm - hits, digs, places a
+     * block -: his guests who are shown his items see the arm that holds them
+     * swing, with {@code follow.mirror-swing}, see {@link GuideSwing}. Their
+     * clients answer with a swing of their own, which leads no tour.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onGuideSwing(PlayerAnimationEvent event) {
+        Player guide = event.getPlayer();
+        Tour tour = tours.get(guide.getUniqueId());
+        if (tour == null || cameraPlayers.contains(guide.getUniqueId()) || !settings.isTourMirrorSwing()) {
+            return;
+        }
+        boolean offHand = event.getAnimationType() == PlayerAnimationType.OFF_ARM_SWING;
+        for (UUID id : tour.guests.keySet()) {
+            Player guest = Bukkit.getPlayer(id);
+            if (guest != null && mirror.isShown(id)) {
+                swing.swing(guest, offHand);
+            }
+        }
     }
 
     /**
