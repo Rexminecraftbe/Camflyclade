@@ -32,6 +32,7 @@ import org.bukkit.event.player.PlayerAnimationType;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
@@ -114,6 +115,9 @@ public final class CamTour implements Listener {
 
     /** Paper's event at the end of every tick, see {@link #watchTickEnd()}. */
     private static final String TICK_END = "com.destroystokyo.paper.event.server.ServerTickEndEvent";
+
+    /** Why the server kicks a player who hits or clicks his own player, see {@link #onSelfInteraction}. */
+    private static final String SELF_INTERACTION = "Cannot interact with self!";
 
     /**
      * How far a guest may fall behind before his camera is put next to the
@@ -1249,6 +1253,21 @@ public final class CamTour implements Listener {
             if (guest != null && mirror.isShown(id)) {
                 swing.swing(guest, offHand);
             }
+        }
+    }
+
+    /**
+     * Keeps a guest on the server whose client hits or clicks his own player.
+     * Seeing through the guide's eyes, he aims from them - and his own
+     * player stands right there, around them: his client finds itself under
+     * the crosshair, and a click goes to himself. The server answers that
+     * with a kick, "Cannot interact with self!", after asking the plugins;
+     * turned down here, the click is only lost, as any click of a guest is.
+     */
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onSelfInteraction(PlayerKickEvent event) {
+        if (guideOf.containsKey(event.getPlayer().getUniqueId()) && SELF_INTERACTION.equals(event.getReason())) {
+            event.setCancelled(true);
         }
     }
 

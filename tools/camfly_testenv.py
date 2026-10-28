@@ -1877,6 +1877,17 @@ async function handle(cmd) {
       const items = bot.inventory ? bot.inventory.items() : [];
       return { count: items.length, names: items.map((i) => i.name) };
     }
+    case 'hit_self': {
+      // Sich selbst schlagen und anklicken - wie ein Client, der durch die
+      // Augen eines anderen zielt und sich selbst unter dem Fadenkreuz hat.
+      const Vec3 = require('vec3');
+      bot._client.write('attack', { entityId: bot.entity.id });
+      await new Promise((r) => setTimeout(r, 200));
+      bot._client.write('use_entity', { target: bot.entity.id, hand: 'main_hand', location: new Vec3(0, 1, 0),
+                                        sneaking: false });
+      await new Promise((r) => setTimeout(r, 200));
+      return { done: true };
+    }
     case 'own_swings':
       return { packets: ownSwings.slice(cmd.since || 0), count: ownSwings.length };
     case 'swing':
@@ -7085,6 +7096,18 @@ def fuehrung_ohne_cam_checks(env, bot):
         neu = [p.get("animation") for p in zuschauer.call("own_swings", since=schwuenge).get("packets", [])]
         FIND.test("mirror-swing: schwingt der Bot den Arm, schwingt beim Gast der eigene mit dem Item darin - erst die "
                   "Hand, dann die zweite Hand", neu == [0, 3], str(neu))
+
+        # Durch die Augen des Bots zielt der Gast von dort, wo er selbst steht:
+        # Sein Client findet sich unter dem Fadenkreuz. Den Klick auf sich
+        # selbst beantwortet der Server sonst mit einem Rauswurf.
+        vorher_log = len(server_log(env))
+        zuschauer.call("hit_self", wait=10)
+        time.sleep(1.5)
+        danach = server_log(env)[vorher_log:]
+        FIND.test("Schlaegt oder klickt der Gast sich selbst, fliegt er nicht vom Server (\"Cannot interact with "
+                  "self!\") und folgt weiter",
+                  "Cannot interact with self" not in danach and f"{ZUSCHAUER_NAME} lost connection" not in danach
+                  and im_cam_modus(bot, ZUSCHAUER_NAME), danach[-300:])
 
         # Seine Maus dreht seinen Spieler weiter, auch wenn er durch die
         # Augen des Bots sieht - und sein Client liesse die Items in seinen
