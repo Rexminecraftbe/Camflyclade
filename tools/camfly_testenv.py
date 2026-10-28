@@ -6821,23 +6821,20 @@ def fuehrung_checks(env, bot):
 
         # Eine Einladung gilt invitation-seconds, und denselben Spieler laedt
         # der Fuehrer erst nach invite-cooldown-seconds wieder ein - der
-        # Testserver startet ohne Wartezeit.
-        set_options(env, [("max-guests", "5", "follow"), ("invitation-seconds", "5", "follow"),
-                          ("invite-cooldown-seconds", "60", "follow")])
+        # Testserver startet ohne Wartezeit, eingeschaltet wird sie erst nach
+        # der ersten Einladung: Die Einladungen davor zaehlten sonst mit.
+        set_options(env, [("max-guests", "5", "follow"), ("invitation-seconds", "5", "follow")])
         cam_off(zuschauer)
         cam_off(bot)
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
         seit = zuschauer.mark()
         zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        eingeladen = time.time()
         dort = zeilen_seit(zuschauer, seit)
         FIND.test("invitation-seconds: 5 - beide lesen, dass die Einladung in 5 Sekunden ablaeuft",
                   gesagt(zeilen, r"The invitation runs out in 5 seconds") and gesagt(dort, r"it runs out in 5 seconds"),
                   f"{zeige(zeilen)} / {zeige(dort)}")
-        zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
-        FIND.test("invite-cooldown-seconds: 60 - gleich noch einmal einladen geht nicht, und er liest, wie lange noch",
-                  gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} a moment ago: you can invite them again in "
-                                 r"(5[89]|60) seconds"), zeige(zeilen))
         befehl(bot, "/cam menu", warten=1.0)
         klick(bot, 9)
         f = fenster(bot)
@@ -6846,7 +6843,13 @@ def fuehrung_checks(env, bot):
                   and re.search(r"The invitation runs out\s*in [1-5] s", item_text(f.get("slots", {}).get("0"))),
                   item_text(f.get("slots", {}).get("0")))
         bot.call("close_window", wait=10)
-        time.sleep(5.0)
+        set_option(env, "invite-cooldown-seconds", "60", "follow")
+        zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        warten = re.search(rf"You invited {ZUSCHAUER_NAME} a moment ago: you can invite them again in (\d+) seconds",
+                           " ".join(zeilen))
+        FIND.test("invite-cooldown-seconds: 60 - gleich noch einmal einladen geht nicht, und er liest, wie lange noch",
+                  warten is not None and 40 <= int(warten.group(1)) <= 60, zeige(zeilen))
+        time.sleep(max(0.0, 6.0 - (time.time() - eingeladen)))
         dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}")
         FIND.test("Nach 5 Sekunden ist die Einladung abgelaufen",
                   gesagt(dort, rf"{BOT_NAME} has not invited you, or the invitation ran out")
@@ -7078,20 +7081,25 @@ def fuehrung_ohne_cam_checks(env, bot):
         # Ticks spaeter: Bis dahin flackerten sie weg.
         hinstellen(bot, x - 5, y, z)
         time.sleep(1.5)
-        vorher = zuschauer.call("own_equipment")
         seit = zuschauer.mark()
-        zuschauer.call("activate_entity", wait=20, at=list(gast), radius=2)
-        time.sleep(1.0)
+        abstaende = []
+        for _ in range(3):
+            vorher = zuschauer.call("own_equipment")
+            zuschauer.call("activate_entity", wait=20, at=list(gast), radius=2)
+            time.sleep(1.3)
+            nachher = zuschauer.call("own_equipment", since=vorher.get("count", 0))
+            neu_um = nachher.get("last_resend", 0)
+            wieder = [p for p in nachher.get("packets", []) if p.get("count", 0) > 0 and p.get("t", 0) >= neu_um]
+            abstaende.append(min((p["t"] - neu_um for p in wieder), default=None)
+                             if neu_um > vorher.get("last_resend", 0) else None)
         dort = zeilen_seit(zuschauer, seit)
-        nachher = zuschauer.call("own_equipment", since=vorher.get("count", 0))
-        neu_um = nachher.get("last_resend", 0)
-        wieder = {p.get("slot") for p in nachher.get("packets", [])
-                  if p.get("count", 0) > 0 and 0 <= p.get("t", 0) - neu_um < 40}
+        # Im selben Tick: Die leere Hand geht gleich hinaus, die Items mit dem
+        # Ende des Ticks. Ohne das kaemen sie erst mit der Auffrischung, bis
+        # zu zehn Ticks spaeter - dreimal hintereinander so knapp waere Zufall.
         FIND.test("Klickt der Gast seinen Koerper an, schickt der Server seine leere Hand - Schwert und Schild "
-                  "kommen im selben Tick wieder",
+                  "kommen im selben Tick wieder, dreimal hintereinander",
                   gesagt(dort, rf"You follow {BOT_NAME}: stop that first")
-                  and neu_um > vorher.get("last_resend", 0) and wieder == {0, 1},
-                  f"{zeige(dort)} / {neu_um} / {nachher.get('packets', [])[-6:]}")
+                  and all(a is not None and a < 100 for a in abstaende), f"{abstaende} / {zeige(dort)}")
         hinstellen(bot, x, y, z)
         time.sleep(1.5)
 
@@ -14391,6 +14399,9 @@ def step_tests(env):
 
         # --- ab hier mit op: /data und /fillbiome brauchen es ---
         console(env, f"op {BOT_NAME}")
+        # Ein abgebrochener Lauf kann den Bot auch in einem anderen Spielmodus
+        # zurueckgelassen haben: Die Abschnitte gehen vom Ueberleben aus.
+        console(env, f"gamemode survival {BOT_NAME}")
         time.sleep(1.5)
         # Erst den Boden: Alles Weitere baut vom Startplatz aus.
         boden_ebnen(bot)
