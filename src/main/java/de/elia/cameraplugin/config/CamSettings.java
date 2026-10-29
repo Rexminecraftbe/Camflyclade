@@ -410,6 +410,12 @@ public final class CamSettings {
     private boolean tourMirrorOffHand;
     /** Whether their arm with his item swings when his does, {@code follow.mirror-swing}. */
     private boolean tourMirrorSwing;
+    /** Whether they see the item on his head on theirs, {@code follow.mirror-head}. */
+    private boolean tourMirrorHead;
+    /** Whether they see his effects as theirs, {@code follow.mirror-effects}. */
+    private boolean tourMirrorEffects;
+    /** Whether they see his frost as theirs, {@code follow.mirror-frost}. */
+    private boolean tourMirrorFrost;
     /** Whether guests in the guide's view are held turned between the ticks too, {@code follow.fine-hold}. */
     private boolean tourFineHold;
     /** Whether the owner of a spot hears how often it was looked at and liked, {@code viewpoints.guestbook}. */
@@ -796,6 +802,9 @@ public final class CamSettings {
         tourMirrorMainHand = config.getBoolean(follow + ".mirror-main-hand", true);
         tourMirrorOffHand = config.getBoolean(follow + ".mirror-off-hand", true);
         tourMirrorSwing = config.getBoolean(follow + ".mirror-swing", true);
+        tourMirrorHead = config.getBoolean(follow + ".mirror-head", true);
+        tourMirrorEffects = config.getBoolean(follow + ".mirror-effects", true);
+        tourMirrorFrost = config.getBoolean(follow + ".mirror-frost", true);
         tourFineHold = config.getBoolean(follow + ".fine-hold", true);
         viewpointsGuestbook = config.getBoolean("viewpoints.guestbook", true);
         guestbookIntervalMinutes = config.getInt("viewpoints.guestbook-interval-minutes", 10, 1,
@@ -1767,6 +1776,21 @@ public final class CamSettings {
     /** Whether the guests' arm with the guide's item swings when the guide's does. */
     public boolean isTourMirrorSwing() {
         return tourMirrorSwing;
+    }
+
+    /** Whether the guests see the item on the guide's head - a carved pumpkin, say - on theirs. */
+    public boolean isTourMirrorHead() {
+        return tourMirrorHead;
+    }
+
+    /** Whether the guests see the guide's effects as theirs. */
+    public boolean isTourMirrorEffects() {
+        return tourMirrorEffects;
+    }
+
+    /** Whether the guests see the guide's frost as theirs. */
+    public boolean isTourMirrorFrost() {
+        return tourMirrorFrost;
     }
 
     /** Whether guests who see through the guide's eyes are held turned between the ticks too. */

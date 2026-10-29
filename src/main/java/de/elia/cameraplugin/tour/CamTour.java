@@ -25,6 +25,7 @@ import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityPotionEffectEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerAnimationEvent;
@@ -162,7 +163,7 @@ public final class CamTour implements Listener {
      * only, see {@link ClientFrost}. Between two sends it counts up to this
      * many ticks of 140 - too little frost to be seen.
      */
-    private static final int FROST_REFRESH = 5;
+    static final int FROST_REFRESH = 5;
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
@@ -193,6 +194,8 @@ public final class CamTour implements Listener {
     private final GuideSwing swing = new GuideSwing(sender);
     /** Holds guests who see through the guide's eyes turned between the ticks too. */
     private final FineHold fineHold = new FineHold(sender);
+    /** The internals that show a guest the frost of his guide as his own. */
+    private final GuideFrost frost = new GuideFrost(sender);
     /** Who looks round freely on tours instead of through the guide's eyes, while he is online. */
     private final Set<UUID> freeLook = new HashSet<>();
     /** The players the tour hid from each viewer with {@code hidePlayer}, see {@link #syncVisibility}. */
@@ -242,7 +245,7 @@ public final class CamTour implements Listener {
         this.settings = plugin.getSettings();
         this.messages = plugin.getMessages();
         this.cameraPlayers = plugin.getCameraPlayers();
-        this.mirror = new GuideMirror(settings);
+        this.mirror = new GuideMirror(settings, frost);
     }
 
     /** Whether {@code /cam follow} is there at all. */
@@ -259,6 +262,7 @@ public final class CamTour implements Listener {
         outOfSight.load(settings.isTourEnabled() ? log : null);
         swing.load(settings.isTourEnabled() && settings.isTourMirrorSwing() ? log : null);
         fineHold.load(settings.isTourEnabled() && settings.isTourGuideView() && settings.isTourFineHold() ? log : null);
+        frost.load(settings.isTourEnabled() && settings.isTourMirrorFrost() ? log : null);
     }
 
     /**
@@ -266,8 +270,9 @@ public final class CamTour implements Listener {
      * the clients are told once more who is gone, see {@link OutOfSight},
      * after the server has sent everything of that tick. A player it paired
      * with a client anew during the tick is gone again before the client
-     * draws him. Without the event, the tour's own tick does it, at the start
-     * of the next one.
+     * draws him. The guide's effects and frost go to his guests there too,
+     * see {@link GuideMirror#tickEnd}. Without the event, the tour's own tick
+     * does both, at its end.
      */
     public void watchTickEnd() {
         Class<? extends Event> event;
@@ -280,6 +285,7 @@ public final class CamTour implements Listener {
         }, EventPriority.MONITOR, (listener, fired) -> {
             if (event.isInstance(fired)) {
                 forgetAgain();
+                mirror.tickEnd();
             }
         }, plugin);
         tickEnd = true;
@@ -1292,6 +1298,19 @@ public final class CamTour implements Listener {
         }
     }
 
+    /**
+     * The effects of a guest change on the server - the night vision camera
+     * mode gives him, say -, and the server sends him the change at once:
+     * those of his guide he is shown go out again at the end of the tick,
+     * over it, see {@link GuideMirror}.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onGuestEffect(EntityPotionEffectEvent event) {
+        if (event.getEntity() instanceof Player guest && guideOf.containsKey(guest.getUniqueId())) {
+            mirror.effectsAgain(guest.getUniqueId());
+        }
+    }
+
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         stopFor(event.getPlayer());
@@ -1380,7 +1399,10 @@ public final class CamTour implements Listener {
                 }
                 if (++state.sinceFrost >= FROST_REFRESH) {
                     state.sinceFrost = 0;
-                    ClientFrost.resend(guest);
+                    // Shown his guide's frost, he is sent that one, see GuideMirror.
+                    if (!mirror.showsFrost(next.getKey())) {
+                        ClientFrost.resend(guest);
+                    }
                 }
             }
             if (!tours.containsKey(guideId)) {
@@ -1395,6 +1417,7 @@ public final class CamTour implements Listener {
         syncVisibility();
         if (!tickEnd) {
             forgetAgain();
+            mirror.tickEnd();
         }
     }
 

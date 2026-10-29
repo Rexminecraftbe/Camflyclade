@@ -905,10 +905,11 @@ visitor-camera:
 # Folgen. Über ihm stehen die Namen gestapelt wie über der Kamera eines Leaders, solange Follower ihm folgen - ganz
 # unten seiner (Text: player.tour-builder-format), siehe guide-name. Nie mehr, als sein eigener Name zeigen würde:
 # nicht, solange er unsichtbar ist, und nicht durch Wände, solange er schleicht.
-# Seine Follower sehen auf ihrem eigenen Bildschirm seine Herzen und die Items in seinen Händen (mirror-...) - nur auf
-# ihrem Bildschirm: Am Server bleiben ihre Herzen ihre, und ihre Hände bleiben leer wie im Cam-Modus; nehmen,
-# wegwerfen oder benutzen lässt sich nichts davon, und sein übriges Inventar sehen sie nicht. Der Hunger bleibt ihrer.
-# Hören sie auf zu folgen (oder startet er den Cam-Modus), sehen sie wieder ihre eigenen Herzen und Hände.
+# Seine Follower sehen auf ihrem eigenen Bildschirm seine Herzen, die Items in seinen Händen und auf seinem Kopf, seine
+# Effekte und seinen Frost (mirror-...) - nur auf ihrem Bildschirm: Am Server bleiben ihre Herzen, Effekte und ihr
+# Frost ihre, und ihre Hände bleiben leer wie im Cam-Modus; nehmen, wegwerfen oder benutzen lässt sich nichts davon,
+# und sein übriges Inventar sehen sie nicht. Der Hunger bleibt ihrer. Hören sie auf zu folgen (oder startet er den
+# Cam-Modus), sehen sie wieder ihre eigenen Herzen, Hände, Effekte und ihren eigenen Frost.
 # Mit guide-view sieht ein Follower durch seine Augen: Die Herzen dort zeichnet das Spiel selbst - und den Hunger
 # dabei immer voll, den schickt das Spiel von niemandem an andere.
 follow:
@@ -965,6 +966,17 @@ follow:
   # Wie das Item nach einem Schlag absinkt und wieder hochkommt, zeigt ein Client nur bei eigenen Schlägen. Geht wie
   # guide-view nur auf Paper (ein Paket über das Innere des Servers).
   mirror-swing: true
+  # Ob sie das Item auf seinem Kopf auf ihrem sehen: Trägt er einen geschnitzten Kürbis, sehen sie den Kürbis-Rand um
+  # den Bildschirm wie er (auch ein Item mit eigenem Rand aus einem Ressourcenpaket)
+  mirror-head: true
+  # Ob sie seine Effekte sehen: die Symbole oben rechts, die hellere Welt von Nachtsicht, das Schwanken von Übelkeit,
+  # den Nebel von Blindheit und Dunkelheit und die Farbe der Herzen (z. B. grün bei Vergiftung). Nicht dabei sind
+  # Schwebe, Sanfter Fall, Sprungkraft und Gunst des Delfins: Die würden ihre eigene Kamera auf ihrem Client bewegen.
+  # Endet einer seiner Effekte, sehen sie wieder ihren eigenen dieser Art, falls sie einen haben.
+  mirror-effects: true
+  # Ob sie seinen Frost sehen: Steckt er im Pulverschnee, wächst bei ihnen der Eis-Rand um den Bildschirm wie bei
+  # ihm. Erfrieren tun sie davon nicht. Geht wie guide-view nur auf Paper (ein Paket über das Innere des Servers).
+  mirror-frost: true
 
 # /cam photo: der Foto-Modus, an und wieder aus, nur im Cam-Modus. Für Bilder und Videos der eigenen Bauten blendet er
 # nur für den Spieler selbst aus, was im Bild stört - alle anderen sehen weiter alles wie vorher, und an der Welt ändert

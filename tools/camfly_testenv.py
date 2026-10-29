@@ -860,6 +860,9 @@ def stop_server(env, quiet=False):
 # gar nicht pruefen. Nur von der Konsole aus gebraucht:
 #   plugintp <spieler> <zu-spieler>
 #   plugintp <spieler> <x> <y> <z>
+# Dazu setzt es den Frost eines Spielers am Server, was kein Befehl kann
+# (/data aendert keine Spieler):
+#   testfrost <spieler> <ticks>
 TPA_HELFER_NAME = "CamFlyTpaHelfer"
 
 TPA_HELFER_JAVA = r'''
@@ -875,6 +878,15 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class TpaHelfer extends JavaPlugin {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase("testfrost")) {
+            Player wer = args.length == 2 ? Bukkit.getPlayerExact(args[0]) : null;
+            if (wer == null) {
+                return false;
+            }
+            wer.setFreezeTicks(Integer.parseInt(args[1]));
+            sender.sendMessage("testfrost: ok");
+            return true;
+        }
         if (args.length != 2 && args.length != 4) {
             return false;
         }
@@ -908,6 +920,8 @@ main: camflytest.TpaHelfer
 api-version: '{MC_VERSION}'
 commands:
   plugintp:
+    permission: camflytest.plugintp
+  testfrost:
     permission: camflytest.plugintp
 permissions:
   camflytest.plugintp:
@@ -1276,6 +1290,17 @@ bot._client.on('animation', (packet) => {
     ownSwings.push({ t: Date.now(), animation: packet.animation });
   }
 });
+// Effekte, wie der Server sie diesem Client schickt (Pakete entity_effect und
+// remove_entity_effect), fuer den eigenen Spieler (own) oder einen anderen -
+// eine Fuehrung ohne Cam-Modus zeigt dem Gast so die Effekte des Fuehrers.
+const effects = [];
+function effectSeen(packet, removed) {
+  effects.push({ t: Date.now(), entityId: packet.entityId, effectId: packet.effectId,
+                 amplifier: removed ? null : packet.amplifier, removed,
+                 own: !!bot.entity && packet.entityId === bot.entity.id });
+}
+bot._client.on('entity_effect', (packet) => effectSeen(packet, false));
+bot._client.on('remove_entity_effect', (packet) => effectSeen(packet, true));
 // Wie stark es regnet, so wie der echte Client es rechnet: Ereignis 1
 // (START_RAINING) setzt den Regen auf 0, von wo ihn die Ereignisse 7 steigen
 // lassen, Ereignis 2 (STOP_RAINING) auf 1, von wo sie ihn fallen lassen.
@@ -1890,6 +1915,11 @@ async function handle(cmd) {
     }
     case 'own_swings':
       return { packets: ownSwings.slice(cmd.since || 0), count: ownSwings.length };
+    case 'effects':
+      // Dazu die eigene Nummer: Der Server nennt jede Entitaet allen
+      // Clients unter derselben.
+      return { packets: effects.slice(cmd.since || 0), count: effects.length,
+               self: bot.entity ? bot.entity.id : null };
     case 'swing':
       // Den Arm schwingen, wie ein echter Client beim Schlagen und Abbauen.
       bot._client.write('arm_animation', { hand: cmd.off ? 'off_hand' : 'main_hand' });
@@ -6947,29 +6977,33 @@ def fuehrung_ohne_cam_checks(env, bot):
     die Kamera des Gastes folgt ihm, waehrend er herumlaeuft und baut.
 
     Voreingestellt ist es an, mit guide-name: replace und mirror-health,
-    -main-hand, -off-hand und -swing sowie fine-hold an - nachgesehen in der
-    Datei, die das Plugin mitbringt. Der Bot laedt ohne Cam-Modus ein, die
-    Tab-Vervollstaendigung bietet den zweiten Spieler an, der nimmt an und
-    folgt ihm. Ueber dem Bot stehen die Namen gestapelt - der Gast mit
-    (Follower) ueber "CamFlyTester (Leader)" (player.tour-builder-format) -,
-    sein eigener Name ist im Team cam_guide ausgeblendet, und ein dritter
-    Spieler sieht den Stapel, nur nicht, solange der Bot unsichtbar ist. Der
-    Gast bekommt die Herzen des Bots auf seinen Bildschirm (max_health 10: 10
-    statt seiner 20, am Server bleiben es 20), das Item in seiner Hand und das
-    in der zweiten als eigene Ausruestung - am Server bleiben seine Haende
-    leer. Schwingt der Bot den Arm, schwingt der Gast seinen mit (Paket
-    animation mit der eigenen Nummer: 0, und 3 fuer die zweite Hand). Im Blick
-    des Bots haelt ihn der Server gedreht - mit fine-hold auch zwischen den
-    Ticks, weit oefter als 20 Mal in der Sekunde, ohne nur jeden Tick.
-    Verlaesst er die Fuehrung, hat er seine Herzen wieder, und sein Inventar
-    kommt neu.
+    -main-hand, -off-hand, -swing, -head, -effects und -frost sowie fine-hold
+    an - nachgesehen in der Datei, die das Plugin mitbringt. Der Bot laedt ohne
+    Cam-Modus ein, die Tab-Vervollstaendigung bietet den zweiten Spieler an,
+    der nimmt an und folgt ihm. Ueber dem Bot stehen die Namen gestapelt - der
+    Gast mit (Follower) ueber "CamFlyTester (Leader)"
+    (player.tour-builder-format) -, sein eigener Name ist im Team cam_guide
+    ausgeblendet, und ein dritter Spieler sieht den Stapel, nur nicht, solange
+    der Bot unsichtbar ist. Der Gast bekommt die Herzen des Bots auf seinen
+    Bildschirm (max_health 10: 10 statt seiner 20, am Server bleiben es 20),
+    das Item in seiner Hand und das in der zweiten als eigene Ausruestung - am
+    Server bleiben seine Haende leer. Schwingt der Bot den Arm, schwingt der
+    Gast seinen mit (Paket animation mit der eigenen Nummer: 0, und 3 fuer die
+    zweite Hand). Seine Effekte kommen beim Gast am Bot an und als eigene -
+    Schwebe nur am Bot -, sein Kuerbis auf dem Kopf und sein Frost (vom
+    Hilfsplugin gesetzt) als eigene, und was davon endet, ist auch beim Gast
+    weg; am Server bekommt der Gast nichts davon. Im Blick des Bots haelt ihn
+    der Server gedreht - mit fine-hold auch zwischen den Ticks, weit oefter als
+    20 Mal in der Sekunde, ohne nur jeden Tick. Verlaesst er die Fuehrung, hat
+    er seine Herzen wieder, und sein Inventar kommt neu.
 
     Startet der Bot den Cam-Modus, geht die Fuehrung weiter, der Gast sieht
     seine eigenen Herzen, und der Bot ist aus dem Team; endet der Cam-Modus,
     endet sie. Im Zuschauermodus fuehrt keiner, und wechselt der Bot dahin,
     endet die Fuehrung. Mit mirror-main-hand: false kommt nur die zweite
-    Hand, mit mirror-swing: false schwingt nichts mit, mit fine-hold: false
-    haelt ihn der Server nur jeden Tick fest. Mit guide-name: above bleibt sein Name, ueber ihm steht nur der
+    Hand, mit mirror-swing: false schwingt nichts mit, mit mirror-effects:
+    false kommen keine Effekte, mit fine-hold: false haelt ihn der Server nur
+    jeden Tick fest. Mit guide-name: above bleibt sein Name, ueber ihm steht nur der
     Gast, und das Team gibt es nicht. Mit lead-without-cam: false heisst es
     wieder "Only in cam mode".
     """
@@ -7037,13 +7071,14 @@ def fuehrung_ohne_cam_checks(env, bot):
     dritter = BotClient(env, name=DRITTER_NAME)
     try:
         quelle = quelle_config(env)
-        FIND.test("Voreingestellt stehen lead-without-cam: true, guide-name: replace, die vier mirror-... und "
+        FIND.test("Voreingestellt stehen lead-without-cam: true, guide-name: replace, die sieben mirror-... und "
                   "fine-hold auf true da",
                   all(re.search(rf"(?m)^\s+{schluessel}:\s*{wert}\s*$", quelle) is not None
                       for schluessel, wert in (("lead-without-cam", "true"), ("guide-name", "replace"),
                                                ("mirror-health", "true"), ("mirror-main-hand", "true"),
                                                ("mirror-off-hand", "true"), ("mirror-swing", "true"),
-                                               ("fine-hold", "true"))), "")
+                                               ("mirror-head", "true"), ("mirror-effects", "true"),
+                                               ("mirror-frost", "true"), ("fine-hold", "true"))), "")
         zuschauer.start()
         dritter.start()
         if not FIND.test("Zweiter und dritter Spieler fuer die Fuehrung ohne Cam-Modus kommen herein",
@@ -7173,9 +7208,68 @@ def fuehrung_ohne_cam_checks(env, bot):
         hinstellen(bot, x, y, z)
         time.sleep(1.5)
 
+        # Effekte, Kopf und Frost des Bots sieht der Gast auf seinem
+        # Bildschirm als seine eigenen - die Effekte auch am Bot, durch dessen
+        # Augen er sieht (der Nebel der Blindheit, die Farbe der Herzen). Am
+        # Server bleibt beim Gast alles, wie es war.
+        bot_nummer = bot.call("effects").get("self")
+        effekte = zuschauer.call("effects").get("count", 0)
+        console(env, f"effect give {BOT_NAME} minecraft:speed 30 1", pause=0.3)
+        console(env, f"effect give {BOT_NAME} minecraft:levitation 30 0", pause=1.5)
+        pakete = zuschauer.call("effects", since=effekte).get("packets", [])
+        am_bot = {p.get("effectId") for p in pakete if p.get("entityId") == bot_nummer and not p.get("removed")}
+        eigene = [p for p in pakete if p.get("own") and not p.get("removed") and p.get("effectId") in am_bot]
+        FIND.test("mirror-effects: Schnelligkeit und Schwebe des Bots kommen beim Gast am Bot an, Schnelligkeit "
+                  "(Stufe 2) auch als seine eigene - Schwebe nicht, sie bewegte seine Kamera auf seinem Client",
+                  bot_nummer is not None and len(am_bot) == 2 and len({p.get("effectId") for p in eigene}) == 1
+                  and all(p.get("amplifier") == 1 for p in eigene), f"{bot_nummer} / {pakete[-8:]}")
+        am_server = daten_von(bot, ZUSCHAUER_NAME, "active_effects")
+        FIND.test("Am Server bekommt der Gast weder Schnelligkeit noch Schwebe",
+                  am_server is None or ("speed" not in am_server and "levitation" not in am_server), str(am_server))
+        effekte = zuschauer.call("effects").get("count", 0)
+        console(env, f"effect clear {BOT_NAME}", pause=1.5)
+        pakete = zuschauer.call("effects", since=effekte).get("packets", [])
+        weg_am_bot = {p.get("effectId") for p in pakete if p.get("entityId") == bot_nummer and p.get("removed")}
+        weg_eigen = {p.get("effectId") for p in pakete if p.get("own") and p.get("removed")}
+        FIND.test("Enden die Effekte des Bots, sind sie beim Gast weg: am Bot beide, bei ihm die Schnelligkeit",
+                  bool(am_bot) and weg_am_bot == am_bot and len(weg_eigen & am_bot) == 1, str(pakete[-8:]))
+        schnelligkeit = next(iter(weg_eigen & am_bot), None)
+
+        ausruestung = zuschauer.call("own_equipment").get("count", 0)
+        console(env, f"item replace entity {BOT_NAME} armor.head with minecraft:carved_pumpkin", pause=1.5)
+        kopf = [p for p in zuschauer.call("own_equipment", since=ausruestung).get("packets", []) if p.get("slot") == 5]
+        FIND.test("mirror-head: setzt der Bot einen geschnitzten Kuerbis auf, bekommt der Gast ihn als eigenen Helm "
+                  "(den Kuerbis-Rand)", bool(kopf) and kopf[-1].get("count", 0) > 0, str(kopf[-3:]))
+        ausruestung = zuschauer.call("own_equipment").get("count", 0)
+        console(env, f"item replace entity {BOT_NAME} armor.head with minecraft:air", pause=1.5)
+        kopf = [p for p in zuschauer.call("own_equipment", since=ausruestung).get("packets", []) if p.get("slot") == 5]
+        FIND.test("Nimmt der Bot ihn ab, ist er auch beim Gast weg", bool(kopf) and kopf[-1].get("count", 1) == 0,
+                  str(kopf[-3:]))
+
+        # Frost gibt kein Befehl einem Spieler: das Hilfsplugin setzt ihn. Ohne
+        # Pulverschnee taut er um 2 je Tick.
+        frost = zuschauer.call("frosts").get("count", 0)
+        console(env, f"testfrost {BOT_NAME} 120", pause=1.0)
+        werte = zuschauer.call("frosts", since=frost).get("values", [])
+        eigener = daten_von(bot, ZUSCHAUER_NAME, "TicksFrozen")
+        FIND.test("mirror-frost: hat der Bot Frost, zeigt der Client des Gastes ihn als seinen eigenen (den Eis-Rand) "
+                  "- am Server bleibt der Gast ohne",
+                  any(w >= 60 for w in werte) and (eigener is None or re.search(r"data:\s*0\b", eigener)),
+                  f"{werte[:6]} / {eigener}")
+        time.sleep(3.0)
+        werte = zuschauer.call("frosts", since=frost).get("values", [])
+        FIND.test("Taut der Bot auf, taut der Eis-Rand beim Gast mit", bool(werte) and werte[-1] == 0, str(werte[-5:]))
+
+        console(env, f"effect give {BOT_NAME} minecraft:speed 30 1", pause=1.5)
+        effekte = zuschauer.call("effects").get("count", 0)
         resends = zuschauer.call("own_equipment").get("resends", 0)
         seit = bot.mark()
         dort = befehl(zuschauer, "/cam follow leave", warten=2.0)
+        pakete = zuschauer.call("effects", since=effekte).get("packets", [])
+        FIND.test("Verlaesst er die Fuehrung, sind die Effekte des Bots bei ihm weg - als seine und am Bot",
+                  any(p.get("own") and p.get("removed") for p in pakete)
+                  and any(p.get("entityId") == bot_nummer and p.get("removed") for p in pakete), str(pakete[-6:]))
+        console(env, f"effect clear {BOT_NAME}", pause=0.5)
         bildschirm, server = gast_herzen()
         FIND.test("Nach dem Verlassen: seine eigenen Herzen wieder, und sein Inventar kommt neu",
                   gesagt(dort, rf"You no longer follow {BOT_NAME}") and bildschirm is not None
@@ -7225,7 +7319,7 @@ def fuehrung_ohne_cam_checks(env, bot):
 
         # Jeder Reload beendet den Cam-Modus des Gastes: danach von vorn.
         set_options(env, [("mirror-main-hand", "false", "follow"), ("mirror-swing", "false", "follow"),
-                          ("fine-hold", "false", "follow")])
+                          ("mirror-effects", "false", "follow"), ("fine-hold", "false", "follow")])
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         ausruestung = zuschauer.call("own_equipment").get("count", 0)
@@ -7240,6 +7334,13 @@ def fuehrung_ohne_cam_checks(env, bot):
         time.sleep(1.0)
         neu = zuschauer.call("own_swings", since=schwuenge).get("packets", [])
         FIND.test("mirror-swing: false - der Arm des Gastes schwingt nicht mit", not neu, str(neu))
+        effekte = zuschauer.call("effects").get("count", 0)
+        console(env, f"effect give {BOT_NAME} minecraft:speed 30 1", pause=1.5)
+        pakete = [p for p in zuschauer.call("effects", since=effekte).get("packets", [])
+                  if p.get("effectId") == schnelligkeit]
+        FIND.test("mirror-effects: false - die Schnelligkeit des Bots kommt beim Gast nicht an",
+                  schnelligkeit is not None and not pakete, f"{schnelligkeit} / {pakete[-4:]}")
+        console(env, f"effect clear {BOT_NAME}", pause=0.5)
         drehung = zuschauer.call("rotations").get("count", 0)
         time.sleep(1.5)
         gedreht = zuschauer.call("rotations", since=drehung).get("packets", [])
@@ -7248,7 +7349,8 @@ def fuehrung_ohne_cam_checks(env, bot):
         befehl(zuschauer, "/cam follow leave")
 
         set_options(env, [("mirror-main-hand", "true", "follow"), ("mirror-swing", "true", "follow"),
-                          ("fine-hold", "true", "follow"), ("guide-name", "above", "follow")])
+                          ("mirror-effects", "true", "follow"), ("fine-hold", "true", "follow"),
+                          ("guide-name", "above", "follow")])
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         einladen_und_annehmen()
