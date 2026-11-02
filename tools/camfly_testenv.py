@@ -3129,6 +3129,146 @@ def toene_checks(env, bot):
 
 
 
+def abschalten_checks(env, bot):
+    """Das Plugin geht mitten in einer Fuehrung aus: /cam reload und das Ende
+    des Servers.
+
+    /cam reload beendet den Cam-Modus beider, ohne einen Fehler im Log, und
+    danach sehen sie sich wieder: Der Client des Fuehrers bekommt den Gast
+    zurueck, den die Fuehrung vor ihm verbarg.
+
+    Beim Ende des Servers ist das Plugin schon aus, wenn es den Cam-Modus
+    aller beendet, und Bukkit nimmt ihm hidePlayer dann nicht mehr ab. Damit
+    alles drankommt, was dabei jemanden verbergen wollte, steht
+    player_visibility_mode auf cam - wer zuerst aus dem Cam-Modus kommt,
+    saehe den anderen nicht mehr -, anti-scouting ist an, mit radius 8, und
+    der Gast, ohne op, ist im Fotomodus; ein dritter Spieler stand beim Start
+    des Fotomodus nah und steht nun weit weg: Das Ende des Fotomodus gibt ihn
+    frei, und anti-scouting wollte ihn verbergen. Nach "stop" steht im Log
+    kein Fehler, das Plugin kommt bis zum Ende ("CameraPlugin has been
+    disabled!"), und unter playerdata/crash liegt keine Datei mehr: Fuer
+    jeden lief das Ende des Cam-Modus durch - seine Datei geht erst, wenn er
+    alles zurueckhat. Nach dem Neustart hoert der Bot deshalb auch nicht, der
+    Server sei in seinem Cam-Modus ausgegangen.
+
+    Wie der Absturztest startet er den Server neu - mit der Konfiguration, mit
+    der er immer startet - und prueft das alte Log deshalb vorher.
+    """
+    ordner = env.server / "plugins" / "CamFly" / "playerdata" / "crash"
+
+    def dateien():
+        return sorted(p.name for p in ordner.glob("*.yml")) if ordner.exists() else []
+
+    def kennt(client, wen, radius=24):
+        """Ob der Client die Entitaet mit dieser Nummer kennt, also sieht."""
+        return any(e.get("id") == wen for e in client.call("entities", radius=radius).get("entities", []))
+
+    def folgt():
+        befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
+        dort = befehl(zuschauer, f"/cam tour accept {BOT_NAME}", warten=2.0)
+        return gesagt(dort, rf"You follow {BOT_NAME} now")
+
+    if not FIND.test("Cam-Modus ist vor dem Test des Abschaltens aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    console(env, f"fill {_floor(x) - 6} {y} {_floor(z) - 3} {_floor(x) + 32} {y + 6} {_floor(z) + 3} "
+                 f"minecraft:air", pause=0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    dritter = BotClient(env, name=DRITTER_NAME)
+    neu_gestartet = False
+    try:
+        zuschauer.start()
+        dritter.start()
+        if not FIND.test("Zweiter und dritter Spieler fuer das Abschalten kommen herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned")
+                         and dritter.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        cam_off(dritter)
+        hinstellen(bot, x, y, z)
+        if not FIND.test("Fuehrung vor /cam reload: der Gast folgt dem Bot",
+                         cam_on(bot) and zuschauer_cam_an(env, zuschauer, x - 3, y, z) and folgt(), ""):
+            return
+        fuehrer_nr = bot.call("cameras").get("self")
+        gast_nr = zuschauer.call("cameras").get("self")
+        time.sleep(1.0)
+        FIND.test("Auf der Fuehrung sieht der Fuehrer den Gast nicht", not kennt(bot, gast_nr), str(gast_nr))
+        vorher = len(log_problems(env))
+        console(env, "cam reload", pause=2)
+        time.sleep(1.0)
+        neu = log_problems(env)[vorher:]
+        FIND.test("/cam reload mitten in der Fuehrung: kein Fehler im Log", not neu, "; ".join(neu[:3]))
+        FIND.test("/cam reload beendet den Cam-Modus beider",
+                  not im_cam_modus(bot, BOT_NAME) and not im_cam_modus(bot, ZUSCHAUER_NAME), "")
+        FIND.test("Nach /cam reload sehen sich beide wieder",
+                  kennt(bot, gast_nr) and kennt(zuschauer, fuehrer_nr),
+                  f"{kennt(bot, gast_nr)} / {kennt(zuschauer, fuehrer_nr)}")
+
+        set_options(env, [("player_visibility_mode", "cam"), ("enabled", "true", "anti-scouting"),
+                          ("radius", "8.0", "anti-scouting")])
+        hinstellen(bot, x, y, z)
+        console(env, f"tp {DRITTER_NAME} {x + 3} {y} {z + 2}", pause=1.0)
+        if not FIND.test("Fuehrung vor dem Ende des Servers: der Gast folgt dem Bot wieder",
+                         cam_on(bot) and zuschauer_cam_an(env, zuschauer, x - 3, y, z) and folgt(), ""):
+            return
+        foto = befehl(zuschauer, "/cam photo")
+        console(env, f"tp {DRITTER_NAME} {x + 30} {y} {z}", pause=1.5)
+        FIND.test("Der Gast ist im Fotomodus, der dritte Spieler steht weit weg",
+                  gesagt(foto, r"Photo mode on"), zeige(foto))
+
+        ereignisse = len(bot.events)
+        vorher = len(log_problems(env))
+        log_vorher = len(server_log(env))
+        neu_gestartet = True
+        stop_server(env, quiet=True)
+        neu = log_problems(env)[vorher:]
+        log = server_log(env)[log_vorher:]
+        if not FIND.test("Ende des Servers mitten in der Fuehrung: kein Fehler beim Abschalten des Plugins",
+                         not neu, "; ".join(neu[:3])):
+            # Der Neustart beginnt ein neues Log: wo es im Plugin geworfen hat, steht nur hier.
+            for zeile in [z.strip() for z in log.splitlines() if "de.elia.cameraplugin" in z][:12]:
+                Log.detail(zeile)
+        FIND.test("Das Abschalten kommt bis zum Ende (\"CameraPlugin has been disabled!\")",
+                  "CameraPlugin has been disabled!" in log, log.strip()[-300:] or "nichts im Log")
+        FIND.test("Fuer jeden lief das Ende des Cam-Modus durch: unter playerdata/crash liegt keine Datei mehr",
+                  not dateien(), str(dateien()))
+        zuschauer.stop()
+        dritter.stop()
+        bot.stop()
+        # Was das Ende des Servers beim Bot ausloest - die Verbindung reisst
+        # ab -, ist kein Fehler des Plugins.
+        del bot.events[ereignisse:]
+
+        if not step_server(env):
+            return
+        bot.start()
+        if not FIND.test("Bot verbindet sich nach dem Neustart",
+                         bot.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(3)
+        zeilen = zeilen_seit(bot, 0)
+        FIND.test("Nach dem Neustart heisst es nicht, der Server sei in seinem Cam-Modus ausgegangen",
+                  not gesagt(zeilen, r"server went down while you were in cam mode"), zeige(zeilen))
+    finally:
+        try:
+            for client in (zuschauer, dritter):
+                if client.proc is not None and client.proc.poll() is None:
+                    if not neu_gestartet:
+                        cam_off(client)
+                    client.stop()
+            if not neu_gestartet:
+                cam_off(bot)
+                # Wie der Testserver es fuer alle anderen Abschnitte hat.
+                set_options(env, [("player_visibility_mode", "true"), ("enabled", "false", "anti-scouting"),
+                                  ("radius", "32.0", "anti-scouting")])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test des Abschaltens: {exc}")
+
+
 def absturz_checks(env, bot):
     """crash-protection: die Datei unter plugins/CamFly/playerdata/crash, und was
     nach einem Absturz aus ihr wird.
@@ -13524,8 +13664,8 @@ class Abschnitt:
 
 
 # Alle Abschnitte, in der Reihenfolge, in der sie laufen. Ein neuer Abschnitt
-# braucht hier einen Eintrag, sonst laeuft er nie. Der Absturztest steht
-# zuletzt: Er startet den Server neu.
+# braucht hier einen Eintrag, sonst laeuft er nie. Das Abschalten und der
+# Absturztest stehen zuletzt: Sie starten den Server neu.
 ABSCHNITTE = [
     Abschnitt("hunger", hunger_checks, "hunger/CamHungerGuard"),
     Abschnitt("heilung", heal_checks, "hunger/CamRegenGuard"),
@@ -13606,6 +13746,8 @@ ABSCHNITTE = [
     Abschnitt("unbewacht", unbewacht_checks, "body/BodySpawner body/BodyWatch", koerpertypen=True),
     Abschnitt("liegengeblieben", liegengeblieben_checks, "body/BodySpawner crash"),
     Abschnitt("teleport", teleport_checks, "teleport"),
+    Abschnitt("abschalten", abschalten_checks,
+              "tour visibility/CamVisibility scout/CamScoutGuard photo/CamPhotoMode session/CameraMode"),
     Abschnitt("absturz", absturz_checks, "crash"),
 ]
 

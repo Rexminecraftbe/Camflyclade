@@ -129,8 +129,8 @@ die Klassen, an deren Verhalten seine Proben hängen. Ein Bereich zu viel lässt
 ihn nur öfter laufen, einer zu wenig lässt ihn aus, wenn sich dort etwas
 ändert. Eine neue Methode in `BotClient` oder eine neue Aktion in `BOT_JS`
 braucht nichts weiter, eine Änderung an einer bestehenden erreicht die
-Abschnitte, die sie benutzen. Der Absturztest steht zuletzt, er startet den
-Server neu.
+Abschnitte, die sie benutzen. Das Abschalten (`abschalten`) und der
+Absturztest stehen zuletzt, sie starten den Server neu.
 
 ## Warum gegen beide APIs geprüft wird
 

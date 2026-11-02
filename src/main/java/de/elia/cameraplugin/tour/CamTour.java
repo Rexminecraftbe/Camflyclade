@@ -322,6 +322,11 @@ public final class CamTour implements Listener {
      * {@code hidePlayer}: only who the viewer sees at all, and only that is
      * shown back, as far as visibility, photo mode and {@code anti-scouting}
      * let it.</p>
+     *
+     * <p>While the plugin is being switched off - the server stops, say -
+     * the tours only end: whom they no longer hide is shown back, nobody is
+     * hidden anew. Bukkit turns {@code hidePlayer} down for a plugin that is
+     * not enabled.</p>
      */
     private void syncVisibility() {
         Map<UUID, Set<UUID>> wanted = new HashMap<>();
@@ -344,6 +349,9 @@ public final class CamTour implements Listener {
         boolean listed = outOfSight.isAvailable();
         letGo(hidden, listed ? Map.of() : wanted, false);
         letGo(forgotten, listed ? wanted : Map.of(), true);
+        if (!plugin.isEnabled()) {
+            return;
+        }
         for (Map.Entry<UUID, Set<UUID>> entry : wanted.entrySet()) {
             Player viewer = Bukkit.getPlayer(entry.getKey());
             if (viewer == null) {
@@ -393,8 +401,7 @@ public final class CamTour implements Listener {
                 }
                 if (forgot) {
                     if (viewer.canSee(other)) {
-                        viewer.hidePlayer(plugin, other);
-                        viewer.showPlayer(plugin, other);
+                        pairAnew(viewer, other);
                     }
                 } else if (cameraPlayers.contains(other.getUniqueId())) {
                     // As visibility has him: outside camera mode, a viewer
@@ -408,6 +415,31 @@ public final class CamTour implements Listener {
             if (entry.getValue().isEmpty()) {
                 from.remove(entry.getKey());
             }
+        }
+    }
+
+    /**
+     * Hides the other player from the viewer and shows the same player again
+     * straight away: the server pairs the two anew and sends the player to
+     * the client, which was told the player is gone, see {@link OutOfSight}.
+     * Only for a player the viewer sees.
+     *
+     * <p>While the plugin is being switched off, Bukkit turns
+     * {@code hidePlayer} down for it, though not {@code showPlayer}; the
+     * clients would keep missing whom the tours ending then took from them,
+     * as long as the server runs on - after a {@code /reload}, say. The old
+     * form without a plugin is not turned down; hidden and shown again
+     * straight away under no plugin's name, the player ends up just as the
+     * pair under the plugin's name would leave things.</p>
+     */
+    @SuppressWarnings("deprecation")
+    private void pairAnew(Player viewer, Player other) {
+        if (plugin.isEnabled()) {
+            viewer.hidePlayer(plugin, other);
+            viewer.showPlayer(plugin, other);
+        } else {
+            viewer.hidePlayer(other);
+            viewer.showPlayer(other);
         }
     }
 

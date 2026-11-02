@@ -47,6 +47,11 @@ public final class CamVisibility {
      * far away, see {@link de.elia.cameraplugin.scout.CamScoutGuard}, and one
      * a tour hides from him with {@code hidePlayer}, see
      * {@link de.elia.cameraplugin.tour.CamTour#hidesPlayer}.</p>
+     *
+     * <p>While the plugin is being switched off, nobody is hidden: camera
+     * mode ends for everybody then, one after the other, and Bukkit turns
+     * {@code hidePlayer} down for a plugin that is not enabled. Showing goes
+     * on.</p>
      */
     public void applyVisibility(Player camPlayer, Player viewer) {
         if (camPlayer.equals(viewer)) return;
@@ -57,7 +62,7 @@ public final class CamVisibility {
             case CAM -> {
                 if (cameraPlayers.contains(viewer.getUniqueId())) {
                     viewer.showPlayer(plugin, camPlayer);
-                } else {
+                } else if (plugin.isEnabled()) {
                     viewer.hidePlayer(plugin, camPlayer);
                 }
             }
