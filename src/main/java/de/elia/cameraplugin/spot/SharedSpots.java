@@ -59,6 +59,8 @@ public final class SharedSpots {
     private final CamSettings settings;
     /** The shares of each owner, by {@link Spot#key()}, in the order he shared them. */
     private final Map<UUID, Map<String, Share>> shares = new LinkedHashMap<>();
+    /** Hears about every change, for the web maps, see {@link #onChange}. */
+    private Runnable onChange = () -> { };
 
     public SharedSpots(JavaPlugin plugin, ConsoleLog log, CamSettings settings) {
         this.plugin = plugin;
@@ -68,6 +70,15 @@ public final class SharedSpots {
 
     private boolean inFile() {
         return settings.getViewpointsStorage() == StorageMode.FILE;
+    }
+
+    /**
+     * Who hears about every change of the shares - made public or private,
+     * moved, liked, deleted, taken down, read anew -: the web maps, which
+     * show the public spots.
+     */
+    public void onChange(Runnable listener) {
+        this.onChange = listener;
     }
 
     private Path file() {
@@ -214,7 +225,7 @@ public final class SharedSpots {
     public boolean toggleLike(Share share, UUID viewer) {
         boolean likes = !share.removeLike(viewer);
         if (likes) {
-            share.addLike(viewer);
+            share.addLike(viewer, System.currentTimeMillis());
         } else if (share.isEmpty()) {
             drop(share.getOwner(), share.getSpot().key());
         }
@@ -305,6 +316,7 @@ public final class SharedSpots {
      */
     public void load() {
         shares.clear();
+        onChange.run();
         if (!inFile() || !Files.exists(file())) {
             return;
         }
@@ -341,7 +353,8 @@ public final class SharedSpots {
             return;
         }
         Spot spot = new Spot(name, world, entry.getDouble("x"), entry.getDouble("y"), entry.getDouble("z"),
-                (float) entry.getDouble("yaw"), (float) entry.getDouble("pitch"), entry.getLong("created"));
+                (float) entry.getDouble("yaw"), (float) entry.getDouble("pitch"), entry.getLong("created"),
+                SpotLook.read(entry));
         Share share = new Share(owner, ownerName, spot);
         share.setEveryone(entry.getBoolean("everyone"));
         ConfigurationSection pending = entry.getConfigurationSection("pending");
@@ -364,10 +377,13 @@ public final class SharedSpots {
                 }
             }
         }
+        // When each like came, for the build of the week; a like from a file
+        // of before that counts, only not for the week.
+        ConfigurationSection likedAt = entry.getConfigurationSection("liked-at");
         for (String id : entry.getStringList("likes")) {
             UUID player = parseId(id);
             if (player != null) {
-                share.addLike(player);
+                share.addLike(player, likedAt == null ? 0L : Math.max(0L, likedAt.getLong(id)));
             }
         }
         if (!share.isEmpty()) {
@@ -388,6 +404,7 @@ public final class SharedSpots {
      * players it goes under another name first and is then moved into place.
      */
     private void save() {
+        onChange.run();
         if (!inFile()) {
             return;
         }
@@ -409,6 +426,7 @@ public final class SharedSpots {
                 if (spot.created() > 0L) {
                     file.set(path + ".created", spot.created());
                 }
+                spot.look().write(file, path);
                 file.set(path + ".everyone", share.isEveryone());
                 for (Map.Entry<UUID, String> player : share.getPlayers().entrySet()) {
                     file.set(path + ".players." + player.getKey(), player.getValue());
@@ -418,8 +436,11 @@ public final class SharedSpots {
                 }
                 if (share.likes() > 0) {
                     List<String> likes = new ArrayList<>();
-                    for (UUID player : share.likers()) {
-                        likes.add(player.toString());
+                    for (Map.Entry<UUID, Long> like : share.likers().entrySet()) {
+                        likes.add(like.getKey().toString());
+                        if (like.getValue() > 0L) {
+                            file.set(path + ".liked-at." + like.getKey(), like.getValue());
+                        }
                     }
                     file.set(path + ".likes", likes);
                 }

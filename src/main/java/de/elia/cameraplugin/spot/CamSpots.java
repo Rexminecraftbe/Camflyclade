@@ -5,6 +5,7 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.movement.CamMovementGuard;
 import de.elia.cameraplugin.session.CameraData;
+import de.elia.cameraplugin.sky.CamSky;
 import de.elia.cameraplugin.storage.PlayerRecord;
 import de.elia.cameraplugin.storage.PlayerStore;
 import de.elia.cameraplugin.storage.StorageMode;
@@ -22,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,6 +31,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 /**
@@ -110,6 +113,60 @@ public final class CamSpots {
     /** How often a spot of this owner was looked at, see {@link SpotViews}. */
     public long views(UUID owner, Spot spot) {
         return views.of(owner, spot.key());
+    }
+
+    // ------------------------------------------------------------ the build of the week
+
+    /** Whether the build of the week counts at all, {@code viewpoints.week-days} above 0. */
+    public boolean hasWeek() {
+        return settings.getWeekDays() > 0;
+    }
+
+    /** Since when the build of the week counts, as {@link System#currentTimeMillis()} does. */
+    private long weekStart() {
+        return System.currentTimeMillis() - TimeUnit.DAYS.toMillis(settings.getWeekDays());
+    }
+
+    /** How many players liked a public spot within the days of the week, and still like it. */
+    public int weekLikes(Share share) {
+        return hasWeek() ? share.likesSince(weekStart()) : 0;
+    }
+
+    /**
+     * How many different players looked at a spot within the days of the
+     * week - jumped there or visited it -, its owner not counting.
+     */
+    public int weekVisitors(Share share) {
+        return hasWeek() ? views.visitorsSince(share.getOwner(), share.getSpot().key(), weekStart()) : 0;
+    }
+
+    /**
+     * The order of the build of the week: the most likes within its days
+     * first, then the most visitors, then the newest spot.
+     */
+    public Comparator<Share> weekOrder() {
+        return Comparator.comparingInt(this::weekLikes).reversed()
+                .thenComparing(Comparator.comparingInt(this::weekVisitors).reversed())
+                .thenComparing(Comparator.comparingLong((Share share) -> share.getSpot().created()).reversed());
+    }
+
+    /**
+     * The build of the week: the public spot that got the most within the
+     * days of {@code viewpoints.week-days} - likes first, then visitors -, or
+     * {@code null} while it is switched off or no public spot got anything.
+     */
+    public Share buildOfTheWeek() {
+        if (!hasWeek()) {
+            return null;
+        }
+        Share best = null;
+        Comparator<Share> order = weekOrder();
+        for (Share share : publicSpots()) {
+            if (weekLikes(share) + weekVisitors(share) > 0 && (best == null || order.compare(share, best) < 0)) {
+                best = share;
+            }
+        }
+        return best;
     }
 
     /**
@@ -286,9 +343,11 @@ public final class CamSpots {
                     String.valueOf(settings.getViewpointsMax()));
             return null;
         }
-        // Under the name he gave it now, capitals and all.
-        Spot spot = before == null ? Spot.at(name, player.getLocation())
-                : Spot.at(name, player.getLocation(), before.created());
+        // Under the name he gave it now, capitals and all, with the look he
+        // has picked for himself now - also when it moves.
+        SpotLook look = lookOf(player);
+        Spot spot = Spot.at(name, player.getLocation(), before == null ? System.currentTimeMillis() : before.created(),
+                look);
         if (inFile()) {
             store.get(player.getUniqueId()).putSpot(player.getName(), spot);
             store.save(player.getUniqueId());
@@ -299,7 +358,76 @@ public final class CamSpots {
         shared.moved(player.getUniqueId(), player.getName(), spot);
         countOwner(player);
         messages.sendConfiguredMessage(player, before != null ? "spot-moved" : "spot-saved", "{spot}", name);
+        String described = describe(look);
+        if (!described.isEmpty()) {
+            messages.sendMessage(player, "spot-saved-look", "{spot}", name, "{look}", described);
+        }
         return spot;
+    }
+
+    /**
+     * What a spot saved now takes along, see {@link SpotLook}: the time, the
+     * weather and the night vision he picked for himself - or that a spot he
+     * was put down at shows him - in camera mode, as far as the config file
+     * lets anybody pick them. Out of camera mode he sees the time and weather
+     * of the world, and the spot takes nothing.
+     */
+    private SpotLook lookOf(Player player) {
+        if (!plugin.isInCameraMode(player)) {
+            return SpotLook.NONE;
+        }
+        SpotLook look = new SpotLook(plugin.getSky().ownTime(player), plugin.getSky().ownWeather(player),
+                plugin.getNightVision().chosenMode(player));
+        return look.isEmpty() ? SpotLook.NONE : look;
+    }
+
+    /**
+     * The look of a spot written out for a message, the parts joined by
+     * {@code spot-look-separator}: what holds for whoever comes there now -
+     * a part the config file switched off is left out, as it is when
+     * somebody jumps there. Empty for a spot that shows nothing of its own.
+     */
+    public String describe(SpotLook look) {
+        List<String> parts = new ArrayList<>();
+        if (look.time() != null && settings.isCamTimeEnabled()) {
+            String word = CamSky.timeWord(look.time());
+            parts.add(messages.getMessage("spot-look-time").replace("{time}",
+                    word != null ? messages.getMessage("spot-look-time-" + word) : String.valueOf(look.time())));
+        }
+        if (look.weather() != null && settings.isCamWeatherEnabled()) {
+            parts.add(messages.getMessage("spot-look-weather").replace("{weather}",
+                    messages.getMessage("spot-look-weather-" + SpotLook.weatherWord(look.weather()))));
+        }
+        if (look.nightVision() != null && settings.isNightVisionPlayerChoice()) {
+            parts.add(messages.getMessage("spot-look-nightvision").replace("{mode}",
+                    messages.getMessage(switch (look.nightVision()) {
+                        case ALWAYS -> "nightvision-always";
+                        case OFF -> "nightvision-never";
+                        case DARK -> "nightvision-dark";
+                    })));
+        }
+        parts.removeIf(String::isEmpty);
+        return String.join(messages.getMessage("spot-look-separator"), parts);
+    }
+
+    /**
+     * His camera was put down at a spot - he jumped there or visits it -:
+     * its time, weather and night vision stand in for his own, see
+     * {@link SpotLook}.
+     */
+    public void showLook(Player player, Spot spot) {
+        plugin.getSky().showSpot(player, spot.look());
+        plugin.getNightVision().showSpot(player, spot.look().nightVision());
+    }
+
+    /**
+     * His camera was put down somewhere that is no spot - back at his body,
+     * at the end of his last flight, at a player he follows -: his own time,
+     * weather and night vision hold again.
+     */
+    public void dropLook(Player player) {
+        plugin.getSky().leaveSpot(player);
+        plugin.getNightVision().leaveSpot(player);
     }
 
     public void delete(Player player, String name) {
@@ -652,10 +780,14 @@ public final class CamSpots {
         if (!messages.isMessageEnabled(entry)) {
             return;
         }
+        Share top = likes ? buildOfTheWeek() : null;
         for (Share share : shares) {
             String text = fillPlace(messages.getMessage(entry), share.getSpot())
                     .replace("{owner}", share.getOwnerName())
-                    .replace("{likes}", String.valueOf(share.likes()));
+                    .replace("{likes}", String.valueOf(share.likes())) + lookSuffix(share.getSpot());
+            if (share == top && messages.isMessageEnabled("spot-list-top")) {
+                text += messages.getMessage("spot-list-top");
+            }
             List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
             line.addAll(button("spot-button-go", share.label(),
                     new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam spot " + share.label())));
@@ -667,6 +799,7 @@ public final class CamSpots {
                 line.addAll(button(share.isLikedBy(player.getUniqueId()) ? "spot-button-unlike" : "spot-button-like",
                         share.label(), new ClickEvent(ClickEvent.Action.RUN_COMMAND,
                                 "/cam spot like " + share.label())));
+                line.addAll(mapButton(share.label(), share.getSpot()));
             }
             player.spigot().sendMessage(line.toArray(new BaseComponent[0]));
         }
@@ -674,10 +807,14 @@ public final class CamSpots {
 
     /** One of his own spots in the list: where it is, whether it is public, whom it is shared with, and its buttons. */
     private BaseComponent[] ownLine(Player player, Spot spot) {
-        String text = fillPlace(messages.getMessage("spot-list-entry"), spot);
+        String text = fillPlace(messages.getMessage("spot-list-entry"), spot) + lookSuffix(spot);
         Share share = shareOf(player, spot);
         if (share != null && share.isEveryone() && messages.isMessageEnabled("spot-list-public")) {
             text += messages.getMessage("spot-list-public").replace("{likes}", String.valueOf(share.likes()));
+        }
+        if (share != null && share.isEveryone() && share == buildOfTheWeek()
+                && messages.isMessageEnabled("spot-list-top")) {
+            text += messages.getMessage("spot-list-top");
         }
         if (share != null && !share.getPlayers().isEmpty() && messages.isMessageEnabled("spot-list-shared")) {
             text += messages.getMessage("spot-list-shared").replace("{players}", whom(share));
@@ -694,7 +831,30 @@ public final class CamSpots {
         }
         line.addAll(button("spot-button-delete", spot.name(),
                 new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/cam spot delete " + spot.name())));
+        if (share != null && share.isEveryone()) {
+            line.addAll(mapButton(spot.name(), spot));
+        }
         return line.toArray(new BaseComponent[0]);
+    }
+
+    /**
+     * The button that opens the web map at a public spot, while
+     * {@code web-map.link} gives its address - nothing otherwise. Only for a
+     * public spot: the others are not on the map.
+     */
+    private List<BaseComponent> mapButton(String label, Spot spot) {
+        String address = plugin.getWebMap().linkTo(spot);
+        return address == null ? List.of() : button("spot-button-map", label,
+                new ClickEvent(ClickEvent.Action.OPEN_URL, address));
+    }
+
+    /** What stands behind a spot in the list while it shows a look of its own, {@code spot-list-look}. */
+    private String lookSuffix(Spot spot) {
+        String described = describe(spot.look());
+        if (described.isEmpty() || !messages.isMessageEnabled("spot-list-look")) {
+            return "";
+        }
+        return messages.getMessage("spot-list-look").replace("{look}", described);
     }
 
     /** Who accepted a share, written out. */
@@ -796,6 +956,7 @@ public final class CamSpots {
         if (!guard.jumpTo(player, data, target)) {
             return;
         }
+        showLook(player, spot);
         viewed(player, owner, spot);
         settings.getSpotSound().play(player);
         if (messages.isMessageEnabled("spot-jumped")) {

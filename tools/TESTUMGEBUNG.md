@@ -47,7 +47,7 @@ echo "say hallo" > ~/camfly-testenv/server/console.fifo
 | `crosscheck` | Denselben Quelltext noch einmal mit `javac` gegen `paper-api` übersetzen. |
 | `apicheck`   | Jeden Aufruf auf `org/bukkit`, `net/md_5`, `io/papermc` aus `target/classes` gegen `paper-api` auflösen. |
 | `names`      | Die Namenslisten der Sprachdatei gegen die Daten des Spiels prüfen, siehe unten. |
-| `server`     | Paper-Server holen, einrichten, starten, Konsole an eine FIFO hängen. |
+| `server`     | Paper-Server holen, einrichten, starten, Konsole an eine FIFO hängen. Dazu die Attrappen von BlueMap, Dynmap und squaremap, siehe unten. |
 | `bot`        | `mineflayer` holen, auf Protokoll 26.2 flicken und seine Kollision wie im echten Client rechnen lassen. |
 | `tests`      | Der Bot spielt die Testfälle im laufenden Server durch: die Grundprobe und die Abschnitte, die die Testauswahl wählt. |
 
@@ -185,7 +185,44 @@ Mobs ohne Spawn-Ei, etwa den Illusioner, sieht die Prüfung nicht. Eine eigene
 Übersetzung wie `lang/de.yml` prüft sie auch nicht, sie liegt nicht im
 Repository: Was ihr fehlt, kommt aus der englischen Datei.
 
+## Die Web-Karten
+
+`web-map` legt die öffentlichen Spots auf BlueMap, Dynmap und squaremap. Die
+echten Karten rendern Kacheln und brauchen ihre Version von Minecraft; auf dem
+Testserver stehen deshalb drei **Attrappen** unter denselben Namen
+(`KARTEN_ATTRAPPEN` im Skript, gebaut von `karten_attrappen_bauen` im Schritt
+`server`). Jede bringt die **echte Schnittstelle** ihrer Karte mit - die Jars
+aus `KARTEN_API`, hineingepackt wie ins echte Plugin -, nur was dahinter steckt
+ist nachgebaut: Sie behalten, was ein Plugin dort ablegt, und schreiben es auf
+
+```bash
+echo "fakebluemap dump" > ~/camfly-testenv/server/console.fifo
+```
+
+(ebenso `fakedynmap dump`, `fakesquaremap dump`) mit `KARTE` vorne ins Log.
+`fakebluemap reload` und `fakesquaremap reload` vergessen alle Ebenen, wie
+`/bluemap reload` und `/squaremap reload` es tun. Weil CamFly die Karten per
+Name aufruft (`webmap/Calls`), fällt der Abschnitt `webkarte` durch, sobald es
+etwas aufruft, das die echte Schnittstelle nicht hat; die Attrappe von Dynmap
+antwortet über Proxys der echten Schnittstellen und wirft bei allem, was sie
+nicht kennt. Geprüft gegen bluemap-api 2.8.2, DynmapCoreAPI 3.8 und
+squaremap-api 1.4.3 - für eine neue Version reicht es, sie in `KARTEN_API`
+einzutragen.
+
 ## Fallen, die das Skript schon kennt
+
+* **Maven Central antwortet manchmal mit 429.** flow-math und squaremap-api
+  kommen deshalb über das Repository von Paper, das Central spiegelt. Bricht
+  der Schritt `paperapi` damit ab, liegen die meisten Jars meist schon unter
+  `~/.m2/repository`: nach `~/camfly-testenv/cache/` kopieren, dann geht es.
+* **Der Bot kennt den Tiefenschiefer von 26.2 nicht beim Namen.** mineflayer
+  liest die Blöcke mit den Daten von 26.1; `block_at` gibt für Tiefenschiefer
+  einen leeren Namen. Der Test der Erze vergleicht ihn deshalb mit dem Zustand
+  eines echten Tiefenschiefers daneben.
+* **`/fill` und `/setblock` melden keine Änderung.** Der Test der Erze baut
+  seine Höhlen damit vor dem Start des Cam-Modus - das Plugin sieht sich die
+  Chunks bei jedem Start neu an, in einem laufenden Flug fiele ein solcher
+  Umbau erst nach fünf Minuten auf.
 
 * **Die Daten des Spiels stecken im Download von Paper nur als Patch.**
   Lesbar sind sie erst im Jar, das Paperclip beim ersten Start daraus

@@ -180,6 +180,8 @@ public final class CamResume {
         if (!plugin.getMovementGuard().jumpTo(player, data, plan.target(), plan.visit())) {
             return;
         }
+        // Where his last flight ended is no spot he jumped to.
+        plugin.getSpots().dropLook(player);
         settings.getSpotSound().play(player);
         if (messages.isMessageEnabled("resume-jumped")) {
             plugin.getActionBar().flash(player, messages.getMessage("resume-jumped"));

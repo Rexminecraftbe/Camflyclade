@@ -4,6 +4,7 @@ import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.nightvision.NightVisionMode;
 import de.elia.cameraplugin.resume.LastFlight;
 import de.elia.cameraplugin.spot.Spot;
+import de.elia.cameraplugin.spot.SpotLook;
 import org.bukkit.Bukkit;
 import org.bukkit.WeatherType;
 import org.bukkit.configuration.ConfigurationSection;
@@ -298,7 +299,8 @@ public final class PlayerStore {
                 continue;
             }
             record.loadSpot(new Spot(name, world, spot.getDouble("x"), spot.getDouble("y"), spot.getDouble("z"),
-                    (float) spot.getDouble("yaw"), (float) spot.getDouble("pitch"), spot.getLong("created")));
+                    (float) spot.getDouble("yaw"), (float) spot.getDouble("pitch"), spot.getLong("created"),
+                    SpotLook.read(spot)));
         }
     }
 
@@ -334,6 +336,7 @@ public final class PlayerStore {
             if (spot.created() > 0L) {
                 file.set(path + ".created", spot.created());
             }
+            spot.look().write(file, path);
         }
         if (record.getNightVision() != null) {
             file.set("settings.night-vision", nightVisionWord(record.getNightVision()));

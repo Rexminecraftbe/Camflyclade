@@ -200,6 +200,7 @@ public final class CameraMode {
         plugin.getFlightSpeed().startFor(player);
         plugin.getNightVision().startFor(player);
         plugin.getSky().startFor(player);
+        plugin.getOreHider().startFor(player);
         plugin.getFireGuard().startFor(player);
         plugin.getHungerGuard().startFor(player);
         plugin.getGhastGuard().startFor(player);
@@ -286,6 +287,7 @@ public final class CameraMode {
             plugin.getPhotoMode().stopFor(player);
             plugin.getScoutGuard().stopFor(player);
             plugin.getSky().stopFor(player);
+            plugin.getOreHider().stopFor(player);
             team.updateViewerTeam(player);
             plugin.getCamModeObjective().setScore(player, 0);
             return;
@@ -304,6 +306,8 @@ public final class CameraMode {
         plugin.getPhotoMode().stopFor(player);
         plugin.getScoutGuard().stopFor(player);
         plugin.getSky().stopFor(player);
+        // Where the camera still is: the ores of its caves come back there.
+        plugin.getOreHider().stopFor(player);
         LivingEntity body = cameraData.getBody();
         Mannequin hitbox = cameraData.getHitbox();
         // For the log, before he is put back at his body.

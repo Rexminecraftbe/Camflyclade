@@ -956,6 +956,743 @@ def tpa_helfer_bauen(env, plugins):
             jar.write(datei, datei.relative_to(klassen).as_posix())
 
 
+# ---------------------------------------------------------------------------
+# Die Web-Karten zum Testen: BlueMap, Dynmap und squaremap
+# ---------------------------------------------------------------------------
+
+# web-map legt die oeffentlichen Spots auf die Karte, die auf dem Server ist.
+# Die echten Karten rendern Kacheln und brauchen ihre Version von Minecraft;
+# auf dem Testserver stehen stattdessen drei Attrappen unter denselben Namen.
+# Jede bringt die echte Schnittstelle ihrer Karte mit - die Jars aus deren
+# Repositories, in die Attrappe gepackt wie in das echte Plugin -, und nur
+# das, was dahinter steckt, ist nachgebaut: Sie behalten, was ein Plugin
+# dort ablegt, und schreiben es mit /fake... dump ins Log. CamFly ruft ihre
+# Methoden per Name, siehe webmap/Calls: Was es aufruft, muss es also in der
+# echten Schnittstelle genau so geben, sonst faellt der Test durch. Die
+# Attrappe von Dynmap antwortet ueber Proxys der echten Schnittstellen und
+# wirft bei jeder Methode, die sie nicht kennt.
+#
+# groupId, artifactId, version, repo - und welche Attrappe sie braucht.
+BLUECOLORED_REPO = "https://repo.bluecolored.de/releases"
+MIKEPRIMM_REPO = "https://repo.mikeprimm.com"
+KARTEN_API = [
+    ("de.bluecolored", "bluemap-api", "2.8.2", BLUECOLORED_REPO, "BlueMap"),
+    # BlueMap bringt flow-math selbst mit, die Schnittstelle nicht.
+    ("com.flowpowered", "flow-math", "1.0.3", PAPER_REPO, "BlueMap"),
+    ("us.dynmap", "DynmapCoreAPI", "3.8", MIKEPRIMM_REPO, "dynmap"),
+    ("us.dynmap", "dynmap-api", "3.8", MIKEPRIMM_REPO, "dynmap"),
+    # Ueber das Repository von Paper, das Maven Central spiegelt: Central
+    # antwortet hier oft mit 429.
+    ("xyz.jpenilla", "squaremap-api", "1.4.3", PAPER_REPO, "squaremap"),
+]
+
+# Name des Plugins, Hauptklasse, Befehl und Quelltext jeder Attrappe.
+KARTEN_ATTRAPPEN = [
+    ("BlueMap", "FakeBlueMap", "fakebluemap", r'''
+package camflytest;
+
+import com.flowpowered.math.vector.Vector2i;
+import com.flowpowered.math.vector.Vector3d;
+import de.bluecolored.bluemap.api.AssetStorage;
+import de.bluecolored.bluemap.api.BlueMapAPI;
+import de.bluecolored.bluemap.api.BlueMapMap;
+import de.bluecolored.bluemap.api.BlueMapWorld;
+import de.bluecolored.bluemap.api.RenderManager;
+import de.bluecolored.bluemap.api.WebApp;
+import de.bluecolored.bluemap.api.markers.Marker;
+import de.bluecolored.bluemap.api.markers.MarkerSet;
+import de.bluecolored.bluemap.api.markers.POIMarker;
+import de.bluecolored.bluemap.api.plugin.Plugin;
+import org.bukkit.Bukkit;
+import org.bukkit.World;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
+import org.bukkit.plugin.java.JavaPlugin;
+
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
+
+/**
+ * Stands in for BlueMap on the test server: the real interface of BlueMap,
+ * with one map for each world, that keeps what a plugin puts there and
+ * writes it into the log on /fakebluemap dump. /fakebluemap reload starts it
+ * anew as /bluemap reload does: every marker set of a plugin is gone.
+ */
+public final class FakeBlueMap extends JavaPlugin {
+
+    private Api api;
+
+    @Override
+    public void onEnable() {
+        start();
+    }
+
+    @Override
+    public void onDisable() {
+        stop();
+    }
+
+    private void start() {
+        api = new Api();
+        Api.register(api);
+    }
+
+    private void stop() {
+        if (api != null) {
+            Api.unregister(api);
+            api = null;
+        }
+    }
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (args.length == 1 && args[0].equals("reload")) {
+            stop();
+            start();
+            getLogger().info("KARTE bluemap neu geladen");
+            return true;
+        }
+        if (args.length == 1 && args[0].equals("dump")) {
+            getLogger().info("KARTE bluemap anfang");
+            for (FakeMap map : api.maps.values()) {
+                for (Map.Entry<String, MarkerSet> set : map.sets.entrySet()) {
+                    MarkerSet markers = set.getValue();
+                    getLogger().info("KARTE bluemap set map=" + map.id + " id=" + set.getKey()
+                            + " label=" + markers.getLabel() + " hidden=" + markers.isDefaultHidden()
+                            + " toggleable=" + markers.isToggleable());
+                    for (Map.Entry<String, Marker> entry : markers.getMarkers().entrySet()) {
+                        Marker marker = entry.getValue();
+                        Vector3d at = marker.getPosition();
+                        String detail = marker instanceof POIMarker poi ? poi.getDetail() : "-";
+                        getLogger().info("KARTE bluemap marker map=" + map.id + " id=" + entry.getKey()
+                                + " | " + marker.getLabel() + " | " + at.getX() + " " + at.getY() + " " + at.getZ()
+                                + " | " + detail);
+                    }
+                }
+            }
+            getLogger().info("KARTE bluemap ende");
+            return true;
+        }
+        return false;
+    }
+
+    /** The interface of BlueMap, with a map of the same name for each world. */
+    static final class Api extends BlueMapAPI {
+        final Map<String, FakeMap> maps = new ConcurrentHashMap<>();
+
+        static void register(Api api) {
+            try {
+                registerInstance(api);
+            } catch (Exception ex) {
+                throw new IllegalStateException(ex);
+            }
+        }
+
+        static void unregister(Api api) {
+            try {
+                unregisterInstance(api);
+            } catch (Exception ex) {
+                throw new IllegalStateException(ex);
+            }
+        }
+
+        private FakeMap mapOf(String world) {
+            return maps.computeIfAbsent(world, FakeMap::new);
+        }
+
+        @Override
+        public RenderManager getRenderManager() {
+            return null;
+        }
+
+        @Override
+        public WebApp getWebApp() {
+            return null;
+        }
+
+        @Override
+        public Plugin getPlugin() {
+            return null;
+        }
+
+        @Override
+        public Collection<BlueMapMap> getMaps() {
+            return new ArrayList<>(maps.values());
+        }
+
+        @Override
+        public Collection<BlueMapWorld> getWorlds() {
+            List<BlueMapWorld> worlds = new ArrayList<>();
+            for (FakeMap map : maps.values()) {
+                worlds.add(map.world);
+            }
+            return worlds;
+        }
+
+        @Override
+        public Optional<BlueMapWorld> getWorld(Object world) {
+            String name = world instanceof World bukkit ? bukkit.getName()
+                    : world instanceof String text ? text : null;
+            if (name == null || Bukkit.getWorld(name) == null) {
+                return Optional.empty();
+            }
+            return Optional.of(mapOf(name).world);
+        }
+
+        @Override
+        public Optional<BlueMapMap> getMap(String id) {
+            return Optional.ofNullable(maps.get(id));
+        }
+
+        @Override
+        public String getBlueMapVersion() {
+            return "fake";
+        }
+    }
+
+    /** A world of BlueMap, with its one map. */
+    static final class FakeWorld implements BlueMapWorld {
+        final String id;
+        final FakeMap map;
+
+        FakeWorld(String id, FakeMap map) {
+            this.id = id;
+            this.map = map;
+        }
+
+        @Override
+        public String getId() {
+            return id;
+        }
+
+        @Override
+        public Path getSaveFolder() {
+            return null;
+        }
+
+        @Override
+        public Collection<BlueMapMap> getMaps() {
+            return List.of(map);
+        }
+    }
+
+    /** A map of BlueMap: it keeps its marker sets, like the real one, in a map made for threads. */
+    static final class FakeMap implements BlueMapMap {
+        final String id;
+        final FakeWorld world;
+        final Map<String, MarkerSet> sets = new ConcurrentHashMap<>();
+
+        FakeMap(String id) {
+            this.id = id;
+            this.world = new FakeWorld(id, this);
+        }
+
+        @Override
+        public String getId() {
+            return id;
+        }
+
+        @Override
+        public String getName() {
+            return id;
+        }
+
+        @Override
+        public BlueMapWorld getWorld() {
+            return world;
+        }
+
+        @Override
+        public AssetStorage getAssetStorage() {
+            return null;
+        }
+
+        @Override
+        public Map<String, MarkerSet> getMarkerSets() {
+            return sets;
+        }
+
+        @Override
+        public Vector2i getTileSize() {
+            return Vector2i.from(32, 32);
+        }
+
+        @Override
+        public Vector2i getTileOffset() {
+            return Vector2i.ZERO;
+        }
+
+        @Override
+        public void setFrozen(boolean frozen) {
+        }
+
+        @Override
+        public boolean isFrozen() {
+            return false;
+        }
+
+        @Override
+        public void setTileFilter(Predicate<Vector2i> filter) {
+        }
+
+        @Override
+        public Predicate<Vector2i> getTileFilter() {
+            return tile -> true;
+        }
+    }
+}
+'''),
+    ("dynmap", "FakeDynmap", "fakedynmap", r'''
+package camflytest;
+
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.dynmap.markers.Marker;
+import org.dynmap.markers.MarkerAPI;
+import org.dynmap.markers.MarkerIcon;
+import org.dynmap.markers.MarkerSet;
+
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Stands in for Dynmap on the test server: the real interfaces of its
+ * markers, each answered by a handler that keeps what a plugin puts there.
+ * A method the handlers do not know throws - so a call CamFly makes that
+ * Dynmap does not have, or one of another shape, shows up as an error.
+ * /fakedynmap dump writes the markers into the log.
+ */
+public final class FakeDynmap extends JavaPlugin {
+
+    private final Map<String, SetState> sets = new LinkedHashMap<>();
+    private final Map<String, MarkerIcon> icons = new LinkedHashMap<>();
+    private MarkerAPI api;
+
+    /** What the plugin of Dynmap answers, as {@code DynmapCommonAPI} has it. */
+    public boolean markerAPIInitialized() {
+        return true;
+    }
+
+    /** What the plugin of Dynmap answers, as {@code DynmapCommonAPI} has it. */
+    public MarkerAPI getMarkerAPI() {
+        if (api == null) {
+            api = proxy(MarkerAPI.class, (self, method, args) -> switch (method.getName()) {
+                case "getMarkerSet" -> {
+                    SetState set = sets.get((String) args[0]);
+                    yield set == null ? null : set.proxy;
+                }
+                case "createMarkerSet" -> {
+                    if (args.length != 4 || sets.containsKey((String) args[0])) {
+                        yield null;
+                    }
+                    SetState set = new SetState((String) args[0], (String) args[1]);
+                    sets.put(set.id, set);
+                    yield set.proxy;
+                }
+                case "getMarkerIcon" -> icons.computeIfAbsent((String) args[0], FakeDynmap::icon);
+                default -> basic(self, method.getName(), args);
+            });
+        }
+        return api;
+    }
+
+    private static MarkerIcon icon(String id) {
+        return proxy(MarkerIcon.class, (self, method, args) -> method.getName().equals("getMarkerIconID") ? id
+                : basic(self, method.getName(), args));
+    }
+
+    /** Answers what every object answers, and throws for anything else. */
+    private static Object basic(Object self, String name, Object[] args) {
+        return switch (name) {
+            case "equals" -> self == args[0];
+            case "hashCode" -> System.identityHashCode(self);
+            case "toString" -> "fake dynmap";
+            default -> throw new UnsupportedOperationException("FakeDynmap kennt " + name + " nicht");
+        };
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T proxy(Class<T> type, InvocationHandler handler) {
+        return (T) Proxy.newProxyInstance(FakeDynmap.class.getClassLoader(), new Class<?>[]{type}, handler);
+    }
+
+    /** A marker set and its markers. */
+    private final class SetState {
+        final String id;
+        String label;
+        boolean hidden;
+        final Map<String, MarkerState> markers = new LinkedHashMap<>();
+        final MarkerSet proxy;
+
+        SetState(String id, String label) {
+            this.id = id;
+            this.label = label;
+            this.proxy = proxy(MarkerSet.class, (self, method, args) -> switch (method.getName()) {
+                case "getMarkers" -> {
+                    Set<Marker> all = new LinkedHashSet<>();
+                    for (MarkerState marker : markers.values()) {
+                        all.add(marker.proxy);
+                    }
+                    yield all;
+                }
+                case "createMarker" -> {
+                    if (args.length != 9 || markers.containsKey((String) args[0])) {
+                        yield null;
+                    }
+                    MarkerState marker = new MarkerState(this, (String) args[0], (String) args[1],
+                            (String) args[3], (Double) args[4], (Double) args[5], (Double) args[6],
+                            (MarkerIcon) args[7]);
+                    markers.put(marker.id, marker);
+                    yield marker.proxy;
+                }
+                case "setMarkerSetLabel" -> {
+                    this.label = (String) args[0];
+                    yield null;
+                }
+                case "setHideByDefault" -> {
+                    this.hidden = (Boolean) args[0];
+                    yield null;
+                }
+                case "deleteMarkerSet" -> {
+                    sets.remove(this.id);
+                    yield null;
+                }
+                case "getMarkerSetID" -> this.id;
+                case "getMarkerSetLabel" -> this.label;
+                default -> basic(self, method.getName(), args);
+            });
+        }
+    }
+
+    /** A marker. */
+    private static final class MarkerState {
+        final SetState set;
+        final String id;
+        final String label;
+        final String world;
+        final double x;
+        final double y;
+        final double z;
+        final MarkerIcon icon;
+        String description;
+        final Marker proxy;
+
+        MarkerState(SetState set, String id, String label, String world, double x, double y, double z,
+                     MarkerIcon icon) {
+            this.set = set;
+            this.id = id;
+            this.label = label;
+            this.world = world;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.icon = icon;
+            this.proxy = proxy(Marker.class, (self, method, args) -> switch (method.getName()) {
+                case "setDescription" -> {
+                    this.description = (String) args[0];
+                    yield null;
+                }
+                case "getDescription" -> this.description;
+                case "deleteMarker" -> {
+                    set.markers.remove(this.id);
+                    yield null;
+                }
+                case "getMarkerID" -> this.id;
+                case "getLabel" -> this.label;
+                default -> basic(self, method.getName(), args);
+            });
+        }
+    }
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (args.length == 1 && args[0].equals("dump")) {
+            getLogger().info("KARTE dynmap anfang");
+            for (SetState set : sets.values()) {
+                getLogger().info("KARTE dynmap set id=" + set.id + " label=" + set.label + " hidden=" + set.hidden);
+                for (MarkerState marker : set.markers.values()) {
+                    getLogger().info("KARTE dynmap marker id=" + marker.id + " | " + marker.label + " | "
+                            + marker.world + " " + marker.x + " " + marker.y + " " + marker.z + " | icon="
+                            + marker.icon.getMarkerIconID() + " | " + marker.description);
+                }
+            }
+            getLogger().info("KARTE dynmap ende");
+            return true;
+        }
+        return false;
+    }
+}
+'''),
+    ("squaremap", "FakeSquaremap", "fakesquaremap", r'''
+package camflytest;
+
+import org.bukkit.Bukkit;
+import org.bukkit.World;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
+import org.bukkit.plugin.java.JavaPlugin;
+import xyz.jpenilla.squaremap.api.BukkitAdapter;
+import xyz.jpenilla.squaremap.api.HtmlComponentSerializer;
+import xyz.jpenilla.squaremap.api.Key;
+import xyz.jpenilla.squaremap.api.LayerProvider;
+import xyz.jpenilla.squaremap.api.MapWorld;
+import xyz.jpenilla.squaremap.api.Pair;
+import xyz.jpenilla.squaremap.api.PlayerManager;
+import xyz.jpenilla.squaremap.api.Registry;
+import xyz.jpenilla.squaremap.api.SimpleLayerProvider;
+import xyz.jpenilla.squaremap.api.Squaremap;
+import xyz.jpenilla.squaremap.api.SquaremapProvider;
+import xyz.jpenilla.squaremap.api.WorldIdentifier;
+import xyz.jpenilla.squaremap.api.marker.Icon;
+import xyz.jpenilla.squaremap.api.marker.Marker;
+
+import java.awt.image.BufferedImage;
+import java.lang.reflect.Method;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * Stands in for squaremap on the test server: the real interface of
+ * squaremap, with every world rendered, whose registries refuse a key twice
+ * like the real ones. /fakesquaremap dump writes the layers and icons into
+ * the log, /fakesquaremap reload forgets every layer as /squaremap reload
+ * does.
+ */
+public final class FakeSquaremap extends JavaPlugin implements Squaremap {
+
+    private final Map<WorldIdentifier, FakeWorld> worlds = new LinkedHashMap<>();
+    private final FakeRegistry<BufferedImage> icons = new FakeRegistry<>();
+
+    @Override
+    public void onEnable() {
+        for (World world : Bukkit.getWorlds()) {
+            WorldIdentifier id = BukkitAdapter.worldIdentifier(world);
+            worlds.put(id, new FakeWorld(id));
+        }
+        provider("register", this);
+    }
+
+    @Override
+    public void onDisable() {
+        provider("unregister");
+    }
+
+    /** SquaremapProvider takes the instance only from squaremap itself, through methods of its package. */
+    private static void provider(String name, Object... args) {
+        try {
+            Method method = args.length == 0 ? SquaremapProvider.class.getDeclaredMethod(name)
+                    : SquaremapProvider.class.getDeclaredMethod(name, Squaremap.class);
+            method.setAccessible(true);
+            method.invoke(null, args);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+
+    @Override
+    public Collection<MapWorld> mapWorlds() {
+        return new ArrayList<>(worlds.values());
+    }
+
+    @Override
+    public Optional<MapWorld> getWorldIfEnabled(WorldIdentifier identifier) {
+        return Optional.ofNullable(worlds.get(identifier));
+    }
+
+    @Override
+    public Registry<BufferedImage> iconRegistry() {
+        return icons;
+    }
+
+    @Override
+    public PlayerManager playerManager() {
+        return null;
+    }
+
+    @Override
+    public Path webDir() {
+        return null;
+    }
+
+    @Override
+    public HtmlComponentSerializer htmlComponentSerializer() {
+        return null;
+    }
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (args.length == 1 && args[0].equals("reload")) {
+            for (FakeWorld world : worlds.values()) {
+                world.layers.entries.clear();
+            }
+            getLogger().info("KARTE squaremap neu geladen");
+            return true;
+        }
+        if (args.length == 1 && args[0].equals("dump")) {
+            getLogger().info("KARTE squaremap anfang");
+            for (Map.Entry<Key, BufferedImage> icon : icons.entries.entrySet()) {
+                getLogger().info("KARTE squaremap icon id=" + icon.getKey().getKey() + " size="
+                        + icon.getValue().getWidth() + "x" + icon.getValue().getHeight());
+            }
+            for (FakeWorld world : worlds.values()) {
+                for (Map.Entry<Key, LayerProvider> entry : world.layers.entries.entrySet()) {
+                    LayerProvider layer = entry.getValue();
+                    getLogger().info("KARTE squaremap layer world=" + world.id.asString() + " id="
+                            + entry.getKey().getKey() + " label=" + layer.getLabel() + " hidden="
+                            + layer.defaultHidden() + " controls=" + layer.showControls());
+                    if (layer instanceof SimpleLayerProvider simple) {
+                        for (Map.Entry<Key, Marker> marker : simple.registeredMarkers().entrySet()) {
+                            String where = marker.getValue() instanceof Icon icon
+                                    ? icon.point().x() + " " + icon.point().z() + " | icon=" + icon.image().getKey()
+                                    + " " + icon.sizeX() + "x" + icon.sizeZ()
+                                    : marker.getValue().getClass().getSimpleName();
+                            getLogger().info("KARTE squaremap marker world=" + world.id.asString() + " id="
+                                    + marker.getKey().getKey() + " | " + where + " | "
+                                    + marker.getValue().markerOptions().hoverTooltip() + " | "
+                                    + marker.getValue().markerOptions().clickTooltip());
+                        }
+                    }
+                }
+            }
+            getLogger().info("KARTE squaremap ende");
+            return true;
+        }
+        return false;
+    }
+
+    /** A world squaremap renders. */
+    static final class FakeWorld implements MapWorld {
+        final WorldIdentifier id;
+        final FakeRegistry<LayerProvider> layers = new FakeRegistry<>();
+
+        FakeWorld(WorldIdentifier id) {
+            this.id = id;
+        }
+
+        @Override
+        public Registry<LayerProvider> layerRegistry() {
+            return layers;
+        }
+
+        @Override
+        public WorldIdentifier identifier() {
+            return id;
+        }
+    }
+
+    /** A registry as squaremap has them: a key once, and only one that is there can go. */
+    static final class FakeRegistry<T> implements Registry<T> {
+        final Map<Key, T> entries = new LinkedHashMap<>();
+
+        @Override
+        public void register(Key key, T value) {
+            if (entries.containsKey(key)) {
+                throw new IllegalArgumentException("Schon da: " + key.getKey());
+            }
+            entries.put(key, value);
+        }
+
+        @Override
+        public void unregister(Key key) {
+            if (entries.remove(key) == null) {
+                throw new IllegalArgumentException("Nicht da: " + key.getKey());
+            }
+        }
+
+        @Override
+        public boolean hasEntry(Key key) {
+            return entries.containsKey(key);
+        }
+
+        @Override
+        public T get(Key key) {
+            T value = entries.get(key);
+            if (value == null) {
+                throw new IllegalArgumentException("Nicht da: " + key.getKey());
+            }
+            return value;
+        }
+
+        @Override
+        public Iterable<Pair<Key, T>> entries() {
+            List<Pair<Key, T>> all = new ArrayList<>();
+            for (Map.Entry<Key, T> entry : entries.entrySet()) {
+                all.add(Pair.of(entry.getKey(), entry.getValue()));
+            }
+            return all;
+        }
+    }
+}
+'''),
+]
+
+
+def karten_attrappen_bauen(env, plugins):
+    """Die drei Attrappen der Web-Karten bauen und zu den Plugins legen,
+    jede mit der echten Schnittstelle ihrer Karte darin.
+
+    Ohne paper-api oder ohne die Schnittstellen bleiben sie weg; der
+    Abschnitt webkarte faellt dann mit diesem Hinweis durch.
+    """
+    for name, _, _, _ in KARTEN_ATTRAPPEN:
+        (plugins / f"Fake{name}.jar").unlink(missing_ok=True)
+    if not env.paper_api_jars:
+        Log.warn("Die Attrappen der Web-Karten fehlen: ohne paper-api nicht zu bauen")
+        return
+    jars = {}
+    try:
+        for group, artifact, version, repo, karte in KARTEN_API:
+            name = f"{artifact}-{version}.jar"
+            jars.setdefault(karte, []).append(download(maven_url(group, artifact, version, repo),
+                                                       env.cache / name, name))
+    except RuntimeError as exc:
+        Log.warn(f"Die Schnittstellen der Web-Karten liessen sich nicht laden: {exc}")
+        return
+    for name, klasse, befehl, quelltext in KARTEN_ATTRAPPEN:
+        ordner = clean_dir(env.work / "karten" / name)
+        quelle = ordner / f"{klasse}.java"
+        quelle.write_text(quelltext, encoding="utf-8")
+        klassen = ordner / "classes"
+        klassen.mkdir()
+        cp = os.pathsep.join([env.paper_api_cp] + [str(j) for j in jars[name]])
+        proc = run([str(env.javac), "-nowarn", "--release", "25", "-cp", cp,
+                    "-d", str(klassen), str(quelle)], check=False, timeout=300)
+        if proc.returncode != 0:
+            Log.warn(f"Die Attrappe von {name} liess sich nicht uebersetzen: {(proc.stdout or '').strip()[:400]}")
+            continue
+        yml = (f"name: {name}\nversion: fake\nmain: camflytest.{klasse}\napi-version: '{MC_VERSION}'\n"
+               f"commands:\n  {befehl}:\n    permission: camflytest.{befehl}\n"
+               f"permissions:\n  camflytest.{befehl}:\n    default: op\n")
+        with zipfile.ZipFile(plugins / f"Fake{name}.jar", "w") as jar:
+            jar.writestr("plugin.yml", yml)
+            for datei in klassen.rglob("*.class"):
+                jar.write(datei, datei.relative_to(klassen).as_posix())
+            # Die Schnittstelle gehoert ins Plugin, wie beim echten.
+            schon = set(jar.namelist())
+            for api in jars[name]:
+                with zipfile.ZipFile(api) as quelle_jar:
+                    for eintrag in quelle_jar.namelist():
+                        if eintrag.endswith(".class") and eintrag not in schon:
+                            jar.writestr(eintrag, quelle_jar.read(eintrag))
+                            schon.add(eintrag)
+
+
 def prepare_server_files(env):
     env.server.mkdir(parents=True, exist_ok=True)
     (env.server / "eula.txt").write_text("eula=true\n", encoding="utf-8")
@@ -967,6 +1704,7 @@ def prepare_server_files(env):
         raise RuntimeError("Kein gebautes Jar in artifacts/ - erst Schritt 'build'")
     shutil.copy2(env.plugin_jar, plugins / "CamFly.jar")
     tpa_helfer_bauen(env, plugins)
+    karten_attrappen_bauen(env, plugins)
 
     # Die Konfiguration kommt aus dem Quellordner. Aus target/classes zu lesen
     # waere eine Falle: Ein Lauf ohne den Schritt build faende dort die
@@ -14589,6 +15327,560 @@ class Abschnitt:
 # Alle Abschnitte, in der Reihenfolge, in der sie laufen. Ein neuer Abschnitt
 # braucht hier einen Eintrag, sonst laeuft er nie. Das Abschalten und der
 # Absturztest stehen zuletzt: Sie starten den Server neu.
+
+def spot_datei_des_bots(env):
+    """Der Text der Datei des Bots unter playerdata/stats, oder ''."""
+    datei = env.server / "plugins" / "CamFly" / "playerdata" / "stats" / f"{offline_uuid(BOT_NAME)}.yml"
+    return datei.read_text(encoding="utf-8") if datei.exists() else ""
+
+
+def aufrufe_datei(env):
+    """Der Text von playerdata/spot-views.yml des Testservers, oder ''."""
+    datei = env.server / "plugins" / "CamFly" / "playerdata" / "spot-views.yml"
+    return datei.read_text(encoding="utf-8") if datei.exists() else ""
+
+
+def spot_ansicht_checks(env, bot):
+    """viewpoints: Ein Spot merkt sich, was sein Besitzer im Cam-Modus selbst
+    eingestellt hat - /cam time, /cam weather, /cam nightvision -, und wer
+    hinspringt oder ihn besucht, sieht den Bau so.
+
+    Zu Fuss gesetzt nimmt ein Spot nichts mit, auch wenn eine Wahl fuer den
+    naechsten Flug gemerkt ist. Im Cam-Modus mit sunset, rain und Nachtsicht
+    on gesetzt sagt die Meldung, was er mitnimmt, und in der Datei des Bots
+    stehen time: 12000, weather: rain und night-vision: on unter dem Spot -
+    nie die Zeit der Welt, die bleibt am Tag stehen (1000). Wieder auf die
+    Welt gestellt, zeigt der Sprung zum Spot Sonnenuntergang, Regen und
+    Nachtsicht am hellen Tag; /cam spot list sagt es hinter dem Spot. /cam
+    back gibt die eigene Zeit zurueck, die Welt, und die Nachtsicht geht weg.
+    Eine eigene Zeit (night) gilt nach dem Spot wieder, gemerkt wird vom Spot
+    nichts. Der zweite Spieler besucht den oeffentlich gemachten Spot und
+    sieht ihn ebenso, der Bot daneben seine eigene Zeit.
+
+    Mit cam-time.enabled: false gilt die Zeit des Spots nicht mehr - weder
+    beim Sprung noch in der Liste -, der Regen schon; zurueck auf true gilt
+    sie wieder, sie stand die ganze Zeit im Spot.
+    """
+    def zeit(client):
+        return client.call("sky").get("timeOfDay")
+
+    def regen(client):
+        return client.call("sky").get("rain") or 0
+
+    def nachtsicht():
+        return nbt_frage(bot, "@s", NACHTSICHT)
+
+    if not FIND.test("Cam-Modus ist vor dem Test der Ansicht eines Spots aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    label = f"{BOT_NAME}:Abend"
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    try:
+        console(env, "weather clear", pause=0.5)
+        console(env, "time set day", pause=1.5)
+        hinstellen(bot, x, y, z)
+        spots_loeschen(bot, "Abend", "Zufuss")
+        befehl(bot, "/cam nightvision reset")
+
+        befehl(bot, "/cam nightvision on")
+        zeilen = befehl(bot, "/cam spot set Zufuss")
+        FIND.test("Zu Fuss gesetzt nimmt ein Spot nichts mit, auch keine gemerkte Nachtsicht",
+                  gesagt(zeilen, r"Spot Zufuss saved here") and not gesagt(zeilen, r"sees it with"), zeige(zeilen))
+
+        if not FIND.test("Cam-Modus fuer die Ansicht eines Spots gestartet", cam_on(bot), ""):
+            return
+        befehl(bot, "/cam time sunset")
+        befehl(bot, "/cam weather rain")
+        zeilen = befehl(bot, "/cam spot set Abend", warten=2.0)
+        FIND.test("Im Cam-Modus gesetzt sagt die Meldung, was der Spot mitnimmt",
+                  gesagt(zeilen, r"Spot Abend saved here")
+                  and gesagt(zeilen, r"sees it with: sunset, rain, night vision always"), zeige(zeilen))
+        text = spot_datei_des_bots(env)
+        teil = text[text.find("abend:"):] if "abend:" in text else ""
+        FIND.test("In der Datei des Bots: time: 12000, weather: rain, night-vision: on unter dem Spot",
+                  re.search(r"time:\s*12000", teil) is not None and re.search(r"weather:\s*rain", teil) is not None
+                  and re.search(r"night-vision:\s*'?on'?", teil) is not None, teil[:400] or "kein Spot")
+        teil = text[text.find("zufuss:"):text.find("zufuss:") + 220] if "zufuss:" in text else ""
+        FIND.test("Der Spot von zu Fuss hat nichts davon in der Datei",
+                  teil != "" and "time:" not in teil and "weather:" not in teil and "night-vision" not in teil,
+                  teil or "kein Spot")
+
+        befehl(bot, "/cam time reset")
+        befehl(bot, "/cam weather reset")
+        befehl(bot, "/cam nightvision reset", warten=2.5)
+        FIND.test("Auf die Welt zurueckgestellt: Tag, kein Regen, keine Nachtsicht am Tag",
+                  zeit(bot) == 1000 and not nachtsicht(), f"{zeit(bot)} / {nachtsicht()}")
+        zeilen = befehl(bot, "/cam spot Abend", warten=6.5)
+        FIND.test("Der Sprung zum Spot zeigt seinen Sonnenuntergang und seinen Regen",
+                  zeit(bot) == 12000 and regen(bot) > 0.99, f"{zeit(bot)} / {regen(bot)} / {zeige(zeilen)}")
+        FIND.test("... und seine Nachtsicht, am hellen Tag", nachtsicht(), "")
+        zeilen = befehl(bot, "/cam spot list")
+        FIND.test("/cam spot list sagt hinter dem Spot, was er zeigt",
+                  gesagt(zeilen, r"- Abend: .*\[sunset, rain, night vision always\]")
+                  and not gesagt(zeilen, r"- Zufuss: .*\(world\) \[(?!Go\])"), zeige(zeilen))
+        befehl(bot, "/cam back", warten=2.5)
+        FIND.test("/cam back: wieder die eigene Zeit, kein Regen, keine Nachtsicht",
+                  zeit(bot) == 1000 and regen(bot) == 0 and not nachtsicht(),
+                  f"{zeit(bot)} / {regen(bot)} / {nachtsicht()}")
+
+        befehl(bot, "/cam time night")
+        befehl(bot, "/cam spot Abend", warten=2.0)
+        am_spot = zeit(bot)
+        befehl(bot, "/cam back", warten=2.0)
+        FIND.test("Eine eigene Zeit gilt nach dem Spot wieder (13000 - 12000 - 13000)",
+                  am_spot == 12000 and zeit(bot) == 13000, f"{am_spot} / {zeit(bot)}")
+        befehl(bot, "/cam time reset")
+
+        befehl(bot, "/cam spot share Abend all")
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Ansicht eines Spots kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 40} {y} {z}", pause=1.5)
+        dort = befehl(zuschauer, f"/cam visit {label}", warten=8.0)
+        FIND.test("Der Besuch zeigt dem zweiten Spieler den Sonnenuntergang und den Regen des Spots",
+                  gesagt(dort, rf"Visiting {BOT_NAME}'s spot Abend") and zeit(zuschauer) == 12000
+                  and regen(zuschauer) > 0.99, f"{zeige(dort)} / {zeit(zuschauer)} / {regen(zuschauer)}")
+        FIND.test("... der Bot daneben sieht seine eigene Zeit", zeit(bot) == 1000, str(zeit(bot)))
+        befehl(zuschauer, "/cam back", warten=2.0)
+        FIND.test("Nach dem Besuch sieht der zweite Spieler wieder die Zeit der Welt", zeit(zuschauer) == 1000,
+                  str(zeit(zuschauer)))
+        cam_off(zuschauer)
+
+        set_option(env, "enabled", "false", "cam-time")
+        cam_on(bot)
+        befehl(bot, "/cam spot Abend", warten=6.5)
+        FIND.test("cam-time.enabled: false - die Zeit des Spots gilt nicht, sein Regen schon",
+                  zeit(bot) == 1000 and regen(bot) > 0.99, f"{zeit(bot)} / {regen(bot)}")
+        zeilen = befehl(bot, "/cam spot list")
+        FIND.test("cam-time.enabled: false - die Liste nennt die Zeit nicht mehr",
+                  gesagt(zeilen, r"- Abend: .*\[rain, night vision always\]"), zeige(zeilen))
+        set_option(env, "enabled", "true", "cam-time")
+        cam_on(bot)
+        befehl(bot, "/cam spot Abend", warten=2.0)
+        FIND.test("Wieder an, gilt die Zeit des Spots wieder - sie stand die ganze Zeit darin",
+                  zeit(bot) == 12000, str(zeit(bot)))
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                cam_off(zuschauer)
+                zuschauer.stop()
+            cam_off(bot)
+            set_option(env, "enabled", "true", "cam-time")
+            befehl(bot, "/cam nightvision reset")
+            spots_loeschen(bot, "Abend", "Zufuss")
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Ansicht eines Spots: {exc}")
+
+
+def bau_der_woche_checks(env, bot):
+    """viewpoints.week-days: der Bau der Woche - unter den oeffentlichen
+    Spots der mit den meisten Likes der letzten Tage, bei Gleichstand den
+    meisten Besuchern.
+
+    Voreingestellt sind es 7 Tage - nachgesehen in der ausgelieferten Datei.
+    Der Bot macht zwei Spots oeffentlich, Woche und Alt. Der zweite Spieler
+    liked Woche: In playerdata/shared-spots.yml steht unter liked-at, wann,
+    und seine Liste traegt den Stern hinter Woche, nicht hinter Alt. Er
+    besucht Alt: In playerdata/spot-views.yml steht er unter week bei Alt;
+    der Bot selbst, der zu seinem eigenen Spot springt, zaehlt dort nicht.
+    Nimmt er das Like zurueck, ist Alt mit seinem einen Besucher vorn. Die
+    Liste des Bots traegt den Stern hinter seinem eigenen Spot. Mit
+    week-days: 0 gibt es keinen Stern.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test des Baus der Woche aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    stern = r"build of the week"
+    try:
+        FIND.test("Voreingestellt steht viewpoints.week-days: 7 da",
+                  re.search(r"(?m)^\s+week-days:\s*7\s*$", ausgeliefert(env)) is not None, "")
+        spots_loeschen(bot, "Woche", "Alt")
+        hinstellen(bot, x + 4, y, z)
+        befehl(bot, "/cam spot set Alt")
+        befehl(bot, "/cam spot share Alt all")
+        hinstellen(bot, x, y, z)
+        befehl(bot, "/cam spot set Woche")
+        befehl(bot, "/cam spot share Woche all")
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer den Bau der Woche kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 30} {y} {z}", pause=1.5)
+
+        dort = befehl(zuschauer, f"/cam spot like {BOT_NAME}:Woche")
+        FIND.test("Der zweite Spieler liked Woche", gesagt(dort, rf"You like {BOT_NAME}:Woche now"), zeige(dort))
+        text = geteilte_datei(env)
+        FIND.test("In playerdata/shared-spots.yml steht unter liked-at, wann er es tat",
+                  re.search(rf"liked-at:\s*\n\s+'?{offline_uuid(ZUSCHAUER_NAME)}'?:\s*\d{{12,}}", text) is not None,
+                  text[-400:] or "keine Datei")
+        dort = befehl(zuschauer, "/cam spot list")
+        FIND.test("Seine Liste traegt den Stern hinter Woche, nicht hinter Alt",
+                  gesagt(dort, rf"{BOT_NAME}:Woche: .*{stern}") and not gesagt(dort, rf"{BOT_NAME}:Alt: .*{stern}"),
+                  zeige(dort))
+
+        befehl(zuschauer, f"/cam visit {BOT_NAME}:Alt", warten=3.0)
+        cam_off(zuschauer)
+        cam_on(bot)
+        befehl(bot, "/cam spot Alt", warten=1.5)
+        cam_off(bot)
+        text = aufrufe_datei(env)
+        woche = text[text.find("week:"):] if "week:" in text else ""
+        FIND.test("In playerdata/spot-views.yml steht der Besucher unter week bei Alt",
+                  re.search(rf"alt:\s*\n\s+'?{offline_uuid(ZUSCHAUER_NAME)}'?:\s*\d{{12,}}", woche) is not None,
+                  woche[:400] or text[-300:] or "keine Datei")
+        FIND.test("Der Bot, der zu seinem eigenen Spot sprang, zaehlt dort nicht",
+                  re.search(rf"'?{offline_uuid(BOT_NAME)}'?:\s*\d", woche) is None, woche[:400])
+
+        befehl(zuschauer, f"/cam spot like {BOT_NAME}:Woche")
+        dort = befehl(zuschauer, "/cam spot list")
+        FIND.test("Ohne das Like ist Alt mit seinem einen Besucher vorn",
+                  gesagt(dort, rf"{BOT_NAME}:Alt: .*{stern}") and not gesagt(dort, rf"{BOT_NAME}:Woche: .*{stern}"),
+                  zeige(dort))
+        zeilen = befehl(bot, "/cam spot list")
+        FIND.test("Die Liste des Bots traegt den Stern hinter seinem eigenen Spot",
+                  gesagt(zeilen, rf"- Alt: .*{stern}") and not gesagt(zeilen, rf"- Woche: .*{stern}"), zeige(zeilen))
+
+        set_option(env, "week-days", "0")
+        dort = befehl(zuschauer, "/cam spot list")
+        FIND.test("week-days: 0 - kein Stern", not gesagt(dort, stern) and gesagt(dort, rf"{BOT_NAME}:Alt"),
+                  zeige(dort))
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                cam_off(zuschauer)
+                zuschauer.stop()
+            cam_off(bot)
+            set_option(env, "week-days", "7")
+            spots_loeschen(bot, "Woche", "Alt")
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test des Baus der Woche: {exc}")
+
+
+def karte_lesen(env, befehl_der_karte):
+    """Was eine Attrappe der Web-Karten gerade zeigt, wie sie es mit dump ins
+    Log schreibt: die Zeilen hinter KARTE."""
+    vorher = len(server_log(env))
+    console(env, f"{befehl_der_karte} dump", pause=1.0)
+    log = strip_colors(server_log(env)[vorher:])
+    return [zeile.split("KARTE ", 1)[1] for zeile in log.splitlines() if "KARTE " in zeile]
+
+
+def webkarte_checks(env, bot):
+    """web-map: die oeffentlichen Spots auf BlueMap, Dynmap und squaremap.
+
+    Auf dem Testserver stehen die drei Attrappen (karten_attrappen_bauen) mit
+    den echten Schnittstellen der Karten. Voreingestellt ist web-map an, fuer
+    alle drei - nachgesehen in der ausgelieferten Datei -, und beim Start
+    sagt die Konsole fuer jede, dass sie die Spots zeigt.
+
+    Der Bot setzt im Cam-Modus mit sunset den Spot Karte und macht ihn
+    oeffentlich, dazu den privaten Spot Geheim: Auf jeder Karte steht eine
+    Ebene "Spots", sichtbar und abschaltbar, mit einer Nadel camfly-<uuid>-karte
+    "Karte (CamFlyTester)" an seinem Ort; ein Klick nennt den Befehl /cam visit
+    CamFlyTester:Karte, die Likes und was er zeigt. Dynmap nimmt das Icon
+    camera, squaremap das eigene Icon der Ebene, 16 x 16. Geheim steht
+    nirgends. Liked der zweite Spieler Karte, ist er der Bau der Woche: "★" im
+    Namen, 1 like im Text, bei Dynmap das Icon goldstar, bei squaremap das
+    goldene.
+
+    Startet BlueMap neu (die Attrappe vergisst ihre Ebenen wie /bluemap
+    reload), ist die Nadel gleich wieder da; vergisst squaremap seine Ebenen,
+    bringt sie die naechste Aenderung zurueck. Wieder privat ist Karte von
+    allen drei Karten weg. web-map.hidden: true schaltet die Ebenen
+    voreingestellt aus, min-likes: 5 laesst Karte weg, squaremap: false nimmt
+    sie nur dort weg, enabled: false ueberall. Mit web-map.link hat /cam spot
+    list einen Knopf [Map] mit der Adresse des Spots.
+    """
+    uuid = offline_uuid(BOT_NAME)
+    nadel = f"camfly-{uuid}-karte"
+
+    def alle():
+        return {"bluemap": karte_lesen(env, "fakebluemap"), "dynmap": karte_lesen(env, "fakedynmap"),
+                "squaremap": karte_lesen(env, "fakesquaremap")}
+
+    def nadeln(zeilen):
+        return [z for z in zeilen if " marker " in f" {z}" and nadel in z]
+
+    if not FIND.test("Cam-Modus ist vor dem Test der Web-Karten aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    try:
+        aus = ausgeliefert(env)
+        FIND.test("Voreingestellt steht web-map an, fuer alle drei Karten",
+                  re.search(r"(?m)^web-map:\s*\n\s*enabled:\s*true\s*$", aus) is not None
+                  and all(re.search(rf"(?m)^\s+{k}:\s*true\s*$", aus) for k in ("bluemap", "dynmap", "squaremap")),
+                  "")
+        log = strip_colors(server_log(env))
+        fehlt = [k for k in ("BlueMap", "dynmap", "squaremap") if f"The public spots are shown on {k}." not in log]
+        if not FIND.test("Die drei Attrappen sind da, und die Konsole sagt fuer jede, dass sie die Spots zeigt",
+                         not fehlt, f"fehlt: {fehlt}"):
+            return
+        spots_loeschen(bot, "Karte", "Geheim")
+        hinstellen(bot, x, y, z)
+        befehl(bot, "/cam spot set Geheim")
+        cam_on(bot)
+        befehl(bot, "/cam time sunset")
+        befehl(bot, "/cam spot set Karte")
+        befehl(bot, "/cam spot share Karte all", warten=1.0)
+        cam_off(bot)
+
+        karten = alle()
+        blue, dyn, square = karten["bluemap"], karten["dynmap"], karten["squaremap"]
+        FIND.test("BlueMap: die Ebene Spots, sichtbar und abschaltbar",
+                  any("set map=world id=camfly-spots label=Spots hidden=false toggleable=true" in z for z in blue),
+                  "\n".join(blue))
+        FIND.test("Dynmap: die Ebene Spots, sichtbar",
+                  any("set id=camfly-spots label=Spots hidden=false" in z for z in dyn), "\n".join(dyn))
+        FIND.test("squaremap: die Ebene Spots in der Oberwelt, sichtbar, mit Schalter",
+                  any("layer world=minecraft:overworld id=camfly-spots label=Spots hidden=false controls=true" in z
+                      for z in square), "\n".join(square))
+        b, d, s = nadeln(blue), nadeln(dyn), nadeln(square)
+        FIND.test("Auf allen drei Karten die Nadel des oeffentlichen Spots, mit seinem Namen",
+                  len(b) == 1 and len(d) == 1 and len(s) == 1
+                  and all(f"| Karte ({BOT_NAME}) |" in z for z in b + d),
+                  "\n".join(b + d + s))
+        ort = re.search(r"\| (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) \|", b[0]) if b else None
+        FIND.test("BlueMap: die Nadel steht am Ort des Spots",
+                  ort is not None and abs(float(ort.group(1)) - x) < 1.0 and abs(float(ort.group(3)) - z) < 1.0,
+                  b[0] if b else "")
+        FIND.test("Der Klick nennt den Befehl zum Besuchen, die Likes und was der Spot zeigt",
+                  all(f"/cam visit {BOT_NAME}:Karte" in t and "0 likes" in t and "Shows: sunset" in t
+                      for t in b + d + s), "\n".join(b + d + s))
+        FIND.test("Dynmap nimmt das Icon camera, squaremap das eigene der Ebene, 16 x 16",
+                  bool(d) and "icon=camera" in d[0] and bool(s) and "icon=camfly-spots_spot 16x16" in s[0]
+                  and any("icon id=camfly-spots_spot size=16x16" in z for z in square), "\n".join(d + s))
+        FIND.test("Der private Spot Geheim steht auf keiner Karte",
+                  not any("geheim" in z.lower() for z in blue + dyn + square), "")
+
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Web-Karten kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        befehl(zuschauer, f"/cam spot like {BOT_NAME}:Karte", warten=1.0)
+        karten = alle()
+        b, d, s = nadeln(karten["bluemap"]), nadeln(karten["dynmap"]), nadeln(karten["squaremap"])
+        # Den Stern selbst schreibt die Konsole je nach Zeichensatz als ?, gesucht wird ein Zeichen davor.
+        stern_im_namen = rf"\| \S+ Karte \({BOT_NAME}\) \|"
+        FIND.test("Geliked ist Karte der Bau der Woche: Stern im Namen, 1 likes im Text",
+                  bool(b) and re.search(stern_im_namen, b[0]) is not None and bool(d)
+                  and re.search(stern_im_namen, d[0]) is not None
+                  and all("1 likes" in t and "Build of the week" in t for t in b + d + s), "\n".join(b + d + s))
+        FIND.test("Der Bau der Woche: bei Dynmap goldstar, bei squaremap das goldene Icon",
+                  bool(d) and "icon=goldstar" in d[0] and bool(s) and "icon=camfly-spots_top" in s[0],
+                  "\n".join(d + s))
+
+        console(env, "fakebluemap reload", pause=1.5)
+        FIND.test("BlueMap neu gestartet: die Nadel ist gleich wieder da",
+                  len(nadeln(karte_lesen(env, "fakebluemap"))) == 1, "")
+        console(env, "fakesquaremap reload", pause=0.5)
+        FIND.test("squaremap hat seine Ebenen vergessen", not nadeln(karte_lesen(env, "fakesquaremap")), "")
+        befehl(zuschauer, f"/cam spot like {BOT_NAME}:Karte", warten=1.0)
+        FIND.test("Die naechste Aenderung bringt sie squaremap zurueck",
+                  len(nadeln(karte_lesen(env, "fakesquaremap"))) == 1, "")
+
+        befehl(bot, "/cam spot unshare Karte all", warten=1.0)
+        karten = alle()
+        FIND.test("Wieder privat ist Karte von allen drei Karten weg",
+                  not any(nadeln(k) for k in karten.values())
+                  and not any(" set " in f" {z}" and "camfly-spots" in z for z in karten["bluemap"])
+                  and not any("layer " in z and "camfly-spots" in z for z in karten["squaremap"]),
+                  "\n".join(sum(karten.values(), [])))
+        befehl(bot, "/cam spot share Karte all", warten=1.0)
+
+        set_option(env, "hidden", "true", "web-map")
+        time.sleep(1.0)
+        karten = alle()
+        FIND.test("web-map.hidden: true - die Ebenen sind voreingestellt aus",
+                  any("hidden=true" in z and "camfly-spots" in z for z in karten["bluemap"])
+                  and any("hidden=true" in z and "camfly-spots" in z for z in karten["dynmap"])
+                  and any("hidden=true" in z and "camfly-spots" in z for z in karten["squaremap"]),
+                  "\n".join(sum(karten.values(), [])))
+        set_options(env, [("hidden", "false", "web-map"), ("min-likes", "5", "web-map")])
+        time.sleep(1.0)
+        karten = alle()
+        FIND.test("web-map.min-likes: 5 - Karte mit 0 Likes kommt nicht auf die Karten",
+                  not any(nadeln(k) for k in karten.values()), "\n".join(sum(karten.values(), [])))
+        set_options(env, [("min-likes", "0", "web-map"), ("squaremap", "false", "web-map")])
+        time.sleep(1.0)
+        karten = alle()
+        FIND.test("web-map.squaremap: false - nur squaremap hat keine Spots",
+                  nadeln(karten["bluemap"]) and nadeln(karten["dynmap"]) and not nadeln(karten["squaremap"]),
+                  "\n".join(sum(karten.values(), [])))
+        set_options(env, [("squaremap", "true", "web-map"), ("enabled", "false", "web-map")])
+        time.sleep(1.0)
+        karten = alle()
+        FIND.test("web-map.enabled: false - auf keiner Karte ein Spot",
+                  not any(nadeln(k) for k in karten.values()), "\n".join(sum(karten.values(), [])))
+
+        set_options(env, [("enabled", "true", "web-map"), ("link", '"https://karte.example/#{world}:{x}:{y}:{z}"',
+                                                            "web-map")])
+        seit = bot.call("chat_packets", since=10 ** 9).get("count", 0)
+        zeilen = befehl(bot, "/cam spot list")
+        pakete = " ".join(p["text"] for p in bot.call("chat_packets", since=seit).get("packets", []))
+        FIND.test("web-map.link: /cam spot list hat hinter dem oeffentlichen Spot den Knopf [Map] mit der Adresse",
+                  gesagt(zeilen, r"- Karte: .*\[Map\]") and not gesagt(zeilen, r"- Geheim: .*\[Map\]")
+                  and f"https://karte.example/#world:{_floor(x)}:" in pakete, f"{zeige(zeilen)} / {pakete[-300:]}")
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                zuschauer.stop()
+            cam_off(bot)
+            set_options(env, [("enabled", "true", "web-map"), ("hidden", "false", "web-map"),
+                              ("min-likes", "0", "web-map"), ("squaremap", "true", "web-map"),
+                              ("link", '""', "web-map")])
+            spots_loeschen(bot, "Karte", "Geheim")
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Web-Karten: {exc}")
+
+
+def erze_checks(env, bot):
+    """hide-ores: Im Cam-Modus sieht der Spieler die Erze einer Hoehle als
+    den Stein darum - nur auf seinem eigenen Bildschirm.
+
+    Voreingestellt ist es an - nachgesehen in der ausgelieferten Datei. Zwei
+    Hoehlen aus Stein mit einem Dach, die eine nahe beim Bot, die andere 80
+    Bloecke weiter, ausserhalb dessen, was sein Client hat (view-distance 2):
+    In jeder ein Diamanterz und ein Tiefenschiefer-Eisenerz an der Wand zur
+    Luft darin, ein Diamanterz oben auf dem Dach unter freiem Himmel und eins
+    ringsum im Stein. Ohne Cam-Modus sieht der Bot alle als Erz. Im Cam-Modus
+    sind die in der nahen Hoehle Stein und Tiefenschiefer, das auf dem Dach
+    und das eingeschlossene bleiben Diamanterz; der zweite Spieler daneben
+    sieht alles, wie es ist. Fliegt die Kamera zur fernen Hoehle, deren
+    Chunks der Client erst dort bekommt, sind auch deren Erze Stein. Nach dem
+    Cam-Modus sieht der Bot wieder die echten Erze. Mit hide-ores.enabled:
+    false bleibt im Cam-Modus alles, wie es ist.
+    """
+    def sieht(client, ort):
+        """Der Name des Blocks, wie der Client ihn sieht - und fuer den
+        Tiefenschiefer der Vergleich mit einem echten: Dessen Zustand kennt
+        mineflayer aus den Daten von 26.1 nicht beim Namen."""
+        block = client.call("block_at", x=ort[0], y=ort[1], z=ort[2])
+        echt = client.call("block_at", x=muster[0], y=muster[1], z=muster[2])
+        if block.get("state") is not None and block.get("state") == echt.get("state"):
+            return "deepslate"
+        return block.get("name")
+
+    if not FIND.test("Cam-Modus ist vor dem Test der Erze aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]), BODEN_Y + 1, _floor(heim[2])
+
+    def hoehle(ax):
+        """Eine Hoehle aus Stein, 7 breit, mit Dach, die Luft darin 5 x 3 x 5;
+        die Wand 2 dick. Gibt die Stellen der vier Erze zurueck."""
+        console(env, f"fill {ax} {y} {z + 6} {ax + 8} {y + 5} {z + 14} minecraft:stone", pause=0.4)
+        console(env, f"fill {ax + 2} {y + 1} {z + 8} {ax + 6} {y + 3} {z + 12} minecraft:air", pause=0.4)
+        wand = (ax + 1, y + 2, z + 10)
+        tief = (ax + 4, y + 2, z + 7)
+        dach = (ax + 4, y + 5, z + 10)
+        drin = (ax + 4, y + 2, z + 14)
+        for ort, block in ((wand, "diamond_ore"), (tief, "deepslate_iron_ore"), (dach, "diamond_ore"),
+                           (drin, "diamond_ore")):
+            console(env, f"setblock {ort[0]} {ort[1]} {ort[2]} minecraft:{block}", pause=0.3)
+        # Der eingeschlossene Block hinter der Wand: aussen noch eine Lage Stein.
+        console(env, f"fill {ax} {y} {z + 15} {ax + 8} {y + 5} {z + 15} minecraft:stone", pause=0.4)
+        return wand, tief, dach, drin
+
+    nah_x = x + 6
+    fern_x = x + 80
+    # Ein echter Tiefenschiefer, so wie ihn das Plugin zeigt (axis=y), zum Vergleich.
+    muster = (x - 3, y, z - 3)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    try:
+        FIND.test("Voreingestellt steht hide-ores.enabled: true da",
+                  re.search(r"(?m)^hide-ores:\s*\n\s*enabled:\s*true\s*$", ausgeliefert(env)) is not None, "")
+        hinstellen(bot, x + 0.5, y, z + 0.5)
+        console(env, f"setblock {muster[0]} {muster[1]} {muster[2]} minecraft:deepslate[axis=y]", pause=0.3)
+        nah = hoehle(nah_x)
+        console(env, f"forceload add {fern_x} {z + 6} {fern_x + 8} {z + 15}", pause=0.5)
+        fern = hoehle(fern_x)
+        time.sleep(1.5)
+        wand, tief, dach, drin = nah
+        vorher = [sieht(bot, o) for o in nah]
+        FIND.test("Ohne Cam-Modus sieht der Bot alle vier als Erz",
+                  vorher == ["diamond_ore", "deepslate_iron_ore", "diamond_ore", "diamond_ore"], str(vorher))
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Erze kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 0.5} {y} {z - 2.5}", pause=2.0)
+
+        if not FIND.test("Cam-Modus fuer die Erze gestartet", cam_on(bot), ""):
+            return
+        time.sleep(2.5)
+        jetzt = [sieht(bot, o) for o in nah]
+        FIND.test("Im Cam-Modus: die Erze der Hoehle sind Stein und Tiefenschiefer",
+                  jetzt[0] == "stone" and jetzt[1] == "deepslate", str(jetzt))
+        FIND.test("... das unter freiem Himmel und das eingeschlossene bleiben Diamanterz",
+                  jetzt[2] == "diamond_ore" and jetzt[3] == "diamond_ore", str(jetzt))
+        dort = [sieht(zuschauer, o) for o in nah]
+        FIND.test("Der zweite Spieler daneben sieht alle vier, wie sie sind",
+                  dort == ["diamond_ore", "deepslate_iron_ore", "diamond_ore", "diamond_ore"], str(dort))
+
+        console(env, f"setblock {fern_x - 3} {y} {z + 6} minecraft:deepslate[axis=y]", pause=0.3)
+        muster = (fern_x - 3, y, z + 6)
+        bot.chat(f"/tp {BOT_NAME} {fern_x - 3.5} {y + 1} {z + 10.5}")
+        time.sleep(4.0)
+        dort_fern = [sieht(bot, o) for o in fern]
+        FIND.test("Zur fernen Hoehle geflogen, deren Chunks erst dort kamen: auch ihre Erze sind Stein",
+                  dort_fern[0] == "stone" and dort_fern[1] == "deepslate" and dort_fern[2] == "diamond_ore",
+                  str(dort_fern))
+        bot.chat(f"/tp {BOT_NAME} {x + 0.5} {y} {z + 0.5}")
+        time.sleep(1.5)
+        muster = (x - 3, y, z - 3)
+
+        cam_off(bot)
+        time.sleep(1.5)
+        nachher = [sieht(bot, o) for o in nah]
+        FIND.test("Nach dem Cam-Modus sieht der Bot wieder die echten Erze",
+                  nachher == ["diamond_ore", "deepslate_iron_ore", "diamond_ore", "diamond_ore"], str(nachher))
+
+        set_option(env, "enabled", "false", "hide-ores")
+        cam_on(bot)
+        time.sleep(2.5)
+        aus = [sieht(bot, o) for o in nah]
+        FIND.test("hide-ores.enabled: false - im Cam-Modus bleiben die Erze, wie sie sind",
+                  aus == ["diamond_ore", "deepslate_iron_ore", "diamond_ore", "diamond_ore"], str(aus))
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                zuschauer.stop()
+            cam_off(bot)
+            set_option(env, "enabled", "true", "hide-ores")
+            for ax in (nah_x, fern_x):
+                console(env, f"fill {ax} {y} {z + 6} {ax + 8} {y + 5} {z + 15} minecraft:air", pause=0.4)
+            console(env, f"setblock {x - 3} {y} {z - 3} minecraft:air", pause=0.3)
+            console(env, f"setblock {fern_x - 3} {y} {z + 6} minecraft:air", pause=0.3)
+            console(env, f"forceload remove {fern_x} {z + 6} {fern_x + 8} {z + 15}", pause=0.3)
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Erze: {exc}")
+
+
 ABSCHNITTE = [
     Abschnitt("hunger", hunger_checks, "hunger/CamHungerGuard"),
     Abschnitt("heilung", heal_checks, "hunger/CamRegenGuard"),
@@ -14639,6 +15931,11 @@ ABSCHNITTE = [
     Abschnitt("spotreiter", spotreiter_checks, "menu spot"),
     Abschnitt("spotmoderation", spotmoderation_checks, "menu spot/SpotModeration spot/SpotBans spot/CamSpots"),
     Abschnitt("tourmoderation", tourmoderation_checks, "menu tour/TourModeration tour/TourBans tour/CamTour"),
+    Abschnitt("spot_ansicht", spot_ansicht_checks,
+              "spot sky nightvision visit back resume tour/CamTour preferences storage/PlayerStore"),
+    Abschnitt("bau_der_woche", bau_der_woche_checks, "spot menu"),
+    Abschnitt("webkarte", webkarte_checks, "webmap spot/SharedSpots spot/CamSpots spot/SpotViews"),
+    Abschnitt("erze", erze_checks, "ore session/CameraMode"),
     Abschnitt("anstupsen", anstups_checks, "nudge", koerpertypen=True),
     Abschnitt("funk", funk_checks, "signal"),
     Abschnitt("traenke", potion_checks, "potion", koerpertypen=True),

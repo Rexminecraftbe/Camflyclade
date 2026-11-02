@@ -48,6 +48,8 @@ public final class CamBack {
         if (!plugin.getMovementGuard().returnToBody(player, data)) {
             return;
         }
+        // Back at his body, no spot shows him its time any more.
+        plugin.getSpots().dropLook(player);
         settings.getBackSound().play(player);
         if (messages.isMessageEnabled("back-to-body")) {
             plugin.getActionBar().flash(player, messages.getMessage("back-to-body"));

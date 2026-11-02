@@ -177,7 +177,7 @@ public final class CamMenu implements Listener {
     private enum SpotTab {
         PRIVATE("private", Material.FILLED_MAP, 48, List.of("date", "name", "views", "near")),
         PUBLIC("public", Material.GLOBE_BANNER_PATTERN, 49,
-                List.of("date", "name", "owner", "likes", "views", "near")),
+                List.of("date", "name", "owner", "likes", "week", "views", "near")),
         SHARED("shared", Material.MAP, 50, List.of("date", "name", "owner", "views", "near"));
 
         final String key;
@@ -195,10 +195,11 @@ public final class CamMenu implements Listener {
 
     /**
      * The orders of the spots: the newest first, by name, by the name of the
-     * owner, the most liked first, the most viewed first, the nearest first.
+     * owner, the most liked first, the build of the week first, the most
+     * viewed first, the nearest first.
      */
     private enum SpotSort {
-        DATE("date"), NAME("name"), OWNER("owner"), LIKES("likes"), VIEWS("views"), NEAR("near");
+        DATE("date"), NAME("name"), OWNER("owner"), LIKES("likes"), WEEK("week"), VIEWS("views"), NEAR("near");
 
         final String key;
 
@@ -577,9 +578,11 @@ public final class CamMenu implements Listener {
                     }
                 }
                 case PUBLIC -> {
+                    Share top = spots.buildOfTheWeek();
                     for (Share share : sorted(spots.publicSpots(), sort, Share::getSpot, Share::getOwnerName,
-                            Share::likes, share -> spots.views(share.getOwner(), share.getSpot()), from)) {
-                        entries.add(slot -> putPublicSpot(player, page, slot, share));
+                            Share::likes, share -> spots.views(share.getOwner(), share.getSpot()), from,
+                            spots.weekOrder())) {
+                        entries.add(slot -> putPublicSpot(player, page, slot, share, share == top));
                     }
                 }
                 case SHARED -> {
@@ -613,7 +616,7 @@ public final class CamMenu implements Listener {
                 putTab(player, page, tab, other);
             }
         }
-        putSort(page, SLOT_SPOT_SORT, sort.key, tab.sorts, current -> {
+        putSort(page, SLOT_SPOT_SORT, sort.key, sortsOf(tab), current -> {
             spotSorts.computeIfAbsent(player.getUniqueId(), id -> new EnumMap<>(SpotTab.class)).put(tab,
                     SpotSort.of(current));
             openSpots(player, tab, 0);
@@ -727,8 +730,12 @@ public final class CamMenu implements Listener {
         List<String> lore = spotLore(player.getUniqueId(), spot);
         Share share = spots.shareOf(player, spot);
         if (share != null && share.isEveryone()) {
+            if (share == spots.buildOfTheWeek()) {
+                lore.addAll(0, lines(messages.getMessage("menu-spot-top")));
+            }
             lore.addAll(lines(messages.getMessage("menu-spot-public-lore")
                     .replace("{likes}", String.valueOf(share.likes()))));
+            lore.addAll(weekLore(share));
         }
         if (share != null && !share.getPlayers().isEmpty()) {
             lore.addAll(lines(messages.getMessage("menu-spot-shared-lore").replace("{players}", spots.whom(share))));
@@ -762,12 +769,17 @@ public final class CamMenu implements Listener {
      * and within reach, right-click likes it or no longer does, shift-click
      * visits it; it shines while he likes it.
      */
-    private void putPublicSpot(Player player, Page page, int slot, Share share) {
+    private void putPublicSpot(Player player, Page page, int slot, Share share, boolean top) {
         CamSpots spots = plugin.getSpots();
         Spot spot = share.getSpot();
         boolean own = share.getOwner().equals(player.getUniqueId());
-        List<String> lore = spotLore(share.getOwner(), spot);
+        List<String> lore = new ArrayList<>();
+        if (top) {
+            lore.addAll(lines(messages.getMessage("menu-spot-top")));
+        }
+        lore.addAll(spotLore(share.getOwner(), spot));
         lore.addAll(lines(messages.getMessage("menu-spot-likes").replace("{likes}", String.valueOf(share.likes()))));
+        lore.addAll(weekLore(share));
         if (own) {
             lore.addAll(reachLore());
             lore.addAll(lines(messages.getMessage("menu-public-own-actions")));
@@ -810,6 +822,21 @@ public final class CamMenu implements Listener {
                 act(player, () -> spots.jump(player, share.label()));
             }
         });
+    }
+
+    /**
+     * How many likes and visitors a public spot got within the days of the
+     * build of the week, while it counts at all.
+     */
+    private List<String> weekLore(Share share) {
+        CamSpots spots = plugin.getSpots();
+        if (!spots.hasWeek()) {
+            return List.of();
+        }
+        return lines(messages.getMessage("menu-spot-week")
+                .replace("{days}", String.valueOf(settings.getWeekDays()))
+                .replace("{likes}", String.valueOf(spots.weekLikes(share)))
+                .replace("{visitors}", String.valueOf(spots.weekVisitors(share))));
     }
 
     /** A spot offered to him: left-click accepts it, right-click turns it down. */
@@ -894,6 +921,10 @@ public final class CamMenu implements Listener {
         List<String> lore = new ArrayList<>(lines(place(messages.getMessage("menu-spot-lore"), spot)));
         if (spot.created() > 0L) {
             lore.addAll(lines(messages.getMessage("menu-spot-created").replace("{date}", date(spot.created()))));
+        }
+        String look = plugin.getSpots().describe(spot.look());
+        if (!look.isEmpty()) {
+            lore.addAll(lines(messages.getMessage("menu-spot-look").replace("{look}", look)));
         }
         lore.addAll(lines(messages.getMessage("menu-spot-views")
                 .replace("{views}", String.valueOf(plugin.getSpots().views(owner, spot)))));
@@ -996,7 +1027,17 @@ public final class CamMenu implements Listener {
     private SpotSort spotSort(Player player, SpotTab tab) {
         Map<SpotTab, SpotSort> own = spotSorts.get(player.getUniqueId());
         SpotSort sort = own == null ? null : own.get(tab);
-        return sort != null && tab.sorts.contains(sort.key) ? sort : SpotSort.DATE;
+        return sort != null && sortsOf(tab).contains(sort.key) ? sort : SpotSort.DATE;
+    }
+
+    /** The orders a tab of the spots offers: the build of the week only while it counts at all. */
+    private List<String> sortsOf(SpotTab tab) {
+        if (plugin.getSpots().hasWeek()) {
+            return tab.sorts;
+        }
+        List<String> sorts = new ArrayList<>(tab.sorts);
+        sorts.remove(SpotSort.WEEK.key);
+        return sorts;
     }
 
     /**
@@ -1011,6 +1052,16 @@ public final class CamMenu implements Listener {
     private static <T> List<T> sorted(Collection<T> items, SpotSort sort, Function<T, Spot> spot,
                                       Function<T, String> owner, ToIntFunction<T> likes, ToLongFunction<T> views,
                                       Location from) {
+        return sorted(items, sort, spot, owner, likes, views, from, (a, b) -> 0);
+    }
+
+    /**
+     * Spots in an order, as above, with the order of the build of the week
+     * for the public ones, see {@link CamSpots#weekOrder()}.
+     */
+    private static <T> List<T> sorted(Collection<T> items, SpotSort sort, Function<T, Spot> spot,
+                                      Function<T, String> owner, ToIntFunction<T> likes, ToLongFunction<T> views,
+                                      Location from, Comparator<T> week) {
         Comparator<T> byName = Comparator.comparing(item -> spot.apply(item).name(), String.CASE_INSENSITIVE_ORDER);
         Comparator<T> byOwner = Comparator.comparing(owner, String.CASE_INSENSITIVE_ORDER);
         Comparator<T> newest = Comparator.comparingLong((T item) -> spot.apply(item).created()).reversed();
@@ -1019,6 +1070,7 @@ public final class CamMenu implements Listener {
             case NAME -> byName.thenComparing(byOwner);
             case OWNER -> byOwner.thenComparing(byName);
             case LIKES -> Comparator.comparingInt(likes).reversed().thenComparing(newest).thenComparing(byName);
+            case WEEK -> week.thenComparing(newest).thenComparing(byName).thenComparing(byOwner);
             case VIEWS -> Comparator.comparingLong(views).reversed().thenComparing(newest).thenComparing(byName);
             case NEAR -> Comparator.comparingDouble((T item) -> distance(spot.apply(item), from))
                     .thenComparing(byName).thenComparing(byOwner);

@@ -131,6 +131,7 @@ public final class CamVisit {
         if (!plugin.getMovementGuard().jumpTo(player, data, visit.anchor(), visit)) {
             return;
         }
+        plugin.getSpots().showLook(player, share.getSpot());
         plugin.getSpots().viewed(player, share.getOwner(), share.getSpot());
         settings.getSpotSound().play(player);
         if (messages.isMessageEnabled("visit-started")) {
@@ -157,6 +158,7 @@ public final class CamVisit {
             if (plugin.getMovementGuard().returnToBody(visitor, data)) {
                 settings.getBackSound().play(visitor);
             }
+            plugin.getSpots().dropLook(visitor);
             messages.sendConfiguredMessage(visitor, "visit-ended", "{owner}", visit.ownerName(),
                     "{spot}", visit.spotName());
         }

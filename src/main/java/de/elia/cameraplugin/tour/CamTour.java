@@ -1095,6 +1095,8 @@ public final class CamTour implements Listener {
         if (!plugin.getMovementGuard().jumpTo(guest, data, guide.getLocation())) {
             return;
         }
+        // Following somebody, he no longer looks at the spot he jumped to.
+        plugin.getSpots().dropLook(guest);
         Tour tour = tours.computeIfAbsent(guide.getUniqueId(), id -> new Tour());
         tour.guests.put(guest.getUniqueId(), new Guest());
         guideOf.put(guest.getUniqueId(), guide.getUniqueId());

@@ -119,6 +119,14 @@ public final class CamSettings {
     /** The longest {@code viewpoints.guestbook-interval-minutes} accepts: a day. */
     private static final int MAX_GUESTBOOK_INTERVAL_MINUTES = 1440;
 
+    /**
+     * The most days {@code viewpoints.week-days} looks back for the build of
+     * the week: a month. Who came longer ago is kept for nothing else, and a
+     * longer look back would only bring back the old spots it is meant to
+     * leave behind.
+     */
+    private static final int MAX_WEEK_DAYS = 30;
+
     /** The levels of {@code signal.levels}, from the most bars down, as the config file names them. */
     private static final String[] SIGNAL_LEVEL_NAMES = {"excellent", "good", "medium", "weak"};
 
@@ -196,7 +204,7 @@ public final class CamSettings {
      * has.
      */
     public static final Set<String> UNLISTED_KEYS = Set.of("mirror-damage.debug", "start-cost.items",
-            "signal.block-costs", OLD_FOLLOW_SECTION, "sounds.tour-invite", "sounds.tour-reach",
+            "signal.block-costs", "hide-ores.blocks", OLD_FOLLOW_SECTION, "sounds.tour-invite", "sounds.tour-reach",
             "menu.buttons.tour", "menu.admin-buttons.tours");
 
     /**
@@ -428,6 +436,28 @@ public final class CamSettings {
     private double viewpointsStartDistance;
     /** How long the same player at the same spot is no new view, {@code viewpoints.views-cooldown-minutes}. */
     private int viewsCooldownMinutes;
+    /** How many days back the build of the week counts likes and visitors, {@code viewpoints.week-days}; 0 for off. */
+    private int weekDays;
+
+    /** Whether a camera player sees the ores of caves as stone, {@code hide-ores.enabled}. */
+    private boolean hideOres;
+    /** What each ore looks like for him, {@code hide-ores.blocks}, in the order of the file. */
+    private final Map<Material, BlockData> oreCovers = new LinkedHashMap<>();
+
+    /** Whether the public spots go on the web maps of the server, {@code web-map.enabled}. */
+    private boolean webMapEnabled;
+    /** Whether on BlueMap, {@code web-map.bluemap}. */
+    private boolean webMapBlueMap;
+    /** Whether on Dynmap, {@code web-map.dynmap}. */
+    private boolean webMapDynmap;
+    /** Whether on squaremap, {@code web-map.squaremap}. */
+    private boolean webMapSquaremap;
+    /** Whether the layer of the spots is switched off on the page until a visitor switches it on, {@code web-map.hidden}. */
+    private boolean webMapHidden;
+    /** How many likes a public spot needs to get onto the map, {@code web-map.min-likes}. */
+    private int webMapMinLikes;
+    /** The address of a spot on the web map, with its placeholders, {@code web-map.link}; empty for none. */
+    private String webMapLink;
 
     /** Whether {@code /cam resume} goes on where the last flight ended, {@code resume-command.enabled}. */
     private boolean resumeEnabled;
@@ -814,6 +844,16 @@ public final class CamSettings {
                 MAX_GUESTBOOK_INTERVAL_MINUTES);
         viewpointsStartDistance = config.getDouble("viewpoints.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
         viewsCooldownMinutes = config.getInt("viewpoints.views-cooldown-minutes", 10, 0, MAX_VIEWS_COOLDOWN_MINUTES);
+        weekDays = config.getInt("viewpoints.week-days", 7, 0, MAX_WEEK_DAYS);
+        hideOres = config.getBoolean("hide-ores.enabled", true);
+        readOreCovers(config);
+        webMapEnabled = config.getBoolean("web-map.enabled", true);
+        webMapBlueMap = config.getBoolean("web-map.bluemap", true);
+        webMapDynmap = config.getBoolean("web-map.dynmap", true);
+        webMapSquaremap = config.getBoolean("web-map.squaremap", true);
+        webMapHidden = config.getBoolean("web-map.hidden", false);
+        webMapMinLikes = config.getInt("web-map.min-likes", 0, 0);
+        webMapLink = config.getString("web-map.link", "").trim();
         resumeEnabled = config.getBoolean("resume-command.enabled", true);
         resumeStorage = readStorage(config, "resume-command.storage");
         playerSettingsStorage = readStorage(config, "player-settings.storage");
@@ -1186,6 +1226,51 @@ public final class CamSettings {
     private void readMediumBorderBlock(ConfigReader config, FlightMedium medium, String path, String def) {
         BlockData block = resolveBlock(config, path, def);
         mediumBorderBlocks.put(medium, block.getMaterial().isSolid() ? block : borderBlock.clone());
+    }
+
+    /**
+     * Reads {@code hide-ores.blocks}: each ore with the block it looks like
+     * for a camera player. An ore or a block that is none - mistyped, an
+     * item, a block of a newer version - is reported, and the entry left
+     * out. Without the section at all, the ores of the game as the file
+     * built into the jar has them.
+     */
+    private void readOreCovers(ConfigReader config) {
+        oreCovers.clear();
+        String path = "hide-ores.blocks";
+        Map<String, String> entries = config.getNames(path);
+        if (!config.has(path)) {
+            entries = DEFAULT_ORE_COVERS;
+        }
+        String allowed = messages.configMessage("config-allowed-blocks");
+        for (Map.Entry<String, String> entry : entries.entrySet()) {
+            Material ore = Material.matchMaterial(entry.getKey().trim());
+            if (ore == null || !ore.isBlock() || ore.isAir()) {
+                config.warnUnknownEntry(path, entry.getKey());
+                continue;
+            }
+            BlockData cover = parseBlock(entry.getValue());
+            if (cover == null) {
+                config.warnUnknownValue(path + "." + entry.getKey(), entry.getValue(), allowed, "-");
+                continue;
+            }
+            oreCovers.put(ore, cover);
+        }
+    }
+
+    /** The ores of the game and what they look like for a camera player, as the file built into the jar has them. */
+    private static final Map<String, String> DEFAULT_ORE_COVERS = defaultOreCovers();
+
+    private static Map<String, String> defaultOreCovers() {
+        Map<String, String> covers = new LinkedHashMap<>();
+        for (String ore : List.of("coal", "iron", "copper", "gold", "redstone", "lapis", "emerald", "diamond")) {
+            covers.put(ore + "_ore", "stone");
+            covers.put("deepslate_" + ore + "_ore", "deepslate");
+        }
+        covers.put("raw_iron_block", "tuff");
+        covers.put("raw_copper_block", "granite");
+        covers.put("ancient_debris", "netherrack");
+        return Collections.unmodifiableMap(covers);
     }
 
     /** The block a {@code border-block} entry names, or {@code null} for none. */
@@ -1833,6 +1918,67 @@ public final class CamSettings {
      */
     public int getViewsCooldownMinutes() {
         return viewsCooldownMinutes;
+    }
+
+    /**
+     * How many days back the build of the week counts the likes and the
+     * visitors of the public spots, {@code viewpoints.week-days}; 0 while it
+     * is switched off. Only with sharing, which public spots need.
+     */
+    public int getWeekDays() {
+        return isViewpointsSharing() ? weekDays : 0;
+    }
+
+    /** Whether a camera player sees the ores of caves as stone, {@code hide-ores.enabled}. */
+    public boolean isHideOres() {
+        return hideOres && !oreCovers.isEmpty();
+    }
+
+    /** What each ore looks like for a camera player, {@code hide-ores.blocks}; not to be changed. */
+    public Map<Material, BlockData> getOreCovers() {
+        return Collections.unmodifiableMap(oreCovers);
+    }
+
+    /**
+     * Whether the public spots go on the web maps of the server,
+     * {@code web-map.enabled}: only with sharing, which public spots need.
+     */
+    public boolean isWebMapEnabled() {
+        return webMapEnabled && isViewpointsSharing();
+    }
+
+    /** Whether the public spots go on BlueMap, while it is there, {@code web-map.bluemap}. */
+    public boolean isWebMapBlueMap() {
+        return webMapBlueMap;
+    }
+
+    /** Whether the public spots go on Dynmap, while it is there, {@code web-map.dynmap}. */
+    public boolean isWebMapDynmap() {
+        return webMapDynmap;
+    }
+
+    /** Whether the public spots go on squaremap, while it is there, {@code web-map.squaremap}. */
+    public boolean isWebMapSquaremap() {
+        return webMapSquaremap;
+    }
+
+    /** Whether the layer of the spots starts switched off on the page of the map, {@code web-map.hidden}. */
+    public boolean isWebMapHidden() {
+        return webMapHidden;
+    }
+
+    /** How many likes a public spot needs at least to get onto the map, {@code web-map.min-likes}. */
+    public int getWebMapMinLikes() {
+        return webMapMinLikes;
+    }
+
+    /**
+     * The address of a spot on the web map, {@code web-map.link}, with
+     * {@code {world}}, {@code {x}}, {@code {y}} and {@code {z}} still in it;
+     * empty while there is none.
+     */
+    public String getWebMapLink() {
+        return webMapLink;
     }
 
     public boolean isResumeEnabled() {

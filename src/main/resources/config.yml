@@ -799,6 +799,15 @@ resume-command:
 #                                             öffentlich ist - nach denselben Regeln wie zu einem eigenen, gemessen
 #                                             vom eigenen Körper
 # Ein Name hat 1 bis 16 Buchstaben, Ziffern, - und _; groß oder klein zählt nicht.
+# Was ein Punkt zeigt: Setzt man ihn im Cam-Modus, nimmt er die Tageszeit, das Wetter und die Nachtsicht mit, die man
+# sich selbst eingestellt hat (/cam time, /cam weather, /cam nightvision) - nie die Zeit und das Wetter der Welt.
+# Wer hinspringt oder ihn besucht, sieht den Bau dann so, z. B. im Sonnenuntergang im Regen, nur auf seinem eigenen
+# Bildschirm - bis seine Kamera woanders hingesetzt wird (ein Punkt ohne eigene Einstellung, /cam back, /cam resume,
+# Folgen) oder er selbst etwas einstellt. Danach sieht er wieder seine eigene; für seine nächsten Flüge gemerkt wird
+# davon nichts. Ist cam-time, cam-weather oder night-vision.player-choice aus, gilt dieser Teil nicht, weder beim
+# Setzen noch beim Hinspringen - im Punkt bleibt er trotzdem stehen und gilt wieder, sobald der Schalter wieder an ist.
+# Zu Fuß sieht man die Zeit und das Wetter der Welt, ein Punkt von dort nimmt nichts mit.
+# (Texte: spot-saved-look, spot-list-look, menu-spot-look, spot-look-...)
 # Gesprungen wird nur, wohin die Kamera auch fliegen dürfte: in der Welt des Körpers, nicht weiter als max-distance
 # (bei max-distance-mode: signal nur, wohin das Signal reicht), nicht in ein Gebiet, das cam-area auf Stufe 2 verbietet,
 # nicht in gesperrte Lava, Wasser oder Pulverschnee und nicht in einen Block, der dort inzwischen steht. Sonst sagt
@@ -830,6 +839,15 @@ viewpoints:
   # Wie lange derselbe Spieler am selben Punkt nicht noch einmal als Aufruf zählt, in Minuten (0 bis 1440, 0 = jeder
   # Sprung und jeder Besuch zählt). So treibt Hin- und Herspringen die Zahl nicht hoch.
   views-cooldown-minutes: 10
+  # Bau der Woche: Unter den öffentlichen Punkten zählt, was ein Punkt in den letzten week-days Tagen bekam - nicht
+  # alles seit jeher, sonst lägen die alten immer vorn. Es zählen die Likes aus diesen Tagen (die noch stehen) und die
+  # Besucher: wie viele verschiedene Spieler hingesprungen sind oder ihn besucht haben, der Besitzer nicht - wer immer
+  # wieder kommt, zählt einmal. Der Punkt mit den meisten Likes darin (bei Gleichstand den meisten Besuchern) ist der
+  # Bau der Woche: Im Menü steht er oben mit einem Stern (menu-spot-top), jeder öffentliche Punkt zeigt seine Zahlen
+  # (menu-spot-week), der Trichter auf dem Reiter der öffentlichen sortiert danach, und /cam spot list und die Karte
+  # (web-map) zeigen den Stern auch. 1 bis 30 Tage, 0 = aus. Geht nur mit sharing: true. Wer wann kam, steht mit den
+  # Aufrufen in plugins/CamFly/playerdata/spot-views.yml; wer länger nicht kam, wird dort vergessen.
+  week-days: 7
   # Das Gästebuch: Wer einen Punkt hat, erfährt, wie oft er angesehen (hingesprungen oder besucht) und geliked wurde -
   # nur andere zählen, und nur so oft, wie es als Aufruf zählt (views-cooldown-minutes). Nichts davon kommt sofort: Es
   # wird gesammelt und als Zahl je Punkt erzählt (Text: spot-guestbook-entry), so kann niemand einem anderen mit
@@ -863,6 +881,41 @@ viewpoints:
 # Geht nur mit viewpoints.enabled und viewpoints.sharing. Ton: sounds.spot, Texte: visit-...
 visitor-camera:
   enabled: true
+
+# Die öffentlichen Punkte auf der Web-Karte des Servers: BlueMap, Dynmap und squaremap, welche davon da ist. Jede
+# bekommt eine eigene Ebene (Text: web-map-layer), die man auf der Seite der Karte ein- und ausschalten kann, mit einer
+# Nadel für jeden öffentlichen Punkt. Ein Klick darauf zeigt, wem er gehört, wie oft er geliked und angesehen wurde, ob
+# er der Bau der Woche ist (bei Dynmap und squaremap mit einer goldenen Nadel), was er zeigt (Zeit, Wetter, Nachtsicht)
+# und den Befehl, ihn zu besuchen (Texte: web-map-...). Im Spiel geht von der Karte aus nichts: Eine Webseite kann
+# für einen Spieler keine Befehle schicken - den Befehl tippt man selbst.
+# Nur öffentliche Punkte (/cam spot share <Name> all): Private und die, die nur einzelnen Spielern angeboten sind,
+# kommen nie auf die Karte - die Seite einer Karte ist oft für jeden im Internet offen, nicht nur für die Spieler. Von
+# der Kamera und vom Körper zeigt die Karte nie etwas. Sperrt die Admin-Seite der Punkte für alle das Ansehen
+# öffentlicher Punkte, ist die Ebene leer.
+# Die Nadeln folgen den Punkten: Wird einer öffentlich, kommt er dazu; wird er privat, abgenommen oder gelöscht, ist er
+# weg; wird er verschoben, wandert er mit. Likes, Aufrufe und der Bau der Woche werden alle 30 Sekunden neu
+# eingetragen. Startet eine Karte nach CamFly oder neu (z. B. /bluemap reload), bekommt sie die Punkte, sobald sie
+# bereit ist. CamFly braucht keine der Karten und wird auch ohne sie gebaut; passt eine neue Version einer Karte nicht
+# mehr, sagt die Konsole das einmal, und nur diese Karte bekommt keine Punkte. Geht nur mit viewpoints.sharing: true.
+web-map:
+  enabled: true
+  # Auf welchen Karten, sofern sie auf dem Server sind
+  bluemap: true
+  dynmap: true
+  squaremap: true
+  # Ob die Ebene der Punkte auf der Seite der Karte erst ausgeschaltet ist, bis ein Besucher sie einschaltet
+  hidden: false
+  # Wie viele Likes ein öffentlicher Punkt mindestens haben muss, um auf die Karte zu kommen (0 = alle)
+  min-likes: 0
+  # Die Adresse der Karte an einem Punkt, für einen Knopf [Map] hinter jedem öffentlichen Punkt in /cam spot list
+  # (Text: spot-button-map). {world} ist der Name der Welt, {x} {y} {z} der Ort. Wie sie aussieht, hängt an der Karte
+  # und ihrer Einstellung, z. B.:
+  #   BlueMap:   "https://karte.example.de/#{world}:{x}:{y}:{z}:50:0:0:0:0:perspective"
+  #   Dynmap:    "https://karte.example.de/?worldname={world}&mapname=flat&zoom=6&x={x}&y={y}&z={z}"
+  #   squaremap: "https://karte.example.de/?world={world}&zoom=4&x={x}&z={z}"
+  # Bei BlueMap steht vor dem ersten : die ID der Karte aus ihrer Einstellung, nicht immer der Name der Welt.
+  # "" = kein Knopf.
+  link: ""
 
 # Folgen: /cam follow - die Kameras anderer folgen einem Spieler, dem Leader: z. B. durch den Bau, den er zeigt, oder
 # beim Bauen und im Kampf, wenn er nicht im Cam-Modus ist (lead-without-cam). Hieß früher /cam tour - der alte Befehl
@@ -1014,6 +1067,45 @@ cam-time:
 # player-settings.weather: true beginnt der nächste Flug wieder mit ihm, bis /cam weather reset.
 cam-weather:
   enabled: true
+
+# Keine Erze ausspähen: Die Kamera darf in Höhlen, aber die Erze dort sieht sie als den Stein darum herum - nur auf dem
+# Bildschirm des Spielers im Cam-Modus. In der Welt ändert sich nichts, alle anderen sehen sie, wie sie sind, und
+# endet der Cam-Modus, sieht auch er wieder die echten.
+# Ausgeblendet wird ein Erz, das an einer Höhle liegt: neben einem Block, durch den man sieht (Luft, Wasser, Glas,
+# Laub ...), über dem bis zum Himmel kein Block mehr steht. Ein Erz, das unter freiem Himmel offen liegt (an einem
+# Hang, unten in einer Schlucht), bleibt, wie es ist - das sieht man zu Fuß genauso. Eins, das ringsum eingeschlossen
+# ist, sieht ohnehin niemand. In einer Welt ohne Himmel (Nether) zählt jedes offene Erz als eins einer Höhle.
+# Auch ein Erz, das jemand in einen Bau gesetzt hat, sieht unter einem Dach im Cam-Modus aus wie Stein - wer das nicht
+# will, nimmt es aus der Liste.
+# Auf Paper bekommt der Spieler die Erze eines Chunks gleich nach dem Chunk ausgeblendet. Spigot sagt nicht, wann ein
+# Chunk ankommt: Dort wird jede halbe Sekunde nachgesehen und zweimal geschickt - kommt ein Chunk noch später an, zeigt
+# er seine Erze, bis die Kamera weiterfliegt.
+hide-ores:
+  enabled: true
+  # Welches Erz wie aussieht, je eine Zeile Erz: Block (ein Block wie bei border-block, auch mit [Zuständen]). Was hier
+  # nicht steht, bleibt sichtbar. {} = keins.
+  blocks:
+    coal_ore: stone
+    deepslate_coal_ore: deepslate
+    iron_ore: stone
+    deepslate_iron_ore: deepslate
+    copper_ore: stone
+    deepslate_copper_ore: deepslate
+    gold_ore: stone
+    deepslate_gold_ore: deepslate
+    redstone_ore: stone
+    deepslate_redstone_ore: deepslate
+    lapis_ore: stone
+    deepslate_lapis_ore: deepslate
+    emerald_ore: stone
+    deepslate_emerald_ore: deepslate
+    diamond_ore: stone
+    deepslate_diamond_ore: deepslate
+    # Die großen Adern: Eisen in Tuffstein, Kupfer in Granit
+    raw_iron_block: tuff
+    raw_copper_block: granite
+    # Antiker Schrott im Nether. Netherquarz- und Nethergolderz stehen nicht hier: Die liegen dort überall offen.
+    ancient_debris: netherrack
 
 # Kein Ausspähen: Die Kamera taugt nicht dazu, andere Spieler zu suchen. Wer im Cam-Modus ist, sieht andere Spieler nur
 # bis radius Blöcke weit - und die Körper anderer im Cam-Modus, die ja dort stehen, wo diese Spieler wirklich sind, auch

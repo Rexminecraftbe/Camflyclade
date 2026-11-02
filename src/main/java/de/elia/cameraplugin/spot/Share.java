@@ -2,9 +2,7 @@ package de.elia.cameraplugin.spot;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -25,8 +23,12 @@ public final class Share {
     private final Map<UUID, String> players = new LinkedHashMap<>();
     /** The players it was offered to who have not accepted it yet, with their names. */
     private final Map<UUID, String> pending = new LinkedHashMap<>();
-    /** The players who like it, for the public spots. */
-    private final Set<UUID> likes = new LinkedHashSet<>();
+    /**
+     * The players who like it, for the public spots, each with when he liked
+     * it - for the build of the week -, 0 for a like from before that was
+     * kept.
+     */
+    private final Map<UUID, Long> likes = new LinkedHashMap<>();
 
     Share(UUID owner, String ownerName, Spot spot) {
         this.owner = owner;
@@ -46,7 +48,17 @@ public final class Share {
     /** How many players like it. */
     public int likes() { return likes.size(); }
     /** Whether this player likes it. */
-    public boolean isLikedBy(UUID player) { return likes.contains(player); }
+    public boolean isLikedBy(UUID player) { return likes.containsKey(player); }
+    /** How many players have liked it since a moment, as {@link System#currentTimeMillis()} counts, and still do. */
+    public int likesSince(long since) {
+        int count = 0;
+        for (long at : likes.values()) {
+            if (at >= since) {
+                count++;
+            }
+        }
+        return count;
+    }
 
     /** Whether this player may use it: anybody but its owner, while it is public or he accepted it. */
     public boolean isFor(UUID viewer) {
@@ -95,7 +107,9 @@ public final class Share {
         players.clear();
         pending.clear();
     }
-    void addLike(UUID player) { likes.add(player); }
-    boolean removeLike(UUID player) { return likes.remove(player); }
-    Set<UUID> likers() { return Collections.unmodifiableSet(likes); }
+    /** He likes it, since a moment as {@link System#currentTimeMillis()} counts, 0 when nobody knows. */
+    void addLike(UUID player, long at) { likes.put(player, at); }
+    boolean removeLike(UUID player) { return likes.remove(player) != null; }
+    /** Who likes it, each with when he liked it; not to be changed. */
+    Map<UUID, Long> likers() { return Collections.unmodifiableMap(likes); }
 }

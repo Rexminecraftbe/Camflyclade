@@ -4,8 +4,9 @@ main: de.elia.cameraplugin.camfly2.CameraPlugin
 api-version: 26.2
 author: Rexminecraft343
 description: A plugin for a camera mode with an armour stand or mannequin body
-# Only for start-cost.money, found through Vault when it is there.
-softdepend: [Vault]
+# Vault only for start-cost.money, the maps only for web-map: each is found when it is there. Loaded first, so that
+# the public spots get onto a map as soon as the server is up.
+softdepend: [Vault, BlueMap, dynmap, squaremap]
 
 commands:
   cam:

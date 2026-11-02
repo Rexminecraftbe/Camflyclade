@@ -17,19 +17,25 @@ import java.util.Locale;
  * @param created when the spot was first saved, as {@link System#currentTimeMillis()}
  *                counts, for sorting by it; 0 for a spot saved before that was
  *                kept, whose date nobody knows
+ * @param look    the time, weather and night vision its owner had picked for
+ *                himself when he saved it, see {@link SpotLook}
  */
 public record Spot(String name, String world, double x, double y, double z, float yaw, float pitch,
-                   long created) {
+                   long created, SpotLook look) {
 
-    /** The spot of a location, under a name, saved now. */
-    public static Spot at(String name, Location where) {
-        return at(name, where, System.currentTimeMillis());
+    public Spot {
+        if (look == null) {
+            look = SpotLook.NONE;
+        }
     }
 
-    /** The spot of a location, under a name, first saved at a moment before: a spot that is moved keeps its date. */
-    public static Spot at(String name, Location where, long created) {
+    /**
+     * The spot of a location, under a name, with a look of its own, first
+     * saved at a moment before: a spot that is moved keeps its date.
+     */
+    public static Spot at(String name, Location where, long created, SpotLook look) {
         return new Spot(name, where.getWorld() == null ? "" : where.getWorld().getName(),
-                where.getX(), where.getY(), where.getZ(), where.getYaw(), where.getPitch(), created);
+                where.getX(), where.getY(), where.getZ(), where.getYaw(), where.getPitch(), created, look);
     }
 
     /** What the spot is found by: its name, capitals not counting. */
