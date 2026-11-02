@@ -416,8 +416,6 @@ public final class CamSettings {
     private boolean tourMirrorEffects;
     /** Whether they see his frost as theirs, {@code follow.mirror-frost}. */
     private boolean tourMirrorFrost;
-    /** Whether they see his hunger as theirs, {@code follow.mirror-food}. */
-    private boolean tourMirrorFood;
     /** Whether they see his experience bar and level as theirs, {@code follow.mirror-experience}. */
     private boolean tourMirrorExperience;
     /** Whether guests in the guide's view are held turned between the ticks too, {@code follow.fine-hold}. */
@@ -809,7 +807,6 @@ public final class CamSettings {
         tourMirrorHead = config.getBoolean(follow + ".mirror-head", true);
         tourMirrorEffects = config.getBoolean(follow + ".mirror-effects", true);
         tourMirrorFrost = config.getBoolean(follow + ".mirror-frost", true);
-        tourMirrorFood = config.getBoolean(follow + ".mirror-food", false);
         tourMirrorExperience = config.getBoolean(follow + ".mirror-experience", false);
         tourFineHold = config.getBoolean(follow + ".fine-hold", true);
         viewpointsGuestbook = config.getBoolean("viewpoints.guestbook", true);
@@ -1797,11 +1794,6 @@ public final class CamSettings {
     /** Whether the guests see the guide's frost as theirs. */
     public boolean isTourMirrorFrost() {
         return tourMirrorFrost;
-    }
-
-    /** Whether the guests see the guide's hunger as theirs - only while they look round freely. */
-    public boolean isTourMirrorFood() {
-        return tourMirrorFood;
     }
 
     /** Whether the guests see the guide's experience bar and level as theirs. */

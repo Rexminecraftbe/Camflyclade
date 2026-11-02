@@ -22,7 +22,7 @@ import java.util.UUID;
  * the guide's hand in his, the one in the guide's off hand in his, the one on
  * the guide's head on his - a carved pumpkin with the rim it draws round the
  * screen -, the guide's effects and the guide's frost, and if switched on the
- * guide's hunger and experience. How the guide swings the items,
+ * guide's experience. His hunger stays his. How the guide swings the items,
  * {@link GuideSwing} shows.
  *
  * <p>All of it goes to the client of the guest only, through
@@ -37,13 +37,11 @@ import java.util.UUID;
  * hearts or items change, so whatever else the server sends him of his own in
  * between - a hit on his body - does not stay either.</p>
  *
- * <p>Hearts, hunger and experience go out at the end of the tick, like the
- * effects: the server sends the guest his own whenever they change, and the
- * guide's go over that again before his client draws it. Seen through the
- * guide's eyes, a client draws the hearts and the hunger after the guide's
- * body there - the hunger always full, as no client is ever sent another
- * player's -, so the guide's hunger shows only while the guest looks round
- * freely. The experience bar it always draws after its own player.</p>
+ * <p>Hearts and experience go out at the end of the tick, like the effects:
+ * the server sends the guest his own whenever they change, and the guide's go
+ * over that again before his client draws it. The hunger a client draws after
+ * the player it looks through - seen through the guide's eyes always full, as
+ * no client is ever sent another player's -, so it is not mirrored at all.</p>
  *
  * <p>Once he is off the tour, or his guide starts camera mode, which empties
  * the guide's hands, the client is sent his own health and his own empty hands
@@ -97,12 +95,13 @@ final class GuideMirror {
 
     /** What one guest's client was sent last. */
     private static final class Shown {
-        /** Whether the guest's client was sent the guide's hearts or hunger, and what. */
-        boolean vitalsShown;
+        /** Whether the guest's client was sent the guide's hearts, and which. */
+        boolean heartsShown;
         double sentHealth;
-        int sentFood;
-        float sentSaturation;
-        /** The guest's own when they were sent: the server sends him those whenever they change. */
+        /**
+         * The guest's own health and hunger when they were sent: the server
+         * sends him those whenever one of them changes.
+         */
         double ownHealth;
         int ownFood;
         float ownSaturation;
@@ -259,7 +258,7 @@ final class GuideMirror {
             boolean refresh = refreshed || state.effectsAgain;
             state.refreshed = false;
             state.effectsAgain = false;
-            vitals(state.guide, guest, state, refreshed);
+            hearts(state.guide, guest, state, refreshed);
             experience(state.guide, guest, state, refreshed);
             effects(state.guide, guest, state, refresh);
             frost(state.guide, guest, state);
@@ -267,35 +266,28 @@ final class GuideMirror {
     }
 
     /**
-     * Sends the guest the guide's hearts and hunger, as far as switched on -
-     * his own in place of the others -, if they or his own changed, or now
-     * and then. Hearts of 0 never: his client would show the screen of death.
+     * Sends the guest the guide's hearts - with his own hunger -, if they or
+     * his own changed, or now and then. Hearts of 0 never: his client would
+     * show the screen of death.
      */
-    private void vitals(Player guide, Player guest, Shown state, boolean refresh) {
-        boolean hearts = settings.isTourMirrorHealth();
-        boolean hunger = settings.isTourMirrorFood();
-        if (!hearts && !hunger) {
-            if (state.vitalsShown) {
+    private void hearts(Player guide, Player guest, Shown state, boolean refresh) {
+        if (!settings.isTourMirrorHealth()) {
+            if (state.heartsShown) {
                 guest.sendHealthUpdate();
-                state.vitalsShown = false;
+                state.heartsShown = false;
             }
             return;
         }
-        double health = (hearts ? guide : guest).getHealth();
-        int food = (hunger ? guide : guest).getFoodLevel();
-        float saturation = (hunger ? guide : guest).getSaturation();
+        double health = guide.getHealth();
         if (health <= 0.0) {
             return;
         }
         boolean ownChanged = guest.getHealth() != state.ownHealth || guest.getFoodLevel() != state.ownFood
                 || guest.getSaturation() != state.ownSaturation;
-        if (refresh || !state.vitalsShown || ownChanged || health != state.sentHealth || food != state.sentFood
-                || saturation != state.sentSaturation) {
-            guest.sendHealthUpdate(health, food, saturation);
-            state.vitalsShown = true;
+        if (refresh || !state.heartsShown || ownChanged || health != state.sentHealth) {
+            guest.sendHealthUpdate(health, guest.getFoodLevel(), guest.getSaturation());
+            state.heartsShown = true;
             state.sentHealth = health;
-            state.sentFood = food;
-            state.sentSaturation = saturation;
             state.ownHealth = guest.getHealth();
             state.ownFood = guest.getFoodLevel();
             state.ownSaturation = guest.getSaturation();
@@ -429,7 +421,7 @@ final class GuideMirror {
     }
 
     /**
-     * Puts back on his client what is his: his own health and hunger, his own
+     * Puts back on his client what is his: his own health, his own
      * experience, his own hands and head, his own effects and frost - and
      * takes the guide's effects off the guide's body there.
      */
@@ -438,7 +430,7 @@ final class GuideMirror {
         if (state == null) {
             return;
         }
-        if (state.vitalsShown) {
+        if (state.heartsShown) {
             guest.sendHealthUpdate();
         }
         if (state.experienceShown) {
@@ -474,6 +466,6 @@ final class GuideMirror {
     boolean isOn() {
         return settings.isTourMirrorHealth() || settings.isTourMirrorMainHand() || settings.isTourMirrorOffHand()
                 || settings.isTourMirrorHead() || settings.isTourMirrorEffects() || settings.isTourMirrorFrost()
-                || settings.isTourMirrorFood() || settings.isTourMirrorExperience();
+                || settings.isTourMirrorExperience();
     }
 }
