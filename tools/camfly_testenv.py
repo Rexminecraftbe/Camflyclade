@@ -3160,8 +3160,12 @@ def abschalten_checks(env, bot):
         return sorted(p.name for p in ordner.glob("*.yml")) if ordner.exists() else []
 
     def kennt(client, wen, radius=24):
-        """Ob der Client die Entitaet mit dieser Nummer kennt, also sieht."""
-        return any(e.get("id") == wen for e in client.call("entities", radius=radius).get("entities", []))
+        """Ob der Client die Entitaet mit dieser Nummer kennt, also sieht -
+        weil der Server sie ihm geschickt hat. Kommt etwas zu einer Nummer,
+        die er nicht kennt, legt mineflayer eine Entitaet ohne Typ an, die ein
+        echter Client nicht haette: Er laesst das liegen. Die zaehlt nicht."""
+        return any(e.get("id") == wen and e.get("type") != "?"
+                   for e in client.call("entities", radius=radius).get("entities", []))
 
     def folgt():
         befehl(bot, f"/cam tour invite {ZUSCHAUER_NAME}")
