@@ -57,7 +57,7 @@ final class OutOfSight {
             available = true;
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
             if (log != null && PacketSender.isPaper()) {
-                log.log(Level.WARNING, "/cam tour cannot keep the players it hides in the tab list on this version"
+                log.log(Level.WARNING, "/cam follow cannot keep the players it hides in the tab list on this version"
                         + " of the server; they are taken out of it as well: " + ex);
             }
         }

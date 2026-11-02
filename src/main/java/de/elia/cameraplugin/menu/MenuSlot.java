@@ -9,6 +9,11 @@ public interface MenuSlot {
     /** Its section, below {@code menu.buttons} or {@code menu.admin-buttons}. */
     String key();
 
+    /** The section it had before it was renamed, which an older file may still have; {@code null} for none. */
+    default String oldKey() {
+        return null;
+    }
+
     String defaultItem();
 
     int defaultSlot();

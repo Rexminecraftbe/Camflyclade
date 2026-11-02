@@ -94,6 +94,22 @@ public final class SpotModeration {
     }
 
     /**
+     * Whether a restriction keeps this player from looking at this kind of
+     * spots, online or not. Whether one who is offline would get around that
+     * of everybody cannot be asked: it keeps him.
+     */
+    public boolean keepsFromLooking(UUID playerId, SpotBans.Kind kind) {
+        Player online = Bukkit.getPlayer(playerId);
+        if (online != null) {
+            return lookHold(online, kind) != null;
+        }
+        SpotBans.Ban own = bans.get(playerId);
+        SpotBans.Ban all = bans.everybody();
+        return own != null && own.stage(kind) == SpotBans.Stage.NO_LOOK
+                || all != null && all.stage(kind) == SpotBans.Stage.NO_LOOK;
+    }
+
+    /**
      * Whether he may make a new spot of this kind - save one, make one
      * public, share one. If not, he has been told for how long still and why.
      */

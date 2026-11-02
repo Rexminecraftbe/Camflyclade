@@ -13,7 +13,8 @@ public enum MenuButton implements MenuSlot {
     BACK("back", "ender_pearl", 11),
     RESUME("resume", "recovery_compass", 12),
     SPOTS("spots", "filled_map", 10),
-    TOUR("tour", "lead", 9),
+    /** {@code /cam follow}, called {@code tour} before. */
+    FOLLOW("follow", "lead", 9, "tour"),
     PHOTO("photo", "painting", 14),
     TIME("time", "clock", 15),
     WEATHER("weather", "sunflower", 16),
@@ -28,17 +29,28 @@ public enum MenuButton implements MenuSlot {
     private final String key;
     private final String defaultItem;
     private final int defaultSlot;
+    private final String oldKey;
 
     MenuButton(String key, String defaultItem, int defaultSlot) {
+        this(key, defaultItem, defaultSlot, null);
+    }
+
+    MenuButton(String key, String defaultItem, int defaultSlot, String oldKey) {
         this.key = key;
         this.defaultItem = defaultItem;
         this.defaultSlot = defaultSlot;
+        this.oldKey = oldKey;
     }
 
     /** Its section under {@code menu.buttons}. */
     @Override
     public String key() {
         return key;
+    }
+
+    @Override
+    public String oldKey() {
+        return oldKey;
     }
 
     @Override

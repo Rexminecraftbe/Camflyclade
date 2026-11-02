@@ -18,8 +18,16 @@ public class CamCommand implements CommandExecutor {
      * The words after {@code /cam} for what {@code /cam menu} offers as
      * well, which {@code menu.access} may keep to the menu.
      */
-    public static final Set<String> MENU_WORDS = Set.of("back", "resume", "spot", "visit", "tour", "photo",
-            "time", "weather", "nightvision", "stats");
+    public static final Set<String> MENU_WORDS = Set.of("back", "resume", "spot", "visit", "follow", "tour",
+            "photo", "time", "weather", "nightvision", "stats");
+
+    /**
+     * Whether the word after {@code /cam} is the one of {@code /cam follow} -
+     * or {@code tour}, as it was called before, which still goes.
+     */
+    public static boolean isFollowWord(String word) {
+        return word.equalsIgnoreCase("follow") || word.equalsIgnoreCase("tour");
+    }
 
     /**
      * The words after {@code /cam} of the commands for admins, which
@@ -116,7 +124,7 @@ public class CamCommand implements CommandExecutor {
             plugin.getVisit().command(player, Arrays.copyOfRange(args, 1, args.length));
             return true;
         }
-        if (args.length > 0 && args[0].equalsIgnoreCase("tour")) {
+        if (args.length > 0 && isFollowWord(args[0])) {
             plugin.getTour().command(player, Arrays.copyOfRange(args, 1, args.length));
             return true;
         }
@@ -186,7 +194,7 @@ public class CamCommand implements CommandExecutor {
      * well, so that a click on them starts the tour right away.
      */
     private static boolean answersInvitation(String[] args) {
-        return args.length == 3 && args[0].equalsIgnoreCase("tour")
+        return args.length == 3 && isFollowWord(args[0])
                 && (args[1].equalsIgnoreCase("accept") || args[1].equalsIgnoreCase("decline"));
     }
 

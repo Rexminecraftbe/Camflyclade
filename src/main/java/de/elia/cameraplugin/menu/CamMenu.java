@@ -19,6 +19,7 @@ import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.spot.Share;
 import de.elia.cameraplugin.spot.Spot;
 import de.elia.cameraplugin.spot.SpotBans;
+import de.elia.cameraplugin.spot.SpotGuestbook;
 import de.elia.cameraplugin.spot.SpotModeration;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -53,6 +54,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -68,7 +70,7 @@ import java.util.function.ToLongFunction;
  * {@code /cam menu}: what camera mode offers, in a window to click instead of
  * commands to type - starting and ending it, {@code back}, {@code resume},
  * the spots of {@code /cam spot} - private, public and shared with him, each
- * on a tab of its own -, the tour of {@code /cam tour}, {@code photo},
+ * on a tab of its own -, the tour of {@code /cam follow}, {@code photo},
  * {@code time}, {@code weather}, {@code nightvision} and the own
  * {@code stats}; and for admins a page of their own: who is in camera mode
  * ({@code list}, {@code tp}, {@code stop}), the statistics of others, the
@@ -110,12 +112,14 @@ public final class CamMenu implements Listener {
     /** The button back to the main page on the small pages. */
     private static final int SLOT_SMALL_BACK = 22;
     /**
-     * The last row of the pages of the spots: after the button back the
-     * pages, then the tabs, the order next to them, a gap, and on the right
-     * the button for a new spot.
+     * The last row of the pages of the spots: after the button back the page
+     * before, the bell of the guestbook next to the tabs, the tabs, the order
+     * next to them, the page after, and on the right the button for a new
+     * spot.
      */
     private static final int SLOT_SPOT_PREVIOUS = 46;
-    private static final int SLOT_SPOT_NEXT = 47;
+    private static final int SLOT_SPOT_GUESTBOOK = 47;
+    private static final int SLOT_SPOT_NEXT = 52;
     private static final int SLOT_SPOT_SORT = 51;
     private static final int SLOT_SPOT_NEW = 53;
     /** The button that sorts a list of players on the admin pages. */
@@ -505,9 +509,9 @@ public final class CamMenu implements Listener {
             lore.addAll(lines(messages.getMessage("menu-tour-invitations").replace("{count}",
                     String.valueOf(invited))));
         }
-        ItemStack item = labelled(settings.getMenuIcon(MenuButton.TOUR).create(plugin.getLogger()),
+        ItemStack item = labelled(settings.getMenuIcon(MenuButton.FOLLOW).create(plugin.getLogger()),
                 messages.getMessage("menu-tour"), lore);
-        put(page, settings.getMenuSlot(MenuButton.TOUR), shine(item, invited > 0),
+        put(page, settings.getMenuSlot(MenuButton.FOLLOW), shine(item, invited > 0),
                 click -> later(() -> openTour(player, 0)));
     }
 
@@ -550,8 +554,9 @@ public final class CamMenu implements Listener {
      * all his own - the public ones among them -, the public ones of
      * everybody, and those shared with him - the offers he has not accepted
      * yet first. With sharing switched off there are only his own. The last
-     * row: back, the pages, the tabs, the order, and on the right the button
-     * for a new spot - left-click private, right-click public.
+     * row: back, the page before, the bell of the guestbook, the tabs, the
+     * order, the page after, and on the right the button for a new spot -
+     * left-click private, right-click public.
      */
     private void openSpots(Player player, SpotTab wanted, int pageNumber) {
         CamSpots spots = plugin.getSpots();
@@ -617,8 +622,54 @@ public final class CamMenu implements Listener {
         newLore.addAll(lines(messages.getMessage(sharing ? "menu-new-spot-lore-public" : "menu-new-spot-lore")));
         put(page, SLOT_SPOT_NEW, Material.WRITABLE_BOOK, messages.getMessage("menu-new-spot"), newLore,
                 click -> act(player, () -> askName(player, sharing && click.isRightClick())));
+        if (settings.isGuestbookEnabled()) {
+            guestbookButton(player, page, () -> openSpots(player, tab, number));
+        }
         paging(page, number, pages, n -> openSpots(player, tab, n), SLOT_SPOT_PREVIOUS, SLOT_SPOT_NEXT);
         player.openInventory(inventory);
+    }
+
+    /**
+     * The bell of the guestbook: how he hears how often his spots are looked
+     * at and liked, see {@link SpotGuestbook.Mode}, under its name, and under
+     * it every way there is - the one he set marked, the others greyed out -
+     * with how often it tells him while he plays. It shines unless he hears
+     * nothing. A click takes the next way, a right-click the one before, as
+     * the button that sorts a list does. While a restriction keeps him from
+     * the spots of others, it says so instead, and a click does nothing.
+     *
+     * @param again opens the page anew, with the bell as it stands then
+     */
+    private void guestbookButton(Player player, Page page, Runnable again) {
+        SpotGuestbook guestbook = plugin.getGuestbook();
+        UUID id = player.getUniqueId();
+        SpotGuestbook.Mode now = guestbook.modeOf(id);
+        List<SpotGuestbook.Mode> modes = List.of(SpotGuestbook.Mode.values());
+        String minutes = String.valueOf(settings.getGuestbookIntervalMinutes());
+        String name = messages.getMessage("menu-guestbook").replace("{mode}", guestbookMode(now));
+        List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-guestbook-lore")));
+        if (guestbook.isLocked(id)) {
+            lore.addAll(lines(messages.getMessage("menu-guestbook-locked")));
+            put(page, SLOT_SPOT_GUESTBOOK, item(Material.BELL, name, lore), null);
+            return;
+        }
+        for (SpotGuestbook.Mode mode : modes) {
+            lore.addAll(lines(messages.getMessage(mode == now ? "menu-guestbook-option-current"
+                    : "menu-guestbook-option").replace("{mode}", guestbookMode(mode))));
+        }
+        lore.addAll(lines(messages.getMessage("menu-guestbook-interval").replace("{minutes}", minutes)));
+        lore.addAll(lines(messages.getMessage("menu-guestbook-action")));
+        put(page, SLOT_SPOT_GUESTBOOK, shine(item(Material.BELL, name, lore), now != SpotGuestbook.Mode.OFF),
+                click -> later(() -> {
+                    int step = click.isRightClick() ? modes.size() - 1 : 1;
+                    guestbook.set(player, modes.get((modes.indexOf(now) + step) % modes.size()));
+                    again.run();
+                }));
+    }
+
+    /** What a way of the guestbook is called on the bell. */
+    private String guestbookMode(SpotGuestbook.Mode mode) {
+        return messages.getMessage("menu-guestbook-" + mode.name().toLowerCase(Locale.ROOT));
     }
 
     /**
@@ -1084,20 +1135,24 @@ public final class CamMenu implements Listener {
         }
         // Whom he could invite - unless he may not lead; one who may not take
         // part shows up all the same, with why he cannot be invited.
-        if (plugin.isInCameraMode(player) && lead == null) {
+        if (tour.canLead(player) && lead == null) {
             boolean full = tour.isFull(player);
             for (Player other : tour.candidates(player)) {
                 String name = other.getName();
                 TourModeration.Hold kept = moderation.hold(other, TourBans.What.JOIN);
+                long holds = tour.invitationLeft(player, other);
+                long wait = tour.inviteWait(player, other);
                 String key = kept != null ? kept.everybody() ? "menu-tour-candidate-disabled-lore"
                         : "menu-tour-candidate-restricted-lore"
                         : full ? "menu-tour-candidate-full-lore"
-                        : tour.hasInvited(player, other) ? "menu-tour-candidate-invited-lore"
+                        : holds > 0L ? "menu-tour-candidate-invited-lore"
+                        : wait > 0L ? "menu-tour-candidate-wait-lore"
                         : plugin.isInCameraMode(other) ? "menu-tour-candidate-lore"
                         : "menu-tour-candidate-outside-lore";
                 long blocks = Math.round(player.getLocation().distance(other.getLocation()));
                 String lore = messages.getMessage(key).replace("{blocks}", String.valueOf(blocks))
-                        .replace("{max}", String.valueOf(settings.getTourMaxGuests()));
+                        .replace("{max}", String.valueOf(settings.getTourMaxGuests()))
+                        .replace("{expires}", String.valueOf(holds)).replace("{seconds}", String.valueOf(wait));
                 entries.add(slot -> put(page, slot, head(other,
                         messages.getMessage("menu-tour-candidate").replace("{player}", name), lines(lore)),
                         click -> later(() -> {
@@ -1114,7 +1169,7 @@ public final class CamMenu implements Listener {
         }
         if (entries.isEmpty() && lead != null) {
             put(page, 22, tourKept(TourBans.What.LEAD, lead), click -> { });
-        } else if (entries.isEmpty() && plugin.isInCameraMode(player)) {
+        } else if (entries.isEmpty() && tour.canLead(player)) {
             // How close one has to be: out of camera mode to the guide's
             // camera, in camera mode camera to camera.
             double start = settings.getTourStartDistance();
@@ -1282,7 +1337,7 @@ public final class CamMenu implements Listener {
             adminButton(page, AdminButton.SPOTS, "menu-admin-spots", click -> later(() -> openSpotOwners(player, 0)));
         }
         if (plugin.getTourModeration().mayUse(player)) {
-            adminButton(page, AdminButton.TOURS, "menu-admin-tours", click -> later(() -> openTourPlayers(player, 0)));
+            adminButton(page, AdminButton.FOLLOW, "menu-admin-tours", click -> later(() -> openTourPlayers(player, 0)));
         }
         adminButton(page, AdminButton.BACK, "menu-to-main", click -> later(() -> openMain(player)));
         player.openInventory(inventory);

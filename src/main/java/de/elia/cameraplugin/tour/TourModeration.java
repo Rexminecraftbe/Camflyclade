@@ -31,11 +31,17 @@ import java.util.UUID;
  */
 public final class TourModeration {
 
-    /** The right of the admin page of the tours. Operators have it by default. */
-    public static final String PERMISSION = "camplugin.touradmin";
+    /** The right of the admin page of {@code /cam follow}. Operators have it by default. */
+    public static final String PERMISSION = "camplugin.followadmin";
 
-    /** Whoever has this right may lead tours and take part while they are off. Operators have it by default. */
-    public static final String BYPASS = "camplugin.touradmin.bypass";
+    /** Whoever has this right may lead and follow while it is switched off. Operators have it by default. */
+    public static final String BYPASS = "camplugin.followadmin.bypass";
+
+    /** What {@link #PERMISSION} was called while {@code /cam follow} was {@code /cam follow}; it still counts. */
+    private static final String OLD_PERMISSION = "camplugin.touradmin";
+
+    /** What {@link #BYPASS} was called then; it still counts as well. */
+    private static final String OLD_BYPASS = "camplugin.touradmin.bypass";
 
     /**
      * What keeps a player from something.
@@ -61,7 +67,13 @@ public final class TourModeration {
     /** Whether this sender may moderate tours: while tours are on, with the right, or the console. */
     public boolean mayUse(CommandSender sender) {
         return settings.isTourEnabled()
-                && (!(sender instanceof Player player) || player.hasPermission(PERMISSION));
+                && (!(sender instanceof Player player) || player.hasPermission(PERMISSION)
+                || player.hasPermission(OLD_PERMISSION));
+    }
+
+    /** Whether he may lead and follow while it is switched off for everybody, under the right's new name or old one. */
+    private static boolean bypasses(Player player) {
+        return player.hasPermission(BYPASS) || player.hasPermission(OLD_BYPASS);
     }
 
     /** Re-reads the restrictions after {@code /cam reload}, so that changes made in the file by hand count. */
@@ -79,7 +91,7 @@ public final class TourModeration {
             return new Hold(own, false);
         }
         TourBans.Ban all = bans.everybody();
-        if (all != null && all.keeps(what) && !player.hasPermission(BYPASS)) {
+        if (all != null && all.keeps(what) && !bypasses(player)) {
             return new Hold(all, true);
         }
         return null;
@@ -229,7 +241,7 @@ public final class TourModeration {
         boolean change = bans.everybody() != null;
         bans.banEverybody(ban);
         for (Player online : Bukkit.getOnlinePlayers()) {
-            if (online.hasPermission(BYPASS)) {
+            if (bypasses(online)) {
                 continue;
             }
             if (!online.equals(admin)) {
@@ -263,7 +275,7 @@ public final class TourModeration {
             return;
         }
         for (Player online : Bukkit.getOnlinePlayers()) {
-            if (!online.equals(admin) && !online.hasPermission(BYPASS)) {
+            if (!online.equals(admin) && !bypasses(online)) {
                 messages.sendMessage(online, "tour-enabled-now", "{player}", name(admin));
             }
         }

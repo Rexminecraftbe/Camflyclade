@@ -10,19 +10,33 @@ import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.session.ClientFrost;
 import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
+import de.elia.cameraplugin.visibility.VisibilityMode;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.chat.hover.content.Text;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityPotionEffectEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerAnimationEvent;
+import org.bukkit.event.player.PlayerAnimationType;
+import org.bukkit.event.player.PlayerInteractAtEntityEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
@@ -40,13 +54,21 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * The tour, {@code /cam tour}: one camera player shows others round, and
+ * The tour, {@code /cam follow}: one camera player shows others round, and
  * their cameras fly along with his - for a build its builder shows to his
  * friends himself.
  *
+ * <p>With {@code follow.lead-without-cam} the guide need not be in camera mode
+ * himself: the cameras of his guests follow him while he walks round and
+ * builds, and his guests see his hearts and the items in his hands on their
+ * own screen, see {@link GuideMirror}. The names of the tour stand over him as
+ * they would over his camera, see
+ * {@link de.elia.cameraplugin.display.CamNameTag}. Nobody leads a tour in
+ * spectator mode, which flies through walls; nor once he dies.</p>
+ *
  * <p>Who may come along is kept fair: a player in camera mode whose camera
- * is close to the guide's, {@code tour.radius}, or one out of camera mode
- * who stands close to it, {@code tour.start-distance} - his camera mode
+ * is close to the guide's, {@code follow.radius}, or one out of camera mode
+ * who stands close to it, {@code follow.start-distance} - his camera mode
  * starts where he stands once he accepts, with every check and cost of a
  * start of {@code /cam} -, and only once he has accepted the invitation. On the tour his camera keeps
  * every limit of its own - {@code max-distance} and the signal from his own
@@ -54,7 +76,7 @@ import java.util.UUID;
  * guide steers it, but no further than it could fly by itself. Whoever the
  * guide leaves behind that way, his camera stops at its own border, and he
  * and the guide are told in the action bar that the tour ends for him in
- * {@code tour.out-of-reach-seconds}; should the guide come back in time, the
+ * {@code follow.out-of-reach-seconds}; should the guide come back in time, the
  * tour goes on.</p>
  *
  * <p>The camera of a guest is not teleported along every tick: it is given
@@ -64,11 +86,11 @@ import java.util.UUID;
  * behind - the guide jumped to a spot, say - is it put next to him, if he is
  * within its reach.</p>
  *
- * <p>What the guest sees: with {@code tour.guide-view}, on Paper, the world
+ * <p>What the guest sees: with {@code follow.guide-view}, on Paper, the world
  * through the eyes of the guide, as smoothly as spectator mode shows another
  * player, see {@link GuideView}; while the guide is out of his reach, his own
  * camera again, which stands at its border. Otherwise - on Spigot, or after
- * {@code /cam tour view} - he looks round as he likes from his own camera,
+ * {@code /cam follow view} - he looks round as he likes from his own camera,
  * which starts looking the way the guide looks.</p>
  *
  * <p>Those on the same tour - the guide and his guests - are mostly at the
@@ -97,8 +119,8 @@ public final class CamTour implements Listener {
     /** Paper's event at the end of every tick, see {@link #watchTickEnd()}. */
     private static final String TICK_END = "com.destroystokyo.paper.event.server.ServerTickEndEvent";
 
-    /** How long an invitation holds, in milliseconds. */
-    private static final long INVITATION_MILLIS = 60_000L;
+    /** Why the server kicks a player who hits or clicks his own player, see {@link #onSelfInteraction}. */
+    private static final String SELF_INTERACTION = "Cannot interact with self!";
 
     /**
      * How far a guest may fall behind before his camera is put next to the
@@ -126,12 +148,24 @@ public final class CamTour implements Listener {
     private static final int VIEW_REFRESH = 20;
 
     /**
+     * How long a guest is held turned while he still looks through his own
+     * eyes, before he sees through the guide's, in ticks. His client counts
+     * his turns on and on - one and a half turns is 540 degrees -, the server
+     * as -180 to 180: turned to where the server has him, he is put back by
+     * whole turns, and the items in his hands sway after that by a tenth of
+     * it. Through his own eyes his client brings them back to the middle,
+     * halfway each tick; through the guide's it no longer does. So they are
+     * centred first.
+     */
+    private static final int CENTER_TICKS = 10;
+
+    /**
      * How often a guest's frost is sent to his client again, in ticks: sent
      * after the guide, his camera may have been in powder snow on his client
      * only, see {@link ClientFrost}. Between two sends it counts up to this
      * many ticks of 140 - too little frost to be seen.
      */
-    private static final int FROST_REFRESH = 5;
+    static final int FROST_REFRESH = 5;
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
@@ -143,6 +177,11 @@ public final class CamTour implements Listener {
     private final Map<UUID, UUID> guideOf = new HashMap<>();
     /** The invitations each player has, by the id of the guide, until when they hold. */
     private final Map<UUID, Map<UUID, Long>> invitations = new HashMap<>();
+    /**
+     * When each player was last invited, by the id of the guide, while that
+     * guide may not invite him again, see {@code follow.invite-cooldown-seconds}.
+     */
+    private final Map<UUID, Map<UUID, Long>> lastInvited = new HashMap<>();
     /** What moves the guests, while there is a tour at all. */
     private BukkitRunnable task;
     /** Sends what the API does not offer, through the internals of the server. */
@@ -151,6 +190,14 @@ public final class CamTour implements Listener {
     private final GuideView view = new GuideView(sender);
     /** The internals that hide players from a client and leave them in its tab list. */
     private final OutOfSight outOfSight = new OutOfSight(sender);
+    /** What the guests of a guide out of camera mode see of him on their own screen. */
+    private final GuideMirror mirror;
+    /** The internals that swing a guest's arm on his own client as his guide swings his. */
+    private final GuideSwing swing = new GuideSwing(sender);
+    /** Holds guests who see through the guide's eyes turned between the ticks too. */
+    private final FineHold fineHold = new FineHold(sender);
+    /** The internals that show a guest the frost of his guide as his own. */
+    private final GuideFrost frost = new GuideFrost(sender);
     /** Who looks round freely on tours instead of through the guide's eyes, while he is online. */
     private final Set<UUID> freeLook = new HashSet<>();
     /** The players the tour hid from each viewer with {@code hidePlayer}, see {@link #syncVisibility}. */
@@ -186,6 +233,11 @@ public final class CamTour implements Listener {
         boolean viewing;
         /** Ticks since the guide's view was last sent. */
         int sinceView;
+        /** Where he is held turned while he sees through the guide's eyes, see {@link #holdTurned}. */
+        float yaw;
+        float pitch;
+        /** Ticks he was held turned before seeing through the guide's eyes, see {@link #CENTER_TICKS}. */
+        int centered;
         /** Ticks since his frost was last sent to his client. */
         int sinceFrost;
     }
@@ -195,9 +247,10 @@ public final class CamTour implements Listener {
         this.settings = plugin.getSettings();
         this.messages = plugin.getMessages();
         this.cameraPlayers = plugin.getCameraPlayers();
+        this.mirror = new GuideMirror(settings, frost);
     }
 
-    /** Whether {@code /cam tour} is there at all. */
+    /** Whether {@code /cam follow} is there at all. */
     public boolean isEnabled() {
         return settings.isTourEnabled();
     }
@@ -209,6 +262,9 @@ public final class CamTour implements Listener {
     public void load(ConsoleLog log) {
         view.load(settings.isTourEnabled() && settings.isTourGuideView() ? log : null);
         outOfSight.load(settings.isTourEnabled() ? log : null);
+        swing.load(settings.isTourEnabled() && settings.isTourMirrorSwing() ? log : null);
+        fineHold.load(settings.isTourEnabled() && settings.isTourGuideView() && settings.isTourFineHold() ? log : null);
+        frost.load(settings.isTourEnabled() && settings.isTourMirrorFrost() ? log : null);
     }
 
     /**
@@ -216,8 +272,9 @@ public final class CamTour implements Listener {
      * the clients are told once more who is gone, see {@link OutOfSight},
      * after the server has sent everything of that tick. A player it paired
      * with a client anew during the tick is gone again before the client
-     * draws him. Without the event, the tour's own tick does it, at the start
-     * of the next one.
+     * draws him. The guide's effects and frost go to his guests there too,
+     * see {@link GuideMirror#tickEnd}. Without the event, the tour's own tick
+     * does both, at its end.
      */
     public void watchTickEnd() {
         Class<? extends Event> event;
@@ -230,6 +287,7 @@ public final class CamTour implements Listener {
         }, EventPriority.MONITOR, (listener, fired) -> {
             if (event.isInstance(fired)) {
                 forgetAgain();
+                mirror.tickEnd();
             }
         }, plugin);
         tickEnd = true;
@@ -246,7 +304,7 @@ public final class CamTour implements Listener {
     }
 
     /**
-     * {@code /cam tour view}: switches between the guide's view and looking
+     * {@code /cam follow view}: switches between the guide's view and looking
      * round freely, for the tour he follows and the ones after it.
      */
     public void toggleView(Player guest) {
@@ -456,10 +514,43 @@ public final class CamTour implements Listener {
         return tours.containsKey(player.getUniqueId());
     }
 
+    /**
+     * Whether he could show others round from where he is, follows no tour
+     * aside: in camera mode, or - with {@code follow.lead-without-cam} - out of
+     * it, as long as he is alive and not in spectator mode.
+     */
+    public boolean canLead(Player player) {
+        if (cameraPlayers.contains(player.getUniqueId())) {
+            return true;
+        }
+        return settings.isTourLeadWithoutCam() && !player.isDead() && player.getGameMode() != GameMode.SPECTATOR;
+    }
+
+    /** Whether he shows others round right now out of camera mode, while he walks round and builds, say. */
+    public boolean guidesWithoutCam(Player player) {
+        return isGuiding(player) && !cameraPlayers.contains(player.getUniqueId());
+    }
+
     /** The guide he follows, or {@code null}. */
     public Player guideOf(Player player) {
         UUID guide = guideOf.get(player.getUniqueId());
         return guide == null ? null : Bukkit.getPlayer(guide);
+    }
+
+    /**
+     * The guide whose eyes this guest sees through right now, or {@code null}
+     * while he sees through his own camera. Meanwhile his client tells the
+     * server nothing of where his own camera is - the tour drags it after the
+     * guide, and the server learns where only now and then, see
+     * {@link #CATCH_UP} -, nor which way he looks, as he is held turned. What
+     * is measured from where he sees, the way to his body or his signal, is
+     * measured from the guide.
+     */
+    public Player seenThrough(Player guest) {
+        UUID guideId = guideOf.get(guest.getUniqueId());
+        Tour tour = guideId == null ? null : tours.get(guideId);
+        Guest state = tour == null ? null : tour.guests.get(guest.getUniqueId());
+        return state != null && state.viewing ? Bukkit.getPlayer(guideId) : null;
     }
 
     /** His guests, in the order they joined. */
@@ -482,7 +573,7 @@ public final class CamTour implements Listener {
         return guideOf.containsKey(player.getUniqueId());
     }
 
-    /** Whether his tour takes no more guests: {@code tour.max-guests}, 0 for no limit. */
+    /** Whether his tour takes no more guests: {@code follow.max-guests}, 0 for no limit. */
     public boolean isFull(Player guide) {
         Tour tour = tours.get(guide.getUniqueId());
         int max = settings.getTourMaxGuests();
@@ -545,21 +636,42 @@ public final class CamTour implements Listener {
 
     /** Whether the guide has invited him and the invitation still holds. */
     public boolean hasInvited(Player guide, Player other) {
+        return invitationLeft(guide, other) > 0L;
+    }
+
+    /** For how many seconds still the guide's invitation of him holds, 0 if there is none. */
+    public long invitationLeft(Player guide, Player other) {
         Map<UUID, Long> own = invitations.get(other.getUniqueId());
         Long until = own == null ? null : own.get(guide.getUniqueId());
-        return until != null && until >= System.currentTimeMillis();
+        return until == null ? 0L : seconds(until - System.currentTimeMillis());
+    }
+
+    /**
+     * For how many seconds still the guide may not invite him again, see
+     * {@code follow.invite-cooldown-seconds}; 0 once he may.
+     */
+    public long inviteWait(Player guide, Player other) {
+        Map<UUID, Long> own = lastInvited.get(other.getUniqueId());
+        Long at = own == null ? null : own.get(guide.getUniqueId());
+        return at == null ? 0L
+                : seconds(at + settings.getTourInviteCooldownSeconds() * 1000L - System.currentTimeMillis());
+    }
+
+    /** Milliseconds left as whole seconds, rounded up; 0 for none left. */
+    private static long seconds(long millis) {
+        return millis <= 0L ? 0L : (millis + 999L) / 1000L;
     }
 
     /**
      * Whom he could invite now, by name: players in camera mode whose camera
-     * is within {@code tour.radius} of his, and players out of camera mode
-     * within {@code tour.start-distance} of it - on no tour, and able to
+     * is within {@code follow.radius} of his, and players out of camera mode
+     * within {@code follow.start-distance} of it - on no tour, and able to
      * follow him from where they are. Nobody while he follows a tour himself
-     * or is not in camera mode.
+     * or cannot lead one, see {@link #canLead}.
      */
     public List<Player> candidates(Player guide) {
         List<Player> found = new ArrayList<>();
-        if (!cameraPlayers.contains(guide.getUniqueId()) || guideOf.containsKey(guide.getUniqueId())) {
+        if (!canLead(guide) || guideOf.containsKey(guide.getUniqueId())) {
             return found;
         }
         Tour tour = tours.get(guide.getUniqueId());
@@ -576,7 +688,7 @@ public final class CamTour implements Listener {
     /**
      * Whether a player could come along on the guide's tour from where he is:
      * in camera mode, on no tour, close and within reach; out of camera mode,
-     * within {@code tour.start-distance} of the guide's camera, which his
+     * within {@code follow.start-distance} of the guide's camera, which his
      * camera could reach once it starts where he stands.
      */
     private boolean mayJoin(Player guide, Player other) {
@@ -621,7 +733,7 @@ public final class CamTour implements Listener {
                 && !tours.containsKey(player.getUniqueId());
     }
 
-    /** Whether the cameras of the two are within {@code tour.radius} of each other. */
+    /** Whether the cameras of the two are within {@code follow.radius} of each other. */
     private boolean near(Player guide, Player other) {
         Location a = guide.getLocation();
         Location b = other.getLocation();
@@ -631,11 +743,15 @@ public final class CamTour implements Listener {
 
     /**
      * Whether the guide would see the other one but for camera mode: a
-     * player a vanish plugin hides is no one to invite.
+     * player a vanish plugin hides is no one to invite. A guide out of camera
+     * mode does not see a camera player under
+     * {@code player_visibility_mode: cam}, which is camera mode as well.
      */
     private boolean seen(Player guide, Player other) {
         return guide.canSee(other) || plugin.getPhotoMode().hides(guide, other)
-                || plugin.getScoutGuard().hides(guide, other);
+                || plugin.getScoutGuard().hides(guide, other)
+                || settings.getPlayerVisibilityMode() == VisibilityMode.CAM
+                && cameraPlayers.contains(other.getUniqueId()) && !cameraPlayers.contains(guide.getUniqueId());
     }
 
     /**
@@ -667,7 +783,7 @@ public final class CamTour implements Listener {
 
     // ------------------------------------------------------------ commands
 
-    /** {@code /cam tour}, with what follows it. */
+    /** {@code /cam follow}, with what follows it. */
     public void command(Player player, String[] args) {
         if (!isEnabled()) {
             messages.sendConfiguredMessage(player, "tour-off");
@@ -719,6 +835,12 @@ public final class CamTour implements Listener {
             messages.sendConfiguredMessage(guide, "tour-already-guest", "{player}", other.getName());
             return;
         }
+        long wait = inviteWait(guide, other);
+        if (wait > 0L) {
+            messages.sendConfiguredMessage(guide, "tour-invite-wait", "{player}", other.getName(),
+                    "{seconds}", String.valueOf(wait));
+            return;
+        }
         if (!plugin.getTourModeration().checkGuest(guide, other)) {
             return;
         }
@@ -745,17 +867,23 @@ public final class CamTour implements Listener {
             messages.sendConfiguredMessage(guide, "tour-out-of-reach", "{player}", other.getName());
             return;
         }
+        long now = System.currentTimeMillis();
+        int holds = settings.getTourInvitationSeconds();
         invitations.computeIfAbsent(other.getUniqueId(), id -> new HashMap<>())
-                .put(guide.getUniqueId(), System.currentTimeMillis() + INVITATION_MILLIS);
-        messages.sendConfiguredMessage(guide, "tour-invited", "{player}", other.getName());
-        tellInvited(other, guide);
+                .put(guide.getUniqueId(), now + holds * 1000L);
+        forgetWaits(now);
+        lastInvited.computeIfAbsent(other.getUniqueId(), id -> new HashMap<>()).put(guide.getUniqueId(), now);
+        messages.sendConfiguredMessage(guide, "tour-invited", "{player}", other.getName(),
+                "{seconds}", String.valueOf(holds));
+        tellInvited(other, guide, holds);
         settings.getTourInviteSound().play(other);
     }
 
     /**
-     * Whether he may show others round: no restriction keeps him from it, in
-     * camera mode, and following no tour himself. If not, he has been told
-     * why.
+     * Whether he may show others round: no restriction keeps him from it, he
+     * can lead one from where he is - in camera mode, or out of it with
+     * {@code follow.lead-without-cam} -, and he follows no tour himself. If not,
+     * he has been told why.
      */
     private boolean checkGuide(Player guide) {
         if (!isEnabled()) {
@@ -765,8 +893,9 @@ public final class CamTour implements Listener {
         if (!plugin.getTourModeration().check(guide, TourBans.What.LEAD)) {
             return false;
         }
-        if (!cameraPlayers.contains(guide.getUniqueId())) {
-            messages.sendConfiguredMessage(guide, "tour-not-in-cam");
+        if (!canLead(guide)) {
+            messages.sendConfiguredMessage(guide, settings.isTourLeadWithoutCam() ? "tour-guide-spectator"
+                    : "tour-not-in-cam");
             return false;
         }
         if (guideOf.containsKey(guide.getUniqueId())) {
@@ -776,15 +905,31 @@ public final class CamTour implements Listener {
         return true;
     }
 
-    /** Tells a player that he is invited, with the buttons to accept and to turn it down. */
-    private void tellInvited(Player other, Player guide) {
+    /**
+     * Forgets whom the guides invited when they may invite them again
+     * anyway: kept no longer than needed, even of players long gone.
+     */
+    private void forgetWaits(long now) {
+        long cooldown = settings.getTourInviteCooldownSeconds() * 1000L;
+        for (Map<UUID, Long> own : lastInvited.values()) {
+            own.values().removeIf(at -> at + cooldown <= now);
+        }
+        lastInvited.values().removeIf(Map::isEmpty);
+    }
+
+    /**
+     * Tells a player that he is invited, and for how many seconds, with the
+     * buttons to accept and to turn it down.
+     */
+    private void tellInvited(Player other, Player guide, int seconds) {
         if (!messages.isMessageEnabled("tour-invitation")) {
             return;
         }
-        String text = messages.getMessage("tour-invitation").replace("{player}", guide.getName());
+        String text = messages.getMessage("tour-invitation").replace("{player}", guide.getName())
+                .replace("{seconds}", String.valueOf(seconds));
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
-        line.addAll(button("tour-button-accept", guide.getName(), "/cam tour accept " + guide.getName()));
-        line.addAll(button("tour-button-decline", guide.getName(), "/cam tour decline " + guide.getName()));
+        line.addAll(button("tour-button-accept", guide.getName(), "/cam follow accept " + guide.getName()));
+        line.addAll(button("tour-button-decline", guide.getName(), "/cam follow decline " + guide.getName()));
         other.spigot().sendMessage(line.toArray(new BaseComponent[0]));
     }
 
@@ -835,9 +980,10 @@ public final class CamTour implements Listener {
                     : guide.getName());
             return;
         }
-        if (!cameraPlayers.contains(guide.getUniqueId()) || guideOf.containsKey(guide.getUniqueId())) {
+        if (!canLead(guide) || guideOf.containsKey(guide.getUniqueId())) {
             invitations.get(guest.getUniqueId()).remove(guide.getUniqueId());
-            messages.sendConfiguredMessage(guest, "tour-guide-gone", "{player}", guide.getName());
+            messages.sendConfiguredMessage(guest, settings.isTourLeadWithoutCam() ? "tour-guide-cannot-lead"
+                    : "tour-guide-gone", "{player}", guide.getName());
             return;
         }
         if (isFull(guide)) {
@@ -862,7 +1008,7 @@ public final class CamTour implements Listener {
 
     /**
      * Accepts an invitation out of camera mode: if he stands within
-     * {@code tour.start-distance} of the guide's camera, which his camera
+     * {@code follow.start-distance} of the guide's camera, which his camera
      * could reach from there, camera mode starts where he stands, and he
      * joins once it has.
      */
@@ -885,7 +1031,7 @@ public final class CamTour implements Listener {
         }
         plugin.getStarter().startThen(guest, () -> {
             if (cameraPlayers.contains(guest.getUniqueId()) && hasInvited(guide, guest)
-                    && cameraPlayers.contains(guide.getUniqueId()) && !guideOf.containsKey(guide.getUniqueId())) {
+                    && canLead(guide) && !guideOf.containsKey(guide.getUniqueId())) {
                 join(guest, guide);
             }
         });
@@ -941,7 +1087,7 @@ public final class CamTour implements Listener {
 
     /**
      * Takes him off the tour he follows, if he follows one: from
-     * {@code /cam tour leave}, the menu, or a jump of his own. The guide
+     * {@code /cam follow leave}, the menu, or a jump of his own. The guide
      * hears about it.
      */
     public void leave(Player guest) {
@@ -957,7 +1103,7 @@ public final class CamTour implements Listener {
         }
     }
 
-    /** {@code /cam tour kick <player>}: sends one of his guests away. */
+    /** {@code /cam follow kick <player>}: sends one of his guests away. */
     public void kick(Player guide, Player guest, String name) {
         Tour tour = tours.get(guide.getUniqueId());
         if (guest == null || tour == null || !tour.guests.containsKey(guest.getUniqueId())) {
@@ -970,7 +1116,7 @@ public final class CamTour implements Listener {
         messages.sendConfiguredMessage(guide, "tour-kicked-guide", "{player}", guest.getName());
     }
 
-    /** {@code /cam tour end}: ends his tour for every guest. */
+    /** {@code /cam follow end}: ends his tour for every guest. */
     public void end(Player guide) {
         if (!tours.containsKey(guide.getUniqueId())) {
             messages.sendConfiguredMessage(guide, "tour-not-guiding");
@@ -1013,7 +1159,11 @@ public final class CamTour implements Listener {
         }
         guideOf.remove(guestId);
         Player guest = Bukkit.getPlayer(guestId);
-        if (guest != null) {
+        if (guest == null) {
+            mirror.forget(guestId);
+        } else {
+            // His own hearts and hands back on his screen.
+            mirror.clear(guest);
             // His own camera back, whatever the tour thought his client saw:
             // a client left seeing through a guide would stay there, through
             // the end of camera mode and the guide leaving, until he joins
@@ -1086,9 +1236,143 @@ public final class CamTour implements Listener {
         }
     }
 
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onGuestInteract(PlayerInteractEvent event) {
+        mirrorAgain(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onGuestInteractEntity(PlayerInteractEntityEvent event) {
+        mirrorAgain(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onGuestInteractAtEntity(PlayerInteractAtEntityEvent event) {
+        mirrorAgain(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onGuestInventoryClick(InventoryClickEvent event) {
+        mirrorAgain(event.getWhoClicked());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onGuestInventoryDrag(InventoryDragEvent event) {
+        mirrorAgain(event.getWhoClicked());
+    }
+
+    /**
+     * A guide out of camera mode swings his arm - hits, digs, and up to 26.2
+     * places blocks -: his guests who are shown his items see the arm that
+     * holds them swing, with {@code follow.mirror-swing}, see
+     * {@link GuideSwing}. Up to 26.2 their clients answer with a swing of
+     * their own, which leads no tour.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onGuideSwing(PlayerAnimationEvent event) {
+        swingGuests(event.getPlayer(), event.getAnimationType() == PlayerAnimationType.OFF_ARM_SWING, false);
+    }
+
+    /**
+     * A guide out of camera mode places a block: the item in his hand sinks
+     * and comes up again - on his guests' screens too, see
+     * {@link GuideMirror#placed}. Since 26.3 his client no longer tells the
+     * server it swung for that either: the server swings his arm itself, and
+     * no plugin hears of it - so his guests are sent the swing from here, see
+     * {@link GuideSwing#serverSwingsOnUse}. Up to 26.2 the swing his client
+     * reports does it, see {@link #onGuideSwing}.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onGuidePlace(BlockPlaceEvent event) {
+        Player guide = event.getPlayer();
+        boolean offHand = event.getHand() == EquipmentSlot.OFF_HAND;
+        boolean swings = settings.isTourMirrorSwing() && swing.serverSwingsOnUse();
+        for (Player guest : shownGuests(guide)) {
+            mirror.placed(guest.getUniqueId(), offHand);
+            if (swings) {
+                swing.swing(guest, guide, offHand, true);
+            }
+        }
+    }
+
+    /**
+     * Swings the arm of every guest of this guide who is shown his items, as
+     * the guide's swung: at a hit, or at a use of the item.
+     */
+    private void swingGuests(Player guide, boolean offHand, boolean use) {
+        if (settings.isTourMirrorSwing()) {
+            for (Player guest : shownGuests(guide)) {
+                swing.swing(guest, guide, offHand, use);
+            }
+        }
+    }
+
+    /** The guests online who are shown this guide, while he leads out of camera mode. */
+    private List<Player> shownGuests(Player guide) {
+        Tour tour = tours.get(guide.getUniqueId());
+        List<Player> guests = new ArrayList<>();
+        if (tour == null || cameraPlayers.contains(guide.getUniqueId())) {
+            return guests;
+        }
+        for (UUID id : tour.guests.keySet()) {
+            Player guest = Bukkit.getPlayer(id);
+            if (guest != null && mirror.isShown(id)) {
+                guests.add(guest);
+            }
+        }
+        return guests;
+    }
+
+    /**
+     * Keeps a guest on the server whose client hits or clicks his own player.
+     * Seeing through the guide's eyes, he aims from them - and his own
+     * player stands right there, around them: his client finds itself under
+     * the crosshair, and a click goes to himself. The server answers that
+     * with a kick, "Cannot interact with self!", after asking the plugins;
+     * turned down here, the click is only lost, as any click of a guest is.
+     */
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onSelfInteraction(PlayerKickEvent event) {
+        if (guideOf.containsKey(event.getPlayer().getUniqueId()) && SELF_INTERACTION.equals(event.getReason())) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Sends the guide's items and hearts to this guest again at the next
+     * tick of the tour, if he is shown them.
+     *
+     * <p>What he holds is only a picture of the guide's items, see
+     * {@link GuideMirror}, and his client uses it like his own. Whatever the
+     * server turns down of that - a click on a block, on a body, into his
+     * inventory - it answers with his own empty hands, and the pictures would
+     * be gone until their next refresh, flickering away. Paper handles what
+     * the clients sent at the start of a tick, before the tour's own tick, so
+     * they go out again in that very tick.</p>
+     */
+    private void mirrorAgain(HumanEntity guest) {
+        if (guideOf.containsKey(guest.getUniqueId())) {
+            mirror.again(guest.getUniqueId());
+        }
+    }
+
+    /**
+     * The effects of a guest change on the server - the night vision camera
+     * mode gives him, say -, and the server sends him the change at once:
+     * those of his guide he is shown go out again at the end of the tick,
+     * over it, see {@link GuideMirror}.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onGuestEffect(EntityPotionEffectEvent event) {
+        if (event.getEntity() instanceof Player guest && guideOf.containsKey(guest.getUniqueId())) {
+            mirror.effectsAgain(guest.getUniqueId());
+        }
+    }
+
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         stopFor(event.getPlayer());
+        mirror.forget(event.getPlayer().getUniqueId());
         freeLook.remove(event.getPlayer().getUniqueId());
         hidden.remove(event.getPlayer().getUniqueId());
         forgotten.remove(event.getPlayer().getUniqueId());
@@ -1101,7 +1385,9 @@ public final class CamTour implements Listener {
             endTour(guide, player == null ? "" : player.getName());
         }
         invitations.clear();
+        lastInvited.clear();
         stopTask();
+        fineHold.stop();
     }
 
     // ------------------------------------------------------------ following
@@ -1133,10 +1419,11 @@ public final class CamTour implements Listener {
             UUID guideId = entry.getKey();
             Tour tour = entry.getValue();
             Player guide = Bukkit.getPlayer(guideId);
-            if (guide == null || !cameraPlayers.contains(guideId)) {
+            if (guide == null || !canLead(guide)) {
                 endTour(guideId, guide == null ? "" : guide.getName());
                 continue;
             }
+            boolean mirrored = !cameraPlayers.contains(guideId) && mirror.isOn();
             Location at = guide.getLocation();
             Vector step = tour.last != null && tour.last.getWorld().equals(at.getWorld())
                     ? at.toVector().subtract(tour.last.toVector()) : new Vector();
@@ -1158,19 +1445,37 @@ public final class CamTour implements Listener {
                     away.add(guest.getName());
                     soonest = Math.min(soonest, left);
                 }
+                if (!tour.guests.containsKey(next.getKey())) {
+                    continue;
+                }
+                if (mirrored) {
+                    mirror.update(guide, guest);
+                } else {
+                    // Nothing to see of him: a guide who started camera mode
+                    // holds nothing any more.
+                    mirror.clear(guest);
+                }
                 if (++state.sinceFrost >= FROST_REFRESH) {
                     state.sinceFrost = 0;
-                    ClientFrost.resend(guest);
+                    // Shown his guide's frost, he is sent that one, see GuideMirror.
+                    if (!mirror.showsFrost(next.getKey())) {
+                        ClientFrost.resend(guest);
+                    }
                 }
             }
             if (!tours.containsKey(guideId)) {
                 continue;
             }
             warnGuide(guide, tour, away, soonest);
+            if (!cameraPlayers.contains(guideId)) {
+                // Over a guide out of camera mode only while guests follow him closely.
+                plugin.getNameTag().keepOverGuide(guide);
+            }
         }
         syncVisibility();
         if (!tickEnd) {
             forgetAgain();
+            mirror.tickEnd();
         }
     }
 
@@ -1265,7 +1570,20 @@ public final class CamTour implements Listener {
             unview(guest, state);
             return;
         }
-        if (state.viewing && ++state.sinceView < VIEW_REFRESH) {
+        if (!state.viewing) {
+            // Centred first, while he still looks through his own eyes, see
+            // CENTER_TICKS - then through the guide's.
+            if (state.centered == 0) {
+                Location at = guest.getLocation();
+                state.yaw = at.getYaw();
+                state.pitch = at.getPitch();
+            }
+            holdTurned(guest, state);
+            if (++state.centered < CENTER_TICKS) {
+                return;
+            }
+        } else if (++state.sinceView < VIEW_REFRESH) {
+            holdTurned(guest, state);
             return;
         }
         // A send that fails changes nothing on the client: whatever it saw
@@ -1274,10 +1592,30 @@ public final class CamTour implements Listener {
             state.viewing = true;
         }
         state.sinceView = 0;
+        holdTurned(guest, state);
+    }
+
+    /**
+     * Turns a guest who sees through the guide's eyes back to where he is
+     * held, every tick. His mouse still turns him on his client, which nobody
+     * sees - but his client draws the items in his hands after it, see
+     * {@link GuideMirror}, and while he does not look through his own eyes,
+     * it lets them sway by every turn without ever bringing them back: they
+     * would hang askew in the guide's view. Turned back every tick, they still
+     * tremble while he moves the mouse - less so held between the ticks too,
+     * see {@link FineHold}.
+     */
+    private void holdTurned(Player guest, Guest state) {
+        guest.setRotation(state.yaw, state.pitch);
+        if (state.viewing && settings.isTourFineHold()) {
+            fineHold.hold(guest, state.yaw, state.pitch);
+        }
     }
 
     /** Gives a guest who sees through the eyes of his guide his own camera back. */
     private void unview(Player guest, Guest state) {
+        fineHold.release(guest);
+        state.centered = 0;
         if (state.viewing) {
             view.show(guest, guest);
             state.viewing = false;

@@ -11,22 +11,34 @@ public enum AdminButton implements MenuSlot {
     STATS("stats", "bookshelf", 14),
     TRAILS("trails", "lead", 16),
     SPOTS("spots", "filled_map", 20),
-    TOURS("tours", "saddle", 24),
+    /** Who may lead and follow, called {@code tours} before. */
+    FOLLOW("follow", "saddle", 24, "tours"),
     BACK("back", "arrow", 22);
 
     private final String key;
     private final String defaultItem;
     private final int defaultSlot;
+    private final String oldKey;
 
     AdminButton(String key, String defaultItem, int defaultSlot) {
+        this(key, defaultItem, defaultSlot, null);
+    }
+
+    AdminButton(String key, String defaultItem, int defaultSlot, String oldKey) {
         this.key = key;
         this.defaultItem = defaultItem;
         this.defaultSlot = defaultSlot;
+        this.oldKey = oldKey;
     }
 
     @Override
     public String key() {
         return key;
+    }
+
+    @Override
+    public String oldKey() {
+        return oldKey;
     }
 
     @Override

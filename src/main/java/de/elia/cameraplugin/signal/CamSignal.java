@@ -244,7 +244,9 @@ public final class CamSignal {
      * it came out of, at the height of his eyes.
      */
     private double measure(Player player, CameraData data) {
-        Location eyes = player.getEyeLocation();
+        // Through the eyes of a guide his camera is there, see CamTour#seenThrough.
+        Player through = plugin.getTour().seenThrough(player);
+        Location eyes = (through != null ? through : player).getEyeLocation();
         Location anchor = plugin.getMovementGuard().distanceAnchor(data, eyes);
         if (anchor == null) {
             return 0.0;
