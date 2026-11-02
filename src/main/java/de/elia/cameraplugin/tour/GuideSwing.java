@@ -9,8 +9,8 @@ import java.util.logging.Level;
 
 /**
  * The swing of a guide out of camera mode, on the screens of his guests,
- * {@code follow.mirror-swing}: when he swings his arm - hits, digs -, each
- * guest sees the arm that holds the guide's item swing, see
+ * {@code follow.mirror-swing}: when he swings his arm - hits, digs, places a
+ * block -, each guest sees the arm that holds the guide's item swing, see
  * {@link GuideMirror}.
  *
  * <p>The game tells a client that an entity swings its arm with a packet.
@@ -22,7 +22,9 @@ import java.util.logging.Level;
  * 26.3 means something else, the first one waking a sleeper -, from 26.3 on
  * {@code ClientboundSwingAnimationPacket}, with the hand and how the item in
  * it swings. Whichever the server has, is used; the numbers are read from the
- * server, never assumed.</p>
+ * server, never assumed. Since 26.3, too, the client no longer reports the
+ * swing that comes with a use - placing a block -: the server swings the arm
+ * itself, and plugins do not hear of it, see {@link #serverSwingsOnUse}.</p>
  *
  * <p>Up to 26.2, his client then tells the server it swung, as after a click
  * of his own. The server lets nobody see that - nobody sees a guest who
@@ -130,11 +132,21 @@ final class GuideSwing {
     }
 
     /**
+     * Whether the server swings a player's arm itself after a use - placing
+     * a block -, since 26.3, with the packet of its own: the client no longer
+     * reports that swing, so a guide's is heard nowhere but at the use. Up to
+     * 26.2 the client reports it, like a hit.
+     */
+    boolean serverSwingsOnUse() {
+        return available && swingPacket != null;
+    }
+
+    /**
      * Swings the guest's arm on his own client as the guide swung his: the
      * arm of the item in his hand, or of the one in his other hand - since
-     * 26.3 the way the guide's item swings.
+     * 26.3 the way the guide's item swings, at a hit or at a use.
      */
-    void swing(Player guest, Player guide, boolean offHand) {
+    void swing(Player guest, Player guide, boolean offHand, boolean use) {
         if (!available) {
             return;
         }
@@ -143,7 +155,7 @@ final class GuideSwing {
             if (swingPacket != null) {
                 Object hand = offHand ? this.offHand : mainHand;
                 Object item = itemInHand.invoke(sender.handleOf(guide), hand);
-                Object animation = (offHand ? interactAnimation : attackAnimation).invoke(item);
+                Object animation = (offHand || use ? interactAnimation : attackAnimation).invoke(item);
                 packet = swingPacket.newInstance(sender.handleOf(guest), hand, animation);
             } else {
                 packet = animatePacket.newInstance(sender.handleOf(guest), offHand ? offHandAction : mainHandAction);

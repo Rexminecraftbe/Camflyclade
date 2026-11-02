@@ -25,6 +25,7 @@ import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityPotionEffectEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -35,6 +36,7 @@ import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
@@ -1244,23 +1246,44 @@ public final class CamTour implements Listener {
     }
 
     /**
-     * A guide out of camera mode swings his arm - hits, digs -: his guests
-     * who are shown his items see the arm that holds them swing, with
-     * {@code follow.mirror-swing}, see {@link GuideSwing}. Up to 26.2 their
-     * clients answer with a swing of their own, which leads no tour.
+     * A guide out of camera mode swings his arm - hits, digs, and up to 26.2
+     * places blocks -: his guests who are shown his items see the arm that
+     * holds them swing, with {@code follow.mirror-swing}, see
+     * {@link GuideSwing}. Up to 26.2 their clients answer with a swing of
+     * their own, which leads no tour.
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onGuideSwing(PlayerAnimationEvent event) {
-        Player guide = event.getPlayer();
+        swingGuests(event.getPlayer(), event.getAnimationType() == PlayerAnimationType.OFF_ARM_SWING, false);
+    }
+
+    /**
+     * A guide out of camera mode places a block. Since 26.3 his client no
+     * longer tells the server it swung for that: the server swings his arm
+     * itself, and no plugin hears of it - so his guests are sent the swing
+     * from here, see {@link GuideSwing#serverSwingsOnUse}. Up to 26.2 the
+     * swing his client reports does it, see {@link #onGuideSwing}.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onGuidePlace(BlockPlaceEvent event) {
+        if (swing.serverSwingsOnUse()) {
+            swingGuests(event.getPlayer(), event.getHand() == EquipmentSlot.OFF_HAND, true);
+        }
+    }
+
+    /**
+     * Swings the arm of every guest of this guide who is shown his items, as
+     * the guide's swung: at a hit, or at a use of the item.
+     */
+    private void swingGuests(Player guide, boolean offHand, boolean use) {
         Tour tour = tours.get(guide.getUniqueId());
         if (tour == null || cameraPlayers.contains(guide.getUniqueId()) || !settings.isTourMirrorSwing()) {
             return;
         }
-        boolean offHand = event.getAnimationType() == PlayerAnimationType.OFF_ARM_SWING;
         for (UUID id : tour.guests.keySet()) {
             Player guest = Bukkit.getPlayer(id);
             if (guest != null && mirror.isShown(id)) {
-                swing.swing(guest, guide, offHand);
+                swing.swing(guest, guide, offHand, use);
             }
         }
     }

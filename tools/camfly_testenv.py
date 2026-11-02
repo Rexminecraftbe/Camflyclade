@@ -1920,6 +1920,19 @@ async function handle(cmd) {
       // Clients unter derselben.
       return { packets: effects.slice(cmd.since || 0), count: effects.length,
                self: bot.entity ? bot.entity.id : null };
+    case 'place': {
+      // Einen Block aus der Hand oben auf den Block bei x y z setzen, wie ein
+      // Client bis 26.2: mit dem Schwung, den er dabei meldet.
+      const Vec3 = require('vec3');
+      const ref = bot.blockAt(new Vec3(cmd.x, cmd.y, cmd.z));
+      if (!ref) return { error: 'kein Block da' };
+      try {
+        await bot.placeBlock(ref, new Vec3(0, 1, 0));
+        return { placed: true };
+      } catch (e) {
+        return { error: String(e && e.message || e) };
+      }
+    }
     case 'swing':
       // Den Arm schwingen, wie ein echter Client beim Schlagen und Abbauen.
       bot._client.write('arm_animation', { hand: cmd.off ? 'off_hand' : 'main_hand' });
@@ -7145,6 +7158,20 @@ def fuehrung_ohne_cam_checks(env, bot):
         neu = [p.get("animation") for p in zuschauer.call("own_swings", since=schwuenge).get("packets", [])]
         FIND.test("mirror-swing: schwingt der Bot den Arm, schwingt beim Gast der eigene mit dem Item darin - erst die "
                   "Hand, dann die zweite Hand", neu == [0, 3], str(neu))
+        # Beim Setzen eines Blocks meldet ein Client bis 26.2 den Schwung
+        # selbst - seit 26.3 schwingt der Server, und CamFly schickt den
+        # Schwung beim Setzen. Hier, auf 26.2, darf es nur einer sein.
+        unter = (_floor(x) + 1, BODEN_Y, _floor(z))
+        console(env, f"setblock {unter[0]} {unter[1] + 1} {unter[2]} minecraft:air", pause=0.3)
+        console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:stone 16", pause=1.0)
+        schwuenge = zuschauer.call("own_swings").get("count", 0)
+        gesetzt = bot.call("place", wait=10, x=unter[0], y=unter[1], z=unter[2], timeout=8000)
+        time.sleep(1.0)
+        neu = [p.get("animation") for p in zuschauer.call("own_swings", since=schwuenge).get("packets", [])]
+        FIND.test("Setzt der Bot einen Block, schwingt beim Gast der Arm genau einmal mit (26.2: der gemeldete "
+                  "Schwung, keiner doppelt)", gesetzt.get("placed") and neu == [0], f"{gesetzt} / {neu}")
+        console(env, f"setblock {unter[0]} {unter[1] + 1} {unter[2]} minecraft:air", pause=0.3)
+        console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:diamond_sword", pause=1.0)
 
         # Durch die Augen des Bots zielt der Gast von dort, wo er selbst steht:
         # Sein Client findet sich unter dem Fadenkreuz. Den Klick auf sich
