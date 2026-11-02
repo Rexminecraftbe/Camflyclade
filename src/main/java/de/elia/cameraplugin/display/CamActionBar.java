@@ -294,7 +294,9 @@ public final class CamActionBar {
         CameraData data = cameraPlayers.get(player.getUniqueId());
         if (data == null) return null;
         String signal = plugin.getSignal().actionBarPart(player);
-        Location at = player.getLocation();
+        // Through the eyes of a guide he sees from there, the way the guide looks.
+        Player through = plugin.getTour().seenThrough(player);
+        Location at = (through != null ? through : player).getLocation();
         Location anchor = plugin.getMovementGuard().distanceAnchor(data, at);
         if (anchor == null) return signal == null ? null : signal.trim();
         boolean atBody = anchor.getWorld().equals(data.getBody().getWorld());

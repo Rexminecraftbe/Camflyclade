@@ -537,6 +537,22 @@ public final class CamTour implements Listener {
         return guide == null ? null : Bukkit.getPlayer(guide);
     }
 
+    /**
+     * The guide whose eyes this guest sees through right now, or {@code null}
+     * while he sees through his own camera. Meanwhile his client tells the
+     * server nothing of where his own camera is - the tour drags it after the
+     * guide, and the server learns where only now and then, see
+     * {@link #CATCH_UP} -, nor which way he looks, as he is held turned. What
+     * is measured from where he sees, the way to his body or his signal, is
+     * measured from the guide.
+     */
+    public Player seenThrough(Player guest) {
+        UUID guideId = guideOf.get(guest.getUniqueId());
+        Tour tour = guideId == null ? null : tours.get(guideId);
+        Guest state = tour == null ? null : tour.guests.get(guest.getUniqueId());
+        return state != null && state.viewing ? Bukkit.getPlayer(guideId) : null;
+    }
+
     /** His guests, in the order they joined. */
     public List<Player> guestsOf(Player guide) {
         List<Player> guests = new ArrayList<>();

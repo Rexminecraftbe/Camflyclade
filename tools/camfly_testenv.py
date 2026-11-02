@@ -7313,6 +7313,22 @@ def fuehrung_ohne_cam_checks(env, bot):
         werte = zuschauer.call("frosts", since=frost).get("values", [])
         FIND.test("Taut der Bot auf, taut der Eis-Rand beim Gast mit", bool(werte) and werte[-1] == 0, str(werte[-5:]))
 
+        # Die Action-Bar des Gastes: Weg und Pfeil zu seinem Koerper von dort,
+        # wo er sieht - durch die Augen des Bots, wie der schaut. Sein eigener
+        # Spieler ist festgehalten und sagte darueber nichts. Der Koerper liegt
+        # sechs Bloecke westlich.
+        def koerper_zeile(yaw):
+            console(env, f"tp {BOT_NAME} {x} {y} {z} {yaw} 0", pause=0.3)
+            seit = zuschauer.mark()
+            time.sleep(1.0)
+            zeilen = [t for t in zeilen_seit(zuschauer, seit) if "Body:" in t]
+            return zeilen[-1] if zeilen else ""
+        nach_westen, nach_osten = koerper_zeile(90), koerper_zeile(-90)
+        FIND.test("Action-Bar des Gastes: der Pfeil zum Koerper so, wie der Bot schaut - nach Westen geradeaus "
+                  "(\u2191), umgedreht dahinter (\u2193), 6 Bloecke",
+                  "\u2191" in nach_westen and "\u2193" in nach_osten and "6 blocks" in nach_westen,
+                  f"{nach_westen} / {nach_osten}")
+
         console(env, f"effect give {BOT_NAME} minecraft:speed 30 1", pause=1.5)
         effekte = zuschauer.call("effects").get("count", 0)
         resends = zuschauer.call("own_equipment").get("resends", 0)
