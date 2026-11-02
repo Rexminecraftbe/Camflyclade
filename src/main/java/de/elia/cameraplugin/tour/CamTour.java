@@ -1258,16 +1258,24 @@ public final class CamTour implements Listener {
     }
 
     /**
-     * A guide out of camera mode places a block. Since 26.3 his client no
-     * longer tells the server it swung for that: the server swings his arm
-     * itself, and no plugin hears of it - so his guests are sent the swing
-     * from here, see {@link GuideSwing#serverSwingsOnUse}. Up to 26.2 the
-     * swing his client reports does it, see {@link #onGuideSwing}.
+     * A guide out of camera mode places a block: the item in his hand sinks
+     * and comes up again - on his guests' screens too, see
+     * {@link GuideMirror#placed}. Since 26.3 his client no longer tells the
+     * server it swung for that either: the server swings his arm itself, and
+     * no plugin hears of it - so his guests are sent the swing from here, see
+     * {@link GuideSwing#serverSwingsOnUse}. Up to 26.2 the swing his client
+     * reports does it, see {@link #onGuideSwing}.
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onGuidePlace(BlockPlaceEvent event) {
-        if (swing.serverSwingsOnUse()) {
-            swingGuests(event.getPlayer(), event.getHand() == EquipmentSlot.OFF_HAND, true);
+        Player guide = event.getPlayer();
+        boolean offHand = event.getHand() == EquipmentSlot.OFF_HAND;
+        boolean swings = settings.isTourMirrorSwing() && swing.serverSwingsOnUse();
+        for (Player guest : shownGuests(guide)) {
+            mirror.placed(guest.getUniqueId(), offHand);
+            if (swings) {
+                swing.swing(guest, guide, offHand, true);
+            }
         }
     }
 
@@ -1276,16 +1284,27 @@ public final class CamTour implements Listener {
      * the guide's swung: at a hit, or at a use of the item.
      */
     private void swingGuests(Player guide, boolean offHand, boolean use) {
+        if (settings.isTourMirrorSwing()) {
+            for (Player guest : shownGuests(guide)) {
+                swing.swing(guest, guide, offHand, use);
+            }
+        }
+    }
+
+    /** The guests online who are shown this guide, while he leads out of camera mode. */
+    private List<Player> shownGuests(Player guide) {
         Tour tour = tours.get(guide.getUniqueId());
-        if (tour == null || cameraPlayers.contains(guide.getUniqueId()) || !settings.isTourMirrorSwing()) {
-            return;
+        List<Player> guests = new ArrayList<>();
+        if (tour == null || cameraPlayers.contains(guide.getUniqueId())) {
+            return guests;
         }
         for (UUID id : tour.guests.keySet()) {
             Player guest = Bukkit.getPlayer(id);
             if (guest != null && mirror.isShown(id)) {
-                swing.swing(guest, guide, offHand, use);
+                guests.add(guest);
             }
         }
+        return guests;
     }
 
     /**

@@ -958,7 +958,8 @@ follow:
   #   above   = sein eigener Name bleibt, die Namen der Follower stehen darüber
   guide-name: replace
   # Was die Follower eines Leaders ohne Cam-Modus von ihm sehen: seine Herzen, das Item in seiner Hand und das in
-  # seiner zweiten Hand
+  # seiner zweiten Hand. Setzt er einen Block, sinkt das Item bei ihnen kurz ab und kommt wieder hoch wie bei ihm,
+  # auch im Kreativmodus (dort mit einer Zahl im Stapel, die eins daneben liegt - im Blick des Leaders sieht man sie nicht)
   mirror-health: true
   mirror-main-hand: true
   mirror-off-hand: true

@@ -7165,11 +7165,37 @@ def fuehrung_ohne_cam_checks(env, bot):
         console(env, f"setblock {unter[0]} {unter[1] + 1} {unter[2]} minecraft:air", pause=0.3)
         console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:stone 16", pause=1.0)
         schwuenge = zuschauer.call("own_swings").get("count", 0)
+        ausruestung = zuschauer.call("own_equipment").get("count", 0)
         gesetzt = bot.call("place", wait=10, x=unter[0], y=unter[1], z=unter[2], timeout=8000)
         time.sleep(1.0)
         neu = [p.get("animation") for p in zuschauer.call("own_swings", since=schwuenge).get("packets", [])]
         FIND.test("Setzt der Bot einen Block, schwingt beim Gast der Arm genau einmal mit (26.2: der gemeldete "
                   "Schwung, keiner doppelt)", gesetzt.get("placed") and neu == [0], f"{gesetzt} / {neu}")
+        # Das Item in der Hand sinkt beim Setzen ab und kommt wieder hoch: Der
+        # Client tut das, sobald sich die Zahl im Stapel aendert - im
+        # Ueberleben einmal, auf 15.
+        def zahlen(seit):
+            return [p.get("count") for p in zuschauer.call("own_equipment", since=seit).get("packets", [])
+                    if p.get("slot") == 0]
+        zahl = zahlen(ausruestung)
+        FIND.test("Setzt der Bot im Ueberleben einen Block, bekommt der Gast den Stapel einmal mit einem weniger",
+                  bool(zahl) and zahl[-1] == 15 and 14 not in zahl, str(zahl))
+        # Im Kreativmodus bleibt die Zahl: Der Gast bekommt sie eins daneben,
+        # damit auch sein Client das Item absinken laesst - und beim naechsten
+        # Block wieder die echte.
+        console(env, f"gamemode creative {BOT_NAME}", pause=1.0)
+        kreativ = []
+        for _ in range(2):
+            console(env, f"setblock {unter[0]} {unter[1] + 1} {unter[2]} minecraft:air", pause=0.5)
+            ausruestung = zuschauer.call("own_equipment").get("count", 0)
+            bot.call("place", wait=10, x=unter[0], y=unter[1], z=unter[2], timeout=8000)
+            time.sleep(1.0)
+            kreativ.append(zahlen(ausruestung))
+        FIND.test("Setzt der Bot im Kreativmodus Bloecke, bekommt der Gast den Stapel abwechselnd eins daneben "
+                  "(14) und wieder echt (15)",
+                  all(kreativ) and kreativ[0][-1] == 14 and kreativ[1][-1] == 15 and 13 not in kreativ[0] + kreativ[1],
+                  str(kreativ))
+        console(env, f"gamemode survival {BOT_NAME}", pause=0.5)
         console(env, f"setblock {unter[0]} {unter[1] + 1} {unter[2]} minecraft:air", pause=0.3)
         console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:diamond_sword", pause=1.0)
 

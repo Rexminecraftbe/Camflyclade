@@ -57,6 +57,14 @@ import java.util.UUID;
  * own frost - goes out during the tick, and the guide's goes over it before
  * his client draws the next picture.</p>
  *
+ * <p>When the guide places a block, a client lowers the item in his hand and
+ * brings it up again - after a change of its count, and in creative mode,
+ * where the count stays, at every use of its own. The guest's client is sent
+ * the item anew, see {@link #placed}; in creative mode with a count one off
+ * from the one it shows, so that it lowers and raises the item too. Seen
+ * through the guide's eyes, the count shows nowhere: the hotbar there is the
+ * guide's.</p>
+ *
  * <p>Hearts of 0 are never sent: the client would show the screen of death.
  * A guide who dies ends the tour first, see {@link CamTour}.</p>
  */
@@ -82,10 +90,16 @@ final class GuideMirror {
     private static final class Shown {
         /** The hearts, -1 while none were sent. */
         double health = -1.0;
-        /** The items, {@code null} while none were sent. */
+        /** The guide's items, as they were when last sent; {@code null} while none were sent. */
         ItemStack mainHand;
         ItemStack offHand;
         ItemStack head;
+        /** Whether the item in a hand is shown with a count one off, see {@link #placed}. */
+        boolean mainHandShift;
+        boolean offHandShift;
+        /** Whether the guide placed a block with the item in a hand since the last update. */
+        boolean mainHandUsed;
+        boolean offHandUsed;
         /** The slot of the hotbar his client held the item of the hand in. */
         int slot = -1;
         /** Ticks since everything was last sent. */
@@ -145,14 +159,25 @@ final class GuideMirror {
             refresh = true;
         }
         state.slot = slot;
-        state.mainHand = mirror(guest, EquipmentSlot.HAND, settings.isTourMirrorMainHand(),
-                guide.getInventory().getItemInMainHand(), guest.getInventory().getItemInMainHand(), state.mainHand,
-                refresh);
-        state.offHand = mirror(guest, EquipmentSlot.OFF_HAND, settings.isTourMirrorOffHand(),
-                guide.getInventory().getItemInOffHand(), guest.getInventory().getItemInOffHand(), state.offHand,
-                refresh);
+        ItemStack mainHand = guide.getInventory().getItemInMainHand();
+        ItemStack offHand = guide.getInventory().getItemInOffHand();
+        // Another item: shown with its own count again.
+        state.mainHandShift &= state.mainHand != null && state.mainHand.isSimilar(mainHand);
+        state.offHandShift &= state.offHand != null && state.offHand.isSimilar(offHand);
+        // Placed a block, and the count stayed - creative mode: one off now.
+        boolean mainHandUsed = state.mainHandUsed && mainHand.equals(state.mainHand);
+        boolean offHandUsed = state.offHandUsed && offHand.equals(state.offHand);
+        state.mainHandUsed = false;
+        state.offHandUsed = false;
+        state.mainHandShift ^= mainHandUsed;
+        state.offHandShift ^= offHandUsed;
+        state.mainHand = mirror(guest, EquipmentSlot.HAND, settings.isTourMirrorMainHand(), mainHand,
+                guest.getInventory().getItemInMainHand(), state.mainHand, state.mainHandShift,
+                refresh || mainHandUsed);
+        state.offHand = mirror(guest, EquipmentSlot.OFF_HAND, settings.isTourMirrorOffHand(), offHand,
+                guest.getInventory().getItemInOffHand(), state.offHand, state.offHandShift, refresh || offHandUsed);
         state.head = mirror(guest, EquipmentSlot.HEAD, settings.isTourMirrorHead(),
-                guide.getInventory().getHelmet(), guest.getInventory().getHelmet(), state.head, refresh);
+                guide.getInventory().getHelmet(), guest.getInventory().getHelmet(), state.head, false, refresh);
     }
 
     /**
@@ -160,10 +185,12 @@ final class GuideMirror {
      * time; a slot no longer mirrored is sent his own again - as empty as
      * camera mode keeps it.
      *
-     * @return what his client holds there now, {@code null} for nothing sent
+     * @param shift whether to show it with a count one off, see {@link #placed}
+     * @return the guide's item his client was sent there, {@code null} for
+     *         nothing sent
      */
     private static ItemStack mirror(Player guest, EquipmentSlot slot, boolean on, ItemStack item, ItemStack own,
-                                    ItemStack before, boolean refresh) {
+                                    ItemStack before, boolean shift, boolean refresh) {
         if (!on) {
             if (before != null) {
                 guest.sendEquipmentChange(guest, slot, own == null ? new ItemStack(Material.AIR) : own);
@@ -172,9 +199,37 @@ final class GuideMirror {
         }
         ItemStack now = item == null ? new ItemStack(Material.AIR) : item;
         if (refresh || before == null || !now.equals(before)) {
-            guest.sendEquipmentChange(guest, slot, now);
+            guest.sendEquipmentChange(guest, slot, shown(now, shift));
         }
         return now.clone();
+    }
+
+    /** The item as the guest's client is shown it: with a count one off, if so. */
+    private static ItemStack shown(ItemStack item, boolean shift) {
+        if (!shift || item.getType().isAir()) {
+            return item;
+        }
+        ItemStack copy = item.clone();
+        copy.setAmount(item.getAmount() > 1 ? item.getAmount() - 1 : item.getAmount() + 1);
+        return copy;
+    }
+
+    /**
+     * The guide placed a block with the item in this hand. The next update -
+     * on Paper still in this tick, once the server has taken the block off
+     * the stack - sends it: changed anyway, or in creative mode, where the
+     * count stays, one off from what the guest's client shows.
+     */
+    void placed(UUID guest, boolean offHand) {
+        Shown state = shown.get(guest);
+        if (state == null) {
+            return;
+        }
+        if (offHand) {
+            state.offHandUsed = true;
+        } else {
+            state.mainHandUsed = true;
+        }
     }
 
     /**
