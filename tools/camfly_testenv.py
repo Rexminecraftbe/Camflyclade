@@ -860,9 +860,10 @@ def stop_server(env, quiet=False):
 # gar nicht pruefen. Nur von der Konsole aus gebraucht:
 #   plugintp <spieler> <zu-spieler>
 #   plugintp <spieler> <x> <y> <z>
-# Dazu setzt es den Frost eines Spielers am Server, was kein Befehl kann
-# (/data aendert keine Spieler):
+# Dazu setzt es Frost und Hunger eines Spielers am Server, was kein Befehl
+# kann (/data aendert keine Spieler):
 #   testfrost <spieler> <ticks>
+#   testfood <spieler> <hunger>
 TPA_HELFER_NAME = "CamFlyTpaHelfer"
 
 TPA_HELFER_JAVA = r'''
@@ -878,13 +879,17 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class TpaHelfer extends JavaPlugin {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (command.getName().equalsIgnoreCase("testfrost")) {
+        if (command.getName().equalsIgnoreCase("testfrost") || command.getName().equalsIgnoreCase("testfood")) {
             Player wer = args.length == 2 ? Bukkit.getPlayerExact(args[0]) : null;
             if (wer == null) {
                 return false;
             }
-            wer.setFreezeTicks(Integer.parseInt(args[1]));
-            sender.sendMessage("testfrost: ok");
+            if (command.getName().equalsIgnoreCase("testfrost")) {
+                wer.setFreezeTicks(Integer.parseInt(args[1]));
+            } else {
+                wer.setFoodLevel(Integer.parseInt(args[1]));
+            }
+            sender.sendMessage(command.getName() + ": ok");
             return true;
         }
         if (args.length != 2 && args.length != 4) {
@@ -922,6 +927,8 @@ commands:
   plugintp:
     permission: camflytest.plugintp
   testfrost:
+    permission: camflytest.plugintp
+  testfood:
     permission: camflytest.plugintp
 permissions:
   camflytest.plugintp:
@@ -1449,6 +1456,7 @@ async function handle(cmd) {
         gameMode: bot.game && bot.game.gameMode,
         health: bot.health,
         food: bot.food,
+        level: bot.experience ? bot.experience.level : null,
         dead,
         pos: bot.entity ? [bot.entity.position.x, bot.entity.position.y, bot.entity.position.z] : null
       };
@@ -7084,14 +7092,15 @@ def fuehrung_ohne_cam_checks(env, bot):
     dritter = BotClient(env, name=DRITTER_NAME)
     try:
         quelle = quelle_config(env)
-        FIND.test("Voreingestellt stehen lead-without-cam: true, guide-name: replace, die sieben mirror-... und "
-                  "fine-hold auf true da",
+        FIND.test("Voreingestellt stehen lead-without-cam: true, guide-name: replace, sieben mirror-... und "
+                  "fine-hold auf true, mirror-food und mirror-experience auf false da",
                   all(re.search(rf"(?m)^\s+{schluessel}:\s*{wert}\s*$", quelle) is not None
                       for schluessel, wert in (("lead-without-cam", "true"), ("guide-name", "replace"),
                                                ("mirror-health", "true"), ("mirror-main-hand", "true"),
                                                ("mirror-off-hand", "true"), ("mirror-swing", "true"),
                                                ("mirror-head", "true"), ("mirror-effects", "true"),
-                                               ("mirror-frost", "true"), ("fine-hold", "true"))), "")
+                                               ("mirror-frost", "true"), ("mirror-food", "false"),
+                                               ("mirror-experience", "false"), ("fine-hold", "true"))), "")
         zuschauer.start()
         dritter.start()
         if not FIND.test("Zweiter und dritter Spieler fuer die Fuehrung ohne Cam-Modus kommen herein",
@@ -7313,6 +7322,16 @@ def fuehrung_ohne_cam_checks(env, bot):
         werte = zuschauer.call("frosts", since=frost).get("values", [])
         FIND.test("Taut der Bot auf, taut der Eis-Rand beim Gast mit", bool(werte) and werte[-1] == 0, str(werte[-5:]))
 
+        # Hunger und XP des Bots: voreingestellt nicht.
+        console(env, f"xp set {BOT_NAME} 7 levels", pause=0.3)
+        console(env, f"testfood {BOT_NAME} 6", pause=1.5)
+        eigen = zuschauer.call("state")
+        FIND.test("mirror-food und mirror-experience voreingestellt aus: der Gast sieht seinen eigenen Hunger und "
+                  "seine eigenen XP, nicht die des Bots (6, Level 7)",
+                  eigen.get("food") != 6 and eigen.get("level") != 7, str(eigen))
+        console(env, f"xp set {BOT_NAME} 0 levels", pause=0.3)
+        console(env, f"testfood {BOT_NAME} 20", pause=0.3)
+
         # Die Action-Bar des Gastes: Weg und Pfeil zu seinem Koerper von dort,
         # wo er sieht - durch die Augen des Bots, wie der schaut. Sein eigener
         # Spieler ist festgehalten und sagte darueber nichts. Der Koerper liegt
@@ -7388,7 +7407,8 @@ def fuehrung_ohne_cam_checks(env, bot):
 
         # Jeder Reload beendet den Cam-Modus des Gastes: danach von vorn.
         set_options(env, [("mirror-main-hand", "false", "follow"), ("mirror-swing", "false", "follow"),
-                          ("mirror-effects", "false", "follow"), ("fine-hold", "false", "follow")])
+                          ("mirror-effects", "false", "follow"), ("fine-hold", "false", "follow"),
+                          ("mirror-food", "true", "follow"), ("mirror-experience", "true", "follow")])
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         ausruestung = zuschauer.call("own_equipment").get("count", 0)
@@ -7415,10 +7435,26 @@ def fuehrung_ohne_cam_checks(env, bot):
         gedreht = zuschauer.call("rotations", since=drehung).get("packets", [])
         FIND.test("fine-hold: false - der Server haelt den Gast nur jeden Tick fest, etwa 20 Mal in der Sekunde",
                   10 <= drehungen_pro_sekunde(gedreht) <= 30, str(drehungen_pro_sekunde(gedreht)))
+        console(env, f"xp set {BOT_NAME} 7 levels", pause=0.3)
+        console(env, f"testfood {BOT_NAME} 6", pause=1.5)
+        # Im Frieden fuellt sich der Hunger des Bots von selbst wieder auf, um
+        # eins je halbe Sekunde: verglichen wird mit dem, den er gerade hat.
+        gespiegelt, beim_bot = zuschauer.call("state"), bot.call("state")
+        FIND.test("mirror-food und mirror-experience: true - der Gast sieht Hunger und Level (7) des Bots",
+                  gespiegelt.get("food") is not None and beim_bot.get("food") is not None
+                  and gespiegelt.get("food") < 20 and abs(gespiegelt.get("food") - beim_bot.get("food")) <= 1
+                  and gespiegelt.get("level") == 7, f"{gespiegelt} / Bot {beim_bot.get('food')}")
         befehl(zuschauer, "/cam follow leave")
+        time.sleep(1.0)
+        eigen = zuschauer.call("state")
+        FIND.test("Verlaesst er die Fuehrung, sieht er wieder seinen eigenen Hunger und seine eigenen XP",
+                  eigen.get("food") != 6 and eigen.get("level") != 7, str(eigen))
+        console(env, f"xp set {BOT_NAME} 0 levels", pause=0.3)
+        console(env, f"testfood {BOT_NAME} 20", pause=0.3)
 
         set_options(env, [("mirror-main-hand", "true", "follow"), ("mirror-swing", "true", "follow"),
                           ("mirror-effects", "true", "follow"), ("fine-hold", "true", "follow"),
+                          ("mirror-food", "false", "follow"), ("mirror-experience", "false", "follow"),
                           ("guide-name", "above", "follow")])
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)

@@ -908,8 +908,9 @@ visitor-camera:
 # Seine Follower sehen auf ihrem eigenen Bildschirm seine Herzen, die Items in seinen Händen und auf seinem Kopf, seine
 # Effekte und seinen Frost (mirror-...) - nur auf ihrem Bildschirm: Am Server bleiben ihre Herzen, Effekte und ihr
 # Frost ihre, und ihre Hände bleiben leer wie im Cam-Modus; nehmen, wegwerfen oder benutzen lässt sich nichts davon,
-# und sein übriges Inventar sehen sie nicht. Der Hunger bleibt ihrer. Hören sie auf zu folgen (oder startet er den
-# Cam-Modus), sehen sie wieder ihre eigenen Herzen, Hände, Effekte und ihren eigenen Frost.
+# und sein übriges Inventar sehen sie nicht. Hunger und XP bleiben ihre, außer mit mirror-food und mirror-experience.
+# Hören sie auf zu folgen (oder startet er den Cam-Modus), sehen sie wieder ihre eigenen Herzen, Hände, Effekte und
+# ihren eigenen Frost.
 # Mit guide-view sieht ein Follower durch seine Augen: Die Herzen dort zeichnet das Spiel selbst - und den Hunger
 # dabei immer voll, den schickt das Spiel von niemandem an andere.
 follow:
@@ -978,6 +979,15 @@ follow:
   # Ob sie seinen Frost sehen: Steckt er im Pulverschnee, wächst bei ihnen der Eis-Rand um den Bildschirm wie bei
   # ihm. Erfrieren tun sie davon nicht. Geht wie guide-view nur auf Paper (ein Paket über das Innere des Servers).
   mirror-frost: true
+  # Ob sie seinen Hunger sehen statt ihres eigenen. Nur beim freien Umsehen (/cam follow view): Im Blick des Leaders
+  # zeichnet das Spiel den Hunger von ihm - und dabei immer volle Keulen, weil es den Hunger von niemandem an andere
+  # schickt. Am Server bleibt ihr Hunger ihrer.
+  mirror-food: false
+  # Ob sie seine XP-Leiste und sein Level sehen statt ihrer eigenen. Am Server bleiben ihre XP ihre, und sobald sie
+  # aufhören zu folgen, sehen sie wieder ihre eigenen. Die Leiste zeigt das Spiel nur im Überleben und im Abenteuer -
+  # und an ihrer Stelle die Ortungsleiste (andere Spieler als Punkte), sobald es dort jemanden gibt: dann den
+  # Fortschritt wie immer nur ein paar Sekunden nach einer Änderung, das Level bleibt stehen.
+  mirror-experience: false
 
 # /cam photo: der Foto-Modus, an und wieder aus, nur im Cam-Modus. Für Bilder und Videos der eigenen Bauten blendet er
 # nur für den Spieler selbst aus, was im Bild stört - alle anderen sehen weiter alles wie vorher, und an der Welt ändert
