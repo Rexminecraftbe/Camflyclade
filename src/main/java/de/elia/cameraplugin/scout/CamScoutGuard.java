@@ -118,6 +118,12 @@ public final class CamScoutGuard implements Listener {
      * Looks once who is too far from this viewer and who is close enough
      * again. Also called by photo mode as it ends, so that nobody far away
      * is seen for a moment.
+     *
+     * <p>While the plugin is being switched off, nobody is hidden anew:
+     * camera mode ends for everybody then, and its end shows each of them
+     * everything again - photo mode, ending with it, calls this on the way.
+     * Bukkit turns {@code hidePlayer} down for a plugin that is not
+     * enabled.</p>
      */
     public void refresh(Player viewer) {
         Hidden hidden = active.get(viewer.getUniqueId());
@@ -176,7 +182,7 @@ public final class CamScoutGuard implements Listener {
 
     private void placePlayer(Player viewer, Hidden hidden, Player other, boolean far) {
         UUID id = other.getUniqueId();
-        if (far && !hidden.players.contains(id) && viewer.canSee(other)) {
+        if (far && !hidden.players.contains(id) && viewer.canSee(other) && plugin.isEnabled()) {
             viewer.hidePlayer(plugin, other);
             hidden.players.add(id);
         } else if (!far && hidden.players.remove(id)) {
@@ -188,7 +194,8 @@ public final class CamScoutGuard implements Listener {
     private void placeBody(Player viewer, Hidden hidden, CameraData data, boolean far) {
         for (Entity part : parts(data)) {
             UUID id = part.getUniqueId();
-            if (far && !hidden.entities.containsKey(id) && part.isValid() && viewer.canSee(part)) {
+            if (far && !hidden.entities.containsKey(id) && part.isValid() && viewer.canSee(part)
+                    && plugin.isEnabled()) {
                 viewer.hideEntity(plugin, part);
                 hidden.entities.put(id, part);
             } else if (!far && hidden.entities.remove(id) != null) {
