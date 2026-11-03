@@ -38,7 +38,7 @@ import java.util.UUID;
  *
  * <p>A spot saved with a night vision of its own, see
  * {@link de.elia.cameraplugin.spot.SpotLook}, gives it to whoever jumps there
- * or visits it in place of his own, while {@code player-choice} lets anybody
+ * in place of his own, while {@code player-choice} lets anybody
  * pick one at all - until his camera is put down somewhere else, or he picks
  * one himself. It is never kept as his own.</p>
  */

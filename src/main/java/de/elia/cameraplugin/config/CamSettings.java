@@ -206,10 +206,10 @@ public final class CamSettings {
      * the file chooses itself, such as the items of {@code start-cost.items}:
      * everything below them is checked when it is read instead. And the old
      * names of what {@code /cam follow} renamed, which an older file still
-     * has.
+     * has, and {@code visitor-camera} of {@code /cam visit}, which is gone.
      */
     public static final Set<String> UNLISTED_KEYS = Set.of("mirror-damage.debug", "start-cost.items",
-            "signal.block-costs", "hide-ores.blocks", OLD_FOLLOW_SECTION, "sounds.tour-invite", "sounds.tour-reach",
+            "signal.block-costs", "hide-ores.blocks", "visitor-camera", OLD_FOLLOW_SECTION, "sounds.tour-invite", "sounds.tour-reach",
             "menu.buttons.tour", "menu.admin-buttons.tours");
 
     /**
@@ -389,8 +389,6 @@ public final class CamSettings {
     private StorageMode viewpointsStorage;
     /** Whether a player may share his spots with others, {@code viewpoints.sharing}. */
     private boolean viewpointsSharing;
-    /** Whether {@code /cam visit} takes the camera to a spot shared with him, {@code visitor-camera.enabled}. */
-    private boolean visitorCameraEnabled;
     /** Whether {@code /cam follow} lets a camera player show others round, {@code follow.enabled}. */
     private boolean tourEnabled;
     /** How close a camera has to be to be invited, {@code follow.radius}. */
@@ -825,7 +823,6 @@ public final class CamSettings {
         viewpointsMax = config.getInt("viewpoints.max-per-player", 10, 0, MAX_VIEWPOINTS);
         viewpointsStorage = readStorage(config, "viewpoints.storage");
         viewpointsSharing = config.getBoolean("viewpoints.sharing", true);
-        visitorCameraEnabled = config.getBoolean("visitor-camera.enabled", true);
         // The section of /cam follow, which was called tour before: an older
         // file is read as it was written.
         String follow = config.renamed(FOLLOW_SECTION, OLD_FOLLOW_SECTION);
@@ -1851,11 +1848,6 @@ public final class CamSettings {
         return viewpointsEnabled && viewpointsSharing;
     }
 
-    /** Whether {@code /cam visit} goes, which only goes while spots may be shared. */
-    public boolean isVisitorCameraEnabled() {
-        return isViewpointsSharing() && visitorCameraEnabled;
-    }
-
     /** Whether {@code /cam follow} is there. */
     public boolean isTourEnabled() {
         return tourEnabled;
@@ -1981,7 +1973,7 @@ public final class CamSettings {
 
     /**
      * How long, in minutes, the same player at the same spot does not count
-     * as a view again; 0 while every jump and every visit counts.
+     * as a view again; 0 while every jump counts.
      */
     public int getViewsCooldownMinutes() {
         return viewsCooldownMinutes;

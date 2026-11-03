@@ -41,8 +41,7 @@ import java.util.regex.Pattern;
  * <p>A spot is saved where the player is, on foot or as a camera, so only a
  * place he has been to himself becomes one. The camera jumps to it only
  * where it would be allowed to fly, see {@link JumpCheck}: in the world of its
- * body, within {@code max-distance} of it - or of the spot it visits -, where
- * the signal reaches, outside the areas {@code cam-area} keeps it out of, out
+ * body, within {@code max-distance} of it, where the signal reaches, outside the areas {@code cam-area} keeps it out of, out
  * of shut lava, water and powder snow and not into a block that has been put
  * there since.</p>
  *
@@ -52,14 +51,13 @@ import java.util.regex.Pattern;
  * offer it to single players, {@code /cam spot share <spot> <player>}; it is
  * theirs once they accept it, {@code /cam spot accept}, and they may turn it
  * down or drop it again, {@code /cam spot decline}, see {@link SharedSpots}.
- * Every jump to a spot and every visit is a view of it, see
+ * Every jump to a spot is a view of it, see
  * {@link SpotViews}: the menu shows them under each spot and sorts by
  * them. How often his spots were looked at and liked, he hears from the
  * guestbook, see {@link SpotGuestbook}.
  * Others jump to a spot they may use as to one of their own,
- * {@code /cam spot Owner:spot} - by the same rules, held from their own body
- * -, and with {@code visitor-camera} they visit it from wherever they are,
- * {@code /cam visit}.</p>
+ * {@code /cam spot Owner:spot} - by the same rules, held from their own
+ * body.</p>
  *
  * <p>Where they are kept is {@code viewpoints.storage}: in the file of the
  * player, or in memory only, which {@code /cam reload} and a restart
@@ -152,7 +150,7 @@ public final class CamSpots {
 
     /**
      * How many different players looked at a spot within so many days -
-     * jumped there or visited it -, its owner not counting.
+     * jumped there -, its owner not counting.
      */
     public int visitorsIn(Share share, int days) {
         return days > 0 ? views.visitorsSince(share.getOwner(), share.getSpot().key(), since(days)) : 0;
@@ -215,7 +213,7 @@ public final class CamSpots {
     }
 
     /**
-     * A player looked at a spot of this owner - jumped there or visited it -,
+     * A player looked at a spot of this owner - jumped there -,
      * see {@link SpotViews}. A view that counts goes into the guestbook of
      * the owner, see {@link SpotGuestbook}.
      */
@@ -456,7 +454,7 @@ public final class CamSpots {
     }
 
     /**
-     * His camera was put down at a spot - he jumped there or visits it -:
+     * His camera was put down at a spot - he jumped there -:
      * its time, weather and night vision stand in for his own, see
      * {@link SpotLook}.
      */
@@ -488,11 +486,10 @@ public final class CamSpots {
         } else {
             inMemory.get(player.getUniqueId()).remove(spot.key());
         }
-        // A spot that is gone is shared with nobody, and nobody visits it.
+        // A spot that is gone is shared with nobody.
         shared.deleted(player.getUniqueId(), spot.key());
         views.deleted(player.getUniqueId(), spot.key());
         guestbook.deleted(player.getUniqueId(), spot.key());
-        plugin.getVisit().checkVisitors(player.getUniqueId(), spot.key());
         countOwner(player);
         messages.sendConfiguredMessage(player, "spot-deleted", "{spot}", spot.name());
     }
@@ -554,8 +551,7 @@ public final class CamSpots {
     /**
      * {@code /cam spot unshare <spot> <player|all>}: takes a share back -
      * from a player, accepted or still offered, or from everybody, which
-     * makes the spot private again. Whoever visits the spot and may no
-     * longer is taken back to his body.
+     * makes the spot private again.
      */
     public void unshare(Player player, String name, String with) {
         if (!settings.isViewpointsSharing()) {
@@ -601,7 +597,6 @@ public final class CamSpots {
         boolean removed = shared.unshare(player.getUniqueId(), spot.key(), otherId);
         messages.sendConfiguredMessage(player, removed ? "spot-unshared" : "spot-not-shared",
                 "{spot}", spot.name(), "{player}", otherName);
-        plugin.getVisit().checkVisitors(player.getUniqueId(), spot.key());
     }
 
     /**
@@ -624,7 +619,6 @@ public final class CamSpots {
             boolean removed = shared.unshare(player.getUniqueId(), spot.key(), null);
             messages.sendConfiguredMessage(player, removed ? "spot-unshared-all" : "spot-not-shared-all",
                     "{spot}", spot.name());
-            plugin.getVisit().checkVisitors(player.getUniqueId(), spot.key());
         }
     }
 
@@ -689,7 +683,6 @@ public final class CamSpots {
             messages.sendConfiguredMessage(player, "spot-offer-unknown", "{spot}", share.label());
             return;
         }
-        plugin.getVisit().checkVisitors(share.getOwner(), share.getSpot().key());
         messages.sendConfiguredMessage(player, offer ? "spot-declined" : "spot-removed", "{spot}", share.label());
         Player owner = Bukkit.getPlayer(share.getOwner());
         if (owner != null && offer) {
@@ -836,10 +829,6 @@ public final class CamSpots {
             List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
             line.addAll(button("spot-button-go", share.label(),
                     new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam spot " + share.label())));
-            if (settings.isVisitorCameraEnabled()) {
-                line.addAll(button("spot-button-visit", share.label(),
-                        new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam visit " + share.label())));
-            }
             if (likes) {
                 line.addAll(button(share.isLikedBy(player.getUniqueId()) ? "spot-button-unlike" : "spot-button-like",
                         share.label(), new ClickEvent(ClickEvent.Action.RUN_COMMAND,
@@ -1144,22 +1133,17 @@ public final class CamSpots {
 
     /**
      * An admin takes one of his spots down: no longer public, shared with
-     * nobody, offered to nobody. Whoever visits it is sent back.
+     * nobody, offered to nobody.
      *
      * @return whether it was shared at all
      */
     public boolean takeDown(UUID owner, String key) {
-        if (!shared.takeBack(owner, key)) {
-            return false;
-        }
-        plugin.getVisit().checkVisitors(owner, key);
-        return true;
+        return shared.takeBack(owner, key);
     }
 
     /**
      * An admin deletes one of his spots, whether he is online or not: out of
-     * his file, shared with nobody, its views gone, and whoever visits it is
-     * sent back.
+     * his file, shared with nobody, its views gone.
      *
      * @return whether he had it
      */
@@ -1177,7 +1161,6 @@ public final class CamSpots {
         shared.deleted(owner, key);
         views.deleted(owner, key);
         guestbook.deleted(owner, key);
-        plugin.getVisit().checkVisitors(owner, key);
         Owner before = owners.get(owner);
         if (before != null) {
             count(owner, before.name(), spotsOf(owner).size());

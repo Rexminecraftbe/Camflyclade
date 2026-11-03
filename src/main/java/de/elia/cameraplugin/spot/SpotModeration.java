@@ -131,7 +131,7 @@ public final class SpotModeration {
     }
 
     /**
-     * Whether he may look at a spot of another - jump to it, visit it: by
+     * Whether he may look at a spot of another - jump to it: by
      * any of the ways he has it, as it is shared with him or as it is
      * public. If not, he has been told for how long still and why.
      */

@@ -110,7 +110,7 @@ import java.util.UUID;
  * {@link #stackedOver}. A guest left behind at the border of his reach is
  * seen at his own camera again, with his own name.</p>
  *
- * <p>A jump of his own - {@code /cam back}, a spot, a visit, {@code resume} -
+ * <p>A jump of his own - {@code /cam back}, a spot, {@code resume} -
  * takes a guest off the tour, as does the end of his camera mode. The end of
  * the guide's camera mode ends the whole tour.</p>
  */
@@ -788,8 +788,8 @@ public final class CamTour implements Listener {
 
     /**
      * Whether a spot lies within the reach of a guest's camera: where it may
-     * fly by itself, held from its body - or from the spot it visits, or the
-     * portal it came out of -, within {@code max-distance}, or where its
+     * fly by itself, held from its body - or from the portal it came out of -,
+     * within {@code max-distance}, or where its
      * signal reaches.
      */
     private boolean inReach(Player guest, CameraData data, Location where) {

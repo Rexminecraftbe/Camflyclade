@@ -414,8 +414,8 @@ sounds:
     sound: block.conduit.activate
     volume: 1.0
     pitch: 1.0
-  # Beim Sprung an einen Aussichtspunkt mit /cam spot <Name> (viewpoints), zu einem Besuch mit /cam visit
-  # (visitor-camera) und dorthin, wo der letzte Flug aufhörte, mit /cam resume (resume-command)
+  # Beim Sprung an einen Aussichtspunkt mit /cam spot <Name> (viewpoints) und dorthin, wo der letzte Flug aufhörte,
+  # mit /cam resume (resume-command)
   spot:
     enabled: true
     sound: item.chorus_fruit.teleport
@@ -604,7 +604,7 @@ camera-head:
 # man nach dem Klick in den Chat (abbrechen mit cancel), lesen tut ihn niemand sonst. Im Menü landet nichts im Inventar
 # und nichts kommt heraus, auch nicht im Cam-Modus, wo sonst jedes Fenster zu bleibt. Texte: menu-... in der Sprachdatei.
 menu:
-  # Wie die Spieler an back, resume, spot, visit, follow, photo, time, weather, nightvision und stats kommen:
+  # Wie die Spieler an back, resume, spot, follow, photo, time, weather, nightvision und stats kommen:
   #   menu    = nur über das Menü - die Befehle sagen, dass es dafür /cam menu gibt (Text: menu-only)
   #   both    = über das Menü und über die Befehle
   #   command = nur über die Befehle, /cam menu ist aus
@@ -655,7 +655,7 @@ menu:
     # löschen. Ein Linksklick auf einen Punkt springt hin, auf einen geteilten oder öffentlichen genauso wie auf einen
     # eigenen: nur, wohin die Kamera auch fliegen dürfte; ohne Cam-Modus startet er erst, wenn der Punkt nah genug ist
     # (viewpoints.start-distance).
-    # Umschalt-Klick besucht einen Punkt eines anderen (visitor-camera). Wartet ein Angebot, glänzt der Knopf.
+    # Wartet ein Angebot, glänzt der Knopf.
     spots:
       item: filled_map
       slot: 10
@@ -718,7 +718,7 @@ menu:
     # Unten der Knopf, der ihn einschränkt, für seine eigenen Punkte, die öffentlichen und die geteilten je ein Knopf,
     # den man weiterklickt (Linksklick weiter, Rechtsklick zurück): erlaubt - keine neuen (keinen Punkt speichern,
     # keinen öffentlich machen, keinen teilen) - auch keine anschauen (kein Sprung zu seinen eigenen, kein Sprung zu
-    # öffentlichen oder geteilten und kein Besuch dort; der Reiter im Spot-Menü zeigt ihm dann nur, dass er gesperrt
+    # öffentlichen oder geteilten; der Reiter im Spot-Menü zeigt ihm dann nur, dass er gesperrt
     # ist). Für immer oder Tage, Stunden und Minuten wie bei einer Sperre, mit Grund; steht schon etwas, ändert oder
     # hebt man es dort auf. Er erfährt alles davon, wenn er online ist, und jedes Mal, wenn ihn eine Einschränkung
     # aufhält, was, wie lange noch und warum (in plugins/CamFly/playerdata/spot-bans.yml). "Alle" ganz vorn in der
@@ -763,9 +763,8 @@ back-command:
 # /cam resume: Die Kamera macht dort weiter, wo der letzte Flug aufgehört hat, und schaut in dieselbe Richtung - für einen
 # Bau, den man sich Stück für Stück ansieht. Ohne Cam-Modus startet er dafür erst (mit allem, was ein Start mit /cam
 # prüft und kostet), im Cam-Modus springt die Kamera gleich. Gemerkt wird das Ende jedes Flugs, egal wodurch er endete.
-# War der letzte Flug ein Besuch (/cam visit), geht der Besuch weiter, solange der Punkt noch geteilt ist.
-# Gesprungen wird nur, wohin die Kamera auch fliegen dürfte - wie bei /cam spot, gemessen vom Körper, wo er jetzt steht
-# (oder vom besuchten Punkt). Sonst sagt eine Meldung, warum nicht, und ohne Cam-Modus startet er dann gar nicht erst.
+# Gesprungen wird nur, wohin die Kamera auch fliegen dürfte - wie bei /cam spot, gemessen vom Körper, wo er jetzt
+# steht. Sonst sagt eine Meldung, warum nicht, und ohne Cam-Modus startet er dann gar nicht erst.
 # Ton: sounds.spot, Texte: resume-...
 resume-command:
   enabled: true
@@ -801,7 +800,7 @@ resume-command:
 # Ein Name hat 1 bis 16 Buchstaben, Ziffern, - und _; groß oder klein zählt nicht.
 # Was ein Punkt zeigt: Setzt man ihn im Cam-Modus, nimmt er die Tageszeit, das Wetter und die Nachtsicht mit, die man
 # sich selbst eingestellt hat (/cam time, /cam weather, /cam nightvision) - nie die Zeit und das Wetter der Welt.
-# Wer hinspringt oder ihn besucht, sieht den Bau dann so, z. B. im Sonnenuntergang im Regen, nur auf seinem eigenen
+# Wer hinspringt, sieht den Bau dann so, z. B. im Sonnenuntergang im Regen, nur auf seinem eigenen
 # Bildschirm - bis seine Kamera woanders hingesetzt wird (ein Punkt ohne eigene Einstellung, /cam back, /cam resume,
 # Folgen) oder er selbst etwas einstellt. Danach sieht er wieder seine eigene; für seine nächsten Flüge gemerkt wird
 # davon nichts. Ist cam-time, cam-weather oder night-vision.player-choice aus, gilt dieser Teil nicht, weder beim
@@ -812,7 +811,7 @@ resume-command:
 # (bei max-distance-mode: signal nur, wohin das Signal reicht), nicht in ein Gebiet, das cam-area auf Stufe 2 verbietet,
 # nicht in gesperrte Lava, Wasser oder Pulverschnee und nicht in einen Block, der dort inzwischen steht. Sonst sagt
 # eine Meldung, warum nicht. Wie bei /cam back zählt der Sprung nicht als geflogen, und /cam trail hat dort eine Lücke.
-# Aufrufe: Jeder Sprung zu einem Punkt und jeder Besuch (/cam visit) zählt als Aufruf - von jedem, auch vom Besitzer,
+# Aufrufe: Jeder Sprung zu einem Punkt zählt als Aufruf - von jedem, auch vom Besitzer,
 # derselbe Spieler am selben Punkt höchstens einmal in views-cooldown-minutes. Das Menü zeigt sie unter jedem Punkt und
 # sortiert auf allen drei Reitern danach (die meisten zuerst). Verschoben behält ein Punkt seine Aufrufe, gelöscht sind
 # sie weg.
@@ -837,11 +836,11 @@ viewpoints:
   # Punkte - auch im Menü nur den Reiter der eigenen.
   sharing: true
   # Wie lange derselbe Spieler am selben Punkt nicht noch einmal als Aufruf zählt, in Minuten (0 bis 1440, 0 = jeder
-  # Sprung und jeder Besuch zählt). So treibt Hin- und Herspringen die Zahl nicht hoch.
+  # Sprung zählt). So treibt Hin- und Herspringen die Zahl nicht hoch.
   views-cooldown-minutes: 10
   # Bau der Woche: Unter den öffentlichen Punkten zählt, was ein Punkt in den letzten Tagen bekam - nicht alles seit
   # jeher, sonst lägen die alten immer vorn. Es zählen die Likes aus diesen Tagen (die noch stehen) und die Besucher:
-  # wie viele verschiedene Spieler hingesprungen sind oder ihn besucht haben, der Besitzer nicht - wer immer wieder
+  # wie viele verschiedene Spieler hingesprungen sind, der Besitzer nicht - wer immer wieder
   # kommt, zählt einmal. Der Punkt mit den meisten Likes darin (bei Gleichstand den meisten Besuchern) ist der beste
   # dieser Tage und bekommt einen Stern (Texte: menu-spot-top, spot-list-top, spot-period ...).
   # Im Menü wählt jeder Spieler selbst, wie viele Tage: Der Trichter auf dem Reiter der öffentlichen Punkte hat nach den
@@ -860,7 +859,7 @@ viewpoints:
   # Bis wohin davon angeboten wird, in Tagen (0 bis 3650, 0 = keiner): Mit 90 gibt es 1, 7, 30 und 90 Tage, mit 360
   # auch 180 und 360.
   top-max-days: 90
-  # Das Gästebuch: Wer einen Punkt hat, erfährt, wie oft er angesehen (hingesprungen oder besucht) und geliked wurde -
+  # Das Gästebuch: Wer einen Punkt hat, erfährt, wie oft er angesehen (hingesprungen) und geliked wurde -
   # nur andere zählen, und nur so oft, wie es als Aufruf zählt (views-cooldown-minutes). Nichts davon kommt sofort: Es
   # wird gesammelt und als Zahl je Punkt erzählt (Text: spot-guestbook-entry), so kann niemand einem anderen mit
   # Springen oder Liken und Entliken den Chat füllen - ein Like, das bis dahin zurückgenommen wurde, zählt nicht. Jeder
@@ -880,25 +879,11 @@ viewpoints:
   # Minuten (1 bis 1440). Die Glocke im Menü nennt es.
   guestbook-interval-minutes: 10
 
-# Besucher-Kamera: /cam visit <Spieler>:<Name> - die Kamera geht zu einem Punkt, den ein anderer mit einem teilt oder
-# der öffentlich ist, von überall aus, z. B. um sich den Bau eines Freundes zeigen zu lassen. Ohne Cam-Modus startet er dafür erst (mit allem,
-# was ein Start mit /cam prüft und kostet). Der Körper bleibt, wo man steht. Solange der Besuch dauert, tritt der Punkt
-# an die Stelle des Körpers: max-distance, das Funksignal und die Wand gehen von ihm aus - die Kamera sieht sich also
-# den Bau an, der ihr gezeigt wird, und kommt nicht weiter als vom eigenen Körper aus. /cam back beendet den Besuch und
-# bringt die Kamera zum Körper zurück.
-# Fair bleibt es so: nur Punkte, die der Besitzer selbst geteilt und dort gesetzt hat, wo er selbst war; nur in der Welt
-# des Körpers; nur, wo die Kamera überhaupt sein darf (nicht in einem Gebiet, das cam-area auf Stufe 2 verbietet, nicht
-# in gesperrter Lava, Wasser oder Pulverschnee, nicht in einem Block). Nimmt der Besitzer das Teilen zurück oder löscht
-# er den Punkt, geht die Kamera jedes Besuchers zu ihrem Körper zurück (Text: visit-ended).
-# Geht nur mit viewpoints.enabled und viewpoints.sharing. Ton: sounds.spot, Texte: visit-...
-visitor-camera:
-  enabled: true
-
 # Die öffentlichen Punkte auf der Web-Karte des Servers: BlueMap, Dynmap und squaremap, welche davon da ist. Jede
 # bekommt eine eigene Ebene (Text: web-map-layer), die man auf der Seite der Karte ein- und ausschalten kann, mit einer
 # Nadel für jeden öffentlichen Punkt. Ein Klick darauf zeigt, wem er gehört, wie oft er geliked und angesehen wurde, ob
 # er der Bau der Woche ist (bei Dynmap und squaremap mit einer goldenen Nadel), was er zeigt (Zeit, Wetter, Nachtsicht)
-# und den Befehl, ihn zu besuchen (Texte: web-map-...). Im Spiel geht von der Karte aus nichts: Eine Webseite kann
+# und wo er ist, mit dem Befehl, der hinspringt (Texte: web-map-...). Im Spiel geht von der Karte aus nichts: Eine Webseite kann
 # für einen Spieler keine Befehle schicken - den Befehl tippt man selbst.
 # Nur öffentliche Punkte (/cam spot share <Name> all): Private und die, die nur einzelnen Spielern angeboten sind,
 # kommen nie auf die Karte - die Seite einer Karte ist oft für jeden im Internet offen, nicht nur für die Spieler. Von
@@ -940,8 +925,8 @@ web-map:
 #                                    mit ihm mit. Ohne Cam-Modus startet er dafür erst, dort wo man steht.
 #   /cam follow decline <Spieler>  = eine Einladung ablehnen
 #   /cam follow kick <Spieler>     = einen Follower wegschicken
-#   /cam follow leave              = aufhören zu folgen (auch /cam back, ein Sprung zu einem Aussichtspunkt, ein Besuch
-#                                    oder /cam resume)
+#   /cam follow leave              = aufhören zu folgen (auch /cam back, ein Sprung zu einem Aussichtspunkt oder
+#                                    /cam resume)
 #   /cam follow end                = alle Follower gehen lassen (auch, wenn der Cam-Modus des Leaders endet, er stirbt
 #                                    oder in den Zuschauermodus wechselt)
 #   /cam follow view               = zwischen dem Blick des Leaders und freiem Umsehen umschalten (auch im Menü)
@@ -1145,7 +1130,7 @@ anti-scouting:
   # Bis wie weit andere Spieler zu sehen sind, in Blöcken (0 bis 256)
   radius: 32.0
   # Von wo aus gemessen wird:
-  #   body   = vom Körper (oder vom besuchten Punkt, in einer anderen Welt vom Portal) - man sieht, wen man auch ohne
+  #   body   = vom Körper (in einer anderen Welt vom Portal) - man sieht, wen man auch ohne
   #            Cam-Modus sähe, egal wo die Kamera ist
   #   camera = von der Kamera aus
   measured-from: body

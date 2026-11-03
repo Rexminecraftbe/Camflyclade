@@ -35,7 +35,7 @@ import java.util.logging.Level;
 
 /**
  * The guestbook of the spots, {@code viewpoints.guestbook}: the owner of a
- * spot hears how often it was looked at - jumped to or visited - and liked.
+ * spot hears how often it was looked at - jumped to - and liked.
  * Only others count, and only with the views {@link SpotViews} counts: the
  * same player at the same spot is one view in
  * {@code viewpoints.views-cooldown-minutes} at most.

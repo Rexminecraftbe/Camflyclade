@@ -312,7 +312,7 @@ public final class CameraMode {
         Mannequin hitbox = cameraData.getHitbox();
         // For the log, before he is put back at his body.
         Location cameraAt = player.getLocation();
-        // Where /cam resume goes on, and the visit it goes on with.
+        // Where /cam resume goes on.
         plugin.getResume().remember(player, cameraData, cameraAt);
         // Before the teleport to the body as well, which is no part of the flight.
         plugin.getTrail().stopFor(player, cameraAt);

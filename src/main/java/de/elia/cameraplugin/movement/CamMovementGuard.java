@@ -9,7 +9,6 @@ import de.elia.cameraplugin.portal.PortalRules;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.session.ClientFrost;
-import de.elia.cameraplugin.visit.Visit;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -208,15 +207,13 @@ public final class CamMovementGuard implements Listener {
     private String distanceAnchorName(CameraData data, Location where) {
         boolean fromPortal = !data.getBody().getWorld().equals(where.getWorld())
                 && data.getPortalAnchor() != null;
-        boolean fromVisit = !fromPortal && data.getVisit() != null;
-        String text = messages.getMessage(fromPortal ? "distance-from-portal"
-                : fromVisit ? "distance-from-visit" : "distance-from-body");
+        String text = messages.getMessage(fromPortal ? "distance-from-portal" : "distance-from-body");
         // Part of a sentence, not a whole one: left empty in the language
         // file, the chat would otherwise read "... blocks from !".
         if (!text.isEmpty()) {
             return text;
         }
-        return fromPortal ? "the portal you came out of" : fromVisit ? "the spot you visit" : "your body";
+        return fromPortal ? "the portal you came out of" : "your body";
     }
 
     /**
@@ -439,16 +436,13 @@ public final class CamMovementGuard implements Listener {
      * @return whether the server carried the teleport out
      */
     public boolean returnToBody(Player player, CameraData data) {
-        // Back home is the end of a visit as well: from now on the body
-        // counts again.
-        data.setVisit(null);
         return returnHome(player, data);
     }
 
     /**
-     * Takes the camera back to where it is held from - the spot it visits,
-     * or its body - and lets camera mode run on, for a signal that is lost
-     * under {@code signal.lost: back}. He keeps looking the way he looked.
+     * Takes the camera back to its body and lets camera mode run on, for a
+     * signal that is lost under {@code signal.lost: back}. He keeps looking
+     * the way he looked.
      *
      * @return whether the server carried the teleport out
      */
@@ -461,24 +455,16 @@ public final class CamMovementGuard implements Listener {
     }
 
     /**
-     * Where the camera is held from in the world of its body: the shared spot
-     * it visits with {@code /cam visit}, which takes the place of the body -
-     * the distance, the signal and the wall go out from there -, or the body
-     * itself.
+     * Where the camera is held from in the world of its body: the body - the
+     * distance, the signal and the wall go out from there.
      */
     public Location home(CameraData data) {
-        Visit visit = data.getVisit();
-        return visit != null ? visit.anchor() : data.getBody().getLocation();
+        return data.getBody().getLocation();
     }
 
-    /**
-     * Where the signal goes out from in the world of the body: the eyes of the
-     * body, or those of a camera standing at the spot it visits.
-     */
+    /** Where the signal goes out from in the world of the body: the eyes of the body. */
     public Location homeEyes(Player player, CameraData data) {
-        Visit visit = data.getVisit();
-        return visit != null ? visit.anchor().add(0.0, player.getEyeHeight(), 0.0)
-                : data.getBody().getEyeLocation();
+        return data.getBody().getEyeLocation();
     }
 
     /**
@@ -491,25 +477,6 @@ public final class CamMovementGuard implements Listener {
      */
     public boolean jumpTo(Player player, CameraData data, Location target) {
         return putDown(player, data, target);
-    }
-
-    /**
-     * Puts the camera down for a visit of {@code /cam visit}, or for a flight
-     * {@code /cam resume} takes up again, and sets what it is held from from
-     * then on: the spot it visits, or - with {@code null} - its body again.
-     * Whether it may go there is for the caller to say beforehand.
-     *
-     * @return whether the server carried the teleport out; if not, the camera
-     *         is held from what it was held from before
-     */
-    public boolean jumpTo(Player player, CameraData data, Location target, Visit visit) {
-        Visit before = data.getVisit();
-        data.setVisit(visit);
-        boolean moved = putDown(player, data, target);
-        if (!moved) {
-            data.setVisit(before);
-        }
-        return moved;
     }
 
     /**
@@ -596,7 +563,6 @@ public final class CamMovementGuard implements Listener {
      * of {@code action-bar.display: distance} points to it.
      */
     public Location distanceAnchor(CameraData data, Location location) {
-        // The spot of a visit lies in the world of the body, see CamVisit.
         Location home = home(data);
         if (home.getWorld().equals(location.getWorld())) {
             return home;

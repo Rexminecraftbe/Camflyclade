@@ -718,9 +718,9 @@ public final class CamMenu implements Listener {
     }
 
     /**
-     * What "nearest first" measures from: where his camera is held from - his
-     * body, or the spot he visits -, the same spot a jump is measured from;
-     * out of camera mode, where he stands, which is where his body will be.
+     * What "nearest first" measures from: his body, the same spot a jump is
+     * measured from; out of camera mode, where he stands, which is where his
+     * body will be.
      */
     private Location nearFrom(Player player) {
         CameraData data = plugin.getCameraPlayers().get(player.getUniqueId());
@@ -791,8 +791,8 @@ public final class CamMenu implements Listener {
      * A public spot. One of his own: left-click jumps to it, right-click takes
      * it offline - it stays among his own; it is deleted there. One of another
      * player: left-click jumps to it like to one of his own, in camera mode
-     * and within reach, right-click likes it or no longer does, shift-click
-     * visits it; it shines while he likes it.
+     * and within reach, right-click likes it or no longer does; it shines
+     * while he likes it.
      */
     private void putPublicSpot(Player player, Page page, int slot, Share share, boolean top, int days) {
         CamSpots spots = plugin.getSpots();
@@ -832,13 +832,14 @@ public final class CamMenu implements Listener {
         lore.addAll(reachLore());
         lore.addAll(lines(messages.getMessage(liked ? "menu-public-spot-actions-unlike"
                 : "menu-public-spot-actions")));
-        lore.addAll(visitLore());
         String name = messages.getMessage("menu-shared-spot").replace("{owner}", share.getOwnerName())
                 .replace("{spot}", spot.name());
         put(page, slot, shine(item(Material.MAP, name, lore), liked), click -> {
             if (click.isShiftClick()) {
-                visit(player, share);
-            } else if (click.isRightClick()) {
+                // Nothing: a slip of the shift key neither jumps nor likes.
+                return;
+            }
+            if (click.isRightClick()) {
                 later(() -> {
                     spots.like(player, share);
                     openSpots(player, SpotTab.PUBLIC, 0);
@@ -895,20 +896,21 @@ public final class CamMenu implements Listener {
     /**
      * A spot shared with him that he accepted: left-click jumps to it like to
      * one of his own, in camera mode and within reach, right-click takes it
-     * off his list, shift-click visits it.
+     * off his list.
      */
     private void putSharedSpot(Player player, Page page, int slot, Share share) {
         CamSpots spots = plugin.getSpots();
         List<String> lore = spotLore(share.getOwner(), share.getSpot());
         lore.addAll(reachLore());
         lore.addAll(lines(messages.getMessage("menu-shared-spot-actions")));
-        lore.addAll(visitLore());
         String name = messages.getMessage("menu-shared-spot").replace("{owner}", share.getOwnerName())
                 .replace("{spot}", share.getSpot().name());
         put(page, slot, Material.MAP, name, lore, click -> {
             if (click.isShiftClick()) {
-                visit(player, share);
-            } else if (click.isRightClick()) {
+                // Nothing: a slip of the shift key neither jumps nor drops it.
+                return;
+            }
+            if (click.isRightClick()) {
                 later(() -> {
                     spots.decline(player, share);
                     openSpots(player, SpotTab.SHARED, 0);
@@ -931,17 +933,6 @@ public final class CamMenu implements Listener {
                 .replace("{start}", String.valueOf(Math.round(start))));
     }
 
-    /** What shift-click does on a spot of another player, while {@code visitor-camera} is on: nothing otherwise. */
-    private List<String> visitLore() {
-        return settings.isVisitorCameraEnabled() ? lines(messages.getMessage("menu-spot-visit-action")) : List.of();
-    }
-
-    /** Visits a spot of another player with the visitor camera, while it is on. */
-    private void visit(Player player, Share share) {
-        if (settings.isVisitorCameraEnabled()) {
-            act(player, () -> plugin.getVisit().visit(player, share));
-        }
-    }
 
     /**
      * Where a spot of this owner is, since when, and how often it was looked

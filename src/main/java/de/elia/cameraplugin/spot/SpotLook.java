@@ -12,7 +12,7 @@ import java.util.Locale;
  * the time of day, the weather and the night vision its owner had picked for
  * himself in camera mode when he saved it - with {@code /cam time},
  * {@code /cam weather} and {@code /cam nightvision} -, so that whoever jumps
- * there or visits it sees the build at sunset in the rain, the way it was
+ * there sees the build at sunset in the rain, the way it was
  * meant to be seen.
  *
  * <p>Only what he picked himself goes into it, never the time and weather of

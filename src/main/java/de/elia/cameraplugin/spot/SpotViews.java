@@ -23,8 +23,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
 /**
- * How often each spot was looked at, its views: every jump to it and every
- * visit, by anybody - its owner as well. The same player at the same spot
+ * How often each spot was looked at, its views: every jump to it, by
+ * anybody - its owner as well. The same player at the same spot
  * counts once in {@code viewpoints.views-cooldown-minutes} at most, so that
  * jumping back and forth does not drive the number up.
  *
@@ -64,7 +64,7 @@ public final class SpotViews {
 
     /** What stands at the top of the file, for whoever finds it and wonders. */
     private static final List<String> HEADER = List.of(
-            "CamFly: how often each spot of /cam spot was looked at - every jump to it and every visit -, by",
+            "CamFly: how often each spot of /cam spot was looked at - every jump to it -, by",
             "the id of its owner and the name of the spot, and under week who came lately (by the id of the",
             "owner, the spot and the id of the player). Deleting it starts every spot at 0 again.");
 
@@ -103,7 +103,7 @@ public final class SpotViews {
     }
 
     /**
-     * A player looked at a spot: jumped there or visited it. It counts unless
+     * A player looked at a spot: jumped there. It counts unless
      * he did the same less than {@code viewpoints.views-cooldown-minutes}
      * ago.
      *

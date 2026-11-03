@@ -6822,28 +6822,23 @@ def im_cam_modus(bot, name):
 
 
 def teilen_checks(env, bot):
-    """viewpoints.sharing und visitor-camera: Aussichtspunkte anbieten,
-    oeffentlich machen, liken und die eines anderen besuchen.
+    """viewpoints.sharing: Aussichtspunkte anbieten, oeffentlich machen,
+    liken und zu denen eines anderen springen.
 
-    Voreingestellt sind beide an - nachgesehen in der ausgelieferten Datei.
+    Voreingestellt ist es an - nachgesehen in der ausgelieferten Datei.
     Der Bot setzt den Punkt "Haus" sechs Bloecke neben seinem Platz und bietet
     ihn dem zweiten Spieler an, der zweihundert Bloecke weiter steht: Der
     erfaehrt es mit Knoepfen, die /cam spot accept und decline
     CamFlyTester:Haus schicken, in playerdata/shared-spots.yml steht er unter
-    pending, /cam spot list zeigt ihn unter "Offered to you", und besuchen
-    kann er ihn noch nicht. Nimmt er ihn an, erfaehrt es der Bot, in der Datei
+    pending, /cam spot list zeigt ihn unter "Offered to you", und springen
+    kann er noch nicht hin. Nimmt er ihn an, erfaehrt es der Bot, in der Datei
     steht er unter players, /cam spot list hat ihn unter "Shared with you",
-    und die Tab-Vervollstaendigung bietet ihn nach /cam visit an. Noch einmal
-    angeboten heisst es, dass er ihn schon hat. Springen wie zu einem eigenen
-    Punkt geht von dort nicht, er ist mehr als max-distance vom eigenen
-    Koerper weg.
-
-    /cam visit setzt die Kamera an den Punkt - im Cam-Modus und ohne ihn,
-    dann startet er erst -, die Action-Bar zeigt den Abstand zum Punkt, und
-    mit max-distance: 4 haelt die Kamera am Punkt fest statt am Koerper. /cam
-    back beendet den Besuch beim Koerper. Nimmt der Bot das Teilen zurueck,
-    waehrend der zweite Spieler zu Besuch ist, ist dessen Kamera wieder beim
-    Koerper, mit der Meldung, und der Punkt ist fuer ihn weg.
+    und die Tab-Vervollstaendigung bietet ihn nach /cam spot an - /cam visit
+    gibt es nicht mehr, auch nicht nach /cam. Noch einmal angeboten heisst es,
+    dass er ihn schon hat. Springen wie zu einem eigenen Punkt geht von dort
+    nicht, er ist mehr als max-distance vom eigenen Koerper weg; nah dran
+    springt er hin. Nimmt der Bot das Teilen zurueck, ist der Punkt fuer ihn
+    weg.
 
     Mit all macht der Bot ihn oeffentlich: Der andere sieht ihn ohne
     annehmen unter "Public spots of others", die Liste des Bots sagt
@@ -6853,10 +6848,9 @@ def teilen_checks(env, bot):
     ein angenommenes nimmt er mit decline wieder von seiner Liste. Die
     Tab-Vervollstaendigung bietet nach share all und die Spieler an.
     Ein unbekannter Name und der eigene werden abgewiesen. Ein verbotenes
-    Biom am Punkt sperrt den Besuch, und der Cam-Modus startet dafuer nicht.
-    Mit visitor-camera.enabled: false ist /cam visit aus, mit
-    viewpoints.sharing: false das Teilen. Ein geloeschter Punkt ist fuer
-    niemanden mehr geteilt.
+    Biom am Punkt sperrt den Sprung, und der Cam-Modus startet dafuer nicht.
+    Mit viewpoints.sharing: false ist das Teilen aus. Ein geloeschter Punkt
+    ist fuer niemanden mehr geteilt.
     """
     def tab(client, text):
         return client.call("tab", text=text).get("matches", [])
@@ -6882,9 +6876,9 @@ def teilen_checks(env, bot):
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
     try:
         aus = ausgeliefert(env)
-        FIND.test("Voreingestellt stehen viewpoints.sharing und visitor-camera.enabled auf true da",
+        FIND.test("Voreingestellt steht viewpoints.sharing auf true da, und visitor-camera gibt es nicht mehr",
                   re.search(r"(?m)^\s+sharing:\s*true\s*$", aus) is not None
-                  and re.search(r"(?m)^visitor-camera:\s*\n\s*enabled:\s*true\s*$", aus) is not None, "")
+                  and re.search(r"(?m)^visitor-camera:", aus) is None, "")
         spots_loeschen(bot, "Haus")
         zuschauer.start()
         if not FIND.test("Zweiter Spieler fuer das Teilen kommt herein",
@@ -6913,8 +6907,8 @@ def teilen_checks(env, bot):
         FIND.test("storage: file - das Angebot steht in playerdata/shared-spots.yml unter pending",
                   re.search(r"name:\s*Haus", text) is not None and re.search(r"pending:", text) is not None
                   and ZUSCHAUER_NAME in text, text[-300:] or "keine Datei")
-        dort = befehl(zuschauer, f"/cam visit {label}")
-        FIND.test("Vor dem Annehmen ist der Punkt nicht seiner: kein Besuch",
+        dort = befehl(zuschauer, f"/cam spot {label}")
+        FIND.test("Vor dem Annehmen ist der Punkt nicht seiner: kein Sprung",
                   gesagt(dort, rf"Nobody shares a spot called {label}"), zeige(dort))
         dort = befehl(zuschauer, "/cam spot list")
         FIND.test("/cam spot list beim anderen: der Punkt unter \"Offered to you\"",
@@ -6935,8 +6929,10 @@ def teilen_checks(env, bot):
         dort = befehl(zuschauer, "/cam spot list")
         FIND.test("/cam spot list beim anderen: der Punkt unter \"Shared with you\"",
                   gesagt(dort, r"Shared with you \(1\)") and gesagt(dort, rf"- {label}: "), zeige(dort))
-        tabs = tab(zuschauer, "/cam visit ")
-        FIND.test("Tab nach /cam visit: der geteilte Punkt", tabs == [label], str(tabs))
+        tabs = tab(zuschauer, "/cam spot ")
+        FIND.test("Tab nach /cam spot: der geteilte Punkt", label in tabs, str(tabs))
+        tabs = tab(zuschauer, "/cam ")
+        FIND.test("Tab nach /cam: visit gibt es nicht mehr", "visit" not in tabs and "spot" in tabs, str(tabs))
         zeilen = befehl(bot, f"/cam spot share Haus {ZUSCHAUER_NAME}")
         FIND.test("Noch einmal angeboten - er hat ihn schon",
                   gesagt(zeilen, rf"{ZUSCHAUER_NAME} has spot Haus already"), zeige(zeilen))
@@ -6948,45 +6944,19 @@ def teilen_checks(env, bot):
         FIND.test("/cam spot Besitzer:Name springt nur wie zu einem eigenen Punkt: zu weit vom eigenen Koerper",
                   gesagt(dort, r"You are too far away")
                   and nahe(zuschauer_pos(), fern, 1.5), zeige(dort))
-        dort = befehl(zuschauer, f"/cam visit {label}", warten=2.0)
-        FIND.test("/cam visit im Cam-Modus - die Kamera steht am geteilten Punkt",
-                  gesagt(dort, rf"Visiting {BOT_NAME}'s spot Haus") and nahe(zuschauer_pos(), punkt),
-                  f"{zeige(dort)} / {zuschauer_pos()}")
-        seit = zuschauer.mark()
-        time.sleep(2.5)
-        dort = zeilen_seit(zuschauer, seit)
-        FIND.test("Beim Besuch zeigt die Action-Bar den Abstand zum Punkt", gesagt(dort, r"Spot: \d+ blocks"),
-                  zeige(dort))
-
-        # Jeder Reload beendet den Cam-Modus: der Besuch beginnt danach ohne ihn.
-        set_option(env, "max-distance", "4.0")
-        dort = befehl(zuschauer, f"/cam visit {label}", warten=3.0)
-        FIND.test("/cam visit ohne Cam-Modus - er startet, und die Kamera steht am geteilten Punkt",
+        cam_off(zuschauer)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 3} {y} {z}", pause=1.5)
+        dort = befehl(zuschauer, f"/cam spot {label}", warten=3.0)
+        FIND.test("Nah dran springt er hin: ohne Cam-Modus startet er, und die Kamera steht am geteilten Punkt",
                   gesagt(dort, r"Cam mode activated") and nahe(zuschauer_pos(), punkt),
                   f"{zeige(dort)} / {zuschauer_pos()}")
-        zuschauer.call("fly", wait=30, dx=10, timeout=6000)
-        time.sleep(1.5)
-        wo = zuschauer_pos()
-        FIND.test("Beim Besuch haelt max-distance die Kamera am Punkt fest, nicht am Koerper",
-                  wo is not None and math.dist(wo, punkt) <= 5.0, str(wo))
-        dort = befehl(zuschauer, "/cam back", warten=2.0)
-        FIND.test("/cam back beendet den Besuch: die Kamera ist beim Koerper",
-                  gesagt(dort, r"Back at your body") and nahe(zuschauer_pos(), fern, 1.5),
-                  f"{zeige(dort)} / {zuschauer_pos()}")
-        set_option(env, "max-distance", "100.0")
-
-        befehl(zuschauer, f"/cam visit {label}", warten=3.0)
-        seit = zuschauer.mark()
-        zeilen = befehl(bot, f"/cam spot unshare Haus {ZUSCHAUER_NAME}", warten=2.0)
-        dort = zeilen_seit(zuschauer, seit)
-        FIND.test("/cam spot unshare waehrend des Besuchs - seine Kamera ist wieder beim Koerper",
-                  gesagt(zeilen, rf"no longer shared with {ZUSCHAUER_NAME}")
-                  and gesagt(dort, rf"{BOT_NAME} no longer shares the spot Haus") and nahe(zuschauer_pos(), fern, 1.5),
-                  f"{zeige(zeilen)} / {zeige(dort)} / {zuschauer_pos()}")
-        dort = befehl(zuschauer, f"/cam visit {label}")
-        FIND.test("Danach ist der Punkt fuer ihn weg", gesagt(dort, rf"Nobody shares a spot called {label}"),
-                  zeige(dort))
         cam_off(zuschauer)
+
+        zeilen = befehl(bot, f"/cam spot unshare Haus {ZUSCHAUER_NAME}", warten=2.0)
+        dort = befehl(zuschauer, f"/cam spot {label}")
+        FIND.test("/cam spot unshare - danach ist der Punkt fuer ihn weg",
+                  gesagt(zeilen, rf"no longer shared with {ZUSCHAUER_NAME}")
+                  and gesagt(dort, rf"Nobody shares a spot called {label}"), f"{zeige(zeilen)} / {zeige(dort)}")
 
         zeilen = befehl(bot, "/cam spot share Haus all")
         dort = befehl(zuschauer, "/cam spot list")
@@ -7040,18 +7010,14 @@ def teilen_checks(env, bot):
 
         bot.chat(f"/fillbiome {biom} minecraft:lush_caves")
         time.sleep(1.5)
-        dort = befehl(zuschauer, f"/cam visit {label}", warten=2.0)
-        FIND.test("Ein verbotenes Biom am Punkt sperrt den Besuch, und der Cam-Modus startet dafuer nicht",
+        dort = befehl(zuschauer, f"/cam spot {label}", warten=2.0)
+        FIND.test("Ein verbotenes Biom am Punkt sperrt den Sprung, und der Cam-Modus startet dafuer nicht",
                   gesagt(dort, rf"Spot {label} lies in Lush Caves") and not im_cam_modus(bot, ZUSCHAUER_NAME),
                   zeige(dort))
         bot.chat(f"/fillbiome {biom} minecraft:plains")
         time.sleep(1.5)
 
-        set_option(env, "enabled", "false", "visitor-camera")
-        dort = befehl(zuschauer, f"/cam visit {label}")
-        FIND.test("visitor-camera.enabled: false - /cam visit ist aus", gesagt(dort, r"/cam visit is switched off"),
-                  zeige(dort))
-        set_options(env, [("enabled", "true", "visitor-camera"), ("sharing", "false", "viewpoints")])
+        set_option(env, "sharing", "false", "viewpoints")
         zeilen = befehl(bot, f"/cam spot share Haus {ZUSCHAUER_NAME}")
         dort = befehl(zuschauer, "/cam spot list")
         FIND.test("viewpoints.sharing: false - kein Teilen, und geteilte Punkte sind nicht zu sehen",
@@ -7060,7 +7026,7 @@ def teilen_checks(env, bot):
         set_option(env, "sharing", "true", "viewpoints")
 
         befehl(bot, "/cam spot delete Haus")
-        dort = befehl(zuschauer, f"/cam visit {label}")
+        dort = befehl(zuschauer, f"/cam spot {label}")
         FIND.test("Ein geloeschter Punkt ist fuer niemanden mehr geteilt",
                   gesagt(dort, rf"Nobody shares a spot called {label}")
                   and re.search(r"name:\s*Haus", geteilte_datei(env)) is None, zeige(dort))
@@ -7070,8 +7036,7 @@ def teilen_checks(env, bot):
                 cam_off(zuschauer)
                 zuschauer.stop()
             cam_off(bot)
-            set_options(env, [("max-distance", "100.0"), ("enabled", "true", "visitor-camera"),
-                              ("sharing", "true", "viewpoints")])
+            set_options(env, [("max-distance", "100.0"), ("sharing", "true", "viewpoints")])
             spots_loeschen(bot, "Haus")
             bot.chat(f"/fillbiome {biom} minecraft:plains")
             time.sleep(1.0)
@@ -15343,7 +15308,7 @@ def aufrufe_datei(env):
 def spot_ansicht_checks(env, bot):
     """viewpoints: Ein Spot merkt sich, was sein Besitzer im Cam-Modus selbst
     eingestellt hat - /cam time, /cam weather, /cam nightvision -, und wer
-    hinspringt oder ihn besucht, sieht den Bau so.
+    hinspringt, sieht den Bau so.
 
     Zu Fuss gesetzt nimmt ein Spot nichts mit, auch wenn eine Wahl fuer den
     naechsten Flug gemerkt ist. Im Cam-Modus mit sunset, rain und Nachtsicht
@@ -15354,7 +15319,7 @@ def spot_ansicht_checks(env, bot):
     Nachtsicht am hellen Tag; /cam spot list sagt es hinter dem Spot. /cam
     back gibt die eigene Zeit zurueck, die Welt, und die Nachtsicht geht weg.
     Eine eigene Zeit (night) gilt nach dem Spot wieder, gemerkt wird vom Spot
-    nichts. Der zweite Spieler besucht den oeffentlich gemachten Spot und
+    nichts. Der zweite Spieler springt zum oeffentlich gemachten Spot und
     sieht ihn ebenso, der Bot daneben seine eigene Zeit.
 
     Mit cam-time.enabled: false gilt die Zeit des Spots nicht mehr - weder
@@ -15441,14 +15406,14 @@ def spot_ansicht_checks(env, bot):
             return
         time.sleep(1.5)
         cam_off(zuschauer)
-        console(env, f"tp {ZUSCHAUER_NAME} {x + 40} {y} {z}", pause=1.5)
-        dort = befehl(zuschauer, f"/cam visit {label}", warten=8.0)
-        FIND.test("Der Besuch zeigt dem zweiten Spieler den Sonnenuntergang und den Regen des Spots",
-                  gesagt(dort, rf"Visiting {BOT_NAME}'s spot Abend") and zeit(zuschauer) == 12000
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 3} {y} {z}", pause=1.5)
+        dort = befehl(zuschauer, f"/cam spot {label}", warten=8.0)
+        FIND.test("Der Sprung zeigt dem zweiten Spieler den Sonnenuntergang und den Regen des Spots",
+                  gesagt(dort, rf"At spot {BOT_NAME}:Abend") and zeit(zuschauer) == 12000
                   and regen(zuschauer) > 0.99, f"{zeige(dort)} / {zeit(zuschauer)} / {regen(zuschauer)}")
         FIND.test("... der Bot daneben sieht seine eigene Zeit", zeit(bot) == 1000, str(zeit(bot)))
         befehl(zuschauer, "/cam back", warten=2.0)
-        FIND.test("Nach dem Besuch sieht der zweite Spieler wieder die Zeit der Welt", zeit(zuschauer) == 1000,
+        FIND.test("Nach /cam back sieht der zweite Spieler wieder die Zeit der Welt", zeit(zuschauer) == 1000,
                   str(zeit(zuschauer)))
         cam_off(zuschauer)
 
@@ -15488,7 +15453,7 @@ def bau_der_woche_checks(env, bot):
     Der Bot macht zwei Spots oeffentlich, Woche und Alt. Der zweite Spieler
     liked Woche: In playerdata/shared-spots.yml steht unter liked-at, wann,
     und seine Liste traegt den Stern hinter Woche, nicht hinter Alt. Er
-    besucht Alt: In playerdata/spot-views.yml steht er unter week bei Alt;
+    springt zu Alt: In playerdata/spot-views.yml steht er unter week bei Alt;
     der Bot selbst, der zu seinem eigenen Spot springt, zaehlt dort nicht.
     Nimmt er das Like zurueck, ist Alt mit seinem einen Besucher vorn. Die
     Liste des Bots traegt den Stern hinter seinem eigenen Spot.
@@ -15553,7 +15518,8 @@ def bau_der_woche_checks(env, bot):
                   gesagt(dort, rf"{BOT_NAME}:Woche: .*{stern}") and not gesagt(dort, rf"{BOT_NAME}:Alt: .*{stern}"),
                   zeige(dort))
 
-        befehl(zuschauer, f"/cam visit {BOT_NAME}:Alt", warten=3.0)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 6} {y} {z}", pause=1.5)
+        befehl(zuschauer, f"/cam spot {BOT_NAME}:Alt", warten=3.0)
         cam_off(zuschauer)
         cam_on(bot)
         befehl(bot, "/cam spot Alt", warten=1.5)
@@ -15654,7 +15620,7 @@ def webkarte_checks(env, bot):
     Der Bot setzt im Cam-Modus mit sunset den Spot Karte und macht ihn
     oeffentlich, dazu den privaten Spot Geheim: Auf jeder Karte steht eine
     Ebene "Spots", sichtbar und abschaltbar, mit einer Nadel camfly-<uuid>-karte
-    "Karte (CamFlyTester)" an seinem Ort; ein Klick nennt den Befehl /cam visit
+    "Karte (CamFlyTester)" an seinem Ort; ein Klick nennt den Befehl /cam spot
     CamFlyTester:Karte, die Likes und was er zeigt. Dynmap nimmt das Icon
     camera, squaremap das eigene Icon der Ebene, 16 x 16. Geheim steht
     nirgends. Liked der zweite Spieler Karte, ist er der Bau der Woche: "★" im
@@ -15725,8 +15691,8 @@ def webkarte_checks(env, bot):
         FIND.test("BlueMap: die Nadel steht am Ort des Spots",
                   ort is not None and abs(float(ort.group(1)) - x) < 1.0 and abs(float(ort.group(3)) - z) < 1.0,
                   b[0] if b else "")
-        FIND.test("Der Klick nennt den Befehl zum Besuchen, die Likes und was der Spot zeigt",
-                  all(f"/cam visit {BOT_NAME}:Karte" in t and "0 likes" in t and "Shows: sunset" in t
+        FIND.test("Der Klick nennt den Befehl zum Hinspringen, die Likes und was der Spot zeigt",
+                  all(f"/cam spot {BOT_NAME}:Karte" in t and "0 likes" in t and "Shows: sunset" in t
                       for t in b + d + s), "\n".join(b + d + s))
         FIND.test("Dynmap nimmt das Icon camera, squaremap das eigene der Ebene, 16 x 16",
                   bool(d) and "icon=camera" in d[0] and bool(s) and "icon=camfly-spots_spot 16x16" in s[0]
@@ -16011,7 +15977,7 @@ ABSCHNITTE = [
     Abschnitt("nachtsicht_wahl", nachtsicht_wahl_checks, "nightvision preferences session/SessionListener"),
     Abschnitt("naehe", naehe_checks, "start/StartChecks"),
     Abschnitt("einstellungen", einstellungen_checks, "preferences speed sky storage session/SessionListener"),
-    Abschnitt("teilen", teilen_checks, "spot visit"),
+    Abschnitt("teilen", teilen_checks, "spot"),
     Abschnitt("fuehrung", fuehrung_checks, "tour speed"),
     Abschnitt("fuehrung_ohne_cam", fuehrung_ohne_cam_checks, "tour display/CamNameTag scoreboard/GuideTeam"),
     Abschnitt("gaestebuch", gaestebuch_checks, "spot/SpotGuestbook spot/CamSpots spot/SpotViews menu/CamMenu"),
@@ -16022,7 +15988,7 @@ ABSCHNITTE = [
     Abschnitt("spotmoderation", spotmoderation_checks, "menu spot/SpotModeration spot/SpotBans spot/CamSpots"),
     Abschnitt("tourmoderation", tourmoderation_checks, "menu tour/TourModeration tour/TourBans tour/CamTour"),
     Abschnitt("spot_ansicht", spot_ansicht_checks,
-              "spot sky nightvision visit back resume tour/CamTour preferences storage/PlayerStore"),
+              "spot sky nightvision back resume tour/CamTour preferences storage/PlayerStore"),
     Abschnitt("bau_der_woche", bau_der_woche_checks, "spot menu"),
     Abschnitt("webkarte", webkarte_checks, "webmap spot/SharedSpots spot/CamSpots spot/SpotViews"),
     Abschnitt("erze", erze_checks, "ore session/CameraMode"),

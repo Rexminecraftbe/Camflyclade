@@ -81,7 +81,6 @@ import de.elia.cameraplugin.trail.CamTrail;
 import de.elia.cameraplugin.tour.CamTour;
 import de.elia.cameraplugin.tour.TourBans;
 import de.elia.cameraplugin.tour.TourModeration;
-import de.elia.cameraplugin.visit.CamVisit;
 import de.elia.cameraplugin.visibility.CamVisibility;
 import de.elia.cameraplugin.webmap.CamWebMap;
 import org.bukkit.Bukkit;
@@ -153,8 +152,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final SpotModeration spotModeration = new SpotModeration(this, new SpotBans(this, log));
     private final JumpCheck jumpCheck = new JumpCheck(this);
     private final CamSpots spots = new CamSpots(this, playerStore, sharedSpots, spotViews, guestbook, jumpCheck);
-    private final CamVisit visit = new CamVisit(this, sharedSpots, jumpCheck);
-    private final CamResume resume = new CamResume(this, playerStore, sharedSpots, jumpCheck);
+    private final CamResume resume = new CamResume(this, playerStore, jumpCheck);
     private final CamTour tour = new CamTour(this);
     private final TourModeration tourModeration = new TourModeration(this, new TourBans(this, log));
     private final CamScoutGuard scoutGuard = new CamScoutGuard(this);
@@ -696,10 +694,6 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamSpots getSpots() {
         return spots;
-    }
-
-    public CamVisit getVisit() {
-        return visit;
     }
 
     public CamWebMap getWebMap() {

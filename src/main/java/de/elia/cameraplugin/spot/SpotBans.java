@@ -56,9 +56,9 @@ public final class SpotBans {
          * the public ones among them as well.
          */
         PRIVATE("private"),
-        /** The public ones: making his public; looking at them is jumping to or visiting those of others. */
+        /** The public ones: making his public; looking at them is jumping to those of others. */
         PUBLIC("public"),
-        /** Those shared by name: sharing his; looking at them is jumping to or visiting those shared with him. */
+        /** Those shared by name: sharing his; looking at them is jumping to those shared with him. */
         SHARED("shared");
 
         public final String key;

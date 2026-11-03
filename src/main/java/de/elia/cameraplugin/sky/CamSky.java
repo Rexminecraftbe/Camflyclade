@@ -33,7 +33,7 @@ import java.util.UUID;
  *
  * <p>A spot saved with a time or a weather of its own, see
  * {@link de.elia.cameraplugin.spot.SpotLook}, shows them to whoever jumps
- * there or visits it, in place of his own - until his camera is put down
+ * there, in place of his own - until his camera is put down
  * somewhere else, see {@link #showSpot} and {@link #leaveSpot}, or he picks
  * one himself. His own comes back then; what a spot showed him is never kept
  * for his next flight.</p>
@@ -319,8 +319,8 @@ public final class CamSky {
     }
 
     /**
-     * The camera of a player was put down at a spot - he jumped there or
-     * visits it: its time and its weather stand in for his own, as far as
+     * The camera of a player was put down at a spot he jumped to: its time
+     * and its weather stand in for his own, as far as
      * {@code cam-time} and {@code cam-weather} let anybody have one. A part
      * the spot does not have shows him his own again, should an earlier spot
      * have stood in for it.

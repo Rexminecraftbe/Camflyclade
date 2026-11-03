@@ -35,9 +35,7 @@ public final class SessionTracker implements Listener {
         if (from.getWorld() != null && from.getWorld().equals(to.getWorld())) {
             data.addDistanceFlown(from.distance(to));
         }
-        // From the spot of a visit, which takes the place of the body: the
-        // way to a body a thousand blocks off is no flight of the camera.
-        Location home = data.getVisit() != null ? data.getVisit().anchor() : data.getBody().getLocation();
+        Location home = data.getBody().getLocation();
         if (home.getWorld() != null && home.getWorld().equals(to.getWorld())) {
             data.noteDistanceFromBody(home.distance(to));
         }

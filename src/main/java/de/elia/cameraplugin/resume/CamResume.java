@@ -5,11 +5,8 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.spot.JumpCheck;
-import de.elia.cameraplugin.spot.Share;
-import de.elia.cameraplugin.spot.SharedSpots;
 import de.elia.cameraplugin.storage.PlayerStore;
 import de.elia.cameraplugin.storage.StorageMode;
-import de.elia.cameraplugin.visit.Visit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -23,14 +20,11 @@ import java.util.UUID;
  * the way it looked - for a build looked at a bit at a time, with a walk in
  * between.
  *
- * <p>Where each flight ends is noted when camera mode ends, whatever ends it.
- * A flight that ended on a visit of {@code /cam visit} goes on as that visit,
- * as long as the spot is still shared with him.</p>
+ * <p>Where each flight ends is noted when camera mode ends, whatever ends it.</p>
  *
  * <p>The camera is put down there only where it could fly to, see
  * {@link JumpCheck}: in the world of the body, within {@code max-distance} of
- * the body - the new one, where he stands now - or of the spot it visits,
- * where the signal reaches, where {@code cam-area} lets it, out of shut lava,
+ * the body - the new one, where he stands now -, where the signal reaches, where {@code cam-area} lets it, out of shut lava,
  * water and powder snow and not into a block. Before camera mode that is
  * asked before it starts, so that nobody pays for a start that only ends at
  * his body; and once more when it has started, in case the wait of
@@ -45,21 +39,15 @@ public final class CamResume {
     private final CamSettings settings;
     private final Messages messages;
     private final PlayerStore store;
-    private final SharedSpots shared;
     private final JumpCheck jumpCheck;
     /** Where the last flight of each player ended, on {@code storage: memory}. */
     private final Map<UUID, LastFlight> inMemory = new HashMap<>();
 
-    /** Where the camera goes on, and what it is held from there. */
-    private record Plan(Location target, Visit visit) {
-    }
-
-    public CamResume(CameraPlugin plugin, PlayerStore store, SharedSpots shared, JumpCheck jumpCheck) {
+    public CamResume(CameraPlugin plugin, PlayerStore store, JumpCheck jumpCheck) {
         this.plugin = plugin;
         this.settings = plugin.getSettings();
         this.messages = plugin.getMessages();
         this.store = store;
-        this.shared = shared;
         this.jumpCheck = jumpCheck;
     }
 
@@ -86,9 +74,7 @@ public final class CamResume {
         if (!settings.isResumeEnabled() || cameraAt.getWorld() == null) {
             return;
         }
-        Visit visit = data.getVisit();
-        LastFlight flight = LastFlight.at(cameraAt, visit == null ? null : visit.owner(),
-                visit == null ? null : visit.spotKey());
+        LastFlight flight = LastFlight.at(cameraAt);
         if (inFile()) {
             store.get(player.getUniqueId()).setLastFlight(flight);
         } else {
@@ -128,56 +114,33 @@ public final class CamResume {
      * where he stands, which is where his body is going to be.
      *
      * @param data his camera mode, or {@code null} before it
-     * @return the plan, or {@code null} when it may not; he has been told why
+     * @return where the camera goes on, or {@code null} when it may not; he
+     *         has been told why
      */
-    private Plan planned(Player player, CameraData data, LastFlight flight) {
+    private Location planned(Player player, CameraData data, LastFlight flight) {
         World home = data != null ? data.getBody().getWorld() : player.getWorld();
         Location target = flight.toLocation();
         if (target == null || !target.getWorld().equals(home)) {
             messages.sendConfiguredMessage(player, "resume-other-world");
             return null;
         }
-        Visit visit = null;
-        Location anchor;
-        Location signalFrom;
-        if (flight.wasVisit()) {
-            // Going on with a visit is a visit.
-            Share share = shared.get(flight.visitOwner(), flight.visitSpot());
-            Location spot = share == null ? null : share.getSpot().toLocation();
-            if (!settings.isVisitorCameraEnabled() || share == null || !share.isFor(player.getUniqueId())
-                    || spot == null || !spot.getWorld().equals(home)) {
-                messages.sendConfiguredMessage(player, "resume-visit-gone");
-                return null;
-            }
-            if (!plugin.getSpotModeration().checkLook(player, share)) {
-                return null;
-            }
-            visit = new Visit(share.getOwner(), share.getOwnerName(), share.getSpot().key(),
-                    share.getSpot().name(), spot);
-            anchor = visit.anchor();
-            signalFrom = visit.anchor().add(0.0, player.getEyeHeight(), 0.0);
-        } else if (data != null) {
-            anchor = data.getBody().getLocation();
-            signalFrom = data.getBody().getEyeLocation();
-        } else {
-            anchor = player.getLocation();
-            signalFrom = player.getEyeLocation();
-        }
+        Location anchor = data != null ? data.getBody().getLocation() : player.getLocation();
+        Location signalFrom = data != null ? data.getBody().getEyeLocation() : player.getEyeLocation();
         if (!jumpCheck.mayGo(player, anchor, signalFrom, target, "resume")) {
             return null;
         }
-        return new Plan(target, visit);
+        return target;
     }
 
-    /** Puts the camera down where the flight ended and holds it from there. */
+    /** Puts the camera down where the flight ended. */
     private void go(Player player, CameraData data, LastFlight flight) {
-        Plan plan = planned(player, data, flight);
-        if (plan == null) {
+        Location target = planned(player, data, flight);
+        if (target == null) {
             return;
         }
         // A jump of his own takes him off a tour he follows.
         plugin.getTour().leave(player);
-        if (!plugin.getMovementGuard().jumpTo(player, data, plan.target(), plan.visit())) {
+        if (!plugin.getMovementGuard().jumpTo(player, data, target)) {
             return;
         }
         // Where his last flight ended is no spot he jumped to.

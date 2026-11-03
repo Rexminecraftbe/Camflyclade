@@ -29,7 +29,7 @@ import java.util.logging.Level;
  * own - it can be switched off on the page of the map - with a pin for every
  * public spot; a click on it says whose it is, how often it was liked and
  * looked at, whether it is the build of the week, what it shows of its own,
- * and the command to visit it.
+ * where it is and the command that jumps there.
  *
  * <p>Only public spots, {@code /cam spot share <spot> all}: what is private,
  * or shared with single players, is for them alone, and the page of a map is
@@ -269,7 +269,7 @@ public final class CamWebMap implements Listener {
                 .replace("{y}", String.valueOf(Location.locToBlock(spot.y())))
                 .replace("{z}", String.valueOf(Location.locToBlock(spot.z())))
                 .replace("{world}", asHtml ? html(spot.world()) : spot.world())
-                .replace("{command}", "/cam visit " + (asHtml ? html(share.label()) : share.label()));
+                .replace("{command}", "/cam spot " + (asHtml ? html(share.label()) : share.label()));
     }
 
     /** A text of the language file without its colours: a web page has none of those. */

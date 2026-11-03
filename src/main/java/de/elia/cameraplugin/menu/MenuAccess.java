@@ -2,7 +2,7 @@ package de.elia.cameraplugin.menu;
 
 /**
  * How the players get at what camera mode offers besides itself -
- * {@code back}, {@code resume}, {@code spot}, {@code visit}, {@code photo},
+ * {@code back}, {@code resume}, {@code spot}, {@code photo},
  * {@code time}, {@code weather}, {@code nightvision} and their own
  * {@code stats} -, the values of {@code menu.access}; and how admins get at
  * theirs - {@code list}, {@code stats player}, {@code stop}, {@code ban},

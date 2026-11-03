@@ -26,8 +26,8 @@ import java.util.UUID;
 /**
  * No scouting, {@code anti-scouting}: the camera is no way to look for other
  * players. A camera player sees the others only within
- * {@code anti-scouting.radius} - of his body, or the spot he visits, which
- * takes its place, or of the camera itself, as {@code measured-from} says -
+ * {@code anti-scouting.radius} - of his body, or of the camera itself, as
+ * {@code measured-from} says -
  * and the bodies of other camera players, which stand where those players
  * really are, only as close as well.
  *
@@ -162,8 +162,7 @@ public final class CamScoutGuard implements Listener {
 
     /**
      * What the radius is measured from: the camera, or what it is held from -
-     * the body, the spot it visits, or in another world the portal it came out
-     * of. With nothing to measure against, the camera.
+     * the body, or in another world the portal it came out of. With nothing to measure against, the camera.
      */
     private Location center(Player viewer, CameraData data) {
         Location camera = viewer.getLocation();
