@@ -838,27 +838,6 @@ viewpoints:
   # Wie lange derselbe Spieler am selben Punkt nicht noch einmal als Aufruf zählt, in Minuten (0 bis 1440, 0 = jeder
   # Sprung zählt). So treibt Hin- und Herspringen die Zahl nicht hoch.
   views-cooldown-minutes: 10
-  # Bau der Woche: Unter den öffentlichen Punkten zählt, was ein Punkt in den letzten Tagen bekam - nicht alles seit
-  # jeher, sonst lägen die alten immer vorn. Es zählen die Likes aus diesen Tagen (die noch stehen) und die Besucher:
-  # wie viele verschiedene Spieler hingesprungen sind, der Besitzer nicht - wer immer wieder
-  # kommt, zählt einmal. Der Punkt mit den meisten Likes darin (bei Gleichstand den meisten Besuchern) ist der beste
-  # dieser Tage und bekommt einen Stern (Texte: menu-spot-top, spot-list-top, spot-period ...).
-  # Im Menü wählt jeder Spieler selbst, wie viele Tage: Der Trichter auf dem Reiter der öffentlichen Punkte hat nach den
-  # anderen Sortierungen eine für jeden Zeitraum von top-periods ("best of the last 30 days first", Text:
-  # menu-sort-top) - der Stern und die Zahlen unter jedem Punkt folgen dann diesem Zeitraum. Wo man nichts wählt, in
-  # /cam spot list, auf der Karte (web-map) und im Menü bei einer anderen Sortierung, gilt week-days.
-  # Wer wann kam, steht mit den Aufrufen in plugins/CamFly/playerdata/spot-views.yml - so lange, wie der längste dieser
-  # Zeiträume zurückreicht; wer länger nicht kam, wird dort vergessen. Alles geht nur mit sharing: true.
-  #
-  # Wie viele Tage der Stern in /cam spot list, auf der Karte und im Menü ohne gewählten Zeitraum zählt
-  # (1 bis 3650, 0 = dort kein Stern)
-  week-days: 7
-  # Die Zeiträume, zwischen denen die Spieler im Menü wählen, in Tagen (je 1 bis 3650), z. B. [1, 2, 3, 5, 18].
-  # Doppelte fallen weg, sortiert wird nach der Länge. [] = keine Wahl im Menü.
-  top-periods: [1, 7, 30, 90, 180, 360]
-  # Bis wohin davon angeboten wird, in Tagen (0 bis 3650, 0 = keiner): Mit 90 gibt es 1, 7, 30 und 90 Tage, mit 360
-  # auch 180 und 360.
-  top-max-days: 90
   # Das Gästebuch: Wer einen Punkt hat, erfährt, wie oft er angesehen (hingesprungen) und geliked wurde -
   # nur andere zählen, und nur so oft, wie es als Aufruf zählt (views-cooldown-minutes). Nichts davon kommt sofort: Es
   # wird gesammelt und als Zahl je Punkt erzählt (Text: spot-guestbook-entry), so kann niemand einem anderen mit
@@ -881,17 +860,16 @@ viewpoints:
 
 # Die öffentlichen Punkte auf der Web-Karte des Servers: BlueMap, Dynmap und squaremap, welche davon da ist. Jede
 # bekommt eine eigene Ebene (Text: web-map-layer), die man auf der Seite der Karte ein- und ausschalten kann, mit einer
-# Nadel für jeden öffentlichen Punkt. Ein Klick darauf zeigt, wem er gehört, wie oft er geliked und angesehen wurde, ob
-# er der Bau der Woche ist (bei Dynmap und squaremap mit einer goldenen Nadel), was er zeigt (Zeit, Wetter, Nachtsicht)
-# und wo er ist, mit dem Befehl, der hinspringt (Texte: web-map-...). Im Spiel geht von der Karte aus nichts: Eine Webseite kann
-# für einen Spieler keine Befehle schicken - den Befehl tippt man selbst.
+# Nadel für jeden öffentlichen Punkt. Ein Klick darauf zeigt, wem er gehört, wie oft er geliked und angesehen wurde, was
+# er zeigt (Zeit, Wetter, Nachtsicht) und wo er ist, mit dem Befehl, der hinspringt (Texte: web-map-...). Im Spiel geht
+# von der Karte aus nichts: Eine Webseite kann für einen Spieler keine Befehle schicken - den Befehl tippt man selbst.
 # Nur öffentliche Punkte (/cam spot share <Name> all): Private und die, die nur einzelnen Spielern angeboten sind,
 # kommen nie auf die Karte - die Seite einer Karte ist oft für jeden im Internet offen, nicht nur für die Spieler. Von
 # der Kamera und vom Körper zeigt die Karte nie etwas. Sperrt die Admin-Seite der Punkte für alle das Ansehen
 # öffentlicher Punkte, ist die Ebene leer.
 # Die Nadeln folgen den Punkten: Wird einer öffentlich, kommt er dazu; wird er privat, abgenommen oder gelöscht, ist er
-# weg; wird er verschoben, wandert er mit. Likes, Aufrufe und der Bau der Woche werden alle 30 Sekunden neu
-# eingetragen. Startet eine Karte nach CamFly oder neu (z. B. /bluemap reload), bekommt sie die Punkte, sobald sie
+# weg; wird er verschoben, wandert er mit. Likes und Aufrufe werden alle 30 Sekunden neu eingetragen - ein Punkt, der
+# min-likes oder min-views erreicht, kommt spätestens dann dazu. Startet eine Karte nach CamFly oder neu (z. B. /bluemap reload), bekommt sie die Punkte, sobald sie
 # bereit ist. CamFly braucht keine der Karten und wird auch ohne sie gebaut; passt eine neue Version einer Karte nicht
 # mehr, sagt die Konsole das einmal, und nur diese Karte bekommt keine Punkte. Geht nur mit viewpoints.sharing: true.
 web-map:
@@ -904,6 +882,9 @@ web-map:
   hidden: false
   # Wie viele Likes ein öffentlicher Punkt mindestens haben muss, um auf die Karte zu kommen (0 = alle)
   min-likes: 0
+  # Wie viele Aufrufe er mindestens haben muss (0 = alle). Aufrufe sind die Sprünge dorthin, wie das Menü sie unter
+  # jedem Punkt zählt (viewpoints.views-cooldown-minutes). Gilt zusammen mit min-likes: Er braucht beides.
+  min-views: 0
   # Die Adresse der Karte an einem Punkt, für einen Knopf [Map] hinter jedem öffentlichen Punkt in /cam spot list
   # (Text: spot-button-map). {world} ist der Name der Welt, {x} {y} {z} der Ort. Wie sie aussieht, hängt an der Karte
   # und ihrer Einstellung, z. B.:

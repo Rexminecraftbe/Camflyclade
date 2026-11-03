@@ -28,8 +28,8 @@ import java.util.logging.Level;
  * Dynmap and squaremap, whichever of them is there. Each gets a layer of its
  * own - it can be switched off on the page of the map - with a pin for every
  * public spot; a click on it says whose it is, how often it was liked and
- * looked at, whether it is the build of the week, what it shows of its own,
- * where it is and the command that jumps there.
+ * looked at, what it shows of its own, where it is and the command that
+ * jumps there.
  *
  * <p>Only public spots, {@code /cam spot share <spot> all}: what is private,
  * or shared with single players, is for them alone, and the page of a map is
@@ -39,8 +39,7 @@ import java.util.logging.Level;
  * <p>The pins follow the spots: one that becomes public appears, one that is
  * made private, taken down or deleted is gone, one that moves moves along -
  * the round after the change, see {@link #changed()}. The likes and views on
- * them, and the build of the week, are brought up to date every
- * {@value #ROUND_SECONDS} seconds. A map that starts later than the plugin,
+ * them are brought up to date every {@value #ROUND_SECONDS} seconds. A map that starts later than the plugin,
  * or anew, gets them as soon as it is there.</p>
  *
  * <p>The plugin is not built against any of the maps, see {@link Calls}: a
@@ -51,7 +50,7 @@ import java.util.logging.Level;
  */
 public final class CamWebMap implements Listener {
 
-    /** How often the pins are brought up to date, in seconds: their likes, views and the build of the week. */
+    /** How often the pins are brought up to date, in seconds: their likes and views. */
     static final long ROUND_SECONDS = 30L;
 
     /** What the layer of the plugin is called inside each map. */
@@ -205,8 +204,9 @@ public final class CamWebMap implements Listener {
     /**
      * The public spots as the maps show them: none while sharing is off or
      * the admin page keeps everybody from looking at public spots, and only
-     * those liked at least {@code web-map.min-likes} times and lying in a
-     * world that is there.
+     * those liked at least {@code web-map.min-likes} times, looked at at
+     * least {@code web-map.min-views} times and lying in a world that is
+     * there.
      */
     private List<MapSpot> collect() {
         CamSpots spots = plugin.getSpots();
@@ -215,30 +215,27 @@ public final class CamWebMap implements Listener {
                 || everybody != null && everybody.stage(SpotBans.Kind.PUBLIC) == SpotBans.Stage.NO_LOOK) {
             return List.of();
         }
-        Share top = spots.buildOfTheWeek();
         List<MapSpot> list = new ArrayList<>();
         for (Share share : spots.publicSpots()) {
             Spot spot = share.getSpot();
-            if (share.likes() < settings.getWebMapMinLikes() || Bukkit.getWorld(spot.world()) == null) {
+            if (share.likes() < settings.getWebMapMinLikes()
+                    || spots.views(share.getOwner(), spot) < settings.getWebMapMinViews()
+                    || Bukkit.getWorld(spot.world()) == null) {
                 continue;
             }
-            boolean isTop = share == top;
-            String label = ChatColor.stripColor(fill(messages.getMessage(isTop ? "web-map-label-top"
-                    : "web-map-label"), share, spots, false));
+            String label = ChatColor.stripColor(fill(messages.getMessage("web-map-label"), share, spots, false));
             list.add(new MapSpot("camfly-" + share.getOwner() + "-" + spot.key(), spot.world(),
-                    spot.x(), spot.y(), spot.z(), label, detail(share, spots, isTop), isTop));
+                    spot.x(), spot.y(), spot.z(), label, detail(share, spots)));
         }
         return list;
     }
 
     /** What a click on a pin shows, as HTML: {@code web-map-detail} with its parts. */
-    private String detail(Share share, CamSpots spots, boolean top) {
+    private String detail(Share share, CamSpots spots) {
         String look = spots.describe(share.getSpot().look());
         String text = fill(messages.getMessage("web-map-detail"), share, spots, true)
-                .replace("{top}", top ? text("web-map-detail-top", share, spots) : "")
                 .replace("{look}", look.isEmpty() ? ""
-                        : text("web-map-detail-look", share, spots).replace("{look}", html(strip(look))))
-                .replace("{week}", spots.hasWeek() ? text("web-map-detail-week", share, spots) : "");
+                        : text("web-map-detail-look", share, spots).replace("{look}", html(strip(look))));
         return strip(text);
     }
 
@@ -261,10 +258,6 @@ public final class CamWebMap implements Listener {
                 .replace("{owner}", owner)
                 .replace("{likes}", String.valueOf(share.likes()))
                 .replace("{views}", String.valueOf(spots.views(share.getOwner(), spot)))
-                .replace("{period}", spots.period(settings.getWeekDays()))
-                .replace("{days}", String.valueOf(settings.getWeekDays()))
-                .replace("{week-likes}", String.valueOf(spots.weekLikes(share)))
-                .replace("{week-visitors}", String.valueOf(spots.weekVisitors(share)))
                 .replace("{x}", String.valueOf(Location.locToBlock(spot.x())))
                 .replace("{y}", String.valueOf(Location.locToBlock(spot.y())))
                 .replace("{z}", String.valueOf(Location.locToBlock(spot.z())))

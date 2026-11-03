@@ -445,8 +445,6 @@ messages:
   menu-sort-option: "&7   {sort}"
   menu-sort-option-current: "&a» {sort}"
   menu-sort-owner: "by player"
-  # The best within a period first, one order for each period of viewpoints.top-periods; {period} as spot-period.
-  menu-sort-top: "best of {period} first"
   menu-sort-views: "most views first"
   menu-spot: "&f{spot}"
   menu-spot-actions: "&eLeft-click: jump there\n&cShift-click: delete"
@@ -465,15 +463,8 @@ messages:
   menu-spot-reach-lore: "&7To jump there: within {start} blocks\n&7of it, or in cam mode within\n&7reach of your camera"
   menu-spot-reach-lore-cam-only: "&7To jump there: in cam mode,\n&7within reach of your camera"
   menu-spot-shared-lore: "&7Shared with: {players}"
-  # The build of the week: menu-spot-top stands at the top of the public spot that got the most likes - then visitors -
-  # within {period}, menu-spot-week under every public spot what it got there. {period} is spot-period: the period the
-  # tab of the public spots is sorted by (menu-sort-top), otherwise viewpoints.week-days:
-  # {likes} how many liked it within them and still do, {visitors} how many different players but its owner jumped
-  # there.
-  menu-spot-top: "&6&l★ Top spot of {period}"
   menu-spot-views: "&7Views: &f{views}"
   menu-spot-views-hint: "&8One view per player every {minutes} min"
-  menu-spot-week: "&6In {period}: &f{likes} likes, {visitors} visitors"
   menu-spots: "&aSpots"
   menu-spots-disabled: "&7Looking at these is switched off"
   menu-spots-disabled-lore: "&7It is off for everybody\n&7{time}{reason}."
@@ -741,9 +732,6 @@ messages:
   spot-list-shared: " &7(shared with {players})"
   spot-list-shared-entry: "&7- &f{owner}:{spot}&7: {x} {y} {z} ({world})"
   spot-list-shared-header: "&eShared with you ({count}):"
-  # Behind the public spot that is the build of the week, see menu-spot-top; {period} as spot-period, of
-  # viewpoints.week-days.
-  spot-list-top: " &6★ top spot of {period}"
   # What a spot shows of its own (viewpoints: the time, weather and night vision its owner picked for himself in cam
   # mode when he saved it): {look} in spot-saved-look, spot-list-look and menu-spot-look lists spot-look-time,
   # spot-look-weather and spot-look-nightvision, joined by spot-look-separator - only those the config file lets
@@ -770,9 +758,6 @@ messages:
   spot-offered: "&aSpot {spot} is offered to {player} now: it is theirs once they accept it."
   spot-offered-to-you: "&e{owner} wants to share the spot {spot} with you."
   spot-other-world: "&cSpot {spot} is not in the world of your body."
-  # How the build of the week names a period of days (viewpoints.week-days, top-periods): {days} days, or one.
-  spot-period: "the last {days} days"
-  spot-period-one: "the last day"
   spot-public-unknown: "&cThere is no public spot called {spot}."
   spot-removed: "&eSpot {spot} is no longer among the spots shared with you."
   spot-restrict-changed: "&aThe restriction of {player} is changed: {what} {time}{reason}."
@@ -984,18 +969,14 @@ messages:
   weather-set-kept: "&aYour own weather: {weather}. Only you see it, in every flight until you reset it."
   weather-usage: "&eUse /cam weather clear, rain or reset."
   # The public spots on the web map (web-map): web-map-layer names the layer of the spots on the page of the map,
-  # web-map-label the pin of a spot - web-map-label-top that of the build of the week -, both plain text. A click on
-  # a pin shows web-map-detail, as HTML: {spot}, {owner}, {likes}, {views}, {x} {y} {z}, {world} and {command} - the
-  # command that jumps there -, with {top} being web-map-detail-top for the build of the week, {week} web-map-detail-week
-  # while viewpoints.week-days counts ({period} as spot-period, {days}, {week-likes}, {week-visitors}) and {look}
-  # web-map-detail-look while the spot shows a look of its own ({look} as in spot-saved-look). An & is a colour code here as everywhere and is left
-  # out, so write no HTML entities like &amp; - the names in it are written safe for HTML by the plugin.
-  web-map-detail: "<b>{spot}</b> by {owner}{top}<br>{likes} likes, {views} views{week}{look}<br>{x} {y} {z} ({world}): <code>{command}</code>"
+  # web-map-label the pin of a spot, plain text. A click on a pin shows web-map-detail, as HTML: {spot}, {owner},
+  # {likes}, {views}, {x} {y} {z}, {world} and {command} - the command that jumps there -, with {look} being
+  # web-map-detail-look while the spot shows a look of its own ({look} as in spot-saved-look). An & is a colour code
+  # here as everywhere and is left out, so write no HTML entities like &amp; - the names in it are written safe for
+  # HTML by the plugin.
+  web-map-detail: "<b>{spot}</b> by {owner}<br>{likes} likes, {views} views{look}<br>{x} {y} {z} ({world}): <code>{command}</code>"
   web-map-detail-look: "<br>Shows: {look}"
-  web-map-detail-top: "<br><b>★ Top spot of {period}</b>"
-  web-map-detail-week: "<br>In {period}: {week-likes} likes, {week-visitors} visitors"
   web-map-label: "{spot} ({owner})"
-  web-map-label-top: "★ {spot} ({owner})"
   web-map-layer: "Spots"
 
 # Names the texts above fill in for things of the game: damage types, mobs, effects, biomes,
@@ -1469,7 +1450,6 @@ message-settings:
   spot-list-shared: true
   spot-list-shared-entry: true
   spot-list-shared-header: true
-  spot-list-top: true
   spot-moved: true
   spot-no-signal: true
   spot-not-shared: true

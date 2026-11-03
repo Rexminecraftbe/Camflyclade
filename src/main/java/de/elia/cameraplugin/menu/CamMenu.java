@@ -157,14 +157,8 @@ public final class CamMenu implements Listener {
     /** The restrictions of the tours being set up on their page, by the id of the admin. */
     private final Map<UUID, TourBanDraft> tourDrafts = new HashMap<>();
 
-    /**
-     * How each player has the tabs of the spots sorted, while he is online:
-     * the key of the order, as {@link #sortsOf} names it.
-     */
-    private final Map<UUID, Map<SpotTab, String>> spotSorts = new HashMap<>();
-
-    /** What the order of the best within a period starts with, before its days: {@code top-7}. */
-    private static final String TOP_PREFIX = "top-";
+    /** How each player has the tabs of the spots sorted, while he is online. */
+    private final Map<UUID, Map<SpotTab, SpotSort>> spotSorts = new HashMap<>();
 
     /** How each admin has the lists of players sorted, while he is online. */
     private final Map<UUID, PlayerSort> playerSorts = new HashMap<>();
@@ -201,12 +195,10 @@ public final class CamMenu implements Listener {
 
     /**
      * The orders of the spots: the newest first, by name, by the name of the
-     * owner, the most liked first, the most viewed first, the nearest first,
-     * and the best within a period first - the build of the week, one order
-     * for each period of {@code viewpoints.top-periods}, {@code top-7}.
+     * owner, the most liked first, the most viewed first, the nearest first.
      */
     private enum SpotSort {
-        DATE("date"), NAME("name"), OWNER("owner"), LIKES("likes"), VIEWS("views"), NEAR("near"), TOP("top");
+        DATE("date"), NAME("name"), OWNER("owner"), LIKES("likes"), VIEWS("views"), NEAR("near");
 
         final String key;
 
@@ -215,27 +207,12 @@ public final class CamMenu implements Listener {
         }
 
         static SpotSort of(String key) {
-            if (key.startsWith(TOP_PREFIX)) {
-                return TOP;
-            }
             for (SpotSort sort : values()) {
                 if (sort.key.equals(key)) {
                     return sort;
                 }
             }
             return DATE;
-        }
-    }
-
-    /** The days of an order of the best within a period, {@code top-7}; 0 for any other order. */
-    private static int topDays(String key) {
-        if (!key.startsWith(TOP_PREFIX)) {
-            return 0;
-        }
-        try {
-            return Integer.parseInt(key.substring(TOP_PREFIX.length()));
-        } catch (NumberFormatException ex) {
-            return 0;
         }
     }
 
@@ -585,8 +562,7 @@ public final class CamMenu implements Listener {
         CamSpots spots = plugin.getSpots();
         boolean sharing = settings.isViewpointsSharing();
         SpotTab tab = sharing ? wanted : SpotTab.PRIVATE;
-        String sortKey = spotSort(player, tab);
-        SpotSort sort = SpotSort.of(sortKey);
+        SpotSort sort = spotSort(player, tab);
         Location from = nearFrom(player);
         List<Consumer<Integer>> entries = new ArrayList<>();
         Page page = new Page();
@@ -601,14 +577,9 @@ public final class CamMenu implements Listener {
                     }
                 }
                 case PUBLIC -> {
-                    // Sorted by the best of a period, its star and its numbers
-                    // go by that period; otherwise by the build of the week.
-                    int days = sort == SpotSort.TOP ? topDays(sortKey) : spots.weekDays();
-                    Share top = spots.topOf(days);
                     for (Share share : sorted(spots.publicSpots(), sort, Share::getSpot, Share::getOwnerName,
-                            Share::likes, share -> spots.views(share.getOwner(), share.getSpot()), from,
-                            spots.topOrder(days))) {
-                        entries.add(slot -> putPublicSpot(player, page, slot, share, share == top, days));
+                            Share::likes, share -> spots.views(share.getOwner(), share.getSpot()), from)) {
+                        entries.add(slot -> putPublicSpot(player, page, slot, share));
                     }
                 }
                 case SHARED -> {
@@ -642,8 +613,9 @@ public final class CamMenu implements Listener {
                 putTab(player, page, tab, other);
             }
         }
-        putSort(page, SLOT_SPOT_SORT, sortKey, sortsOf(tab), current -> {
-            spotSorts.computeIfAbsent(player.getUniqueId(), id -> new EnumMap<>(SpotTab.class)).put(tab, current);
+        putSort(page, SLOT_SPOT_SORT, sort.key, tab.sorts, current -> {
+            spotSorts.computeIfAbsent(player.getUniqueId(), id -> new EnumMap<>(SpotTab.class)).put(tab,
+                    SpotSort.of(current));
             openSpots(player, tab, 0);
         });
         List<String> newLore = new ArrayList<>(lines(spotCount(player)));
@@ -755,12 +727,8 @@ public final class CamMenu implements Listener {
         List<String> lore = spotLore(player.getUniqueId(), spot);
         Share share = spots.shareOf(player, spot);
         if (share != null && share.isEveryone()) {
-            if (share == spots.buildOfTheWeek()) {
-                lore.addAll(0, lines(topLine(spots.weekDays())));
-            }
             lore.addAll(lines(messages.getMessage("menu-spot-public-lore")
                     .replace("{likes}", String.valueOf(share.likes()))));
-            lore.addAll(weekLore(share, spots.weekDays()));
         }
         if (share != null && !share.getPlayers().isEmpty()) {
             lore.addAll(lines(messages.getMessage("menu-spot-shared-lore").replace("{players}", spots.whom(share))));
@@ -794,17 +762,12 @@ public final class CamMenu implements Listener {
      * and within reach, right-click likes it or no longer does; it shines
      * while he likes it.
      */
-    private void putPublicSpot(Player player, Page page, int slot, Share share, boolean top, int days) {
+    private void putPublicSpot(Player player, Page page, int slot, Share share) {
         CamSpots spots = plugin.getSpots();
         Spot spot = share.getSpot();
         boolean own = share.getOwner().equals(player.getUniqueId());
-        List<String> lore = new ArrayList<>();
-        if (top) {
-            lore.addAll(lines(topLine(days)));
-        }
-        lore.addAll(spotLore(share.getOwner(), spot));
+        List<String> lore = spotLore(share.getOwner(), spot);
         lore.addAll(lines(messages.getMessage("menu-spot-likes").replace("{likes}", String.valueOf(share.likes()))));
-        lore.addAll(weekLore(share, days));
         if (own) {
             lore.addAll(reachLore());
             lore.addAll(lines(messages.getMessage("menu-public-own-actions")));
@@ -848,27 +811,6 @@ public final class CamMenu implements Listener {
                 act(player, () -> spots.jump(player, share.label()));
             }
         });
-    }
-
-    /**
-     * How many likes and visitors a public spot got within so many days -
-     * those of the period it is sorted by, or of the build of the week -,
-     * while that counts at all.
-     */
-    private List<String> weekLore(Share share, int days) {
-        CamSpots spots = plugin.getSpots();
-        if (days <= 0) {
-            return List.of();
-        }
-        return lines(messages.getMessage("menu-spot-week")
-                .replace("{period}", spots.period(days))
-                .replace("{likes}", String.valueOf(spots.likesIn(share, days)))
-                .replace("{visitors}", String.valueOf(spots.visitorsIn(share, days))));
-    }
-
-    /** The star over the best public spot of so many days, {@code menu-spot-top}. */
-    private String topLine(int days) {
-        return messages.getMessage("menu-spot-top").replace("{period}", plugin.getSpots().period(days));
     }
 
     /** A spot offered to him: left-click accepts it, right-click turns it down. */
@@ -1045,31 +987,11 @@ public final class CamMenu implements Listener {
         player.openInventory(inventory);
     }
 
-    /**
-     * How he has a tab of the spots sorted, as the key of the order: the
-     * newest first, until he picks another one - or when the one he picked
-     * is no longer offered.
-     */
-    private String spotSort(Player player, SpotTab tab) {
-        Map<SpotTab, String> own = spotSorts.get(player.getUniqueId());
-        String sort = own == null ? null : own.get(tab);
-        return sort != null && sortsOf(tab).contains(sort) ? sort : SpotSort.DATE.key;
-    }
-
-    /**
-     * The orders a tab of the spots offers. The public one has, after the
-     * others, one for each period of {@code viewpoints.top-periods} up to
-     * {@code viewpoints.top-max-days}: the best within it first.
-     */
-    private List<String> sortsOf(SpotTab tab) {
-        if (tab != SpotTab.PUBLIC) {
-            return tab.sorts;
-        }
-        List<String> sorts = new ArrayList<>(tab.sorts);
-        for (int days : plugin.getSpots().periods()) {
-            sorts.add(TOP_PREFIX + days);
-        }
-        return sorts;
+    /** How he has a tab of the spots sorted: the newest first, until he picks another order. */
+    private SpotSort spotSort(Player player, SpotTab tab) {
+        Map<SpotTab, SpotSort> own = spotSorts.get(player.getUniqueId());
+        SpotSort sort = own == null ? null : own.get(tab);
+        return sort != null && tab.sorts.contains(sort.key) ? sort : SpotSort.DATE;
     }
 
     /**
@@ -1084,16 +1006,6 @@ public final class CamMenu implements Listener {
     private static <T> List<T> sorted(Collection<T> items, SpotSort sort, Function<T, Spot> spot,
                                       Function<T, String> owner, ToIntFunction<T> likes, ToLongFunction<T> views,
                                       Location from) {
-        return sorted(items, sort, spot, owner, likes, views, from, (a, b) -> 0);
-    }
-
-    /**
-     * Spots in an order, as above, with the order of the best within a
-     * period for the public ones, see {@link CamSpots#topOrder(int)}.
-     */
-    private static <T> List<T> sorted(Collection<T> items, SpotSort sort, Function<T, Spot> spot,
-                                      Function<T, String> owner, ToIntFunction<T> likes, ToLongFunction<T> views,
-                                      Location from, Comparator<T> week) {
         Comparator<T> byName = Comparator.comparing(item -> spot.apply(item).name(), String.CASE_INSENSITIVE_ORDER);
         Comparator<T> byOwner = Comparator.comparing(owner, String.CASE_INSENSITIVE_ORDER);
         Comparator<T> newest = Comparator.comparingLong((T item) -> spot.apply(item).created()).reversed();
@@ -1102,7 +1014,6 @@ public final class CamMenu implements Listener {
             case NAME -> byName.thenComparing(byOwner);
             case OWNER -> byOwner.thenComparing(byName);
             case LIKES -> Comparator.comparingInt(likes).reversed().thenComparing(newest).thenComparing(byName);
-            case TOP -> week.thenComparing(newest).thenComparing(byName).thenComparing(byOwner);
             case VIEWS -> Comparator.comparingLong(views).reversed().thenComparing(newest).thenComparing(byName);
             case NEAR -> Comparator.comparingDouble((T item) -> distance(spot.apply(item), from))
                     .thenComparing(byName).thenComparing(byOwner);
@@ -1124,17 +1035,6 @@ public final class CamMenu implements Listener {
     }
 
     /**
-     * What an order is called on the button that sorts: {@code menu-sort-}
-     * and its key - for the best within a period {@code menu-sort-top}, with
-     * the period.
-     */
-    private String sortName(String order) {
-        int days = topDays(order);
-        return days > 0 ? messages.getMessage("menu-sort-top").replace("{period}", plugin.getSpots().period(days))
-                : messages.getMessage("menu-sort-" + order);
-    }
-
-    /**
      * The button that sorts a list: the order it has now under its name, and
      * under it every order there is - the one it has now marked, the others
      * greyed out. A click takes the next order, a right-click the one before.
@@ -1144,11 +1044,11 @@ public final class CamMenu implements Listener {
      * @param choose what picking one does
      */
     private void putSort(Page page, int slot, String now, List<String> orders, Consumer<String> choose) {
-        String name = messages.getMessage("menu-sort").replace("{sort}", sortName(now));
+        String name = messages.getMessage("menu-sort").replace("{sort}", messages.getMessage("menu-sort-" + now));
         List<String> lore = new ArrayList<>();
         for (String order : orders) {
             lore.addAll(lines(messages.getMessage(order.equals(now) ? "menu-sort-option-current" : "menu-sort-option")
-                    .replace("{sort}", sortName(order))));
+                    .replace("{sort}", messages.getMessage("menu-sort-" + order))));
         }
         lore.addAll(lines(messages.getMessage("menu-sort-lore")));
         put(page, slot, Material.HOPPER, name, lore, click -> later(() -> {

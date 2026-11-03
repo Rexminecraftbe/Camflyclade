@@ -17,8 +17,7 @@ import java.util.Optional;
 
 /**
  * The spots on squaremap, as a layer of their own in every world it renders:
- * an icon for each spot - a gold one for the build of the week -, with its
- * name on hovering and its text on a click.
+ * an icon for each spot, with its name on hovering and its text on a click.
  *
  * <p>Checked against {@code xyz.jpenilla:squaremap-api} 1.4.3:</p>
  * <ul>
@@ -56,7 +55,6 @@ final class SquaremapLink implements MapLink {
     private final Plugin map;
     private final String layerKey;
     private final String iconKey;
-    private final String topIconKey;
     private final String layer;
     private final boolean hidden;
     /** The layer put into each world last time, by the name of the world, to see whether it is still there. */
@@ -70,7 +68,6 @@ final class SquaremapLink implements MapLink {
         String base = id.replace(':', '_');
         this.layerKey = base;
         this.iconKey = base + "_spot";
-        this.topIconKey = base + "_top";
         this.layer = layer;
         this.hidden = hidden;
     }
@@ -99,7 +96,6 @@ final class SquaremapLink implements MapLink {
         }
         Object icons = Calls.call(squaremap, "iconRegistry");
         registerIcon(icons, iconKey, new Color(0x3F, 0xB7, 0xD9));
-        registerIcon(icons, topIconKey, new Color(0xF2, 0xB7, 0x05));
         Object layerId = key(layerKey);
         Map<String, Object> now = new HashMap<>();
         for (World world : Bukkit.getWorlds()) {
@@ -125,7 +121,7 @@ final class SquaremapLink implements MapLink {
             Object provider = Calls.call(builder, "build");
             for (MapSpot spot : here) {
                 Object point = Calls.callStatic(type(POINT), "of", spot.x(), spot.z());
-                Object marker = Calls.callStatic(type(MARKER), "icon", point, key(spot.top() ? topIconKey : iconKey),
+                Object marker = Calls.callStatic(type(MARKER), "icon", point, key(iconKey),
                         ICON_SIZE);
                 Object options = Calls.callStatic(type(OPTIONS), "builder");
                 Calls.call(options, "hoverTooltip", escape(spot.label()));
@@ -167,11 +163,9 @@ final class SquaremapLink implements MapLink {
                 }
             }
             Object icons = Calls.call(squaremap, "iconRegistry");
-            for (String icon : List.of(iconKey, topIconKey)) {
-                Object id = key(icon);
-                if (Boolean.TRUE.equals(Calls.call(icons, "hasEntry", id))) {
-                    Calls.call(icons, "unregister", id);
-                }
+            Object id = key(iconKey);
+            if (Boolean.TRUE.equals(Calls.call(icons, "hasEntry", id))) {
+                Calls.call(icons, "unregister", id);
             }
         }
         shown.clear();

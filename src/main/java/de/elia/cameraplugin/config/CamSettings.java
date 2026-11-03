@@ -122,15 +122,6 @@ public final class CamSettings {
     /** The longest {@code viewpoints.guestbook-interval-minutes} accepts: a day. */
     private static final int MAX_GUESTBOOK_INTERVAL_MINUTES = 1440;
 
-    /**
-     * The most days the build of the week looks back, {@code viewpoints.week-days},
-     * {@code top-periods} and {@code top-max-days}: ten years. Who came to a
-     * spot is kept as long as the longest of them looks back.
-     */
-    private static final int MAX_TOP_DAYS = 3650;
-
-    /** The periods of {@code viewpoints.top-periods} out of the box, in days. */
-    private static final List<Integer> DEFAULT_TOP_PERIODS = List.of(1, 7, 30, 90, 180, 360);
 
     /** The levels of {@code signal.levels}, from the most bars down, as the config file names them. */
     private static final String[] SIGNAL_LEVEL_NAMES = {"excellent", "good", "medium", "weak"};
@@ -439,12 +430,6 @@ public final class CamSettings {
     private double viewpointsStartDistance;
     /** How long the same player at the same spot is no new view, {@code viewpoints.views-cooldown-minutes}. */
     private int viewsCooldownMinutes;
-    /** How many days back the build of the week counts likes and visitors, {@code viewpoints.week-days}; 0 for off. */
-    private int weekDays;
-    /** The periods the players pick from in the menu, in days, shortest first, {@code viewpoints.top-periods}. */
-    private List<Integer> topPeriods = DEFAULT_TOP_PERIODS;
-    /** The longest of them the menu offers, {@code viewpoints.top-max-days}; 0 for none. */
-    private int topMaxDays;
 
     /** Whether a camera player sees the ores of caves as stone, {@code hide-ores.enabled}. */
     private boolean hideOres;
@@ -467,6 +452,8 @@ public final class CamSettings {
     private boolean webMapHidden;
     /** How many likes a public spot needs to get onto the map, {@code web-map.min-likes}. */
     private int webMapMinLikes;
+    /** How many views a public spot needs to get onto the map, {@code web-map.min-views}. */
+    private int webMapMinViews;
     /** The address of a spot on the web map, with its placeholders, {@code web-map.link}; empty for none. */
     private String webMapLink;
 
@@ -854,9 +841,6 @@ public final class CamSettings {
                 MAX_GUESTBOOK_INTERVAL_MINUTES);
         viewpointsStartDistance = config.getDouble("viewpoints.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
         viewsCooldownMinutes = config.getInt("viewpoints.views-cooldown-minutes", 10, 0, MAX_VIEWS_COOLDOWN_MINUTES);
-        weekDays = config.getInt("viewpoints.week-days", 7, 0, MAX_TOP_DAYS);
-        topPeriods = readDays(config, "viewpoints.top-periods", DEFAULT_TOP_PERIODS);
-        topMaxDays = config.getInt("viewpoints.top-max-days", 90, 0, MAX_TOP_DAYS);
         hideOres = config.getBoolean("hide-ores.enabled", true);
         readOreCovers(config);
         oreBiomesOnly = config.getChoice("hide-ores.where", "caves", "caves", "biomes")
@@ -868,6 +852,7 @@ public final class CamSettings {
         webMapSquaremap = config.getBoolean("web-map.squaremap", true);
         webMapHidden = config.getBoolean("web-map.hidden", false);
         webMapMinLikes = config.getInt("web-map.min-likes", 0, 0);
+        webMapMinViews = config.getInt("web-map.min-views", 0, 0);
         webMapLink = config.getString("web-map.link", "").trim();
         resumeEnabled = config.getBoolean("resume-command.enabled", true);
         resumeStorage = readStorage(config, "resume-command.storage");
@@ -1054,34 +1039,6 @@ public final class CamSettings {
         }
         seconds.sort(Comparator.reverseOrder());
         return List.copyOf(seconds);
-    }
-
-    /**
-     * Reads a list of days, such as {@code viewpoints.top-periods}: whole
-     * numbers from 1 to {@value #MAX_TOP_DAYS}, each once, the shortest
-     * first. An entry that is none is reported and left out.
-     */
-    private static List<Integer> readDays(ConfigReader config, String path, List<Integer> def) {
-        List<String> defaults = new ArrayList<>();
-        for (Integer days : def) {
-            defaults.add(String.valueOf(days));
-        }
-        List<Integer> days = new ArrayList<>();
-        for (String entry : config.getStringList(path, defaults)) {
-            int value;
-            try {
-                value = Integer.parseInt(entry.trim());
-            } catch (NumberFormatException ex) {
-                value = 0;
-            }
-            if (value < 1 || value > MAX_TOP_DAYS) {
-                config.warnUnknownEntry(path, entry);
-            } else if (!days.contains(value)) {
-                days.add(value);
-            }
-        }
-        Collections.sort(days);
-        return List.copyOf(days);
     }
 
     /**
@@ -1979,46 +1936,6 @@ public final class CamSettings {
         return viewsCooldownMinutes;
     }
 
-    /**
-     * How many days back the build of the week counts the likes and the
-     * visitors of the public spots, {@code viewpoints.week-days}; 0 while it
-     * is switched off. Only with sharing, which public spots need.
-     */
-    public int getWeekDays() {
-        return isViewpointsSharing() ? weekDays : 0;
-    }
-
-    /**
-     * The periods a player picks from on the tab of the public spots, in
-     * days, the shortest first: those of {@code viewpoints.top-periods} up to
-     * {@code viewpoints.top-max-days}. None without sharing.
-     */
-    public List<Integer> getTopPeriods() {
-        if (!isViewpointsSharing()) {
-            return List.of();
-        }
-        List<Integer> shown = new ArrayList<>();
-        for (int days : topPeriods) {
-            if (days <= topMaxDays) {
-                shown.add(days);
-            }
-        }
-        return shown;
-    }
-
-    /**
-     * How many days back who came to a spot has to be kept: as long as the
-     * longest of the build of the week and the periods of the menu looks
-     * back; 0 while neither counts.
-     */
-    public int getTopKeepDays() {
-        int keep = getWeekDays();
-        for (int days : getTopPeriods()) {
-            keep = Math.max(keep, days);
-        }
-        return keep;
-    }
-
     /** Whether a camera player sees the ores of caves as stone, {@code hide-ores.enabled}. */
     public boolean isHideOres() {
         return hideOres && !oreCovers.isEmpty();
@@ -2069,6 +1986,14 @@ public final class CamSettings {
     /** How many likes a public spot needs at least to get onto the map, {@code web-map.min-likes}. */
     public int getWebMapMinLikes() {
         return webMapMinLikes;
+    }
+
+    /**
+     * How many views a public spot needs at least to get onto the map,
+     * {@code web-map.min-views}: jumps to it, as the menu counts them.
+     */
+    public int getWebMapMinViews() {
+        return webMapMinViews;
     }
 
     /**

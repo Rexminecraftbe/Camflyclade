@@ -15299,12 +15299,6 @@ def spot_datei_des_bots(env):
     return datei.read_text(encoding="utf-8") if datei.exists() else ""
 
 
-def aufrufe_datei(env):
-    """Der Text von playerdata/spot-views.yml des Testservers, oder ''."""
-    datei = env.server / "plugins" / "CamFly" / "playerdata" / "spot-views.yml"
-    return datei.read_text(encoding="utf-8") if datei.exists() else ""
-
-
 def spot_ansicht_checks(env, bot):
     """viewpoints: Ein Spot merkt sich, was sein Besitzer im Cam-Modus selbst
     eingestellt hat - /cam time, /cam weather, /cam nightvision -, und wer
@@ -15444,162 +15438,6 @@ def spot_ansicht_checks(env, bot):
             FIND.problem(f"Aufraeumen nach dem Test der Ansicht eines Spots: {exc}")
 
 
-def bau_der_woche_checks(env, bot):
-    """viewpoints.week-days: der Bau der Woche - unter den oeffentlichen
-    Spots der mit den meisten Likes der letzten Tage, bei Gleichstand den
-    meisten Besuchern.
-
-    Voreingestellt sind es 7 Tage - nachgesehen in der ausgelieferten Datei.
-    Der Bot macht zwei Spots oeffentlich, Woche und Alt. Der zweite Spieler
-    liked Woche: In playerdata/shared-spots.yml steht unter liked-at, wann,
-    und seine Liste traegt den Stern hinter Woche, nicht hinter Alt. Er
-    springt zu Alt: In playerdata/spot-views.yml steht er unter week bei Alt;
-    der Bot selbst, der zu seinem eigenen Spot springt, zaehlt dort nicht.
-    Nimmt er das Like zurueck, ist Alt mit seinem einen Besucher vorn. Die
-    Liste des Bots traegt den Stern hinter seinem eigenen Spot.
-
-    Im Menue hat der Trichter auf dem Reiter der oeffentlichen Spots nach den
-    anderen Sortierungen eine fuer jeden Zeitraum - voreingestellt
-    top-periods 1, 7, 30, 90, 180, 360 bis top-max-days 90, also 1, 7, 30 und
-    90 Tage, nicht 180. Nach sieben Klicks sortiert er nach den letzten 7
-    Tagen: Alt steht vorn, mit dem Stern oben und seinen Zahlen dieser Tage.
-    Mit top-max-days: 360 gibt es auch 360 Tage, mit top-periods
-    [1, 2, 3, 5, 18] genau diese, mit top-max-days: 0 keinen. Mit
-    week-days: 0 gibt es in der Liste keinen Stern.
-    """
-    def fenster(client):
-        return client.call("window_slots", wait=10)
-
-    def klick(client, slot, warten=1.5):
-        client.call("click_window", wait=15, slot=slot, button=0, mode=0)
-        time.sleep(warten)
-
-    def oeffentliche(client):
-        """Das Menue auf dem Reiter der oeffentlichen Spots."""
-        befehl(client, "/cam menu", warten=1.0)
-        klick(client, 10)
-        klick(client, 49)
-        return fenster(client)
-
-    if not FIND.test("Cam-Modus ist vor dem Test des Baus der Woche aus", cam_off(bot), ""):
-        return
-    heim = bot.server_pos()
-    if heim is None:
-        return
-    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
-    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
-    stern = r"top spot of the last 7 days"
-    try:
-        FIND.test("Voreingestellt steht viewpoints.week-days: 7 da",
-                  re.search(r"(?m)^\s+week-days:\s*7\s*$", ausgeliefert(env)) is not None, "")
-        spots_loeschen(bot, "Woche", "Alt")
-        hinstellen(bot, x + 4, y, z)
-        befehl(bot, "/cam spot set Alt")
-        befehl(bot, "/cam spot share Alt all")
-        hinstellen(bot, x, y, z)
-        befehl(bot, "/cam spot set Woche")
-        befehl(bot, "/cam spot share Woche all")
-        zuschauer.start()
-        if not FIND.test("Zweiter Spieler fuer den Bau der Woche kommt herein",
-                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
-            return
-        time.sleep(1.5)
-        cam_off(zuschauer)
-        console(env, f"tp {ZUSCHAUER_NAME} {x + 30} {y} {z}", pause=1.5)
-
-        dort = befehl(zuschauer, f"/cam spot like {BOT_NAME}:Woche")
-        FIND.test("Der zweite Spieler liked Woche", gesagt(dort, rf"You like {BOT_NAME}:Woche now"), zeige(dort))
-        text = geteilte_datei(env)
-        FIND.test("In playerdata/shared-spots.yml steht unter liked-at, wann er es tat",
-                  re.search(rf"liked-at:\s*\n\s+'?{offline_uuid(ZUSCHAUER_NAME)}'?:\s*\d{{12,}}", text) is not None,
-                  text[-400:] or "keine Datei")
-        dort = befehl(zuschauer, "/cam spot list")
-        FIND.test("Seine Liste traegt den Stern hinter Woche, nicht hinter Alt",
-                  gesagt(dort, rf"{BOT_NAME}:Woche: .*{stern}") and not gesagt(dort, rf"{BOT_NAME}:Alt: .*{stern}"),
-                  zeige(dort))
-
-        console(env, f"tp {ZUSCHAUER_NAME} {x + 6} {y} {z}", pause=1.5)
-        befehl(zuschauer, f"/cam spot {BOT_NAME}:Alt", warten=3.0)
-        cam_off(zuschauer)
-        cam_on(bot)
-        befehl(bot, "/cam spot Alt", warten=1.5)
-        cam_off(bot)
-        text = aufrufe_datei(env)
-        woche = text[text.find("week:"):] if "week:" in text else ""
-        FIND.test("In playerdata/spot-views.yml steht der Besucher unter week bei Alt",
-                  re.search(rf"alt:\s*\n\s+'?{offline_uuid(ZUSCHAUER_NAME)}'?:\s*\d{{12,}}", woche) is not None,
-                  woche[:400] or text[-300:] or "keine Datei")
-        FIND.test("Der Bot, der zu seinem eigenen Spot sprang, zaehlt dort nicht",
-                  re.search(rf"'?{offline_uuid(BOT_NAME)}'?:\s*\d", woche) is None, woche[:400])
-
-        befehl(zuschauer, f"/cam spot like {BOT_NAME}:Woche")
-        dort = befehl(zuschauer, "/cam spot list")
-        FIND.test("Ohne das Like ist Alt mit seinem einen Besucher vorn",
-                  gesagt(dort, rf"{BOT_NAME}:Alt: .*{stern}") and not gesagt(dort, rf"{BOT_NAME}:Woche: .*{stern}"),
-                  zeige(dort))
-        zeilen = befehl(bot, "/cam spot list")
-        FIND.test("Die Liste des Bots traegt den Stern hinter seinem eigenen Spot",
-                  gesagt(zeilen, rf"- Alt: .*{stern}") and not gesagt(zeilen, rf"- Woche: .*{stern}"), zeige(zeilen))
-
-        f = oeffentliche(zuschauer)
-        filter_text = item_text(f.get("slots", {}).get("51"))
-        zeitraeume = re.findall(r"best of the last (?:(\d+) days|day) first", filter_text)
-        FIND.test("Menue: der Trichter bietet die Zeitraeume 1, 7, 30 und 90 Tage an, nicht 180",
-                  [z or "1" for z in zeitraeume] == ["1", "7", "30", "90"], filter_text)
-        for _ in range(7):
-            klick(zuschauer, 51)
-        f = fenster(zuschauer)
-        filter_text = item_text(f.get("slots", {}).get("51"))
-        erster = item_text(f.get("slots", {}).get("0"))
-        FIND.test("Menue: nach sieben Klicks sortiert der Trichter nach den letzten 7 Tagen",
-                  "» best of the last 7 days first" in filter_text, filter_text)
-        FIND.test("Menue: Alt steht vorn, mit dem Stern oben und seinen Zahlen der letzten 7 Tage",
-                  erster.startswith(f"{BOT_NAME}:Alt") and "Top spot of the last 7 days" in erster
-                  and "In the last 7 days: 0 likes, 1 visitors" in erster, erster)
-        klick(zuschauer, 51)
-        f = fenster(zuschauer)
-        erster = item_text(f.get("slots", {}).get("0"))
-        FIND.test("Menue: ein Klick weiter, 30 Tage - Stern und Zahlen folgen dem Zeitraum",
-                  "Top spot of the last 30 days" in erster and "In the last 30 days: 0 likes, 1 visitors" in erster,
-                  erster)
-        zuschauer.call("close_window", wait=10)
-
-        set_option(env, "top-max-days", "360")
-        filter_text = item_text(oeffentliche(zuschauer).get("slots", {}).get("51"))
-        FIND.test("top-max-days: 360 - auch 180 und 360 Tage",
-                  "best of the last 180 days first" in filter_text and "best of the last 360 days first" in filter_text,
-                  filter_text)
-        zuschauer.call("close_window", wait=10)
-        set_option(env, "top-periods", "[1, 2, 3, 5, 18]")
-        filter_text = item_text(oeffentliche(zuschauer).get("slots", {}).get("51"))
-        zeitraeume = re.findall(r"best of the last (?:(\d+) days|day) first", filter_text)
-        FIND.test("top-periods: [1, 2, 3, 5, 18] - genau diese Zeitraeume",
-                  [z or "1" for z in zeitraeume] == ["1", "2", "3", "5", "18"], filter_text)
-        zuschauer.call("close_window", wait=10)
-        set_option(env, "top-max-days", "0")
-        filter_text = item_text(oeffentliche(zuschauer).get("slots", {}).get("51"))
-        FIND.test("top-max-days: 0 - keine Wahl im Menue", "best of the last" not in filter_text
-                  and "nearest first" in filter_text, filter_text)
-        zuschauer.call("close_window", wait=10)
-
-        set_option(env, "week-days", "0")
-        dort = befehl(zuschauer, "/cam spot list")
-        FIND.test("week-days: 0 - kein Stern", not gesagt(dort, r"top spot of") and gesagt(dort, rf"{BOT_NAME}:Alt"),
-                  zeige(dort))
-    finally:
-        try:
-            if zuschauer.proc is not None:
-                cam_off(zuschauer)
-                zuschauer.stop()
-            cam_off(bot)
-            set_options(env, [("week-days", "7"), ("top-max-days", "90"),
-                              ("top-periods", "[1, 7, 30, 90, 180, 360]")])
-            spots_loeschen(bot, "Woche", "Alt")
-            hinstellen(bot, heim[0], heim[1], heim[2])
-        except Exception as exc:
-            FIND.problem(f"Aufraeumen nach dem Test des Baus der Woche: {exc}")
-
-
 def karte_lesen(env, befehl_der_karte):
     """Was eine Attrappe der Web-Karten gerade zeigt, wie sie es mit dump ins
     Log schreibt: die Zeilen hinter KARTE."""
@@ -15623,17 +15461,18 @@ def webkarte_checks(env, bot):
     "Karte (CamFlyTester)" an seinem Ort; ein Klick nennt den Befehl /cam spot
     CamFlyTester:Karte, die Likes und was er zeigt. Dynmap nimmt das Icon
     camera, squaremap das eigene Icon der Ebene, 16 x 16. Geheim steht
-    nirgends. Liked der zweite Spieler Karte, ist er der Bau der Woche: "★" im
-    Namen, 1 like im Text, bei Dynmap das Icon goldstar, bei squaremap das
-    goldene.
+    nirgends. Liked der zweite Spieler Karte, steht 1 like im Text, und Name
+    und Icon bleiben, wie sie sind.
 
     Startet BlueMap neu (die Attrappe vergisst ihre Ebenen wie /bluemap
     reload), ist die Nadel gleich wieder da; vergisst squaremap seine Ebenen,
     bringt sie die naechste Aenderung zurueck. Wieder privat ist Karte von
     allen drei Karten weg. web-map.hidden: true schaltet die Ebenen
-    voreingestellt aus, min-likes: 5 laesst Karte weg, squaremap: false nimmt
-    sie nur dort weg, enabled: false ueberall. Mit web-map.link hat /cam spot
-    list einen Knopf [Map] mit der Adresse des Spots.
+    voreingestellt aus, min-likes: 5 laesst Karte weg. min-views - voreingestellt
+    0 - laesst sie mit 1 ebenso weg, bis der Bot einmal hingesprungen ist;
+    danach ist sie da. squaremap: false nimmt sie nur dort weg, enabled: false
+    ueberall. Mit web-map.link hat /cam spot list einen Knopf [Map] mit der
+    Adresse des Spots.
     """
     uuid = offline_uuid(BOT_NAME)
     nadel = f"camfly-{uuid}-karte"
@@ -15708,16 +15547,10 @@ def webkarte_checks(env, bot):
         befehl(zuschauer, f"/cam spot like {BOT_NAME}:Karte", warten=1.0)
         karten = alle()
         b, d, s = nadeln(karten["bluemap"]), nadeln(karten["dynmap"]), nadeln(karten["squaremap"])
-        # Den Stern selbst schreibt die Konsole je nach Zeichensatz als ?, gesucht wird ein Zeichen davor.
-        stern_im_namen = rf"\| \S+ Karte \({BOT_NAME}\) \|"
-        FIND.test("Geliked ist Karte der Bau der Woche: Stern im Namen, 1 likes im Text",
-                  bool(b) and re.search(stern_im_namen, b[0]) is not None and bool(d)
-                  and re.search(stern_im_namen, d[0]) is not None
-                  and all("1 likes" in t and "Top spot of the last 7 days" in t for t in b + d + s),
-                  "\n".join(b + d + s))
-        FIND.test("Der Bau der Woche: bei Dynmap goldstar, bei squaremap das goldene Icon",
-                  bool(d) and "icon=goldstar" in d[0] and bool(s) and "icon=camfly-spots_top" in s[0],
-                  "\n".join(d + s))
+        FIND.test("Geliked: 1 likes im Text, Name und Icon bleiben",
+                  bool(b) and f"| Karte ({BOT_NAME}) |" in b[0] and bool(d) and f"| Karte ({BOT_NAME}) |" in d[0]
+                  and "icon=camera" in d[0] and bool(s) and "icon=camfly-spots_spot" in s[0]
+                  and all("1 likes" in t for t in b + d + s), "\n".join(b + d + s))
 
         console(env, "fakebluemap reload", pause=1.5)
         FIND.test("BlueMap neu gestartet: die Nadel ist gleich wieder da",
@@ -15750,7 +15583,22 @@ def webkarte_checks(env, bot):
         karten = alle()
         FIND.test("web-map.min-likes: 5 - Karte mit 0 Likes kommt nicht auf die Karten",
                   not any(nadeln(k) for k in karten.values()), "\n".join(sum(karten.values(), [])))
-        set_options(env, [("min-likes", "0", "web-map"), ("squaremap", "false", "web-map")])
+        FIND.test("Voreingestellt steht web-map.min-views: 0 da",
+                  re.search(r"(?m)^\s+min-views:\s*0\s*$", ausgeliefert(env)) is not None, "")
+        set_options(env, [("min-likes", "0", "web-map"), ("min-views", "1", "web-map")])
+        time.sleep(1.0)
+        karten = alle()
+        FIND.test("web-map.min-views: 1 - Karte, zu der noch keiner gesprungen ist, kommt nicht auf die Karten",
+                  not any(nadeln(k) for k in karten.values()), "\n".join(sum(karten.values(), [])))
+        cam_on(bot)
+        befehl(bot, "/cam spot Karte", warten=1.0)
+        cam_off(bot)
+        # Aufrufe allein melden sich nicht bei den Karten; der naechste Durchgang bringt sie, hier der Reload.
+        console(env, "cam reload", pause=2.0)
+        karten = alle()
+        FIND.test("web-map.min-views: 1 - nach einem Sprung dorthin ist Karte auf allen drei Karten",
+                  all(len(nadeln(k)) == 1 for k in karten.values()), "\n".join(sum(karten.values(), [])))
+        set_options(env, [("min-views", "0", "web-map"), ("squaremap", "false", "web-map")])
         time.sleep(1.0)
         karten = alle()
         FIND.test("web-map.squaremap: false - nur squaremap hat keine Spots",
@@ -15776,7 +15624,8 @@ def webkarte_checks(env, bot):
                 zuschauer.stop()
             cam_off(bot)
             set_options(env, [("enabled", "true", "web-map"), ("hidden", "false", "web-map"),
-                              ("min-likes", "0", "web-map"), ("squaremap", "true", "web-map"),
+                              ("min-likes", "0", "web-map"), ("min-views", "0", "web-map"),
+                              ("squaremap", "true", "web-map"),
                               ("link", '""', "web-map")])
             spots_loeschen(bot, "Karte", "Geheim")
             hinstellen(bot, heim[0], heim[1], heim[2])
@@ -15989,7 +15838,6 @@ ABSCHNITTE = [
     Abschnitt("tourmoderation", tourmoderation_checks, "menu tour/TourModeration tour/TourBans tour/CamTour"),
     Abschnitt("spot_ansicht", spot_ansicht_checks,
               "spot sky nightvision back resume tour/CamTour preferences storage/PlayerStore"),
-    Abschnitt("bau_der_woche", bau_der_woche_checks, "spot menu"),
     Abschnitt("webkarte", webkarte_checks, "webmap spot/SharedSpots spot/CamSpots spot/SpotViews"),
     Abschnitt("erze", erze_checks, "ore session/CameraMode"),
     Abschnitt("anstupsen", anstups_checks, "nudge", koerpertypen=True),

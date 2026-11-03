@@ -225,7 +225,7 @@ public final class SharedSpots {
     public boolean toggleLike(Share share, UUID viewer) {
         boolean likes = !share.removeLike(viewer);
         if (likes) {
-            share.addLike(viewer, System.currentTimeMillis());
+            share.addLike(viewer);
         } else if (share.isEmpty()) {
             drop(share.getOwner(), share.getSpot().key());
         }
@@ -377,13 +377,10 @@ public final class SharedSpots {
                 }
             }
         }
-        // When each like came, for the build of the week; a like from a file
-        // of before that counts, only not for the week.
-        ConfigurationSection likedAt = entry.getConfigurationSection("liked-at");
         for (String id : entry.getStringList("likes")) {
             UUID player = parseId(id);
             if (player != null) {
-                share.addLike(player, likedAt == null ? 0L : Math.max(0L, likedAt.getLong(id)));
+                share.addLike(player);
             }
         }
         if (!share.isEmpty()) {
@@ -436,11 +433,8 @@ public final class SharedSpots {
                 }
                 if (share.likes() > 0) {
                     List<String> likes = new ArrayList<>();
-                    for (Map.Entry<UUID, Long> like : share.likers().entrySet()) {
-                        likes.add(like.getKey().toString());
-                        if (like.getValue() > 0L) {
-                            file.set(path + ".liked-at." + like.getKey(), like.getValue());
-                        }
+                    for (UUID player : share.likers()) {
+                        likes.add(player.toString());
                     }
                     file.set(path + ".likes", likes);
                 }

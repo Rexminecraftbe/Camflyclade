@@ -23,7 +23,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,7 +30,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 /**
@@ -111,105 +109,6 @@ public final class CamSpots {
     /** How often a spot of this owner was looked at, see {@link SpotViews}. */
     public long views(UUID owner, Spot spot) {
         return views.of(owner, spot.key());
-    }
-
-    // ------------------------------------------------------------ the build of the week
-
-    /**
-     * Whether the build of the week counts outside the menu - its star in
-     * {@code /cam spot list} and on the web map -, {@code viewpoints.week-days}
-     * above 0.
-     */
-    public boolean hasWeek() {
-        return settings.getWeekDays() > 0;
-    }
-
-    /** How many days the build of the week counts outside the menu, {@code viewpoints.week-days}. */
-    public int weekDays() {
-        return settings.getWeekDays();
-    }
-
-    /**
-     * The periods a player picks from on the tab of the public spots, in
-     * days, the shortest first: {@code viewpoints.top-periods} up to
-     * {@code viewpoints.top-max-days}.
-     */
-    public List<Integer> periods() {
-        return settings.getTopPeriods();
-    }
-
-    /** Since when a period of so many days counts, as {@link System#currentTimeMillis()} does. */
-    private static long since(int days) {
-        return System.currentTimeMillis() - TimeUnit.DAYS.toMillis(days);
-    }
-
-    /** How many players liked a public spot within so many days, and still like it. */
-    public int likesIn(Share share, int days) {
-        return days > 0 ? share.likesSince(since(days)) : 0;
-    }
-
-    /**
-     * How many different players looked at a spot within so many days -
-     * jumped there -, its owner not counting.
-     */
-    public int visitorsIn(Share share, int days) {
-        return days > 0 ? views.visitorsSince(share.getOwner(), share.getSpot().key(), since(days)) : 0;
-    }
-
-    /** {@link #likesIn} over the days of {@code viewpoints.week-days}. */
-    public int weekLikes(Share share) {
-        return likesIn(share, weekDays());
-    }
-
-    /** {@link #visitorsIn} over the days of {@code viewpoints.week-days}. */
-    public int weekVisitors(Share share) {
-        return visitorsIn(share, weekDays());
-    }
-
-    /**
-     * The order of the best within so many days: the most likes in them
-     * first, then the most visitors, then the newest spot.
-     */
-    public Comparator<Share> topOrder(int days) {
-        return Comparator.comparingInt((Share share) -> likesIn(share, days)).reversed()
-                .thenComparing(Comparator.comparingInt((Share share) -> visitorsIn(share, days)).reversed())
-                .thenComparing(Comparator.comparingLong((Share share) -> share.getSpot().created()).reversed());
-    }
-
-    /**
-     * The public spot that got the most within so many days - likes first,
-     * then visitors -, or {@code null} when none got anything.
-     */
-    public Share topOf(int days) {
-        if (days <= 0) {
-            return null;
-        }
-        Share best = null;
-        Comparator<Share> order = topOrder(days);
-        for (Share share : publicSpots()) {
-            if (likesIn(share, days) + visitorsIn(share, days) > 0
-                    && (best == null || order.compare(share, best) < 0)) {
-                best = share;
-            }
-        }
-        return best;
-    }
-
-    /**
-     * The build of the week: {@link #topOf} the days of
-     * {@code viewpoints.week-days}, or {@code null} while it is switched off.
-     */
-    public Share buildOfTheWeek() {
-        return topOf(weekDays());
-    }
-
-    /**
-     * How the texts name a period of so many days: {@code spot-period}, or
-     * {@code spot-period-one} for a single day.
-     */
-    public String period(int days) {
-        return days == 1 ? messages.getMessage("spot-period-one")
-                : messages.getMessage("spot-period").replace("{days}", String.valueOf(days));
     }
 
     /**
@@ -818,14 +717,10 @@ public final class CamSpots {
         if (!messages.isMessageEnabled(entry)) {
             return;
         }
-        Share top = likes ? buildOfTheWeek() : null;
         for (Share share : shares) {
             String text = fillPlace(messages.getMessage(entry), share.getSpot())
                     .replace("{owner}", share.getOwnerName())
                     .replace("{likes}", String.valueOf(share.likes())) + lookSuffix(share.getSpot());
-            if (share == top && messages.isMessageEnabled("spot-list-top")) {
-                text += messages.getMessage("spot-list-top").replace("{period}", period(weekDays()));
-            }
             List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
             line.addAll(button("spot-button-go", share.label(),
                     new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam spot " + share.label())));
@@ -845,10 +740,6 @@ public final class CamSpots {
         Share share = shareOf(player, spot);
         if (share != null && share.isEveryone() && messages.isMessageEnabled("spot-list-public")) {
             text += messages.getMessage("spot-list-public").replace("{likes}", String.valueOf(share.likes()));
-        }
-        if (share != null && share.isEveryone() && share == buildOfTheWeek()
-                && messages.isMessageEnabled("spot-list-top")) {
-            text += messages.getMessage("spot-list-top").replace("{period}", period(weekDays()));
         }
         if (share != null && !share.getPlayers().isEmpty() && messages.isMessageEnabled("spot-list-shared")) {
             text += messages.getMessage("spot-list-shared").replace("{players}", whom(share));

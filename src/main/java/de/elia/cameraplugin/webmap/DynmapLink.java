@@ -8,8 +8,7 @@ import java.util.List;
 
 /**
  * The spots on Dynmap, as a marker set of their own: a marker with the
- * camera icon for each spot - the gold star for the build of the week -, and
- * its text on a click.
+ * camera icon for each spot, and its text on a click.
  *
  * <p>Checked against {@code us.dynmap:DynmapCoreAPI} and {@code dynmap-api}
  * 3.8; the plugin itself is the {@code DynmapAPI}:</p>
@@ -34,9 +33,7 @@ final class DynmapLink implements MapLink {
 
     /** The icon of a spot, one Dynmap brings along. */
     private static final String ICON = "camera";
-    /** The icon of the build of the week. */
-    private static final String TOP_ICON = "goldstar";
-    /** What Dynmap shows when one of the two is missing. */
+    /** What Dynmap shows when it is missing. */
     private static final String FALLBACK_ICON = "default";
 
     private final Plugin map;
@@ -85,10 +82,9 @@ final class DynmapLink implements MapLink {
             }
         }
         Object icon = icon(api, ICON);
-        Object topIcon = icon(api, TOP_ICON);
         for (MapSpot spot : spots) {
             Object marker = Calls.call(set, "createMarker", spot.id(), spot.label(), Boolean.FALSE, spot.world(),
-                    spot.x(), spot.y(), spot.z(), spot.top() ? topIcon : icon, Boolean.FALSE);
+                    spot.x(), spot.y(), spot.z(), icon, Boolean.FALSE);
             if (marker != null) {
                 Calls.call(marker, "setDescription", spot.detail());
             }
