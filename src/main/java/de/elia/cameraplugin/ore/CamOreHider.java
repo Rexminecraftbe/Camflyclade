@@ -6,6 +6,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.ChunkSnapshot;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -55,6 +56,12 @@ import java.util.UUID;
  * well. One shut in on every side is no matter at all, nobody sees it
  * either way. In a world without a sky, the Nether, every open ore counts as
  * one of a cave.</p>
+ *
+ * <p>With {@code hide-ores.where: biomes} only the ores of the biomes of
+ * {@code hide-ores.biomes} are hidden - the caves the game has as biomes of
+ * their own, out of the box -, every one of them that lies open, under the
+ * sky or not. The ores of an ordinary cave, which has the biome of the land
+ * above it, stay as they are then.</p>
  *
  * <p>The client gets the chunks around the camera with every ore in them, so
  * the plugin tells it right after each chunk, block by block, that the ores
@@ -110,6 +117,11 @@ public final class CamOreHider implements Listener {
     private Set<Material> clear = EnumSet.noneOf(Material.class);
     /** What each ore looks like for a camera player, from {@code hide-ores.blocks}, as it is when a look starts. */
     private Map<Material, BlockData> covers = Map.of();
+    /**
+     * The biomes whose ores alone are hidden, {@code hide-ores.where: biomes},
+     * or {@code null} for the ores of every cave.
+     */
+    private Set<NamespacedKey> biomes;
 
     /** The ores of the caves of each chunk looked at, the one used last at the end. */
     private final LinkedHashMap<ChunkId, Looked> found = new LinkedHashMap<>(256, 0.75f, true) {
@@ -231,6 +243,7 @@ public final class CamOreHider implements Listener {
     public void reload() {
         found.clear();
         covers = Map.copyOf(settings.getOreCovers());
+        biomes = settings.getOreBiomes() == null ? null : Set.copyOf(settings.getOreBiomes());
         Set<Material> through = EnumSet.noneOf(Material.class);
         for (Material material : Material.values()) {
             try {
@@ -466,16 +479,17 @@ public final class CamOreHider implements Listener {
                 waiting.remove(id);
                 continue;
             }
-            ChunkSnapshot copy = world.getChunkAt(id.x(), id.z()).getChunkSnapshot(true, false, false);
+            Set<NamespacedKey> among = biomes;
+            ChunkSnapshot copy = world.getChunkAt(id.x(), id.z()).getChunkSnapshot(true, among != null, false);
             Map<Material, BlockData> lookFor = covers;
             Set<Material> through = clear;
             int minY = world.getMinHeight();
             int maxY = world.getMaxHeight();
-            boolean sky = world.hasSkyLight();
+            boolean sky = skyCounts(world);
             int change = changes.getOrDefault(id, 0);
             long taken = System.currentTimeMillis();
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-                List<Found> ores = OreScan.scan(copy, id.x(), id.z(), minY, maxY, sky, lookFor, through);
+                List<Found> ores = OreScan.scan(copy, id.x(), id.z(), minY, maxY, sky, lookFor, through, among);
                 Bukkit.getScheduler().runTask(plugin, () -> arrived(id, change, taken, ores));
             });
         }
@@ -549,12 +563,21 @@ public final class CamOreHider implements Listener {
             if (!clear.contains(block.getType())) {
                 continue;
             }
-            if (world.hasSkyLight() && y > world.getHighestBlockYAt(x, z)) {
+            if (skyCounts(world) && y > world.getHighestBlockYAt(x, z)) {
                 return false;
             }
             cave = true;
         }
         return cave;
+    }
+
+    /**
+     * Whether an ore open under the sky stays as it is: in a world with a
+     * sky, unless only the ores of the biomes of {@code hide-ores.biomes} are
+     * hidden - there the sky does not matter.
+     */
+    private boolean skyCounts(World world) {
+        return biomes == null && world.hasSkyLight();
     }
 
     /**

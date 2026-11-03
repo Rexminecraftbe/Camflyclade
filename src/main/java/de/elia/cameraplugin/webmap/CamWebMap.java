@@ -261,6 +261,7 @@ public final class CamWebMap implements Listener {
                 .replace("{owner}", owner)
                 .replace("{likes}", String.valueOf(share.likes()))
                 .replace("{views}", String.valueOf(spots.views(share.getOwner(), spot)))
+                .replace("{period}", spots.period(settings.getWeekDays()))
                 .replace("{days}", String.valueOf(settings.getWeekDays()))
                 .replace("{week-likes}", String.valueOf(spots.weekLikes(share)))
                 .replace("{week-visitors}", String.valueOf(spots.weekVisitors(share)))

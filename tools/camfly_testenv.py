@@ -15491,11 +15491,16 @@ def bau_der_woche_checks(env, bot):
     besucht Alt: In playerdata/spot-views.yml steht er unter week bei Alt;
     der Bot selbst, der zu seinem eigenen Spot springt, zaehlt dort nicht.
     Nimmt er das Like zurueck, ist Alt mit seinem einen Besucher vorn. Die
-    Liste des Bots traegt den Stern hinter seinem eigenen Spot. Im Menue
-    sortiert der Trichter auf dem Reiter der oeffentlichen Spots nach sechs
-    Klicks nach dem Bau der Woche - als letzte Sortierung -, Alt steht vorn,
-    mit dem Stern oben und seinen Zahlen der letzten 7 Tage. Mit
-    week-days: 0 gibt es keinen Stern und diese Sortierung nicht.
+    Liste des Bots traegt den Stern hinter seinem eigenen Spot.
+
+    Im Menue hat der Trichter auf dem Reiter der oeffentlichen Spots nach den
+    anderen Sortierungen eine fuer jeden Zeitraum - voreingestellt
+    top-periods 1, 7, 30, 90, 180, 360 bis top-max-days 90, also 1, 7, 30 und
+    90 Tage, nicht 180. Nach sieben Klicks sortiert er nach den letzten 7
+    Tagen: Alt steht vorn, mit dem Stern oben und seinen Zahlen dieser Tage.
+    Mit top-max-days: 360 gibt es auch 360 Tage, mit top-periods
+    [1, 2, 3, 5, 18] genau diese, mit top-max-days: 0 keinen. Mit
+    week-days: 0 gibt es in der Liste keinen Stern.
     """
     def fenster(client):
         return client.call("window_slots", wait=10)
@@ -15518,7 +15523,7 @@ def bau_der_woche_checks(env, bot):
         return
     x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
-    stern = r"build of the week"
+    stern = r"top spot of the last 7 days"
     try:
         FIND.test("Voreingestellt steht viewpoints.week-days: 7 da",
                   re.search(r"(?m)^\s+week-days:\s*7\s*$", ausgeliefert(env)) is not None, "")
@@ -15570,35 +15575,59 @@ def bau_der_woche_checks(env, bot):
         FIND.test("Die Liste des Bots traegt den Stern hinter seinem eigenen Spot",
                   gesagt(zeilen, rf"- Alt: .*{stern}") and not gesagt(zeilen, rf"- Woche: .*{stern}"), zeige(zeilen))
 
-        oeffentliche(zuschauer)
-        for _ in range(6):
+        f = oeffentliche(zuschauer)
+        filter_text = item_text(f.get("slots", {}).get("51"))
+        zeitraeume = re.findall(r"best of the last (?:(\d+) days|day) first", filter_text)
+        FIND.test("Menue: der Trichter bietet die Zeitraeume 1, 7, 30 und 90 Tage an, nicht 180",
+                  [z or "1" for z in zeitraeume] == ["1", "7", "30", "90"], filter_text)
+        for _ in range(7):
             klick(zuschauer, 51)
         f = fenster(zuschauer)
         filter_text = item_text(f.get("slots", {}).get("51"))
         erster = item_text(f.get("slots", {}).get("0"))
-        FIND.test("Menue: nach sechs Klicks sortiert der Trichter nach dem Bau der Woche",
-                  "» build of the week first" in filter_text, filter_text)
+        FIND.test("Menue: nach sieben Klicks sortiert der Trichter nach den letzten 7 Tagen",
+                  "» best of the last 7 days first" in filter_text, filter_text)
         FIND.test("Menue: Alt steht vorn, mit dem Stern oben und seinen Zahlen der letzten 7 Tage",
-                  erster.startswith(f"{BOT_NAME}:Alt") and "Build of the week" in erster
-                  and "Last 7 days: 0 likes, 1 visitors" in erster, erster)
+                  erster.startswith(f"{BOT_NAME}:Alt") and "Top spot of the last 7 days" in erster
+                  and "In the last 7 days: 0 likes, 1 visitors" in erster, erster)
+        klick(zuschauer, 51)
+        f = fenster(zuschauer)
+        erster = item_text(f.get("slots", {}).get("0"))
+        FIND.test("Menue: ein Klick weiter, 30 Tage - Stern und Zahlen folgen dem Zeitraum",
+                  "Top spot of the last 30 days" in erster and "In the last 30 days: 0 likes, 1 visitors" in erster,
+                  erster)
+        zuschauer.call("close_window", wait=10)
+
+        set_option(env, "top-max-days", "360")
+        filter_text = item_text(oeffentliche(zuschauer).get("slots", {}).get("51"))
+        FIND.test("top-max-days: 360 - auch 180 und 360 Tage",
+                  "best of the last 180 days first" in filter_text and "best of the last 360 days first" in filter_text,
+                  filter_text)
+        zuschauer.call("close_window", wait=10)
+        set_option(env, "top-periods", "[1, 2, 3, 5, 18]")
+        filter_text = item_text(oeffentliche(zuschauer).get("slots", {}).get("51"))
+        zeitraeume = re.findall(r"best of the last (?:(\d+) days|day) first", filter_text)
+        FIND.test("top-periods: [1, 2, 3, 5, 18] - genau diese Zeitraeume",
+                  [z or "1" for z in zeitraeume] == ["1", "2", "3", "5", "18"], filter_text)
+        zuschauer.call("close_window", wait=10)
+        set_option(env, "top-max-days", "0")
+        filter_text = item_text(oeffentliche(zuschauer).get("slots", {}).get("51"))
+        FIND.test("top-max-days: 0 - keine Wahl im Menue", "best of the last" not in filter_text
+                  and "nearest first" in filter_text, filter_text)
         zuschauer.call("close_window", wait=10)
 
         set_option(env, "week-days", "0")
         dort = befehl(zuschauer, "/cam spot list")
-        FIND.test("week-days: 0 - kein Stern", not gesagt(dort, stern) and gesagt(dort, rf"{BOT_NAME}:Alt"),
+        FIND.test("week-days: 0 - kein Stern", not gesagt(dort, r"top spot of") and gesagt(dort, rf"{BOT_NAME}:Alt"),
                   zeige(dort))
-        f = oeffentliche(zuschauer)
-        filter_text = item_text(f.get("slots", {}).get("51"))
-        FIND.test("week-days: 0 - der Trichter kennt den Bau der Woche nicht mehr",
-                  "build of the week" not in filter_text and "most views first" in filter_text, filter_text)
-        zuschauer.call("close_window", wait=10)
     finally:
         try:
             if zuschauer.proc is not None:
                 cam_off(zuschauer)
                 zuschauer.stop()
             cam_off(bot)
-            set_option(env, "week-days", "7")
+            set_options(env, [("week-days", "7"), ("top-max-days", "90"),
+                              ("top-periods", "[1, 7, 30, 90, 180, 360]")])
             spots_loeschen(bot, "Woche", "Alt")
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
@@ -15718,7 +15747,8 @@ def webkarte_checks(env, bot):
         FIND.test("Geliked ist Karte der Bau der Woche: Stern im Namen, 1 likes im Text",
                   bool(b) and re.search(stern_im_namen, b[0]) is not None and bool(d)
                   and re.search(stern_im_namen, d[0]) is not None
-                  and all("1 likes" in t and "Build of the week" in t for t in b + d + s), "\n".join(b + d + s))
+                  and all("1 likes" in t and "Top spot of the last 7 days" in t for t in b + d + s),
+                  "\n".join(b + d + s))
         FIND.test("Der Bau der Woche: bei Dynmap goldstar, bei squaremap das goldene Icon",
                   bool(d) and "icon=goldstar" in d[0] and bool(s) and "icon=camfly-spots_top" in s[0],
                   "\n".join(d + s))
@@ -15804,6 +15834,12 @@ def erze_checks(env, bot):
     Chunks der Client erst dort bekommt, sind auch deren Erze Stein. Nach dem
     Cam-Modus sieht der Bot wieder die echten Erze. Mit hide-ores.enabled:
     false bleibt im Cam-Modus alles, wie es ist.
+
+    hide-ores.where: biomes - voreingestellt steht caves da: In der nahen
+    Hoehle, die das Biom der Ebene hat, bleiben jetzt alle Erze, wie sie
+    sind. Mit /fillbiome zu Ueppigen Hoehlen gemacht, ist dort jedes offene Erz
+    Stein, auch das unter freiem Himmel auf dem Dach; das eingeschlossene
+    bleibt.
     """
     def sieht(client, ort):
         """Der Name des Blocks, wie der Client ihn sieht - und fuer den
@@ -15900,12 +15936,31 @@ def erze_checks(env, bot):
         aus = [sieht(bot, o) for o in nah]
         FIND.test("hide-ores.enabled: false - im Cam-Modus bleiben die Erze, wie sie sind",
                   aus == ["diamond_ore", "deepslate_iron_ore", "diamond_ore", "diamond_ore"], str(aus))
+
+        FIND.test("Voreingestellt steht hide-ores.where: caves da, mit den Hoehlen-Biomen in der Liste",
+                  re.search(r"(?m)^\s+where:\s*caves\s*$", ausgeliefert(env)) is not None
+                  and re.search(r"(?m)^\s+- lush_caves\s*$", ausgeliefert(env)) is not None, "")
+        set_options(env, [("enabled", "true", "hide-ores"), ("where", "biomes", "hide-ores")])
+        cam_on(bot)
+        time.sleep(2.5)
+        ebene = [sieht(bot, o) for o in nah]
+        FIND.test("where: biomes - in der Hoehle mit dem Biom der Ebene bleiben alle Erze",
+                  ebene == ["diamond_ore", "deepslate_iron_ore", "diamond_ore", "diamond_ore"], str(ebene))
+        cam_off(bot)
+        console(env, f"fillbiome {nah_x} {y} {z + 6} {nah_x + 8} {y + 6} {z + 15} minecraft:lush_caves", pause=1.0)
+        cam_on(bot)
+        time.sleep(2.5)
+        ueppig = [sieht(bot, o) for o in nah]
+        FIND.test("where: biomes - in Ueppigen Hoehlen ist jedes offene Erz Stein, auch das unter freiem Himmel",
+                  ueppig[0] == "stone" and ueppig[1] == "deepslate" and ueppig[2] == "stone", str(ueppig))
+        FIND.test("where: biomes - das eingeschlossene bleibt Diamanterz", ueppig[3] == "diamond_ore", str(ueppig))
     finally:
         try:
             if zuschauer.proc is not None:
                 zuschauer.stop()
             cam_off(bot)
-            set_option(env, "enabled", "true", "hide-ores")
+            set_options(env, [("enabled", "true", "hide-ores"), ("where", "caves", "hide-ores")])
+            console(env, f"fillbiome {nah_x} {y} {z + 6} {nah_x + 8} {y + 6} {z + 15} minecraft:plains", pause=0.5)
             for ax in (nah_x, fern_x):
                 console(env, f"fill {ax} {y} {z + 6} {ax + 8} {y + 5} {z + 15} minecraft:air", pause=0.4)
             console(env, f"setblock {x - 3} {y} {z - 3} minecraft:air", pause=0.3)

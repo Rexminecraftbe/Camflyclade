@@ -33,6 +33,8 @@ import de.elia.cameraplugin.timelimit.FlightLimit;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
 import org.bukkit.Particle;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
@@ -46,6 +48,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -120,12 +123,14 @@ public final class CamSettings {
     private static final int MAX_GUESTBOOK_INTERVAL_MINUTES = 1440;
 
     /**
-     * The most days {@code viewpoints.week-days} looks back for the build of
-     * the week: a month. Who came longer ago is kept for nothing else, and a
-     * longer look back would only bring back the old spots it is meant to
-     * leave behind.
+     * The most days the build of the week looks back, {@code viewpoints.week-days},
+     * {@code top-periods} and {@code top-max-days}: ten years. Who came to a
+     * spot is kept as long as the longest of them looks back.
      */
-    private static final int MAX_WEEK_DAYS = 30;
+    private static final int MAX_TOP_DAYS = 3650;
+
+    /** The periods of {@code viewpoints.top-periods} out of the box, in days. */
+    private static final List<Integer> DEFAULT_TOP_PERIODS = List.of(1, 7, 30, 90, 180, 360);
 
     /** The levels of {@code signal.levels}, from the most bars down, as the config file names them. */
     private static final String[] SIGNAL_LEVEL_NAMES = {"excellent", "good", "medium", "weak"};
@@ -438,11 +443,19 @@ public final class CamSettings {
     private int viewsCooldownMinutes;
     /** How many days back the build of the week counts likes and visitors, {@code viewpoints.week-days}; 0 for off. */
     private int weekDays;
+    /** The periods the players pick from in the menu, in days, shortest first, {@code viewpoints.top-periods}. */
+    private List<Integer> topPeriods = DEFAULT_TOP_PERIODS;
+    /** The longest of them the menu offers, {@code viewpoints.top-max-days}; 0 for none. */
+    private int topMaxDays;
 
     /** Whether a camera player sees the ores of caves as stone, {@code hide-ores.enabled}. */
     private boolean hideOres;
     /** What each ore looks like for him, {@code hide-ores.blocks}, in the order of the file. */
     private final Map<Material, BlockData> oreCovers = new LinkedHashMap<>();
+    /** Whether only the ores of the biomes of {@code hide-ores.biomes} are hidden, {@code hide-ores.where: biomes}. */
+    private boolean oreBiomesOnly;
+    /** The biomes whose ores are hidden under {@code hide-ores.where: biomes}. */
+    private final Set<NamespacedKey> oreBiomes = new HashSet<>();
 
     /** Whether the public spots go on the web maps of the server, {@code web-map.enabled}. */
     private boolean webMapEnabled;
@@ -844,9 +857,14 @@ public final class CamSettings {
                 MAX_GUESTBOOK_INTERVAL_MINUTES);
         viewpointsStartDistance = config.getDouble("viewpoints.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
         viewsCooldownMinutes = config.getInt("viewpoints.views-cooldown-minutes", 10, 0, MAX_VIEWS_COOLDOWN_MINUTES);
-        weekDays = config.getInt("viewpoints.week-days", 7, 0, MAX_WEEK_DAYS);
+        weekDays = config.getInt("viewpoints.week-days", 7, 0, MAX_TOP_DAYS);
+        topPeriods = readDays(config, "viewpoints.top-periods", DEFAULT_TOP_PERIODS);
+        topMaxDays = config.getInt("viewpoints.top-max-days", 90, 0, MAX_TOP_DAYS);
         hideOres = config.getBoolean("hide-ores.enabled", true);
         readOreCovers(config);
+        oreBiomesOnly = config.getChoice("hide-ores.where", "caves", "caves", "biomes")
+                .equalsIgnoreCase("biomes");
+        readOreBiomes(config);
         webMapEnabled = config.getBoolean("web-map.enabled", true);
         webMapBlueMap = config.getBoolean("web-map.bluemap", true);
         webMapDynmap = config.getBoolean("web-map.dynmap", true);
@@ -1039,6 +1057,34 @@ public final class CamSettings {
         }
         seconds.sort(Comparator.reverseOrder());
         return List.copyOf(seconds);
+    }
+
+    /**
+     * Reads a list of days, such as {@code viewpoints.top-periods}: whole
+     * numbers from 1 to {@value #MAX_TOP_DAYS}, each once, the shortest
+     * first. An entry that is none is reported and left out.
+     */
+    private static List<Integer> readDays(ConfigReader config, String path, List<Integer> def) {
+        List<String> defaults = new ArrayList<>();
+        for (Integer days : def) {
+            defaults.add(String.valueOf(days));
+        }
+        List<Integer> days = new ArrayList<>();
+        for (String entry : config.getStringList(path, defaults)) {
+            int value;
+            try {
+                value = Integer.parseInt(entry.trim());
+            } catch (NumberFormatException ex) {
+                value = 0;
+            }
+            if (value < 1 || value > MAX_TOP_DAYS) {
+                config.warnUnknownEntry(path, entry);
+            } else if (!days.contains(value)) {
+                days.add(value);
+            }
+        }
+        Collections.sort(days);
+        return List.copyOf(days);
     }
 
     /**
@@ -1257,6 +1303,27 @@ public final class CamSettings {
             oreCovers.put(ore, cover);
         }
     }
+
+    /**
+     * Reads {@code hide-ores.biomes}, the way {@code cam-area.forbidden-biomes}
+     * is read: a name the server does not know is reported and left out.
+     */
+    private void readOreBiomes(ConfigReader config) {
+        oreBiomes.clear();
+        String path = "hide-ores.biomes";
+        for (String entry : config.getStringList(path, DEFAULT_ORE_BIOMES)) {
+            NamespacedKey key = CamAreaRules.toKey(entry, Registry.BIOME);
+            if (key == null) {
+                config.warnUnknownEntry(path, entry);
+            } else {
+                oreBiomes.add(key);
+            }
+        }
+    }
+
+    /** The biomes of {@code hide-ores.biomes} out of the box: the caves the game has as biomes of their own. */
+    private static final List<String> DEFAULT_ORE_BIOMES =
+            List.of("lush_caves", "dripstone_caves", "deep_dark", "sulfur_caves");
 
     /** The ores of the game and what they look like for a camera player, as the file built into the jar has them. */
     private static final Map<String, String> DEFAULT_ORE_COVERS = defaultOreCovers();
@@ -1929,6 +1996,37 @@ public final class CamSettings {
         return isViewpointsSharing() ? weekDays : 0;
     }
 
+    /**
+     * The periods a player picks from on the tab of the public spots, in
+     * days, the shortest first: those of {@code viewpoints.top-periods} up to
+     * {@code viewpoints.top-max-days}. None without sharing.
+     */
+    public List<Integer> getTopPeriods() {
+        if (!isViewpointsSharing()) {
+            return List.of();
+        }
+        List<Integer> shown = new ArrayList<>();
+        for (int days : topPeriods) {
+            if (days <= topMaxDays) {
+                shown.add(days);
+            }
+        }
+        return shown;
+    }
+
+    /**
+     * How many days back who came to a spot has to be kept: as long as the
+     * longest of the build of the week and the periods of the menu looks
+     * back; 0 while neither counts.
+     */
+    public int getTopKeepDays() {
+        int keep = getWeekDays();
+        for (int days : getTopPeriods()) {
+            keep = Math.max(keep, days);
+        }
+        return keep;
+    }
+
     /** Whether a camera player sees the ores of caves as stone, {@code hide-ores.enabled}. */
     public boolean isHideOres() {
         return hideOres && !oreCovers.isEmpty();
@@ -1937,6 +2035,15 @@ public final class CamSettings {
     /** What each ore looks like for a camera player, {@code hide-ores.blocks}; not to be changed. */
     public Map<Material, BlockData> getOreCovers() {
         return Collections.unmodifiableMap(oreCovers);
+    }
+
+    /**
+     * The biomes whose ores alone are hidden, {@code hide-ores.biomes}, under
+     * {@code hide-ores.where: biomes}; {@code null} under {@code caves}, where
+     * the ores of every cave are. Not to be changed.
+     */
+    public Set<NamespacedKey> getOreBiomes() {
+        return oreBiomesOnly ? Collections.unmodifiableSet(oreBiomes) : null;
     }
 
     /**

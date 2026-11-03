@@ -839,15 +839,27 @@ viewpoints:
   # Wie lange derselbe Spieler am selben Punkt nicht noch einmal als Aufruf zählt, in Minuten (0 bis 1440, 0 = jeder
   # Sprung und jeder Besuch zählt). So treibt Hin- und Herspringen die Zahl nicht hoch.
   views-cooldown-minutes: 10
-  # Bau der Woche: Unter den öffentlichen Punkten zählt, was ein Punkt in den letzten week-days Tagen bekam - nicht
-  # alles seit jeher, sonst lägen die alten immer vorn. Es zählen die Likes aus diesen Tagen (die noch stehen) und die
-  # Besucher: wie viele verschiedene Spieler hingesprungen sind oder ihn besucht haben, der Besitzer nicht - wer immer
-  # wieder kommt, zählt einmal. Der Punkt mit den meisten Likes darin (bei Gleichstand den meisten Besuchern) ist der
-  # Bau der Woche: Im Menü steht er oben mit einem Stern (menu-spot-top), jeder öffentliche Punkt zeigt seine Zahlen
-  # (menu-spot-week), der Trichter auf dem Reiter der öffentlichen sortiert danach, und /cam spot list und die Karte
-  # (web-map) zeigen den Stern auch. 1 bis 30 Tage, 0 = aus. Geht nur mit sharing: true. Wer wann kam, steht mit den
-  # Aufrufen in plugins/CamFly/playerdata/spot-views.yml; wer länger nicht kam, wird dort vergessen.
+  # Bau der Woche: Unter den öffentlichen Punkten zählt, was ein Punkt in den letzten Tagen bekam - nicht alles seit
+  # jeher, sonst lägen die alten immer vorn. Es zählen die Likes aus diesen Tagen (die noch stehen) und die Besucher:
+  # wie viele verschiedene Spieler hingesprungen sind oder ihn besucht haben, der Besitzer nicht - wer immer wieder
+  # kommt, zählt einmal. Der Punkt mit den meisten Likes darin (bei Gleichstand den meisten Besuchern) ist der beste
+  # dieser Tage und bekommt einen Stern (Texte: menu-spot-top, spot-list-top, spot-period ...).
+  # Im Menü wählt jeder Spieler selbst, wie viele Tage: Der Trichter auf dem Reiter der öffentlichen Punkte hat nach den
+  # anderen Sortierungen eine für jeden Zeitraum von top-periods ("best of the last 30 days first", Text:
+  # menu-sort-top) - der Stern und die Zahlen unter jedem Punkt folgen dann diesem Zeitraum. Wo man nichts wählt, in
+  # /cam spot list, auf der Karte (web-map) und im Menü bei einer anderen Sortierung, gilt week-days.
+  # Wer wann kam, steht mit den Aufrufen in plugins/CamFly/playerdata/spot-views.yml - so lange, wie der längste dieser
+  # Zeiträume zurückreicht; wer länger nicht kam, wird dort vergessen. Alles geht nur mit sharing: true.
+  #
+  # Wie viele Tage der Stern in /cam spot list, auf der Karte und im Menü ohne gewählten Zeitraum zählt
+  # (1 bis 3650, 0 = dort kein Stern)
   week-days: 7
+  # Die Zeiträume, zwischen denen die Spieler im Menü wählen, in Tagen (je 1 bis 3650), z. B. [1, 2, 3, 5, 18].
+  # Doppelte fallen weg, sortiert wird nach der Länge. [] = keine Wahl im Menü.
+  top-periods: [1, 7, 30, 90, 180, 360]
+  # Bis wohin davon angeboten wird, in Tagen (0 bis 3650, 0 = keiner): Mit 90 gibt es 1, 7, 30 und 90 Tage, mit 360
+  # auch 180 und 360.
+  top-max-days: 90
   # Das Gästebuch: Wer einen Punkt hat, erfährt, wie oft er angesehen (hingesprungen oder besucht) und geliked wurde -
   # nur andere zählen, und nur so oft, wie es als Aufruf zählt (views-cooldown-minutes). Nichts davon kommt sofort: Es
   # wird gesammelt und als Zahl je Punkt erzählt (Text: spot-guestbook-entry), so kann niemand einem anderen mit
@@ -1076,12 +1088,27 @@ cam-weather:
 # Hang, unten in einer Schlucht), bleibt, wie es ist - das sieht man zu Fuß genauso. Eins, das ringsum eingeschlossen
 # ist, sieht ohnehin niemand. In einer Welt ohne Himmel (Nether) zählt jedes offene Erz als eins einer Höhle.
 # Auch ein Erz, das jemand in einen Bau gesetzt hat, sieht unter einem Dach im Cam-Modus aus wie Stein - wer das nicht
-# will, nimmt es aus der Liste.
+# will, nimmt es aus der Liste. Mit where: biomes zählen statt aller Höhlen nur die Höhlen-Biome, siehe unten.
 # Auf Paper bekommt der Spieler die Erze eines Chunks gleich nach dem Chunk ausgeblendet. Spigot sagt nicht, wann ein
 # Chunk ankommt: Dort wird jede halbe Sekunde nachgesehen und zweimal geschickt - kommt ein Chunk noch später an, zeigt
 # er seine Erze, bis die Kamera weiterfliegt.
 hide-ores:
   enabled: true
+  # Wo Erze ausgeblendet werden:
+  #   caves  = an jeder Höhle, wie oben beschrieben: offen zu Luft (oder Wasser, Glas ...), über der bis zum Himmel kein
+  #            Block mehr steht
+  #   biomes = nur in den Biomen von biomes - dort jedes offene Erz, unter freiem Himmel oder nicht. Eine gewöhnliche
+  #            Höhle hat das Biom des Landes darüber (Ebene, Wald ...), ihre Erze bleiben dann sichtbar. Die
+  #            Höhlen-Biome sperrt cam-area.forbidden-biomes voreingestellt für die Kamera: Hinein fliegt sie dann nicht,
+  #            nur von außen hineinschauen kann sie.
+  where: caves
+  # Die Biome für where: biomes, geschrieben wie bei cam-area.forbidden-biomes. Voreingestellt die Höhlen, die das
+  # Spiel als eigene Biome hat.
+  biomes:
+    - lush_caves
+    - dripstone_caves
+    - deep_dark
+    - sulfur_caves
   # Welches Erz wie aussieht, je eine Zeile Erz: Block (ein Block wie bei border-block, auch mit [Zuständen]). Was hier
   # nicht steht, bleibt sichtbar. {} = keins.
   blocks:

@@ -33,11 +33,12 @@ import java.util.logging.Level;
  * while he is online. A spot that is moved keeps them, one that is deleted
  * loses them.</p>
  *
- * <p>For the build of the week, {@code viewpoints.week-days}, it also keeps
- * who looked at each spot lately - everybody but its owner, each with the
- * last view of his that counted -: how many different players came is what
- * counts there, so that nobody pushes a spot up by coming back again and
- * again. Whoever has not come within the days of the week drops out.</p>
+ * <p>For the build of the week - {@code viewpoints.week-days} and the
+ * periods of {@code viewpoints.top-periods} - it also keeps who looked at
+ * each spot lately - everybody but its owner, each with the last view of his
+ * that counted -: how many different players came is what counts there, so
+ * that nobody pushes a spot up by coming back again and again. Whoever has
+ * not come within the longest of those periods drops out.</p>
  *
  * <p>Where they are kept follows {@code viewpoints.storage}, like
  * {@link SharedSpots}: in one file for everybody,
@@ -76,7 +77,8 @@ public final class SpotViews {
     private final Map<String, Long> lastCounted = new HashMap<>();
     /**
      * Who came to the spots of each owner lately, by {@link Spot#key()}: each
-     * player but the owner, with the last view of his that counted.
+     * player but the owner, with the last view of his that counted - for every
+     * period the build of the week looks back, the same list.
      */
     private final Map<UUID, Map<String, Map<UUID, Long>>> recent = new LinkedHashMap<>();
 
@@ -150,12 +152,13 @@ public final class SpotViews {
     }
 
     /**
-     * Drops whoever has not come within {@code viewpoints.week-days}: he no
-     * longer counts for the week, and the file does not grow without end.
-     * With the week switched off nobody is kept at all.
+     * Drops whoever has not come within the longest period the build of the
+     * week looks back, see {@link CamSettings#getTopKeepDays()}: he no longer
+     * counts for any of them, and the file does not grow without end. With
+     * all of them switched off nobody is kept at all.
      */
     private void forgetOld(long now) {
-        int days = settings.getWeekDays();
+        int days = settings.getTopKeepDays();
         long since = days > 0 ? now - days * DAY : Long.MAX_VALUE;
         recent.values().removeIf(own -> {
             own.values().removeIf(came -> {
