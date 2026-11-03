@@ -462,7 +462,7 @@ public final class CamAreaRules {
      * @return the key, or {@code null} when the server knows nothing by that
      *         name
      */
-    private static NamespacedKey toKey(String entry, Registry<?> registry) {
+    public static NamespacedKey toKey(String entry, Registry<?> registry) {
         String text = entry.trim().toLowerCase(Locale.ROOT).replace(' ', '_');
         if (text.isEmpty()) {
             return null;

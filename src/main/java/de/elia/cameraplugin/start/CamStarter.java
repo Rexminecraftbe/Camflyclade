@@ -36,8 +36,8 @@ public final class CamStarter {
 
     /**
      * Starts camera mode for a player who is not in it, and then does what
-     * started it - takes the camera to a visit of {@code /cam visit}, or to
-     * where {@code /cam resume} goes on. Like {@code /cam}: right away, or
+     * started it - takes the camera to a spot of {@code /cam spot}, to the
+     * player it follows, or to where {@code /cam resume} goes on. Like {@code /cam}: right away, or
      * after the wait of {@code start-delay}, which a second command calls
      * off.
      *

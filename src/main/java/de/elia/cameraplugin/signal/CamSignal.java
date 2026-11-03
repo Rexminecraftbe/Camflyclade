@@ -264,8 +264,7 @@ public final class CamSignal {
      * measured the way {@link #measure} measures it at the camera, from the
      * eyes it goes out from to the eyes of the camera there.
      *
-     * @param from where the signal goes out from: the eyes of the body, or of
-     *             a camera at the spot it visits
+     * @param from where the signal goes out from: the eyes of the body
      * @param feet where the feet of the camera would be
      */
     public boolean reaches(Player player, Location from, Location feet) {
@@ -282,8 +281,7 @@ public final class CamSignal {
      */
     private void lose(Player player, CameraData data, Link link) {
         link.lostSince = 0L;
-        // On a visit back to the spot, which the signal goes out from then.
-        String back = data.getVisit() != null ? "signal-back-to-visit" : "signal-back-to-body";
+        String back = "signal-back-to-body";
         if (settings.getSignalLoss() == SignalLoss.BACK && plugin.getMovementGuard().returnHome(player, data)) {
             settings.getBackSound().play(player);
             if (messages.isMessageEnabled(back)) {

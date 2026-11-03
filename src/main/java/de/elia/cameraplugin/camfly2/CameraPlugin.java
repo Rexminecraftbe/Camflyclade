@@ -41,6 +41,7 @@ import de.elia.cameraplugin.movement.CamBorderWall;
 import de.elia.cameraplugin.movement.CamMovementGuard;
 import de.elia.cameraplugin.nightvision.CamNightVision;
 import de.elia.cameraplugin.nudge.CamNudge;
+import de.elia.cameraplugin.ore.CamOreHider;
 import de.elia.cameraplugin.photo.CamPhotoMode;
 import de.elia.cameraplugin.potion.CamPotionGuard;
 import de.elia.cameraplugin.preferences.CamPreferences;
@@ -80,8 +81,8 @@ import de.elia.cameraplugin.trail.CamTrail;
 import de.elia.cameraplugin.tour.CamTour;
 import de.elia.cameraplugin.tour.TourBans;
 import de.elia.cameraplugin.tour.TourModeration;
-import de.elia.cameraplugin.visit.CamVisit;
 import de.elia.cameraplugin.visibility.CamVisibility;
+import de.elia.cameraplugin.webmap.CamWebMap;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandMap;
@@ -151,8 +152,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final SpotModeration spotModeration = new SpotModeration(this, new SpotBans(this, log));
     private final JumpCheck jumpCheck = new JumpCheck(this);
     private final CamSpots spots = new CamSpots(this, playerStore, sharedSpots, spotViews, guestbook, jumpCheck);
-    private final CamVisit visit = new CamVisit(this, sharedSpots, jumpCheck);
-    private final CamResume resume = new CamResume(this, playerStore, sharedSpots, jumpCheck);
+    private final CamResume resume = new CamResume(this, playerStore, jumpCheck);
     private final CamTour tour = new CamTour(this);
     private final TourModeration tourModeration = new TourModeration(this, new TourBans(this, log));
     private final CamScoutGuard scoutGuard = new CamScoutGuard(this);
@@ -167,6 +167,8 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamBorderWall borderWall = new CamBorderWall(this);
     private final CamTeleportGuard teleportGuard = new CamTeleportGuard(this);
     private final CameraMode cameraMode = new CameraMode(this);
+    private final CamWebMap webMap = new CamWebMap(this, log);
+    private final CamOreHider oreHider = new CamOreHider(this);
 
     private CamFireGuard camFireGuard;
     private CamHungerGuard camHungerGuard;
@@ -204,6 +206,7 @@ public final class CameraPlugin extends JavaPlugin {
         camSulfurCubeGuard = new CamSulfurCubeGuard(this);
         camInventoryGuard = new CamInventoryGuard(this, this::isInCameraMode);
         configFile.reportConfigWarnings(loadConfigValues(), null);
+        oreHider.reload();
         ban.reload();
         sharedSpots.load();
         spotViews.load();
@@ -224,6 +227,9 @@ public final class CameraPlugin extends JavaPlugin {
         this.getCommand("cam").setExecutor(new CamCommand(this));
         this.getCommand("cam").setTabCompleter(new CamTabCompleter(this));
         registerListeners();
+        // The public spots on the web maps, from now on along with every change.
+        sharedSpots.onChange(webMap::changed);
+        webMap.start();
         noCollisionTeam.refreshNoCollisionTeam();
         crashGuard.restoreOnline();
         // Started by hand on a running server: for the battery and the
@@ -270,6 +276,8 @@ public final class CameraPlugin extends JavaPlugin {
                 menu,
                 tour,
                 guestbook,
+                webMap,
+                oreHider,
                 new CamSuggestionFilter(this));
         for (Listener listener : listeners) {
             pluginManager.registerEvents(listener, this);
@@ -281,6 +289,7 @@ public final class CameraPlugin extends JavaPlugin {
         damageMirror.watchBursts();
         mobTargeting.watchWardenAnger();
         tour.watchTickEnd();
+        oreHider.register();
         mobGaze.start();
     }
 
@@ -339,6 +348,8 @@ public final class CameraPlugin extends JavaPlugin {
             // that would have to be taken down.
             return;
         }
+        // Before the maps themselves are switched off, which comes after.
+        webMap.stop();
         // Iterates over a copy of the keys to avoid a ConcurrentModificationException
         for (UUID playerId : new HashSet<>(cameraPlayers.ids())) {
             Player player = Bukkit.getPlayer(playerId);
@@ -365,6 +376,7 @@ public final class CameraPlugin extends JavaPlugin {
         nameTag.onDisable();
         actionBar.onDisable();
         nightVision.onDisable();
+        oreHider.onDisable();
         timeLimit.onDisable();
         bodyAlarm.onDisable();
         nudge.onDisable();
@@ -451,6 +463,7 @@ public final class CameraPlugin extends JavaPlugin {
         // What the start asks for may change with the file.
         startDelay.callOffAll("start-delay-cancelled");
         configFile.reportConfigWarnings(loadConfigValues(), initiator);
+        oreHider.reload();
         ban.reload();
         noCollisionTeam.refreshNoCollisionTeam();
         timeLimit.onReload();
@@ -466,6 +479,7 @@ public final class CameraPlugin extends JavaPlugin {
         spots.indexOwners();
         tour.load(log);
         tourModeration.reload();
+        webMap.start();
         return true;
     }
 
@@ -682,8 +696,12 @@ public final class CameraPlugin extends JavaPlugin {
         return spots;
     }
 
-    public CamVisit getVisit() {
-        return visit;
+    public CamWebMap getWebMap() {
+        return webMap;
+    }
+
+    public CamOreHider getOreHider() {
+        return oreHider;
     }
 
     public CamTour getTour() {

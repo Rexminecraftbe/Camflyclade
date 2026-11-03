@@ -414,8 +414,8 @@ sounds:
     sound: block.conduit.activate
     volume: 1.0
     pitch: 1.0
-  # Beim Sprung an einen Aussichtspunkt mit /cam spot <Name> (viewpoints), zu einem Besuch mit /cam visit
-  # (visitor-camera) und dorthin, wo der letzte Flug aufhörte, mit /cam resume (resume-command)
+  # Beim Sprung an einen Aussichtspunkt mit /cam spot <Name> (viewpoints) und dorthin, wo der letzte Flug aufhörte,
+  # mit /cam resume (resume-command)
   spot:
     enabled: true
     sound: item.chorus_fruit.teleport
@@ -604,7 +604,7 @@ camera-head:
 # man nach dem Klick in den Chat (abbrechen mit cancel), lesen tut ihn niemand sonst. Im Menü landet nichts im Inventar
 # und nichts kommt heraus, auch nicht im Cam-Modus, wo sonst jedes Fenster zu bleibt. Texte: menu-... in der Sprachdatei.
 menu:
-  # Wie die Spieler an back, resume, spot, visit, follow, photo, time, weather, nightvision und stats kommen:
+  # Wie die Spieler an back, resume, spot, follow, photo, time, weather, nightvision und stats kommen:
   #   menu    = nur über das Menü - die Befehle sagen, dass es dafür /cam menu gibt (Text: menu-only)
   #   both    = über das Menü und über die Befehle
   #   command = nur über die Befehle, /cam menu ist aus
@@ -655,7 +655,7 @@ menu:
     # löschen. Ein Linksklick auf einen Punkt springt hin, auf einen geteilten oder öffentlichen genauso wie auf einen
     # eigenen: nur, wohin die Kamera auch fliegen dürfte; ohne Cam-Modus startet er erst, wenn der Punkt nah genug ist
     # (viewpoints.start-distance).
-    # Umschalt-Klick besucht einen Punkt eines anderen (visitor-camera). Wartet ein Angebot, glänzt der Knopf.
+    # Wartet ein Angebot, glänzt der Knopf.
     spots:
       item: filled_map
       slot: 10
@@ -718,7 +718,7 @@ menu:
     # Unten der Knopf, der ihn einschränkt, für seine eigenen Punkte, die öffentlichen und die geteilten je ein Knopf,
     # den man weiterklickt (Linksklick weiter, Rechtsklick zurück): erlaubt - keine neuen (keinen Punkt speichern,
     # keinen öffentlich machen, keinen teilen) - auch keine anschauen (kein Sprung zu seinen eigenen, kein Sprung zu
-    # öffentlichen oder geteilten und kein Besuch dort; der Reiter im Spot-Menü zeigt ihm dann nur, dass er gesperrt
+    # öffentlichen oder geteilten; der Reiter im Spot-Menü zeigt ihm dann nur, dass er gesperrt
     # ist). Für immer oder Tage, Stunden und Minuten wie bei einer Sperre, mit Grund; steht schon etwas, ändert oder
     # hebt man es dort auf. Er erfährt alles davon, wenn er online ist, und jedes Mal, wenn ihn eine Einschränkung
     # aufhält, was, wie lange noch und warum (in plugins/CamFly/playerdata/spot-bans.yml). "Alle" ganz vorn in der
@@ -763,9 +763,8 @@ back-command:
 # /cam resume: Die Kamera macht dort weiter, wo der letzte Flug aufgehört hat, und schaut in dieselbe Richtung - für einen
 # Bau, den man sich Stück für Stück ansieht. Ohne Cam-Modus startet er dafür erst (mit allem, was ein Start mit /cam
 # prüft und kostet), im Cam-Modus springt die Kamera gleich. Gemerkt wird das Ende jedes Flugs, egal wodurch er endete.
-# War der letzte Flug ein Besuch (/cam visit), geht der Besuch weiter, solange der Punkt noch geteilt ist.
-# Gesprungen wird nur, wohin die Kamera auch fliegen dürfte - wie bei /cam spot, gemessen vom Körper, wo er jetzt steht
-# (oder vom besuchten Punkt). Sonst sagt eine Meldung, warum nicht, und ohne Cam-Modus startet er dann gar nicht erst.
+# Gesprungen wird nur, wohin die Kamera auch fliegen dürfte - wie bei /cam spot, gemessen vom Körper, wo er jetzt
+# steht. Sonst sagt eine Meldung, warum nicht, und ohne Cam-Modus startet er dann gar nicht erst.
 # Ton: sounds.spot, Texte: resume-...
 resume-command:
   enabled: true
@@ -776,7 +775,8 @@ resume-command:
 
 # Aussichtspunkte: Stellen mit Blickrichtung, an die die Kamera springt - für einen Bau, den man sich immer wieder von
 # derselben Stelle aus ansieht.
-#   /cam spot set <Name>     = die Stelle, an der man gerade ist (als Kamera oder zu Fuß), mit der Blickrichtung.
+#   /cam spot set <Name>     = die Stelle, an der man gerade ist, mit der Blickrichtung: voreingestellt nur im
+#                              Cam-Modus, wo die Kamera ist (set-in-cam-only), sonst auch zu Fuß.
 #                              Gibt es den Namen schon, wandert er hierher.
 #   /cam spot <Name>         = die Kamera springt dorthin (Ton: sounds.spot, Text: spot-jumped). Ohne Cam-Modus
 #                              startet er dafür erst, dort wo man steht - wenn der Punkt nicht weiter als
@@ -799,11 +799,20 @@ resume-command:
 #                                             öffentlich ist - nach denselben Regeln wie zu einem eigenen, gemessen
 #                                             vom eigenen Körper
 # Ein Name hat 1 bis 16 Buchstaben, Ziffern, - und _; groß oder klein zählt nicht.
+# Was ein Punkt zeigt: Setzt man ihn im Cam-Modus, nimmt er die Tageszeit, das Wetter und die Nachtsicht mit, die man
+# sich selbst eingestellt hat (/cam time, /cam weather, /cam nightvision) - nie die Zeit und das Wetter der Welt.
+# Wer hinspringt, sieht den Bau dann so, z. B. im Sonnenuntergang im Regen, nur auf seinem eigenen
+# Bildschirm - bis seine Kamera woanders hingesetzt wird (ein Punkt ohne eigene Einstellung, /cam back, /cam resume,
+# Folgen) oder er selbst etwas einstellt. Danach sieht er wieder seine eigene; für seine nächsten Flüge gemerkt wird
+# davon nichts. Ist cam-time, cam-weather oder night-vision.player-choice aus, gilt dieser Teil nicht, weder beim
+# Setzen noch beim Hinspringen - im Punkt bleibt er trotzdem stehen und gilt wieder, sobald der Schalter wieder an ist.
+# Zu Fuß sieht man die Zeit und das Wetter der Welt, ein Punkt von dort nimmt nichts mit.
+# (Texte: spot-saved-look, spot-list-look, menu-spot-look, spot-look-...)
 # Gesprungen wird nur, wohin die Kamera auch fliegen dürfte: in der Welt des Körpers, nicht weiter als max-distance
 # (bei max-distance-mode: signal nur, wohin das Signal reicht), nicht in ein Gebiet, das cam-area auf Stufe 2 verbietet,
 # nicht in gesperrte Lava, Wasser oder Pulverschnee und nicht in einen Block, der dort inzwischen steht. Sonst sagt
 # eine Meldung, warum nicht. Wie bei /cam back zählt der Sprung nicht als geflogen, und /cam trail hat dort eine Lücke.
-# Aufrufe: Jeder Sprung zu einem Punkt und jeder Besuch (/cam visit) zählt als Aufruf - von jedem, auch vom Besitzer,
+# Aufrufe: Jeder Sprung zu einem Punkt zählt als Aufruf - von jedem, auch vom Besitzer,
 # derselbe Spieler am selben Punkt höchstens einmal in views-cooldown-minutes. Das Menü zeigt sie unter jedem Punkt und
 # sortiert auf allen drei Reitern danach (die meisten zuerst). Verschoben behält ein Punkt seine Aufrufe, gelöscht sind
 # sie weg.
@@ -813,6 +822,9 @@ viewpoints:
   # Cam-Modus). Der Cam-Modus startet dann dort, wo man steht, mit allem, was ein Start mit /cam prüft und kostet
   # (z. B. nicht direkt nach Schaden). Auch der Linksklick im Menü.
   start-distance: 16
+  # Ob man Punkte nur im Cam-Modus setzen kann (true), dort wo die Kamera ist, oder auch zu Fuß (false). Zu Fuß gesetzt
+  # gilt sonst dasselbe: nur, wo man selbst war. Auch der Knopf für einen neuen Punkt im Menü (Text: spot-set-cam-only).
+  set-in-cam-only: true
   # Wie viele Punkte jeder Spieler höchstens hat (1 bis 100, 0 = kein Limit). Öffentliche zählen mit. Der Knopf für
   # einen neuen Punkt im Menü zeigt, wie viele man hat und wie viele noch gehen (ohne Limit nur, wie viele man hat).
   max-per-player: 10
@@ -828,9 +840,9 @@ viewpoints:
   # Punkte - auch im Menü nur den Reiter der eigenen.
   sharing: true
   # Wie lange derselbe Spieler am selben Punkt nicht noch einmal als Aufruf zählt, in Minuten (0 bis 1440, 0 = jeder
-  # Sprung und jeder Besuch zählt). So treibt Hin- und Herspringen die Zahl nicht hoch.
+  # Sprung zählt). So treibt Hin- und Herspringen die Zahl nicht hoch.
   views-cooldown-minutes: 10
-  # Das Gästebuch: Wer einen Punkt hat, erfährt, wie oft er angesehen (hingesprungen oder besucht) und geliked wurde -
+  # Das Gästebuch: Wer einen Punkt hat, erfährt, wie oft er angesehen (hingesprungen) und geliked wurde -
   # nur andere zählen, und nur so oft, wie es als Aufruf zählt (views-cooldown-minutes). Nichts davon kommt sofort: Es
   # wird gesammelt und als Zahl je Punkt erzählt (Text: spot-guestbook-entry), so kann niemand einem anderen mit
   # Springen oder Liken und Entliken den Chat füllen - ein Like, das bis dahin zurückgenommen wurde, zählt nicht. Jeder
@@ -850,19 +862,42 @@ viewpoints:
   # Minuten (1 bis 1440). Die Glocke im Menü nennt es.
   guestbook-interval-minutes: 10
 
-# Besucher-Kamera: /cam visit <Spieler>:<Name> - die Kamera geht zu einem Punkt, den ein anderer mit einem teilt oder
-# der öffentlich ist, von überall aus, z. B. um sich den Bau eines Freundes zeigen zu lassen. Ohne Cam-Modus startet er dafür erst (mit allem,
-# was ein Start mit /cam prüft und kostet). Der Körper bleibt, wo man steht. Solange der Besuch dauert, tritt der Punkt
-# an die Stelle des Körpers: max-distance, das Funksignal und die Wand gehen von ihm aus - die Kamera sieht sich also
-# den Bau an, der ihr gezeigt wird, und kommt nicht weiter als vom eigenen Körper aus. /cam back beendet den Besuch und
-# bringt die Kamera zum Körper zurück.
-# Fair bleibt es so: nur Punkte, die der Besitzer selbst geteilt und dort gesetzt hat, wo er selbst war; nur in der Welt
-# des Körpers; nur, wo die Kamera überhaupt sein darf (nicht in einem Gebiet, das cam-area auf Stufe 2 verbietet, nicht
-# in gesperrter Lava, Wasser oder Pulverschnee, nicht in einem Block). Nimmt der Besitzer das Teilen zurück oder löscht
-# er den Punkt, geht die Kamera jedes Besuchers zu ihrem Körper zurück (Text: visit-ended).
-# Geht nur mit viewpoints.enabled und viewpoints.sharing. Ton: sounds.spot, Texte: visit-...
-visitor-camera:
+# Die öffentlichen Punkte auf der Web-Karte des Servers: BlueMap, Dynmap und squaremap, welche davon da ist. Jede
+# bekommt eine eigene Ebene (Text: web-map-layer), die man auf der Seite der Karte ein- und ausschalten kann, mit einer
+# Nadel für jeden öffentlichen Punkt. Ein Klick darauf zeigt, wem er gehört, wie oft er geliked und angesehen wurde, was
+# er zeigt (Zeit, Wetter, Nachtsicht) und wo er ist, mit dem Befehl, der hinspringt (Texte: web-map-...). Im Spiel geht
+# von der Karte aus nichts: Eine Webseite kann für einen Spieler keine Befehle schicken - den Befehl tippt man selbst.
+# Nur öffentliche Punkte (/cam spot share <Name> all): Private und die, die nur einzelnen Spielern angeboten sind,
+# kommen nie auf die Karte - die Seite einer Karte ist oft für jeden im Internet offen, nicht nur für die Spieler. Von
+# der Kamera und vom Körper zeigt die Karte nie etwas. Sperrt die Admin-Seite der Punkte für alle das Ansehen
+# öffentlicher Punkte, ist die Ebene leer.
+# Die Nadeln folgen den Punkten: Wird einer öffentlich, kommt er dazu; wird er privat, abgenommen oder gelöscht, ist er
+# weg; wird er verschoben, wandert er mit. Likes und Aufrufe werden alle 30 Sekunden neu eingetragen - ein Punkt, der
+# min-likes oder min-views erreicht, kommt spätestens dann dazu. Startet eine Karte nach CamFly oder neu (z. B. /bluemap reload), bekommt sie die Punkte, sobald sie
+# bereit ist. CamFly braucht keine der Karten und wird auch ohne sie gebaut; passt eine neue Version einer Karte nicht
+# mehr, sagt die Konsole das einmal, und nur diese Karte bekommt keine Punkte. Geht nur mit viewpoints.sharing: true.
+web-map:
   enabled: true
+  # Auf welchen Karten, sofern sie auf dem Server sind
+  bluemap: true
+  dynmap: true
+  squaremap: true
+  # Ob die Ebene der Punkte auf der Seite der Karte erst ausgeschaltet ist, bis ein Besucher sie einschaltet
+  hidden: false
+  # Wie viele Likes ein öffentlicher Punkt mindestens haben muss, um auf die Karte zu kommen (0 = alle)
+  min-likes: 0
+  # Wie viele Aufrufe er mindestens haben muss (0 = alle). Aufrufe sind die Sprünge dorthin, wie das Menü sie unter
+  # jedem Punkt zählt (viewpoints.views-cooldown-minutes). Gilt zusammen mit min-likes: Er braucht beides.
+  min-views: 0
+  # Die Adresse der Karte an einem Punkt, für einen Knopf [Map] hinter jedem öffentlichen Punkt in /cam spot list
+  # (Text: spot-button-map). {world} ist der Name der Welt, {x} {y} {z} der Ort. Wie sie aussieht, hängt an der Karte
+  # und ihrer Einstellung, z. B.:
+  #   BlueMap:   "https://karte.example.de/#{world}:{x}:{y}:{z}:50:0:0:0:0:perspective"
+  #   Dynmap:    "https://karte.example.de/?worldname={world}&mapname=flat&zoom=6&x={x}&y={y}&z={z}"
+  #   squaremap: "https://karte.example.de/?world={world}&zoom=4&x={x}&z={z}"
+  # Bei BlueMap steht vor dem ersten : die ID der Karte aus ihrer Einstellung, nicht immer der Name der Welt.
+  # "" = kein Knopf.
+  link: ""
 
 # Folgen: /cam follow - die Kameras anderer folgen einem Spieler, dem Leader: z. B. durch den Bau, den er zeigt, oder
 # beim Bauen und im Kampf, wenn er nicht im Cam-Modus ist (lead-without-cam). Hieß früher /cam tour - der alte Befehl
@@ -875,8 +910,8 @@ visitor-camera:
 #                                    mit ihm mit. Ohne Cam-Modus startet er dafür erst, dort wo man steht.
 #   /cam follow decline <Spieler>  = eine Einladung ablehnen
 #   /cam follow kick <Spieler>     = einen Follower wegschicken
-#   /cam follow leave              = aufhören zu folgen (auch /cam back, ein Sprung zu einem Aussichtspunkt, ein Besuch
-#                                    oder /cam resume)
+#   /cam follow leave              = aufhören zu folgen (auch /cam back, ein Sprung zu einem Aussichtspunkt oder
+#                                    /cam resume)
 #   /cam follow end                = alle Follower gehen lassen (auch, wenn der Cam-Modus des Leaders endet, er stirbt
 #                                    oder in den Zuschauermodus wechselt)
 #   /cam follow view               = zwischen dem Blick des Leaders und freiem Umsehen umschalten (auch im Menü)
@@ -1015,6 +1050,71 @@ cam-time:
 cam-weather:
   enabled: true
 
+# Keine Erze ausspähen: Die Kamera darf in Höhlen, aber die Erze dort sieht sie als den Stein darum herum - nur auf dem
+# Bildschirm des Spielers im Cam-Modus. In der Welt ändert sich nichts, alle anderen sehen sie, wie sie sind, und
+# endet der Cam-Modus, sieht auch er wieder die echten.
+# Ausgeblendet wird ein Erz, das an einer Höhle liegt: neben einem Block, durch den man sieht (Luft, Wasser, Glas,
+# Laub ...), an den kein Himmelslicht kommt (max-sky-light), und nicht höher als max-y. Ein Erz, an das Licht des
+# Himmels kommt - an einem Hang, unten in einer Schlucht, gleich hinter dem Eingang einer Höhle, in einem Haus mit
+# Fenstern -, bleibt, wie es ist: das sieht man zu Fuß genauso. Eins, das ringsum eingeschlossen ist, sieht ohnehin
+# niemand. In einer Welt ohne Himmel (Nether) zählt jedes offene Erz als eins einer Höhle, bis max-y.
+# Wird etwas abgebaut oder gebaut, sieht das Plugin den Chunk ein paar Ticks später neu an, wenn der Server das Licht
+# neu gerechnet hat. Ein Erz in einem ganz dunklen Raum eines Baus sieht im Cam-Modus aus wie Stein - wer das nicht
+# will, nimmt es aus der Liste oder senkt max-y. Mit where: biomes zählen statt aller Höhlen nur die Höhlen-Biome.
+# Auf Paper bekommt der Spieler die Erze eines Chunks gleich nach dem Chunk ausgeblendet. Spigot sagt nicht, wann ein
+# Chunk ankommt: Dort wird jede halbe Sekunde nachgesehen und zweimal geschickt - kommt ein Chunk noch später an, zeigt
+# er seine Erze, bis die Kamera weiterfliegt.
+hide-ores:
+  enabled: true
+  # Wo Erze ausgeblendet werden:
+  #   caves  = an jeder Höhle, wie oben beschrieben: offen zu Luft (oder Wasser, Glas ...), an die kein Himmelslicht
+  #            kommt
+  #   biomes = nur in den Biomen von biomes - dort jedes offene Erz, unter freiem Himmel oder nicht. Eine gewöhnliche
+  #            Höhle hat das Biom des Landes darüber (Ebene, Wald ...), ihre Erze bleiben dann sichtbar. Die
+  #            Höhlen-Biome sperrt cam-area.forbidden-biomes voreingestellt für die Kamera: Hinein fliegt sie dann nicht,
+  #            nur von außen hineinschauen kann sie.
+  where: caves
+  # Die Biome für where: biomes, geschrieben wie bei cam-area.forbidden-biomes. Voreingestellt die Höhlen, die das
+  # Spiel als eigene Biome hat.
+  biomes:
+    - lush_caves
+    - dripstone_caves
+    - deep_dark
+    - sulfur_caves
+  # Wie viel Himmelslicht die offene Seite eines Erzes höchstens haben darf, damit es als eins einer Höhle zählt
+  # (0 bis 15). Unter freiem Himmel ist es 15; von einer Öffnung aus wird es mit jedem Block um 1 dunkler, tief in
+  # einer Höhle ist es 0. 0 = nur, wo gar kein Himmelslicht hinkommt; höher blendet auch Erze näher am Eingang aus;
+  # 15 = jedes offene Erz, auch unter freiem Himmel. Gilt nicht bei where: biomes.
+  max-sky-light: 0
+  # Bis zu welcher Höhe Erze ausgeblendet werden: das Erz auf dieser Höhe und alle darunter. Voreingestellt 15 - darunter
+  # liegen die Diamanten (und Redstone, Lapis, das meiste Gold); Erze weiter oben, auch Bauten an der Oberfläche,
+  # bleiben, wie sie sind. off = in jeder Höhe. Gilt auch bei where: biomes.
+  max-y: 15
+  # Welches Erz wie aussieht, je eine Zeile Erz: Block (ein Block wie bei border-block, auch mit [Zuständen]). Was hier
+  # nicht steht, bleibt sichtbar. {} = keins.
+  blocks:
+    coal_ore: stone
+    deepslate_coal_ore: deepslate
+    iron_ore: stone
+    deepslate_iron_ore: deepslate
+    copper_ore: stone
+    deepslate_copper_ore: deepslate
+    gold_ore: stone
+    deepslate_gold_ore: deepslate
+    redstone_ore: stone
+    deepslate_redstone_ore: deepslate
+    lapis_ore: stone
+    deepslate_lapis_ore: deepslate
+    emerald_ore: stone
+    deepslate_emerald_ore: deepslate
+    diamond_ore: stone
+    deepslate_diamond_ore: deepslate
+    # Die großen Adern: Eisen in Tuffstein, Kupfer in Granit
+    raw_iron_block: tuff
+    raw_copper_block: granite
+    # Antiker Schrott im Nether. Netherquarz- und Nethergolderz stehen nicht hier: Die liegen dort überall offen.
+    ancient_debris: netherrack
+
 # Kein Ausspähen: Die Kamera taugt nicht dazu, andere Spieler zu suchen. Wer im Cam-Modus ist, sieht andere Spieler nur
 # bis radius Blöcke weit - und die Körper anderer im Cam-Modus, die ja dort stehen, wo diese Spieler wirklich sind, auch
 # nur so weit. Nur er sieht sie nicht mehr, alle anderen sehen weiter alles. Spieler in einer anderen Welt als die
@@ -1026,7 +1126,7 @@ anti-scouting:
   # Bis wie weit andere Spieler zu sehen sind, in Blöcken (0 bis 256)
   radius: 32.0
   # Von wo aus gemessen wird:
-  #   body   = vom Körper (oder vom besuchten Punkt, in einer anderen Welt vom Portal) - man sieht, wen man auch ohne
+  #   body   = vom Körper (in einer anderen Welt vom Portal) - man sieht, wen man auch ohne
   #            Cam-Modus sähe, egal wo die Kamera ist
   #   camera = von der Kamera aus
   measured-from: body

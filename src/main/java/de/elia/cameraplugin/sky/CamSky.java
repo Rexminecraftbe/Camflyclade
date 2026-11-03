@@ -4,6 +4,7 @@ import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.preferences.CamPreferences;
+import de.elia.cameraplugin.spot.SpotLook;
 import org.bukkit.WeatherType;
 import org.bukkit.entity.Player;
 
@@ -29,6 +30,13 @@ import java.util.UUID;
  * {@code player-settings.time} and {@code player-settings.weather} the next
  * flight starts with them once more, until he resets them, see
  * {@link de.elia.cameraplugin.preferences.CamPreferences}.</p>
+ *
+ * <p>A spot saved with a time or a weather of its own, see
+ * {@link de.elia.cameraplugin.spot.SpotLook}, shows them to whoever jumps
+ * there, in place of his own - until his camera is put down
+ * somewhere else, see {@link #showSpot} and {@link #leaveSpot}, or he picks
+ * one himself. His own comes back then; what a spot showed him is never kept
+ * for his next flight.</p>
  */
 public final class CamSky {
 
@@ -56,6 +64,8 @@ public final class CamSky {
     private final Map<UUID, Long> shownTime = new HashMap<>();
     /** The weather each camera player sees as his own now, for the menu. */
     private final Map<UUID, WeatherType> shownWeather = new HashMap<>();
+    /** What the spot each camera player was put down at last shows him in place of his own, see {@link #showSpot}. */
+    private final Map<UUID, StandIn> standIns = new HashMap<>();
 
     /**
      * What a player saw before camera mode gave him a time or a weather of
@@ -69,6 +79,18 @@ public final class CamSky {
         boolean weather;
         /** The weather another plugin gave him, or {@code null} for the one of the world. */
         WeatherType weatherType;
+    }
+
+    /**
+     * Which parts of what a player sees a spot stands in for, each with his
+     * own under it - {@code null} for the time or weather of the world -, to
+     * be given back once the spot no longer counts.
+     */
+    private static final class StandIn {
+        boolean time;
+        Long ownTime;
+        boolean weather;
+        WeatherType ownWeather;
     }
 
     public CamSky(CameraPlugin plugin) {
@@ -120,6 +142,7 @@ public final class CamSky {
         String word = args[0].toLowerCase(Locale.ROOT);
         CamPreferences preferences = plugin.getPreferences();
         if (word.equals("reset")) {
+            dropStandIn(player, true, false);
             resetTime(player);
             preferences.setTime(player, null);
             messages.sendConfiguredMessage(player, "time-reset");
@@ -133,6 +156,7 @@ public final class CamSky {
             messages.sendConfiguredMessage(player, "time-usage");
             return;
         }
+        dropStandIn(player, true, false);
         showTime(player, ticks);
         preferences.setTime(player, ticks);
         messages.sendConfiguredMessage(player, preferences.keepsTime() ? "time-set-kept" : "time-set",
@@ -182,6 +206,7 @@ public final class CamSky {
         String word = args[0].toLowerCase(Locale.ROOT);
         CamPreferences preferences = plugin.getPreferences();
         if (word.equals("reset")) {
+            dropStandIn(player, false, true);
             resetWeather(player);
             preferences.setWeather(player, null);
             messages.sendConfiguredMessage(player, "weather-reset");
@@ -196,6 +221,7 @@ public final class CamSky {
             messages.sendConfiguredMessage(player, "weather-usage");
             return;
         }
+        dropStandIn(player, false, true);
         showWeather(player, type);
         preferences.setWeather(player, type);
         messages.sendConfiguredMessage(player, preferences.keepsWeather() ? "weather-set-kept" : "weather-set",
@@ -292,8 +318,113 @@ public final class CamSky {
         }
     }
 
+    /**
+     * The camera of a player was put down at a spot he jumped to: its time
+     * and its weather stand in for his own, as far as
+     * {@code cam-time} and {@code cam-weather} let anybody have one. A part
+     * the spot does not have shows him his own again, should an earlier spot
+     * have stood in for it.
+     */
+    public void showSpot(Player player, SpotLook look) {
+        if (!plugin.isInCameraMode(player)) {
+            return;
+        }
+        UUID id = player.getUniqueId();
+        Long time = settings.isCamTimeEnabled() ? look.time() : null;
+        WeatherType weather = settings.isCamWeatherEnabled() ? look.weather() : null;
+        StandIn in = standIns.get(id);
+        if (in == null && (time != null || weather != null)) {
+            in = new StandIn();
+            standIns.put(id, in);
+        }
+        if (in == null) {
+            return;
+        }
+        if (time != null) {
+            if (!in.time) {
+                in.time = true;
+                in.ownTime = shownTime.get(id);
+            }
+            showTime(player, time);
+        } else if (in.time) {
+            in.time = false;
+            restoreTime(player, in.ownTime);
+        }
+        if (weather != null) {
+            if (!in.weather) {
+                in.weather = true;
+                in.ownWeather = shownWeather.get(id);
+            }
+            showWeather(player, weather);
+        } else if (in.weather) {
+            in.weather = false;
+            restoreWeather(player, in.ownWeather);
+        }
+        if (!in.time && !in.weather) {
+            standIns.remove(id);
+        }
+    }
+
+    /**
+     * His camera was put down somewhere that is no spot - at his body, at the
+     * end of his last flight, at a player he follows: what a spot showed him
+     * gives way to his own time and weather again.
+     */
+    public void leaveSpot(Player player) {
+        StandIn in = standIns.remove(player.getUniqueId());
+        if (in == null) {
+            return;
+        }
+        if (in.time) {
+            restoreTime(player, in.ownTime);
+        }
+        if (in.weather) {
+            restoreWeather(player, in.ownWeather);
+        }
+    }
+
+    /**
+     * He picks a time or a weather himself: for that part no spot stands in
+     * any more, and his own from before the spot is forgotten - the new one
+     * is his own now.
+     */
+    private void dropStandIn(Player player, boolean time, boolean weather) {
+        StandIn in = standIns.get(player.getUniqueId());
+        if (in == null) {
+            return;
+        }
+        if (time) {
+            in.time = false;
+        }
+        if (weather) {
+            in.weather = false;
+        }
+        if (!in.time && !in.weather) {
+            standIns.remove(player.getUniqueId());
+        }
+    }
+
+    /** Shows him his own time again: the one he picked, or the one of the world for {@code null}. */
+    private void restoreTime(Player player, Long own) {
+        if (own != null) {
+            showTime(player, own);
+        } else {
+            resetTime(player);
+        }
+    }
+
+    /** Shows him his own weather again: the one he picked, or the one of the world for {@code null}. */
+    private void restoreWeather(Player player, WeatherType own) {
+        if (own != null) {
+            showWeather(player, own);
+        } else {
+            resetWeather(player);
+        }
+    }
+
     /** At the end of camera mode: the time and the weather he saw before it. */
     public void stopFor(Player player) {
+        standIns.remove(player.getUniqueId());
         resetTime(player);
         resetWeather(player);
         before.remove(player.getUniqueId());

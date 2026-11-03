@@ -12,8 +12,8 @@ import org.bukkit.util.BoundingBox;
 
 /**
  * Whether the camera may be put down at a spot it does not fly to - a spot of
- * {@code /cam spot}, a shared one of {@code /cam visit}, or where
- * {@code /cam resume} takes it: everything that would hold it back in flight.
+ * {@code /cam spot}, or where {@code /cam resume} takes it: everything that
+ * would hold it back in flight.
  *
  * <p>In the world it is held from, not further than {@code max-distance} from
  * what it is held from - under {@code max-distance-mode: signal} only where the
@@ -22,7 +22,7 @@ import org.bukkit.util.BoundingBox;
  * The jump saves the way there and nothing else.</p>
  *
  * <p>Each kind of jump says why not in messages of its own: the prefix
- * {@code spot}, {@code visit} or {@code resume} with {@code -too-far},
+ * {@code spot} or {@code resume} with {@code -too-far},
  * {@code -no-signal}, {@code -area} and {@code -blocked} after it.</p>
  */
 public final class JumpCheck {
@@ -48,7 +48,7 @@ public final class JumpCheck {
      * Whether the camera may be put down at the target, held from the anchor
      * in the same world.
      *
-     * @param anchor     what it is held from: the body, or the spot it visits
+     * @param anchor     what it is held from: the body, or where it will stand
      * @param signalFrom where the signal goes out from there
      * @param prefix     which messages say why not
      * @param fills      placeholder and value for those messages, one pair
@@ -72,11 +72,11 @@ public final class JumpCheck {
 
     /**
      * Whether the camera may stand at the target at all, wherever it is held
-     * from: for the spot of a visit, which it is held from itself.
+     * from.
      *
      * @return whether it may; if not, he has been told why
      */
-    public boolean mayStand(Player player, Location target, String prefix, String... fills) {
+    private boolean mayStand(Player player, Location target, String prefix, String... fills) {
         String area = settings.keepsOutOfAreas() ? settings.getCamAreaRules().forbiddenArea(target) : null;
         if (area != null) {
             messages.sendConfiguredMessage(player, prefix + "-area", with(fills, "{area}", area));

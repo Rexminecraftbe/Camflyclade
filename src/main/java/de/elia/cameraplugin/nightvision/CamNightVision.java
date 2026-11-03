@@ -35,6 +35,12 @@ import java.util.UUID;
  * himself, {@code /cam nightvision}. The choice holds for every flight after
  * it, kept as {@code player-settings.storage} says, see
  * {@link CamPreferences}: in his file, or until he leaves the server.</p>
+ *
+ * <p>A spot saved with a night vision of its own, see
+ * {@link de.elia.cameraplugin.spot.SpotLook}, gives it to whoever jumps there
+ * in place of his own, while {@code player-choice} lets anybody
+ * pick one at all - until his camera is put down somewhere else, or he picks
+ * one himself. It is never kept as his own.</p>
  */
 public final class CamNightVision {
 
@@ -60,6 +66,8 @@ public final class CamNightVision {
     private final Map<UUID, BukkitRunnable> tasks = new HashMap<>();
     /** The players wearing the night vision of this class right now. */
     private final Set<UUID> given = new HashSet<>();
+    /** The mode of the spot each camera player was put down at last, in place of his own, see {@link #showSpot}. */
+    private final Map<UUID, NightVisionMode> spotModes = new HashMap<>();
 
     public CamNightVision(JavaPlugin plugin, CamSettings settings, Messages messages, CameraPlayers cameraPlayers,
                           CamPreferences preferences) {
@@ -73,10 +81,52 @@ public final class CamNightVision {
     /**
      * The mode that holds for this player: the one he picked, while
      * {@code player-choice} lets him, otherwise {@code night-vision.mode}.
+     * The mode of a spot his camera was put down at stands in for his own.
      */
     public NightVisionMode modeFor(Player player) {
-        NightVisionMode own = settings.isNightVisionPlayerChoice() ? preferences.nightVision(player) : null;
+        NightVisionMode own = chosenMode(player);
         return own != null ? own : settings.getNightVisionMode();
+    }
+
+    /**
+     * The mode he picked himself, or the one of the spot his camera was put
+     * down at, while {@code player-choice} lets anybody pick one; {@code null}
+     * while {@code night-vision.mode} holds for him. What a spot he saves now
+     * takes along.
+     */
+    public NightVisionMode chosenMode(Player player) {
+        if (!settings.isNightVisionPlayerChoice()) {
+            return null;
+        }
+        NightVisionMode spot = spotModes.get(player.getUniqueId());
+        return spot != null ? spot : preferences.nightVision(player);
+    }
+
+    /**
+     * The camera of a player was put down at a spot: its night vision stands
+     * in for his own, while {@code player-choice} lets anybody pick one. A
+     * spot without one gives him his own back, should an earlier spot have
+     * stood in for it.
+     *
+     * @param mode the mode of the spot, or {@code null} for none
+     */
+    public void showSpot(Player player, NightVisionMode mode) {
+        UUID id = player.getUniqueId();
+        if (!cameraPlayers.contains(id)) {
+            return;
+        }
+        NightVisionMode wanted = settings.isNightVisionPlayerChoice() ? mode : null;
+        NightVisionMode was = wanted == null ? spotModes.remove(id) : spotModes.put(id, wanted);
+        if (was != wanted) {
+            restart(player);
+        }
+    }
+
+    /** His camera was put down somewhere that is no spot: his own night vision holds again. */
+    public void leaveSpot(Player player) {
+        if (spotModes.remove(player.getUniqueId()) != null) {
+            restart(player);
+        }
     }
 
     /**
@@ -139,6 +189,12 @@ public final class CamNightVision {
      * among them is not taken along.
      */
     public void stopFor(Player player) {
+        spotModes.remove(player.getUniqueId());
+        stopLooking(player);
+    }
+
+    /** Stops looking after his night vision, and takes off the one of this class. */
+    private void stopLooking(Player player) {
         BukkitRunnable task = tasks.remove(player.getUniqueId());
         if (task != null) {
             task.cancel();
@@ -166,6 +222,8 @@ public final class CamNightVision {
         }
         String word = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
         if (word.equals("reset")) {
+            // His own choice: a spot no longer stands in for it.
+            spotModes.remove(player.getUniqueId());
             preferences.setNightVision(player, null);
             restart(player);
             messages.sendConfiguredMessage(player, "nightvision-reset", "{mode}", name(modeFor(player)));
@@ -182,6 +240,7 @@ public final class CamNightVision {
             messages.sendConfiguredMessage(player, "nightvision-usage");
             return;
         }
+        spotModes.remove(player.getUniqueId());
         preferences.setNightVision(player, mode);
         restart(player);
         messages.sendConfiguredMessage(player, preferences.keepsForGood() ? "nightvision-set" : "nightvision-set-memory",
@@ -218,13 +277,14 @@ public final class CamNightVision {
             return;
         }
         if (modeFor(player) == NightVisionMode.OFF) {
-            stopFor(player);
+            stopLooking(player);
         } else {
             startFor(player);
         }
     }
 
     public void onDisable() {
+        spotModes.clear();
         for (BukkitRunnable task : tasks.values()) {
             task.cancel();
         }

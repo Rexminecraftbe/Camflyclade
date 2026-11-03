@@ -39,6 +39,7 @@ public final class ConfigReader {
     private static final String EXPECTED_TEXT = "config-expected-text";
     private static final String EXPECTED_LIST = "config-expected-list";
     private static final String EXPECTED_AMOUNTS = "config-expected-amounts";
+    private static final String EXPECTED_NAMES = "config-expected-names";
     private static final String UNKNOWN_VALUE = "config-unknown-value";
     private static final String UNKNOWN_ENTRY = "config-unknown-entry";
     private static final String UNKNOWN_KEY = "config-unknown-key";
@@ -339,6 +340,41 @@ public final class ConfigReader {
             }
         }
         return costs;
+    }
+
+    /** Whether the file says anything at all at this path, rather than leaving it to the default. */
+    public boolean has(String path) {
+        return config.contains(path, true);
+    }
+
+    /**
+     * Reads a section of names, each with a name, such as
+     * {@code coal_ore: stone}. Both are left to the caller to check; an entry
+     * whose value is no text is reported and left out, and anything other
+     * than such a section counts as none and is reported.
+     *
+     * @return the names and what each stands for, as they stand in the file,
+     *         in the order of the file
+     */
+    public Map<String, String> getNames(String path) {
+        Map<String, String> names = new LinkedHashMap<>();
+        Object raw = config.get(path);
+        if (raw == null) {
+            return names;
+        }
+        if (!(raw instanceof ConfigurationSection section)) {
+            warnWrongType(path, raw, EXPECTED_NAMES, "{}");
+            return names;
+        }
+        for (String key : section.getKeys(false)) {
+            Object value = section.get(key);
+            if (value instanceof String text) {
+                names.put(key, text);
+            } else {
+                warnUnknownEntry(path + "." + key, value);
+            }
+        }
+        return names;
     }
 
     /** Reads the name of an enum constant, ignoring case. */

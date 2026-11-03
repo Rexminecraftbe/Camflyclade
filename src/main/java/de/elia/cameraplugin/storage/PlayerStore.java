@@ -4,6 +4,7 @@ import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.nightvision.NightVisionMode;
 import de.elia.cameraplugin.resume.LastFlight;
 import de.elia.cameraplugin.spot.Spot;
+import de.elia.cameraplugin.spot.SpotLook;
 import org.bukkit.Bukkit;
 import org.bukkit.WeatherType;
 import org.bukkit.configuration.ConfigurationSection;
@@ -265,18 +266,11 @@ public final class PlayerStore {
         if (world == null || world.isEmpty()) {
             return null;
         }
-        String owner = section.getString("visit-owner");
-        UUID visitOwner = null;
-        if (owner != null) {
-            try {
-                visitOwner = UUID.fromString(owner);
-            } catch (IllegalArgumentException ex) {
-                // A visit nobody can be found for is no visit.
-            }
-        }
+        // A file of an older version may name the visit of /cam visit the
+        // flight was on (visit-owner, visit-spot): that is gone, the flight
+        // goes on where it ended.
         return new LastFlight(world, section.getDouble("x"), section.getDouble("y"), section.getDouble("z"),
-                (float) section.getDouble("yaw"), (float) section.getDouble("pitch"),
-                visitOwner, section.getString("visit-spot"));
+                (float) section.getDouble("yaw"), (float) section.getDouble("pitch"));
     }
 
     /**
@@ -298,7 +292,8 @@ public final class PlayerStore {
                 continue;
             }
             record.loadSpot(new Spot(name, world, spot.getDouble("x"), spot.getDouble("y"), spot.getDouble("z"),
-                    (float) spot.getDouble("yaw"), (float) spot.getDouble("pitch"), spot.getLong("created")));
+                    (float) spot.getDouble("yaw"), (float) spot.getDouble("pitch"), spot.getLong("created"),
+                    SpotLook.read(spot)));
         }
     }
 
@@ -334,6 +329,7 @@ public final class PlayerStore {
             if (spot.created() > 0L) {
                 file.set(path + ".created", spot.created());
             }
+            spot.look().write(file, path);
         }
         if (record.getNightVision() != null) {
             file.set("settings.night-vision", nightVisionWord(record.getNightVision()));
@@ -355,10 +351,6 @@ public final class PlayerStore {
             file.set("last-flight.z", flight.z());
             file.set("last-flight.yaw", (double) flight.yaw());
             file.set("last-flight.pitch", (double) flight.pitch());
-            if (flight.wasVisit()) {
-                file.set("last-flight.visit-owner", flight.visitOwner().toString());
-                file.set("last-flight.visit-spot", flight.visitSpot());
-            }
         }
         Path target = file(playerId);
         Path temp = target.resolveSibling(target.getFileName() + ".tmp");

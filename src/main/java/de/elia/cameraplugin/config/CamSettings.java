@@ -33,6 +33,8 @@ import de.elia.cameraplugin.timelimit.FlightLimit;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
 import org.bukkit.Particle;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
@@ -46,6 +48,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -118,6 +121,7 @@ public final class CamSettings {
 
     /** The longest {@code viewpoints.guestbook-interval-minutes} accepts: a day. */
     private static final int MAX_GUESTBOOK_INTERVAL_MINUTES = 1440;
+
 
     /** The levels of {@code signal.levels}, from the most bars down, as the config file names them. */
     private static final String[] SIGNAL_LEVEL_NAMES = {"excellent", "good", "medium", "weak"};
@@ -193,10 +197,10 @@ public final class CamSettings {
      * the file chooses itself, such as the items of {@code start-cost.items}:
      * everything below them is checked when it is read instead. And the old
      * names of what {@code /cam follow} renamed, which an older file still
-     * has.
+     * has, and {@code visitor-camera} of {@code /cam visit}, which is gone.
      */
     public static final Set<String> UNLISTED_KEYS = Set.of("mirror-damage.debug", "start-cost.items",
-            "signal.block-costs", OLD_FOLLOW_SECTION, "sounds.tour-invite", "sounds.tour-reach",
+            "signal.block-costs", "hide-ores.blocks", "visitor-camera", OLD_FOLLOW_SECTION, "sounds.tour-invite", "sounds.tour-reach",
             "menu.buttons.tour", "menu.admin-buttons.tours");
 
     /**
@@ -376,8 +380,6 @@ public final class CamSettings {
     private StorageMode viewpointsStorage;
     /** Whether a player may share his spots with others, {@code viewpoints.sharing}. */
     private boolean viewpointsSharing;
-    /** Whether {@code /cam visit} takes the camera to a spot shared with him, {@code visitor-camera.enabled}. */
-    private boolean visitorCameraEnabled;
     /** Whether {@code /cam follow} lets a camera player show others round, {@code follow.enabled}. */
     private boolean tourEnabled;
     /** How close a camera has to be to be invited, {@code follow.radius}. */
@@ -426,8 +428,40 @@ public final class CamSettings {
     private int guestbookIntervalMinutes;
     /** How close a player out of camera mode has to be to a spot to jump there, {@code viewpoints.start-distance}. */
     private double viewpointsStartDistance;
+    /** Whether a spot is saved only in camera mode, {@code viewpoints.set-in-cam-only}. */
+    private boolean viewpointsSetInCamOnly;
     /** How long the same player at the same spot is no new view, {@code viewpoints.views-cooldown-minutes}. */
     private int viewsCooldownMinutes;
+
+    /** Whether a camera player sees the ores of caves as stone, {@code hide-ores.enabled}. */
+    private boolean hideOres;
+    /** What each ore looks like for him, {@code hide-ores.blocks}, in the order of the file. */
+    private final Map<Material, BlockData> oreCovers = new LinkedHashMap<>();
+    /** Whether only the ores of the biomes of {@code hide-ores.biomes} are hidden, {@code hide-ores.where: biomes}. */
+    private boolean oreBiomesOnly;
+    /** The biomes whose ores are hidden under {@code hide-ores.where: biomes}. */
+    private final Set<NamespacedKey> oreBiomes = new HashSet<>();
+    /** The most sky light an ore may have at its open side and still count as one of a cave, {@code hide-ores.max-sky-light}. */
+    private int oreMaxSkyLight;
+    /** The highest ore that is hidden, {@code hide-ores.max-y}; {@link Integer#MAX_VALUE} for no limit. */
+    private int oreMaxY;
+
+    /** Whether the public spots go on the web maps of the server, {@code web-map.enabled}. */
+    private boolean webMapEnabled;
+    /** Whether on BlueMap, {@code web-map.bluemap}. */
+    private boolean webMapBlueMap;
+    /** Whether on Dynmap, {@code web-map.dynmap}. */
+    private boolean webMapDynmap;
+    /** Whether on squaremap, {@code web-map.squaremap}. */
+    private boolean webMapSquaremap;
+    /** Whether the layer of the spots is switched off on the page until a visitor switches it on, {@code web-map.hidden}. */
+    private boolean webMapHidden;
+    /** How many likes a public spot needs to get onto the map, {@code web-map.min-likes}. */
+    private int webMapMinLikes;
+    /** How many views a public spot needs to get onto the map, {@code web-map.min-views}. */
+    private int webMapMinViews;
+    /** The address of a spot on the web map, with its placeholders, {@code web-map.link}; empty for none. */
+    private String webMapLink;
 
     /** Whether {@code /cam resume} goes on where the last flight ended, {@code resume-command.enabled}. */
     private boolean resumeEnabled;
@@ -782,7 +816,6 @@ public final class CamSettings {
         viewpointsMax = config.getInt("viewpoints.max-per-player", 10, 0, MAX_VIEWPOINTS);
         viewpointsStorage = readStorage(config, "viewpoints.storage");
         viewpointsSharing = config.getBoolean("viewpoints.sharing", true);
-        visitorCameraEnabled = config.getBoolean("visitor-camera.enabled", true);
         // The section of /cam follow, which was called tour before: an older
         // file is read as it was written.
         String follow = config.renamed(FOLLOW_SECTION, OLD_FOLLOW_SECTION);
@@ -813,7 +846,23 @@ public final class CamSettings {
         guestbookIntervalMinutes = config.getInt("viewpoints.guestbook-interval-minutes", 10, 1,
                 MAX_GUESTBOOK_INTERVAL_MINUTES);
         viewpointsStartDistance = config.getDouble("viewpoints.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
+        viewpointsSetInCamOnly = config.getBoolean("viewpoints.set-in-cam-only", true);
         viewsCooldownMinutes = config.getInt("viewpoints.views-cooldown-minutes", 10, 0, MAX_VIEWS_COOLDOWN_MINUTES);
+        hideOres = config.getBoolean("hide-ores.enabled", true);
+        readOreCovers(config);
+        oreBiomesOnly = config.getChoice("hide-ores.where", "caves", "caves", "biomes")
+                .equalsIgnoreCase("biomes");
+        readOreBiomes(config);
+        oreMaxSkyLight = config.getInt("hide-ores.max-sky-light", 0, 0, MAX_LIGHT);
+        oreMaxY = readOreMaxY(config);
+        webMapEnabled = config.getBoolean("web-map.enabled", true);
+        webMapBlueMap = config.getBoolean("web-map.bluemap", true);
+        webMapDynmap = config.getBoolean("web-map.dynmap", true);
+        webMapSquaremap = config.getBoolean("web-map.squaremap", true);
+        webMapHidden = config.getBoolean("web-map.hidden", false);
+        webMapMinLikes = config.getInt("web-map.min-likes", 0, 0);
+        webMapMinViews = config.getInt("web-map.min-views", 0, 0);
+        webMapLink = config.getString("web-map.link", "").trim();
         resumeEnabled = config.getBoolean("resume-command.enabled", true);
         resumeStorage = readStorage(config, "resume-command.storage");
         playerSettingsStorage = readStorage(config, "player-settings.storage");
@@ -1186,6 +1235,97 @@ public final class CamSettings {
     private void readMediumBorderBlock(ConfigReader config, FlightMedium medium, String path, String def) {
         BlockData block = resolveBlock(config, path, def);
         mediumBorderBlocks.put(medium, block.getMaterial().isSolid() ? block : borderBlock.clone());
+    }
+
+    /**
+     * Reads {@code hide-ores.blocks}: each ore with the block it looks like
+     * for a camera player. An ore or a block that is none - mistyped, an
+     * item, a block of a newer version - is reported, and the entry left
+     * out. Without the section at all, the ores of the game as the file
+     * built into the jar has them.
+     */
+    private void readOreCovers(ConfigReader config) {
+        oreCovers.clear();
+        String path = "hide-ores.blocks";
+        Map<String, String> entries = config.getNames(path);
+        if (!config.has(path)) {
+            entries = DEFAULT_ORE_COVERS;
+        }
+        String allowed = messages.configMessage("config-allowed-blocks");
+        for (Map.Entry<String, String> entry : entries.entrySet()) {
+            Material ore = Material.matchMaterial(entry.getKey().trim());
+            if (ore == null || !ore.isBlock() || ore.isAir()) {
+                config.warnUnknownEntry(path, entry.getKey());
+                continue;
+            }
+            BlockData cover = parseBlock(entry.getValue());
+            if (cover == null) {
+                config.warnUnknownValue(path + "." + entry.getKey(), entry.getValue(), allowed, "-");
+                continue;
+            }
+            oreCovers.put(ore, cover);
+        }
+    }
+
+    /**
+     * Reads {@code hide-ores.biomes}, the way {@code cam-area.forbidden-biomes}
+     * is read: a name the server does not know is reported and left out.
+     */
+    private void readOreBiomes(ConfigReader config) {
+        oreBiomes.clear();
+        String path = "hide-ores.biomes";
+        for (String entry : config.getStringList(path, DEFAULT_ORE_BIOMES)) {
+            NamespacedKey key = CamAreaRules.toKey(entry, Registry.BIOME);
+            if (key == null) {
+                config.warnUnknownEntry(path, entry);
+            } else {
+                oreBiomes.add(key);
+            }
+        }
+    }
+
+    /** The brightest light the game has, sky or block. */
+    private static final int MAX_LIGHT = 15;
+
+    /** The word of {@code hide-ores.max-y} for no limit at all. */
+    private static final String NO_LIMIT = "off";
+
+    /**
+     * Reads {@code hide-ores.max-y}: the height of the highest ore that is
+     * hidden, out of the box 15 - where the diamonds begin -, or
+     * {@code off} for ores of every height.
+     */
+    private int readOreMaxY(ConfigReader config) {
+        String path = "hide-ores.max-y";
+        String raw = config.getString(path, "15").trim();
+        if (raw.equalsIgnoreCase(NO_LIMIT)) {
+            return Integer.MAX_VALUE;
+        }
+        try {
+            return Integer.parseInt(raw);
+        } catch (NumberFormatException ex) {
+            config.warnUnknownValue(path, raw, messages.configMessage("config-allowed-height"), "15");
+            return 15;
+        }
+    }
+
+    /** The biomes of {@code hide-ores.biomes} out of the box: the caves the game has as biomes of their own. */
+    private static final List<String> DEFAULT_ORE_BIOMES =
+            List.of("lush_caves", "dripstone_caves", "deep_dark", "sulfur_caves");
+
+    /** The ores of the game and what they look like for a camera player, as the file built into the jar has them. */
+    private static final Map<String, String> DEFAULT_ORE_COVERS = defaultOreCovers();
+
+    private static Map<String, String> defaultOreCovers() {
+        Map<String, String> covers = new LinkedHashMap<>();
+        for (String ore : List.of("coal", "iron", "copper", "gold", "redstone", "lapis", "emerald", "diamond")) {
+            covers.put(ore + "_ore", "stone");
+            covers.put("deepslate_" + ore + "_ore", "deepslate");
+        }
+        covers.put("raw_iron_block", "tuff");
+        covers.put("raw_copper_block", "granite");
+        covers.put("ancient_debris", "netherrack");
+        return Collections.unmodifiableMap(covers);
     }
 
     /** The block a {@code border-block} entry names, or {@code null} for none. */
@@ -1699,11 +1839,6 @@ public final class CamSettings {
         return viewpointsEnabled && viewpointsSharing;
     }
 
-    /** Whether {@code /cam visit} goes, which only goes while spots may be shared. */
-    public boolean isVisitorCameraEnabled() {
-        return isViewpointsSharing() && visitorCameraEnabled;
-    }
-
     /** Whether {@code /cam follow} is there. */
     public boolean isTourEnabled() {
         return tourEnabled;
@@ -1819,6 +1954,14 @@ public final class CamSettings {
     }
 
     /**
+     * Whether a spot is saved only in camera mode, {@code viewpoints.set-in-cam-only}:
+     * where the camera is, not where the player stands.
+     */
+    public boolean isViewpointsSetInCamOnly() {
+        return viewpointsSetInCamOnly;
+    }
+
+    /**
      * How close, in blocks, a player out of camera mode has to be to a spot
      * to jump there, which starts camera mode for him; 0 while only who is in
      * camera mode may jump.
@@ -1829,10 +1972,96 @@ public final class CamSettings {
 
     /**
      * How long, in minutes, the same player at the same spot does not count
-     * as a view again; 0 while every jump and every visit counts.
+     * as a view again; 0 while every jump counts.
      */
     public int getViewsCooldownMinutes() {
         return viewsCooldownMinutes;
+    }
+
+    /** Whether a camera player sees the ores of caves as stone, {@code hide-ores.enabled}. */
+    public boolean isHideOres() {
+        return hideOres && !oreCovers.isEmpty();
+    }
+
+    /** What each ore looks like for a camera player, {@code hide-ores.blocks}; not to be changed. */
+    public Map<Material, BlockData> getOreCovers() {
+        return Collections.unmodifiableMap(oreCovers);
+    }
+
+    /**
+     * The most sky light the open side of an ore may have for it to count
+     * as one of a cave, {@code hide-ores.max-sky-light}: 0 out of the box,
+     * the dark of a cave; at 15 the sky does not matter at all.
+     */
+    public int getOreMaxSkyLight() {
+        return oreMaxSkyLight;
+    }
+
+    /**
+     * The height of the highest ore that is hidden, {@code hide-ores.max-y};
+     * {@link Integer#MAX_VALUE} while every height is.
+     */
+    public int getOreMaxY() {
+        return oreMaxY;
+    }
+
+    /**
+     * The biomes whose ores alone are hidden, {@code hide-ores.biomes}, under
+     * {@code hide-ores.where: biomes}; {@code null} under {@code caves}, where
+     * the ores of every cave are. Not to be changed.
+     */
+    public Set<NamespacedKey> getOreBiomes() {
+        return oreBiomesOnly ? Collections.unmodifiableSet(oreBiomes) : null;
+    }
+
+    /**
+     * Whether the public spots go on the web maps of the server,
+     * {@code web-map.enabled}: only with sharing, which public spots need.
+     */
+    public boolean isWebMapEnabled() {
+        return webMapEnabled && isViewpointsSharing();
+    }
+
+    /** Whether the public spots go on BlueMap, while it is there, {@code web-map.bluemap}. */
+    public boolean isWebMapBlueMap() {
+        return webMapBlueMap;
+    }
+
+    /** Whether the public spots go on Dynmap, while it is there, {@code web-map.dynmap}. */
+    public boolean isWebMapDynmap() {
+        return webMapDynmap;
+    }
+
+    /** Whether the public spots go on squaremap, while it is there, {@code web-map.squaremap}. */
+    public boolean isWebMapSquaremap() {
+        return webMapSquaremap;
+    }
+
+    /** Whether the layer of the spots starts switched off on the page of the map, {@code web-map.hidden}. */
+    public boolean isWebMapHidden() {
+        return webMapHidden;
+    }
+
+    /** How many likes a public spot needs at least to get onto the map, {@code web-map.min-likes}. */
+    public int getWebMapMinLikes() {
+        return webMapMinLikes;
+    }
+
+    /**
+     * How many views a public spot needs at least to get onto the map,
+     * {@code web-map.min-views}: jumps to it, as the menu counts them.
+     */
+    public int getWebMapMinViews() {
+        return webMapMinViews;
+    }
+
+    /**
+     * The address of a spot on the web map, {@code web-map.link}, with
+     * {@code {world}}, {@code {x}}, {@code {y}} and {@code {z}} still in it;
+     * empty while there is none.
+     */
+    public String getWebMapLink() {
+        return webMapLink;
     }
 
     public boolean isResumeEnabled() {

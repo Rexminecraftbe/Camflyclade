@@ -4,13 +4,14 @@ main: de.elia.cameraplugin.camfly2.CameraPlugin
 api-version: 26.2
 author: Rexminecraft343
 description: A plugin for a camera mode with an armour stand or mannequin body
-# Only for start-cost.money, found through Vault when it is there.
-softdepend: [Vault]
+# Vault only for start-cost.money, the maps only for web-map: each is found when it is there. Loaded first, so that
+# the public spots get onto a map as soon as the server is up.
+softdepend: [Vault, BlueMap, dynmap, squaremap]
 
 commands:
   cam:
     description: Enables or disables camera mode
-    usage: /<command> [menu|back|resume|spot [set|delete] <name>|spot share|unshare <name> <player|all>|spot accept|decline|like <player>:<spot>|spot list|visit <player>:<spot>|follow invite|accept|decline|kick <player>|follow leave|end|view|photo|time <time>|reset|weather clear|rain|reset|nightvision [on|off|dark|reset]|list|reload|stats [reset|player <name>]|stop <name>|all|ban <name>|all [time] [reason]|unban <name>|all|banlist|tp <name> camera|body|trail [name [number|all]]]
+    usage: /<command> [menu|back|resume|spot [set|delete] <name>|spot share|unshare <name> <player|all>|spot accept|decline|like <player>:<spot>|spot list|follow invite|accept|decline|kick <player>|follow leave|end|view|photo|time <time>|reset|weather clear|rain|reset|nightvision [on|off|dark|reset]|list|reload|stats [reset|player <name>]|stop <name>|all|ban <name>|all [time] [reason]|unban <name>|all|banlist|tp <name> camera|body|trail [name [number|all]]]
     permission: camplugin.use
     permission-message: "You do not have permission for this command.!"
 

@@ -176,10 +176,6 @@ public class CamTabCompleter implements TabCompleter {
         if (spotCommand && args.length == 4 && sharing && args[1].equalsIgnoreCase("unshare")) {
             return matching(spots.sharedNames(own, args[2]), args[3]);
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("visit") && own != null
-                && plugin.getSettings().isVisitorCameraEnabled()) {
-            return matching(spots.sharedLabels(own), args[1]);
-        }
         CamTour tour = plugin.getTour();
         if (args.length == 2 && CamCommand.isFollowWord(args[0]) && own != null && tour.isEnabled()) {
             List<String> words = new ArrayList<>();
@@ -251,10 +247,6 @@ public class CamTabCompleter implements TabCompleter {
         }
         if (own != null && plugin.getResume().hasFlight(own) && "resume".startsWith(partial)) {
             completions.add("resume");
-        }
-        if (own != null && plugin.getSettings().isVisitorCameraEnabled() && !spots.sharedWith(own).isEmpty()
-                && "visit".startsWith(partial)) {
-            completions.add("visit");
         }
         // Offered under its new name only; /cam tour goes all the same.
         if (own != null && plugin.getTour().isEnabled() && "follow".startsWith(partial)
