@@ -177,7 +177,7 @@ public final class CamMenu implements Listener {
     private enum SpotTab {
         PRIVATE("private", Material.FILLED_MAP, 48, List.of("date", "name", "views", "near")),
         PUBLIC("public", Material.GLOBE_BANNER_PATTERN, 49,
-                List.of("date", "name", "owner", "likes", "week", "views", "near")),
+                List.of("date", "name", "owner", "likes", "views", "near", "week")),
         SHARED("shared", Material.MAP, 50, List.of("date", "name", "owner", "views", "near"));
 
         final String key;

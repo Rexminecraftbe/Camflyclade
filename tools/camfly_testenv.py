@@ -15491,9 +15491,26 @@ def bau_der_woche_checks(env, bot):
     besucht Alt: In playerdata/spot-views.yml steht er unter week bei Alt;
     der Bot selbst, der zu seinem eigenen Spot springt, zaehlt dort nicht.
     Nimmt er das Like zurueck, ist Alt mit seinem einen Besucher vorn. Die
-    Liste des Bots traegt den Stern hinter seinem eigenen Spot. Mit
-    week-days: 0 gibt es keinen Stern.
+    Liste des Bots traegt den Stern hinter seinem eigenen Spot. Im Menue
+    sortiert der Trichter auf dem Reiter der oeffentlichen Spots nach sechs
+    Klicks nach dem Bau der Woche - als letzte Sortierung -, Alt steht vorn,
+    mit dem Stern oben und seinen Zahlen der letzten 7 Tage. Mit
+    week-days: 0 gibt es keinen Stern und diese Sortierung nicht.
     """
+    def fenster(client):
+        return client.call("window_slots", wait=10)
+
+    def klick(client, slot, warten=1.5):
+        client.call("click_window", wait=15, slot=slot, button=0, mode=0)
+        time.sleep(warten)
+
+    def oeffentliche(client):
+        """Das Menue auf dem Reiter der oeffentlichen Spots."""
+        befehl(client, "/cam menu", warten=1.0)
+        klick(client, 10)
+        klick(client, 49)
+        return fenster(client)
+
     if not FIND.test("Cam-Modus ist vor dem Test des Baus der Woche aus", cam_off(bot), ""):
         return
     heim = bot.server_pos()
@@ -15553,10 +15570,28 @@ def bau_der_woche_checks(env, bot):
         FIND.test("Die Liste des Bots traegt den Stern hinter seinem eigenen Spot",
                   gesagt(zeilen, rf"- Alt: .*{stern}") and not gesagt(zeilen, rf"- Woche: .*{stern}"), zeige(zeilen))
 
+        oeffentliche(zuschauer)
+        for _ in range(6):
+            klick(zuschauer, 51)
+        f = fenster(zuschauer)
+        filter_text = item_text(f.get("slots", {}).get("51"))
+        erster = item_text(f.get("slots", {}).get("0"))
+        FIND.test("Menue: nach sechs Klicks sortiert der Trichter nach dem Bau der Woche",
+                  "» build of the week first" in filter_text, filter_text)
+        FIND.test("Menue: Alt steht vorn, mit dem Stern oben und seinen Zahlen der letzten 7 Tage",
+                  erster.startswith(f"{BOT_NAME}:Alt") and "Build of the week" in erster
+                  and "Last 7 days: 0 likes, 1 visitors" in erster, erster)
+        zuschauer.call("close_window", wait=10)
+
         set_option(env, "week-days", "0")
         dort = befehl(zuschauer, "/cam spot list")
         FIND.test("week-days: 0 - kein Stern", not gesagt(dort, stern) and gesagt(dort, rf"{BOT_NAME}:Alt"),
                   zeige(dort))
+        f = oeffentliche(zuschauer)
+        filter_text = item_text(f.get("slots", {}).get("51"))
+        FIND.test("week-days: 0 - der Trichter kennt den Bau der Woche nicht mehr",
+                  "build of the week" not in filter_text and "most views first" in filter_text, filter_text)
+        zuschauer.call("close_window", wait=10)
     finally:
         try:
             if zuschauer.proc is not None:
