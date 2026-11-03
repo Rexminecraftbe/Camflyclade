@@ -1054,19 +1054,21 @@ cam-weather:
 # Bildschirm des Spielers im Cam-Modus. In der Welt ändert sich nichts, alle anderen sehen sie, wie sie sind, und
 # endet der Cam-Modus, sieht auch er wieder die echten.
 # Ausgeblendet wird ein Erz, das an einer Höhle liegt: neben einem Block, durch den man sieht (Luft, Wasser, Glas,
-# Laub ...), über dem bis zum Himmel kein Block mehr steht. Ein Erz, das unter freiem Himmel offen liegt (an einem
-# Hang, unten in einer Schlucht), bleibt, wie es ist - das sieht man zu Fuß genauso. Eins, das ringsum eingeschlossen
-# ist, sieht ohnehin niemand. In einer Welt ohne Himmel (Nether) zählt jedes offene Erz als eins einer Höhle.
-# Auch ein Erz, das jemand in einen Bau gesetzt hat, sieht unter einem Dach im Cam-Modus aus wie Stein - wer das nicht
-# will, nimmt es aus der Liste. Mit where: biomes zählen statt aller Höhlen nur die Höhlen-Biome, siehe unten.
+# Laub ...), an den kein Himmelslicht kommt (max-sky-light), und nicht höher als max-y. Ein Erz, an das Licht des
+# Himmels kommt - an einem Hang, unten in einer Schlucht, gleich hinter dem Eingang einer Höhle, in einem Haus mit
+# Fenstern -, bleibt, wie es ist: das sieht man zu Fuß genauso. Eins, das ringsum eingeschlossen ist, sieht ohnehin
+# niemand. In einer Welt ohne Himmel (Nether) zählt jedes offene Erz als eins einer Höhle, bis max-y.
+# Wird etwas abgebaut oder gebaut, sieht das Plugin den Chunk ein paar Ticks später neu an, wenn der Server das Licht
+# neu gerechnet hat. Ein Erz in einem ganz dunklen Raum eines Baus sieht im Cam-Modus aus wie Stein - wer das nicht
+# will, nimmt es aus der Liste oder senkt max-y. Mit where: biomes zählen statt aller Höhlen nur die Höhlen-Biome.
 # Auf Paper bekommt der Spieler die Erze eines Chunks gleich nach dem Chunk ausgeblendet. Spigot sagt nicht, wann ein
 # Chunk ankommt: Dort wird jede halbe Sekunde nachgesehen und zweimal geschickt - kommt ein Chunk noch später an, zeigt
 # er seine Erze, bis die Kamera weiterfliegt.
 hide-ores:
   enabled: true
   # Wo Erze ausgeblendet werden:
-  #   caves  = an jeder Höhle, wie oben beschrieben: offen zu Luft (oder Wasser, Glas ...), über der bis zum Himmel kein
-  #            Block mehr steht
+  #   caves  = an jeder Höhle, wie oben beschrieben: offen zu Luft (oder Wasser, Glas ...), an die kein Himmelslicht
+  #            kommt
   #   biomes = nur in den Biomen von biomes - dort jedes offene Erz, unter freiem Himmel oder nicht. Eine gewöhnliche
   #            Höhle hat das Biom des Landes darüber (Ebene, Wald ...), ihre Erze bleiben dann sichtbar. Die
   #            Höhlen-Biome sperrt cam-area.forbidden-biomes voreingestellt für die Kamera: Hinein fliegt sie dann nicht,
@@ -1079,6 +1081,15 @@ hide-ores:
     - dripstone_caves
     - deep_dark
     - sulfur_caves
+  # Wie viel Himmelslicht die offene Seite eines Erzes höchstens haben darf, damit es als eins einer Höhle zählt
+  # (0 bis 15). Unter freiem Himmel ist es 15; von einer Öffnung aus wird es mit jedem Block um 1 dunkler, tief in
+  # einer Höhle ist es 0. 0 = nur, wo gar kein Himmelslicht hinkommt; höher blendet auch Erze näher am Eingang aus;
+  # 15 = jedes offene Erz, auch unter freiem Himmel. Gilt nicht bei where: biomes.
+  max-sky-light: 0
+  # Bis zu welcher Höhe Erze ausgeblendet werden: das Erz auf dieser Höhe und alle darunter. Voreingestellt 15 - darunter
+  # liegen die Diamanten (und Redstone, Lapis, das meiste Gold); Erze weiter oben, auch Bauten an der Oberfläche,
+  # bleiben, wie sie sind. off = in jeder Höhe. Gilt auch bei where: biomes.
+  max-y: 15
   # Welches Erz wie aussieht, je eine Zeile Erz: Block (ein Block wie bei border-block, auch mit [Zuständen]). Was hier
   # nicht steht, bleibt sichtbar. {} = keins.
   blocks:

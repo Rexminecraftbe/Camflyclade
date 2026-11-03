@@ -125,6 +125,7 @@ messages:
   cant-fly-in-powder-snow: "&cYou cannot fly into powder snow in camera mode."
   cant-fly-in-water: "&cYou cannot fly into water in camera mode."
   config-allowed-blocks: "any block, e.g. barrier or glass"
+  config-allowed-height: "a height, e.g. 15 or -32, or off"
   config-allowed-menu-items: "any item, e.g. clock or ender_pearl, or camera_head or night_vision_potion"
   config-allowed-particles: "a particle without extra data, e.g. soul_fire_flame, flame or end_rod"
   config-allowed-signal-costs: "a number of blocks of at least 0, or stop"

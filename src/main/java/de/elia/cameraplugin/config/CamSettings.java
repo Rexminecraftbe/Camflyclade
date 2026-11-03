@@ -441,6 +441,10 @@ public final class CamSettings {
     private boolean oreBiomesOnly;
     /** The biomes whose ores are hidden under {@code hide-ores.where: biomes}. */
     private final Set<NamespacedKey> oreBiomes = new HashSet<>();
+    /** The most sky light an ore may have at its open side and still count as one of a cave, {@code hide-ores.max-sky-light}. */
+    private int oreMaxSkyLight;
+    /** The highest ore that is hidden, {@code hide-ores.max-y}; {@link Integer#MAX_VALUE} for no limit. */
+    private int oreMaxY;
 
     /** Whether the public spots go on the web maps of the server, {@code web-map.enabled}. */
     private boolean webMapEnabled;
@@ -849,6 +853,8 @@ public final class CamSettings {
         oreBiomesOnly = config.getChoice("hide-ores.where", "caves", "caves", "biomes")
                 .equalsIgnoreCase("biomes");
         readOreBiomes(config);
+        oreMaxSkyLight = config.getInt("hide-ores.max-sky-light", 0, 0, MAX_LIGHT);
+        oreMaxY = readOreMaxY(config);
         webMapEnabled = config.getBoolean("web-map.enabled", true);
         webMapBlueMap = config.getBoolean("web-map.bluemap", true);
         webMapDynmap = config.getBoolean("web-map.dynmap", true);
@@ -1275,6 +1281,31 @@ public final class CamSettings {
             } else {
                 oreBiomes.add(key);
             }
+        }
+    }
+
+    /** The brightest light the game has, sky or block. */
+    private static final int MAX_LIGHT = 15;
+
+    /** The word of {@code hide-ores.max-y} for no limit at all. */
+    private static final String NO_LIMIT = "off";
+
+    /**
+     * Reads {@code hide-ores.max-y}: the height of the highest ore that is
+     * hidden, out of the box 15 - where the diamonds begin -, or
+     * {@code off} for ores of every height.
+     */
+    private int readOreMaxY(ConfigReader config) {
+        String path = "hide-ores.max-y";
+        String raw = config.getString(path, "15").trim();
+        if (raw.equalsIgnoreCase(NO_LIMIT)) {
+            return Integer.MAX_VALUE;
+        }
+        try {
+            return Integer.parseInt(raw);
+        } catch (NumberFormatException ex) {
+            config.warnUnknownValue(path, raw, messages.configMessage("config-allowed-height"), "15");
+            return 15;
         }
     }
 
@@ -1955,6 +1986,23 @@ public final class CamSettings {
     /** What each ore looks like for a camera player, {@code hide-ores.blocks}; not to be changed. */
     public Map<Material, BlockData> getOreCovers() {
         return Collections.unmodifiableMap(oreCovers);
+    }
+
+    /**
+     * The most sky light the open side of an ore may have for it to count
+     * as one of a cave, {@code hide-ores.max-sky-light}: 0 out of the box,
+     * the dark of a cave; at 15 the sky does not matter at all.
+     */
+    public int getOreMaxSkyLight() {
+        return oreMaxSkyLight;
+    }
+
+    /**
+     * The height of the highest ore that is hidden, {@code hide-ores.max-y};
+     * {@link Integer#MAX_VALUE} while every height is.
+     */
+    public int getOreMaxY() {
+        return oreMaxY;
     }
 
     /**

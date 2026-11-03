@@ -25,25 +25,28 @@ final class OreScan {
 
     /**
      * Every ore of the copy that lies open to a cave, or might, by a side in
-     * the chunk next door. An ore open under the sky on any side within the
-     * chunk is left out at once.
+     * the chunk next door. An ore open to more sky light than
+     * {@code maxSky} on any side within the chunk is left out at once: light
+     * of the sky reaches there, so it can be seen from outside, on foot.
      *
      * <p>With {@code biomes}, {@code hide-ores.where: biomes}, only an ore in
      * one of them counts, and the sky does not matter: every ore of such a
      * biome open to a block that can be seen through is one to hide. The copy
      * has to carry its biomes then.</p>
      *
-     * @param chunkX  the chunk, in chunks
-     * @param minY    the lowest block of the world
-     * @param maxY    one above its highest block
-     * @param sky     whether an ore open under the sky stays as it is: in a
-     *                world without a sky, and among the biomes, none does
-     * @param lookFor the ores, each with what it looks like for a camera player
-     * @param through every block that can be seen through
-     * @param biomes  the biomes whose ores alone count, or {@code null} for every cave
+     * @param chunkX    the chunk, in chunks
+     * @param minY      the lowest block of the world
+     * @param maxY      one above its highest block
+     * @param maxSky    the most sky light at the open side of an ore that
+     *                  still counts as a cave; {@code -1} when the sky does not
+     *                  matter - in a world without one, and among the biomes
+     * @param highestOre the height of the highest ore that counts, {@code hide-ores.max-y}
+     * @param lookFor   the ores, each with what it looks like for a camera player
+     * @param through   every block that can be seen through
+     * @param biomes    the biomes whose ores alone count, or {@code null} for every cave
      */
-    static List<CamOreHider.Found> scan(ChunkSnapshot copy, int chunkX, int chunkZ, int minY, int maxY, boolean sky,
-                                        Map<Material, BlockData> lookFor, Set<Material> through,
+    static List<CamOreHider.Found> scan(ChunkSnapshot copy, int chunkX, int chunkZ, int minY, int maxY, int maxSky,
+                                        int highestOre, Map<Material, BlockData> lookFor, Set<Material> through,
                                         Set<NamespacedKey> biomes) {
         List<CamOreHider.Found> found = new ArrayList<>();
         int sections = (maxY - minY) >> 4;
@@ -54,7 +57,10 @@ final class OreScan {
                 continue;
             }
             int bottom = minY + (section << 4);
-            for (int y = bottom; y < bottom + 16; y++) {
+            if (bottom > highestOre) {
+                break;
+            }
+            for (int y = bottom; y < Math.min(bottom + 16, highestOre + 1); y++) {
                 for (int x = 0; x < 16; x++) {
                     for (int z = 0; z < 16; z++) {
                         BlockData cover = lookFor.get(copy.getBlockType(x, y, z));
@@ -81,7 +87,7 @@ final class OreScan {
                             if (!through.contains(copy.getBlockType(nx, ny, nz))) {
                                 continue;
                             }
-                            if (sky && ny > copy.getHighestBlockYAt(nx, nz)) {
+                            if (maxSky >= 0 && copy.getBlockSkyLight(nx, ny, nz) > maxSky) {
                                 open = true;
                                 break;
                             }

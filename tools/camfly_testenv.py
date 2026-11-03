@@ -15732,6 +15732,14 @@ def erze_checks(env, bot):
     Cam-Modus sieht der Bot wieder die echten Erze. Mit hide-ores.enabled:
     false bleibt im Cam-Modus alles, wie es ist.
 
+    Himmelslicht und Hoehe - voreingestellt max-sky-light: 0 und max-y: 15:
+    Ein Diamanterz hinten in einem kurzen Gang unter einem Ueberhang, an das
+    von draussen Himmelslicht kommt, bleibt im Cam-Modus Diamanterz - mit der
+    alten Regel "kein Block bis zum Himmel" waere es Stein gewesen. Mit
+    max-sky-light: 15 sind auch dieses und das auf dem Dach Stein, das
+    eingeschlossene nicht. Mit max-y: -61 liegt die Hoehle zu hoch, und ihre
+    Erze bleiben, wie sie sind.
+
     hide-ores.where: biomes - voreingestellt steht caves da: In der nahen
     Hoehle, die das Biom der Ebene hat, bleiben jetzt alle Erze, wie sie
     sind. Mit /fillbiome zu Ueppigen Hoehlen gemacht, ist dort jedes offene Erz
@@ -15773,6 +15781,10 @@ def erze_checks(env, bot):
 
     nah_x = x + 6
     fern_x = x + 80
+    # Ein kurzer Gang unter einem Ueberhang, nach Osten offen: hinten ein Erz,
+    # an das von draussen Himmelslicht kommt.
+    ex, ez = x - 8, z + 8
+    eingang = (ex, y, ez)
     # Ein echter Tiefenschiefer, so wie ihn das Plugin zeigt (axis=y), zum Vergleich.
     muster = (x - 3, y, z - 3)
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
@@ -15782,6 +15794,9 @@ def erze_checks(env, bot):
         hinstellen(bot, x + 0.5, y, z + 0.5)
         console(env, f"setblock {muster[0]} {muster[1]} {muster[2]} minecraft:deepslate[axis=y]", pause=0.3)
         nah = hoehle(nah_x)
+        console(env, f"fill {ex - 1} {y} {ez - 1} {ex + 2} {y + 2} {ez + 1} minecraft:stone", pause=0.4)
+        console(env, f"fill {ex + 1} {y} {ez} {ex + 2} {y} {ez} minecraft:air", pause=0.4)
+        console(env, f"setblock {ex} {y} {ez} minecraft:diamond_ore", pause=0.3)
         console(env, f"forceload add {fern_x} {z + 6} {fern_x + 8} {z + 15}", pause=0.5)
         fern = hoehle(fern_x)
         time.sleep(1.5)
@@ -15808,6 +15823,8 @@ def erze_checks(env, bot):
         dort = [sieht(zuschauer, o) for o in nah]
         FIND.test("Der zweite Spieler daneben sieht alle vier, wie sie sind",
                   dort == ["diamond_ore", "deepslate_iron_ore", "diamond_ore", "diamond_ore"], str(dort))
+        FIND.test("Unter dem Ueberhang, wo von draussen Himmelslicht hinkommt, bleibt das Erz Diamanterz",
+                  sieht(bot, eingang) == "diamond_ore", str(sieht(bot, eingang)))
 
         console(env, f"setblock {fern_x - 3} {y} {z + 6} minecraft:deepslate[axis=y]", pause=0.3)
         muster = (fern_x - 3, y, z + 6)
@@ -15834,6 +15851,25 @@ def erze_checks(env, bot):
         FIND.test("hide-ores.enabled: false - im Cam-Modus bleiben die Erze, wie sie sind",
                   aus == ["diamond_ore", "deepslate_iron_ore", "diamond_ore", "diamond_ore"], str(aus))
 
+        quelle = quelle_config(env)
+        FIND.test("Voreingestellt stehen hide-ores.max-sky-light: 0 und max-y: 15 da",
+                  re.search(r"(?m)^\s+max-sky-light:\s*0\s*$", quelle) is not None
+                  and re.search(r"(?m)^\s+max-y:\s*15\s*$", quelle) is not None, "")
+        set_options(env, [("enabled", "true", "hide-ores"), ("max-sky-light", "15", "hide-ores")])
+        cam_on(bot)
+        time.sleep(2.5)
+        hell = [sieht(bot, o) for o in nah]
+        FIND.test("max-sky-light: 15 - auch das Erz unter dem Ueberhang und das auf dem Dach sind Stein",
+                  sieht(bot, eingang) == "stone" and hell[2] == "stone" and hell[0] == "stone", str(hell))
+        FIND.test("max-sky-light: 15 - das eingeschlossene bleibt Diamanterz", hell[3] == "diamond_ore", str(hell))
+        set_options(env, [("max-sky-light", "0", "hide-ores"), ("max-y", "-61", "hide-ores")])
+        cam_on(bot)
+        time.sleep(2.5)
+        tief_genug = [sieht(bot, o) for o in nah]
+        FIND.test("max-y: -61 - die Hoehle liegt hoeher, ihre Erze bleiben, wie sie sind",
+                  tief_genug == ["diamond_ore", "deepslate_iron_ore", "diamond_ore", "diamond_ore"], str(tief_genug))
+        set_option(env, "max-y", "15", "hide-ores")
+
         FIND.test("Voreingestellt steht hide-ores.where: caves da, mit den Hoehlen-Biomen in der Liste",
                   re.search(r"(?m)^\s+where:\s*caves\s*$", ausgeliefert(env)) is not None
                   and re.search(r"(?m)^\s+- lush_caves\s*$", ausgeliefert(env)) is not None, "")
@@ -15856,8 +15892,10 @@ def erze_checks(env, bot):
             if zuschauer.proc is not None:
                 zuschauer.stop()
             cam_off(bot)
-            set_options(env, [("enabled", "true", "hide-ores"), ("where", "caves", "hide-ores")])
+            set_options(env, [("enabled", "true", "hide-ores"), ("where", "caves", "hide-ores"),
+                              ("max-sky-light", "0", "hide-ores"), ("max-y", "15", "hide-ores")])
             console(env, f"fillbiome {nah_x} {y} {z + 6} {nah_x + 8} {y + 6} {z + 15} minecraft:plains", pause=0.5)
+            console(env, f"fill {ex - 1} {y} {ez - 1} {ex + 2} {y + 2} {ez + 1} minecraft:air", pause=0.4)
             for ax in (nah_x, fern_x):
                 console(env, f"fill {ax} {y} {z + 6} {ax + 8} {y + 5} {z + 15} minecraft:air", pause=0.4)
             console(env, f"setblock {x - 3} {y} {z - 3} minecraft:air", pause=0.3)

@@ -50,9 +50,11 @@ import java.util.UUID;
  * sees them as they are.
  *
  * <p>Hidden is an ore that lies open to a cave: next to a block that can be
- * seen through - air, water, glass, leaves - over which no block stands up
- * to the sky. An ore that lies open under the sky - on a cliff, at the
- * bottom of a ravine - stays as it is: it is there to be seen on foot as
+ * seen through - air, water, glass, leaves - that no light of the sky reaches,
+ * {@code hide-ores.max-sky-light}, and no higher than {@code hide-ores.max-y},
+ * 15 out of the box, where the diamonds begin. An ore the sky light reaches -
+ * on a cliff, at the bottom of a ravine, just inside the mouth of a cave, in
+ * a house with windows - stays as it is: it is there to be seen on foot as
  * well. One shut in on every side is no matter at all, nobody sees it
  * either way. In a world without a sky, the Nether, every open ore counts as
  * one of a cave.</p>
@@ -70,7 +72,8 @@ import java.util.UUID;
  * of camera mode looks at the chunks anew; during the flight what was found
  * is kept - for a chunk that comes back, and for every camera player whose
  * flight started before it was looked at - until something in the chunk is
- * broken, built, burnt, pushed or blown up, or for {@value #KEEP_MINUTES}
+ * broken, built, burnt, pushed or blown up - looked at again a few ticks
+ * later, once the server has worked out its light anew -, or for {@value #KEEP_MINUTES}
  * minutes at most: what commands and other plugins change, {@code /fill} or
  * WorldEdit, comes without a word. When camera mode ends he is shown the
  * real blocks again.</p>
@@ -106,6 +109,9 @@ public final class CamOreHider implements Listener {
 
     /** On Spigot: when a chunk new in his view is told once more, in ticks. */
     private static final long TELL_AGAIN = 20L;
+
+    /** How long after a change its chunk is looked at again, in ticks: the light of it comes a little later. */
+    private static final long LIGHT_SETTLES = 5L;
 
     /** The six sides of a block. */
     private static final int[][] SIDES = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
@@ -480,16 +486,18 @@ public final class CamOreHider implements Listener {
                 continue;
             }
             Set<NamespacedKey> among = biomes;
-            ChunkSnapshot copy = world.getChunkAt(id.x(), id.z()).getChunkSnapshot(true, among != null, false);
+            ChunkSnapshot copy = world.getChunkAt(id.x(), id.z()).getChunkSnapshot(false, among != null, false);
             Map<Material, BlockData> lookFor = covers;
             Set<Material> through = clear;
             int minY = world.getMinHeight();
             int maxY = world.getMaxHeight();
-            boolean sky = skyCounts(world);
+            int maxSky = maxSkyLight(world);
+            int highestOre = settings.getOreMaxY();
             int change = changes.getOrDefault(id, 0);
             long taken = System.currentTimeMillis();
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-                List<Found> ores = OreScan.scan(copy, id.x(), id.z(), minY, maxY, sky, lookFor, through, among);
+                List<Found> ores = OreScan.scan(copy, id.x(), id.z(), minY, maxY, maxSky, highestOre, lookFor,
+                        through, among);
                 Bukkit.getScheduler().runTask(plugin, () -> arrived(id, change, taken, ores));
             });
         }
@@ -563,7 +571,8 @@ public final class CamOreHider implements Listener {
             if (!clear.contains(block.getType())) {
                 continue;
             }
-            if (skyCounts(world) && y > world.getHighestBlockYAt(x, z)) {
+            int maxSky = maxSkyLight(world);
+            if (maxSky >= 0 && block.getLightFromSky() > maxSky) {
                 return false;
             }
             cave = true;
@@ -572,12 +581,13 @@ public final class CamOreHider implements Listener {
     }
 
     /**
-     * Whether an ore open under the sky stays as it is: in a world with a
-     * sky, unless only the ores of the biomes of {@code hide-ores.biomes} are
-     * hidden - there the sky does not matter.
+     * The most sky light the open side of an ore may have for it to count as
+     * one of a cave, {@code hide-ores.max-sky-light}; {@code -1} while the
+     * sky does not matter: in a world without one, and when only the ores of
+     * the biomes of {@code hide-ores.biomes} are hidden.
      */
-    private boolean skyCounts(World world) {
-        return biomes == null && world.hasSkyLight();
+    private int maxSkyLight(World world) {
+        return biomes == null && world.hasSkyLight() ? settings.getOreMaxSkyLight() : -1;
     }
 
     /**
@@ -679,7 +689,9 @@ public final class CamOreHider implements Listener {
             found.remove(id);
             changes.merge(id, 1, Integer::sum);
         }
-        Bukkit.getScheduler().runTask(plugin, () -> {
+        // The light of the change is worked out a little later than the block
+        // itself: looked at again once it is.
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
             for (ChunkId id : ids) {
                 for (Map.Entry<UUID, Shown> entry : shown.entrySet()) {
                     Player player = Bukkit.getPlayer(entry.getKey());
@@ -691,7 +703,7 @@ public final class CamOreHider implements Listener {
                     changes.remove(id);
                 }
             }
-        });
+        }, LIGHT_SETTLES);
     }
 
     public void onDisable() {
