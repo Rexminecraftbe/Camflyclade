@@ -775,7 +775,8 @@ resume-command:
 
 # Aussichtspunkte: Stellen mit Blickrichtung, an die die Kamera springt - für einen Bau, den man sich immer wieder von
 # derselben Stelle aus ansieht.
-#   /cam spot set <Name>     = die Stelle, an der man gerade ist (als Kamera oder zu Fuß), mit der Blickrichtung.
+#   /cam spot set <Name>     = die Stelle, an der man gerade ist, mit der Blickrichtung: voreingestellt nur im
+#                              Cam-Modus, wo die Kamera ist (set-in-cam-only), sonst auch zu Fuß.
 #                              Gibt es den Namen schon, wandert er hierher.
 #   /cam spot <Name>         = die Kamera springt dorthin (Ton: sounds.spot, Text: spot-jumped). Ohne Cam-Modus
 #                              startet er dafür erst, dort wo man steht - wenn der Punkt nicht weiter als
@@ -821,6 +822,9 @@ viewpoints:
   # Cam-Modus). Der Cam-Modus startet dann dort, wo man steht, mit allem, was ein Start mit /cam prüft und kostet
   # (z. B. nicht direkt nach Schaden). Auch der Linksklick im Menü.
   start-distance: 16
+  # Ob man Punkte nur im Cam-Modus setzen kann (true), dort wo die Kamera ist, oder auch zu Fuß (false). Zu Fuß gesetzt
+  # gilt sonst dasselbe: nur, wo man selbst war. Auch der Knopf für einen neuen Punkt im Menü (Text: spot-set-cam-only).
+  set-in-cam-only: true
   # Wie viele Punkte jeder Spieler höchstens hat (1 bis 100, 0 = kein Limit). Öffentliche zählen mit. Der Knopf für
   # einen neuen Punkt im Menü zeigt, wie viele man hat und wie viele noch gehen (ohne Limit nur, wie viele man hat).
   max-per-player: 10

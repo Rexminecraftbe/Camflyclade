@@ -619,6 +619,9 @@ public final class CamMenu implements Listener {
             openSpots(player, tab, 0);
         });
         List<String> newLore = new ArrayList<>(lines(spotCount(player)));
+        if (settings.isViewpointsSetInCamOnly()) {
+            newLore.addAll(lines(messages.getMessage("menu-new-spot-cam-only")));
+        }
         newLore.addAll(lines(messages.getMessage(sharing ? "menu-new-spot-lore-public" : "menu-new-spot-lore")));
         put(page, SLOT_SPOT_NEW, Material.WRITABLE_BOOK, messages.getMessage("menu-new-spot"), newLore,
                 click -> act(player, () -> askName(player, sharing && click.isRightClick())));
@@ -2495,6 +2498,10 @@ public final class CamMenu implements Listener {
      * it. A public one is made public once it is saved.
      */
     private void askName(Player player, boolean makePublic) {
+        // Asked before the name: nobody types one only to hear that it does not go here.
+        if (!plugin.getSpots().maySetHere(player)) {
+            return;
+        }
         if (makePublic && !plugin.getSpotModeration().checkNew(player, SpotBans.Kind.PUBLIC)) {
             return;
         }

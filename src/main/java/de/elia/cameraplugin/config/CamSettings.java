@@ -428,6 +428,8 @@ public final class CamSettings {
     private int guestbookIntervalMinutes;
     /** How close a player out of camera mode has to be to a spot to jump there, {@code viewpoints.start-distance}. */
     private double viewpointsStartDistance;
+    /** Whether a spot is saved only in camera mode, {@code viewpoints.set-in-cam-only}. */
+    private boolean viewpointsSetInCamOnly;
     /** How long the same player at the same spot is no new view, {@code viewpoints.views-cooldown-minutes}. */
     private int viewsCooldownMinutes;
 
@@ -840,6 +842,7 @@ public final class CamSettings {
         guestbookIntervalMinutes = config.getInt("viewpoints.guestbook-interval-minutes", 10, 1,
                 MAX_GUESTBOOK_INTERVAL_MINUTES);
         viewpointsStartDistance = config.getDouble("viewpoints.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
+        viewpointsSetInCamOnly = config.getBoolean("viewpoints.set-in-cam-only", true);
         viewsCooldownMinutes = config.getInt("viewpoints.views-cooldown-minutes", 10, 0, MAX_VIEWS_COOLDOWN_MINUTES);
         hideOres = config.getBoolean("hide-ores.enabled", true);
         readOreCovers(config);
@@ -1917,6 +1920,14 @@ public final class CamSettings {
 
     public int getGuestbookIntervalMinutes() {
         return guestbookIntervalMinutes;
+    }
+
+    /**
+     * Whether a spot is saved only in camera mode, {@code viewpoints.set-in-cam-only}:
+     * where the camera is, not where the player stands.
+     */
+    public boolean isViewpointsSetInCamOnly() {
+        return viewpointsSetInCamOnly;
     }
 
     /**

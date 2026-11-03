@@ -1758,6 +1758,12 @@ def prepare_server_files(env):
     text, n = replace_option(text, "invite-cooldown-seconds", "0", "follow")
     if n != 1:
         Log.warn("follow.invite-cooldown-seconds nicht in der Konfiguration gefunden")
+    # Spots gehen voreingestellt nur im Cam-Modus. Die Abschnitte setzen ihre
+    # Spots meist zu Fuss, an einer Stelle, an die sie den Bot gestellt
+    # haben; nur spot_nur_im_cam stellt es fuer sich wieder ein und prueft es.
+    text, n = replace_option(text, "set-in-cam-only", "false", "viewpoints")
+    if n != 1:
+        Log.warn("viewpoints.set-in-cam-only nicht in der Konfiguration gefunden")
     data_dir = plugins / "CamFly"
     data_dir.mkdir(exist_ok=True)
     (data_dir / "config.yml").write_text(text, encoding="utf-8")
@@ -6126,6 +6132,7 @@ def aussichtspunkt_checks(env, bot):
     try:
         FIND.test("Voreingestellt steht viewpoints mit enabled: true, max-per-player: 10 und storage: file da",
                   re.search(r"(?m)^viewpoints:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*start-distance:\s*16\s*\n"
+                            r"(?:\s*#.*\n)*(?:\s*set-in-cam-only:\s*(?:true|false)\s*\n)?"
                             r"(?:\s*#.*\n)*\s*max-per-player:\s*10\s*\n"
                             r"(?:\s*#.*\n)*\s*storage:\s*file\s*$", ausgeliefert(env)) is not None, "")
         spots_loeschen(bot, "Turm", "Weit", "Mem")
@@ -15299,6 +15306,81 @@ def spot_datei_des_bots(env):
     return datei.read_text(encoding="utf-8") if datei.exists() else ""
 
 
+def spot_nur_im_cam_checks(env, bot):
+    """viewpoints.set-in-cam-only: Spots werden nur im Cam-Modus gesetzt, dort,
+    wo die Kamera ist.
+
+    Voreingestellt steht true da - nachgesehen in der ausgelieferten Datei;
+    der Testserver startet mit false, die anderen Abschnitte setzen ihre Spots
+    zu Fuss. Mit true sagt /cam spot set zu Fuss, dass es nur im Cam-Modus
+    geht, und kein Spot kommt dazu; im Menue sagt der Knopf fuer einen neuen
+    Spot "Only in cam mode", und ein Klick fragt gar nicht erst nach dem
+    Namen. Im Cam-Modus wird der Spot gesetzt, an der Stelle der Kamera. Mit
+    false geht es auch zu Fuss.
+    """
+    def fenster(client):
+        return client.call("window_slots", wait=10)
+
+    if not FIND.test("Cam-Modus ist vor dem Test von set-in-cam-only aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    try:
+        FIND.test("Voreingestellt steht viewpoints.set-in-cam-only: true da",
+                  re.search(r"(?m)^\s+set-in-cam-only:\s*true\s*$", quelle_config(env)) is not None, "")
+        spots_loeschen(bot, "Nurcam", "Zufuss")
+        hinstellen(bot, x, y, z)
+        set_option(env, "set-in-cam-only", "true", "viewpoints")
+        zeilen = befehl(bot, "/cam spot set Zufuss")
+        liste = befehl(bot, "/cam spot list")
+        FIND.test("set-in-cam-only: true - zu Fuss sagt /cam spot set, dass es nur im Cam-Modus geht",
+                  gesagt(zeilen, r"Spots are saved in cam mode only") and not gesagt(liste, r"- Zufuss: "),
+                  f"{zeige(zeilen)} / {zeige(liste)}")
+
+        befehl(bot, "/cam menu", warten=1.0)
+        bot.call("click_window", wait=15, slot=10, button=0, mode=0)
+        time.sleep(1.5)
+        knopf = item_text(fenster(bot).get("slots", {}).get("53"))
+        seit = bot.mark()
+        bot.call("click_window", wait=15, slot=53, button=0, mode=0)
+        time.sleep(1.5)
+        dort = zeilen_seit(bot, seit)
+        FIND.test("Im Menue sagt der Knopf fuer einen neuen Spot \"Only in cam mode\", und ein Klick fragt nicht "
+                  "nach dem Namen", "Only in cam mode" in knopf and gesagt(dort, r"Spots are saved in cam mode only")
+                  and not gesagt(dort, r"Type the name"), f"{knopf} / {zeige(dort)}")
+        bot.call("close_window", wait=10)
+
+        if not FIND.test("Cam-Modus fuer set-in-cam-only gestartet", cam_on(bot), ""):
+            return
+        bot.call("fly", wait=30, dy=4, timeout=6000)
+        time.sleep(1.0)
+        kamera = bot.server_pos()
+        zeilen = befehl(bot, "/cam spot set Nurcam")
+        text = spot_datei_des_bots(env)
+        teil = text[text.find("nurcam:"):text.find("nurcam:") + 300] if "nurcam:" in text else ""
+        treffer = re.search(r"(?m)^\s+y:\s*(-?[\d.]+)", teil)
+        FIND.test("Im Cam-Modus wird der Spot gesetzt, an der Stelle der Kamera",
+                  gesagt(zeilen, r"Spot Nurcam saved here") and treffer is not None and kamera is not None
+                  and abs(float(treffer.group(1)) - kamera[1]) < 0.6, f"{zeige(zeilen)} / {teil[:200]} / {kamera}")
+        cam_off(bot)
+
+        set_option(env, "set-in-cam-only", "false", "viewpoints")
+        zeilen = befehl(bot, "/cam spot set Zufuss")
+        FIND.test("set-in-cam-only: false - zu Fuss geht es auch", gesagt(zeilen, r"Spot Zufuss saved here"),
+                  zeige(zeilen))
+    finally:
+        try:
+            cam_off(bot)
+            set_option(env, "set-in-cam-only", "false", "viewpoints")
+            bot.call("close_window", wait=10)
+            spots_loeschen(bot, "Nurcam", "Zufuss")
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test von set-in-cam-only: {exc}")
+
+
 def spot_ansicht_checks(env, bot):
     """viewpoints: Ein Spot merkt sich, was sein Besitzer im Cam-Modus selbst
     eingestellt hat - /cam time, /cam weather, /cam nightvision -, und wer
@@ -15836,6 +15918,7 @@ ABSCHNITTE = [
     Abschnitt("spotreiter", spotreiter_checks, "menu spot"),
     Abschnitt("spotmoderation", spotmoderation_checks, "menu spot/SpotModeration spot/SpotBans spot/CamSpots"),
     Abschnitt("tourmoderation", tourmoderation_checks, "menu tour/TourModeration tour/TourBans tour/CamTour"),
+    Abschnitt("spot_nur_im_cam", spot_nur_im_cam_checks, "spot/CamSpots menu config/CamSettings"),
     Abschnitt("spot_ansicht", spot_ansicht_checks,
               "spot sky nightvision back resume tour/CamTour preferences storage/PlayerStore"),
     Abschnitt("webkarte", webkarte_checks, "webmap spot/SharedSpots spot/CamSpots spot/SpotViews"),

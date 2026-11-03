@@ -271,6 +271,9 @@ public final class CamSpots {
      * @return the spot, or {@code null} when it was not saved; he has been told why
      */
     public Spot set(Player player, String name) {
+        if (!maySetHere(player)) {
+            return null;
+        }
         if (!NAME.matcher(name).matches() || WORDS.contains(Spot.key(name))) {
             messages.sendConfiguredMessage(player, "spot-bad-name");
             return null;
@@ -305,6 +308,19 @@ public final class CamSpots {
             messages.sendMessage(player, "spot-saved-look", "{spot}", name, "{look}", described);
         }
         return spot;
+    }
+
+    /**
+     * Whether he may save a spot where he is: anywhere, or with
+     * {@code viewpoints.set-in-cam-only} only in camera mode, where the
+     * camera is. If not, he has been told so.
+     */
+    public boolean maySetHere(Player player) {
+        if (settings.isViewpointsSetInCamOnly() && !plugin.isInCameraMode(player)) {
+            messages.sendConfiguredMessage(player, "spot-set-cam-only");
+            return false;
+        }
+        return true;
     }
 
     /**

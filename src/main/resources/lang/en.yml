@@ -400,6 +400,8 @@ messages:
   menu-new-spot-count: "&7Your spots: &f{count} of {max} &7- &a{left} more &7possible"
   menu-new-spot-count-full: "&cYour spots: {count} of {max} - delete one first"
   menu-new-spot-count-unlimited: "&7Your spots: &f{count}"
+  # Under the button of a new spot while viewpoints.set-in-cam-only is on.
+  menu-new-spot-cam-only: "&eOnly in cam mode"
   menu-new-spot-lore: "&7Where you are, looking the way you look.\n&7Then type its name in the chat."
   menu-new-spot-lore-public: "&7Where you are, looking the way you look.\n&7Then type its name in the chat.\n&fLeft-click: private\n&eRight-click: public - it is one of\n&eyour spots all the same"
   menu-next: "&7Next page »"
@@ -783,6 +785,8 @@ messages:
   # After spot-saved or spot-moved, while the spot takes along a look of its own ({look}, see spot-look-...).
   spot-saved-look: "&7Whoever jumps there sees it with: &b{look}"
   spot-share-everybody: "everybody"
+  # viewpoints.set-in-cam-only: a spot is saved only in cam mode.
+  spot-set-cam-only: "&cSpots are saved in cam mode only: start it with /cam, fly to the spot, then save it."
   spot-share-off: "&cSharing spots is switched off."
   spot-share-self: "&cYour own spots are yours already."
   spot-share-unknown-player: "&cNobody called {player} has been on this server."
@@ -1475,6 +1479,7 @@ message-settings:
   spot-restricted-shared-new: true
   spot-saved: true
   spot-saved-look: true
+  spot-set-cam-only: true
   spot-share-off: true
   spot-share-self: true
   spot-share-unknown-player: true
