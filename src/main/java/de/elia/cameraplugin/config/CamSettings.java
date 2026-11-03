@@ -507,6 +507,10 @@ public final class CamSettings {
     private boolean photoHidePlayers;
     /** Whether it hides the bodies, {@code photo-mode.hide-bodies}. */
     private boolean photoHideBodies;
+    /** Whether it hides the mobs and animals, {@code photo-mode.hide-mobs}. */
+    private boolean photoHideMobs;
+    /** Whether it hides items lying about and experience orbs, {@code photo-mode.hide-items}. */
+    private boolean photoHideItems;
 
     /** Whether {@code /cam time} gives the camera player a time of his own, {@code cam-time.enabled}. */
     private boolean camTimeEnabled;
@@ -881,6 +885,8 @@ public final class CamSettings {
         photoModeEnabled = config.getBoolean("photo-mode.enabled", true);
         photoHidePlayers = config.getBoolean("photo-mode.hide-players", true);
         photoHideBodies = config.getBoolean("photo-mode.hide-bodies", true);
+        photoHideMobs = config.getBoolean("photo-mode.hide-mobs", true);
+        photoHideItems = config.getBoolean("photo-mode.hide-items", true);
         camTimeEnabled = config.getBoolean("cam-time.enabled", true);
         camWeatherEnabled = config.getBoolean("cam-weather.enabled", true);
         startDelayEnabled = config.getBoolean("start-delay.enabled", false);
@@ -2145,6 +2151,14 @@ public final class CamSettings {
 
     public boolean photoHidesBodies() {
         return photoHideBodies;
+    }
+
+    public boolean photoHidesMobs() {
+        return photoHideMobs;
+    }
+
+    public boolean photoHidesItems() {
+        return photoHideItems;
     }
 
     public boolean isCamTimeEnabled() {

@@ -6329,6 +6329,15 @@ def foto_checks(env, bot):
     geht /cam photo nicht, mit enabled: false gar nicht, und die
     Tab-Vervollstaendigung bietet es nur im Cam-Modus an.
 
+    Mobs und Items (hide-mobs, hide-items): Ein Schwein, ein liegender Stein
+    und eine Erfahrungskugel sind im Foto-Modus beim Bot weg und beim zweiten
+    Spieler da, danach beim Bot wieder da. Ein Schwein und ein Stein, die erst
+    im Foto-Modus dazukommen, sieht der Bot auch nicht. Bei hide-players: false
+    bleibt das Schwein, solange der zweite Spieler darauf sitzt - der Bot sieht
+    ihn darauf -, und ist weg, wenn er absteigt. hide-mobs: false laesst das
+    Schwein im Bild, hide-items: false den Stein und die Kugel. Die Kugel liegt
+    weiter als 8 Bloecke von jedem Spieler weg, sonst floege sie zu ihm.
+
     Wo ein Koerper steht, zaehlt der Test an den Entitaeten um seine Stelle:
     Ruestungsstaender, Mannequin und Name. Den zweiten Spieler sucht er dort,
     wo der Server ihn hat. Nach Art und Name wird nicht gesucht, mineflayer
@@ -6354,6 +6363,20 @@ def foto_checks(env, bot):
     def tab(text):
         return bot.call("tab", text=text).get("matches", [])
 
+    def ids_bei(client, wo):
+        """Die Entitaeten, die der Client an einer Stelle sieht, an der ein
+        Mob, ein Item oder eine Kugel liegt."""
+        return [e["id"] for e in entitaeten(client)
+                if math.dist((e["pos"][0], e["pos"][2]), (wo[0], wo[2])) < 1.0
+                and wo[1] - 0.5 <= e["pos"][1] <= wo[1] + 1.5]
+
+    def sieht_bei(client, *orte):
+        """Ob der Client an jeder dieser Stellen etwas sieht."""
+        return all(ids_bei(client, wo) for wo in orte)
+
+    def sieht_nichts_bei(client, *orte):
+        return not any(ids_bei(client, wo) for wo in orte)
+
     if not FIND.test("Cam-Modus ist vor dem Test des Foto-Modus aus", cam_off(bot), ""):
         return
     heim = bot.server_pos()
@@ -6362,8 +6385,23 @@ def foto_checks(env, bot):
     x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
     koerper = (x, y, z)
     sein_koerper = (x + 3, y, z)
-    console(env, f"fill {_floor(x) - 2} {y} {_floor(z) - 2} {_floor(x) + 5} {y + 6} {_floor(z) + 2} minecraft:air",
+    schwein = (x - 3, y, z + 3)
+    stein = (x - 3, y, z - 3)
+    kugel = (x - 10, y, z - 5)
+    neues_schwein = (x - 6, y, z + 3)
+    neuer_stein = (x - 6, y, z - 3)
+    console(env, f"fill {_floor(x) - 11} {y} {_floor(z) - 6} {_floor(x) + 5} {y + 6} {_floor(z) + 4} minecraft:air",
             pause=0.5)
+    marke = 'Tags:["camfly_foto"]'
+
+    def schwein_hin(wo):
+        console(env, f"summon minecraft:pig {wo[0]} {wo[1]} {wo[2]} "
+                     f"{{{marke},NoAI:1b,Silent:1b,PersistenceRequired:1b,Invulnerable:1b}}")
+
+    def stein_hin(wo):
+        console(env, f'summon minecraft:item {wo[0]} {wo[1]} {wo[2]} '
+                     f'{{{marke},Item:{{id:"minecraft:stone",count:1}},PickupDelay:32767s,Age:-32768s}}')
+
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
 
     def zuschauer_hin():
@@ -6378,9 +6416,14 @@ def foto_checks(env, bot):
         return ok
 
     try:
-        FIND.test("Voreingestellt steht photo-mode mit enabled, hide-players und hide-bodies auf true da",
+        FIND.test("Voreingestellt steht photo-mode mit enabled, hide-players, hide-bodies, hide-mobs und hide-items "
+                  "auf true da",
                   re.search(r"(?m)^photo-mode:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*hide-players:\s*true\s*\n"
-                            r"(?:\s*#.*\n)*\s*hide-bodies:\s*true\s*$", ausgeliefert(env)) is not None, "")
+                            r"(?:\s*#.*\n)*\s*hide-bodies:\s*true\s*\n(?:\s*#.*\n)*\s*hide-mobs:\s*true\s*\n"
+                            r"(?:\s*#.*\n)*\s*hide-items:\s*true\s*$", ausgeliefert(env)) is not None, "")
+        schwein_hin(schwein)
+        stein_hin(stein)
+        console(env, f"summon minecraft:experience_orb {kugel[0]} {kugel[1]} {kugel[2]} {{{marke},Value:1s}}")
         zeilen = befehl(bot, "/cam photo")
         FIND.test("/cam photo ohne Cam-Modus geht nicht", gesagt(zeilen, r"only works in cam mode"), zeige(zeilen))
         FIND.test("Ohne Cam-Modus schlaegt /cam kein photo vor", "photo" not in tab("/cam "), "")
@@ -6396,6 +6439,8 @@ def foto_checks(env, bot):
         FIND.test("Vor dem Foto-Modus sieht der Bot den zweiten Spieler und seinen Koerper",
                   sieht_spieler(bot, ZUSCHAUER_NAME) and koerper_bei(bot, koerper) >= 2,
                   f"Koerper: {koerper_bei(bot, koerper)}")
+        FIND.test("Vor dem Foto-Modus sieht der Bot das Schwein, den Stein und die Erfahrungskugel",
+                  sieht_bei(bot, schwein, stein, kugel), "")
 
         zeilen = befehl(bot, "/cam photo")
         FIND.test("/cam photo - \"Photo mode on\"", gesagt(zeilen, r"Photo mode on"), zeige(zeilen))
@@ -6406,6 +6451,16 @@ def foto_checks(env, bot):
         FIND.test("photo-mode: der zweite Spieler sieht den Koerper weiter",
                   koerper_bei(zuschauer, koerper) >= 2, str(koerper_bei(zuschauer, koerper)))
         FIND.test("photo-mode: der Cam-Modus laeuft weiter", spielmodus_ist(bot, "adventure"), "")
+        FIND.test("hide-mobs, hide-items: Schwein, Stein und Erfahrungskugel sind fuer den Bot nicht mehr da",
+                  sieht_nichts_bei(bot, schwein, stein, kugel), "")
+        FIND.test("hide-mobs, hide-items: der zweite Spieler sieht Schwein, Stein und Erfahrungskugel weiter",
+                  sieht_bei(zuschauer, schwein, stein, kugel), "")
+        schwein_hin(neues_schwein)
+        stein_hin(neuer_stein)
+        time.sleep(1.5)
+        FIND.test("hide-mobs, hide-items: ein Schwein und ein Stein, die erst im Foto-Modus kommen, sieht der Bot nicht",
+                  sieht_nichts_bei(bot, neues_schwein, neuer_stein)
+                  and sieht_bei(zuschauer, neues_schwein, neuer_stein), "")
 
         bei_bot = bot.mark()
         klicken(zuschauer, "activate_entity", at=list(koerper), radius=2)
@@ -6426,6 +6481,8 @@ def foto_checks(env, bot):
                   sieht_spieler(bot, ZUSCHAUER_NAME) and koerper_bei(bot, sein_koerper) >= 2
                   and koerper_bei(bot, koerper) >= 2,
                   f"{koerper_bei(bot, sein_koerper)} / {koerper_bei(bot, koerper)}")
+        FIND.test("Nach dem Foto-Modus sieht der Bot die Schweine, die Steine und die Erfahrungskugel wieder",
+                  sieht_bei(bot, schwein, stein, kugel, neues_schwein, neuer_stein), "")
         cam_off(zuschauer)
         zuschauer_hin()
 
@@ -6433,7 +6490,7 @@ def foto_checks(env, bot):
         cam_off(bot)
         time.sleep(1.0)
         FIND.test("Das Ende des Cam-Modus beendet den Foto-Modus: der zweite Spieler ist wieder zu sehen",
-                  sieht_spieler(bot, ZUSCHAUER_NAME), "")
+                  sieht_spieler(bot, ZUSCHAUER_NAME) and sieht_bei(bot, schwein, stein), "")
 
         bot_kamera()
         befehl(bot, "/cam photo")
@@ -6453,7 +6510,31 @@ def foto_checks(env, bot):
         FIND.test("hide-players: false - der zweite Spieler bleibt im Bild, nur der Koerper ist weg",
                   sieht_spieler(bot, ZUSCHAUER_NAME) and koerper_bei(bot, koerper) == 0,
                   str(koerper_bei(bot, koerper)))
-        set_options(env, [("hide-players", "true", "photo-mode"), ("enabled", "false", "photo-mode")])
+        # Der zweite Spieler steigt im Foto-Modus auf das Schwein: Dass er
+        # darauf sitzt, sagt der Bot nur, wenn er das Schwein kennt. Wo er
+        # sitzt, schickt der Server bei einem Reiter nicht - nur, worauf.
+        console(env, f"ride {ZUSCHAUER_NAME} mount @e[type=minecraft:pig,tag=camfly_foto,limit=1,"
+                     f"x={schwein[0]},y={schwein[1]},z={schwein[2]},distance=..1]", pause=1.5)
+        unter_ihm = ids_bei(bot, schwein)
+        FIND.test("hide-players: false - das Schwein, auf dem der zweite Spieler sitzt, bleibt im Bild",
+                  bool(unter_ihm) and any(e.get("vehicle") in unter_ihm for e in entitaeten(bot)),
+                  str(unter_ihm))
+        console(env, f"ride {ZUSCHAUER_NAME} dismount", pause=1.5)
+        FIND.test("hide-players: false - steigt er ab, ist das Schwein weg",
+                  sieht_nichts_bei(bot, schwein) and sieht_bei(zuschauer, schwein), "")
+        zuschauer_hin()
+
+        set_options(env, [("hide-players", "true", "photo-mode"), ("hide-mobs", "false", "photo-mode")])
+        bot_kamera()
+        befehl(bot, "/cam photo")
+        FIND.test("hide-mobs: false - das Schwein bleibt im Bild, Stein und Erfahrungskugel sind weg",
+                  sieht_bei(bot, schwein) and sieht_nichts_bei(bot, stein, kugel), "")
+        set_options(env, [("hide-mobs", "true", "photo-mode"), ("hide-items", "false", "photo-mode")])
+        bot_kamera()
+        befehl(bot, "/cam photo")
+        FIND.test("hide-items: false - Stein und Erfahrungskugel bleiben im Bild, das Schwein ist weg",
+                  sieht_bei(bot, stein, kugel) and sieht_nichts_bei(bot, schwein), "")
+        set_options(env, [("hide-items", "true", "photo-mode"), ("enabled", "false", "photo-mode")])
         bot_kamera()
         zeilen = befehl(bot, "/cam photo")
         FIND.test("photo-mode.enabled: false - /cam photo ist abgeschaltet",
@@ -6464,7 +6545,9 @@ def foto_checks(env, bot):
                 cam_off(zuschauer)
                 zuschauer.stop()
             cam_off(bot)
-            set_options(env, [("enabled", "true", "photo-mode"), ("hide-players", "true", "photo-mode")])
+            set_options(env, [("enabled", "true", "photo-mode"), ("hide-players", "true", "photo-mode"),
+                              ("hide-mobs", "true", "photo-mode"), ("hide-items", "true", "photo-mode")])
+            console(env, "kill @e[tag=camfly_foto]", pause=0.5)
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test des Foto-Modus: {exc}")

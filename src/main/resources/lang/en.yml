@@ -418,7 +418,7 @@ messages:
   menu-offer-actions: "&eOffered to you\n&aLeft-click: accept\n&cRight-click: turn down"
   menu-only: "&eThat goes through /cam menu on this server."
   menu-photo: "&dPhoto mode"
-  menu-photo-lore: "&7The other players and the bodies\n&7out of the picture, on and off."
+  menu-photo-lore: "&7The other players, the bodies, mobs\n&7and items out of the picture, on and off."
   menu-previous: "&7« Previous page"
   menu-public-own: "&f{spot} &7(yours)"
   menu-public-own-actions: "&eLeft-click: jump there\n&7Right-click: take it offline -\n&7it stays among your spots"
@@ -602,7 +602,7 @@ messages:
   # /cam photo (photo-mode).
   photo-ended: "&aPhoto mode off: you see everything again."
   photo-off: "&c/cam photo is switched off."
-  photo-started: "&aPhoto mode on: the other players and the bodies are out of the picture for you. F1 hides the rest, photo mode once more ends it."
+  photo-started: "&aPhoto mode on: the other players, the bodies, mobs and items are out of the picture for you. F1 hides the rest, photo mode once more ends it."
   player.name-format: "{player}'s Cam"
   # While others follow a leader (/cam follow), their names stand over his camera, stacked over his: {name} = what
   # player.name-format says (without its colour), {player} = the player's name. The follower lines take the colour of
