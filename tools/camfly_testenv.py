@@ -15403,8 +15403,9 @@ def teleport_checks(env, bot):
 # mob-spawning und progress-guard
 # ---------------------------------------------------------------------------
 
-def spielerdatei(env, ordner, spieler=BOT_NAME):
-    """Eine Datei, die der Server je Spieler schreibt, nach einem save-all:
+def welt_spielerdatei(env, ordner, spieler=BOT_NAME):
+    """Eine Datei, die der Server selbst je Spieler schreibt, nach einem
+    save-all - nicht die des Plugins, die spielerdatei liest:
     ordner "stats" fuer die Statistik, "advancements" fuer die Fortschritte.
     Gesucht wird unter der ganzen Welt, wo der Ordner auch liegt - die
     Versionen legen ihn verschieden ab. None, wenn es sie nicht gibt."""
@@ -15422,7 +15423,7 @@ def spielerdatei(env, ordner, spieler=BOT_NAME):
 def geflogen(env):
     """Wie weit der Bot laut seiner Statistik geflogen ist, in Zentimetern
     (minecraft:fly_one_cm), oder None ohne Datei."""
-    daten = spielerdatei(env, "stats")
+    daten = welt_spielerdatei(env, "stats")
     if daten is None:
         return None
     return daten.get("stats", {}).get("minecraft:custom", {}).get("minecraft:fly_one_cm", 0)
@@ -15431,7 +15432,7 @@ def geflogen(env):
 def hat_fortschritt(env, fortschritt, kriterium=None):
     """Ob der Bot dieses Kriterium dieses Fortschritts hat - ohne Kriterium,
     ob er den ganzen Fortschritt hat. Aus seiner Datei der Fortschritte."""
-    eintrag = (spielerdatei(env, "advancements") or {}).get(fortschritt, {})
+    eintrag = (welt_spielerdatei(env, "advancements") or {}).get(fortschritt, {})
     if kriterium is None:
         return bool(eintrag.get("done"))
     return kriterium in eintrag.get("criteria", {})
