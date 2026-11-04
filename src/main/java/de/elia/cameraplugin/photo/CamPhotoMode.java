@@ -7,12 +7,18 @@ import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.ExperienceOrb;
+import org.bukkit.entity.Item;
+import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntitySpawnEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.ArrayList;
@@ -28,7 +34,10 @@ import java.util.UUID;
  * camera player no longer sees what stands in the way of it - the other
  * players, with the names, particles and outlines of those in camera mode, and
  * the bodies of camera mode, his own among them, with their names and hearts,
- * as {@code photo-mode.hide-players} and {@code hide-bodies} say.
+ * the mobs and animals, and the items and experience orbs lying about, as
+ * {@code photo-mode.hide-players}, {@code hide-bodies}, {@code hide-mobs} and
+ * {@code hide-items} say. What belongs to a build - armour stands,
+ * mannequins, item frames, paintings, minecarts, boats - stays in the picture.
  *
  * <p>Only he stops seeing them. Everybody else sees everything as before, and
  * nothing changes in the world. It runs until he types the command again or
@@ -38,9 +47,16 @@ import java.util.UUID;
  * hidden players are gone from his tab list as well while it runs.</p>
  *
  * <p>Hidden is what he could see when it started, and whatever turns up later
- * - a player joining, a new body - as soon as it does. What another plugin,
- * a vanish plugin say, hid from him already is none of photo mode's: it is
- * left alone, and stays hidden when photo mode ends.</p>
+ * - a player joining, a new body, a mob spawning, an item dropped, the mobs
+ * of a chunk that loads - as soon as it does. Mobs and items only in the
+ * world he is in, and in the next one as soon as he gets there. What another
+ * plugin, a vanish plugin say, hid from him already is none of photo mode's:
+ * it is left alone, and stays hidden when photo mode ends.</p>
+ *
+ * <p>A mob somebody rides whom he is to see - a player on a horse, while
+ * {@code hide-players} is off - stays: the server moves a rider only with
+ * what he sits on, without it he would hang in the air for him. Once the
+ * rider gets off, the next look round hides it.</p>
  */
 public final class CamPhotoMode implements Listener {
 
@@ -59,7 +75,10 @@ public final class CamPhotoMode implements Listener {
     /** What photo mode has hidden from one player, to be shown to him again. */
     private static final class Hidden {
         final Set<UUID> players = new HashSet<>();
+        /** The bodies, with the mannequins in them and their names and hearts. */
         final Map<UUID, Entity> entities = new HashMap<>();
+        /** The mobs, items and experience orbs. */
+        final Map<UUID, Entity> mobsAndItems = new HashMap<>();
     }
 
     public CamPhotoMode(CameraPlugin plugin) {
@@ -162,6 +181,12 @@ public final class CamPhotoMode implements Listener {
                 }
             }
         }
+        // After the players: whether he still sees a rider decides over his mount.
+        if (hidesMobsOrItems()) {
+            for (Entity entity : viewer.getWorld().getEntities()) {
+                hideMobOrItem(viewer, hidden, entity);
+            }
+        }
     }
 
     private void hidePlayer(Player viewer, Hidden hidden, Player other) {
@@ -187,6 +212,59 @@ public final class CamPhotoMode implements Listener {
             if (part.isValid() && viewer.canSee(part)) {
                 viewer.hideEntity(plugin, part);
                 hidden.entities.put(part.getUniqueId(), part);
+            }
+        }
+    }
+
+    /** Whether photo mode hides mobs or items at all, {@code hide-mobs} and {@code hide-items}. */
+    private boolean hidesMobsOrItems() {
+        return settings.photoHidesMobs() || settings.photoHidesItems();
+    }
+
+    /**
+     * Whether photo mode takes this out of the picture for what it is: a mob
+     * or animal, or an item lying about or an experience orb. The bodies are
+     * armour stands and mannequins, neither of them a mob.
+     */
+    private boolean ofHiddenKind(Entity entity) {
+        if (entity instanceof Mob) {
+            return settings.photoHidesMobs();
+        }
+        return (entity instanceof Item || entity instanceof ExperienceOrb) && settings.photoHidesItems();
+    }
+
+    /**
+     * Whether something of a hidden kind carries somebody the viewer is to
+     * see, on it or on what rides it: then it stays in the picture.
+     */
+    private boolean carriesSeen(Player viewer, Entity entity) {
+        for (Entity passenger : entity.getPassengers()) {
+            if (ofHiddenKind(passenger) ? carriesSeen(viewer, passenger) : viewer.canSee(passenger)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Hides a mob, an item or an experience orb from the viewer, if it is in
+     * his world and he still sees it. Also for one that is only about to be
+     * added to the world: the server will then never show it to him.
+     */
+    private void hideMobOrItem(Player viewer, Hidden hidden, Entity entity) {
+        if (ofHiddenKind(entity) && entity.getWorld().equals(viewer.getWorld())
+                && viewer.canSee(entity) && !carriesSeen(viewer, entity)) {
+            viewer.hideEntity(plugin, entity);
+            hidden.mobsAndItems.put(entity.getUniqueId(), entity);
+        }
+    }
+
+    /** Hides a mob or item that has just turned up from everybody photo mode runs for. */
+    private void hideFromAll(Entity entity) {
+        for (Map.Entry<UUID, Hidden> entry : active.entrySet()) {
+            Player viewer = Bukkit.getPlayer(entry.getKey());
+            if (viewer != null) {
+                hideMobOrItem(viewer, entry.getValue(), entity);
             }
         }
     }
@@ -218,6 +296,16 @@ public final class CamPhotoMode implements Listener {
                 viewer.showEntity(plugin, part);
                 return true;
             });
+            // The same for a mob or an item - one that unloads with its chunk
+            // is hidden again as it loads. A mount somebody he sees has got on
+            // is shown again, not to leave the rider hanging in the air.
+            hidden.mobsAndItems.values().removeIf(entity -> {
+                if (entity.isValid() && !carriesSeen(viewer, entity)) {
+                    return false;
+                }
+                viewer.showEntity(plugin, entity);
+                return true;
+            });
             hideFrom(viewer, hidden);
         }
         if (active.isEmpty()) {
@@ -243,6 +331,9 @@ public final class CamPhotoMode implements Listener {
         for (Entity part : hidden.entities.values()) {
             player.showEntity(plugin, part);
         }
+        for (Entity entity : hidden.mobsAndItems.values()) {
+            player.showEntity(plugin, entity);
+        }
         // Shown again is everybody photo mode hid, and camera mode decides
         // once more which of them he is to see - anti-scouting at once, before
         // anybody too far away is seen for a moment.
@@ -264,6 +355,38 @@ public final class CamPhotoMode implements Listener {
             if (viewer != null) {
                 hidePlayer(viewer, entry.getValue(), event.getPlayer());
             }
+        }
+    }
+
+    /**
+     * A mob spawning, an item dropped or an experience orb is hidden from
+     * everybody photo mode runs for before it is in the world - before the
+     * server could show it to anybody.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onSpawn(EntitySpawnEvent event) {
+        if (!active.isEmpty() && ofHiddenKind(event.getEntity())) {
+            hideFromAll(event.getEntity());
+        }
+    }
+
+    /** The mobs and items of a chunk that loads, before the server shows them to anybody. */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onEntitiesLoad(EntitiesLoadEvent event) {
+        if (active.isEmpty() || !hidesMobsOrItems()) {
+            return;
+        }
+        for (Entity entity : event.getEntities()) {
+            hideFromAll(entity);
+        }
+    }
+
+    /** Through a portal: the mobs and items of the world he gets to, straight away. */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onChangedWorld(PlayerChangedWorldEvent event) {
+        Hidden hidden = active.get(event.getPlayer().getUniqueId());
+        if (hidden != null) {
+            hideFrom(event.getPlayer(), hidden);
         }
     }
 

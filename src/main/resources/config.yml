@@ -1032,6 +1032,14 @@ photo-mode:
   hide-players: true
   # Die Körper aller Spieler im Cam-Modus ausblenden, auch den eigenen, mit ihrem Namen und den Herzen
   hide-bodies: true
+  # Mobs und Tiere ausblenden: alles, was von selbst läuft, schwimmt oder fliegt - Monster, Tiere, Dorfbewohner, Golems,
+  # Fische, Fledermäuse ... Was zum Bau gehört, bleibt: Rüstungsständer, Mannequins, Rahmen, Bilder, Loren, Boote.
+  # Ein Reittier, auf dem jemand sitzt, den er sieht (z. B. ein Spieler bei hide-players: false), bleibt auch - ohne es
+  # hinge der Reiter für ihn in der Luft. Steigt er ab, ist es nach einer halben Sekunde weg.
+  # Hören tut er sie weiter, und Partikel, die sie machen (z. B. Herzen beim Füttern), sieht er weiter.
+  hide-mobs: true
+  # Items, die herumliegen, und Erfahrungskugeln ausblenden
+  hide-items: true
 
 # /cam time: eine eigene Tageszeit im Cam-Modus - z. B. den eigenen Bau im Sonnenuntergang ansehen.
 #   /cam time day | noon | sunset | night | midnight | sunrise   = 1000, 6000, 12000, 13000, 18000, 23000
