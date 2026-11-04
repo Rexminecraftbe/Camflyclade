@@ -14185,6 +14185,159 @@ def zustand_checks(env, bot):
 
 
 # ---------------------------------------------------------------------------
+# Der Kamera-Kopf, die Herzen der Effekte und der Start beim Reiten
+# ---------------------------------------------------------------------------
+
+def helm_ist(bot, item):
+    """Ob der Bot dieses Item im Helm-Slot traegt, am Server gefragt."""
+    return server_says(bot, f"/execute if items entity {BOT_NAME} armor.head minecraft:{item} "
+                            f"run say {{marke}}")
+
+
+def kamerakopf_checks(env, bot):
+    """camera-head: Der Kopf der Kamera kommt zwei Ticks nach dem Start auf.
+
+    Endete der Cam-Modus in diesen zwei Ticks - /cam zweimal schnell
+    hintereinander, ein Treffer gleich beim Start -, hatte der Spieler seinen
+    Helm schon zurueck, und der Kopf kam trotzdem: an die Stelle des Helms,
+    der damit weg war, und der Kopf blieb ihm.
+
+    Erst der gewoehnliche Fall: im Cam-Modus der Kopf, danach der eigene
+    Helm. Dann /cam zweimal gleich hintereinander: Der Helm bleibt, und kein
+    Kopf kommt.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test des Kamera-Kopfs aus", cam_off(bot), ""):
+        return
+    set_option(env, "enabled", "true", "camera-head")
+    try:
+        console(env, f"item replace entity {BOT_NAME} armor.head with minecraft:iron_helmet", pause=1.0)
+        if not FIND.test("Der Bot traegt fuer den Test einen Eisenhelm", helm_ist(bot, "iron_helmet"), ""):
+            return
+        if FIND.test("/cam startet fuer den Test des Kamera-Kopfs", cam_on(bot), ""):
+            FIND.test("camera-head: im Cam-Modus traegt er den Kopf der Kamera", helm_ist(bot, "player_head"), "")
+            cam_off(bot)
+            FIND.test("Nach dem Cam-Modus traegt er wieder seinen Eisenhelm", helm_ist(bot, "iron_helmet"), "")
+
+        # Beide gleich hintereinander: Der Server nimmt sie im selben Tick
+        # oder im naechsten an, lange vor den zwei Ticks bis zum Kopf.
+        bot.chat("/cam")
+        bot.chat("/cam")
+        time.sleep(2.0)
+        lief = spielmodus_ist(bot, "adventure")
+        helm = helm_ist(bot, "iron_helmet")
+        kopf = helm_ist(bot, "player_head")
+        FIND.test("Endet der Cam-Modus, bevor der Kopf aufgesetzt ist, behaelt er seinen Eisenhelm, und kein "
+                  "Kopf kommt", not lief and helm and not kopf,
+                  "Cam-Modus laeuft noch" if lief else f"Eisenhelm {helm}, Kopf {kopf}")
+    finally:
+        if spielmodus_ist(bot, "adventure"):
+            cam_off(bot)
+        console(env, f"item replace entity {BOT_NAME} armor.head with minecraft:air", pause=1.0)
+        set_option(env, "enabled", "false", "camera-head")
+
+
+def herzen_checks(env, bot):
+    """Die Effekte ruhen im Cam-Modus - und die Herzen, die an ihnen haengen,
+    mit ihnen.
+
+    Abgenommen und wieder aufgesetzt war nicht dasselbe wie angehalten:
+      * Absorption fuellt ihre gelben Herzen beim Aufsetzen wieder auf. Zweimal
+        /cam war damit eine Auffrischung umsonst, so oft man wollte.
+      * Gesundheitsschub nimmt beim Abnehmen das Leben ueber dem gewoehnlichen
+        Hoechstwert mit und kam mit leeren Extra-Herzen zurueck.
+
+    Danach muss beides so stehen wie vor dem Cam-Modus. cam-safety ist dafuer
+    aus: Die Absorption wird mit /damage angebrochen.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test der Herzen aus", cam_off(bot), ""):
+        return
+    set_option(env, "enabled", "false", "cam-safety")
+    try:
+        # --- Absorption ---
+        bot.chat("/effect give @s minecraft:absorption 120 1")
+        time.sleep(1.0)
+        bot.chat("/damage @s 3 minecraft:generic")
+        time.sleep(1.0)
+        vorher = bot.server_data("AbsorptionAmount")
+        if FIND.test("Der Bot hat angebrochene Absorption (Stufe 2, drei Punkte weg)",
+                     vorher is not None and 0.5 < vorher < 7.5, f"Absorption {vorher}") \
+                and FIND.test("/cam startet fuer den Test der Absorption", cam_on(bot), ""):
+            cam_off(bot)
+            nachher = bot.server_data("AbsorptionAmount")
+            FIND.test("Nach dem Cam-Modus hat er so viel Absorption wie vorher, nicht wieder die vollen acht Punkte",
+                      nachher is not None and abs(nachher - vorher) < 0.01,
+                      f"vorher {vorher}, nachher {nachher}")
+        bot.chat("/effect clear @s")
+        time.sleep(1.0)
+
+        # --- Gesundheitsschub ---
+        # Ohne Regeneration: Sie fuellte die Extra-Herzen nach dem Cam-Modus
+        # wieder auf, ehe nachgesehen ist.
+        console(env, "gamerule natural_health_regeneration false", pause=0.3)
+        bot.chat("/effect give @s minecraft:health_boost 120 0")
+        time.sleep(0.5)
+        bot.chat("/effect give @s minecraft:instant_health 1 3")
+        time.sleep(1.0)
+        vorher = bot.server_data("Health")
+        if FIND.test("Der Bot hat mit Gesundheitsschub mehr als zwanzig Leben",
+                     vorher is not None and vorher > 20.5, f"Leben {vorher}") \
+                and FIND.test("/cam startet fuer den Test des Gesundheitsschubs", cam_on(bot), ""):
+            time.sleep(1.0)
+            cam_off(bot)
+            nachher = bot.server_data("Health")
+            FIND.test("Nach dem Cam-Modus hat er seine Extra-Herzen noch, er steht bei seinem Leben von vorher",
+                      nachher is not None and nachher >= vorher - 0.01,
+                      f"vorher {vorher}, nachher {nachher}")
+    finally:
+        if spielmodus_ist(bot, "adventure"):
+            cam_off(bot)
+        bot.chat("/effect clear @s")
+        time.sleep(0.5)
+        console(env, "gamerule natural_health_regeneration true", pause=0.3)
+        set_option(env, "enabled", "true", "cam-safety")
+
+
+def reiten_checks(env, bot):
+    """Kein Start des Cam-Modus beim Reiten.
+
+    Im Cam-Modus traegt nichts einen Kamera-Spieler, und der Cam-Modus setzt
+    ihn auch nicht ab. Auf einer Lore, einem Boot oder einem Pferd gestartet,
+    blieb die unsichtbare Kamera darauf sitzen und fuhr mit ihr herum.
+
+    Auf einer Lore wird /cam abgelehnt, mit der Meldung dazu; abgestiegen
+    startet er wieder.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test des Reitens aus", cam_off(bot), ""):
+        return
+    lore = "@e[type=minecraft:minecart,tag=camfly_reiten,limit=1]"
+    try:
+        console(env, f'execute at {BOT_NAME} run summon minecraft:minecart ~ ~ ~ {{Tags:["camfly_reiten"]}}',
+                pause=1.0)
+        console(env, f"ride {BOT_NAME} mount {lore}", pause=1.5)
+        if not FIND.test("Der Bot sitzt fuer den Test in einer Lore",
+                         server_says(bot, "/execute on vehicle if entity @s[type=minecraft:minecart] "
+                                          "run say {marke}"), ""):
+            return
+        since = bot.mark()
+        bot.chat("/cam")
+        hit = bot.expect("cannot start cam mode while riding", since, 6000)
+        time.sleep(0.5)
+        lief = spielmodus_ist(bot, "adventure")
+        FIND.test("In einer Lore startet /cam nicht, und er hoert, warum", bool(hit) and not lief,
+                  "Cam-Modus laeuft" if lief else
+                  strip_colors(hit["text"]) if hit else "keine Ablehnung im Chat")
+        if lief:
+            cam_off(bot)
+        console(env, f"ride {BOT_NAME} dismount", pause=1.5)
+        FIND.test("Abgestiegen startet /cam wieder", cam_on(bot), "")
+    finally:
+        if spielmodus_ist(bot, "adventure"):
+            cam_off(bot)
+        console(env, f"ride {BOT_NAME} dismount", pause=0.5)
+        console(env, f"kill {lore}", pause=0.5)
+
+
+# ---------------------------------------------------------------------------
 # Die Grenze: border-mode, border-block, border-radius
 # ---------------------------------------------------------------------------
 
@@ -16506,6 +16659,9 @@ ABSCHNITTE = [
               "movement/FlightMedium movement/CamMovementGuard movement/CamBorderWall start/StartChecks"),
     Abschnitt("fall", fall_checks, "start/StartChecks"),
     Abschnitt("zustand", zustand_checks, "session/CameraMode body/BodySpawner"),
+    Abschnitt("kamerakopf", kamerakopf_checks, "session/CameraMode session/CameraHead"),
+    Abschnitt("herzen", herzen_checks, "session/PausedEffects session/CameraMode session/CameraData"),
+    Abschnitt("reiten", reiten_checks, "start/StartChecks start/CamStarter"),
     Abschnitt("grenze", border_checks, "movement"),
     Abschnitt("portale", portal_checks, "portal movement/CamMovementGuard area"),
     Abschnitt("unbewacht", unbewacht_checks, "body/BodySpawner body/BodyWatch", koerpertypen=True),

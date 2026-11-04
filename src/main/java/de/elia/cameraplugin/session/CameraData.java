@@ -63,6 +63,10 @@ public class CameraData {
      * ends, see {@link de.elia.cameraplugin.progress.CamProgressGuard}.
      */
     private Map<Statistic, Integer> movementAtStart = Map.of();
+    /** His health when camera mode started, see {@link PausedEffects}. */
+    private double healthAtStart;
+    /** His absorption when camera mode started, see {@link PausedEffects}. */
+    private double absorptionAtStart;
 
     public CameraData(LivingEntity body, Mannequin hitbox, TextDisplay nameDisplay, Chunk bodyChunk, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, Collection<PotionEffect> pausedEffects) {
         this.body = body;
@@ -113,4 +117,12 @@ public class CameraData {
     /** His statistics of moving when camera mode started. */
     public Map<Statistic, Integer> getMovementAtStart() { return movementAtStart; }
     public void setMovementAtStart(Map<Statistic, Integer> movementAtStart) { this.movementAtStart = movementAtStart; }
+    /** His health when camera mode started, given back with the paused effects. */
+    public double getHealthAtStart() { return healthAtStart; }
+    /** His absorption when camera mode started, given back with the paused effects. */
+    public double getAbsorptionAtStart() { return absorptionAtStart; }
+    public void setHeartsAtStart(double health, double absorption) {
+        this.healthAtStart = health;
+        this.absorptionAtStart = absorption;
+    }
 }

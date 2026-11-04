@@ -117,6 +117,7 @@ messages:
   cam-tp-not-in-cam: "&c{player} is not in cam mode."
   cam-tp-self: "&cThat is your own camera. Use /cam back to go back to your body."
   cam-tp-usage: "&eUse /cam tp <player> camera or /cam tp <player> body."
+  cam-vehicle-start: "&cYou cannot start cam mode while riding. Get off first."
   cam-water-start: "&cYou cannot start cam mode in water."
   camera-off: "&aCamera mode ended."
   camera-on: "&aCamera mode activated! Use /cam again to exit."
@@ -1341,6 +1342,7 @@ message-settings:
   cam-tp-not-in-cam: true
   cam-tp-self: true
   cam-tp-usage: true
+  cam-vehicle-start: true
   cam-water-start: true
   camera-off: false
   camera-on: false

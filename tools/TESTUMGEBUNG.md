@@ -53,7 +53,7 @@ echo "say hallo" > ~/camfly-testenv/server/console.fifo
 
 ## Welche Abschnitte laufen
 
-Die Tests bestehen aus der **Grundprobe** und knapp achtzig **Abschnitten**. Die
+Die Tests bestehen aus der **Grundprobe** und gut achtzig **Abschnitten**. Die
 Grundprobe läuft immer, sie ist kurz: `/cam` an und aus, der Körper, Fliegen,
 zurück zum Körper, `/cam reload`, ein verbotenes Biom. Die
 Abschnitte stehen in `ABSCHNITTE` im Skript, jeder mit seinem Namen, seiner

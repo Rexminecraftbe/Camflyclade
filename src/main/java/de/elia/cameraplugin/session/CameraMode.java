@@ -78,6 +78,8 @@ public final class CameraMode {
         // Before the effects are paused: the absorption goes with its effect,
         // and the yellow hearts over the body are to show what he had.
         double absorption = player.getAbsorptionAmount();
+        // Health boost takes the health above the normal maximum with it.
+        double health = player.getHealth();
         Collection<PotionEffect> pausedEffects = new ArrayList<>();
         for (PotionEffect effect : player.getActivePotionEffects()) {
             pausedEffects.add(effect);
@@ -184,6 +186,7 @@ public final class CameraMode {
         cameraData.setHeartsFront(heartsFront);
         // Before the crash file below, which keeps them as well.
         cameraData.setMovementAtStart(CamProgressGuard.readMovement(player));
+        cameraData.setHeartsAtStart(health, absorption);
         cameraPlayers.put(player.getUniqueId(), cameraData);
         // Out of the picture of whoever takes one, from the start, and out
         // of sight of whoever is too far away to see it.
@@ -240,10 +243,17 @@ public final class CameraMode {
             new BukkitRunnable() {
                 @Override
                 public void run() {
+                    // Only into this camera mode. One that ended in the two
+                    // ticks has given him his own helmet back already, and the
+                    // head would take its place - lost for good, and the head
+                    // his to keep.
+                    if (!player.isOnline() || cameraPlayers.get(player.getUniqueId()) != cameraData) {
+                        return;
+                    }
                     ItemStack camHead = CameraHead.create(plugin.getLogger());
                     player.getInventory().setHelmet(camHead);
                 }
-            }.runTaskLater(plugin, 2L); // delay to ensure armour is restored
+            }.runTaskLater(plugin, 2L); // after the creative tick that gets the flight going
         }
         settings.getStartSound().play(player);
     }
@@ -360,9 +370,9 @@ public final class CameraMode {
         } else {
             player.setFireTicks(0);
         }
-        for (PotionEffect effect : cameraData.getPausedEffects()) {
-            player.addPotionEffect(effect);
-        }
+        // With the hearts they stood for: absorption would come back full.
+        PausedEffects.giveBack(player, cameraData.getPausedEffects(), cameraData.getHealthAtStart(),
+                cameraData.getAbsorptionAtStart());
         player.setGameMode(cameraData.getOriginalGameMode());
         player.setAllowFlight(cameraData.getOriginalAllowFlight());
         player.setFlying(cameraData.getOriginalFlying());

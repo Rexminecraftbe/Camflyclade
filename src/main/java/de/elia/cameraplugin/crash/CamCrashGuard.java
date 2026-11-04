@@ -6,6 +6,7 @@ import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.progress.CamProgressGuard;
 import de.elia.cameraplugin.session.CameraData;
+import de.elia.cameraplugin.session.PausedEffects;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -126,6 +127,9 @@ public final class CamCrashGuard implements Listener {
         file.set("name", player.getName());
         file.set("inventory", Arrays.asList(data.getOriginalInventoryContents()));
         file.set("effects", new ArrayList<>(data.getPausedEffects()));
+        // The hearts the effects stood for, see PausedEffects.
+        file.set("health", data.getHealthAtStart());
+        file.set("absorption", data.getAbsorptionAtStart());
         file.set("game-mode", data.getOriginalGameMode().name());
         file.set("allow-flight", data.getOriginalAllowFlight());
         file.set("flying", data.getOriginalFlying());
@@ -251,11 +255,17 @@ public final class CamCrashGuard implements Listener {
         for (PotionEffect effect : player.getActivePotionEffects()) {
             player.removePotionEffect(effect.getType());
         }
+        List<PotionEffect> effects = new ArrayList<>();
         for (Object entry : file.getList("effects", List.of())) {
             if (entry instanceof PotionEffect effect) {
-                player.addPotionEffect(effect);
+                effects.add(effect);
             }
         }
+        // With the hearts they stood for, as when camera mode ends. A file
+        // from before they were kept has none.
+        PausedEffects.giveBack(player, effects,
+                file.isDouble("health") ? file.getDouble("health") : null,
+                file.isDouble("absorption") ? file.getDouble("absorption") : null);
         player.getInventory().setContents(contents);
         player.updateInventory();
         GameMode gameMode;

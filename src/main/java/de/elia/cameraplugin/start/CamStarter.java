@@ -123,6 +123,10 @@ public final class CamStarter {
         if (!checks.checkCamArea(player)) {
             return false;
         }
+        // Before the medium: on a boat on the water "get off" is what helps.
+        if (!checks.checkCamVehicle(player)) {
+            return false;
+        }
         if (!checks.checkCamMedium(player)) {
             return false;
         }
