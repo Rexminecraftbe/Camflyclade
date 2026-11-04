@@ -3,6 +3,7 @@ package de.elia.cameraplugin.session;
 import org.bukkit.Chunk;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.Statistic;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.TextDisplay;
@@ -10,6 +11,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 
 import java.util.Collection;
+import java.util.Map;
 
 /**
  * What a player left behind when he started camera mode, and what camera mode
@@ -56,6 +58,11 @@ public class CameraData {
      * the world of the body.
      */
     private double farthestFromBody;
+    /**
+     * His statistics of moving when camera mode started, put back when it
+     * ends, see {@link de.elia.cameraplugin.progress.CamProgressGuard}.
+     */
+    private Map<Statistic, Integer> movementAtStart = Map.of();
 
     public CameraData(LivingEntity body, Mannequin hitbox, TextDisplay nameDisplay, Chunk bodyChunk, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, Collection<PotionEffect> pausedEffects) {
         this.body = body;
@@ -103,4 +110,7 @@ public class CameraData {
     /** The farthest the camera has been from the body, for {@code cam-log} and the statistics. */
     public double getFarthestFromBody() { return farthestFromBody; }
     public void noteDistanceFromBody(double blocks) { farthestFromBody = Math.max(farthestFromBody, blocks); }
+    /** His statistics of moving when camera mode started. */
+    public Map<Statistic, Integer> getMovementAtStart() { return movementAtStart; }
+    public void setMovementAtStart(Map<Statistic, Integer> movementAtStart) { this.movementAtStart = movementAtStart; }
 }

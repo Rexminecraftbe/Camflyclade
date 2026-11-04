@@ -4,6 +4,7 @@ import de.elia.cameraplugin.body.BodySpawner;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.display.GlowMode;
+import de.elia.cameraplugin.progress.CamProgressGuard;
 import de.elia.cameraplugin.scoreboard.NoCollisionTeam;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.Bukkit;
@@ -181,6 +182,8 @@ public final class CameraMode {
         // *** Hand the saved inventory to CameraData ***
         CameraData cameraData = new CameraData(body, hitbox, nameDisplay, bodyChunk, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects);
         cameraData.setHeartsFront(heartsFront);
+        // Before the crash file below, which keeps them as well.
+        cameraData.setMovementAtStart(CamProgressGuard.readMovement(player));
         cameraPlayers.put(player.getUniqueId(), cameraData);
         // Out of the picture of whoever takes one, from the start, and out
         // of sight of whoever is too far away to see it.
@@ -373,6 +376,8 @@ public final class CameraMode {
         player.setRemainingAir(standIn.getRemainingAir());
         ClientFrost.resend(player, standIn.getFreezeTicks());
         plugin.getHungerGuard().stopFor(player);
+        // After every teleport of the end: what the camera moved is put back.
+        plugin.getProgressGuard().stopFor(player, cameraData);
 
         cameraPlayers.remove(player.getUniqueId());
         // Takes him out of the team - or the whole team away, when he was the

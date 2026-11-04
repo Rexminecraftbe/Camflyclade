@@ -27,6 +27,7 @@ import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.signal.SignalCosts;
 import de.elia.cameraplugin.signal.SignalLoss;
 import de.elia.cameraplugin.sound.CamSound;
+import de.elia.cameraplugin.spawning.SpawnMode;
 import de.elia.cameraplugin.start.EffectStart;
 import de.elia.cameraplugin.storage.StorageMode;
 import de.elia.cameraplugin.timelimit.FlightLimit;
@@ -275,6 +276,14 @@ public final class CamSettings {
     private boolean commandTeleportEndsCam;
     /** Whether a teleport by another plugin ends camera mode, {@code teleports.plugin}. */
     private boolean pluginTeleportEndsCam;
+    /** Whether a teleport by an ender pearl ends camera mode, {@code teleports.ender-pearl}. */
+    private boolean pearlTeleportEndsCam;
+    /** What a camera player counts as for the mobs that spawn by themselves, {@code mob-spawning}. */
+    private SpawnMode spawnMode;
+    /** Whether a camera player earns no advancements, {@code progress-guard.advancements}. */
+    private boolean advancementsBlocked;
+    /** Whether a camera player's movement counts for no statistic, {@code progress-guard.statistics}. */
+    private boolean statisticsBlocked;
     private VisibilityMode playerVisibilityMode;
     private boolean allowInvisibilityPotion;
     private GlowMode glowMode;
@@ -938,6 +947,16 @@ public final class CamSettings {
         portalRules.load(config);
         commandTeleportEndsCam = config.getBoolean("teleports.command", true);
         pluginTeleportEndsCam = config.getBoolean("teleports.plugin", true);
+        pearlTeleportEndsCam = config.getBoolean("teleports.ender-pearl", true);
+        String spawning = config.getChoice("mob-spawning", "body", "body", "camera", "false")
+                .toLowerCase(Locale.ROOT);
+        spawnMode = switch (spawning) {
+            case "camera" -> SpawnMode.CAMERA;
+            case "false" -> SpawnMode.OFF;
+            default -> SpawnMode.BODY;
+        };
+        advancementsBlocked = config.getBoolean("progress-guard.advancements", true);
+        statisticsBlocked = config.getBoolean("progress-guard.statistics", true);
 
         mirrorKnockback = config.getBoolean("mirror-damage.knockback", true);
         // Only for measuring, so left out of config.yml on purpose: whoever
@@ -2422,15 +2441,32 @@ public final class CamSettings {
      * {@link de.elia.cameraplugin.teleport.CamTeleportGuard}:
      * {@code teleports.command} for a command such as {@code /tp},
      * {@code teleports.plugin} for another plugin such as one for
-     * {@code /tpa}. Portals, ender pearls and the like have rules of their
-     * own or cannot be used in camera mode at all.
+     * {@code /tpa}, {@code teleports.ender-pearl} for an ender pearl thrown
+     * before camera mode began - none can be thrown in it. Portals and the
+     * like have rules of their own or cannot be used in camera mode at all.
      */
     public boolean teleportEndsCamMode(TeleportCause cause) {
         return switch (cause) {
             case COMMAND -> commandTeleportEndsCam;
             case PLUGIN -> pluginTeleportEndsCam;
+            case ENDER_PEARL -> pearlTeleportEndsCam;
             default -> false;
         };
+    }
+
+    /** What a camera player counts as for the mobs that spawn by themselves, {@code mob-spawning}. */
+    public SpawnMode getSpawnMode() {
+        return spawnMode;
+    }
+
+    /** Whether a camera player earns no advancements, {@code progress-guard.advancements}. */
+    public boolean blocksAdvancements() {
+        return advancementsBlocked;
+    }
+
+    /** Whether a camera player's movement counts for no statistic, {@code progress-guard.statistics}. */
+    public boolean blocksStatistics() {
+        return statisticsBlocked;
     }
 
     // ----------------------------------------------------------- mirror-damage

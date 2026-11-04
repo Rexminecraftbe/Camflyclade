@@ -45,6 +45,7 @@ import de.elia.cameraplugin.ore.CamOreHider;
 import de.elia.cameraplugin.photo.CamPhotoMode;
 import de.elia.cameraplugin.potion.CamPotionGuard;
 import de.elia.cameraplugin.preferences.CamPreferences;
+import de.elia.cameraplugin.progress.CamProgressGuard;
 import de.elia.cameraplugin.resume.CamResume;
 import de.elia.cameraplugin.scoreboard.CamModeObjective;
 import de.elia.cameraplugin.scoreboard.GuideTeam;
@@ -59,6 +60,7 @@ import de.elia.cameraplugin.session.SessionListener;
 import de.elia.cameraplugin.session.SessionTracker;
 import de.elia.cameraplugin.signal.CamSignal;
 import de.elia.cameraplugin.sky.CamSky;
+import de.elia.cameraplugin.spawning.CamSpawnFilter;
 import de.elia.cameraplugin.speed.CamFlightSpeed;
 import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.spot.JumpCheck;
@@ -169,6 +171,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CameraMode cameraMode = new CameraMode(this);
     private final CamWebMap webMap = new CamWebMap(this, log);
     private final CamOreHider oreHider = new CamOreHider(this);
+    private final CamProgressGuard progressGuard = new CamProgressGuard(this);
 
     private CamFireGuard camFireGuard;
     private CamHungerGuard camHungerGuard;
@@ -290,6 +293,8 @@ public final class CameraPlugin extends JavaPlugin {
         mobTargeting.watchWardenAnger();
         tour.watchTickEnd();
         oreHider.register();
+        new CamSpawnFilter(this).register();
+        progressGuard.register();
         mobGaze.start();
     }
 
@@ -791,6 +796,10 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamBorderWall getBorderWall() {
         return borderWall;
+    }
+
+    public CamProgressGuard getProgressGuard() {
+        return progressGuard;
     }
 
     public CamTeleportGuard getTeleportGuard() {

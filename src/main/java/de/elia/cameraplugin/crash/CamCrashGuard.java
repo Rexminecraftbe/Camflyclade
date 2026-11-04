@@ -4,11 +4,13 @@ import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.log.ConsoleLog;
+import de.elia.cameraplugin.progress.CamProgressGuard;
 import de.elia.cameraplugin.session.CameraData;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -129,6 +131,7 @@ public final class CamCrashGuard implements Listener {
         file.set("flying", data.getOriginalFlying());
         file.set("glowing", data.getOriginalGlowing());
         file.set("fly-speed", (double) player.getFlySpeed());
+        file.set("movement-statistics", CamProgressGuard.byName(data.getMovementAtStart()));
         // Written out instead of as a Location: one of those cannot even be
         // read back while its world is not loaded, and the rest of the file
         // would be lost with it.
@@ -269,6 +272,12 @@ public final class CamCrashGuard implements Listener {
         player.setFlySpeed(Math.max(-1.0f, Math.min(1.0f, flySpeed)));
         player.setFireTicks(0);
         player.setFallDistance(0.0f);
+        // What the camera moved before the crash, set back. A file from
+        // before the statistics were kept has none.
+        ConfigurationSection movement = file.getConfigurationSection("movement-statistics");
+        if (movement != null) {
+            plugin.getProgressGuard().restoreMovement(player, movement.getValues(false));
+        }
         World world = Bukkit.getWorld(file.getString("body.world", ""));
         if (world != null) {
             player.teleport(new Location(world, file.getDouble("body.x"), file.getDouble("body.y"),

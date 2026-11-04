@@ -21,9 +21,10 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Ends camera mode when a command or another plugin teleports somebody, as far
- * as {@code teleports.command} and {@code teleports.plugin} say: the camera
- * player himself, or a player who would come out right where a camera flies.
+ * Ends camera mode when a command, another plugin or an ender pearl teleports
+ * somebody, as far as {@code teleports.command}, {@code teleports.plugin} and
+ * {@code teleports.ender-pearl} say: the camera player himself, or a player
+ * who would come out right where a camera flies.
  *
  * <p>Without it a camera player taken away by {@code /tpa} or {@code /tp}
  * stayed in camera mode at the far end, his body and his things left behind,
@@ -31,6 +32,12 @@ import java.util.UUID;
  * the camera hung in the air. Now the one arrives out of camera mode, with his
  * things, and the other arrives at the body, where the camera player stands
  * again by then.</p>
+ *
+ * <p>An ender pearl cannot be thrown in camera mode, but one thrown before
+ * still lands - in a stasis chamber, say, that a friend sets off. It used to
+ * carry only the camera along, which the distance limit then mostly sent back
+ * to the body, and the pearl was spent all the same. Now it carries the
+ * player, the way it would without camera mode.</p>
  *
  * <p>Camera mode's own teleports - back to the body, back from behind a
  * portal, off a happy ghast - go through {@link #teleport(Player, Location)}
