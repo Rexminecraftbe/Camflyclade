@@ -1139,6 +1139,33 @@ anti-scouting:
   #   camera = von der Kamera aus
   measured-from: body
 
+# Mobs, die von selbst spawnen. Für das Spiel ist die Kamera ein Spieler wie jeder andere: Um sie herum spawnen Mobs
+# (24 bis 128 Blöcke weit), und ein Spawner läuft an, wenn sie nah genug ist. So ließe sich die Kamera an die beste
+# AFK-Stelle einer Farm hängen, mitten in der Luft, während der Körper sicher woanders steht.
+#   body   = es zählt, wo der Körper steht: Ein Mob spawnt nur, wo er auch spawnen würde, wenn der Spieler dort stünde
+#            (nicht näher als 24 Blöcke am Körper, nicht weiter als 128), ein Spawner läuft nur, wenn der Körper in
+#            seiner Reichweite ist. Mehr als am Körper gibt es so nie, eher weniger: Versucht wird es weiter nur rund
+#            um die Kamera, und je weiter sie vom Körper weg ist, desto weniger kommt durch.
+#   camera = wie ohne Plugin: es zählt die Kamera
+#   false  = wer im Cam-Modus ist, zählt gar nicht, weder die Kamera noch der Körper
+# Spieler, die nicht im Cam-Modus sind, zählen immer wie sonst. Nicht betroffen: Phantome, Katzen, der fahrende
+# Händler, Patrouillen, Trial-Spawner und das Verschwinden (Despawnen) der Mobs - das rechnet das Spiel weiter von der
+# Kamera aus.
+mob-spawning: body
+
+# Fortschritte und Statistik: Was die Kamera erlebt, zählt nicht für den Spieler.
+progress-guard:
+  # Keine Fortschritte (Advancements) im Cam-Modus. Sonst brächte schon das Herumfliegen "Abenteuerzeit" (alle Biome),
+  # das Betreten von Strukturen oder den Nether ein. Gesperrt ist, was im Fortschrittsmenü steht, auch aus einem
+  # Datenpaket, und auch, was ein Befehl oder ein anderes Plugin in der Zeit vergibt. Rezepte und unsichtbare
+  # Fortschritte, an denen Datenpakete ihre Funktionen aufhängen, laufen weiter. Wirkt nur auf Paper.
+  advancements: true
+  # Keine Bewegungs-Statistik im Cam-Modus: die Strecken (geflogen, gegangen, geschwommen ...), die Sprünge und die
+  # Zeit beim Schleichen. Während des Flugs zählt das Spiel sie mit, am Ende stehen sie wieder, wie sie beim Start
+  # waren (nach einem Absturz mit crash-protection auch). Alles andere zählt weiter: Spielzeit, Schaden, Tode, die
+  # Zeit seit dem letzten Schlaf.
+  statistics: true
+
 # /cam stop <Name> beendet den Cam-Modus eines anderen Spielers, /cam stop all den von allen - z. B. vor einem
 # Event oder einem Neustart. Er kommt zurück zu seinem Körper und erfährt, wer es war (Text: stopped-by).
 # Benutzen dürfen es die Konsole und wer das Recht camplugin.stop hat (Operatoren haben es). Ton: sounds.end-forced.
@@ -1367,6 +1394,11 @@ teleports:
 
   # Teleports durch andere Plugins, z. B. /tpa, /tpahere, /home, /spawn, /warp
   plugin: true
+
+  # Teleports durch eine Ender-Perle, die schon vor dem Cam-Modus geworfen wurde, z. B. aus einer
+  # Stasis-Kammer, die ein Freund auslöst. Werfen lässt sich im Cam-Modus keine.
+  # false = die Perle nimmt nur die Kamera mit, und sie ist trotzdem verbraucht
+  ender-pearl: true
 
 # Treffer auf den Körper an den Spieler weitergeben
 mirror-damage:

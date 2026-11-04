@@ -4156,7 +4156,9 @@ def absturz_checks(env, bot):
     im Cam-Modus ist - ohne Diamanten, im Abenteuermodus, in der Luft -, und
     dann wird der Server mit SIGKILL beendet, ohne dass das Plugin noch etwas
     tun koennte. Nach dem Neustart muss der Bot alles zurueckhaben, am Koerper
-    stehen, und die Datei muss weg sein.
+    stehen, und die Datei muss weg sein. Die geflogene Strecke seiner
+    Statistik, die der save-all mit auf die Platte schreibt, steht danach
+    wieder wie vor dem Cam-Modus (progress-guard.statistics).
 
     Der Neustart beginnt ein neues server.log: Was im alten stand, wird
     deshalb vorher geprueft. Der Test steht am Ende, damit kein anderer nach
@@ -4198,14 +4200,21 @@ def absturz_checks(env, bot):
     bot.chat("/gamemode survival")
     time.sleep(1.0)
     heim = bot.server_pos()
+    vor_dem_flug = geflogen(env)
     if not FIND.test("Cam-Modus fuer den Absturz gestartet", heim is not None and cam_on(bot), ""):
         return
     bot.call("fly", wait=30, dy=6, timeout=15000)
+    # Zur Seite: fly_one_cm zaehlt nur, was waagerecht geflogen ist.
+    bot.call("fly", wait=30, dx=4, timeout=15000)
     bot.call("hotbar", slot=0)
     time.sleep(0.3)
     bot.call("hotbar", slot=8)
     time.sleep(0.5)
     console(env, "save-all", pause=3)
+    im_flug = geflogen(env)
+    FIND.test("Vor dem Absturz steht die Strecke der Kamera in der Statistik auf der Platte",
+              vor_dem_flug is not None and im_flug is not None and im_flug > vor_dem_flug,
+              f"{vor_dem_flug} -> {im_flug}")
     hits = log_problems(env)
     FIND.test("Server-Log vor dem Absturz ohne Fehler des Plugins", not hits,
               "" if not hits else "; ".join(hits[:5]))
@@ -4247,6 +4256,9 @@ def absturz_checks(env, bot):
     FIND.test("Nach dem Neustart: die Fluggeschwindigkeit ist wieder normal",
               tempo is not None and abs(tempo - 0.05) < 0.001, str(tempo))
     FIND.test("Nach dem Neustart: die Datei ist geloescht", not dateien(), str(dateien()))
+    nach_dem_neustart = geflogen(env)
+    FIND.test("Nach dem Neustart: die geflogene Strecke steht wieder wie vor dem Cam-Modus (progress-guard)",
+              nach_dem_neustart == vor_dem_flug, f"{vor_dem_flug} -> {im_flug} -> {nach_dem_neustart}")
     hx, hy, hz = heim
     FIND.test("Nach dem Neustart: kein Koerper liegt mehr herum",
               not server_says(bot, f"/execute positioned {hx} {hy} {hz} if entity "
@@ -15186,6 +15198,41 @@ def tp_kamera_hoch(bot, heim):
     return True
 
 
+def uuid_als_nbt(text):
+    """Eine UUID so, wie das Spiel sie in NBT schreibt: vier Ganzzahlen mit
+    Vorzeichen, die hoechsten Bits zuerst - [I;a,b,c,d]."""
+    wert = uuid.UUID(text).int
+    teile = []
+    for verschiebung in (96, 64, 32, 0):
+        teil = (wert >> verschiebung) & 0xFFFFFFFF
+        teile.append(teil - (1 << 32) if teil >= (1 << 31) else teil)
+    return "[I;" + ",".join(str(t) for t in teile) + "]"
+
+
+# Das Etikett der Ender-Perle des Teleporttests.
+PERLEN_ETIKETT = "camfly_perle"
+
+
+def perle_bereit(env, x, y, z, besitzer=BOT_NAME):
+    """Eine Ender-Perle dieses Spielers drei Bloecke ueber x y z, ohne
+    Schwerkraft in der Luft haltend - wie eine Perle in einer Stasis-Kammer.
+
+    Vor dem Cam-Modus, wie im Spiel: Paper meldet auch eine beschworene
+    Perle als abgeschossen, und im Cam-Modus nimmt das Plugin einem Spieler
+    jedes Projektil weg, das er abschiesst."""
+    console(env, f"kill @e[type=minecraft:ender_pearl,tag={PERLEN_ETIKETT}]", pause=0.2)
+    console(env, f"summon minecraft:ender_pearl {x} {y + 3} {z} "
+                 f"{{Owner:{uuid_als_nbt(offline_uuid(besitzer))},NoGravity:1b,"
+                 f"Tags:[\"{PERLEN_ETIKETT}\"]}}", pause=0.5)
+
+
+def perle_landet(env, pause=2.5):
+    """Die Perle von perle_bereit fallen lassen - wie ein Freund, der die
+    Stasis-Kammer ausloest. Sie trifft drei Bloecke tiefer den Boden."""
+    console(env, f"data merge entity @e[type=minecraft:ender_pearl,tag={PERLEN_ETIKETT},limit=1] "
+                 f"{{NoGravity:0b,Motion:[0.0d,-1.0d,0.0d]}}", pause=pause)
+
+
 def teleport_checks(env, bot):
     """teleports.command und teleports.plugin: was ein Teleport von aussen mit
     dem Cam-Modus macht.
@@ -15200,6 +15247,11 @@ def teleport_checks(env, bot):
         Cam-Modus endet.
     Mit dem Schalter auf false bleibt der Kamera-Spieler im Cam-Modus, und wer
     zu ihm kommt, kommt bei der Kamera an - wie frueher.
+
+    teleports.ender-pearl ebenso fuer eine Ender-Perle, die vor dem Cam-Modus
+    geworfen war: Mit true kommt der Spieler selbst bei ihr an, mit false nur
+    die Kamera. Die Perle trifft ihn mit fuenf Punkten Schaden, danach sperrt
+    cam-safety den Cam-Modus fuenf Sekunden lang - so lange wartet der Test.
     """
     pos = bot.server_pos()
     if not FIND.test("Position fuer den Teleporttest lesbar", pos is not None, str(pos)):
@@ -15212,7 +15264,8 @@ def teleport_checks(env, bot):
     try:
         # Auf dem Testserver steht teleports.command auf false, siehe
         # prepare_server_files. Hier geht es gerade um true, die Voreinstellung.
-        set_options(env, [("command", "true", "teleports"), ("plugin", "true", "teleports")])
+        set_options(env, [("command", "true", "teleports"), ("plugin", "true", "teleports"),
+                          ("ender-pearl", "true", "teleports")])
         cam_off(bot)
         bot.chat("/clear @s")
         bot.chat("/give @s minecraft:stick")
@@ -15241,6 +15294,28 @@ def teleport_checks(env, bot):
             if ursache == "plugin":
                 FIND.test("Die Meldung teleport-ended kommt",
                           bool(bot.expect("You were teleported", since, 3000)), "")
+
+        # --- Eine Ender-Perle von vor dem Cam-Modus landet ---
+        perle = (hx + 8, hy, hz)
+        perle_bereit(env, *perle)
+        if tp_kamera_hoch(bot, heim):
+            since = bot.mark()
+            perle_landet(env)
+            FIND.test("teleports.ender-pearl: die Perle bringt ihn selbst hin - er ist aus dem "
+                      "Cam-Modus heraus und steht bei ihr",
+                      not spielmodus_ist(bot, "adventure")
+                      and tp_steht_bei(bot, BOT_NAME, *perle, weit=2), "")
+            FIND.test("teleports.ender-pearl: er hat seine Sachen wieder, und sein Koerper "
+                      "bleibt nicht stehen",
+                      server_says(bot, "/execute if items entity @s container.* minecraft:stick "
+                                       "run say {marke}")
+                      and not tp_koerper_da(bot, *heim), "")
+            FIND.test("teleports.ender-pearl: die Meldung teleport-ended kommt",
+                      bool(bot.expect("You were teleported", since, 3000)), "")
+        else:
+            FIND.test("teleports.ender-pearl: Cam-Modus startet", False, "")
+        # Die Perle hat ihn verletzt: cam-safety laesst ihn so lange nicht.
+        time.sleep(6)
 
         # --- Jemand wird zu einer Kamera teleportiert ---
         zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
@@ -15275,7 +15350,19 @@ def teleport_checks(env, bot):
                           bool(bot.expect(f"{ZUSCHAUER_NAME} was teleported to you", since, 3000)), "")
 
         # --- Mit dem Schalter auf false bleibt es wie frueher ---
-        set_options(env, [("command", "false", "teleports"), ("plugin", "false", "teleports")])
+        set_options(env, [("command", "false", "teleports"), ("plugin", "false", "teleports"),
+                          ("ender-pearl", "false", "teleports")])
+        perle_bereit(env, *perle)
+        if tp_kamera_hoch(bot, heim):
+            perle_landet(env)
+            FIND.test("teleports.ender-pearl: false - er bleibt im Cam-Modus, nur die Kamera "
+                      "steht bei der Perle",
+                      spielmodus_ist(bot, "adventure") and tp_steht_bei(bot, BOT_NAME, *perle, weit=2)
+                      and tp_koerper_da(bot, *heim), "")
+            cam_off(bot)
+            time.sleep(1)
+        else:
+            FIND.test("teleports.ender-pearl: false - Cam-Modus startet", False, "")
         for ursache, befehl in (("plugin", f"plugintp {BOT_NAME} {ziel[0]} {ziel[1]} {ziel[2]}"),
                                 ("command", f"tp {BOT_NAME} {ziel[0]} {ziel[1]} {ziel[2]}")):
             if ursache == "plugin" and not helfer:
@@ -15304,10 +15391,358 @@ def teleport_checks(env, bot):
         if zuschauer is not None:
             zuschauer.stop()
         cam_off(bot)
+        console(env, f"kill @e[type=minecraft:ender_pearl,tag={PERLEN_ETIKETT}]", pause=0.2)
         bot.chat("/clear @s")
         bot.chat("/execute in minecraft:overworld run tp @s {} {} {}".format(*heim))
         time.sleep(1)
-        set_options(env, [("command", "false", "teleports"), ("plugin", "true", "teleports")])
+        set_options(env, [("command", "false", "teleports"), ("plugin", "true", "teleports"),
+                          ("ender-pearl", "true", "teleports")])
+
+
+# ---------------------------------------------------------------------------
+# mob-spawning und progress-guard
+# ---------------------------------------------------------------------------
+
+def welt_spielerdatei(env, ordner, spieler=BOT_NAME):
+    """Eine Datei, die der Server selbst je Spieler schreibt, nach einem
+    save-all - nicht die des Plugins, die spielerdatei liest:
+    ordner "stats" fuer die Statistik, "advancements" fuer die Fortschritte.
+    Gesucht wird unter der ganzen Welt, wo der Ordner auch liegt - die
+    Versionen legen ihn verschieden ab. None, wenn es sie nicht gibt."""
+    console(env, "save-all flush", pause=2.5)
+    name = f"{offline_uuid(spieler)}.json"
+    for pfad in (env.server / "world").rglob(name):
+        if pfad.parent.name == ordner:
+            try:
+                return json.loads(pfad.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return None
+    return None
+
+
+def geflogen(env):
+    """Wie weit der Bot laut seiner Statistik geflogen ist, in Zentimetern
+    (minecraft:fly_one_cm), oder None ohne Datei."""
+    daten = welt_spielerdatei(env, "stats")
+    if daten is None:
+        return None
+    return daten.get("stats", {}).get("minecraft:custom", {}).get("minecraft:fly_one_cm", 0)
+
+
+def hat_fortschritt(env, fortschritt, kriterium=None):
+    """Ob der Bot dieses Kriterium dieses Fortschritts hat - ohne Kriterium,
+    ob er den ganzen Fortschritt hat. Aus seiner Datei der Fortschritte."""
+    eintrag = (welt_spielerdatei(env, "advancements") or {}).get(fortschritt, {})
+    if kriterium is None:
+        return bool(eintrag.get("done"))
+    return kriterium in eintrag.get("criteria", {})
+
+
+def fortschritt_checks(env, bot):
+    """progress-guard: was die Kamera erlebt, zaehlt nicht fuer den Spieler.
+
+    advancements: /fillbiome legt ein Stueck Wueste neben den Testplatz. Fliegt
+    die Kamera hinein, bekommt er das Kriterium minecraft:desert von
+    "Abenteuerzeit" nicht; ohne Cam-Modus an derselben Stelle gleich. Was
+    /advancement im Cam-Modus vergibt, geht ebenso nicht durch - ausser einem
+    Fortschritt ohne Anzeige, einem Rezept. Mit advancements: false bekommt
+    er die Wueste auch im Cam-Modus.
+
+    statistics: Die geflogene Strecke (minecraft:fly_one_cm) zaehlt das Spiel
+    im Flug mit; nach dem Ende steht sie wieder, wie sie vor dem Cam-Modus war.
+    Mit statistics: false bleibt sie stehen. Gezaehlt wird dort nur, was
+    waagerecht geflogen ist - der Bot fliegt deshalb erst hinauf, dann
+    sechs Bloecke zur Seite.
+
+    Beides wird aus den Dateien des Servers gelesen, nach einem save-all: Das
+    Kriterium eines Bioms hat einen Doppelpunkt im Namen, den nimmt der
+    Selektor advancements= nicht, und die Statistik sagt der Client nicht.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test der Fortschritte aus", cam_off(bot), ""):
+        return
+    pos = bot.server_pos()
+    if not FIND.test("Position fuer den Test der Fortschritte lesbar", pos is not None, str(pos)):
+        return
+    hx, hy, hz = _floor(pos[0]) + 0.5, BODEN_Y + 1, _floor(pos[2]) + 0.5
+    heim = (hx, hy, hz)
+    in_der_wueste = (hx + 13, hy, hz)
+    kamera_in_der_wueste = (hx + 13, hy + 2, hz)
+    x0, z0 = _floor(hx) + 10, _floor(hz) - 3
+    wueste = f"{x0} {BODEN_Y - 3} {z0} {x0 + 6} {BODEN_Y + 15} {z0 + 6}"
+    abenteuer = "minecraft:adventure/adventuring_time"
+    stein = "minecraft:story/mine_stone"
+    rezept = "minecraft:recipes/building_blocks/stone_slab"
+
+    def zuruecknehmen():
+        for fortschritt in (abenteuer, stein, rezept):
+            console(env, f"advancement revoke {BOT_NAME} only {fortschritt}", pause=0.2)
+
+    try:
+        FIND.test("Voreingestellt steht progress-guard mit advancements: true und statistics: true da",
+                  re.search(r"(?m)^progress-guard:\s*\n(?:\s*#.*\n)*\s*advancements:\s*true\s*\n"
+                            r"(?:\s*#.*\n)*\s*statistics:\s*true\s*$", ausgeliefert(env)) is not None, "")
+        hinstellen(bot, *heim)
+        console(env, f"execute in minecraft:overworld run fillbiome {wueste} minecraft:desert")
+        zuruecknehmen()
+        time.sleep(1.0)
+
+        # --- Fortschritte ---
+        if FIND.test("progress-guard: Cam-Modus startet", cam_on(bot), ""):
+            hinstellen(bot, *kamera_in_der_wueste)
+            time.sleep(3.0)
+            console(env, f"advancement grant {BOT_NAME} only {stein}", pause=0.3)
+            console(env, f"advancement grant {BOT_NAME} only {rezept}", pause=1.0)
+            FIND.test("advancements: true - die Kamera in der Wueste bringt kein Kriterium von Abenteuerzeit",
+                      not hat_fortschritt(env, abenteuer, "minecraft:desert"), "")
+            FIND.test("advancements: true - auch /advancement vergibt im Cam-Modus keinen Fortschritt",
+                      not hat_fortschritt(env, stein), "")
+            FIND.test("advancements: true - ein Rezept, ohne Anzeige im Menue, geht im Cam-Modus durch",
+                      hat_fortschritt(env, rezept), "")
+            cam_off(bot)
+        hinstellen(bot, *in_der_wueste)
+        time.sleep(3.0)
+        FIND.test("Ohne Cam-Modus bringt dieselbe Wueste das Kriterium gleich",
+                  hat_fortschritt(env, abenteuer, "minecraft:desert"), "")
+        hinstellen(bot, *heim)
+        zuruecknehmen()
+        set_option(env, "advancements", "false", "progress-guard")
+        if FIND.test("advancements: false - Cam-Modus startet", cam_on(bot), ""):
+            hinstellen(bot, *kamera_in_der_wueste)
+            time.sleep(3.0)
+            FIND.test("advancements: false - die Kamera bringt das Kriterium wie frueher",
+                      hat_fortschritt(env, abenteuer, "minecraft:desert"), "")
+            cam_off(bot)
+        set_option(env, "advancements", "true", "progress-guard")
+
+        # --- Statistik ---
+        hinstellen(bot, *heim)
+        vorher = geflogen(env)
+        if FIND.test("statistics: Cam-Modus startet", vorher is not None and cam_on(bot), str(vorher)):
+            bot.call("fly", wait=30, dy=6, dx=0, timeout=15000)
+            bot.call("fly", wait=30, dx=6, timeout=15000)
+            im_flug = geflogen(env)
+            FIND.test("statistics: im Flug zaehlt das Spiel die Strecke mit",
+                      im_flug is not None and im_flug > vorher, f"{vorher} -> {im_flug}")
+            cam_off(bot)
+            time.sleep(1.0)
+            danach = geflogen(env)
+            FIND.test("statistics: true - nach dem Ende steht die geflogene Strecke wieder wie vorher",
+                      danach == vorher, f"{vorher} -> {im_flug} -> {danach}")
+        set_option(env, "statistics", "false", "progress-guard")
+        vorher = geflogen(env)
+        if FIND.test("statistics: false - Cam-Modus startet", cam_on(bot), ""):
+            bot.call("fly", wait=30, dy=6, dx=0, timeout=15000)
+            bot.call("fly", wait=30, dx=6, timeout=15000)
+            cam_off(bot)
+            time.sleep(1.0)
+            danach = geflogen(env)
+            FIND.test("statistics: false - die geflogene Strecke bleibt stehen",
+                      vorher is not None and danach is not None and danach > vorher, f"{vorher} -> {danach}")
+    finally:
+        try:
+            cam_off(bot)
+            set_options(env, [("advancements", "true", "progress-guard"),
+                              ("statistics", "true", "progress-guard")])
+            console(env, f"execute in minecraft:overworld run fillbiome {wueste} minecraft:plains")
+            zuruecknehmen()
+            hinstellen(bot, *heim)
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Fortschritte: {exc}")
+
+
+# Die Monster der Nacht, nach denen der Test des natuerlichen Spawnens sieht:
+# was in einer Ebene der Flachwelt spawnt, Schleime in ihren Chunks tief unten.
+# Das Zombiepferd spawnt seit 26.x nachts in der Ebene, gilt als Monster und
+# bleibt bei peaceful stehen: Liegen ein paar von einem frueheren Lauf herum,
+# ist die Obergrenze fuer Monster voll - bei der Sichtweite 2 des Testservers
+# sind das nur eine Handvoll -, und es kommt gar keins mehr.
+MONSTER_DER_NACHT = ("zombie", "zombie_villager", "zombie_horse", "skeleton", "creeper", "spider",
+                     "enderman", "witch", "slime")
+
+# Das Etikett der Schweine aus dem Spawner des Spawntests.
+SPAWNER_ETIKETT = "camfly_spawner"
+
+
+def monster_bei(bot, x, y, z, weit=64):
+    """Ob ein Monster der Nacht hoechstens so weit von dieser Stelle steht."""
+    return any(server_says(bot, f"/execute in minecraft:overworld positioned {x} {y} {z} if entity "
+                                f"@e[type=minecraft:{art},distance=..{weit}] run say {{marke}}")
+               for art in MONSTER_DER_NACHT)
+
+
+def monster_weg(env):
+    """Jedes Monster der Nacht in allen Welten entfernen. Ein Schleim teilt
+    sich, wenn er stirbt - er kommt erst auf die kleinste Groesse, die das
+    nicht mehr tut; sonst saessen danach seine Teile da wie neu gespawnt."""
+    console(env, "execute as @e[type=minecraft:slime] run data merge entity @s {Size:0}", pause=0.2)
+    for art in MONSTER_DER_NACHT:
+        console(env, f"kill @e[type=minecraft:{art}]", pause=0.1)
+    time.sleep(0.5)
+
+
+def spawn_checks(env, bot):
+    """mob-spawning: wo ein Spieler im Cam-Modus fuer die Mobs zaehlt, die von
+    selbst spawnen.
+
+    Der Spawner: 22 Bloecke oestlich vom Testplatz steht einer, der
+    Schweine mit einem Etikett bringt, RequiredPlayerRange 12. Mit body
+    laeuft er nicht, solange nur die Kamera neben ihm haengt und der Koerper
+    am Testplatz steht; mit camera schon - wie ohne Plugin. Steht der Koerper
+    selbst sechs Bloecke vor ihm, laeuft er mit body, mit false nicht.
+
+    Das natuerliche Spawnen, nachts, auf easy, mit spawn_mobs: Mit camera
+    kommen um eine Kamera 200 Bloecke vom Koerper Monster, mit body dort
+    keine. Haengt die Kamera ueber dem Koerper, kommen mit body Monster - am
+    Koerper aendert sich nichts -, mit false keine. max-distance steht dafuer
+    auf 400. Die Sichtweite des Testservers ist 2: Monster kommen nur in
+    einem Ring von 24 bis gut 40 Bloecken um die Kamera.
+
+    Jedes set_option laedt neu und beendet damit den Cam-Modus. Ohne
+    Cam-Modus spawnt um den Bot selbst etwas; deshalb wird erst nach dem
+    Start aufgeraeumt. Zuletzt kommt die Schwierigkeit zurueck auf peaceful,
+    noch im Cam-Modus: Das nimmt die Monster mit, bevor der Bot wieder ein
+    gewoehnlicher Spieler ist.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Spawntest aus", cam_off(bot), ""):
+        return
+    pos = bot.server_pos()
+    if not FIND.test("Position fuer den Spawntest lesbar", pos is not None, str(pos)):
+        return
+    hx, hy, hz = _floor(pos[0]) + 0.5, BODEN_Y + 1, _floor(pos[2]) + 0.5
+    heim = (hx, hy, hz)
+    sx, sy, sz = _floor(hx) + 22, hy, _floor(hz)
+    neben_spawner = (sx - 2.5, hy + 1, sz + 0.5)
+    vor_spawner = (sx - 5.5, hy, sz + 0.5)
+    weit_weg = (hx + 200, hy + 1, hz)
+    spawner_nbt = ('{SpawnData:{entity:{id:"minecraft:pig",Tags:["' + SPAWNER_ETIKETT + '"]}},'
+                   'Delay:0s,MinSpawnDelay:20s,MaxSpawnDelay:40s,SpawnCount:2s,MaxNearbyEntities:30s,'
+                   'RequiredPlayerRange:12s,SpawnRange:2s}')
+
+    def schweine():
+        return server_says(bot, f"/execute if entity @e[tag={SPAWNER_ETIKETT}] run say {{marke}}")
+
+    def schweine_weg():
+        console(env, f"kill @e[tag={SPAWNER_ETIKETT}]", pause=0.5)
+
+    def kamera_zum_spawner(koerper):
+        """Cam-Modus mit dem Koerper an koerper, die Kamera neben den Spawner,
+        fuenf Sekunden warten. Gibt zurueck, ob der Cam-Modus lief."""
+        hinstellen(bot, *koerper)
+        if not cam_on(bot):
+            return False
+        schweine_weg()
+        hinstellen(bot, *neben_spawner)
+        time.sleep(5.0)
+        return True
+
+    def kamera_bis_monster(wo, sekunden):
+        """Warten, bis um wo ein Monster steht, hoechstens so lange."""
+        ende = time.time() + sekunden
+        while time.time() < ende:
+            if monster_bei(bot, *wo):
+                return True
+            time.sleep(1.0)
+        return False
+
+    try:
+        FIND.test("Voreingestellt steht mob-spawning: body da",
+                  re.search(r"(?m)^mob-spawning:\s*body\s*$", ausgeliefert(env)) is not None, "")
+
+        # --- Der Spawner ---
+        console(env, f"execute in minecraft:overworld run fill {sx - 4} {BODEN_Y} {sz - 4} {sx + 4} {BODEN_Y} "
+                     f"{sz + 4} minecraft:grass_block", pause=0.3)
+        console(env, f"execute in minecraft:overworld run fill {sx - 4} {sy} {sz - 4} {sx + 4} {sy + 3} {sz + 4} "
+                     f"minecraft:air", pause=0.3)
+        console(env, f"execute in minecraft:overworld run setblock {sx} {sy} {sz} minecraft:spawner{spawner_nbt}",
+                pause=0.5)
+        FIND.test("Der Spawner fuer den Spawntest steht",
+                  server_says(bot, f"/execute in minecraft:overworld if block {sx} {sy} {sz} minecraft:spawner "
+                                   f"run say {{marke}}"), "")
+
+        if kamera_zum_spawner(heim):
+            FIND.test("mob-spawning: body - der Spawner laeuft nicht, solange nur die Kamera bei ihm ist",
+                      not schweine(), "")
+        else:
+            FIND.test("mob-spawning: body - Cam-Modus startet", False, "")
+
+        set_option(env, "mob-spawning", "camera")
+        if kamera_zum_spawner(heim):
+            FIND.test("mob-spawning: camera - der Spawner laeuft mit der Kamera, wie ohne Plugin",
+                      schweine(), "")
+        else:
+            FIND.test("mob-spawning: camera - Cam-Modus startet", False, "")
+
+        set_option(env, "mob-spawning", "body")
+        if kamera_zum_spawner(vor_spawner):
+            FIND.test("mob-spawning: body - steht der Koerper vor dem Spawner, laeuft er",
+                      schweine(), "")
+        else:
+            FIND.test("mob-spawning: body, Koerper vor dem Spawner - Cam-Modus startet", False, "")
+
+        set_option(env, "mob-spawning", "false")
+        if kamera_zum_spawner(vor_spawner):
+            FIND.test("mob-spawning: false - auch mit dem Koerper davor laeuft er nicht", not schweine(), "")
+        else:
+            FIND.test("mob-spawning: false - Cam-Modus startet", False, "")
+        cam_off(bot)
+        console(env, f"execute in minecraft:overworld run setblock {sx} {sy} {sz} minecraft:air", pause=0.3)
+        schweine_weg()
+
+        # --- Natuerliches Spawnen, nachts ---
+        set_options(env, [("max-distance", "400.0"), ("mob-spawning", "camera")])
+        # Erst die Spielregeln, dann die Schwierigkeit: Ob Monster spawnen,
+        # rechnet der Server nur beim Wechsel der Schwierigkeit neu aus.
+        console(env, "gamerule spawn_monsters true")
+        console(env, "gamerule spawn_mobs true")
+        console(env, "difficulty easy")
+        console(env, "time set midnight", pause=1.0)
+
+        hinstellen(bot, *heim)
+        if FIND.test("Natuerliches Spawnen: Cam-Modus startet", cam_on(bot), ""):
+            hinstellen(bot, *weit_weg)
+            monster_weg(env)
+            FIND.test("mob-spawning: camera - um die Kamera 200 Bloecke vom Koerper kommen nachts Monster",
+                      kamera_bis_monster(weit_weg, 30), "")
+
+        set_option(env, "mob-spawning", "body")
+        hinstellen(bot, *heim)
+        if FIND.test("mob-spawning: body, Kamera weit weg - Cam-Modus startet", cam_on(bot), ""):
+            hinstellen(bot, *weit_weg)
+            monster_weg(env)
+            time.sleep(12.0)
+            FIND.test("mob-spawning: body - um die Kamera 200 Bloecke vom Koerper kommt kein Monster",
+                      not monster_bei(bot, *weit_weg), "")
+
+        set_option(env, "mob-spawning", "false")
+        hinstellen(bot, *heim)
+        if FIND.test("mob-spawning: false, Kamera am Koerper - Cam-Modus startet", cam_on(bot), ""):
+            bot.call("fly", wait=30, dy=4, dx=0, timeout=15000)
+            monster_weg(env)
+            time.sleep(12.0)
+            FIND.test("mob-spawning: false - auch mit der Kamera ueber dem Koerper kommt kein Monster",
+                      not monster_bei(bot, *heim), "")
+
+        set_option(env, "mob-spawning", "body")
+        hinstellen(bot, *heim)
+        if FIND.test("mob-spawning: body, Kamera am Koerper - Cam-Modus startet", cam_on(bot), ""):
+            bot.call("fly", wait=30, dy=4, dx=0, timeout=15000)
+            monster_weg(env)
+            FIND.test("mob-spawning: body - haengt die Kamera ueber dem Koerper, kommen Monster wie ohne Plugin",
+                      kamera_bis_monster(heim, 30), "")
+    finally:
+        try:
+            # Noch im Cam-Modus: peaceful nimmt die Monster mit.
+            console(env, "difficulty peaceful")
+            console(env, "gamerule spawn_mobs false")
+            console(env, "time set day")
+            monster_weg(env)
+            cam_off(bot)
+            console(env, f"execute in minecraft:overworld run setblock {sx} {sy} {sz} minecraft:air", pause=0.3)
+            schweine_weg()
+            set_options(env, [("max-distance", "100.0"), ("mob-spawning", "body")])
+            hinstellen(bot, *heim)
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Spawntest: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -16076,9 +16511,11 @@ ABSCHNITTE = [
     Abschnitt("unbewacht", unbewacht_checks, "body/BodySpawner body/BodyWatch", koerpertypen=True),
     Abschnitt("liegengeblieben", liegengeblieben_checks, "body/BodySpawner crash"),
     Abschnitt("teleport", teleport_checks, "teleport"),
+    Abschnitt("spawnen", spawn_checks, "spawning"),
+    Abschnitt("fortschritt", fortschritt_checks, "progress session/CameraMode session/CameraData"),
     Abschnitt("abschalten", abschalten_checks,
               "tour visibility/CamVisibility scout/CamScoutGuard photo/CamPhotoMode session/CameraMode"),
-    Abschnitt("absturz", absturz_checks, "crash"),
+    Abschnitt("absturz", absturz_checks, "crash progress"),
 ]
 
 # Welche Abschnitte dieser Lauf faehrt, siehe auswahl_laden. None faehrt alle.

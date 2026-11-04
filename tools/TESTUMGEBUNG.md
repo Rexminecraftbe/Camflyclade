@@ -53,7 +53,7 @@ echo "say hallo" > ~/camfly-testenv/server/console.fifo
 
 ## Welche Abschnitte laufen
 
-Die Tests bestehen aus der **Grundprobe** und gut sechzig **Abschnitten**. Die
+Die Tests bestehen aus der **Grundprobe** und knapp achtzig **Abschnitten**. Die
 Grundprobe läuft immer, sie ist kurz: `/cam` an und aus, der Körper, Fliegen,
 zurück zum Körper, `/cam reload`, ein verbotenes Biom. Die
 Abschnitte stehen in `ABSCHNITTE` im Skript, jeder mit seinem Namen, seiner
@@ -148,7 +148,7 @@ Aufrufe heraus und löst sie per Reflection gegen `paper-api` auf - samt
 Oberklassen, allen Interfaces und, bei Interfaces, `java.lang.Object`.
 
 Sollmarke im Skript sind die **348 Aufrufe** aus der Anleitung. Dieser Prüfer
-zählt zurzeit **856** - alle 856 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
+zählt zurzeit **959** - alle 959 gibt es auch in paper-api. Der Hinweis auf die Abweichung steht also bei jedem Lauf da; ein
 Fehler ist er nicht, nur ein Zeichen, dass sich am Plugin etwas geändert hat.
 Was zählt, ist die Zeile darunter: **fehlen: 0**.
 
@@ -1194,6 +1194,36 @@ einzutragen.
   könnte, gibt es nicht, deshalb geht `click_window` nach drei Sekunden weiter.
 * **Beim Ausspähen schaut der zweite Spieler durch die Kamera.** Der Bot hat
   op und damit `camplugin.antiscout.bypass`; er sähe jeden.
+* **Die Ender-Perle des Teleporttests liegt vor dem Cam-Modus bereit**, wie in
+  einer Stasis-Kammer: beschworen mit dem Bot als `Owner` (seine UUID als vier
+  Ganzzahlen, `uuid_als_nbt`) und `NoGravity`, drei Blöcke über dem Boden.
+  Erst im Cam-Modus lässt `data merge` sie fallen. Paper meldet auch eine
+  beschworene Perle als abgeschossen, und eine, die im Cam-Modus erscheint,
+  nimmt das Plugin dem Spieler weg wie jedes Projektil - sie täte gar
+  nichts. Die Perle trifft ihn mit fünf Punkten, danach wartet der Test die
+  fünf Sekunden von `cam-safety` ab.
+* **Statistik und Fortschritte liest der Test aus den Dateien des Servers**,
+  `<uuid>.json` unter `stats` und `advancements`, nach einem `save-all`.
+  Gesucht wird unter der ganzen Welt, die Versionen legen die Ordner
+  verschieden ab. Der Selektor `advancements=` nimmt kein Kriterium mit
+  Doppelpunkt im Namen, und die Biome von „Abenteuerzeit“ heißen alle so.
+* **`minecraft:fly_one_cm` zählt nur, was waagerecht geflogen ist.** Wer im
+  Flug nur steigt, steigt um null Zentimeter; die Tests der Statistik fliegen
+  deshalb auch zur Seite.
+* **Die Monster des Spawntests kommen nur mit Vorbereitung**: `spawn_mobs`
+  und `spawn_monsters` an, danach `difficulty easy`, dann `time set midnight`.
+  Die Reihenfolge zählt: Ob Monster spawnen, rechnet der Server nur beim
+  Wechsel der Schwierigkeit neu aus - mit der Spielregel danach kam keins. In
+  einem Schleim-Chunk der Flachwelt kommen Schleime auch am Tag; ein großer
+  Schleim teilt sich bei `/kill` in kleinere, `monster_weg` setzt ihn deshalb
+  vorher auf die kleinste Größe. Bei der
+  Sichtweite 2 sind nur wenige Chunks zum Spawnen da und die Obergrenze für
+  Monster entsprechend klein; das Zombiepferd, das in 26.x nachts in der Ebene
+  spawnt, gilt als Monster und bleibt bei `peaceful` stehen. Liegen ein paar
+  von einem früheren Lauf herum, kommt gar nichts mehr - der Test räumt sie
+  deshalb vor jeder Probe mit weg. Zurück auf `peaceful` geht es noch im
+  Cam-Modus: Das nimmt die Monster mit, bevor der Bot wieder ein gewöhnlicher
+  Spieler ist.
 
 ## Was die Tests abdecken
 
@@ -1372,6 +1402,20 @@ kommt · wer zu einer Kamera in der Luft teleportiert wird, landet bei ihrem
 Körper, ihr Cam-Modus endet, und die Meldung nennt, wer kam · mit
 `teleports.plugin: false` und `teleports.command: false` bleibt der
 Kamera-Spieler im Cam-Modus, und wer zu ihm kommt, kommt bei der Kamera an ·
+eine Ender-Perle von vor dem Cam-Modus bringt den Spieler selbst hin: er ist
+heraus, steht bei ihr, hat seine Sachen wieder, sein Körper ist weg, und die
+Meldung kommt; mit `teleports.ender-pearl: false` nimmt sie nur die Kamera mit ·
+`mob-spawning: body` lässt einen Spawner nicht laufen, solange nur die Kamera
+bei ihm ist, wohl aber, wenn der Körper davor steht; `camera` lässt ihn mit
+der Kamera laufen, `false` auch mit dem Körper davor nicht · nachts kommen mit
+`camera` um eine Kamera 200 Blöcke vom Körper Monster, mit `body` dort keine;
+hängt die Kamera über dem Körper, kommen mit `body` Monster, mit `false`
+keine · die Kamera in einem Stück Wüste bringt kein Kriterium von
+„Abenteuerzeit“, `/advancement` im Cam-Modus keinen Fortschritt, ein Rezept
+aber schon; ohne Cam-Modus bringt dieselbe Wüste das Kriterium, und mit
+`progress-guard.advancements: false` auch die Kamera · die geflogene Strecke
+zählt im Flug mit und steht nach dem Ende wieder wie vorher, mit
+`progress-guard.statistics: false` bleibt sie stehen ·
 voreingestellt ist `exit-key` an · zu Beginn steht der Hinweis auf die
 Taste und auf `/cam` in der Action-Bar, die Taste als Keybind
 `key.swapOffhand` · die Taste zum
@@ -1409,7 +1453,10 @@ auf null · mit `statistics.enabled: false` sagt `/cam stats`, dass sie aus
 ist · die Datei der crash-protection liegt unter `playerdata/crash/`, und
 eine, die vor dem Update noch direkt unter `playerdata/` lag, gibt dem
 Spieler beim Betreten trotzdem alles zurück: er steht an der Stelle aus der
-Datei, sie ist weg, und Spielmodus und Flug sind die aus der Datei ·
+Datei, sie ist weg, und Spielmodus und Flug sind die aus der Datei · nach dem
+Absturz steht die geflogene Strecke der Statistik wieder wie vor dem
+Cam-Modus, obwohl der `save-all` davor sie mit der Strecke der Kamera auf die
+Platte geschrieben hatte ·
 `action-bar.display: false` zeigt die Startzeile mit dem Hinweis nur zu
 Beginn, danach kommt nichts mehr · `/cam back` setzt die Kamera an den
 Körper, der Cam-Modus läuft weiter, mit dem Ton und der Zeile in der
