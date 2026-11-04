@@ -1,7 +1,10 @@
 package de.elia.cameraplugin.session;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.World;
+import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -13,6 +16,9 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 /** What happens to camera mode when a player joins, leaves or dies. */
 public final class SessionListener implements Listener {
+
+    /** How close to his body a dead player has to be to count as standing there, in blocks. */
+    private static final double AT_BODY = 1.0;
 
     private final CameraPlugin plugin;
     private final CameraPlayers cameraPlayers;
@@ -75,6 +81,36 @@ public final class SessionListener implements Listener {
                 }
             }
         }
+        Location bodyAt = data.getBody().getLocation();
         plugin.exitCameraMode(player, EndReason.DEATH);
+        // Bukkit teleports nobody without health, so the end of camera mode
+        // may have left him where the camera was - and the server would drop
+        // everything there, in the air, over the void or in somebody else's
+        // base. It goes where he really stood: at his body.
+        if (!atBody(player.getLocation(), bodyAt)) {
+            dropAtBody(event, bodyAt);
+        }
+    }
+
+    /** Whether the player stands where his body stood, as the end of camera mode puts him. */
+    private static boolean atBody(Location player, Location body) {
+        return body.getWorld() == null || body.getWorld().equals(player.getWorld())
+                && player.distanceSquared(body) <= AT_BODY * AT_BODY;
+    }
+
+    /** Drops what the server would drop for the player at his body instead. */
+    private static void dropAtBody(PlayerDeathEvent event, Location body) {
+        World world = body.getWorld();
+        for (ItemStack item : event.getDrops()) {
+            if (item != null && item.getType() != Material.AIR) {
+                world.dropItemNaturally(body, item);
+            }
+        }
+        event.getDrops().clear();
+        int experience = event.getDroppedExp();
+        if (experience > 0) {
+            event.setDroppedExp(0);
+            world.spawn(body, ExperienceOrb.class, orb -> orb.setExperience(experience));
+        }
     }
 }

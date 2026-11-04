@@ -128,7 +128,7 @@ public class CamFireGuard implements Listener {
         Set<Block> previous = hiddenMap.getOrDefault(p.getUniqueId(), Collections.emptySet());
 
         for (Block b : previous) if (!current.contains(b))
-            p.sendBlockChange(b.getLocation(), b.getBlockData());
+            showAgain(p, b);
 
         // Always resend the hide packet in case the client was updated by the server
         for (Block b : current)
@@ -187,6 +187,19 @@ public class CamFireGuard implements Listener {
         Set<Block> hidden = hiddenMap.get(p.getUniqueId());
         if (hidden == null) return;
         for (Block b : hidden) {
+            showAgain(p, b);
+        }
+    }
+
+    /**
+     * Sends the player a hidden block as it really is - only while he is in
+     * its world. The client takes a block change for the world it is in, so
+     * after a portal, or back at a body in another world, the fire would turn
+     * up at the same spot over there, where there is none. The chunks of the
+     * new world come to him as they are anyway.
+     */
+    private void showAgain(Player p, Block b) {
+        if (b.getWorld().equals(p.getWorld())) {
             p.sendBlockChange(b.getLocation(), b.getBlockData());
         }
     }

@@ -311,6 +311,27 @@ public final class StartChecks implements Listener {
     }
 
     /**
+     * Checks whether the player sits on nothing: no horse, boat, minecart or
+     * anything else that carries him.
+     *
+     * <p>In camera mode nothing carries a camera player, see
+     * {@link de.elia.cameraplugin.interaction.CamInteractionGuard}, and camera
+     * mode does not take him off by itself. Started on a mount, the invisible
+     * camera would stay on it and ride it about, his body put down in the
+     * saddle.</p>
+     *
+     * @return whether the player may start; if not, the player has been told
+     *         why
+     */
+    public boolean checkCamVehicle(Player player) {
+        if (!player.isInsideVehicle()) {
+            return true;
+        }
+        messages.sendMessage(player, "cam-vehicle-start");
+        return false;
+    }
+
+    /**
      * Checks whether camera mode may be started where the player is: not in
      * lava, water or powder snow while its switch under {@code camera-mode} -
      * {@code allow_lava_flight}, {@code allow_water_flight},
