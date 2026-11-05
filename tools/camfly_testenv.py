@@ -3596,7 +3596,9 @@ def grund_checks(env, bot):
         """Einmal /cam, den Bot vom Koerper wegstellen, den Koerper treffen und
         nachsehen, was im Chat steht. treffen bekommt die Stelle des Koerpers
         und einen Selektor fuer das Mannequin, das die Treffer nimmt."""
-        if not FIND.test(f"/cam startet fuer die Meldung ({name})", cam_on(bot), ""):
+        vorher = bot.mark()
+        if not FIND.test(f"/cam startet fuer die Meldung ({name})", cam_on(bot),
+                         zeige(zeilen_seit(bot, vorher))):
             return
         koerper = bot.server_pos()
         if koerper is None:
