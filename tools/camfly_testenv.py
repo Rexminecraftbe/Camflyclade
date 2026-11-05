@@ -17526,8 +17526,6 @@ def mobtreffer_checks(env, bot):
     wie sein eigener Angriff es taete. Auf normal, wo Spinne, Biene und
     Schaedel ueberhaupt vergiften; der Bot traegt Resistenz 255.
     """
-    if not FIND.test("Cam-Modus ist vor dem Test der Mob-Treffer aus", cam_off(bot), ""):
-        return
     heim = bot.server_pos()
     if heim is None:
         return
@@ -17554,7 +17552,12 @@ def mobtreffer_checks(env, bot):
         return True
 
     try:
+        # Vor der ersten Frage: Ein Abschnitt davor mag den Bot verletzt
+        # haben, und cam-safety lehnte dann das /cam ab, mit dem cam_off
+        # nachsieht.
         set_option(env, "enabled", "false", "cam-safety")
+        if not FIND.test("Cam-Modus ist vor dem Test der Mob-Treffer aus", cam_off(bot), ""):
+            return
         console(env, "difficulty normal", pause=0.3)
         console(env, "gamerule mob_griefing false", pause=0.3)
         for name, art, wirkung, wort in proben:
@@ -17601,8 +17604,6 @@ def schlaeger_checks(env, bot):
     muss gleich ausgehen. Sein Fallschaden zaehlt zehnfach, damit ein
     abgefangener Fall und einer, der weiterging, sicher auseinanderliegen.
     """
-    if not FIND.test("Cam-Modus ist vor dem Test des Schlaegers aus", cam_off(bot), ""):
-        return
     heim = bot.server_pos()
     if heim is None:
         return
@@ -17611,6 +17612,10 @@ def schlaeger_checks(env, bot):
 
     def waffe(item):
         console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+        # Ein Schlag trifft, was dem Ziel am naechsten steht - auch einen
+        # Pfeil, den ein Abschnitt davor dort stecken liess.
+        console(env, f"execute positioned {x} {y} {z} run kill @e[type=#minecraft:arrows,distance=..8]",
+                pause=0.3)
         console(env, f"clear {ZUSCHAUER_NAME}", pause=0.3)
         console(env, f"item replace entity {ZUSCHAUER_NAME} hotbar.0 with {item}", pause=0.5)
         schlaeger.call("hotbar", slot=0)
@@ -17628,9 +17633,12 @@ def schlaeger_checks(env, bot):
         return True
 
     try:
+        # Vor der ersten Frage, siehe mobtreffer_checks.
+        set_option(env, "enabled", "false", "cam-safety")
+        if not FIND.test("Cam-Modus ist vor dem Test des Schlaegers aus", cam_off(bot), ""):
+            return
         bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
         time.sleep(0.5)
-        set_option(env, "enabled", "false", "cam-safety")
         console(env, "gamerule natural_health_regeneration false", pause=0.3)
         schlaeger.start()
         if not FIND.test("Zweiter Spieler fuer die Schlaege kommt herein",
@@ -17692,8 +17700,6 @@ def fuehrung_kette_checks(env, bot):
     dritten - als Gast und Leiter zugleich, was das Plugin sonst ueberall
     ausschliesst.
     """
-    if not FIND.test("Cam-Modus ist vor dem Test der Fuehrungskette aus", cam_off(bot), ""):
-        return
     heim = bot.server_pos()
     if heim is None:
         return
@@ -17701,7 +17707,10 @@ def fuehrung_kette_checks(env, bot):
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
     dritter = BotClient(env, name=DRITTER_NAME)
     try:
-        set_option(env, "invite-cooldown-seconds", "0", "follow")
+        # Vor der ersten Frage, siehe mobtreffer_checks.
+        set_options(env, [("invite-cooldown-seconds", "0", "follow"), ("enabled", "false", "cam-safety")])
+        if not FIND.test("Cam-Modus ist vor dem Test der Fuehrungskette aus", cam_off(bot), ""):
+            return
         zuschauer.start()
         dritter.start()
         if not FIND.test("Zweiter und dritter Spieler fuer die Fuehrungskette kommen herein",
@@ -17741,7 +17750,7 @@ def fuehrung_kette_checks(env, bot):
         cam_off(dritter)
         zuschauer.stop()
         dritter.stop()
-        set_option(env, "invite-cooldown-seconds", "60", "follow")
+        set_options(env, [("invite-cooldown-seconds", "60", "follow"), ("enabled", "true", "cam-safety")])
         hinstellen(bot, heim[0], heim[1], heim[2])
 
 
@@ -17760,15 +17769,16 @@ def umgebung_checks(env, bot):
     und der Grosse Waechter tut es nur einmal in der Minute. Sie laufen
     ueber dieselbe Sperre in CamPotionGuard.
     """
-    if not FIND.test("Cam-Modus ist vor dem Test der Umgebung aus", cam_off(bot), ""):
-        return
     heim = bot.server_pos()
     if heim is None:
         return
     x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
     rx, rz = _floor(x) + 6, _floor(z)
     try:
+        # Vor der ersten Frage, siehe mobtreffer_checks.
         set_option(env, "enabled", "false", "cam-safety")
+        if not FIND.test("Cam-Modus ist vor dem Test der Umgebung aus", cam_off(bot), ""):
+            return
         console(env, "difficulty normal", pause=0.3)
         console(env, f"setblock {rx} {y} {rz} minecraft:wither_rose", pause=0.5)
         hinstellen(bot, rx + 0.5, y, rz + 0.5)
