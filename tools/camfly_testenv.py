@@ -14522,11 +14522,13 @@ def tod_checks(env, bot):
     if heim is None:
         return
     x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    # Acht Bloecke: Was ein Toter fallen laesst, wirft der Server mit einem
+    # zufaelligen Schwung um sich, und mancher Wurf geht ueber vier hinaus.
     weg = f"execute positioned {x} {y} {z} run kill @e[type=minecraft:item,distance=..8]"
 
     def liegt(item):
         return server_says(bot, f"/execute positioned {x} {y} {z} if items entity "
-                                f"@e[type=minecraft:item,distance=..4] contents minecraft:{item} "
+                                f"@e[type=minecraft:item,distance=..8] contents minecraft:{item} "
                                 f"run say {{marke}}")
 
     try:
