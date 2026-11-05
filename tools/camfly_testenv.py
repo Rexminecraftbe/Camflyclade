@@ -3617,6 +3617,11 @@ def grund_checks(env, bot):
         if not told:
             # Endete der Cam-Modus gar nicht, raeumt das hier ab.
             cam_off(bot)
+        # Die Meldung kommt, sobald der Koerper getroffen ist - der Treffer
+        # selbst ist dann noch ein, zwei Ticks zum Spieler unterwegs, und ein
+        # /cam in dieser Zeit startet mit Absicht nicht (treffer_unterwegs).
+        # Die naechste Probe kaeme sonst manchmal hinein.
+        time.sleep(1.0)
 
     def amboss(x, y, z, mannequin):
         # CancelDrop: Er bleibt nicht als Block liegen, genau dort, wohin der
