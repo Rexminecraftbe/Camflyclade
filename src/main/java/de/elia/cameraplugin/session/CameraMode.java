@@ -240,6 +240,9 @@ public final class CameraMode {
         cameraData.setFireTicksAtStart(fireTicks);
         // Before the flight speed of camera mode is set, further down.
         cameraData.setFlySpeedAtStart(player.getFlySpeed());
+        // Before he joins the team of camera mode, further down: the crash file
+        // keeps the one he stands in now.
+        cameraData.setTeamAtStart(plugin.getNoCollisionTeam().teamOf(player));
         cameraPlayers.put(player.getUniqueId(), cameraData);
 
         // Two ticks and not one: the world has to tick once with him in

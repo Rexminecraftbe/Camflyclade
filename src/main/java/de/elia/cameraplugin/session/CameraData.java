@@ -71,6 +71,11 @@ public class CameraData {
     private int fireTicksAtStart;
     private ItemStack[] heldForMode;
     private float flySpeedAtStart = 0.1f;
+    /**
+     * The team he stood in on the main scoreboard when camera mode started,
+     * or {@code null}, see {@link de.elia.cameraplugin.scoreboard.NoCollisionTeam#teamOf}.
+     */
+    private String teamAtStart;
 
     public CameraData(LivingEntity body, Mannequin hitbox, TextDisplay nameDisplay, Chunk bodyChunk, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, Collection<PotionEffect> pausedEffects) {
         this.body = body;
@@ -157,5 +162,18 @@ public class CameraData {
 
     public void setFlySpeedAtStart(float flySpeed) {
         this.flySpeedAtStart = flySpeed;
+    }
+
+    /**
+     * The team he stood in when camera mode started, for the crash
+     * protection: camera mode puts him into a team of its own, and the world
+     * keeps that over a crash.
+     */
+    public String getTeamAtStart() {
+        return teamAtStart;
+    }
+
+    public void setTeamAtStart(String team) {
+        this.teamAtStart = team;
     }
 }
