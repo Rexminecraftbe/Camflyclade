@@ -67,6 +67,8 @@ public class CameraData {
     private double healthAtStart;
     /** His absorption when camera mode started, see {@link PausedEffects}. */
     private double absorptionAtStart;
+    /** How long he would still have burnt when camera mode started, in ticks. */
+    private int fireTicksAtStart;
 
     public CameraData(LivingEntity body, Mannequin hitbox, TextDisplay nameDisplay, Chunk bodyChunk, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, Collection<PotionEffect> pausedEffects) {
         this.body = body;
@@ -125,4 +127,10 @@ public class CameraData {
         this.healthAtStart = health;
         this.absorptionAtStart = absorption;
     }
+    /**
+     * How long he would still have burnt when camera mode started, in ticks:
+     * the fire is paused like his effects, and he burns on when it ends.
+     */
+    public int getFireTicksAtStart() { return fireTicksAtStart; }
+    public void setFireTicksAtStart(int fireTicks) { this.fireTicksAtStart = Math.max(0, fireTicks); }
 }

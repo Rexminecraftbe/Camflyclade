@@ -533,7 +533,15 @@ einzutragen.
   es aus dem Quelltext im Skript gegen paper-api; ohne den Schritt
   `paperapi` fehlt es, und die Proben dazu fallen mit diesem Hinweis durch.
   Von der Konsole: `plugintp <spieler> <zu-spieler>` oder
-  `plugintp <spieler> <x> <y> <z>`.
+  `plugintp <spieler> <x> <y> <z>`. Dazu kann es, was sonst nur andere
+  Plugins tun: `testfrost <spieler> <ticks>` setzt den Frost,
+  `testtod <spieler>` bringt mit `setHealth(0)` um - Schaden erreicht einen
+  Kamera-Spieler nicht -, `testtoddrop an|aus` legt jedem Toten eine
+  Nautilusschale in die Drops, `testspawnsperre an|aus` verbietet Plugins
+  Mannequins und Rüstungsständer wie WorldGuard mit `mob-spawning: deny`, und
+  `testtreffercam <spieler>` trifft das Mannequin am Körper und lässt ihn im
+  nächsten Tick `/cam` tippen, solange der Treffer noch zu ihm unterwegs ist.
+  Ändert sich das Hilfsplugin, laufen alle Abschnitte.
 * **Wer zur Kamera teleportiert wird, bekommt vorher Sanften Fall.** Die
   Kamera steht sechs Blöcke hoch. Käme er bei ihr in der Luft an statt beim
   Körper, fiele er ohne den Effekt in einer Sekunde herunter und stünde bei
