@@ -167,10 +167,6 @@ public final class CameraMode {
         // Read before the fire guard puts it out: he burns on from there.
         int fireTicks = player.getFireTicks();
 
-        // *** Empty inventory and armour ***
-        playerInventory.clear();
-        player.updateInventory();
-
         Location playerLocation = player.getLocation();
 
         BodySpawner bodies = plugin.getBodySpawner();
@@ -220,7 +216,9 @@ public final class CameraMode {
         // brain are only noted down here and handed over in the creative tick.
         plugin.getMobTargeting().turnMobsFromPlayer(player, damageTarget);
 
-        player.setGameMode(GameMode.CREATIVE);
+        // His own things stay in his pockets until the game mode has changed:
+        // see switchGameMode, which empties them right after.
+        ItemStack[] heldForMode = switchGameMode(player, null, GameMode.CREATIVE);
         player.setAllowFlight(true);
         player.setFlying(true);
         if (settings.getGlowMode() == GlowMode.ALWAYS && settings.getPlayerVisibilityMode() != VisibilityMode.NONE) {
@@ -232,6 +230,18 @@ public final class CameraMode {
             player.setGlowing(true);
         }
 
+        // *** Hand the saved inventory to CameraData ***
+        CameraData cameraData = new CameraData(body, hitbox, nameDisplay, bodyChunk, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects);
+        cameraData.setHeartsFront(heartsFront);
+        cameraData.setHeldForMode(heldForMode);
+        // Before the crash file below, which keeps them as well.
+        cameraData.setMovementAtStart(CamProgressGuard.readMovement(player));
+        cameraData.setHeartsAtStart(health, absorption);
+        cameraData.setFireTicksAtStart(fireTicks);
+        // Before the flight speed of camera mode is set, further down.
+        cameraData.setFlySpeedAtStart(player.getFlySpeed());
+        cameraPlayers.put(player.getUniqueId(), cameraData);
+
         // Two ticks and not one: the world has to tick once with him in
         // creative mode. A mob steered by its brain takes no setTarget, but it
         // lets go of a player in creative mode by itself - in that tick, and
@@ -241,32 +251,30 @@ public final class CameraMode {
         new BukkitRunnable() {
             @Override
             public void run() {
-                if (!player.isOnline() || !cameraPlayers.contains(player.getUniqueId())) {
-                    // Camera mode is over already, and his own game mode is back.
+                // Only into this camera mode. One that ended in the two ticks
+                // has given him his own game mode and things back already -
+                // and the camera head would take the place of his helmet, lost
+                // for good, the head his to keep.
+                if (!player.isOnline() || cameraPlayers.get(player.getUniqueId()) != cameraData) {
                     return;
                 }
-                player.setGameMode(flyingGameMode);
+                cameraData.setHeldForMode(switchGameMode(player, cameraData.getHeldForMode(), flyingGameMode));
                 player.setAllowFlight(true); // ensure flight remains enabled
                 player.setFlying(true);       // keep player flying
                 if (plugin.getVisibility().needsInvisibility() && !player.hasPotionEffect(PotionEffectType.INVISIBILITY)) {
                     player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false));
                 }
+                if (settings.isCameraHeadEnabled()) {
+                    player.getInventory().setHelmet(CameraHead.create(plugin.getLogger()));
+                }
+                // With what the game mode of the camera brought along.
+                plugin.getCrashGuard().save(player, cameraData);
             }
         }.runTaskLater(plugin, 2L);
-
-        // *** Hand the saved inventory to CameraData ***
-        CameraData cameraData = new CameraData(body, hitbox, nameDisplay, bodyChunk, originalGameMode, originalAllowFlight, originalFlying, originalGlowing, originalInventory, pausedEffects);
-        cameraData.setHeartsFront(heartsFront);
-        // Before the crash file below, which keeps them as well.
-        cameraData.setMovementAtStart(CamProgressGuard.readMovement(player));
-        cameraData.setHeartsAtStart(health, absorption);
-        cameraData.setFireTicksAtStart(fireTicks);
-        cameraPlayers.put(player.getUniqueId(), cameraData);
         // Out of the picture of whoever takes one, from the start, and out
         // of sight of whoever is too far away to see it.
         plugin.getPhotoMode().hideNewBody(cameraData);
         plugin.getScoutGuard().hideNewBody(player, cameraData);
-        // Before the flight speed below: the file is to hold the one he had.
         plugin.getCrashGuard().save(player, cameraData);
         cameraPlayers.addBody(body.getUniqueId(), player.getUniqueId());
         if (hitbox != null) {
@@ -292,6 +300,7 @@ public final class CameraMode {
         // level and only one of them does anything.
         plugin.getBodyWatch().startBodyMovementCheck(player, damageTarget);
         plugin.getBodyWatch().startBodyPin(player, body, hitbox);
+        plugin.getBodyWatch().endWhenBodyGone(player, cameraData);
         // After the pin: in the same tick the name then finds the body back in
         // its spot already, instead of following it away for that one tick.
         plugin.getBodyWatch().keepNameOverBody(player, body, nameDisplay, heartsFront, absorption);
@@ -312,24 +321,45 @@ public final class CameraMode {
         plugin.getAfk().startFor(player);
         plugin.getCamLog().started(player, cameraData);
         plugin.getTrail().startFor(player, playerLocation);
-
-        if (settings.isCameraHeadEnabled()) {
-            new BukkitRunnable() {
-                @Override
-                public void run() {
-                    // Only into this camera mode. One that ended in the two
-                    // ticks has given him his own helmet back already, and the
-                    // head would take its place - lost for good, and the head
-                    // his to keep.
-                    if (!player.isOnline() || cameraPlayers.get(player.getUniqueId()) != cameraData) {
-                        return;
-                    }
-                    ItemStack camHead = CameraHead.create(plugin.getLogger());
-                    player.getInventory().setHelmet(camHead);
-                }
-            }.runTaskLater(plugin, 2L); // after the creative tick that gets the flight going
-        }
         settings.getStartSound().play(player);
+    }
+
+    /**
+     * Changes the game mode of a player camera mode empties the pockets of,
+     * the way a plugin that keeps an inventory for each game mode can follow.
+     *
+     * <p>PerWorldInventory does that out of the box
+     * ({@code separate-gamemode-inventories: true}), Multiverse-Inventories
+     * on request: when the game mode changes, the inventory the player holds
+     * is put away as the one of the old mode, and the one of the new mode is
+     * put into his hands. Camera mode used to empty his pockets before the
+     * first change and fill them before the last: an empty inventory was put
+     * away as the one of his own mode, his things as the one of the camera's,
+     * and he stood there with empty pockets. What was put into his hands for
+     * the modes of the camera it cleared away - and that was then put away
+     * as theirs.</p>
+     *
+     * <p>So each change goes the way it would without camera mode: he holds
+     * what is his for the mode he leaves - his own things, or what was put
+     * into his hands for it -, and what he holds after it is kept aside until
+     * he leaves that mode again. Without such a plugin that is a copy of his
+     * own things, set aside and put back in the same moment.</p>
+     *
+     * @param heldForOldMode what was put into his hands for the mode he
+     *                       leaves, or {@code null} while he still holds his
+     *                       own things
+     * @return what he held right after the change, now out of his hands
+     */
+    private static ItemStack[] switchGameMode(Player player, ItemStack[] heldForOldMode, GameMode to) {
+        PlayerInventory inventory = player.getInventory();
+        if (heldForOldMode != null) {
+            inventory.setContents(heldForOldMode);
+        }
+        player.setGameMode(to);
+        ItemStack[] held = inventory.getContents();
+        inventory.clear();
+        player.updateInventory();
+        return held;
     }
 
     public void exitCameraMode(Player player, EndReason reason) {
@@ -407,8 +437,12 @@ public final class CameraMode {
         // The name comes off before the teleport: while it sits on the
         // player as a passenger, Spigot turns the teleport down.
         plugin.getNameTag().stopFor(player);
-        if (toBody) {
-            plugin.getTeleportGuard().teleport(player, body.getLocation());
+        if (toBody && !plugin.getTeleportGuard().teleportHome(player, body.getLocation()) && !player.isDead()) {
+            // A dead player is never teleported, SessionListener sees to his
+            // things. Anybody else is only kept from his body by a plugin that
+            // turns the teleport down after keepHomeTeleport let it through.
+            plugin.getLogger().warning("Another plugin kept " + player.getName() + " from going back to his"
+                    + " body at the end of cam mode, he stays where his camera was.");
         }
         plugin.getParticles().stopCameraParticles(player);
         plugin.getSightGlow().stopSightGlow(player);
@@ -426,10 +460,13 @@ public final class CameraMode {
         // inventory away again.
         plugin.getInventoryGuard().stopFor(player);
 
-        // *** Restore inventory and armour ***
+        // *** Restore game mode, inventory and armour ***
+        // The game mode first, see switchGameMode: then a plugin keeping an
+        // inventory for each game mode puts away what it gave him for the one
+        // of the camera, and his own things come into his hands after it.
+        switchGameMode(player, cameraData.getHeldForMode(), cameraData.getOriginalGameMode());
         // setContents() writes every slot back, armour included.
         PlayerInventory playerInventory = player.getInventory();
-        playerInventory.clear(); // Emptied to be safe, in case items were added
         playerInventory.setContents(cameraData.getOriginalInventoryContents());
         player.updateInventory();
 
@@ -445,7 +482,6 @@ public final class CameraMode {
         // With the hearts they stood for: absorption would come back full.
         PausedEffects.giveBack(player, cameraData.getPausedEffects(), cameraData.getHealthAtStart(),
                 cameraData.getAbsorptionAtStart());
-        player.setGameMode(cameraData.getOriginalGameMode());
         player.setAllowFlight(cameraData.getOriginalAllowFlight());
         player.setFlying(cameraData.getOriginalFlying());
         player.setGlowing(cameraData.getOriginalGlowing());

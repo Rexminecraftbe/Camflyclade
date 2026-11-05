@@ -13,6 +13,7 @@ import de.elia.cameraplugin.config.ConfigFile;
 import de.elia.cameraplugin.config.ConfigIssue;
 import de.elia.cameraplugin.config.ConfigReader;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.command.CamCommandFilter;
 import de.elia.cameraplugin.cost.StartCost;
 import de.elia.cameraplugin.crash.CamCrashGuard;
 import de.elia.cameraplugin.display.CamActionBar;
@@ -282,6 +283,7 @@ public final class CameraPlugin extends JavaPlugin {
                 guestbook,
                 webMap,
                 oreHider,
+                new CamCommandFilter(this),
                 new CamSuggestionFilter(this));
         for (Listener listener : listeners) {
             pluginManager.registerEvents(listener, this);

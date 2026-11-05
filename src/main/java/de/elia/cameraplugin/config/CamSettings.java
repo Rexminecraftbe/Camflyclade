@@ -2,6 +2,8 @@ package de.elia.cameraplugin.config;
 
 import de.elia.cameraplugin.area.CamAreaRules;
 import de.elia.cameraplugin.body.BodyType;
+import de.elia.cameraplugin.command.CamCommandFilter;
+import de.elia.cameraplugin.command.CommandMode;
 import de.elia.cameraplugin.body.MobTargetMode;
 import de.elia.cameraplugin.body.MovementSensitivity;
 import de.elia.cameraplugin.display.ActionBarDisplay;
@@ -278,6 +280,10 @@ public final class CamSettings {
     private boolean pluginTeleportEndsCam;
     /** Whether a teleport by an ender pearl ends camera mode, {@code teleports.ender-pearl}. */
     private boolean pearlTeleportEndsCam;
+    /** Which commands a camera player may use, {@code cam-commands.mode}. */
+    private CommandMode camCommandMode = CommandMode.BLACKLIST;
+    /** The commands of {@code cam-commands.list}, each as its words, see {@link CamCommandFilter#words}. */
+    private List<List<String>> camCommands = List.of();
     /** What a camera player counts as for the mobs that spawn by themselves, {@code mob-spawning}. */
     private SpawnMode spawnMode;
     /** Whether a camera player earns no advancements, {@code progress-guard.advancements}. */
@@ -948,6 +954,7 @@ public final class CamSettings {
         commandTeleportEndsCam = config.getBoolean("teleports.command", true);
         pluginTeleportEndsCam = config.getBoolean("teleports.plugin", true);
         pearlTeleportEndsCam = config.getBoolean("teleports.ender-pearl", true);
+        readCamCommands(config);
         String spawning = config.getChoice("mob-spawning", "body", "body", "camera", "false")
                 .toLowerCase(Locale.ROOT);
         spawnMode = switch (spawning) {
@@ -1332,6 +1339,29 @@ public final class CamSettings {
             config.warnUnknownValue(path, raw, messages.configMessage("config-allowed-height"), "15");
             return 15;
         }
+    }
+
+    /** The commands of {@code cam-commands.list} out of the box, as the file built into the jar has them. */
+    private static final List<String> DEFAULT_CAM_COMMANDS = List.of("sethome", "setwarp", "setspawn", "setjail",
+            "spawnpoint", "setworldspawn", "claim", "plot claim", "plot auto");
+
+    /** The section {@code cam-commands}. */
+    private void readCamCommands(ConfigReader config) {
+        String mode = config.getChoice("cam-commands.mode", "blacklist", "blacklist", "whitelist", "all")
+                .toLowerCase(Locale.ROOT);
+        camCommandMode = switch (mode) {
+            case "whitelist" -> CommandMode.WHITELIST;
+            case "all" -> CommandMode.ALL;
+            default -> CommandMode.BLACKLIST;
+        };
+        List<List<String>> commands = new ArrayList<>();
+        for (String entry : config.getStringList("cam-commands.list", DEFAULT_CAM_COMMANDS)) {
+            List<String> words = CamCommandFilter.words(entry);
+            if (!words.isEmpty()) {
+                commands.add(List.copyOf(words));
+            }
+        }
+        camCommands = List.copyOf(commands);
     }
 
     /** The biomes of {@code hide-ores.biomes} out of the box: the caves the game has as biomes of their own. */
@@ -2452,6 +2482,16 @@ public final class CamSettings {
             case ENDER_PEARL -> pearlTeleportEndsCam;
             default -> false;
         };
+    }
+
+    /** Which commands a camera player may use, {@code cam-commands.mode}. */
+    public CommandMode getCamCommandMode() {
+        return camCommandMode;
+    }
+
+    /** The commands of {@code cam-commands.list}, each as its words in lower case. */
+    public List<List<String>> getCamCommands() {
+        return camCommands;
     }
 
     /** What a camera player counts as for the mobs that spawn by themselves, {@code mob-spawning}. */

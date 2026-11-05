@@ -1400,6 +1400,29 @@ teleports:
   # false = die Perle nimmt nur die Kamera mit, und sie ist trotzdem verbraucht
   ender-pearl: true
 
+# Befehle im Cam-Modus. Die Kamera steht woanders als der Spieler: Ein Befehl, der sich den Ort merkt, merkt sich den
+# der Kamera - /sethome dort, und mit /home käme er später hin, wo nur seine Kamera war, z. B. in eine fremde Basis.
+# Text: cam-command-blocked. /cam geht immer.
+cam-commands:
+  # Welche Befehle im Cam-Modus gehen:
+  #   blacklist = alle außer denen in list
+  #   whitelist = nur /cam und die in list
+  #   all       = alle, ohne Ausnahme (wie früher)
+  mode: blacklist
+
+  # Befehle ohne /, auch mit Unterbefehl wie "plot claim". Ihre Aliase zählen mit, und ebenso die Form mit
+  # Namensraum davor (essentials:sethome, minecraft:spawnpoint).
+  list:
+    - sethome
+    - setwarp
+    - setspawn
+    - setjail
+    - spawnpoint
+    - setworldspawn
+    - claim
+    - plot claim
+    - plot auto
+
 # Treffer auf den Körper an den Spieler weitergeben
 mirror-damage:
   # Schaden für den Spieler:

@@ -21,6 +21,7 @@ import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
 
 import java.util.HashMap;
@@ -230,6 +231,12 @@ public final class CamInteractionGuard implements Listener {
         lockNotes.put(guest.getUniqueId(), now);
         Player guide = plugin.getTour().guideOf(guest);
         messages.sendConfiguredMessage(guest, "tour-body-locked", "{player}", guide == null ? "" : guide.getName());
+    }
+
+    /** Whoever leaves takes his note along: it only ever spares a second click. */
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        lockNotes.remove(event.getPlayer().getUniqueId());
     }
 
     @EventHandler

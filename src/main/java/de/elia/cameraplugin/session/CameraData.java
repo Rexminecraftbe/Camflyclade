@@ -69,6 +69,8 @@ public class CameraData {
     private double absorptionAtStart;
     /** How long he would still have burnt when camera mode started, in ticks. */
     private int fireTicksAtStart;
+    private ItemStack[] heldForMode;
+    private float flySpeedAtStart = 0.1f;
 
     public CameraData(LivingEntity body, Mannequin hitbox, TextDisplay nameDisplay, Chunk bodyChunk, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, Collection<PotionEffect> pausedEffects) {
         this.body = body;
@@ -133,4 +135,27 @@ public class CameraData {
      */
     public int getFireTicksAtStart() { return fireTicksAtStart; }
     public void setFireTicksAtStart(int fireTicks) { this.fireTicksAtStart = Math.max(0, fireTicks); }
+
+    /**
+     * What a plugin keeping an inventory for each game mode put into his
+     * hands for the game mode of the camera, set aside until he leaves it -
+     * without such a plugin a copy of his own things. See
+     * {@link CameraMode}{@code #switchGameMode}.
+     */
+    public ItemStack[] getHeldForMode() {
+        return heldForMode;
+    }
+
+    public void setHeldForMode(ItemStack[] heldForMode) {
+        this.heldForMode = heldForMode;
+    }
+
+    /** His own flight speed, before camera mode set one of its own. */
+    public float getFlySpeedAtStart() {
+        return flySpeedAtStart;
+    }
+
+    public void setFlySpeedAtStart(float flySpeed) {
+        this.flySpeedAtStart = flySpeed;
+    }
 }

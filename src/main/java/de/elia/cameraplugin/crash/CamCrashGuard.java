@@ -113,9 +113,9 @@ public final class CamCrashGuard implements Listener {
     }
 
     /**
-     * Writes down what a player entering camera mode is to get back. Called
-     * before the flight speed of camera mode is set, so his own is read off
-     * him.
+     * Writes down what a player entering camera mode is to get back - once
+     * at the start, and once more when the game mode of the camera has
+     * brought along what it brings, see {@code CameraMode#switchGameMode}.
      */
     public void save(Player player, CameraData data) {
         if (!settings.isCrashProtectionEnabled()) {
@@ -126,6 +126,9 @@ public final class CamCrashGuard implements Listener {
         file.set("format", FORMAT);
         file.set("name", player.getName());
         file.set("inventory", Arrays.asList(data.getOriginalInventoryContents()));
+        if (data.getHeldForMode() != null) {
+            file.set("mode-inventory", Arrays.asList(data.getHeldForMode()));
+        }
         file.set("effects", new ArrayList<>(data.getPausedEffects()));
         // The hearts the effects stood for, see PausedEffects.
         file.set("health", data.getHealthAtStart());
@@ -136,7 +139,7 @@ public final class CamCrashGuard implements Listener {
         file.set("allow-flight", data.getOriginalAllowFlight());
         file.set("flying", data.getOriginalFlying());
         file.set("glowing", data.getOriginalGlowing());
-        file.set("fly-speed", (double) player.getFlySpeed());
+        file.set("fly-speed", (double) data.getFlySpeedAtStart());
         file.set("movement-statistics", CamProgressGuard.byName(data.getMovementAtStart()));
         // Written out instead of as a Location: one of those cannot even be
         // read back while its world is not loaded, and the rest of the file
@@ -248,12 +251,8 @@ public final class CamCrashGuard implements Listener {
     }
 
     private void apply(Player player, YamlConfiguration file) {
-        List<?> inventory = file.getList("inventory", List.of());
-        int size = Math.min(inventory.size(), player.getInventory().getSize());
-        ItemStack[] contents = new ItemStack[size];
-        for (int i = 0; i < size; i++) {
-            contents[i] = inventory.get(i) instanceof ItemStack item ? item : null;
-        }
+        ItemStack[] contents = items(player, file.getList("inventory", List.of()));
+        List<?> modeInventory = file.getList("mode-inventory");
         for (PotionEffect effect : player.getActivePotionEffects()) {
             player.removePotionEffect(effect.getType());
         }
@@ -268,15 +267,25 @@ public final class CamCrashGuard implements Listener {
         PausedEffects.giveBack(player, effects,
                 file.isDouble("health") ? file.getDouble("health") : null,
                 file.isDouble("absorption") ? file.getDouble("absorption") : null);
-        player.getInventory().setContents(contents);
-        player.updateInventory();
         GameMode gameMode;
         try {
             gameMode = GameMode.valueOf(file.getString("game-mode", "SURVIVAL").toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
             gameMode = GameMode.SURVIVAL;
         }
+        // The game mode before his things, as at the end of camera mode: a
+        // plugin keeping an inventory for each game mode puts away what it
+        // gave him for the one of the camera, and his own come after it. A
+        // file from before that was kept has none, and nothing is put away.
+        if (modeInventory != null) {
+            player.getInventory().setContents(items(player, modeInventory));
+        } else {
+            player.getInventory().clear();
+        }
         player.setGameMode(gameMode);
+        player.getInventory().clear();
+        player.getInventory().setContents(contents);
+        player.updateInventory();
         player.setAllowFlight(file.getBoolean("allow-flight"));
         player.setFlying(file.getBoolean("flying"));
         player.setGlowing(file.getBoolean("glowing"));
@@ -297,6 +306,16 @@ public final class CamCrashGuard implements Listener {
                     file.getDouble("body.z"), (float) file.getDouble("body.yaw"),
                     (float) file.getDouble("body.pitch")));
         }
+    }
+
+    /** The items of a list in the file, as many as fit into his inventory; anything else is an empty slot. */
+    private static ItemStack[] items(Player player, List<?> list) {
+        int size = Math.min(list.size(), player.getInventory().getSize());
+        ItemStack[] contents = new ItemStack[size];
+        for (int i = 0; i < size; i++) {
+            contents[i] = list.get(i) instanceof ItemStack item ? item : null;
+        }
+        return contents;
     }
 
     /** Moves a file that could not be given back out of the way, under a name that says so. */
