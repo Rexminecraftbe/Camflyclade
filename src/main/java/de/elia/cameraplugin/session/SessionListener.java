@@ -7,7 +7,9 @@ import org.bukkit.World;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Cancellable;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -15,7 +17,10 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /** What happens to camera mode when a player joins, leaves or dies. */
 public final class SessionListener implements Listener {
@@ -25,6 +30,8 @@ public final class SessionListener implements Listener {
 
     private final CameraPlugin plugin;
     private final CameraPlayers cameraPlayers;
+    /** Where the things of a player dying in camera mode away from his body go, see {@link #onPlayerDeathDecided}. */
+    private final Map<UUID, Location> dropsForBody = new HashMap<>();
 
     public SessionListener(CameraPlugin plugin) {
         this.plugin = plugin;
@@ -37,6 +44,7 @@ public final class SessionListener implements Listener {
             plugin.exitCameraMode(event.getPlayer(), EndReason.QUIT);
         }
         plugin.getMovementGuard().forget(event.getPlayer().getUniqueId());
+        dropsForBody.remove(event.getPlayer().getUniqueId());
         plugin.getNoCollisionTeam().removePlayerFromNoCollisionTeam(event.getPlayer());
         plugin.getStartChecks().forget(event.getPlayer().getUniqueId());
         plugin.getPreferences().forget(event.getPlayer().getUniqueId());
@@ -97,10 +105,31 @@ public final class SessionListener implements Listener {
         // Bukkit teleports nobody without health, so the end of camera mode
         // may have left him where the camera was - and the server would drop
         // everything there, in the air, over the void or in somebody else's
-        // base. It goes where he really stood: at his body.
+        // base. It goes where he really stood: at his body, once every other
+        // plugin has had its say, see onPlayerDeathDecided.
         if (!atBody(player.getLocation(), bodyAt)) {
-            dropAtBody(event, bodyAt);
+            dropsForBody.put(player.getUniqueId(), bodyAt);
         }
+    }
+
+    /**
+     * Puts down at his body what a player dying in camera mode away from it
+     * drops - last of all, when it is settled what that is.
+     *
+     * <p>Dropped right away, the things lay in the world before a plugin
+     * that lets him keep his inventory - per world, per permission, on
+     * {@code HIGH} or {@code HIGHEST} - could say so. He kept them, and they
+     * lay at his body as well: twice. Now only what is still in the drops
+     * goes, the experience the same. On Paper, where a death can be called
+     * off, nothing drops for a death that did not happen.</p>
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerDeathDecided(PlayerDeathEvent event) {
+        Location bodyAt = dropsForBody.remove(event.getEntity().getUniqueId());
+        if (bodyAt == null || (event instanceof Cancellable death && death.isCancelled())) {
+            return;
+        }
+        dropAtBody(event, bodyAt);
     }
 
     /**

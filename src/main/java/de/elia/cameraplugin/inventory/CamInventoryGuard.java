@@ -73,8 +73,21 @@ public class CamInventoryGuard {
         this.inCameraMode = inCameraMode;
     }
 
-    /** Starts sweeping for this camera player. */
+    /**
+     * Starts sweeping for this camera player, and keeps experience orbs off
+     * him.
+     *
+     * <p>An orb goes to whoever touches it, and nothing in the Spigot API
+     * turns that away; what it gave stayed with the player after camera mode.
+     * He could fly to somebody else's farm and take its experience without
+     * being there. The game hands an orb only to a player whose pickup delay
+     * has run out, so the camera gets one that does not run out while it
+     * flies. That orbs do not fly towards the camera either is
+     * {@link de.elia.cameraplugin.mob.MobTargeting}'s business: an orb picks
+     * the player it follows the way a mob picks its target.</p>
+     */
     public void startFor(Player player) {
+        player.setExpCooldown(Integer.MAX_VALUE);
         if (tasks.containsKey(player.getUniqueId())) {
             return;
         }
@@ -100,6 +113,8 @@ public class CamInventoryGuard {
         BukkitRunnable task = tasks.remove(player.getUniqueId());
         if (task != null) {
             task.cancel();
+            // Orbs reach him again, the way they would have without camera mode.
+            player.setExpCooldown(0);
         }
     }
 

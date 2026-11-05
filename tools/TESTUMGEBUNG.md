@@ -549,6 +549,13 @@ einzutragen.
   `testfeuerhieb <spieler>` trifft das Mannequin an ihm mit einem Schwert mit
   Verbrennung, und `testmodusinventar an|aus` gibt jedem Spielmodus ein
   eigenes Inventar wie PerWorldInventory in seiner Voreinstellung.
+  Dazu `testbehalten an|aus`, das jeden Toten auf `HIGHEST` sein Inventar
+  behalten lässt wie ein Plugin für keepInventory je Welt oder Recht,
+  `testkoerperschutz an|aus`, das Mannequins und Rüstungsständer vor Schaden
+  und Wurftränken schützt wie ein Schutzgebiet, `testgiftpfeil <x> <y> <z>`,
+  das einen Giftpfeil auf das Mannequin dort schießt, und
+  `testmelder an|aus`, das im Chat sagt, wenn ein Fahrzeug Schaden nimmt oder
+  ein Rahmen oder Bild abgerissen wird und niemand es abhält.
   Ändert sich das Hilfsplugin, laufen alle Abschnitte.
 * **Wer zur Kamera teleportiert wird, bekommt vorher Sanften Fall.** Die
   Kamera steht sechs Blöcke hoch. Käme er bei ihr in der Luft an statt beim

@@ -4,6 +4,7 @@ import de.elia.cameraplugin.body.BodySpawner;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.potion.CamPotionGuard;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.session.EndReason;
@@ -13,6 +14,7 @@ import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.damage.DamageType;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.AbstractArrow;
+import org.bukkit.entity.Arrow;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
@@ -151,9 +153,6 @@ public final class DamageMirror implements Listener {
         Entity damagerEntity = null;
         if (event instanceof EntityDamageByEntityEvent entityEvent) {
             damagerEntity = entityEvent.getDamager();
-            // The effects of a tipped arrow have reached the player already:
-            // CamPotionGuard passes them on when the arrow hits, which comes
-            // before this damage.
         }
 
         double applyDamage;
@@ -199,6 +198,14 @@ public final class DamageMirror implements Listener {
                 announcedRadius(event.getDamageSource()), swingStrength);
 
         plugin.exitCameraMode(owner, EndReason.BODY);
+        // The effects of a tipped arrow, which the cancelled hit on the body
+        // hands to nobody. Here and not as soon as the arrow touched the body:
+        // only now is it certain that the hit counts. After the end, which
+        // takes off invisibility and night vision and would take an arrow's
+        // along.
+        if (damagerEntity instanceof Arrow arrow) {
+            CamPotionGuard.passOnArrowEffects(arrow, owner);
+        }
 
         sendDamageMessage(owner, event);
 
@@ -812,6 +819,13 @@ public final class DamageMirror implements Listener {
         UUID playerId = player.getUniqueId();
         if (damageImmunityBypass.contains(playerId)) {
             return; // his own hit, on its way through
+        }
+        // /kill is no hit but the end of the player, and it ends him in
+        // camera mode as well: turned away, /kill @a of an admin reported
+        // every camera player killed and left them all flying. He dies where
+        // he is, and SessionListener puts his things down at his body.
+        if (event.getDamageSource().getDamageType() == DamageType.GENERIC_KILL) {
+            return;
         }
         if (cameraPlayers.contains(playerId) || pendingMirrorHit.containsKey(playerId)) {
             event.setCancelled(true);

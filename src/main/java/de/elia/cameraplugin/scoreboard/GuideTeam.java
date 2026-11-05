@@ -26,7 +26,7 @@ import java.util.HashSet;
  */
 public final class GuideTeam {
 
-    private static final String GUIDE_TEAM = "cam_guide";
+    static final String GUIDE_TEAM = "cam_guide";
 
     /**
      * Hides his name tag, if no other team has him.
