@@ -9,14 +9,12 @@ import org.bukkit.entity.Arrow;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.AreaEffectCloudApplyEvent;
 import org.bukkit.event.entity.EntityPotionEffectEvent;
 import org.bukkit.event.entity.PotionSplashEvent;
-import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.potion.PotionEffect;
 
 import java.util.ArrayList;
@@ -80,8 +78,17 @@ public final class CamPotionGuard implements Listener {
         event.setCancelled(true);
     }
 
-    /** Apply potion effects from a tipped arrow to the player. */
-    private static void applyArrowEffects(Arrow arrow, Player player) {
+    /**
+     * Passes the effects of a tipped arrow that hit the body on to its
+     * player. The body takes no damage, so the arrow hands them to nobody by
+     * itself.
+     *
+     * <p>Called by {@link de.elia.cameraplugin.mirrordamage.DamageMirror} once
+     * the hit counts, and not as soon as the arrow touches the body: a hit a
+     * protected region turned away left the camera running and the player
+     * poisoned all the same.</p>
+     */
+    public static void passOnArrowEffects(Arrow arrow, Player player) {
         var base = arrow.getBasePotionType();
         if (base != null) {
             base.getPotionEffects().forEach(effect -> player.addPotionEffect(effect, true));
@@ -101,8 +108,12 @@ public final class CamPotionGuard implements Listener {
      * find of him: it wets the mannequin, and from there the effect is passed
      * on to him like everything else his body is met with. An armour stand
      * does not take potions at all, the mannequin standing in it does.</p>
+     *
+     * <p>Last of all, and only for a throw that still counts: what a
+     * protection plugin turns away - the whole throw, or the body by an
+     * intensity of zero - does not reach him through his body either.</p>
      */
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onPotionSplash(PotionSplashEvent event) {
         // Over a copy: taking somebody out of the cloud removes him from the
         // very collection this loop walks.
@@ -149,23 +160,22 @@ public final class CamPotionGuard implements Listener {
     }
 
     /**
-     * Transfer potion effects from arrows that hit the camera body.
+     * A beacon or a conduit gives nothing to the camera.
      *
-     * <p>The only place they are handed over: this event comes before the
-     * damage of the same arrow, which {@link de.elia.cameraplugin.mirrordamage.DamageMirror}
-     * passes on to the player.</p>
+     * <p>Both hand their effect to every player in their reach, and the
+     * camera is one to the game. With regeneration camera mode healed: fly to
+     * the beacon, wait, and be back at the body with full hearts. Whatever
+     * else it gives, strength or resistance, he took along to his body. His
+     * body is no player and gets nothing either, as it stands where he
+     * stood.</p>
      */
-    @EventHandler
-    public void onProjectileHit(ProjectileHitEvent event) {
-        Entity hit = event.getHitEntity();
-        if (hit == null) return;
-        UUID owner = cameraPlayers.getBodyOrHitboxOwner(hit);
-        if (owner == null) return;
-        Player player = Bukkit.getPlayer(owner);
-        if (player == null) return;
-        Projectile proj = event.getEntity();
-        if (proj instanceof Arrow arrow) {
-            applyArrowEffects(arrow, player);
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onCameraPlayerEffect(EntityPotionEffectEvent event) {
+        EntityPotionEffectEvent.Cause cause = event.getCause();
+        if (event.getNewEffect() != null
+                && (cause == EntityPotionEffectEvent.Cause.BEACON || cause == EntityPotionEffectEvent.Cause.CONDUIT)
+                && event.getEntity() instanceof Player player && cameraPlayers.contains(player.getUniqueId())) {
+            event.setCancelled(true);
         }
     }
 }

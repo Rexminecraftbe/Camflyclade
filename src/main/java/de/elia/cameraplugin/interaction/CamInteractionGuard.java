@@ -17,11 +17,14 @@ import org.bukkit.event.block.BlockReceiveGameEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityMountEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
+import org.bukkit.event.hanging.HangingBreakByEntityEvent;
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.vehicle.VehicleDamageEvent;
+import org.bukkit.event.vehicle.VehicleDestroyEvent;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
 
 import java.util.HashMap;
@@ -30,7 +33,7 @@ import java.util.UUID;
 
 /**
  * The camera player has no hands out in the world: he clicks, breaks, places,
- * shoots, attacks and rides nothing. His own body is the one thing left to
+ * shoots, attacks, smashes and rides nothing. His own body is the one thing left to
  * him - clicking it ends camera mode. Anybody else clicking it nudges him,
  * see {@link de.elia.cameraplugin.nudge.CamNudge}.
  *
@@ -216,6 +219,44 @@ public final class CamInteractionGuard implements Listener {
             event.setCancelled(true);
             lockedOnTour(attacker);
         }
+    }
+
+    /**
+     * Nor does he break a boat or a minecart.
+     *
+     * <p>Their damage is an event of its own, not the one above: the camera
+     * player smashed boats and minecarts even in the adventure mode, a chest
+     * minecart with everything that lay in it.</p>
+     */
+    @EventHandler(ignoreCancelled = true)
+    public void onCameraVehicleDamage(VehicleDamageEvent event) {
+        if (isCameraPlayer(event.getAttacker())) {
+            event.setCancelled(true);
+        }
+    }
+
+    /** The same for the destruction itself, which in the creative mode comes with the first hit. */
+    @EventHandler(ignoreCancelled = true)
+    public void onCameraVehicleDestroy(VehicleDestroyEvent event) {
+        if (isCameraPlayer(event.getAttacker())) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Nor does he tear down a painting or an empty item frame - an event of
+     * its own as well. The item in a frame is knocked out through the one
+     * above already.
+     */
+    @EventHandler(ignoreCancelled = true)
+    public void onCameraHangingBreak(HangingBreakByEntityEvent event) {
+        if (isCameraPlayer(event.getRemover())) {
+            event.setCancelled(true);
+        }
+    }
+
+    private boolean isCameraPlayer(Entity entity) {
+        return entity instanceof Player player && cameraPlayers.contains(player.getUniqueId());
     }
 
     /**

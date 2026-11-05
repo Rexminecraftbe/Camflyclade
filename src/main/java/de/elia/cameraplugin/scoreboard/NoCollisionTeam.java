@@ -9,7 +9,10 @@ import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -28,8 +31,23 @@ public final class NoCollisionTeam {
      */
     private static final String BODY_TEAM = "cam_body";
 
+    /** The teams of camera mode itself, none of which is given back, see {@link #formerTeams}. */
+    private static final Set<String> OWN_TEAMS = Set.of(NO_COLLISION_TEAM, BODY_TEAM, GuideTeam.GUIDE_TEAM);
+
     private final CamSettings settings;
     private final CameraPlayers cameraPlayers;
+    /**
+     * The team each camera player stood in before he joined
+     * {@code cam_no_push}, by his name: his team of {@code /team}, or the one
+     * a plugin for ranks and colours puts him into.
+     *
+     * <p>A name stands in one team of a scoreboard at most, and the game
+     * takes it out of the one it is in when it joins another. Camera mode took
+     * him out of his own team that way and left him in none at its end. Now he
+     * gets it back when he leaves {@code cam_no_push} - unless it is gone by
+     * then, or something else has put him into a team meanwhile.</p>
+     */
+    private final Map<String, String> formerTeams = new HashMap<>();
 
     public NoCollisionTeam(CamSettings settings, CameraPlayers cameraPlayers) {
         this.settings = settings;
@@ -67,10 +85,46 @@ public final class NoCollisionTeam {
         Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
         Team team = scoreboard.getTeam(name);
         if (team == null) return;
-        for (String entry : new HashSet<>(team.getEntries())) {
+        Set<String> entries = new HashSet<>(team.getEntries());
+        for (String entry : entries) {
             team.removeEntry(entry);
         }
         team.unregister();
+        for (String entry : entries) {
+            giveBackFormerTeam(entry);
+        }
+    }
+
+    /** Puts a player into {@code cam_no_push}, noting down the team he leaves for it. */
+    private void join(Team team, String name) {
+        if (team.hasEntry(name)) {
+            return;
+        }
+        Team former = Bukkit.getScoreboardManager().getMainScoreboard().getEntryTeam(name);
+        if (former != null && !OWN_TEAMS.contains(former.getName())) {
+            formerTeams.put(name, former.getName());
+        }
+        team.addEntry(name);
+    }
+
+    /** Takes a player out of {@code cam_no_push} and back into the team he stood in before. */
+    private void leave(Team team, String name) {
+        if (team != null && team.hasEntry(name)) {
+            team.removeEntry(name);
+        }
+        giveBackFormerTeam(name);
+    }
+
+    private void giveBackFormerTeam(String name) {
+        String former = formerTeams.remove(name);
+        if (former == null) {
+            return;
+        }
+        Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
+        Team team = scoreboard.getTeam(former);
+        if (team != null && scoreboard.getEntryTeam(name) == null) {
+            team.addEntry(name);
+        }
     }
 
     /** Deletes the teams as soon as no player is in camera mode any more. */
@@ -137,10 +191,7 @@ public final class NoCollisionTeam {
 
     public void removePlayerFromNoCollisionTeam(Player player) {
         Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
-        Team team = scoreboard.getTeam(NO_COLLISION_TEAM);
-        if (team != null) {
-            team.removeEntry(player.getName());
-        }
+        leave(scoreboard.getTeam(NO_COLLISION_TEAM), player.getName());
         deleteNoCollisionTeamIfUnused();
     }
 
@@ -163,13 +214,9 @@ public final class NoCollisionTeam {
         Team team = ensureNoCollisionTeam();
 
         if (cameraPlayers.contains(player.getUniqueId())) {
-            if (!team.hasEntry(player.getName())) {
-                team.addEntry(player.getName());
-            }
+            join(team, player.getName());
         } else {
-            if (team.hasEntry(player.getName())) {
-                team.removeEntry(player.getName());
-            }
+            leave(team, player.getName());
         }
     }
 }

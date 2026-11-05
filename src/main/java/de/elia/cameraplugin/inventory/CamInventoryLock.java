@@ -9,6 +9,7 @@ import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerPickupArrowEvent;
 
 /**
  * Turns away everything that would put something into the pockets of a camera
@@ -28,6 +29,19 @@ public final class CamInventoryLock implements Listener {
     public void onPlayerPickupItem(EntityPickupItemEvent event) {
         if (event.getEntity() instanceof Player &&
                 cameraPlayers.contains(event.getEntity().getUniqueId())) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Arrows and tridents lying about are picked up through an event of their
+     * own, not the one above. Let through, they went into the empty pockets
+     * of the camera, and {@link CamInventoryGuard} swept them away in the next
+     * tick: a trident somebody flew out to look for with {@code /cam} was gone.
+     */
+    @EventHandler
+    public void onPlayerPickupArrow(PlayerPickupArrowEvent event) {
+        if (cameraPlayers.contains(event.getPlayer().getUniqueId())) {
             event.setCancelled(true);
         }
     }
