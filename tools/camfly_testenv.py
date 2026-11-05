@@ -14477,6 +14477,9 @@ def brand_checks(env, bot):
     x, y, z = _floor(heim[0]), BODEN_Y + 1, _floor(heim[2])
     set_option(env, "enabled", "false", "cam-safety")
     try:
+        # Das Wetter der Welt wechselt im langen Lauf von selbst, und Regen
+        # loescht den Bot, bevor er brennt.
+        console(env, "weather clear", pause=0.5)
         hinstellen(bot, x + 0.5, y, z + 0.5)
         bot.chat("/effect give @s minecraft:fire_resistance 120 0 true")
         time.sleep(0.5)
