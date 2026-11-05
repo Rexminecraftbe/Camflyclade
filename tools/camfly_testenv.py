@@ -14545,7 +14545,11 @@ def tod_checks(env, bot):
         console(env, "testtoddrop an", pause=0.3)
         if not FIND.test("/cam startet fuer den Test des Todes", cam_on(bot), ""):
             return
+        ereignisse = len(bot.events)
         console(env, f"testtod {BOT_NAME}", pause=3.0)
+        # Dieser Tod gehoert zum Test: Der Schluss soll ihn nicht als Ereignis
+        # des Bots melden, das man sich ansehen muesste.
+        bot.events[ereignisse:] = [e for e in bot.events[ereignisse:] if e.get("event") != "death"]
         FIND.test("Tod im Cam-Modus: sein Diamant liegt am Koerper", liegt("diamond"), "")
         FIND.test("Tod im Cam-Modus: was ein anderes Plugin in die Drops legt, liegt auch dort",
                   liegt("nautilus_shell"), "")
@@ -14613,10 +14617,13 @@ def treffer_unterwegs_checks(env, bot):
     weggepackt war. Das Hilfsplugin trifft den Koerper und laesst den Bot im
     naechsten Tick /cam tippen: Danach laeuft kein Cam-Modus, er hoert die
     Meldung von cam-safety, und der Treffer hat ihn ausserhalb erreicht.
+    Ohne Regeneration: Satt fuellte sie die zwei Punkte in einer Sekunde
+    wieder auf, ehe nachgesehen ist.
     """
     if not FIND.test("Cam-Modus ist vor dem Test des Treffers unterwegs aus", cam_off(bot), ""):
         return
     try:
+        console(env, "gamerule natural_health_regeneration false", pause=0.3)
         bot.chat("/effect clear @s")
         console(env, f"effect give {BOT_NAME} minecraft:instant_health 1 5", pause=1.0)
         if not FIND.test("/cam startet fuer den Test des Treffers unterwegs", cam_on(bot), ""):
@@ -14634,6 +14641,7 @@ def treffer_unterwegs_checks(env, bot):
     finally:
         cam_off(bot)
         console(env, f"effect give {BOT_NAME} minecraft:instant_health 1 5", pause=0.5)
+        console(env, "gamerule natural_health_regeneration true", pause=0.3)
 
 
 # ---------------------------------------------------------------------------
