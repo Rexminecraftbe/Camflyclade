@@ -35,6 +35,8 @@ public final class CameraMode {
     private final CameraPlugin plugin;
     private final CamSettings settings;
     private final CameraPlayers cameraPlayers;
+    /** Whether a body another plugin kept from spawning has been reported in the console, which is said once. */
+    private boolean bodyBlockedReported;
 
     public CameraMode(CameraPlugin plugin) {
         this.plugin = plugin;
@@ -68,7 +70,81 @@ public final class CameraMode {
         };
     }
 
-    public void enterCameraMode(Player player) {
+    /**
+     * The body a start has put down, and the invisible hitbox standing in it
+     * when the body is the armour stand of the armorstand body, otherwise
+     * {@code null}. See {@link #putDownBody(Player)}.
+     */
+    public record PutDown(LivingEntity body, Mannequin hitbox) {
+    }
+
+    /**
+     * Puts the body down where the player stands, as the first step of a
+     * start: before anything is taken off him and before the start is paid.
+     *
+     * <p>Another plugin may keep the body from spawning - a protection plugin
+     * that denies the spawning of mobs in a region, WorldGuard's
+     * {@code mob-spawning: deny} with {@code block-plugin-spawning} among
+     * them. The server hands out the entity all the same, it only never
+     * reaches the world. Camera mode on such a body would have nothing to be
+     * hit: the player would fly about with nothing at stake. So the start is
+     * turned away here, while nothing has happened yet that would have to be
+     * undone.</p>
+     *
+     * @return what was put down, or {@code null} when it could not be; he has
+     *         been told why
+     */
+    public PutDown putDownBody(Player player) {
+        Location at = player.getLocation();
+        ItemStack[] armor = player.getInventory().getArmorContents();
+        BodySpawner bodies = plugin.getBodySpawner();
+        LivingEntity body = bodies.spawnCameraBody(player, at, armor);
+        Mannequin hitbox = null;
+        if (!bodies.usesMannequinBody()) {
+            // The mannequin next to the armour stand is invisible, so it wears
+            // copies whose armour is not rendered either. What is seen of the
+            // armour hangs on the armour stand, see spawnArmorStandBody.
+            hitbox = bodies.spawnHitbox(player, at, bodies.createHiddenArmor(armor));
+        }
+        if (body.isValid() && (hitbox == null || hitbox.isValid())) {
+            if (hitbox != null) {
+                hitbox.teleport(body.getLocation());
+            }
+            return new PutDown(body, hitbox);
+        }
+        bodies.remove(body);
+        if (hitbox != null) {
+            bodies.remove(hitbox);
+        }
+        if (!bodyBlockedReported) {
+            bodyBlockedReported = true;
+            plugin.getLogger().warning("The body of " + player.getName() + " could not be spawned at "
+                    + at.getWorld().getName() + " " + at.getBlockX() + " " + at.getBlockY() + " " + at.getBlockZ()
+                    + ": another plugin cancelled the spawn, a protection plugin denying mob spawning there"
+                    + " most likely. Cam mode does not start where its body cannot stand."
+                    + " This is only said once.");
+        }
+        plugin.getMessages().sendMessage(player, "cam-body-blocked");
+        return null;
+    }
+
+    /**
+     * Takes away a body {@link #putDownBody(Player)} put down for a start
+     * that did not happen after all: the cost could not be paid.
+     */
+    public void takeAway(PutDown putDown) {
+        BodySpawner bodies = plugin.getBodySpawner();
+        bodies.remove(putDown.body());
+        if (putDown.hitbox() != null) {
+            bodies.remove(putDown.hitbox());
+        }
+    }
+
+    /**
+     * Starts camera mode on the body {@link #putDownBody(Player)} has put
+     * down in this same tick.
+     */
+    public void enterCameraMode(Player player, PutDown putDown) {
         // *** Save inventory and armour ***
         // getContents() holds every slot, armour and off hand included.
         // The armour is needed once more on its own for the body.
@@ -88,6 +164,8 @@ public final class CameraMode {
         boolean originalGlowing = player.isGlowing();
         int remainingAir = player.getRemainingAir();
         int freezeTicks = player.getFreezeTicks();
+        // Read before the fire guard puts it out: he burns on from there.
+        int fireTicks = player.getFireTicks();
 
         // *** Empty inventory and armour ***
         playerInventory.clear();
@@ -96,14 +174,15 @@ public final class CameraMode {
         Location playerLocation = player.getLocation();
 
         BodySpawner bodies = plugin.getBodySpawner();
-        LivingEntity body = bodies.spawnCameraBody(player, playerLocation, originalArmor);
+        LivingEntity body = putDown.body();
 
         // A mannequin takes the hits for both body types and is the entity the
         // movement check watches. It carries the player's armour so the body
         // looks like him; the damage itself is calculated on the player, see
-        // onBodyDamage.
-        Mannequin hitbox = null;
-        if (bodies.usesMannequinBody()) {
+        // onBodyDamage. The hitbox of the armorstand body has its copies on
+        // already, see putDownBody.
+        Mannequin hitbox = putDown.hitbox();
+        if (hitbox == null) {
             EntityEquipment bodyEquipment = body.getEquipment();
             if (bodyEquipment != null) {
                 // Here body and hitbox are one and the same entity, so it wears
@@ -113,12 +192,6 @@ public final class CameraMode {
                         ? bodies.createMirrorArmor(originalArmor)
                         : bodies.createHiddenArmor(originalArmor));
             }
-        } else {
-            // The mannequin next to the armour stand is invisible, so it wears
-            // copies whose armour is not rendered either. What is seen of the
-            // armour hangs on the armour stand, see spawnArmorStandBody.
-            hitbox = bodies.spawnHitbox(player, playerLocation, bodies.createHiddenArmor(originalArmor));
-            hitbox.teleport(body.getLocation());
         }
         // The mannequin is the entity that takes the hits.
         LivingEntity damageTarget = hitbox != null ? hitbox : body;
@@ -187,6 +260,7 @@ public final class CameraMode {
         // Before the crash file below, which keeps them as well.
         cameraData.setMovementAtStart(CamProgressGuard.readMovement(player));
         cameraData.setHeartsAtStart(health, absorption);
+        cameraData.setFireTicksAtStart(fireTicks);
         cameraPlayers.put(player.getUniqueId(), cameraData);
         // Out of the picture of whoever takes one, from the start, and out
         // of sight of whoever is too far away to see it.
@@ -365,11 +439,9 @@ public final class CameraMode {
         plugin.getNightVision().stopFor(player);
         plugin.getSignal().stopFor(player);
 
-        if (standingInFire) {
-            player.setFireTicks(160);
-        } else {
-            player.setFireTicks(0);
-        }
+        // Burning when camera mode began, he burns on: the fire is paused like
+        // his effects, and camera mode is no way to put it out.
+        player.setFireTicks(Math.max(cameraData.getFireTicksAtStart(), standingInFire ? 160 : 0));
         // With the hearts they stood for: absorption would come back full.
         PausedEffects.giveBack(player, cameraData.getPausedEffects(), cameraData.getHealthAtStart(),
                 cameraData.getAbsorptionAtStart());

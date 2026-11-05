@@ -130,6 +130,8 @@ public final class CamCrashGuard implements Listener {
         // The hearts the effects stood for, see PausedEffects.
         file.set("health", data.getHealthAtStart());
         file.set("absorption", data.getAbsorptionAtStart());
+        // Paused like the effects, see CameraMode.
+        file.set("fire-ticks", data.getFireTicksAtStart());
         file.set("game-mode", data.getOriginalGameMode().name());
         file.set("allow-flight", data.getOriginalAllowFlight());
         file.set("flying", data.getOriginalFlying());
@@ -280,7 +282,8 @@ public final class CamCrashGuard implements Listener {
         player.setGlowing(file.getBoolean("glowing"));
         float flySpeed = (float) file.getDouble("fly-speed", 0.1);
         player.setFlySpeed(Math.max(-1.0f, Math.min(1.0f, flySpeed)));
-        player.setFireTicks(0);
+        // A file from before the fire was kept has none.
+        player.setFireTicks(Math.max(0, file.getInt("fire-ticks", 0)));
         player.setFallDistance(0.0f);
         // What the camera moved before the crash, set back. A file from
         // before the statistics were kept has none.

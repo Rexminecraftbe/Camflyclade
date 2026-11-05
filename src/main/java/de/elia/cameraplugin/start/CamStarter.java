@@ -2,6 +2,7 @@ package de.elia.cameraplugin.start;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.session.CameraMode;
 import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import org.bukkit.ChatColor;
@@ -78,10 +79,20 @@ public final class CamStarter {
     }
 
     private boolean start(Player player, Runnable then) {
-        if (!mayStart(player) || !plugin.getStartCost().pay(player)) {
+        if (!mayStart(player) || !plugin.getStartCost().canPay(player)) {
             return false;
         }
-        plugin.enterCameraMode(player);
+        // The body before the cost: another plugin may keep it from standing
+        // there, and then nothing is to be paid.
+        CameraMode.PutDown body = plugin.putDownBody(player);
+        if (body == null) {
+            return false;
+        }
+        if (!plugin.getStartCost().pay(player)) {
+            plugin.takeAwayBody(body);
+            return false;
+        }
+        plugin.enterCameraMode(player, body);
         messages.sendConfiguredMessage(player, "camera-on");
         if (then != null) {
             then.run();
@@ -101,6 +112,16 @@ public final class CamStarter {
         // First of all: neither waiting nor going somewhere else helps a
         // banned player.
         if (!plugin.getBan().checkStart(player)) {
+            return false;
+        }
+        // The hit his body just took is still on its way to him, for a tick
+        // or two: it is to land with his armour on, not on a camera that has
+        // put it away again. Said the way cam-safety says it, which counts
+        // that hit as soon as it lands.
+        if (plugin.getDamageMirror() != null && plugin.getDamageMirror().isHitPending(player.getUniqueId())) {
+            if (messages.isMessageEnabled("cam-safety")) {
+                player.sendMessage(ChatColor.RED + messages.getMessage("cam-safety").replace("%seconds%", "1"));
+            }
             return false;
         }
         // Before the cooldown: "wait ten more seconds" tells a spectator

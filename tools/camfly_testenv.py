@@ -863,6 +863,14 @@ def stop_server(env, quiet=False):
 # Dazu setzt es den Frost eines Spielers am Server, was kein Befehl kann
 # (/data aendert keine Spieler):
 #   testfrost <spieler> <ticks>
+# Und es tut, was sonst nur andere Plugins tun:
+#   testtod <spieler>            - setHealth(0), ein Tod ohne Schaden, auch im Cam-Modus
+#   testtoddrop an|aus           - legt jedem Toten eine Nautilusschale in die Drops,
+#                                  auf LOW, wie ein Plugin fuer Koepfe es taete
+#   testspawnsperre an|aus       - verbietet Plugins Mannequins und Ruestungsstaender,
+#                                  wie WorldGuard mit mob-spawning: deny
+#   testtreffercam <spieler>     - trifft das Mannequin an seinem Koerper und laesst ihn
+#                                  im naechsten Tick /cam tippen, ehe der Treffer bei ihm ist
 TPA_HELFER_NAME = "CamFlyTpaHelfer"
 
 TPA_HELFER_JAVA = r'''
@@ -870,14 +878,88 @@ package camflytest;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.CreatureSpawnEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public final class TpaHelfer extends JavaPlugin {
+public final class TpaHelfer extends JavaPlugin implements Listener {
+    private boolean todDrop;
+    private boolean spawnSperre;
+
+    @Override
+    public void onEnable() {
+        getServer().getPluginManager().registerEvents(this, this);
+    }
+
+    @EventHandler(priority = EventPriority.LOW)
+    public void onDeath(PlayerDeathEvent event) {
+        if (todDrop) {
+            event.getDrops().add(new ItemStack(Material.NAUTILUS_SHELL));
+        }
+    }
+
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    public void onSpawn(CreatureSpawnEvent event) {
+        if (spawnSperre && event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.CUSTOM
+                && (event.getEntityType() == EntityType.MANNEQUIN || event.getEntityType() == EntityType.ARMOR_STAND)) {
+            event.setCancelled(true);
+        }
+    }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase("testtoddrop") || command.getName().equalsIgnoreCase("testspawnsperre")) {
+            if (args.length != 1) {
+                return false;
+            }
+            boolean an = args[0].equalsIgnoreCase("an");
+            if (command.getName().equalsIgnoreCase("testtoddrop")) {
+                todDrop = an;
+            } else {
+                spawnSperre = an;
+            }
+            sender.sendMessage(command.getName() + ": " + (an ? "an" : "aus"));
+            return true;
+        }
+        if (command.getName().equalsIgnoreCase("testtod") || command.getName().equalsIgnoreCase("testtreffercam")) {
+            Player wer = args.length == 1 ? Bukkit.getPlayerExact(args[0]) : null;
+            if (wer == null) {
+                return false;
+            }
+            if (command.getName().equalsIgnoreCase("testtod")) {
+                wer.setHealth(0.0);
+                sender.sendMessage("testtod: ok");
+                return true;
+            }
+            Mannequin koerper = null;
+            for (Entity e : wer.getWorld().getNearbyEntities(wer.getLocation(), 1.5, 2.5, 1.5)) {
+                if (e instanceof Mannequin m) {
+                    koerper = m;
+                    break;
+                }
+            }
+            if (koerper == null) {
+                sender.sendMessage("testtreffercam: kein Mannequin");
+                return true;
+            }
+            koerper.damage(2.0);
+            // Im naechsten Tick, wie ein Spieler, der sofort wieder /cam tippt:
+            // Der Treffer ist dann noch unterwegs zu ihm.
+            Bukkit.getScheduler().runTask(this, () -> wer.performCommand("cam"));
+            sender.sendMessage("testtreffercam: ok");
+            return true;
+        }
         if (command.getName().equalsIgnoreCase("testfrost")) {
             Player wer = args.length == 2 ? Bukkit.getPlayerExact(args[0]) : null;
             if (wer == null) {
@@ -922,6 +1004,14 @@ commands:
   plugintp:
     permission: camflytest.plugintp
   testfrost:
+    permission: camflytest.plugintp
+  testtod:
+    permission: camflytest.plugintp
+  testtoddrop:
+    permission: camflytest.plugintp
+  testspawnsperre:
+    permission: camflytest.plugintp
+  testtreffercam:
     permission: camflytest.plugintp
 permissions:
   camflytest.plugintp:
@@ -14338,6 +14428,228 @@ def reiten_checks(env, bot):
 
 
 # ---------------------------------------------------------------------------
+# Tippfehler, Brennen, Tod, ein gesperrter Koerper und ein Treffer unterwegs
+# ---------------------------------------------------------------------------
+
+def tippfehler_checks(env, bot):
+    """Ein Wort nach /cam, das kein Befehl ist, schaltet nichts um.
+
+    Was CamCommand nicht kannte, fiel bis ans Ende durch und schaltete den
+    Cam-Modus um: /cam spto startete ihn, /cam hlep beendete ihn. Jetzt sagt
+    cam-unknown-command, dass es den Befehl nicht gibt, und der Cam-Modus
+    bleibt, wie er ist - aus wie an.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test der Tippfehler aus", cam_off(bot), ""):
+        return
+    try:
+        zeilen = befehl(bot, "/cam spto", warten=2.0)
+        lief = spielmodus_ist(bot, "adventure")
+        FIND.test("/cam spto startet den Cam-Modus nicht und sagt, dass es den Befehl nicht gibt",
+                  gesagt(zeilen, r"/cam spto is no command") and not lief,
+                  "Cam-Modus laeuft" if lief else zeige(zeilen))
+        if lief:
+            cam_off(bot)
+        if FIND.test("/cam startet fuer den Test der Tippfehler", cam_on(bot), ""):
+            zeilen = befehl(bot, "/cam hlep", warten=2.0)
+            lief = spielmodus_ist(bot, "adventure")
+            FIND.test("/cam hlep beendet den Cam-Modus nicht und sagt, dass es den Befehl nicht gibt",
+                      gesagt(zeilen, r"/cam hlep is no command") and lief,
+                      "Cam-Modus ist aus" if not lief else zeige(zeilen))
+    finally:
+        cam_off(bot)
+
+
+def brand_checks(env, bot):
+    """Wer brennend in den Cam-Modus geht, brennt danach weiter.
+
+    Der Feuerschutz loescht den Kamera-Spieler, und das Ende gab ihm nur
+    Feuer, wenn er dort gerade im Feuer stand: Der Cam-Modus war ein
+    Feuerloescher. Jetzt ruht das Feuer wie seine Effekte und brennt danach
+    weiter. Die Feuerresistenz haelt den Schaden ab - sonst sperrte
+    cam-safety den Start ohnehin -, abgeschaltet ist cam-safety trotzdem: Hier
+    soll allein das Feuer entscheiden.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test des Brennens aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]), BODEN_Y + 1, _floor(heim[2])
+    set_option(env, "enabled", "false", "cam-safety")
+    try:
+        # Das Wetter der Welt wechselt im langen Lauf von selbst, und Regen
+        # loescht den Bot, bevor er brennt.
+        console(env, "weather clear", pause=0.5)
+        hinstellen(bot, x + 0.5, y, z + 0.5)
+        bot.chat("/effect give @s minecraft:fire_resistance 120 0 true")
+        time.sleep(0.5)
+        console(env, f"setblock {x} {y} {z} minecraft:fire", pause=1.0)
+        console(env, f"setblock {x} {y} {z} minecraft:air", pause=0.5)
+        vorher = bot.server_data("Fire")
+        if FIND.test("Der Bot brennt fuer den Test", vorher is not None and vorher > 60, f"Fire {vorher}") \
+                and FIND.test("/cam startet fuer den Test des Brennens", cam_on(bot), ""):
+            time.sleep(1.0)
+            cam_off(bot)
+            nachher = bot.server_data("Fire")
+            FIND.test("Nach dem Cam-Modus brennt er weiter, das Feuer hat nur geruht",
+                      nachher is not None and nachher > 20, f"vorher {vorher}, nachher {nachher}")
+    finally:
+        cam_off(bot)
+        # Geloescht: Wasser an seinen Fuessen, gleich wieder weg.
+        console(env, f"setblock {x} {y} {z} minecraft:water", pause=1.0)
+        console(env, f"setblock {x} {y} {z} minecraft:air", pause=0.5)
+        bot.chat("/effect clear @s")
+        time.sleep(0.5)
+        set_option(env, "enabled", "true", "cam-safety")
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
+def tod_checks(env, bot):
+    """Stirbt ein Kamera-Spieler, fallen am Koerper seine eigenen Dinge - wie
+    ohne Cam-Modus.
+
+    Was der Server an Drops einsammelt, sind die leeren Taschen der Kamera.
+    Das Plugin setzte an ihre Stelle das ganze Inventar von vor dem
+    Cam-Modus - warf dabei aber alles weg, was andere Plugins dazugelegt
+    hatten, und legte auch Dinge mit dem Fluch des Verschwindens hinein, die
+    ohne Cam-Modus mit dem Tod verschwinden.
+
+    Das Hilfsplugin bringt den Bot mit setHealth(0) um, wie ein Plugin es
+    taete - Schaden erreicht einen Kamera-Spieler nicht -, und legt jedem
+    Toten eine Nautilusschale in die Drops. Am Koerper liegen danach sein
+    Diamant und die Nautilusschale, das verfluchte Eisenschwert nicht.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test des Todes aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    # Acht Bloecke: Was ein Toter fallen laesst, wirft der Server mit einem
+    # zufaelligen Schwung um sich, und mancher Wurf geht ueber vier hinaus.
+    weg = f"execute positioned {x} {y} {z} run kill @e[type=minecraft:item,distance=..8]"
+
+    def liegt(item):
+        return server_says(bot, f"/execute positioned {x} {y} {z} if items entity "
+                                f"@e[type=minecraft:item,distance=..8] contents minecraft:{item} "
+                                f"run say {{marke}}")
+
+    try:
+        console(env, "gamerule keep_inventory false", pause=0.3)
+        console(env, weg, pause=0.3)
+        hinstellen(bot, x, y, z)
+        console(env, f"clear {BOT_NAME}", pause=0.3)
+        console(env, f"give {BOT_NAME} minecraft:diamond 1", pause=0.3)
+        console(env, f'give {BOT_NAME} minecraft:iron_sword[minecraft:enchantments='
+                     f'{{"minecraft:vanishing_curse":1}}] 1', pause=0.5)
+        if not FIND.test("Der Bot hat fuer den Test einen Diamanten und ein verfluchtes Eisenschwert",
+                         server_says(bot, f"/execute if items entity {BOT_NAME} container.* minecraft:diamond "
+                                          f"if items entity {BOT_NAME} container.* minecraft:iron_sword "
+                                          f"run say {{marke}}"), ""):
+            return
+        console(env, "testtoddrop an", pause=0.3)
+        if not FIND.test("/cam startet fuer den Test des Todes", cam_on(bot), ""):
+            return
+        ereignisse = len(bot.events)
+        console(env, f"testtod {BOT_NAME}", pause=3.0)
+        # Dieser Tod gehoert zum Test: Der Schluss soll ihn nicht als Ereignis
+        # des Bots melden, das man sich ansehen muesste.
+        bot.events[ereignisse:] = [e for e in bot.events[ereignisse:] if e.get("event") != "death"]
+        FIND.test("Tod im Cam-Modus: sein Diamant liegt am Koerper", liegt("diamond"), "")
+        FIND.test("Tod im Cam-Modus: was ein anderes Plugin in die Drops legt, liegt auch dort",
+                  liegt("nautilus_shell"), "")
+        FIND.test("Tod im Cam-Modus: das Schwert mit dem Fluch des Verschwindens ist weg, wie ohne Cam-Modus",
+                  not liegt("iron_sword"), "")
+    finally:
+        console(env, "testtoddrop aus", pause=0.3)
+        time.sleep(1.0)
+        cam_off(bot)
+        console(env, weg, pause=0.3)
+        console(env, f"clear {BOT_NAME}", pause=0.3)
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
+def koerpersperre_checks(env, bot):
+    """Laesst ein anderes Plugin den Koerper nicht spawnen, startet der
+    Cam-Modus nicht - und nichts ist bezahlt oder weggenommen.
+
+    Ein Schutzplugin wie WorldGuard verbietet mit mob-spawning: deny auch
+    Plugins das Spawnen. Der Server gibt die Entitaet trotzdem heraus, sie
+    kommt nur nie in die Welt: Der Cam-Modus lief dann ohne einen Koerper,
+    den etwas treffen konnte. Jetzt wird der Start abgelehnt
+    (cam-body-blocked), und zwar vor den Kosten: start-cost.xp ist dafuer
+    eine Stufe. Das Hilfsplugin spielt das Schutzplugin (testspawnsperre).
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test der Koerpersperre aus", cam_off(bot), ""):
+        return
+    try:
+        set_options(env, [("enabled", "true", "start-cost"), ("xp", "1", "start-cost")])
+        bot.chat("/xp set @s 3 levels")
+        time.sleep(0.5)
+        console(env, "testspawnsperre an", pause=0.3)
+        zeilen = befehl(bot, "/cam", warten=2.0)
+        lief = spielmodus_ist(bot, "adventure")
+        FIND.test("Kann der Koerper nicht spawnen, startet /cam nicht, und er hoert, warum",
+                  gesagt(zeilen, r"body cannot be put down here") and not lief,
+                  "Cam-Modus laeuft" if lief else zeige(zeilen))
+        if lief:
+            cam_off(bot)
+        FIND.test("Dafuer ist nichts bezahlt: er hat seine drei Stufen noch", nbt_frage(bot, "@s", "{XpLevel:3}"), "")
+        FIND.test("Kein Koerper ist stehen geblieben",
+                  not server_says(bot, "/execute if entity @e[type=minecraft:mannequin,distance=..3] "
+                                       "run say {marke}")
+                  and not server_says(bot, "/execute if entity @e[type=minecraft:armor_stand,distance=..3] "
+                                           "run say {marke}"), "")
+        console(env, "testspawnsperre aus", pause=0.3)
+        if FIND.test("Ohne die Sperre startet /cam wieder", cam_on(bot), ""):
+            FIND.test("Und kostet dann seine Stufe", nbt_frage(bot, "@s", "{XpLevel:2}"), "")
+    finally:
+        console(env, "testspawnsperre aus", pause=0.3)
+        cam_off(bot)
+        set_options(env, [("enabled", "false", "start-cost"), ("xp", "0", "start-cost")])
+        bot.chat("/xp set @s 0 levels")
+        time.sleep(0.5)
+
+
+def treffer_unterwegs_checks(env, bot):
+    """Kein neuer Start, solange der Treffer auf den Koerper noch zum Spieler
+    unterwegs ist.
+
+    Der Treffer erreicht den Spieler erst ein, zwei Ticks nach dem Ende des
+    Cam-Modus, wenn seine Ruestung ihn wieder schuetzt, und cam-safety zaehlt
+    ihn erst, wenn er ankommt. Ein /cam dazwischen startete den Cam-Modus
+    neu, und der Treffer landete auf der Kamera, deren Ruestung schon wieder
+    weggepackt war. Das Hilfsplugin trifft den Koerper und laesst den Bot im
+    naechsten Tick /cam tippen: Danach laeuft kein Cam-Modus, er hoert die
+    Meldung von cam-safety, und der Treffer hat ihn ausserhalb erreicht.
+    Ohne Regeneration: Satt fuellte sie die zwei Punkte in einer Sekunde
+    wieder auf, ehe nachgesehen ist.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test des Treffers unterwegs aus", cam_off(bot), ""):
+        return
+    try:
+        console(env, "gamerule natural_health_regeneration false", pause=0.3)
+        bot.chat("/effect clear @s")
+        console(env, f"effect give {BOT_NAME} minecraft:instant_health 1 5", pause=1.0)
+        if not FIND.test("/cam startet fuer den Test des Treffers unterwegs", cam_on(bot), ""):
+            return
+        since = bot.mark()
+        console(env, f"testtreffercam {BOT_NAME}", pause=2.0)
+        zeilen = zeilen_seit(bot, since)
+        lief = spielmodus_ist(bot, "adventure")
+        leben = bot.server_data("Health")
+        FIND.test("Ein /cam, waehrend der Treffer auf den Koerper noch unterwegs ist, startet nicht",
+                  not lief and gesagt(zeilen, r"remain safe"),
+                  "Cam-Modus laeuft" if lief else zeige(zeilen))
+        FIND.test("Der Treffer hat ihn ausserhalb des Cam-Modus erreicht",
+                  leben is not None and leben < 19.99, f"Leben {leben}")
+    finally:
+        cam_off(bot)
+        console(env, f"effect give {BOT_NAME} minecraft:instant_health 1 5", pause=0.5)
+        console(env, "gamerule natural_health_regeneration true", pause=0.3)
+
+
+# ---------------------------------------------------------------------------
 # Die Grenze: border-mode, border-block, border-radius
 # ---------------------------------------------------------------------------
 
@@ -15180,6 +15492,136 @@ def portal_checks(env, bot):
                           ("nether", "false", "cam-area"),
                           ("forget-changed", "true"),
                           ("border-mode", "barrier")])
+
+
+def fuehrung_nether_checks(env, bot):
+    """/cam follow hinter einem Portal: Der Gast folgt seinem Leader auch in
+    der Welt, in die ihn ein Portal gebracht hat - beim Annehmen und beim
+    Aufholen.
+
+    Jeder Sprung der Kamera - zu einem Spot, zum Ende des letzten Flugs, zum
+    Leader - nahm ihr den Anker des Portals, durch das sie gekommen war. Fuer
+    die Spots und /cam resume stimmt das, sie fuehren immer in die Welt des
+    Koerpers. Der Leader aber kann drueben stehen: Ohne Anker galt der Gast
+    dort als verloren, fiel aus der Reichweite (follow.out-of-reach-seconds)
+    und wurde beim naechsten Schritt zum Koerper zurueckgeholt.
+
+    Der Bot geht im Cam-Modus durch ein Portal in den Nether. Der zweite
+    Spieler steht drueben ohne Cam-Modus neben ihm (lead-without-cam) und
+    laedt ihn ein. Nach dem Annehmen und nach einem Sprung des Leaders um gut
+    elf Bloecke, den der Gast aufholt, steht der Bot noch drueben, beim Leader,
+    und hat nichts von verlorener Reichweite oder vom Zurueckholen gehoert.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test der Fuehrung im Nether aus", cam_off(bot), ""):
+        return
+    if in_nether(bot):
+        bot.chat("/execute in minecraft:overworld run tp @s 0 -59 0")
+        time.sleep(2)
+    pos = bot.server_pos()
+    if not FIND.test("Position fuer die Fuehrung im Nether lesbar", pos is not None, str(pos)):
+        return
+    bx, by, bz = _floor(pos[0]), _floor(pos[1] + 0.5), _floor(pos[2])
+    # Auf der anderen Seite als das Portal des Portaltests, damit keins das
+    # andere nimmt.
+    portal = (bx - 8, by, bz + 6)
+    heim = (bx, by, bz)
+    ziel = (portal[0] // 8, portal[2] // 8)
+    nether = "/execute in minecraft:the_nether run"
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    vorbereitet = False
+
+    def leader_pos():
+        return bot.call("server_pos", selector=ZUSCHAUER_NAME).get("pos")
+
+    def folgt_drueben(was, seit):
+        """Ob der Bot noch drueben ist, beim Leader, und nichts vom Verlieren gehoert hat."""
+        zeilen = zeilen_seit(bot, seit)
+        verloren = [z for z in zeilen if re.search(r"out of your reach|brought back|no longer follow", z)]
+        drueben = in_nether(bot)
+        wo, leader = bot.server_pos(), leader_pos()
+        nah = wo is not None and leader is not None and math.dist(wo, leader) < 6.0
+        FIND.test(f"follow im Nether, {was}: der Gast bleibt drueben beim Leader", drueben and nah and not verloren,
+                  zeige(verloren) if verloren else f"im Nether {drueben}, Gast {wo}, Leader {leader}")
+
+    try:
+        set_options(env, [("nether", "true", "portals"), ("nether", "true", "cam-area")])
+        if not FIND.test("Portal fuer die Fuehrung im Nether steht",
+                         build_portal(bot, "minecraft:overworld", *portal), str(portal)):
+            return
+        hold_nether_chunks(bot, ziel)
+        vorbereitet = True
+        fill_nether_biome(bot, ziel, "minecraft:nether_wastes")
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Fuehrung im Nether kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        if not FIND.test("/cam startet fuer die Fuehrung im Nether", cam_on(bot), ""):
+            return
+        bot.chat("/execute in minecraft:overworld run tp @s {:.1f} {:d} {:.1f}".format(
+            portal[0] + 0.5, portal[1], portal[2] + 0.5))
+        time.sleep(PORTAL_TRAVEL_WAIT)
+        dort = bot.server_pos()
+        if not FIND.test("Der Bot ist im Cam-Modus durch das Portal in den Nether gekommen",
+                         in_nether(bot) and dort is not None, str(dort)):
+            return
+        # Neben dem Portal drueben ein Gang an der Luft, schraeg weg vom Rahmen
+        # - der steht in einer Ebene, und schraeg trifft ihn keine Ecke -, mit
+        # zwei Glasflecken, auf denen der Leader nacheinander steht.
+        ax, ay, az = _floor(dort[0]), _floor(dort[1] + 0.5), _floor(dort[2])
+        bot.chat(f"{nether} fill {ax + 1} {ay} {az + 1} {ax + 13} {ay + 2} {az + 13} minecraft:air")
+        time.sleep(0.5)
+        erster, zweiter = (ax + 3, ay, az + 3), (ax + 11, ay, az + 11)
+        for fx, fy, fz in (erster, zweiter):
+            bot.chat(f"{nether} fill {fx - 1} {fy - 1} {fz - 1} {fx + 1} {fy - 1} {fz + 1} minecraft:glass")
+            time.sleep(0.3)
+        console(env, f"effect give {ZUSCHAUER_NAME} minecraft:fire_resistance 300 0 true", pause=0.3)
+        console(env, f"execute in minecraft:the_nether run tp {ZUSCHAUER_NAME} "
+                     f"{erster[0] + 0.5} {erster[1]} {erster[2] + 0.5}", pause=1.5)
+        zeilen = befehl(zuschauer, f"/cam follow invite {BOT_NAME}")
+        if not FIND.test("Der Leader drueben laedt den Gast ein", gesagt(zeilen, rf"You invited {BOT_NAME}"),
+                         zeige(zeilen)):
+            return
+        seit = bot.mark()
+        zeilen = befehl(bot, f"/cam follow accept {ZUSCHAUER_NAME}", warten=3.0)
+        if not FIND.test("Im Nether nimmt der Gast die Einladung an und folgt",
+                         gesagt(zeilen, rf"You follow {ZUSCHAUER_NAME} now"), zeige(zeilen)):
+            return
+        # Laenger, als follow.out-of-reach-seconds ihm ohne Anker liesse.
+        time.sleep(7.0)
+        folgt_drueben("nach dem Annehmen", seit)
+
+        seit = bot.mark()
+        console(env, f"execute in minecraft:the_nether run tp {ZUSCHAUER_NAME} "
+                     f"{zweiter[0] + 0.5} {zweiter[1]} {zweiter[2] + 0.5}", pause=0.5)
+        time.sleep(7.0)
+        folgt_drueben("nach dem Aufholen", seit)
+    finally:
+        try:
+            befehl(bot, "/cam follow leave")
+            cam_off(bot)
+            if zuschauer.proc is not None:
+                cam_off(zuschauer)
+                console(env, f"execute in minecraft:overworld run tp {ZUSCHAUER_NAME} "
+                             f"{heim[0] + 0.5} {heim[1]} {heim[2] + 0.5}", pause=0.5)
+                console(env, f"effect clear {ZUSCHAUER_NAME}", pause=0.3)
+                zuschauer.stop()
+            bot.chat("/execute in minecraft:overworld run tp @s {:.1f} {:d} {:.1f}".format(
+                heim[0] + 0.5, heim[1], heim[2] + 0.5))
+            time.sleep(1)
+            if vorbereitet:
+                clear_nether_portals(bot, ziel)
+                fill_nether_biome(bot, ziel, "minecraft:nether_wastes")
+                bot.chat("/execute in minecraft:the_nether run forceload remove all")
+                time.sleep(1)
+            px, py, pz = portal
+            bot.chat(f"/execute in minecraft:overworld run fill "
+                     f"{px-1} {py-1} {pz} {px+2} {py+3} {pz} minecraft:air")
+            time.sleep(0.5)
+            set_options(env, [("nether", "false", "portals"), ("nether", "false", "cam-area")])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Fuehrung im Nether: {exc}")
 
 
 # Wo der Koerper fuer den Test des unbewachten Chunks steht: auf dem Dach des
@@ -16662,8 +17104,15 @@ ABSCHNITTE = [
     Abschnitt("kamerakopf", kamerakopf_checks, "session/CameraMode session/CameraHead"),
     Abschnitt("herzen", herzen_checks, "session/PausedEffects session/CameraMode session/CameraData"),
     Abschnitt("reiten", reiten_checks, "start/StartChecks start/CamStarter"),
+    Abschnitt("tippfehler", tippfehler_checks, "camfly2/CamCommand"),
+    Abschnitt("brand", brand_checks, "session/CameraMode session/CameraData fire crash/CamCrashGuard"),
+    Abschnitt("tod", tod_checks, "session/SessionListener"),
+    Abschnitt("koerpersperre", koerpersperre_checks, "session/CameraMode start/CamStarter body/BodySpawner cost",
+              koerpertypen=True),
+    Abschnitt("treffer_unterwegs", treffer_unterwegs_checks, "mirrordamage/DamageMirror start/CamStarter"),
     Abschnitt("grenze", border_checks, "movement"),
     Abschnitt("portale", portal_checks, "portal movement/CamMovementGuard area"),
+    Abschnitt("fuehrung_nether", fuehrung_nether_checks, "tour/CamTour movement/CamMovementGuard portal"),
     Abschnitt("unbewacht", unbewacht_checks, "body/BodySpawner body/BodyWatch", koerpertypen=True),
     Abschnitt("liegengeblieben", liegengeblieben_checks, "body/BodySpawner crash"),
     Abschnitt("teleport", teleport_checks, "teleport"),

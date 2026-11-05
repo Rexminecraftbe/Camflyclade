@@ -4,6 +4,7 @@ import de.elia.cameraplugin.camfly2.CameraPlugin;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -13,6 +14,8 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
+
+import java.util.List;
 
 /** What happens to camera mode when a player joins, leaves or dies. */
 public final class SessionListener implements Listener {
@@ -67,17 +70,25 @@ public final class SessionListener implements Listener {
         if (data == null) {
             return;
         }
-        // The server has collected the drops from the empty inventory of the
-        // camera player. The player's own things from CameraData are to drop
-        // instead - getContents() holds every slot, armour and off hand
-        // included, so a separate loop over the armour would drop it twice.
-        // With keepInventory nothing drops at all: exitCameraMode gives the
-        // inventory back, and the server leaves it with the player.
+        // The server has collected the drops from the inventory of the camera
+        // player, empty but for the camera head. The player's own things from
+        // CameraData are to drop instead - getContents() holds every slot,
+        // armour and off hand included, so a separate loop over the armour
+        // would drop it twice. Only what the camera carried is taken out of
+        // the drops: whatever other plugins put in there - a head of the
+        // player, say - stays. With keepInventory nothing drops at all:
+        // exitCameraMode gives the inventory back, and the server leaves it
+        // with the player.
         if (!event.getKeepInventory()) {
-            event.getDrops().clear();
+            List<ItemStack> drops = event.getDrops();
+            for (ItemStack carried : player.getInventory().getContents()) {
+                if (carried != null && carried.getType() != Material.AIR) {
+                    drops.remove(carried);
+                }
+            }
             for (ItemStack item : data.getOriginalInventoryContents()) {
-                if (item != null && item.getType() != Material.AIR) {
-                    event.getDrops().add(item);
+                if (item != null && item.getType() != Material.AIR && !vanishes(item)) {
+                    drops.add(item);
                 }
             }
         }
@@ -90,6 +101,17 @@ public final class SessionListener implements Listener {
         if (!atBody(player.getLocation(), bodyAt)) {
             dropAtBody(event, bodyAt);
         }
+    }
+
+    /**
+     * Whether a thing is gone with its owner's death instead of dropping: the
+     * curse of vanishing. The server leaves those out of the drops it
+     * collects itself, so the things put in their place leave them out too.
+     * An enchanted book that only carries the curse is no such thing, it
+     * drops as it would.
+     */
+    private static boolean vanishes(ItemStack item) {
+        return item.containsEnchantment(Enchantment.VANISHING_CURSE);
     }
 
     /** Whether the player stands where his body stood, as the end of camera mode puts him. */

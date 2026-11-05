@@ -468,10 +468,12 @@ public final class CamMovementGuard implements Listener {
     }
 
     /**
-     * Puts the camera down at a spot of {@code /cam spot}, as camera mode's
-     * own teleport, and lets camera mode run on. Whether it may go there is
-     * for {@link de.elia.cameraplugin.spot.CamSpots} to say beforehand: the
-     * same as where it may fly.
+     * Puts the camera down at a spot of {@code /cam spot}, where
+     * {@code /cam resume} goes on, or next to the guide of
+     * {@code /cam follow}, as camera mode's own teleport, and lets camera
+     * mode run on. Whether it may go there is for the caller to say
+     * beforehand: the same as where it may fly. The guide may be in the world
+     * a portal took the guest to, see {@link #putDown}.
      *
      * @return whether the server carried the teleport out
      */
@@ -496,12 +498,19 @@ public final class CamMovementGuard implements Listener {
      * @return whether the server carried the teleport out
      */
     private boolean putDown(Player player, CameraData data, Location target) {
-        // Whatever he was measured against over there is done with.
-        data.setPortalAnchor(null);
-        data.setPortalEntry(null);
         // A name sitting on him would turn the teleport down.
         plugin.getNameTag().takeOffForTeleport(player);
         boolean moved = plugin.getTeleportGuard().teleport(player, target);
+        if (moved && (target.getWorld() == null || target.getWorld().equals(data.getBody().getWorld()))) {
+            // Back in the world of his body: whatever he was measured against
+            // over there is done with. Not so for a guest of /cam follow put
+            // down after his guide in the world a portal took him to - the
+            // portal he came out of is still what holds him there, and the
+            // one he set out through still the way back. Without them he
+            // would count as lost out there and be sent home at the next step.
+            data.setPortalAnchor(null);
+            data.setPortalEntry(null);
+        }
         // He may well have been set down in the portal he set out through.
         player.setPortalCooldown(PORTAL_COOLDOWN_TICKS);
         keepFlying(player);

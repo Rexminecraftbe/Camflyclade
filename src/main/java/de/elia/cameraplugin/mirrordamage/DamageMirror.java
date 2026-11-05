@@ -212,6 +212,16 @@ public final class DamageMirror implements Listener {
     }
 
     /**
+     * Whether the hit his body took is still on its way to the player, the
+     * tick or two after camera mode ended for it, see
+     * {@link #mirrorHitToPlayer}. A start in between would let the hit land on
+     * the camera, whose armour has been put away again.
+     */
+    public boolean isHitPending(UUID playerId) {
+        return pendingMirrorHit.containsKey(playerId);
+    }
+
+    /**
      * The mannequin taking the hits for this player: the one standing in the
      * armour stand of the armorstand body, otherwise the body itself. It has
      * the player's shape and stands where the player will stand once camera

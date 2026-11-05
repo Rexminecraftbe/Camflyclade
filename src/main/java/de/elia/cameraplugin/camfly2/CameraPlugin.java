@@ -178,6 +178,7 @@ public final class CameraPlugin extends JavaPlugin {
     private CamGhastGuard camGhastGuard;
     private CamSulfurCubeGuard camSulfurCubeGuard;
     private CamInventoryGuard camInventoryGuard;
+    private DamageMirror damageMirror;
     private BodySpawner bodySpawner;
     private boolean shuttingDown = false;
     /** Whether the start got past the config file and actually set anything up. */
@@ -249,7 +250,7 @@ public final class CameraPlugin extends JavaPlugin {
     private void registerListeners() {
         PluginManager pluginManager = this.getServer().getPluginManager();
         SwingStrength swingStrength = new SwingStrength(this, cameraPlayers);
-        DamageMirror damageMirror = new DamageMirror(this, swingStrength);
+        damageMirror = new DamageMirror(this, swingStrength);
         List<Listener> listeners = List.of(
                 damageMirror,
                 new CamInteractionGuard(this),
@@ -530,8 +531,19 @@ public final class CameraPlugin extends JavaPlugin {
     // Camera mode itself
     // ------------------------------------------------------------------------
 
-    public void enterCameraMode(Player player) {
-        cameraMode.enterCameraMode(player);
+    /** Puts the body of a start down, see {@link CameraMode#putDownBody}; {@code null} when it cannot stand there. */
+    public CameraMode.PutDown putDownBody(Player player) {
+        return cameraMode.putDownBody(player);
+    }
+
+    /** Takes a body away again whose start did not happen, see {@link CameraMode#takeAway}. */
+    public void takeAwayBody(CameraMode.PutDown putDown) {
+        cameraMode.takeAway(putDown);
+    }
+
+    /** Starts camera mode on the body {@link #putDownBody} has put down in this tick. */
+    public void enterCameraMode(Player player, CameraMode.PutDown putDown) {
+        cameraMode.enterCameraMode(player, putDown);
     }
 
     /** Ends camera mode, with the sound that goes with the reason. */
@@ -643,6 +655,11 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamSulfurCubeGuard getSulfurCubeGuard() {
         return camSulfurCubeGuard;
+    }
+
+    /** The hits on the bodies, passed on to their players; {@code null} until the listeners are registered. */
+    public DamageMirror getDamageMirror() {
+        return damageMirror;
     }
 
     public CamInventoryGuard getInventoryGuard() {

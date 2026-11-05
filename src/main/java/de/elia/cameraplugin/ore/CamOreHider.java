@@ -531,6 +531,10 @@ public final class CamOreHider implements Listener {
             if (waiters != null) {
                 waiting.put(id, waiters);
                 queue.add(id);
+                // The copies may have stopped meanwhile, the queue having run
+                // empty: nothing else would start them for this chunk, whose
+                // ores would stay in sight until the camera wants another.
+                startTasks();
             }
             return;
         }

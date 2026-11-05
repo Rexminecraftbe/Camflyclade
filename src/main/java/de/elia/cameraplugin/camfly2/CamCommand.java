@@ -153,6 +153,12 @@ public class CamCommand implements CommandExecutor {
             plugin.getListTeleport().command(player, Arrays.copyOfRange(args, 1, args.length));
             return true;
         }
+        // A word that is none of the above is a typo, not a request for
+        // camera mode: /cam spto is not to start it, nor /cam hlep to end it.
+        if (args.length > 0) {
+            messages.sendMessage(player, "cam-unknown-command", "{command}", args[0]);
+            return true;
+        }
 
         plugin.getStarter().toggle(player);
         return true;
