@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.mirrordamage;
 
+import de.elia.cameraplugin.body.BodySpawner;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
@@ -111,14 +112,8 @@ public final class DamageMirror implements Listener {
         Player owner = Bukkit.getPlayer(ownerUUID);
         if (owner == null || !owner.isOnline()) {
             // Player offline -> clean up
-            if (damagedBody) {
-                cameraPlayers.removeBody(damagedEntity.getUniqueId());
-            } else {
-                cameraPlayers.removeHitbox(damagedEntity.getUniqueId());
-            }
-            cameraPlayers.remove(ownerUUID);
-            plugin.getNoCollisionTeam().deleteNoCollisionTeamIfUnused();
-            damagedEntity.remove();
+            event.setCancelled(true);
+            clearAfterOwner(ownerUUID, damagedEntity, damagedBody);
             return;
         }
 
@@ -134,6 +129,17 @@ public final class DamageMirror implements Listener {
 
         // The body itself takes no damage, every hit ends camera mode.
         event.setCancelled(true);
+
+        // /kill is no hit but the end of the body, with a damage no armour
+        // and nothing else stops: passed on, /kill @e[type=!player] of an
+        // admin clearing up killed every player in camera mode. The body is
+        // gone for him, the same as when a plugin takes it away, see
+        // BodyWatch#endWhenBodyGone.
+        if (event.getDamageSource().getDamageType() == DamageType.GENERIC_KILL) {
+            plugin.exitCameraMode(owner, EndReason.BODY);
+            messages.sendMessage(owner, "body-gone");
+            return;
+        }
 
         if (event instanceof EntityDamageByEntityEvent selfHit &&
                 selfHit.getDamager().getUniqueId().equals(owner.getUniqueId())) {
@@ -417,6 +423,9 @@ public final class DamageMirror implements Listener {
         // damage of a fall, of fire or of an explosion.
         boolean knocked = !owner.getVelocity().equals(standstill);
         boolean turnedAway = mirroredHitTurnedAway.remove(ownerId);
+        // Nothing turned it away, and it did not run into the invulnerability
+        // of an earlier hit, too weak to count: it is his last damage now.
+        boolean gotThrough = !turnedAway && owner.getLastDamageCause() != causeBefore;
         boolean landed = landedInFull(owner, framesBefore, causeBefore);
         if (!settings.damageCountsArmor()) {
             takeWhatTheArmorKeptAway(owner, amount, healthBefore + absorptionBefore, framesBefore);
@@ -446,6 +455,23 @@ public final class DamageMirror implements Listener {
         reportMirroredHit(owner, amount, source, armor, toughness, knockbackResistance,
                 healthBefore, speed, waitedTicks, framesBefore, lastBefore, fireBefore,
                 pushed, armorNote(serverWearsArmor, wornPoints));
+        // Fire Aspect and a burning arrow set on fire only whom they hit, as
+        // they do outside camera mode: a hit a protected region or a god mode
+        // turned away leaves him unburnt.
+        if (gotThrough && !owner.isDead()) {
+            setOnFire(owner, attacker);
+        }
+        if (saved != null && !owner.isDead()) {
+            owner.getInventory().setArmorContents(saved);
+            owner.updateInventory();
+        }
+        // Died from the hit: the copies are what he dropped, and they carry the
+        // same pieces. Handing the originals back into an inventory the server
+        // has just emptied would only put them into the world twice.
+    }
+
+    /** The fire a hit with Fire Aspect or a burning arrow sets the player on. */
+    private static void setOnFire(Player owner, Entity attacker) {
         if (attacker instanceof LivingEntity living) {
             ItemStack weapon = living.getEquipment().getItemInMainHand();
             int fireLevel = weapon.getEnchantmentLevel(Enchantment.FIRE_ASPECT);
@@ -459,13 +485,42 @@ public final class DamageMirror implements Listener {
                 owner.setFireTicks(ticks);
             }
         }
-        if (saved != null && !owner.isDead()) {
-            owner.getInventory().setArmorContents(saved);
-            owner.updateInventory();
+    }
+
+    /**
+     * Clears away what the camera mode of a player who is no longer online
+     * left standing. Only reached when its end failed as he left: what he
+     * was carrying is still in his crash file, which stays for his next join,
+     * see {@link de.elia.cameraplugin.crash.CamCrashGuard}.
+     */
+    private void clearAfterOwner(UUID ownerId, Entity damaged, boolean damagedBody) {
+        CameraData data = cameraPlayers.get(ownerId);
+        cameraPlayers.remove(ownerId);
+        BodySpawner bodies = plugin.getBodySpawner();
+        if (data == null) {
+            if (damagedBody) {
+                cameraPlayers.removeBody(damaged.getUniqueId());
+            } else {
+                cameraPlayers.removeHitbox(damaged.getUniqueId());
+            }
+            bodies.remove(damaged);
+        } else {
+            cameraPlayers.removeBody(data.getBody().getUniqueId());
+            bodies.remove(data.getBody());
+            if (data.getHitbox() != null) {
+                cameraPlayers.removeHitbox(data.getHitbox().getUniqueId());
+                bodies.remove(data.getHitbox());
+            }
+            if (data.getNameDisplay() != null) {
+                bodies.remove(data.getNameDisplay());
+            }
+            if (data.getHeartsFront() != null) {
+                bodies.remove(data.getHeartsFront());
+            }
+            // Last: until the body is gone, its chunk has to stay.
+            bodies.releaseChunk(data.getBodyChunk());
         }
-        // Died from the hit: the copies are what he dropped, and they carry the
-        // same pieces. Handing the originals back into an inventory the server
-        // has just emptied would only put them into the world twice.
+        plugin.getNoCollisionTeam().deleteNoCollisionTeamIfUnused();
     }
 
     /**

@@ -60,6 +60,11 @@ public final class CamTeleportGuard implements Listener {
     /** The players camera mode is teleporting itself right now. */
     private final Set<UUID> ownTeleports = new HashSet<>();
     /**
+     * The players camera mode is taking back to their body right now, at its
+     * end, with where the body stands. See {@link #teleportHome}.
+     */
+    private final Map<UUID, Location> homeTeleports = new HashMap<>();
+    /**
      * Whose camera a teleport under way comes out at, by the player being
      * teleported: found while the teleport can still be sent elsewhere, and
      * ended once it is certain to happen, see {@link #onTeleportDecided}.
@@ -86,6 +91,44 @@ public final class CamTeleportGuard implements Listener {
             return player.teleport(to);
         } finally {
             ownTeleports.remove(id);
+        }
+    }
+
+    /**
+     * Takes a player back to his body at the end of camera mode - a teleport
+     * no other plugin turns down, see {@link #keepHomeTeleport}.
+     *
+     * @return whether the server carried it out
+     */
+    public boolean teleportHome(Player player, Location body) {
+        UUID id = player.getUniqueId();
+        homeTeleports.put(id, body);
+        try {
+            return teleport(player, body);
+        } finally {
+            homeTeleports.remove(id);
+        }
+    }
+
+    /**
+     * Lets the way back to the body through, whatever another plugin said
+     * about it.
+     *
+     * <p>To the server it is a teleport like any other, and a plugin that
+     * stops teleports - one against fleeing a fight, say, which turns down
+     * every teleport by a plugin while its player is in one - turned it down.
+     * Camera mode ended all the same: the player stood with all his things
+     * where his camera had been, up to {@code max-distance} away, out of the
+     * fight. It is no trip, though: his body is where he has been standing the
+     * whole time, the camera only looked around. Last of all who may still
+     * change the teleport, it is let through again, to the body.</p>
+     */
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void keepHomeTeleport(PlayerTeleportEvent event) {
+        Location body = homeTeleports.get(event.getPlayer().getUniqueId());
+        if (body != null) {
+            event.setCancelled(false);
+            event.setTo(body);
         }
     }
 

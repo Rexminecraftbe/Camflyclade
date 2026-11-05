@@ -541,6 +541,14 @@ einzutragen.
   Mannequins und Rüstungsständer wie WorldGuard mit `mob-spawning: deny`, und
   `testtreffercam <spieler>` trifft das Mannequin am Körper und lässt ihn im
   nächsten Tick `/cam` tippen, solange der Treffer noch zu ihm unterwegs ist.
+  Außerdem: `testtpsperre an|aus` lehnt jeden Teleport durch ein Plugin ab
+  wie ein Kampf-Plugin, `testreiter <spieler>` setzt ihm einen
+  Rüstungsständer als Passagier auf, `testkoerperweg <spieler>` räumt
+  Mannequin und Rüstungsständer an ihm mit `remove()` weg wie ein Plugin gegen
+  Lag, `testgottmodus an|aus` lehnt jeden Schaden an Spielern ab,
+  `testfeuerhieb <spieler>` trifft das Mannequin an ihm mit einem Schwert mit
+  Verbrennung, und `testmodusinventar an|aus` gibt jedem Spielmodus ein
+  eigenes Inventar wie PerWorldInventory in seiner Voreinstellung.
   Ändert sich das Hilfsplugin, laufen alle Abschnitte.
 * **Wer zur Kamera teleportiert wird, bekommt vorher Sanften Fall.** Die
   Kamera steht sechs Blöcke hoch. Käme er bei ihr in der Luft an statt beim

@@ -871,6 +871,18 @@ def stop_server(env, quiet=False):
 #                                  wie WorldGuard mit mob-spawning: deny
 #   testtreffercam <spieler>     - trifft das Mannequin an seinem Koerper und laesst ihn
 #                                  im naechsten Tick /cam tippen, ehe der Treffer bei ihm ist
+#   testtpsperre an|aus          - lehnt jeden Teleport durch ein Plugin ab, wie ein
+#                                  Kampf-Plugin es im Kampf tut
+#   testreiter <spieler>         - setzt ihm einen Ruestungsstaender als Passagier auf, wie
+#                                  ein Plugin zum Aufsitzen auf Spielern
+#   testkoerperweg <spieler>     - entfernt Mannequin und Ruestungsstaender an ihm mit remove(),
+#                                  ohne Schaden, wie ein Plugin gegen Lag es tut
+#   testgottmodus an|aus         - lehnt jeden Schaden an Spielern ab, wie ein God-Mode oder
+#                                  ein Gebiet ohne PvP
+#   testfeuerhieb <spieler>      - trifft das Mannequin an ihm mit einem Schwert mit
+#                                  Verbrennung, gehalten von einem Ruestungsstaender
+#   testmodusinventar an|aus     - ein Inventar je Spielmodus, wie PerWorldInventory mit
+#                                  separate-gamemode-inventories: true (der Voreinstellung)
 TPA_HELFER_NAME = "CamFlyTpaHelfer"
 
 TPA_HELFER_JAVA = r'''
@@ -888,14 +900,76 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.GameMode;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.event.entity.CreatureSpawnEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerGameModeChangeEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 public final class TpaHelfer extends JavaPlugin implements Listener {
     private boolean todDrop;
     private boolean spawnSperre;
+    private boolean tpSperre;
+    private boolean gottModus;
+    private boolean modusInventar;
+    /** Die Inventare je Spieler und Spielmodus, wie PerWorldInventory sie haelt. */
+    private final Map<UUID, Map<GameMode, ItemStack[]>> inventare = new HashMap<>();
+
+    // Wie ein Kampf-Plugin: Teleports durch Plugins sind gesperrt, auf NORMAL.
+    @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
+    public void onTeleport(PlayerTeleportEvent event) {
+        if (tpSperre && event.getCause() == PlayerTeleportEvent.TeleportCause.PLUGIN) {
+            event.setCancelled(true);
+        }
+    }
+
+    // Wie ein God-Mode: Spieler nehmen keinen Schaden.
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onSchaden(EntityDamageEvent event) {
+        if (gottModus && event.getEntity() instanceof Player) {
+            event.setCancelled(true);
+        }
+    }
+
+    // Wie PerWorldInventory (PlayerGameModeChangeListener): auf MONITOR das
+    // Inventar unter dem alten Spielmodus ablegen und das des neuen laden.
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onModus(PlayerGameModeChangeEvent event) {
+        if (!modusInventar || event.isCancelled()) {
+            return;
+        }
+        Player wer = event.getPlayer();
+        Map<GameMode, ItemStack[]> seine = inventare.computeIfAbsent(wer.getUniqueId(), id -> new HashMap<>());
+        seine.put(wer.getGameMode(), kopie(wer.getInventory().getContents()));
+        ItemStack[] neu = seine.get(event.getNewGameMode());
+        wer.getInventory().setContents(neu == null ? new ItemStack[wer.getInventory().getSize()] : kopie(neu));
+    }
+
+    private static ItemStack[] kopie(ItemStack[] inhalt) {
+        ItemStack[] kopie = new ItemStack[inhalt.length];
+        for (int i = 0; i < inhalt.length; i++) {
+            kopie[i] = inhalt[i] == null ? null : inhalt[i].clone();
+        }
+        return kopie;
+    }
+
+    private static Mannequin mannequinBei(Player wer) {
+        for (Entity e : wer.getWorld().getNearbyEntities(wer.getLocation(), 1.5, 2.5, 1.5)) {
+            if (e instanceof Mannequin m) {
+                return m;
+            }
+        }
+        return null;
+    }
 
     @Override
     public void onEnable() {
@@ -919,17 +993,65 @@ public final class TpaHelfer extends JavaPlugin implements Listener {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (command.getName().equalsIgnoreCase("testtoddrop") || command.getName().equalsIgnoreCase("testspawnsperre")) {
+        String name = command.getName().toLowerCase(java.util.Locale.ROOT);
+        if (name.equals("testtoddrop") || name.equals("testspawnsperre") || name.equals("testtpsperre")
+                || name.equals("testgottmodus") || name.equals("testmodusinventar")) {
             if (args.length != 1) {
                 return false;
             }
             boolean an = args[0].equalsIgnoreCase("an");
-            if (command.getName().equalsIgnoreCase("testtoddrop")) {
-                todDrop = an;
-            } else {
-                spawnSperre = an;
+            switch (name) {
+                case "testtoddrop" -> todDrop = an;
+                case "testspawnsperre" -> spawnSperre = an;
+                case "testtpsperre" -> tpSperre = an;
+                case "testgottmodus" -> gottModus = an;
+                default -> {
+                    modusInventar = an;
+                    inventare.clear();
+                }
             }
             sender.sendMessage(command.getName() + ": " + (an ? "an" : "aus"));
+            return true;
+        }
+        if (name.equals("testreiter") || name.equals("testkoerperweg") || name.equals("testfeuerhieb")) {
+            Player wer = args.length == 1 ? Bukkit.getPlayerExact(args[0]) : null;
+            if (wer == null) {
+                return false;
+            }
+            if (name.equals("testreiter")) {
+                ArmorStand reiter = wer.getWorld().spawn(wer.getLocation(), ArmorStand.class, a -> {
+                    a.setMarker(true);
+                    a.setInvisible(true);
+                    a.addScoreboardTag("camflyreiter");
+                });
+                sender.sendMessage("testreiter: " + (wer.addPassenger(reiter) ? "ok" : "abgelehnt"));
+                return true;
+            }
+            if (name.equals("testkoerperweg")) {
+                int weg = 0;
+                for (Entity e : wer.getWorld().getNearbyEntities(wer.getLocation(), 1.5, 2.5, 1.5)) {
+                    if (e instanceof Mannequin || e instanceof ArmorStand) {
+                        e.remove();
+                        weg++;
+                    }
+                }
+                sender.sendMessage("testkoerperweg: " + weg);
+                return true;
+            }
+            Mannequin koerper = mannequinBei(wer);
+            if (koerper == null) {
+                sender.sendMessage("testfeuerhieb: kein Mannequin");
+                return true;
+            }
+            ArmorStand haelt = koerper.getWorld().spawn(koerper.getLocation().add(1.5, 0.0, 0.0), ArmorStand.class, a -> {
+                ItemStack schwert = new ItemStack(Material.IRON_SWORD);
+                schwert.addUnsafeEnchantment(Enchantment.FIRE_ASPECT, 2);
+                a.getEquipment().setItemInMainHand(schwert);
+                a.addScoreboardTag("camflyfeuerhieb");
+            });
+            koerper.damage(2.0, haelt);
+            Bukkit.getScheduler().runTaskLater(this, haelt::remove, 40L);
+            sender.sendMessage("testfeuerhieb: ok");
             return true;
         }
         if (command.getName().equalsIgnoreCase("testtod") || command.getName().equalsIgnoreCase("testtreffercam")) {
@@ -1012,6 +1134,18 @@ commands:
   testspawnsperre:
     permission: camflytest.plugintp
   testtreffercam:
+    permission: camflytest.plugintp
+  testtpsperre:
+    permission: camflytest.plugintp
+  testreiter:
+    permission: camflytest.plugintp
+  testkoerperweg:
+    permission: camflytest.plugintp
+  testgottmodus:
+    permission: camflytest.plugintp
+  testfeuerhieb:
+    permission: camflytest.plugintp
+  testmodusinventar:
     permission: camflytest.plugintp
 permissions:
   camflytest.plugintp:
@@ -3462,7 +3596,9 @@ def grund_checks(env, bot):
         """Einmal /cam, den Bot vom Koerper wegstellen, den Koerper treffen und
         nachsehen, was im Chat steht. treffen bekommt die Stelle des Koerpers
         und einen Selektor fuer das Mannequin, das die Treffer nimmt."""
-        if not FIND.test(f"/cam startet fuer die Meldung ({name})", cam_on(bot), ""):
+        vorher = bot.mark()
+        if not FIND.test(f"/cam startet fuer die Meldung ({name})", cam_on(bot),
+                         zeige(zeilen_seit(bot, vorher))):
             return
         koerper = bot.server_pos()
         if koerper is None:
@@ -3481,6 +3617,11 @@ def grund_checks(env, bot):
         if not told:
             # Endete der Cam-Modus gar nicht, raeumt das hier ab.
             cam_off(bot)
+        # Die Meldung kommt, sobald der Koerper getroffen ist - der Treffer
+        # selbst ist dann noch ein, zwei Ticks zum Spieler unterwegs, und ein
+        # /cam in dieser Zeit startet mit Absicht nicht (treffer_unterwegs).
+        # Die naechste Probe kaeme sonst manchmal hinein.
+        time.sleep(1.0)
 
     def amboss(x, y, z, mannequin):
         # CancelDrop: Er bleibt nicht als Block liegen, genau dort, wohin der
@@ -16390,6 +16531,340 @@ def boden_ebnen(bot):
 # Die Abschnitte der Tests und welche davon laufen
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Was andere Plugins dem Cam-Modus antun
+# ---------------------------------------------------------------------------
+
+def rueckweg_checks(env, bot):
+    """Am Ende des Cam-Modus steht er wieder an seinem Koerper - auch wenn ein
+    anderes Plugin Teleports sperrt oder ihm etwas aufsitzt.
+
+    Der Weg zurueck zum Koerper ist ein Teleport des Plugins. Ein
+    Kampf-Plugin, das im Kampf jeden Teleport durch ein Plugin sperrt, lehnte
+    ihn ab, und der Cam-Modus endete trotzdem: Der Spieler stand mit seinen
+    Sachen dort, wo die Kamera war - bis zu max-distance weit weg, mitten aus
+    dem Kampf heraus. Das Hilfsplugin spielt es nach (testtpsperre). Einen
+    Passagier, den ihm ein anderes Plugin aufsetzt (testreiter), nimmt Paper
+    beim Teleport einfach mit; die Probe steht da, damit es so bleibt. /tp,
+    mit dem die Kamera hier an ihren Platz kommt, ist ein Befehl und kein
+    Plugin, die Sperre laesst es durch.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test des Rueckwegs aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+
+    def lauf(vorher, wie):
+        hinstellen(bot, x, y, z)
+        if not FIND.test(f"/cam startet fuer den Rueckweg, {wie}", cam_on(bot), ""):
+            return
+        hinstellen(bot, x + 8, y + 4, z)
+        vorher()
+        aus = cam_off(bot)
+        time.sleep(0.5)
+        pos = bot.server_pos()
+        weg = None if pos is None else math.dist(pos, (x, y, z))
+        FIND.test(f"Nach /cam steht er wieder am Koerper, {wie}",
+                  aus and weg is not None and weg < 0.5,
+                  "Cam-Modus nicht beendet" if not aus else f"{weg} Bloecke vom Koerper")
+
+    try:
+        console(env, "testtpsperre an", pause=0.3)
+        lauf(lambda: None, "obwohl ein Plugin Teleports sperrt")
+        console(env, "testtpsperre aus", pause=0.3)
+        lauf(lambda: console(env, f"testreiter {BOT_NAME}", pause=0.5), "obwohl ihm etwas aufsitzt")
+    finally:
+        console(env, "testtpsperre aus", pause=0.3)
+        console(env, "kill @e[tag=camflyreiter]", pause=0.3)
+        cam_off(bot)
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
+def befehle_im_cam_checks(env, bot):
+    """Befehle, die sich den Ort merken, gehen im Cam-Modus nicht,
+    cam-commands.
+
+    Die Kamera steht woanders als der Spieler. /sethome, /setwarp oder ein
+    Grundstueck merkten sich den Ort der Kamera, und mit /home kaeme er
+    spaeter dorthin, wo nur sie war. Vanilla hat so einen Befehl auch:
+    /spawnpoint setzt den Punkt, an dem er nach dem Tod wieder anfaengt, auf
+    den Ort, an dem er steht - im Cam-Modus auf den der Kamera.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test der Befehle aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    gesetzt = r"[Ss]et spawn point"
+    gesperrt = r"can't use /\S+ in cam mode"
+    try:
+        hinstellen(bot, x, y, z)
+        if not FIND.test("/cam startet fuer den Test der Befehle", cam_on(bot), ""):
+            return
+        hinstellen(bot, x + 8, y + 4, z)
+        zeilen = befehl(bot, "/spawnpoint")
+        FIND.test("Im Cam-Modus setzt /spawnpoint nichts an den Ort der Kamera, und er hoert, warum",
+                  not gesagt(zeilen, gesetzt) and gesagt(zeilen, gesperrt), zeige(zeilen))
+        zeilen = befehl(bot, "/minecraft:spawnpoint")
+        FIND.test("Auch nicht mit dem Namensraum davor, /minecraft:spawnpoint",
+                  not gesagt(zeilen, gesetzt) and gesagt(zeilen, gesperrt), zeige(zeilen))
+        zeilen = befehl(bot, "/cam list")
+        FIND.test("Was nicht auf der Liste steht, geht weiter, /cam list",
+                  gesagt(zeilen, r"blocks from the body") and not gesagt(zeilen, gesperrt), zeige(zeilen))
+
+        set_option(env, "mode", "whitelist", "cam-commands")
+        cam_on(bot)
+        zeilen = befehl(bot, "/cam list")
+        FIND.test("Mit mode: whitelist geht /cam immer",
+                  gesagt(zeilen, r"blocks from the body") and not gesagt(zeilen, gesperrt), zeige(zeilen))
+        zeilen = befehl(bot, "/me winkt")
+        FIND.test("Mit mode: whitelist geht nichts, was nicht auf der Liste steht, /me",
+                  gesagt(zeilen, gesperrt) and not gesagt(zeilen, r"winkt"), zeige(zeilen))
+        cam_off(bot)
+        zeilen = befehl(bot, "/me winkt")
+        FIND.test("Ausserhalb des Cam-Modus geht /me wieder", gesagt(zeilen, r"winkt"), zeige(zeilen))
+
+        set_option(env, "mode", "all", "cam-commands")
+        cam_on(bot)
+        hinstellen(bot, x + 8, y + 4, z)
+        zeilen = befehl(bot, "/spawnpoint")
+        FIND.test("Mit mode: all geht jeder Befehl, auch /spawnpoint (Gegenprobe)",
+                  gesagt(zeilen, gesetzt), zeige(zeilen))
+    finally:
+        set_option(env, "mode", "blacklist", "cam-commands")
+        cam_off(bot)
+        console(env, f"spawnpoint {BOT_NAME} {_floor(heim[0])} {BODEN_Y + 1} {_floor(heim[2])}", pause=0.3)
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
+def koerper_weg_checks(env, bot):
+    """Verschwindet der Koerper, endet der Cam-Modus - und /kill auf den
+    Koerper bringt den Spieler nicht um.
+
+    Ein Plugin gegen Lag, das Mannequins oder Ruestungsstaender mit remove()
+    wegraeumt, nahm den Koerper ohne einen Treffer mit, und der Cam-Modus
+    lief ohne ihn weiter: nichts mehr, was getroffen werden konnte. /kill
+    nimmt einen Ruestungsstaender ebenso ohne Treffer weg. Ein Mannequin
+    dagegen toetet /kill mit einem Treffer von unendlich viel Schaden, und
+    den gab das Plugin weiter: /kill @e[type=!player] eines Admins brachte
+    jeden Spieler im Cam-Modus um.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test des verschwundenen Koerpers aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    weg = r"body is gone"
+
+    def lauf(wie, wegnehmen):
+        hinstellen(bot, x, y, z)
+        if not FIND.test(f"/cam startet, {wie}", cam_on(bot), ""):
+            return
+        since = bot.mark()
+        ereignisse = len(bot.events)
+        wegnehmen()
+        time.sleep(2.0)
+        gestorben = any(e.get("event") == "death" for e in bot.events[ereignisse:])
+        bot.events[ereignisse:] = [e for e in bot.events[ereignisse:] if e.get("event") != "death"]
+        zeilen = zeilen_seit(bot, since)
+        lief = spielmodus_ist(bot, "adventure")
+        FIND.test(f"{wie}: der Cam-Modus endet, und er hoert, warum",
+                  not lief and gesagt(zeilen, weg), "Cam-Modus laeuft" if lief else zeige(zeilen))
+        FIND.test(f"{wie}: er lebt noch", not gestorben, "gestorben")
+        if lief:
+            cam_off(bot)
+
+    try:
+        lauf("ein Plugin raeumt den Koerper weg",
+             lambda: console(env, f"testkoerperweg {BOT_NAME}", pause=0.3))
+        lauf("/kill auf den Koerper",
+             lambda: console(env, f"execute positioned {x} {y} {z} run kill "
+                                  f"@e[type=!minecraft:player,distance=..2]", pause=0.3))
+    finally:
+        cam_off(bot)
+        console(env, f"effect give {BOT_NAME} minecraft:instant_health 1 5", pause=0.3)
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
+def effekt_weg_checks(env, bot):
+    """Nimmt jemand dem Koerper einen Effekt weg, laeuft der Cam-Modus weiter.
+
+    Ein Effekt, den der Koerper abbekommt, beendet den Cam-Modus, und der
+    Spieler bekommt ihn. Das Plugin hielt aber jede Aenderung an den Effekten
+    des Koerpers fuer einen solchen Treffer, auch eine, die einen wegnimmt:
+    /effect clear auf den Koerper beendete den Cam-Modus mit "Your body was
+    hit by the effect invisibility" - der Unsichtbarkeit, die das Mannequin im
+    Ruestungsstaender unsichtbar haelt. Ebenso jedes Plugin, das den Koerper
+    wegraeumt: Mit ihm gehen seine Effekte.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test des weggenommenen Effekts aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    koerper = f"execute positioned {x} {y} {z} run effect"
+    try:
+        hinstellen(bot, x, y, z)
+        if not FIND.test("/cam startet fuer den Test des weggenommenen Effekts", cam_on(bot), ""):
+            return
+        since = bot.mark()
+        console(env, f"{koerper} clear @e[type=minecraft:mannequin,distance=..2]", pause=1.5)
+        zeilen = zeilen_seit(bot, since)
+        lief = spielmodus_ist(bot, "adventure")
+        FIND.test("/effect clear auf den Koerper beendet den Cam-Modus nicht",
+                  lief and not gesagt(zeilen, r"hit by the effect"), zeige(zeilen))
+        FIND.test("Das Mannequin im Ruestungsstaender bleibt unsichtbar",
+                  nbt_frage(bot, "@e[type=minecraft:mannequin,distance=..2,limit=1]",
+                            '{active_effects:[{id:"minecraft:invisibility"}]}'), "")
+        if not lief:
+            cam_on(bot)
+        since = bot.mark()
+        console(env, f"{koerper} give @e[type=minecraft:mannequin,distance=..2] minecraft:slowness 5 0", pause=1.5)
+        zeilen = zeilen_seit(bot, since)
+        FIND.test("Ein Effekt, der den Koerper trifft, beendet den Cam-Modus weiterhin (Gegenprobe)",
+                  not spielmodus_ist(bot, "adventure") and gesagt(zeilen, r"hit by the effect"), zeige(zeilen))
+    finally:
+        cam_off(bot)
+        bot.chat("/effect clear @s")
+        time.sleep(0.5)
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
+def feuerhieb_checks(env, bot):
+    """Ein Schwert mit Verbrennung auf den Koerper zuendet den Spieler nur an,
+    wenn der Treffer auch bei ihm ankommt.
+
+    Ohne Cam-Modus brennt nur, wen der Schlag trifft. Das Plugin zuendete den
+    Spieler nach dem weitergegebenen Treffer aber in jedem Fall an - auch
+    wenn ein anderes Plugin den Treffer ablehnte, ein God-Mode oder ein
+    Gebiet ohne Schaden, und auch auf peaceful, wo der Angriff eines Mobs
+    einem Spieler gar nichts tut. Das Hilfsplugin schlaegt mit einem Ruestungsstaender,
+    der ein Schwert mit Verbrennung haelt (testfeuerhieb), und spielt den
+    God-Mode (testgottmodus).
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test der Verbrennung aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+
+    def loeschen():
+        bot.chat(f"/setblock {_floor(x)} {y} {_floor(z)} minecraft:water")
+        time.sleep(1.0)
+        bot.chat(f"/setblock {_floor(x)} {y} {_floor(z)} minecraft:air")
+        time.sleep(0.5)
+
+    def schlag():
+        hinstellen(bot, x, y, z)
+        if not cam_on(bot):
+            return None
+        console(env, f"testfeuerhieb {BOT_NAME}", pause=2.0)
+        lief = spielmodus_ist(bot, "adventure")
+        if lief:
+            cam_off(bot)
+            return None
+        return bot.server_data("Fire")
+
+    try:
+        # Der erste Schlag trifft ihn: Ohne das haelt cam-safety den zweiten
+        # Start fuenf Sekunden lang auf.
+        set_option(env, "enabled", "false", "cam-safety")
+        # Auf peaceful macht der Angriff eines Mobs einem Spieler keinen
+        # Schaden, und ohne Treffer brennt auch niemand.
+        console(env, "difficulty easy", pause=0.3)
+        feuer = schlag()
+        FIND.test("Ein Schlag mit Verbrennung auf den Koerper zuendet ihn an (Gegenprobe)",
+                  feuer is not None and feuer > 0, f"Fire {feuer}")
+        loeschen()
+        console(env, "testgottmodus an", pause=0.3)
+        feuer = schlag()
+        FIND.test("Lehnt ein Plugin den weitergegebenen Treffer ab, brennt er auch nicht",
+                  feuer is not None and feuer <= 0, f"Fire {feuer}")
+    finally:
+        console(env, "testgottmodus aus", pause=0.3)
+        console(env, "difficulty peaceful", pause=0.3)
+        set_option(env, "enabled", "true", "cam-safety")
+        console(env, "kill @e[tag=camflyfeuerhieb]", pause=0.3)
+        cam_off(bot)
+        loeschen()
+        console(env, f"effect give {BOT_NAME} minecraft:instant_health 1 5", pause=0.3)
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
+def modusinventar_checks(env, bot):
+    """Mit einem Plugin, das jedem Spielmodus ein eigenes Inventar gibt, hat
+    er nach dem Cam-Modus seine Sachen - und die anderen Inventare bleiben.
+
+    PerWorldInventory tut das in der Voreinstellung
+    (separate-gamemode-inventories: true): Wechselt der Spielmodus, legt es
+    das Inventar unter dem alten ab und laedt das des neuen. Der Cam-Modus
+    wechselt ihn zweimal hinein und einmal hinaus. Er leerte die Taschen vor
+    dem ersten Wechsel und fuellte sie vor dem letzten: Abgelegt wurde unter
+    dem Ueberleben ein leeres Inventar, seine Sachen landeten unter dem
+    Abenteuer, und er stand mit leeren Taschen da. Was der Cam-Modus von den
+    Inventaren der anderen Modi geladen bekam, raeumte er weg - und das
+    wurde dann so abgelegt. Das Hilfsplugin spielt PerWorldInventory nach
+    (testmodusinventar).
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test der Inventare je Spielmodus aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+
+    def hat(item):
+        return server_says(bot, f"/execute if items entity {BOT_NAME} container.* minecraft:{item} "
+                                f"run say {{marke}}")
+
+    def modus(name):
+        console(env, f"gamemode {name} {BOT_NAME}", pause=0.8)
+
+    try:
+        console(env, f"clear {BOT_NAME}", pause=0.3)
+        console(env, "testmodusinventar an", pause=0.3)
+        modus("adventure")
+        console(env, f"give {BOT_NAME} minecraft:gold_ingot 1", pause=0.3)
+        modus("creative")
+        console(env, f"give {BOT_NAME} minecraft:emerald 1", pause=0.3)
+        modus("survival")
+        console(env, f"give {BOT_NAME} minecraft:diamond 1", pause=0.5)
+        if not FIND.test("Vorbereitung: im Ueberleben traegt er nur den Diamanten",
+                         hat("diamond") and not hat("gold_ingot") and not hat("emerald"), ""):
+            return
+        hinstellen(bot, x, y, z)
+        if not FIND.test("/cam startet mit einem Inventar je Spielmodus", cam_on(bot), ""):
+            return
+        time.sleep(1.0)
+        cam_off(bot)
+        time.sleep(0.5)
+        FIND.test("Nach dem Cam-Modus hat er seinen Diamanten wieder", hat("diamond"), "")
+        FIND.test("Und nichts aus den Inventaren der anderen Spielmodi",
+                  not hat("gold_ingot") and not hat("emerald") and not hat("player_head"), "")
+        zeilen = befehl(bot, "/clear @s minecraft:diamond 0")
+        FIND.test("Den Diamanten genau einmal", gesagt(zeilen, r"Found 1 matching"), zeige(zeilen))
+        modus("adventure")
+        FIND.test("Sein Inventar fuer den Abenteuermodus ist noch da",
+                  hat("gold_ingot") and not hat("diamond") and not hat("player_head"), "")
+        modus("creative")
+        FIND.test("Sein Inventar fuer den Kreativmodus ist noch da",
+                  hat("emerald") and not hat("diamond"), "")
+        modus("survival")
+        FIND.test("Zurueck im Ueberleben: wieder der Diamant", hat("diamond"), "")
+    finally:
+        console(env, "testmodusinventar aus", pause=0.3)
+        cam_off(bot)
+        modus("survival")
+        console(env, f"clear {BOT_NAME}", pause=0.3)
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
 class Abschnitt:
     """Ein Abschnitt der Tests: sein Name, die Funktion, die ihn faehrt, und
     die Bereiche des Plugins, die er prueft.
@@ -17116,6 +17591,13 @@ ABSCHNITTE = [
     Abschnitt("unbewacht", unbewacht_checks, "body/BodySpawner body/BodyWatch", koerpertypen=True),
     Abschnitt("liegengeblieben", liegengeblieben_checks, "body/BodySpawner crash"),
     Abschnitt("teleport", teleport_checks, "teleport"),
+    Abschnitt("rueckweg", rueckweg_checks, "session/CameraMode teleport/CamTeleportGuard"),
+    Abschnitt("befehle_im_cam", befehle_im_cam_checks, "command"),
+    Abschnitt("koerper_weg", koerper_weg_checks, "body/BodyWatch mirrordamage/DamageMirror",
+              koerpertypen=True),
+    Abschnitt("effekt_weg", effekt_weg_checks, "potion"),
+    Abschnitt("feuerhieb", feuerhieb_checks, "mirrordamage/DamageMirror"),
+    Abschnitt("modusinventar", modusinventar_checks, "session/CameraMode crash/CamCrashGuard inventory"),
     Abschnitt("spawnen", spawn_checks, "spawning"),
     Abschnitt("fortschritt", fortschritt_checks, "progress session/CameraMode session/CameraData"),
     Abschnitt("abschalten", abschalten_checks,

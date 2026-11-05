@@ -2,6 +2,7 @@ package de.elia.cameraplugin.body;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
+import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.session.EndReason;
 import org.bukkit.Location;
@@ -117,6 +118,43 @@ public final class BodyWatch {
                 if (hitbox != null && !hitbox.isDead()) {
                     pinToSpot(hitbox, anchor);
                 }
+            }
+        }.runTaskTimer(plugin, 1L, 1L);
+    }
+
+    /**
+     * Ends camera mode once the body is gone, or the mannequin standing in it.
+     *
+     * <p>Everything that hits the body ends camera mode by itself, through its
+     * damage. Something that takes it away does not: a plugin against lag that
+     * clears mannequins or armour stands with {@code remove()}, or
+     * {@code /kill}, which takes an armour stand away without a hit. Camera
+     * mode then ran on without a body - nothing left that could be hit, the
+     * flight without anything at stake that {@link
+     * de.elia.cameraplugin.session.CameraMode#putDownBody} keeps from
+     * starting.</p>
+     *
+     * <p>Its chunk is held while camera mode runs, see
+     * {@link BodySpawner#holdChunk}, and the levels above 0 of
+     * {@code body.movement-sensitivity} end camera mode before it can get
+     * anywhere else: a body that is no longer valid has not just gone out of
+     * a loaded chunk.</p>
+     */
+    public void endWhenBodyGone(Player player, CameraData data) {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (!player.isOnline() || cameraPlayers.get(player.getUniqueId()) != data) {
+                    this.cancel();
+                    return;
+                }
+                Mannequin hitbox = data.getHitbox();
+                if (data.getBody().isValid() && (hitbox == null || hitbox.isValid())) {
+                    return;
+                }
+                this.cancel();
+                plugin.exitCameraMode(player, EndReason.BODY);
+                plugin.getMessages().sendMessage(player, "body-gone");
             }
         }.runTaskTimer(plugin, 1L, 1L);
     }

@@ -54,16 +54,23 @@ public final class CamPotionGuard implements Listener {
 
         if (ownerUUID == null) return;
 
+        if (event.getNewEffect() == null) {
+            // An effect taken off, not one that hit: /effect clear on the
+            // body, or the body being cleared away, whose effects go with it.
+            // That ended camera mode as well, "hit by the effect
+            // invisibility" - the one that keeps the mannequin standing in
+            // the armour stand out of sight, which is to stay on it.
+            event.setCancelled(true);
+            return;
+        }
+
         Player owner = Bukkit.getPlayer(ownerUUID);
         if (owner != null) {
             plugin.exitCameraMode(owner, EndReason.BODY);
             // After the exit: it takes off the invisibility and the night
             // vision of camera mode, and would take the same effect from the
             // body along with them.
-            PotionEffect newEffect = event.getNewEffect();
-            if (newEffect != null) {
-                owner.addPotionEffect(newEffect);
-            }
+            owner.addPotionEffect(event.getNewEffect());
             // After the exit, like the message about a hit on the body: first
             // he is back in his body, then he reads why.
             messages.sendMessage(owner, "body-got-effect", "{effect}",
