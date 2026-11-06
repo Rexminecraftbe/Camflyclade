@@ -198,6 +198,11 @@ public final class DamageMirror implements Listener {
                 announcedRadius(event.getDamageSource()), swingStrength);
 
         plugin.exitCameraMode(owner, EndReason.BODY);
+        // The attacker's own side of the hit: the wear on his weapon, the fall
+        // a mace catches, the sting a bee loses. After the end, which hands
+        // the mobs after the body back to the player - a bee that has stung
+        // is to stay away from him.
+        AttackerAftermath.handOut(event);
         // The effects of a tipped arrow, which the cancelled hit on the body
         // hands to nobody. Here and not as soon as the arrow touched the body:
         // only now is it certain that the hit counts. After the end, which
@@ -464,9 +469,12 @@ public final class DamageMirror implements Listener {
                 pushed, armorNote(serverWearsArmor, wornPoints));
         // Fire Aspect and a burning arrow set on fire only whom they hit, as
         // they do outside camera mode: a hit a protected region or a god mode
-        // turned away leaves him unburnt.
+        // turned away leaves him unburnt. The poison of a cave spider, the
+        // wither of a wither skeleton and what else a mob hands out with its
+        // hit go the same way.
         if (gotThrough && !owner.isDead()) {
             setOnFire(owner, attacker);
+            MobHitEffects.handOut(owner, attacker, source);
         }
         if (saved != null && !owner.isDead()) {
             owner.getInventory().setArmorContents(saved);

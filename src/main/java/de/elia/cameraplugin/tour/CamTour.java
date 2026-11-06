@@ -728,7 +728,8 @@ public final class CamTour implements Listener {
             return free(other) && near(guide, other)
                     && inReach(other, cameraPlayers.get(other.getUniqueId()), guide.getLocation());
         }
-        return distanceOutside(guide, other) <= settings.getTourStartDistance() && reachableFrom(other, guide);
+        return !busy(other) && distanceOutside(guide, other) <= settings.getTourStartDistance()
+                && reachableFrom(other, guide);
     }
 
     /**
@@ -761,8 +762,16 @@ public final class CamTour implements Listener {
 
     /** Whether he is in camera mode and on no tour: neither following one nor showing one. */
     private boolean free(Player player) {
-        return cameraPlayers.contains(player.getUniqueId()) && !guideOf.containsKey(player.getUniqueId())
-                && !tours.containsKey(player.getUniqueId());
+        return cameraPlayers.contains(player.getUniqueId()) && !busy(player);
+    }
+
+    /**
+     * Whether he is on a tour, in camera mode or not: following one, or
+     * showing one - out of camera mode as well, with
+     * {@code follow.lead-without-cam}.
+     */
+    private boolean busy(Player player) {
+        return guideOf.containsKey(player.getUniqueId()) || tours.containsKey(player.getUniqueId());
     }
 
     /** Whether the cameras of the two are within {@code follow.radius} of each other. */
@@ -886,7 +895,9 @@ public final class CamTour implements Listener {
             messages.sendConfiguredMessage(guide, "tour-other-not-in-cam", "{player}", other.getName());
             return;
         }
-        if (inCam && !free(other)) {
+        // Out of camera mode as well: whoever shows a tour round without it
+        // follows none at the same time.
+        if (busy(other)) {
             messages.sendConfiguredMessage(guide, "tour-other-busy", "{player}", other.getName());
             return;
         }
@@ -1023,12 +1034,14 @@ public final class CamTour implements Listener {
             messages.sendConfiguredMessage(guest, "tour-full", "{player}", guide.getName());
             return;
         }
-        if (!cameraPlayers.contains(guest.getUniqueId())) {
-            startThenJoin(guest, guide);
+        // Before camera mode is started for it: a guide out of camera mode
+        // shows his tour round and follows none at the same time.
+        if (busy(guest)) {
+            messages.sendConfiguredMessage(guest, "tour-busy");
             return;
         }
-        if (!free(guest)) {
-            messages.sendConfiguredMessage(guest, "tour-busy");
+        if (!cameraPlayers.contains(guest.getUniqueId())) {
+            startThenJoin(guest, guide);
             return;
         }
         if (!near(guide, guest)) {
@@ -1062,7 +1075,7 @@ public final class CamTour implements Listener {
             return;
         }
         plugin.getStarter().startThen(guest, () -> {
-            if (cameraPlayers.contains(guest.getUniqueId()) && hasInvited(guide, guest)
+            if (free(guest) && hasInvited(guide, guest)
                     && canLead(guide) && !guideOf.containsKey(guide.getUniqueId())) {
                 join(guest, guide);
             }

@@ -107,6 +107,40 @@ public final class NoCollisionTeam {
         team.addEntry(name);
     }
 
+    /**
+     * The team a player stands in on the main scoreboard, the teams of camera
+     * mode itself left out: the one camera mode is to give back to him.
+     *
+     * @return its name, or {@code null} for none
+     */
+    public String teamOf(Player player) {
+        Team team = Bukkit.getScoreboardManager().getMainScoreboard().getEntryTeam(player.getName());
+        return team == null || OWN_TEAMS.contains(team.getName()) ? null : team.getName();
+    }
+
+    /**
+     * Puts a player whose camera mode a crash ended back into the team he
+     * stood in when it started.
+     *
+     * <p>The server keeps the teams with the world. A crash after it had
+     * saved him in {@code cam_no_push} left him there, and the start of the
+     * plugin deletes that team - which of his own he stood in was only held
+     * in memory and gone with the crash. It comes from the file of the crash
+     * protection instead. Only while he stands in no team: one that something
+     * else has put him into since stays.</p>
+     */
+    public void giveBackAfterCrash(Player player, String former) {
+        if (former == null || OWN_TEAMS.contains(former)) {
+            return;
+        }
+        Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
+        Team team = scoreboard.getTeam(former);
+        Team now = scoreboard.getEntryTeam(player.getName());
+        if (team != null && (now == null || now.getName().equals(NO_COLLISION_TEAM))) {
+            team.addEntry(player.getName());
+        }
+    }
+
     /** Takes a player out of {@code cam_no_push} and back into the team he stood in before. */
     private void leave(Team team, String name) {
         if (team != null && team.hasEntry(name)) {

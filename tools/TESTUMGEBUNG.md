@@ -556,7 +556,22 @@ einzutragen.
   das einen Giftpfeil auf das Mannequin dort schießt, und
   `testmelder an|aus`, das im Chat sagt, wenn ein Fahrzeug Schaden nimmt oder
   ein Rahmen oder Bild abgerissen wird und niemand es abhält.
+  Und `testmobhieb <x> <y> <z> <art>`: Ein Mob dieser Art trifft das Mannequin
+  dort mit `attack()`, so wie sein eigener Angriff es täte - `cave_spider`,
+  `bee`, `wither_skeleton`, `husk` -, oder ein `wither_skull` und ein
+  `shulker_bullet` fliegen darauf zu; `wither_skull_daneben` schlägt neben
+  ihm in den Boden, sodass ihn nur die Explosion trifft.
   Ändert sich das Hilfsplugin, laufen alle Abschnitte.
+* **Gift, Wither und Hunger eines Mob-Treffers gibt es erst ab `normal`.**
+  Höhlenspinne, Biene und Witherschädel vergiften auf `easy` gar nicht, der
+  Abschnitt `mobtreffer` stellt deshalb für sich auf `normal` und danach
+  wieder zurück, mit `mob_griefing` aus, damit der Witherschädel kein Loch
+  in die Welt sprengt. Die Kamera wartet dabei abseits: Ein Geschoss träfe
+  sonst sie statt des Körpers.
+* **Der Fallschaden des Schlägers zählt im Abschnitt `schlaeger` zehnfach.**
+  Ein Streitkolben, der von oben trifft, fängt den Fall ab; einer, dessen
+  Schlag nicht durchgeht, nicht. Aus 3,4 Blöcken wären das sonst ein, zwei
+  halbe Herzen Unterschied, mit `fall_damage_multiplier` 10 sind es gut vier.
 * **Wer zur Kamera teleportiert wird, bekommt vorher Sanften Fall.** Die
   Kamera steht sechs Blöcke hoch. Käme er bei ihr in der Luft an statt beim
   Körper, fiele er ohne den Effekt in einer Sekunde herunter und stünde bei

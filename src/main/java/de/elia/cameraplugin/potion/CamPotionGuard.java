@@ -18,6 +18,8 @@ import org.bukkit.event.entity.PotionSplashEvent;
 import org.bukkit.potion.PotionEffect;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -160,22 +162,37 @@ public final class CamPotionGuard implements Listener {
     }
 
     /**
-     * A beacon or a conduit gives nothing to the camera.
+     * What the world hands to the players around it gives nothing to the
+     * camera: a beacon, a conduit, the warden, the sculk shrieker, the elder
+     * guardian and the wither rose.
      *
-     * <p>Both hand their effect to every player in their reach, and the
-     * camera is one to the game. With regeneration camera mode healed: fly to
-     * the beacon, wait, and be back at the body with full hearts. Whatever
-     * else it gives, strength or resistance, he took along to his body. His
-     * body is no player and gets nothing either, as it stands where he
-     * stood.</p>
+     * <p>All of them hand their effect to every player in their reach, and
+     * the camera is one to the game. With regeneration camera mode healed: fly
+     * to the beacon, wait, and be back at the body with full hearts. Whatever
+     * else it gives, strength or resistance, he took along to his body - and
+     * the same went for the darkness of a warden or a shrieker the camera flew
+     * past, the mining fatigue of an elder guardian in its monument and the
+     * wither of a wither rose it flew through. His body is no player and gets
+     * nothing either, as it stands where he stood.</p>
+     *
+     * <p>The elder guardian hands its effect out as an attack. A real attack
+     * never reaches the camera - every hit on it is turned away, and whatever
+     * the hit on his body brings comes once camera mode is over -, so whatever
+     * comes as one while camera mode runs is the elder guardian's.</p>
      */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onCameraPlayerEffect(EntityPotionEffectEvent event) {
-        EntityPotionEffectEvent.Cause cause = event.getCause();
-        if (event.getNewEffect() != null
-                && (cause == EntityPotionEffectEvent.Cause.BEACON || cause == EntityPotionEffectEvent.Cause.CONDUIT)
+        if (event.getNewEffect() != null && FROM_THE_WORLD.contains(event.getCause())
                 && event.getEntity() instanceof Player player && cameraPlayers.contains(player.getUniqueId())) {
             event.setCancelled(true);
         }
     }
+
+    /** The causes of what the world hands out to the players around it, see {@link #onCameraPlayerEffect}. */
+    private static final Set<EntityPotionEffectEvent.Cause> FROM_THE_WORLD = EnumSet.of(
+            EntityPotionEffectEvent.Cause.BEACON,
+            EntityPotionEffectEvent.Cause.CONDUIT,
+            EntityPotionEffectEvent.Cause.WARDEN,
+            EntityPotionEffectEvent.Cause.ATTACK,
+            EntityPotionEffectEvent.Cause.WITHER_ROSE);
 }

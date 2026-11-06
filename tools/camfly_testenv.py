@@ -890,6 +890,10 @@ def stop_server(env, quiet=False):
 #   testgiftpfeil <x> <y> <z>    - schiesst einen Giftpfeil auf das Mannequin bei x y z
 #   testmelder an|aus            - sagt im Chat, wenn ein Fahrzeug Schaden nimmt oder etwas
 #                                  Aufgehaengtes abgerissen wird und niemand es abhaelt
+#   testmobhieb <x> <y> <z> <art> - ein Mob dieser Art trifft das Mannequin bei x y z, wie sein
+#                                  eigener Angriff es taete (attack()): cave_spider, bee,
+#                                  wither_skeleton, husk; wither_skull und shulker_bullet
+#                                  fliegen darauf zu, wither_skull_daneben in den Boden daneben
 TPA_HELFER_NAME = "CamFlyTpaHelfer"
 
 TPA_HELFER_JAVA = r'''
@@ -903,8 +907,12 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
+import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.ShulkerBullet;
+import org.bukkit.entity.WitherSkull;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -1083,6 +1091,63 @@ public final class TpaHelfer extends JavaPlugin implements Listener {
             sender.sendMessage("testgiftpfeil: ok");
             return true;
         }
+        if (name.equals("testmobhieb")) {
+            if (args.length != 4) {
+                return false;
+            }
+            World welt = sender instanceof Player p ? p.getWorld() : Bukkit.getWorlds().get(0);
+            Location bei = new Location(welt, Double.parseDouble(args[0]), Double.parseDouble(args[1]),
+                    Double.parseDouble(args[2]));
+            Mannequin koerper = null;
+            for (Entity e : welt.getNearbyEntities(bei, 1.5, 2.5, 1.5)) {
+                if (e instanceof Mannequin m) {
+                    koerper = m;
+                    break;
+                }
+            }
+            if (koerper == null) {
+                sender.sendMessage("testmobhieb: kein Mannequin");
+                return true;
+            }
+            Location brust = koerper.getLocation().add(0.0, 1.2, 0.0);
+            String art = args[3].toLowerCase(java.util.Locale.ROOT);
+            Entity mob;
+            if (art.equals("wither_skull_daneben")) {
+                // Neben den Koerper in den Boden: Ihn trifft nur die
+                // Explosion, und die gibt keinen Wither.
+                mob = welt.spawn(koerper.getLocation().add(1.2, 2.0, 0.0), WitherSkull.class,
+                        s -> s.setDirection(new Vector(0, -1, 0)));
+            } else if (art.equals("wither_skull")) {
+                // Ohne Schuetzen, wie ein Dispenser ihn nicht hat: magischer
+                // Schaden, und der Wither auf normal zehn Sekunden.
+                mob = welt.spawn(brust.clone().add(2.0, 0.0, 0.0), WitherSkull.class,
+                        s -> s.setDirection(new Vector(-1, 0, 0)));
+            } else if (art.equals("shulker_bullet")) {
+                Mannequin ziel = koerper;
+                mob = welt.spawn(brust.clone().add(1.5, 0.0, 0.0), ShulkerBullet.class, k -> k.setTarget(ziel));
+            } else {
+                EntityType typ;
+                try {
+                    typ = EntityType.valueOf(art.toUpperCase(java.util.Locale.ROOT));
+                } catch (IllegalArgumentException ex) {
+                    sender.sendMessage("testmobhieb: keine Art " + art);
+                    return true;
+                }
+                LivingEntity angreifer = (LivingEntity) welt.spawnEntity(koerper.getLocation().add(1.5, 0.0, 0.0), typ);
+                if (angreifer instanceof Mob m) {
+                    m.setAI(false);
+                }
+                // Was der Mob nach einem Treffer tut - Gift, Wither, Hunger,
+                // der Stich einer Biene -, haengt am Erfolg dieses Angriffs.
+                angreifer.attack(koerper);
+                mob = angreifer;
+            }
+            mob.addScoreboardTag("camflymobhieb");
+            // Lange genug, dass der Test danach noch nach ihm fragen kann.
+            Bukkit.getScheduler().runTaskLater(this, mob::remove, 200L);
+            sender.sendMessage("testmobhieb: ok " + art);
+            return true;
+        }
         if (name.equals("testtoddrop") || name.equals("testspawnsperre") || name.equals("testtpsperre")
                 || name.equals("testgottmodus") || name.equals("testmodusinventar")
                 || name.equals("testbehalten") || name.equals("testkoerperschutz") || name.equals("testmelder")) {
@@ -1247,6 +1312,8 @@ commands:
   testgiftpfeil:
     permission: camflytest.plugintp
   testmelder:
+    permission: camflytest.plugintp
+  testmobhieb:
     permission: camflytest.plugintp
 permissions:
   camflytest.plugintp:
@@ -4530,6 +4597,10 @@ def absturz_checks(env, bot):
     bot.chat("/clear @s")
     bot.chat("/give @s minecraft:diamond 7")
     bot.chat("/gamemode survival")
+    # Sein Team: Der Cam-Modus stellt ihn in cam_no_push, und die Welt
+    # behaelt das ueber den Absturz. Danach muss er wieder in seinem stehen.
+    console(env, "team add camflyabsturz", pause=0.3)
+    console(env, f"team join camflyabsturz {BOT_NAME}", pause=0.3)
     time.sleep(1.0)
     heim = bot.server_pos()
     vor_dem_flug = geflogen(env)
@@ -4588,6 +4659,8 @@ def absturz_checks(env, bot):
     FIND.test("Nach dem Neustart: die Fluggeschwindigkeit ist wieder normal",
               tempo is not None and abs(tempo - 0.05) < 0.001, str(tempo))
     FIND.test("Nach dem Neustart: die Datei ist geloescht", not dateien(), str(dateien()))
+    FIND.test("Nach dem Neustart: er steht wieder in seinem Team", ist_im_team(bot, "camflyabsturz"), "")
+    console(env, "team remove camflyabsturz", pause=0.3)
     nach_dem_neustart = geflogen(env)
     FIND.test("Nach dem Neustart: die geflogene Strecke steht wieder wie vor dem Cam-Modus (progress-guard)",
               nach_dem_neustart == vor_dem_flug, f"{vor_dem_flug} -> {im_flug} -> {nach_dem_neustart}")
@@ -17425,6 +17498,322 @@ def schutzgebiet_checks(env, bot):
         hinstellen(bot, heim[0], heim[1], heim[2])
 
 
+WITHER = '{active_effects:[{id:"minecraft:wither"}]}'
+HUNGER = '{active_effects:[{id:"minecraft:hunger"}]}'
+SCHWEBE = '{active_effects:[{id:"minecraft:levitation"}]}'
+
+
+def wirkt_bald(bot, auswahl, nbt, sekunden=4.0):
+    """Ob diese Wirkung binnen der Sekunden an der Entitaet haengt."""
+    ende = time.time() + sekunden
+    while True:
+        if nbt_frage(bot, auswahl, nbt):
+            return True
+        if time.time() >= ende:
+            return False
+        time.sleep(0.5)
+
+
+def mobtreffer_checks(env, bot):
+    """Was ein Mob mit seinem Treffer austeilt, bekommt auch der Spieler,
+    dessen Koerper er trifft.
+
+    Die Hoehlenspinne vergiftet, die Biene sticht und vergiftet, das
+    Witherskelett und der Witherschaedel geben Wither, der Wuestenzombie
+    Hunger, das Shulker-Geschoss laesst schweben - alles nur, wenn ihr
+    Treffer durchgeht. Der Treffer auf den Koerper geht nie durch, das Plugin
+    bricht ihn ab und gibt nur den Schaden weiter: Der Cam-Modus schuetzte so
+    vor Gift und Wither. testmobhieb laesst den Mob den Koerper so treffen,
+    wie sein eigener Angriff es taete. Auf normal, wo Spinne, Biene und
+    Schaedel ueberhaupt vergiften; der Bot traegt Resistenz 255.
+    """
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    proben = [
+        ("Hoehlenspinne", "cave_spider", GIFT, "Gift"),
+        ("Biene", "bee", GIFT, "Gift"),
+        ("Witherskelett", "wither_skeleton", WITHER, "Wither"),
+        ("Wuestenzombie", "husk", HUNGER, "Hunger"),
+        ("Witherschaedel", "wither_skull", WITHER, "Wither"),
+        ("Shulker-Geschoss", "shulker_bullet", SCHWEBE, "Schwebe"),
+    ]
+
+    def bereit():
+        bot.chat("/effect clear @s")
+        time.sleep(0.5)
+        bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
+        time.sleep(0.5)
+        hinstellen(bot, x, y, z)
+        if not cam_on(bot):
+            return False
+        # Abseits, damit nichts die Kamera statt des Koerpers trifft.
+        hinstellen(bot, x - 8, y + 4, z)
+        return True
+
+    try:
+        # Vor der ersten Frage: Ein Abschnitt davor mag den Bot verletzt
+        # haben, und cam-safety lehnte dann das /cam ab, mit dem cam_off
+        # nachsieht.
+        set_option(env, "enabled", "false", "cam-safety")
+        if not FIND.test("Cam-Modus ist vor dem Test der Mob-Treffer aus", cam_off(bot), ""):
+            return
+        console(env, "difficulty normal", pause=0.3)
+        console(env, "gamerule mob_griefing false", pause=0.3)
+        for name, art, wirkung, wort in proben:
+            if not FIND.test(f"/cam startet fuer den Treffer: {name}", bereit(), ""):
+                continue
+            console(env, f"testmobhieb {x} {y} {z} {art}", pause=2.0)
+            # Erst, was da ist: Eine Frage, auf die der Server nicht
+            # antwortet, wartet vier Sekunden - und das Gift der
+            # Hoehlenspinne haelt auf normal nur sieben.
+            gestochen = art == "bee" and server_says(
+                bot, "/execute if entity @e[type=minecraft:bee,tag=camflymobhieb,"
+                     "nbt={{HasStung:1b}}] run say {marke}")
+            hat = wirkt_bald(bot, "@s", wirkung)
+            geendet = not spielmodus_ist(bot, "adventure")
+            FIND.test(f"{name} trifft den Koerper: der Cam-Modus endet", geendet, "")
+            FIND.test(f"{name} trifft den Koerper: er hat danach {wort}, wie ohne Cam-Modus",
+                      geendet and hat, "")
+            if art == "wither_skull":
+                # Gegenprobe: Trifft den Koerper nur die Explosion, gibt es
+                # keinen Wither - ohne Cam-Modus ebenso.
+                cam_off(bot)
+                if FIND.test("/cam startet fuer den Witherschaedel daneben", bereit(), ""):
+                    console(env, f"testmobhieb {x} {y} {z} wither_skull_daneben", pause=2.0)
+                    geendet = not spielmodus_ist(bot, "adventure")
+                    FIND.test("Explodiert ein Witherschaedel neben dem Koerper, endet der Cam-Modus - ohne Wither",
+                              geendet and not nbt_frage(bot, "@s", WITHER), "")
+            if art == "bee":
+                FIND.test("Die Biene hat danach gestochen, wie ohne Cam-Modus, und greift nicht noch einmal an",
+                          gestochen, "")
+            cam_off(bot)
+    finally:
+        cam_off(bot)
+        console(env, "kill @e[tag=camflymobhieb]", pause=0.3)
+        console(env, "difficulty peaceful", pause=0.3)
+        console(env, "gamerule mob_griefing true", pause=0.3)
+        bot.chat("/effect clear @s")
+        time.sleep(0.5)
+        set_option(env, "enabled", "true", "cam-safety")
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
+def schlaeger_checks(env, bot):
+    """Was ein Schlag auf den Koerper beim Spieler ausloest, der zuschlaegt.
+
+    Der Treffer auf den Koerper geht nie durch, das Plugin bricht ihn ab. Ein
+    Spieler, dessen Schlag nicht durchgeht, nutzt aber seine Waffe nicht ab -
+    und ein Streitkolben, der von oben trifft, faengt seinen Fall nicht ab:
+    Er schlug den Koerper und kam mit vollem Fallschaden auf. Der zweite
+    Spieler schlaegt erst den Bot selbst, dann seinen Koerper, und beides
+    muss gleich ausgehen. Sein Fallschaden zaehlt zehnfach, damit ein
+    abgefangener Fall und einer, der weiterging, sicher auseinanderliegen.
+    """
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    schlaeger = BotClient(env, name=ZUSCHAUER_NAME)
+
+    def waffe(item):
+        console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+        # Ein Schlag trifft, was dem Ziel am naechsten steht - auch einen
+        # Pfeil, den ein Abschnitt davor dort stecken liess.
+        console(env, f"execute positioned {x} {y} {z} run kill @e[type=#minecraft:arrows,distance=..8]",
+                pause=0.3)
+        console(env, f"clear {ZUSCHAUER_NAME}", pause=0.3)
+        console(env, f"item replace entity {ZUSCHAUER_NAME} hotbar.0 with {item}", pause=0.5)
+        schlaeger.call("hotbar", slot=0)
+        console(env, f"effect give {ZUSCHAUER_NAME} minecraft:instant_health 1 5", pause=0.5)
+
+    def ziel(cam):
+        """Ohne Cam-Modus steht der Bot am Ziel, im Cam-Modus sein Koerper,
+        und die Kamera wartet abseits."""
+        hinstellen(bot, x, y, z)
+        if not cam:
+            return True
+        if not cam_on(bot):
+            return False
+        hinstellen(bot, x - 8, y + 4, z)
+        return True
+
+    try:
+        # Vor der ersten Frage, siehe mobtreffer_checks.
+        set_option(env, "enabled", "false", "cam-safety")
+        if not FIND.test("Cam-Modus ist vor dem Test des Schlaegers aus", cam_off(bot), ""):
+            return
+        bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
+        time.sleep(0.5)
+        console(env, "gamerule natural_health_regeneration false", pause=0.3)
+        schlaeger.start()
+        if not FIND.test("Zweiter Spieler fuer die Schlaege kommt herein",
+                         schlaeger.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(schlaeger)
+        console(env, f"gamemode survival {ZUSCHAUER_NAME}", pause=0.3)
+        console(env, f"attribute {ZUSCHAUER_NAME} minecraft:fall_damage_multiplier base set 10", pause=0.3)
+
+        for cam in (False, True):
+            wo = "seinen Koerper" if cam else "den Bot (Gegenprobe)"
+            waffe("minecraft:iron_sword")
+            if not FIND.test(f"Ziel steht fuer den Schwerthieb auf {wo}", ziel(cam), ""):
+                continue
+            console(env, f"tp {ZUSCHAUER_NAME} {x + 2} {y} {z} 90 0", pause=0.3)
+            time.sleep(1.0)
+            schlag = schlaeger.call("attack_entity", wait=20, radius=1.5, at=[x, y, z])
+            time.sleep(1.0)
+            abgenutzt = server_says(bot, f"/execute if items entity {ZUSCHAUER_NAME} weapon.mainhand "
+                                         f"minecraft:iron_sword[minecraft:damage=1] run say {{marke}}")
+            FIND.test(f"Ein Schwerthieb auf {wo} nutzt das Schwert um einen Punkt ab",
+                      schlag.get("done") and abgenutzt, str(schlag))
+            cam_off(bot)
+
+        for cam in (False, True):
+            wo = "seinen Koerper" if cam else "den Bot (Gegenprobe)"
+            waffe("minecraft:mace")
+            if not FIND.test(f"Ziel steht fuer den Streitkolben auf {wo}", ziel(cam), ""):
+                continue
+            # Von oben: nach gut 1,5 Bloecken Fall schlaegt der Streitkolben
+            # auf, wie im Rueckstosstest.
+            console(env, f"tp {ZUSCHAUER_NAME} {x + 1.6} {y + 3.4} {z} 90 70", pause=0)
+            time.sleep(0.3)
+            schlag = schlaeger.call("attack_entity", wait=20, radius=1.0, at=[x, y + 0.5, z], aim=0.8)
+            time.sleep(2.0)
+            heil = nbt_frage(bot, ZUSCHAUER_NAME, "{Health:20.0f}")
+            FIND.test(f"Ein Streitkolben von oben auf {wo} faengt den Fall des Schlaegers ab: kein Fallschaden",
+                      schlag.get("done") and heil, str(schlag))
+            cam_off(bot)
+    finally:
+        cam_off(bot)
+        schlaeger.stop()
+        console(env, "gamerule natural_health_regeneration true", pause=0.3)
+        console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+        bot.chat("/effect clear @s")
+        time.sleep(0.5)
+        set_option(env, "enabled", "true", "cam-safety")
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
+def fuehrung_kette_checks(env, bot):
+    """Wer ohne Cam-Modus eine Fuehrung leitet, folgt nicht zugleich einer
+    anderen.
+
+    Mit follow.lead-without-cam leitet der Bot eine Fuehrung, ohne im
+    Cam-Modus zu sein. Ein dritter Spieler im Cam-Modus konnte ihn trotzdem
+    einladen, und nahm er an, startete sein Cam-Modus und er folgte dem
+    dritten - als Gast und Leiter zugleich, was das Plugin sonst ueberall
+    ausschliesst.
+    """
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    dritter = BotClient(env, name=DRITTER_NAME)
+    try:
+        # Vor der ersten Frage, siehe mobtreffer_checks. invite-cooldown-seconds
+        # steht auf dem Testserver ohnehin auf 0.
+        set_option(env, "enabled", "false", "cam-safety")
+        if not FIND.test("Cam-Modus ist vor dem Test der Fuehrungskette aus", cam_off(bot), ""):
+            return
+        zuschauer.start()
+        dritter.start()
+        if not FIND.test("Zweiter und dritter Spieler fuer die Fuehrungskette kommen herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned")
+                         and dritter.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        cam_off(dritter)
+        hinstellen(bot, x, y, z)
+        console(env, f"tp {ZUSCHAUER_NAME} {x - 4} {y} {z}", pause=0.5)
+        console(env, f"tp {DRITTER_NAME} {x + 4} {y} {z}", pause=0.5)
+        if not FIND.test("Der dritte Spieler startet den Cam-Modus", cam_on(dritter), ""):
+            return
+        zeilen = befehl(dritter, f"/cam follow invite {BOT_NAME}")
+        FIND.test("Der dritte laedt den Bot ein, der noch niemanden fuehrt",
+                  gesagt(zeilen, rf"You invited {BOT_NAME} to follow you"), zeige(zeilen))
+        befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
+        if not FIND.test("Der Bot fuehrt ohne Cam-Modus den zweiten Spieler",
+                         gesagt(dort, rf"You follow {BOT_NAME} now") and not im_cam_modus(bot, BOT_NAME),
+                         zeige(dort)):
+            return
+        hier = befehl(bot, f"/cam follow accept {DRITTER_NAME}", warten=3.0)
+        FIND.test("Nimmt der Bot, der fuehrt, die Einladung an, heisst es: er fuehrt schon - und er bleibt "
+                  "ohne Cam-Modus",
+                  gesagt(hier, r"You lead or follow already") and not im_cam_modus(bot, BOT_NAME), zeige(hier))
+        zeilen = befehl(dritter, f"/cam follow invite {BOT_NAME}")
+        FIND.test("Den Bot, der fuehrt, kann der dritte nicht mehr einladen",
+                  gesagt(zeilen, rf"{BOT_NAME} leads or follows already"), zeige(zeilen))
+        tabs = dritter.call("tab", text="/cam follow invite ").get("matches", [])
+        FIND.test("Tab nach /cam follow invite bietet dem dritten den Bot nicht an", BOT_NAME not in tabs, str(tabs))
+    finally:
+        befehl(bot, "/cam follow end")
+        cam_off(bot)
+        cam_off(zuschauer)
+        cam_off(dritter)
+        zuschauer.stop()
+        dritter.stop()
+        set_option(env, "enabled", "true", "cam-safety")
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
+def umgebung_checks(env, bot):
+    """Was die Welt Spielern in der Naehe gibt, bekommt die Kamera nicht.
+
+    Eine Witherrose gibt jedem Wither, der in ihr steht; die Kamera flog
+    hindurch und nahm ihn an den Koerper mit. Der Waerter und der
+    Sculk-Kreischer geben jedem Spieler in ihrer Naehe Dunkelheit, der
+    Grosse Waechter Abbaulaehmung - Spielern im Ueberleben und Abenteuer, der
+    Kamera also auch. Wie bei Leuchtfeuer und Conduit gibt es fuer die Kamera
+    nichts davon.
+
+    Geprueft wird die Witherrose. Waerter und Grosser Waechter verteilen ihre
+    Wirkung nur mit KI - ohne geben sie nichts, mit greift der Waerter an,
+    und der Grosse Waechter tut es nur einmal in der Minute. Sie laufen
+    ueber dieselbe Sperre in CamPotionGuard.
+    """
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    rx, rz = _floor(x) + 6, _floor(z)
+    try:
+        # Vor der ersten Frage, siehe mobtreffer_checks.
+        set_option(env, "enabled", "false", "cam-safety")
+        if not FIND.test("Cam-Modus ist vor dem Test der Umgebung aus", cam_off(bot), ""):
+            return
+        console(env, "difficulty normal", pause=0.3)
+        console(env, f"setblock {rx} {y} {rz} minecraft:wither_rose", pause=0.5)
+        hinstellen(bot, rx + 0.5, y, rz + 0.5)
+        FIND.test("Gegenprobe: ohne Cam-Modus gibt die Witherrose ihm Wither", wirkt_bald(bot, "@s", WITHER), "")
+        hinstellen(bot, x, y, z)
+        bot.chat("/effect clear @s")
+        time.sleep(1.0)
+        if FIND.test("/cam startet fuer die Witherrose", cam_on(bot), ""):
+            hinstellen(bot, rx + 0.5, y, rz + 0.5)
+            FIND.test("Im Cam-Modus gibt die Witherrose der Kamera keinen Wither",
+                      not wirkt_bald(bot, "@s", WITHER, 3.0), "")
+            hinstellen(bot, x, y, z)
+            cam_off(bot)
+            FIND.test("Und nach dem Cam-Modus hat er keinen Wither", not nbt_frage(bot, "@s", WITHER), "")
+        console(env, f"setblock {rx} {y} {rz} minecraft:air", pause=0.3)
+
+    finally:
+        cam_off(bot)
+        console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
+        console(env, f"setblock {rx} {y} {rz} minecraft:air", pause=0.3)
+        console(env, "difficulty peaceful", pause=0.3)
+        bot.chat("/effect clear @s")
+        time.sleep(0.5)
+        set_option(env, "enabled", "true", "cam-safety")
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
 class Abschnitt:
     """Ein Abschnitt der Tests: sein Name, die Funktion, die ihn faehrt, und
     die Bereiche des Plugins, die er prueft.
@@ -18167,6 +18556,10 @@ ABSCHNITTE = [
     Abschnitt("tod_fern", tod_fern_checks, "session/SessionListener"),
     Abschnitt("leuchtfeuer", leuchtfeuer_checks, "potion hunger/CamRegenGuard"),
     Abschnitt("schutzgebiet", schutzgebiet_checks, "potion mirrordamage/DamageMirror"),
+    Abschnitt("mobtreffer", mobtreffer_checks, "mirrordamage potion"),
+    Abschnitt("schlaeger", schlaeger_checks, "mirrordamage"),
+    Abschnitt("fuehrung_kette", fuehrung_kette_checks, "tour/CamTour"),
+    Abschnitt("umgebung", umgebung_checks, "potion"),
     Abschnitt("abschalten", abschalten_checks,
               "tour visibility/CamVisibility scout/CamScoutGuard photo/CamPhotoMode session/CameraMode"),
     Abschnitt("absturz", absturz_checks, "crash progress"),

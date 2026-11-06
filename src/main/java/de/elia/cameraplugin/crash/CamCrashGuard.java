@@ -141,6 +141,11 @@ public final class CamCrashGuard implements Listener {
         file.set("glowing", data.getOriginalGlowing());
         file.set("fly-speed", (double) data.getFlySpeedAtStart());
         file.set("movement-statistics", CamProgressGuard.byName(data.getMovementAtStart()));
+        // Camera mode puts him into a team of its own, and the world keeps
+        // that over a crash, see NoCollisionTeam#giveBackAfterCrash.
+        if (data.getTeamAtStart() != null) {
+            file.set("team", data.getTeamAtStart());
+        }
         // Written out instead of as a Location: one of those cannot even be
         // read back while its world is not loaded, and the rest of the file
         // would be lost with it.
@@ -300,6 +305,8 @@ public final class CamCrashGuard implements Listener {
         if (movement != null) {
             plugin.getProgressGuard().restoreMovement(player, movement.getValues(false));
         }
+        // His team, which a file from before it was kept does not name.
+        plugin.getNoCollisionTeam().giveBackAfterCrash(player, file.getString("team"));
         World world = Bukkit.getWorld(file.getString("body.world", ""));
         if (world != null) {
             player.teleport(new Location(world, file.getDouble("body.x"), file.getDouble("body.y"),
