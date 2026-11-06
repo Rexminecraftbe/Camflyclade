@@ -17707,8 +17707,9 @@ def fuehrung_kette_checks(env, bot):
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
     dritter = BotClient(env, name=DRITTER_NAME)
     try:
-        # Vor der ersten Frage, siehe mobtreffer_checks.
-        set_options(env, [("invite-cooldown-seconds", "0", "follow"), ("enabled", "false", "cam-safety")])
+        # Vor der ersten Frage, siehe mobtreffer_checks. invite-cooldown-seconds
+        # steht auf dem Testserver ohnehin auf 0.
+        set_option(env, "enabled", "false", "cam-safety")
         if not FIND.test("Cam-Modus ist vor dem Test der Fuehrungskette aus", cam_off(bot), ""):
             return
         zuschauer.start()
@@ -17750,7 +17751,7 @@ def fuehrung_kette_checks(env, bot):
         cam_off(dritter)
         zuschauer.stop()
         dritter.stop()
-        set_options(env, [("invite-cooldown-seconds", "60", "follow"), ("enabled", "true", "cam-safety")])
+        set_option(env, "enabled", "true", "cam-safety")
         hinstellen(bot, heim[0], heim[1], heim[2])
 
 
