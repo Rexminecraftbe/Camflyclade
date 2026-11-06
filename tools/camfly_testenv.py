@@ -1143,7 +1143,8 @@ public final class TpaHelfer extends JavaPlugin implements Listener {
                 mob = angreifer;
             }
             mob.addScoreboardTag("camflymobhieb");
-            Bukkit.getScheduler().runTaskLater(this, mob::remove, 60L);
+            // Lange genug, dass der Test danach noch nach ihm fragen kann.
+            Bukkit.getScheduler().runTaskLater(this, mob::remove, 200L);
             sender.sendMessage("testmobhieb: ok " + art);
             return true;
         }
@@ -17563,24 +17564,30 @@ def mobtreffer_checks(env, bot):
         for name, art, wirkung, wort in proben:
             if not FIND.test(f"/cam startet fuer den Treffer: {name}", bereit(), ""):
                 continue
-            console(env, f"testmobhieb {x} {y} {z} {art}", pause=3.0)
+            console(env, f"testmobhieb {x} {y} {z} {art}", pause=2.0)
+            # Erst, was da ist: Eine Frage, auf die der Server nicht
+            # antwortet, wartet vier Sekunden - und das Gift der
+            # Hoehlenspinne haelt auf normal nur sieben.
+            gestochen = art == "bee" and server_says(
+                bot, "/execute if entity @e[type=minecraft:bee,tag=camflymobhieb,"
+                     "nbt={{HasStung:1b}}] run say {marke}")
+            hat = wirkt_bald(bot, "@s", wirkung)
             geendet = not spielmodus_ist(bot, "adventure")
             FIND.test(f"{name} trifft den Koerper: der Cam-Modus endet", geendet, "")
             FIND.test(f"{name} trifft den Koerper: er hat danach {wort}, wie ohne Cam-Modus",
-                      geendet and wirkt_bald(bot, "@s", wirkung), "")
+                      geendet and hat, "")
             if art == "wither_skull":
                 # Gegenprobe: Trifft den Koerper nur die Explosion, gibt es
                 # keinen Wither - ohne Cam-Modus ebenso.
                 cam_off(bot)
                 if FIND.test("/cam startet fuer den Witherschaedel daneben", bereit(), ""):
-                    console(env, f"testmobhieb {x} {y} {z} wither_skull_daneben", pause=3.0)
+                    console(env, f"testmobhieb {x} {y} {z} wither_skull_daneben", pause=2.0)
                     geendet = not spielmodus_ist(bot, "adventure")
                     FIND.test("Explodiert ein Witherschaedel neben dem Koerper, endet der Cam-Modus - ohne Wither",
                               geendet and not nbt_frage(bot, "@s", WITHER), "")
             if art == "bee":
                 FIND.test("Die Biene hat danach gestochen, wie ohne Cam-Modus, und greift nicht noch einmal an",
-                          server_says(bot, "/execute if entity @e[type=minecraft:bee,tag=camflymobhieb,"
-                                           "nbt={{HasStung:1b}}] run say {marke}"), "")
+                          gestochen, "")
             cam_off(bot)
     finally:
         cam_off(bot)
