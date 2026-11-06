@@ -19,6 +19,7 @@ import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.world.PortalCreateEvent;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -64,6 +65,8 @@ public final class CamMovementGuard implements Listener {
     private final Map<UUID, Long> portalMessageCooldown = new HashMap<>();
     /** Players who were just told that lava, water or powder snow does not let them in. */
     private final Map<UUID, Long> mediumMessageCooldown = new HashMap<>();
+    /** The task of {@link #holdFlight()}, while it runs. */
+    private BukkitTask flightTask;
 
     public CamMovementGuard(CameraPlugin plugin) {
         this.plugin = plugin;
@@ -547,6 +550,53 @@ public final class CamMovementGuard implements Listener {
                 }
             }
         }.runTaskLater(plugin, 1L);
+    }
+
+    /**
+     * Gives the camera players their flight back every tick, should anything
+     * have taken it, see {@link #holdFlight()}.
+     */
+    public void startHoldingFlight() {
+        stopHoldingFlight();
+        flightTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::holdFlight, 1L, 1L);
+    }
+
+    /** Stops {@link #startHoldingFlight()}, when the plugin is switched off. */
+    public void stopHoldingFlight() {
+        if (flightTask != null) {
+            flightTask.cancel();
+            flightTask = null;
+        }
+    }
+
+    /**
+     * Gives every camera player whose flight something else has taken the
+     * flight back, and keeps the camera in the air.
+     *
+     * <p>Camera mode lets the player fly, and nothing in it takes that away
+     * again before the end. Other things do: {@code /gamemode}, or any plugin
+     * changing the game mode, takes the flight along with the mode, and
+     * world plugins set the game mode or the flight of a world on whoever
+     * comes into it, or reset the flight on a change of world - through a
+     * portal, say. That alone only lets the camera drop. But where it is then
+     * held up in the air - at the border of {@code max-distance} over the
+     * void, on a wall only its client has or by steps that are turned back -
+     * the server sees a player who may not fly and does not fall, and after
+     * four seconds throws the player off with "Flying is not enabled on this
+     * server", on every server with {@code allow-flight=false}, the default
+     * of {@code server.properties}.</p>
+     *
+     * <p>Asked every tick: a camera that has lost its flight drops at
+     * once.</p>
+     */
+    private void holdFlight() {
+        for (UUID id : cameraPlayers.ids()) {
+            Player player = Bukkit.getPlayer(id);
+            if (player != null && !player.getAllowFlight()) {
+                player.setAllowFlight(true);
+                player.setFlying(true);
+            }
+        }
     }
 
     /**

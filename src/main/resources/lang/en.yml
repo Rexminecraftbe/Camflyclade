@@ -115,6 +115,7 @@ messages:
   cam-nearby-player: "&cYou are too close to {player} to start cam mode. Get at least {radius} blocks away ({more} more)."
   cam-powder-snow-start: "&cYou cannot start cam mode in powder snow."
   cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
+  cam-sleeping-start: "&cYou cannot start cam mode while lying in a bed. Get up first."
   cam-spectator-start: "&cYou cannot start cam mode in spectator mode."
   cam-tp-body: "&aTeleported next to the body of {player}."
   cam-tp-camera: "&aTeleported to the camera of {player}."
@@ -1345,6 +1346,7 @@ message-settings:
   cam-nearby-player: true
   cam-powder-snow-start: true
   cam-safety: true
+  cam-sleeping-start: true
   cam-spectator-start: true
   cam-tp-body: true
   cam-tp-camera: true

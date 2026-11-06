@@ -299,6 +299,7 @@ public final class CameraPlugin extends JavaPlugin {
         new CamSpawnFilter(this).register();
         progressGuard.register();
         mobGaze.start();
+        movementGuard.startHoldingFlight();
     }
 
     /**
@@ -378,6 +379,7 @@ public final class CameraPlugin extends JavaPlugin {
             camSulfurCubeGuard.onDisable();
         }
         borderWall.onDisable();
+        movementGuard.stopHoldingFlight();
         mobGaze.onDisable();
         particles.onDisable();
         sightGlow.onDisable();

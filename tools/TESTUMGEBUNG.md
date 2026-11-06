@@ -1262,6 +1262,18 @@ einzutragen.
   deshalb vor jeder Probe mit weg. Zurück auf `peaceful` geht es noch im
   Cam-Modus: Das nimmt die Monster mit, bevor der Bot wieder ein gewöhnlicher
   Spieler ist.
+* **Ob der Bot im Bett liegt, steht in `sleeping_pos`.** `SleepingX`, `-Y` und
+  `-Z` gibt es seit 26.x nicht mehr. Ins Bett kommt er nur nachts, der Test
+  stellt dafür `time set midnight` und danach wieder `day`. Allein im Bett
+  weckt ihn der Server nach fünf Sekunden; die Probe muss davor fertig sein.
+* **Der Testserver wirft niemanden fürs Fliegen hinaus**, er hat
+  `allow-flight=true`. Auf einem Server mit der Voreinstellung `false` fliegt
+  ein Spieler, der nicht fliegen darf und vier Sekunden lang nicht fällt, mit
+  „Flying is not enabled on this server“ vom Server - etwa eine Kamera, der
+  `/gamemode` oder ein Welten-Plugin das Fliegen genommen hat und die über
+  dem Void an der Grenze hängt. `flug_genommen` prüft deshalb nicht den
+  Rauswurf, sondern ob der Kamera-Spieler gleich wieder fliegen darf
+  (`abilities.mayfly`).
 
 ## Was die Tests abdecken
 
@@ -1403,7 +1415,10 @@ auf, weder als Glas noch als Barriere (der Bot schreibt dafür jeden Block mit,
 den der Client dort bekommt) · mit `push-back` bleibt die Lava Lava, und wer hineinfällt, wird
 zurückgesetzt · mitten im Fall startet `/cam` nicht, auch nicht mit Sanftem
 Fall hoch in der Luft, und die Ablehnung sagt warum · Gegenprobe: so hoch wie
-ein Sprung über dem Boden geht es · das Mannequin atmet und friert mit der
+ein Sprung über dem Boden geht es · im Bett startet `/cam` nicht, und die
+Ablehnung sagt warum; aufgestanden geht es · nimmt `/gamemode` dem
+Kamera-Spieler das Fliegen, darf er gleich wieder fliegen und fliegt, und nach
+dem Ende darf er es so wie vor dem Start · das Mannequin atmet und friert mit der
 Luft und dem Frost weiter, die der Spieler beim Start hatte, und nach dem
 Aussteigen hat der Spieler die des Mannequins · voreingestellt steht
 `border-mode: barrier` mit `border-block: barrier`, `border-block-water:
