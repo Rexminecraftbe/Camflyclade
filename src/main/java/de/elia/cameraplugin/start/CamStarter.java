@@ -148,6 +148,11 @@ public final class CamStarter {
         if (!checks.checkCamVehicle(player)) {
             return false;
         }
+        // Out of bed first, like off a mount: the start would leave the
+        // player asleep in it.
+        if (!checks.checkCamSleeping(player)) {
+            return false;
+        }
         if (!checks.checkCamMedium(player)) {
             return false;
         }

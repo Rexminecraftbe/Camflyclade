@@ -38,8 +38,8 @@ import java.util.UUID;
  * taken, or with {@code cam-safety.after-attack} handed out -, not with another
  * player close by while {@code cam-safety.nearby-players} is on, not as a
  * spectator, not with the wrong effects on him, not in a forbidden area, not
- * in lava, water or powder snow that camera mode is kept out of and not in the
- * middle of a fall.
+ * on a mount or in a bed, not in lava, water or powder snow that camera mode
+ * is kept out of and not in the middle of a fall.
  */
 public final class StartChecks implements Listener {
 
@@ -328,6 +328,25 @@ public final class StartChecks implements Listener {
             return true;
         }
         messages.sendMessage(player, "cam-vehicle-start");
+        return false;
+    }
+
+    /**
+     * Checks whether the player lies in a bed.
+     *
+     * <p>Camera mode does not get the player out of it. Started there, the
+     * server still has the player asleep: the body is put down lying in the
+     * bed, and the camera hangs on in it - flying, while the server still
+     * counts the player as asleep.</p>
+     *
+     * @return whether the player may start; if not, the player has been told
+     *         why
+     */
+    public boolean checkCamSleeping(Player player) {
+        if (!player.isSleeping()) {
+            return true;
+        }
+        messages.sendMessage(player, "cam-sleeping-start");
         return false;
     }
 

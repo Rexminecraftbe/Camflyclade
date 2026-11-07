@@ -14742,6 +14742,91 @@ def reiten_checks(env, bot):
         console(env, f"kill {lore}", pause=0.5)
 
 
+def bett_checks(env, bot):
+    """Kein Start des Cam-Modus aus dem Bett.
+
+    Der Cam-Modus holt niemanden aus dem Bett. Darin gestartet, fuehrte der
+    Server den Spieler weiter als schlafend: Der Koerper lag im Bett, die
+    Kamera hing darin, und einen Schlafenden fragt der Server nicht einmal,
+    ob er in der Luft schwebt.
+
+    Im Bett wird /cam abgelehnt, mit der Meldung dazu; aufgestanden startet
+    er wieder. Das Bett steht sechs Bloecke westlich, und es ist Mitternacht,
+    sonst laesst der Server niemanden hinein. Allein im Bett weckt ihn der
+    Server nach fuenf Sekunden wieder - die Probe muss davor fertig sein.
+    Ob er liegt, sagt sleeping_pos in seinen Daten; SleepingX und die beiden
+    anderen gibt es seit 26.x nicht mehr.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test des Betts aus", cam_off(bot), ""):
+        return
+    pos = bot.server_pos()
+    if not FIND.test("Standort fuer den Test des Betts lesbar", pos is not None, str(pos)):
+        return
+    bx, by, bz = _floor(pos[0]), _floor(pos[1] + 0.5), _floor(pos[2])
+    heim = (bx + 0.5, by, bz + 0.5)
+    x = bx - 6
+    platz = f"{x - 1} {by} {bz - 2} {x + 1} {by + 2} {bz + 2}"
+    try:
+        console(env, f"fill {platz} minecraft:air", pause=0.3)
+        console(env, f"setblock {x} {by} {bz} minecraft:red_bed[facing=south,part=foot]", pause=0.3)
+        console(env, f"setblock {x} {by} {bz + 1} minecraft:red_bed[facing=south,part=head]", pause=0.3)
+        console(env, "time set midnight", pause=1.0)
+        hinstellen(bot, x + 0.5, by, bz - 0.5)
+        bot.call("activate_block", x=x, y=by, z=bz, timeout=5000)
+        if not FIND.test("Der Bot liegt fuer den Test im Bett",
+                         server_says(bot, "/execute if data entity @s sleeping_pos run say {marke}"), ""):
+            return
+        since = bot.mark()
+        bot.chat("/cam")
+        hit = bot.expect("cannot start cam mode while lying in a bed", since, 3000)
+        lief = spielmodus_ist(bot, "adventure")
+        FIND.test("Im Bett startet /cam nicht, und er hoert, warum", bool(hit) and not lief,
+                  "Cam-Modus laeuft" if lief else
+                  strip_colors(hit["text"]) if hit else "keine Ablehnung im Chat")
+        if lief:
+            cam_off(bot)
+        # Ohne Bett steht er auf.
+        console(env, f"fill {platz} minecraft:air", pause=1.0)
+        hinstellen(bot, *heim)
+        FIND.test("Aufgestanden startet /cam wieder", cam_on(bot), "")
+    finally:
+        cam_off(bot)
+        console(env, f"fill {platz} minecraft:air", pause=0.3)
+        console(env, "time set day", pause=0.5)
+
+
+def flug_genommen_checks(env, bot):
+    """Nimmt etwas einem Kamera-Spieler das Fliegen, bekommt er es gleich
+    zurueck.
+
+    Ein neuer Spielmodus - mit /gamemode, durch ein anderes Plugin, durch ein
+    Welten-Plugin beim Betreten einer Welt - nimmt das Fliegen mit. Die
+    Kamera fiel dann, und wo sie an der Grenze von max-distance ueber dem
+    Void haengen blieb, warf der Server den Spieler nach vier Sekunden mit
+    "Flying is not enabled on this server" hinaus - auf jedem Server mit
+    allow-flight=false. Der Testserver hat allow-flight=true und wirft
+    niemanden hinaus; geprueft wird deshalb, dass der Kamera-Spieler wieder
+    fliegen darf, und dass er nach dem Ende wieder so fliegen darf wie vor
+    dem Start.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test des genommenen Flugs aus", cam_off(bot), ""):
+        return
+    vorher = nbt_frage(bot, "@s", "abilities{mayfly:1b}")
+    if not FIND.test("Cam-Modus startet fuer den Test des genommenen Flugs", cam_on(bot), ""):
+        return
+    try:
+        console(env, f"gamemode survival {BOT_NAME}", pause=1.0)
+        FIND.test("Nach /gamemode im Cam-Modus darf der Kamera-Spieler gleich wieder fliegen",
+                  nbt_frage(bot, "@s", "abilities{mayfly:1b}"), "")
+        FIND.test("... und fliegt", nbt_frage(bot, "@s", "abilities{flying:1b}"), "")
+        cam_off(bot)
+        nachher = nbt_frage(bot, "@s", "abilities{mayfly:1b}")
+        FIND.test("Nach dem Ende darf er fliegen wie vor dem Start", nachher == vorher,
+                  f"vorher {'ja' if vorher else 'nein'}, nachher {'ja' if nachher else 'nein'}")
+    finally:
+        cam_off(bot)
+
+
 # ---------------------------------------------------------------------------
 # Tippfehler, Brennen, Tod, ein gesperrter Koerper und ein Treffer unterwegs
 # ---------------------------------------------------------------------------
@@ -18528,6 +18613,8 @@ ABSCHNITTE = [
     Abschnitt("kamerakopf", kamerakopf_checks, "session/CameraMode session/CameraHead"),
     Abschnitt("herzen", herzen_checks, "session/PausedEffects session/CameraMode session/CameraData"),
     Abschnitt("reiten", reiten_checks, "start/StartChecks start/CamStarter"),
+    Abschnitt("bett", bett_checks, "start/StartChecks start/CamStarter"),
+    Abschnitt("flug_genommen", flug_genommen_checks, "movement/CamMovementGuard session/CameraMode"),
     Abschnitt("tippfehler", tippfehler_checks, "camfly2/CamCommand"),
     Abschnitt("brand", brand_checks, "session/CameraMode session/CameraData fire crash/CamCrashGuard"),
     Abschnitt("tod", tod_checks, "session/SessionListener"),
