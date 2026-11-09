@@ -14,15 +14,16 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.logging.Level;
@@ -39,6 +40,12 @@ import java.util.stream.Stream;
  * between is worked out from the time, not counted. Like the files of the
  * crash protection it goes under another name first and is then moved into
  * place, so a crash in the middle of writing leaves no half a file.</p>
+ *
+ * <p>The text of the file is put together on the main thread, the writing
+ * itself is left to the {@link BackgroundWriter}: a slow disk holds up only
+ * its thread and not the server. Until the text is on the disk, reading the
+ * file gives that text, so a player who leaves and comes straight back finds
+ * his record the way he left it.</p>
  */
 public final class PlayerStore {
 
@@ -60,15 +67,21 @@ public final class PlayerStore {
 
     private final JavaPlugin plugin;
     private final ConsoleLog log;
+    private final BackgroundWriter writer;
     private final Map<UUID, PlayerRecord> loaded = new HashMap<>();
 
-    public PlayerStore(JavaPlugin plugin, ConsoleLog log) {
+    public PlayerStore(JavaPlugin plugin, ConsoleLog log, BackgroundWriter writer) {
         this.plugin = plugin;
         this.log = log;
+        this.writer = writer;
+    }
+
+    private Path folder() {
+        return plugin.getDataFolder().toPath().resolve(PLAYER_FOLDER).resolve(FOLDER);
     }
 
     private Path file(UUID playerId) {
-        return plugin.getDataFolder().toPath().resolve(PLAYER_FOLDER).resolve(FOLDER).resolve(playerId + ".yml");
+        return folder().resolve(playerId + ".yml");
     }
 
     /** The record of a player, read from his file the first time and kept from then on. */
@@ -131,19 +144,24 @@ public final class PlayerStore {
      */
     public Map<UUID, SpotCount> countSpots() {
         Map<UUID, SpotCount> found = new HashMap<>();
-        Path folder = plugin.getDataFolder().toPath().resolve(PLAYER_FOLDER).resolve(FOLDER);
-        if (!Files.isDirectory(folder)) {
-            return found;
-        }
-        List<Path> files;
-        try (Stream<Path> list = Files.list(folder)) {
-            files = list.filter(path -> path.getFileName().toString().endsWith(".yml")).toList();
-        } catch (IOException ex) {
-            log.log(Level.WARNING, "The files of the players could not be listed for the spots: " + ex);
-            return found;
+        Path folder = folder();
+        // What is still on its way to the disk counts as it will be there,
+        // a file that is not there at all yet included.
+        Map<Path, String> pendingTexts = writer.pendingIn(folder);
+        Set<Path> files = new HashSet<>(pendingTexts.keySet());
+        if (Files.isDirectory(folder)) {
+            try (Stream<Path> list = Files.list(folder)) {
+                list.map(path -> path.toAbsolutePath().normalize()).forEach(files::add);
+            } catch (IOException ex) {
+                log.log(Level.WARNING, "The files of the players could not be listed for the spots: " + ex);
+                return found;
+            }
         }
         for (Path path : files) {
             String fileName = path.getFileName().toString();
+            if (!fileName.endsWith(".yml")) {
+                continue;
+            }
             UUID id;
             try {
                 id = UUID.fromString(fileName.substring(0, fileName.length() - ".yml".length()));
@@ -152,7 +170,8 @@ public final class PlayerStore {
             }
             YamlConfiguration file = new YamlConfiguration();
             try {
-                file.loadFromString(Files.readString(path, StandardCharsets.UTF_8));
+                String text = pendingTexts.get(path);
+                file.loadFromString(text != null ? text : Files.readString(path, StandardCharsets.UTF_8));
             } catch (IOException | InvalidConfigurationException ex) {
                 continue;
             }
@@ -194,12 +213,14 @@ public final class PlayerStore {
      */
     private PlayerRecord read(UUID playerId) {
         Path path = file(playerId);
-        if (!Files.exists(path)) {
+        // A text still on its way to the disk is newer than the file.
+        String text = writer.pendingText(path);
+        if (text == null && !Files.exists(path)) {
             return new PlayerRecord();
         }
         YamlConfiguration file = new YamlConfiguration();
         try {
-            file.loadFromString(Files.readString(path, StandardCharsets.UTF_8));
+            file.loadFromString(text != null ? text : Files.readString(path, StandardCharsets.UTF_8));
         } catch (IOException | InvalidConfigurationException ex) {
             keepBroken(path, ex);
             return new PlayerRecord();
@@ -352,21 +373,13 @@ public final class PlayerStore {
             file.set("last-flight.yaw", (double) flight.yaw());
             file.set("last-flight.pitch", (double) flight.pitch());
         }
-        Path target = file(playerId);
-        Path temp = target.resolveSibling(target.getFileName() + ".tmp");
-        try {
-            Files.createDirectories(target.getParent());
-            Files.writeString(temp, file.saveToString(), StandardCharsets.UTF_8);
-            try {
-                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException ex) {
-                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
-            }
-            record.markSaved();
-        } catch (IOException ex) {
-            log.log(Level.WARNING, "The statistics, battery, cooldown, spots and settings of " + record.getName()
-                    + " could not be written: " + ex);
-        }
+        // Counted as saved as soon as it is handed over: only a change from
+        // now on has it written again. Should the disk turn it away, it counts
+        // as changed again and goes with the next save, as before.
+        record.markSaved();
+        writer.write(file(playerId), file.saveToString(),
+                "The statistics, battery, cooldown, spots and settings of " + record.getName(),
+                record::markDirty);
     }
 
     /** Moves a file that could not be read out of the way, under a name that says so. */
