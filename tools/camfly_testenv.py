@@ -4738,7 +4738,15 @@ def absturz_nach_dem_ende(env, bot, dateien):
     heim = bot.server_pos()
     if not FIND.test(f"{wer}: Cam-Modus gestartet", heim is not None and cam_on(bot), ""):
         return
+    time.sleep(0.5)
     bot.call("fly", wait=30, dy=6, timeout=15000)
+    bot.call("fly", wait=30, dx=4, timeout=15000)
+    time.sleep(0.5)
+    # Sonst sagte die Frage nach dem Platz nach dem Neustart nichts: Der
+    # save-all muss ihn woanders als am Koerper auf die Platte schreiben.
+    kamera = bot.server_pos()
+    FIND.test(f"{wer}: die Kamera ist vom Koerper weggeflogen",
+              kamera is not None and math.dist(kamera, heim) > 3, f"{heim} -> {kamera}")
     console(env, "save-all", pause=3)
     if not FIND.test(f"{wer}: Cam-Modus beendet", cam_off(bot), ""):
         return
