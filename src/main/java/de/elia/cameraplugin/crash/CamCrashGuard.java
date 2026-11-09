@@ -190,6 +190,25 @@ public final class CamCrashGuard implements Listener {
     }
 
     /**
+     * Writes a player into the world's own player data right away, the way he
+     * is now, instead of at the next save of the server.
+     *
+     * <p>Done when camera mode has given him everything back and the file is
+     * about to go: the server saves its players only every few minutes, and
+     * the last of those saves may have caught him in camera mode. A crash
+     * before the next one would load him like that, with no file left to put
+     * it right.</p>
+     */
+    public void saveNow(Player player) {
+        try {
+            player.saveData();
+        } catch (RuntimeException ex) {
+            log.log(Level.WARNING, "The player data of " + player.getName() + " could not be saved at the"
+                    + " end of cam mode, a crash before the next save would put him back into it: " + ex);
+        }
+    }
+
+    /**
      * A player joining with a file left behind: camera mode never ended for
      * him. A tick later, so that he is fully in the world and nothing that
      * comes with the join undoes it again.
@@ -244,6 +263,9 @@ public final class CamCrashGuard implements Listener {
             keepBroken(player, path, ex);
             return;
         }
+        // The same as at the end of camera mode: the state the world loaded
+        // him in is still the one on the disk.
+        saveNow(player);
         try {
             Files.deleteIfExists(path);
         } catch (IOException ex) {

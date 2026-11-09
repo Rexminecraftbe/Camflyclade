@@ -4559,10 +4559,16 @@ def absturz_checks(env, bot):
     Statistik, die der save-all mit auf die Platte schreibt, steht danach
     wieder wie vor dem Cam-Modus (progress-guard.statistics).
 
-    Der Neustart beginnt ein neues server.log: Was im alten stand, wird
-    deshalb vorher geprueft. Der Test steht am Ende, damit kein anderer nach
-    ihm auf einem frisch gestarteten Server mit zurueckgesetzter
-    Konfiguration landet.
+    Zwei Abstuerze mehr fuer das, was ohne die Datei geschieht. Einer kurz
+    nach dem Ende: Der save-all hat ihn im Cam-Modus auf die Platte
+    geschrieben, die Datei ist mit dem Ende weg - das Ende speichert ihn
+    deshalb gleich selbst, und nach dem Neustart ist er, wie er nach dem Ende
+    war. Und einer im Cam-Modus, nach dem die Datei fehlt, wie bei einer, die
+    nicht zu lesen war: Das Leuchten des Cam-Modus nimmt ihm dann die Notiz in
+    seinen eigenen Daten ab (GlowMark), sonst behielte er es fuer immer.
+
+    Der Test steht am Ende, damit kein anderer nach ihm auf einem frisch
+    gestarteten Server mit zurueckgesetzter Konfiguration landet.
     """
     ordner = env.server / "plugins" / "CamFly" / "playerdata" / "crash"
 
@@ -4571,10 +4577,16 @@ def absturz_checks(env, bot):
 
     if not FIND.test("Cam-Modus ist vor dem Absturztest aus", cam_off(bot), ""):
         return
+    FIND.test("Vor dem Cam-Modus leuchtet er nicht", not leuchtet(bot), "")
     cam_on(bot)
     time.sleep(0.5)
     FIND.test("crash-protection: im Cam-Modus liegt eine Datei unter playerdata/crash",
               len(dateien()) == 1, str(dateien()))
+    # Die Gegenproben nach den Abstuerzen fragen, ob es nicht mehr da ist:
+    # Hier zeigt sich, dass die Fragen es ueberhaupt finden.
+    FIND.test("Im Cam-Modus leuchtet er (Glowing in seinen Daten)", leuchtet(bot), "")
+    FIND.test("Im Cam-Modus steht in seinen Daten, dass er vorher nicht leuchtete (GlowMark)",
+              glow_notiz(bot, False), "")
     if dateien():
         kopf = (ordner / dateien()[0]).read_text(encoding="utf-8").splitlines()[:3]
         FIND.test("crash-protection: oben in der Datei steht, wozu sie da ist, mit der Warnung",
@@ -4586,6 +4598,8 @@ def absturz_checks(env, bot):
     cam_off(bot)
     time.sleep(0.5)
     FIND.test("crash-protection: nach dem Ende ist die Datei wieder weg", not dateien(), str(dateien()))
+    FIND.test("Nach dem Ende leuchtet er nicht mehr", not leuchtet(bot), "")
+    FIND.test("Nach dem Ende ist die Notiz des Leuchtens weg", not glow_notiz(bot), "")
 
     set_option(env, "enabled", "false", "crash-protection")
     cam_on(bot)
@@ -4618,30 +4632,8 @@ def absturz_checks(env, bot):
     FIND.test("Vor dem Absturz steht die Strecke der Kamera in der Statistik auf der Platte",
               vor_dem_flug is not None and im_flug is not None and im_flug > vor_dem_flug,
               f"{vor_dem_flug} -> {im_flug}")
-    hits = log_problems(env)
-    FIND.test("Server-Log vor dem Absturz ohne Fehler des Plugins", not hits,
-              "" if not hits else "; ".join(hits[:5]))
-
-    ereignisse = len(bot.events)
-    pgid = server_running(env)
-    if pgid is not None:
-        os.killpg(pgid, signal.SIGKILL)
-    for _ in range(40):
-        if server_running(env) is None:
-            break
-        time.sleep(0.25)
-    (env.server / "server.pgid").unlink(missing_ok=True)
-    FIND.test("Nach dem Absturz liegt die Datei noch da", len(dateien()) == 1, str(dateien()))
-    bot.stop()
-    # Was der Absturz beim Bot ausloest - die Verbindung reisst ab -, ist
-    # kein Fehler des Plugins.
-    del bot.events[ereignisse:]
-
-    if not step_server(env):
-        return
-    bot.start()
-    if not FIND.test("Bot verbindet sich nach dem Neustart",
-                     bot.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+    if not absturz(env, bot, dazwischen=lambda: FIND.test(
+            "Nach dem Absturz liegt die Datei noch da", len(dateien()) == 1, str(dateien()))):
         return
     time.sleep(3)
     z = zeilen_seit(bot, 0)
@@ -4659,6 +4651,8 @@ def absturz_checks(env, bot):
     FIND.test("Nach dem Neustart: die Fluggeschwindigkeit ist wieder normal",
               tempo is not None and abs(tempo - 0.05) < 0.001, str(tempo))
     FIND.test("Nach dem Neustart: die Datei ist geloescht", not dateien(), str(dateien()))
+    FIND.test("Nach dem Neustart: er leuchtet nicht mehr", not leuchtet(bot), "")
+    FIND.test("Nach dem Neustart: die Notiz des Leuchtens ist weg", not glow_notiz(bot), "")
     FIND.test("Nach dem Neustart: er steht wieder in seinem Team", ist_im_team(bot, "camflyabsturz"), "")
     console(env, "team remove camflyabsturz", pause=0.3)
     nach_dem_neustart = geflogen(env)
@@ -4668,7 +4662,136 @@ def absturz_checks(env, bot):
     FIND.test("Nach dem Neustart: kein Koerper liegt mehr herum",
               not server_says(bot, f"/execute positioned {hx} {hy} {hz} if entity "
                                    f"@e[type=minecraft:armor_stand,distance=..2] run say {{marke}}"), "")
+
+    absturz_nach_dem_ende(env, bot, dateien)
+    absturz_ohne_datei(env, bot, dateien)
     bot.chat("/clear @s")
+    time.sleep(0.5)
+
+
+def absturz(env, bot, wer="", dazwischen=None):
+    """Den Server mit SIGKILL beenden, ohne dass das Plugin noch etwas tun
+    koennte, wieder starten und den Bot wieder anmelden.
+
+    Der Neustart beginnt ein neues server.log: Was im alten stand, wird
+    deshalb vorher geprueft. dazwischen() laeuft, solange der Server unten
+    ist. Gibt zurueck, ob der Bot wieder im Spiel ist.
+    """
+    vorn = f"{wer}: " if wer else ""
+    hits = log_problems(env)
+    FIND.test(f"{vorn}Server-Log vor dem Absturz ohne Fehler des Plugins", not hits,
+              "" if not hits else "; ".join(hits[:5]))
+
+    ereignisse = len(bot.events)
+    pgid = server_running(env)
+    if pgid is not None:
+        os.killpg(pgid, signal.SIGKILL)
+    for _ in range(40):
+        if server_running(env) is None:
+            break
+        time.sleep(0.25)
+    (env.server / "server.pgid").unlink(missing_ok=True)
+    if dazwischen is not None:
+        dazwischen()
+    bot.stop()
+    # Was der Absturz beim Bot ausloest - die Verbindung reisst ab -, ist
+    # kein Fehler des Plugins.
+    del bot.events[ereignisse:]
+
+    if not step_server(env):
+        return False
+    bot.start()
+    return FIND.test(f"{vorn}Bot verbindet sich nach dem Neustart",
+                     bot.call("wait_spawn", wait=90, timeout=75000).get("spawned"), "")
+
+
+def leuchtet(bot):
+    """Ob der Server den Bot mit dem Leuchten fuehrt, das ein Plugin setzt
+    (Glowing in seinen Daten; der Effekt Leuchten steht dort nicht)."""
+    return nbt_frage(bot, "@s", "{Glowing:1b}")
+
+
+def glow_notiz(bot, wert=None):
+    """Ob in den Daten des Bots die Notiz von GlowMark steht - mit wert nur
+    die, die das sagt: ob er vor dem Cam-Modus schon leuchtete."""
+    if wert is None:
+        return server_says(bot, '/execute if data entity @s BukkitValues."camfly:glowing-before-cam" '
+                                'run say {marke}')
+    return nbt_frage(bot, "@s", '{BukkitValues:{"camfly:glowing-before-cam":%s}}'
+                     % ("1b" if wert else "0b"))
+
+
+def absturz_nach_dem_ende(env, bot, dateien):
+    """Ein Absturz kurz nach dem Ende des Cam-Modus.
+
+    Der save-all im Flug schreibt ihn so auf die Platte, wie der Cam-Modus
+    ihn hat: im Abenteuermodus, ohne seine Sachen, leuchtend. Das Ende gibt
+    ihm alles zurueck und loescht die Datei. Speicherte es ihn nicht gleich
+    selbst, laege bis zum naechsten Speichern des Servers nur dieser Stand
+    auf der Platte, und nach einem Absturz kaeme er so wieder - ohne Datei,
+    die das richtet.
+    """
+    wer = "Absturz nach dem Ende"
+    bot.chat("/clear @s")
+    bot.chat("/give @s minecraft:emerald 5")
+    time.sleep(1.0)
+    heim = bot.server_pos()
+    if not FIND.test(f"{wer}: Cam-Modus gestartet", heim is not None and cam_on(bot), ""):
+        return
+    bot.call("fly", wait=30, dy=6, timeout=15000)
+    console(env, "save-all", pause=3)
+    if not FIND.test(f"{wer}: Cam-Modus beendet", cam_off(bot), ""):
+        return
+    time.sleep(1.0)
+    if not absturz(env, bot, wer, dazwischen=lambda: FIND.test(
+            f"{wer}: nach dem Ende liegt keine Datei mehr da", not dateien(), str(dateien()))):
+        return
+    time.sleep(3)
+    z = zeilen_seit(bot, 0)
+    FIND.test(f"{wer}: keine Meldung des Absturzschutzes, es gab nichts zurueckzugeben",
+              not gesagt(z, r"server went down while you were in cam mode"), zeige(z))
+    FIND.test(f"{wer}: die Smaragde sind da",
+              nbt_frage(bot, "@s", '{Inventory:[{id:"minecraft:emerald"}]}'), "")
+    FIND.test(f"{wer}: im Ueberlebensmodus", spielmodus_ist(bot, "survival"), "")
+    pos = bot.server_pos()
+    FIND.test(f"{wer}: er steht am Koerper, nicht wo die Kamera war",
+              pos is not None and math.dist(pos, heim) < 1.5, f"{heim} -> {pos}")
+    FIND.test(f"{wer}: keine Unsichtbarkeit",
+              not nbt_frage(bot, "@s", '{active_effects:[{id:"minecraft:invisibility"}]}'), "")
+    FIND.test(f"{wer}: er leuchtet nicht", not leuchtet(bot), "")
+    FIND.test(f"{wer}: keine Notiz des Leuchtens", not glow_notiz(bot), "")
+
+
+def absturz_ohne_datei(env, bot, dateien):
+    """Ein Absturz im Cam-Modus, nach dem die Datei fehlt.
+
+    So steht es nach einer Datei, die nicht zu lesen war, oder einem Plugin,
+    das nach dem Absturz nicht startete: Der Spieler kommt so zurueck, wie
+    der save-all ihn im Cam-Modus geschrieben hat. Seine Sachen gibt dann
+    nichts mehr zurueck - das Leuchten aber nimmt ihm die Notiz in seinen
+    Daten ab, die die Welt mit ihm zusammen gespeichert hat. Ohne sie
+    behielte er es fuer immer: Kein Befehl des Spiels nimmt es einem Spieler,
+    und jeder Cam-Modus danach hielte es fuer sein eigenes.
+    """
+    wer = "Absturz ohne Datei"
+    if not FIND.test(f"{wer}: Cam-Modus gestartet", cam_on(bot), ""):
+        return
+    time.sleep(0.5)
+    console(env, "save-all", pause=3)
+
+    def datei_weg():
+        for name in dateien():
+            (env.server / "plugins" / "CamFly" / "playerdata" / "crash" / name).unlink()
+
+    if not absturz(env, bot, wer, dazwischen=datei_weg):
+        return
+    time.sleep(3)
+    FIND.test(f"{wer}: er leuchtet nicht mehr", not leuchtet(bot), "")
+    FIND.test(f"{wer}: die Notiz des Leuchtens ist weg", not glow_notiz(bot), "")
+    # Was der Cam-Modus sonst an ihm gelassen hat, gibt ohne die Datei nichts
+    # zurueck; aufgeraeumt wird von Hand.
+    bot.chat("/effect clear @s")
+    bot.chat("/gamemode survival")
     time.sleep(0.5)
 
 

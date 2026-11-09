@@ -16,6 +16,7 @@ import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.command.CamCommandFilter;
 import de.elia.cameraplugin.cost.StartCost;
 import de.elia.cameraplugin.crash.CamCrashGuard;
+import de.elia.cameraplugin.crash.GlowMark;
 import de.elia.cameraplugin.display.CamActionBar;
 import de.elia.cameraplugin.display.CamNameTag;
 import de.elia.cameraplugin.display.CamParticles;
@@ -135,6 +136,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamStop stop = new CamStop(this);
     private final CamBan ban = new CamBan(this, new BanList(this, log));
     private final CamCrashGuard crashGuard = new CamCrashGuard(this, log);
+    private final GlowMark glowMark = new GlowMark(this);
     private final CamBattery battery = new CamBattery(this, playerStore);
     private final CamTimeLimit timeLimit = new CamTimeLimit(this, playerStore);
     private final CamStats stats = new CamStats(settings, messages, playerStore, battery, timeLimit);
@@ -236,6 +238,9 @@ public final class CameraPlugin extends JavaPlugin {
         sharedSpots.onChange(webMap::changed);
         webMap.start();
         noCollisionTeam.refreshNoCollisionTeam();
+        // Before the crash files: what they give back is saved right away,
+        // and the note of the outline is to be gone by then.
+        glowMark.giveBackOnline();
         crashGuard.restoreOnline();
         // Started by hand on a running server: for the battery and the
         // cooldowns, everybody online joins now.
@@ -272,6 +277,7 @@ public final class CameraPlugin extends JavaPlugin {
                 new CamPotionGuard(this),
                 flightSpeed,
                 crashGuard,
+                glowMark,
                 new SessionTracker(cameraPlayers),
                 trail,
                 new ExitKey(this),
@@ -643,6 +649,10 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamCrashGuard getCrashGuard() {
         return crashGuard;
+    }
+
+    public GlowMark getGlowMark() {
+        return glowMark;
     }
 
     public CamFireGuard getFireGuard() {
