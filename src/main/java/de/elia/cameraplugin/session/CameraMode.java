@@ -221,6 +221,11 @@ public final class CameraMode {
         ItemStack[] heldForMode = switchGameMode(player, null, GameMode.CREATIVE);
         player.setAllowFlight(true);
         player.setFlying(true);
+        if (settings.getGlowMode() != GlowMode.OFF && settings.getPlayerVisibilityMode() != VisibilityMode.NONE) {
+            // Before the outline goes on, here or in startSightGlow: the
+            // world keeps it on him over a crash, see GlowMark.
+            plugin.getGlowMark().mark(player, originalGlowing);
+        }
         if (settings.getGlowMode() == GlowMode.ALWAYS && settings.getPlayerVisibilityMode() != VisibilityMode.NONE) {
             // The invisibility takes the body away, the outline puts a visible
             // shape back - that is what everyone else sees of the camera player.
@@ -488,6 +493,7 @@ public final class CameraMode {
         player.setAllowFlight(cameraData.getOriginalAllowFlight());
         player.setFlying(cameraData.getOriginalFlying());
         player.setGlowing(cameraData.getOriginalGlowing());
+        plugin.getGlowMark().clear(player);
         plugin.getFlightSpeed().stopFor(player);
         // He stands where the mannequin stood, in the same water or powder
         // snow: what air it has left and how frozen it got is his now. The
@@ -541,6 +547,13 @@ public final class CameraMode {
             }
         }
         plugin.getVisibility().updateVisibilityForAll();
+        // On the disk he may still be the way camera mode had him: the
+        // server saves its players every few minutes, and one of those saves
+        // may have come during the flight. Without the file, a crash before
+        // the next one would load him like that - in the game mode of the
+        // camera, without his things, and nothing left to give them back. So
+        // he is saved now, with everything back, before the file goes.
+        plugin.getCrashGuard().saveNow(player);
         // Only now that he has everything back: until here the file is the
         // one thing that would give it to him after a crash.
         plugin.getCrashGuard().delete(player);

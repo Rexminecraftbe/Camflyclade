@@ -304,10 +304,16 @@ einzutragen.
   (`sound_effect`, `entity_sound_effect`), als Text des ganzen Pakets: Wo der
   Name des Tons darin steht, hängt an den geflickten Paketdaten.
 * **Der Absturztest beendet den Server mit `SIGKILL`** und startet ihn neu,
-  vorher schreibt `save-all` den Bot so auf die Platte, wie er im Cam-Modus
-  ist. Der Neustart beginnt ein neues `server.log`, das alte prüft der Test
-  deshalb vorher auf Fehler des Plugins. Er steht ganz am Ende, weil der
-  Neustart auch die Konfiguration des Testservers zurücksetzt.
+  dreimal; vorher schreibt `save-all` den Bot jedes Mal so auf die Platte,
+  wie er im Cam-Modus ist. Der Neustart beginnt ein neues `server.log`, das
+  alte prüft der Test deshalb vorher auf Fehler des Plugins. Er steht ganz
+  am Ende, weil der Neustart auch die Konfiguration des Testservers
+  zurücksetzt.
+* **Das Leuchten des Cam-Modus fragt der Test in den Daten des Bots**:
+  `Glowing:1b` ist das Leuchten, das ein Plugin setzt (der Effekt Leuchten
+  steht nicht dort), und die Notiz dazu steht unter
+  `BukkitValues."camfly:glowing-before-cam"`. Beides wird erst im Cam-Modus
+  gefunden, bevor nach den Abstürzen gefragt wird, ob es weg ist.
 * **Welches Item der Bot hält, fragt der Test den Server**, mit
   `/execute if data entity @s {Inventory:[...]}`. Die Itemliste von
   mineflayer stammt aus 26.1 und nennt manche Items anders, einen Kopf etwa
@@ -1509,7 +1515,12 @@ Spieler beim Betreten trotzdem alles zurück: er steht an der Stelle aus der
 Datei, sie ist weg, und Spielmodus und Flug sind die aus der Datei · nach dem
 Absturz steht die geflogene Strecke der Statistik wieder wie vor dem
 Cam-Modus, obwohl der `save-all` davor sie mit der Strecke der Kamera auf die
-Platte geschrieben hatte ·
+Platte geschrieben hatte, und er leuchtet nicht mehr · stürzt der Server kurz
+nach dem Ende ab, nachdem ein `save-all` ihn im Cam-Modus auf die Platte
+geschrieben hatte, ist er nach dem Neustart, wie das Ende ihn hinterließ: mit
+seinen Sachen, im Überlebensmodus, am Körper, ohne Leuchten · fehlt nach
+einem Absturz im Cam-Modus die Datei, nimmt ihm die Notiz in seinen Daten
+trotzdem das Leuchten ab ·
 `action-bar.display: false` zeigt die Startzeile mit dem Hinweis nur zu
 Beginn, danach kommt nichts mehr · `/cam back` setzt die Kamera an den
 Körper, der Cam-Modus läuft weiter, mit dem Ton und der Zeile in der
