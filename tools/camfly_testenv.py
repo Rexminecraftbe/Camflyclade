@@ -15300,7 +15300,16 @@ def brand_checks(env, bot):
         hinstellen(bot, x + 0.5, y, z + 0.5)
         bot.chat("/effect give @s minecraft:fire_resistance 120 0 true")
         time.sleep(0.5)
-        console(env, f"setblock {x} {y} {z} minecraft:fire", pause=1.0)
+        console(env, f"setblock {x} {y} {z} minecraft:fire", pause=0.5)
+        # Das Feuer bleibt, bis er brennt, hoechstens drei Sekunden: Wann der
+        # Server ihn im Feuer findet, haengt an seinem Takt, und eine feste
+        # Sekunde reichte einmal nicht.
+        ende = time.time() + 3.0
+        while time.time() < ende:
+            feuer = bot.server_data("Fire")
+            if feuer is not None and feuer > 60:
+                break
+            time.sleep(0.25)
         console(env, f"setblock {x} {y} {z} minecraft:air", pause=0.5)
         vorher = bot.server_data("Fire")
         if FIND.test("Der Bot brennt fuer den Test", vorher is not None and vorher > 60, f"Fire {vorher}") \
