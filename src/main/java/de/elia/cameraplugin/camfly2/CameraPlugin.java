@@ -76,6 +76,7 @@ import de.elia.cameraplugin.start.StartChecks;
 import de.elia.cameraplugin.start.StartDelay;
 import de.elia.cameraplugin.stats.CamStats;
 import de.elia.cameraplugin.stop.CamStop;
+import de.elia.cameraplugin.storage.BackgroundWriter;
 import de.elia.cameraplugin.storage.PlayerStore;
 import de.elia.cameraplugin.sulfurcube.CamSulfurCubeGuard;
 import de.elia.cameraplugin.teleport.CamTeleportGuard;
@@ -127,7 +128,9 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamNameTag nameTag = new CamNameTag(this, settings, messages, cameraPlayers);
     private final CamActionBar actionBar = new CamActionBar(this);
     private final CamFlightSpeed flightSpeed = new CamFlightSpeed(this);
-    private final PlayerStore playerStore = new PlayerStore(this, log);
+    /** Writes statistics, spots, settings and the cam log away from the main thread. */
+    private final BackgroundWriter writer = new BackgroundWriter(this, log);
+    private final PlayerStore playerStore = new PlayerStore(this, log, writer);
     private final CamPreferences preferences = new CamPreferences(settings, playerStore);
     private final CamNightVision nightVision = new CamNightVision(this, settings, messages, cameraPlayers,
             preferences);
@@ -140,7 +143,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamBattery battery = new CamBattery(this, playerStore);
     private final CamTimeLimit timeLimit = new CamTimeLimit(this, playerStore);
     private final CamStats stats = new CamStats(settings, messages, playerStore, battery, timeLimit);
-    private final CamLog camLog = new CamLog(this, settings, log);
+    private final CamLog camLog = new CamLog(this, settings, log, writer);
     private final StartCost startCost = new StartCost(settings, messages, log);
     private final MobTargeting mobTargeting = new MobTargeting(this, settings, cameraPlayers);
     private final MobGaze mobGaze = new MobGaze(this, settings, cameraPlayers);
@@ -361,6 +364,7 @@ public final class CameraPlugin extends JavaPlugin {
         if (!startedUp) {
             // The start stopped at the config file, so there is nothing set up
             // that would have to be taken down.
+            writer.finish();
             return;
         }
         // Before the maps themselves are switched off, which comes after.
@@ -413,6 +417,9 @@ public final class CameraPlugin extends JavaPlugin {
         noCollisionTeam.deleteNoCollisionTeam();
         guideTeam.delete();
         bodySpawner.removeLeftoverEntities();
+        // Last: everything above may still have handed over a file, and the
+        // server must not go down before it is on the disk.
+        writer.finish();
         getLogger().info("CameraPlugin has been disabled!");
     }
 

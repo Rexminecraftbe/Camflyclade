@@ -220,4 +220,5 @@ public final class PlayerRecord {
 
     boolean isDirty() { return dirty; }
     void markSaved() { dirty = false; }
+    void markDirty() { dirty = true; }
 }

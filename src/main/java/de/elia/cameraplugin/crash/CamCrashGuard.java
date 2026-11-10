@@ -55,6 +55,14 @@ import java.util.logging.Level;
  * nothing while camera mode runs. The file is written under another name first
  * and then moved into place, so a crash in the middle of writing it leaves no
  * half a file behind.</p>
+ *
+ * <p>Written right here on the main thread, and not by the
+ * {@link de.elia.cameraplugin.storage.BackgroundWriter} like the statistics,
+ * on purpose: the file has to be on the disk before the server can save the
+ * player the way camera mode has him, and its next save may come in the very
+ * next tick. A file still on its way then, and a crash, would leave him
+ * without his things. The deletion at the end goes the same way, so that it
+ * can never overtake the file of the next start.</p>
  */
 public final class CamCrashGuard implements Listener {
 
