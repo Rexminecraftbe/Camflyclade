@@ -6,6 +6,7 @@ import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.ban.BanList;
 import de.elia.cameraplugin.ban.CamBan;
 import de.elia.cameraplugin.body.PlayerSkins;
+import de.elia.cameraplugin.nightvision.CamNightVision;
 import de.elia.cameraplugin.nightvision.NightVisionMode;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.sky.CamSky;
@@ -72,8 +73,9 @@ import java.util.function.ToLongFunction;
  * the spots of {@code /cam spot} - private, public and shared with him, each
  * on a tab of its own -, the tour of {@code /cam follow}, {@code photo},
  * {@code time}, {@code weather}, {@code nightvision} and the own
- * {@code stats} - the time and the weather stepped through on their button,
- * a click on to the next, a right-click back to the one before -; and for
+ * {@code stats} - the time, the weather and the night vision stepped through
+ * on their button, a click on to the next, a right-click back to the one
+ * before -; and for
  * admins a page of their own: who is in camera mode
  * ({@code list}, {@code tp}, {@code stop}), the statistics of others, the
  * bans and the flights of {@code /cam trail}. The lists of spots and of
@@ -376,8 +378,8 @@ public final class CamMenu implements Listener {
 
     /**
      * The main page: each button where {@code menu.buttons} puts it, showing
-     * the item it names. Photo mode and the night vision say under their name
-     * how they stand now; the time and the weather are stepped through right
+     * the item it names. Photo mode says under its name how it stands now;
+     * the time, the weather and the night vision are stepped through right
      * there, see {@link #choicesButton}.
      */
     private void openMain(Player player) {
@@ -385,8 +387,7 @@ public final class CamMenu implements Listener {
         boolean inCam = plugin.isInCameraMode(player);
         Inventory inventory = create(page, MenuButton.SLOTS, messages.getMessage("menu-title"));
         if (settings.isNightVisionPlayerChoice()) {
-            button(page, MenuButton.NIGHT_VISION, "menu-nightvision", nightVisionState(player), false,
-                    click -> later(() -> openNightVision(player)));
+            nightVisionButton(player, page);
         }
         if (settings.isBackCommandEnabled()) {
             button(page, MenuButton.BACK, "menu-back", null, false,
@@ -516,11 +517,6 @@ public final class CamMenu implements Listener {
                 click -> later(() -> openTour(player, 0)));
     }
 
-    /** How his night vision stands: the name of the mode that holds for him. */
-    private String nightVisionState(Player player) {
-        return messages.getMessage("menu-nightvision-" + nightVisionWord(plugin.getNightVision().modeFor(player)));
-    }
-
     /** The word of {@code /cam nightvision} for a mode. */
     private static String nightVisionWord(NightVisionMode mode) {
         return switch (mode) {
@@ -588,6 +584,39 @@ public final class CamMenu implements Listener {
         return new Choices(all, own == null ? 0 : own == WeatherType.CLEAR ? 1 : 2);
     }
 
+    /**
+     * The modes of {@code /cam nightvision}: the one of the server first -
+     * which one that is stands in its name -, then always, only in the dark
+     * and never. While he picked none of his own, the one of the server holds.
+     */
+    private Choices nightVisionChoices(Player player) {
+        CamNightVision nightVision = plugin.getNightVision();
+        String server = messages.getMessage("menu-nightvision-" + nightVisionWord(settings.getNightVisionMode()));
+        List<Choice> all = List.of(
+                new Choice("reset", messages.getMessage("menu-nightvision-reset").replace("{mode}", server)),
+                new Choice("on", messages.getMessage("menu-nightvision-on")),
+                new Choice("dark", messages.getMessage("menu-nightvision-dark")),
+                new Choice("off", messages.getMessage("menu-nightvision-off")));
+        String now = nightVision.hasOwnMode(player) ? nightVisionWord(nightVision.modeFor(player)) : "reset";
+        int at = 0;
+        for (int i = 0; i < all.size(); i++) {
+            if (all.get(i).word().equals(now)) {
+                at = i;
+            }
+        }
+        return new Choices(all, at);
+    }
+
+    /** The button of the night vision on the main page; a click picks the next mode, a right-click the one before. */
+    private void nightVisionButton(Player player, Page page) {
+        choicesButton(player, page, MenuButton.NIGHT_VISION, "menu-nightvision", "{mode}", nightVisionChoices(player),
+                back -> {
+                    String word = nightVisionChoices(player).step(back).word();
+                    plugin.getNightVision().command(player, new String[]{word});
+                    nightVisionButton(player, page);
+                });
+    }
+
     /** The button of the time of day on the main page; a click picks the next time, a right-click the one before. */
     private void timeButton(Player player, Page page) {
         choicesButton(player, page, MenuButton.TIME, "menu-time", "{time}", timeChoices(player), back -> {
@@ -609,7 +638,8 @@ public final class CamMenu implements Listener {
      * button that sorts a list does: the choice that holds now in its name,
      * under it the text with {@code -lore} after the key, every choice - the
      * one that holds now marked, the others greyed out - and how to step. It
-     * shines while the choice is not the first one, that of the world.
+     * shines while the choice is not the first one, that of the world or of
+     * the server.
      *
      * <p>The menu stays open: the click does what the command does, with its
      * messages, and the button is put in anew in the window he has open, as
@@ -1315,33 +1345,6 @@ public final class CamMenu implements Listener {
                     tour.toggleView(player);
                     openTour(player, 0);
                 }));
-    }
-
-    /** The modes of the night vision; the one he picked shines, {@code reset} while he picked none. */
-    private void openNightVision(Player player) {
-        Page page = new Page();
-        Inventory inventory = create(page, SMALL, messages.getMessage("menu-nightvision-title"));
-        String[] words = {"on", "dark", "off", "reset"};
-        ItemStack[] icons = {MenuIcon.parse(MenuIcon.NIGHT_VISION_POTION).create(plugin.getLogger()),
-                new ItemStack(Material.TORCH), new ItemStack(Material.COAL), new ItemStack(Material.BARRIER)};
-        String now = plugin.getNightVision().hasOwnMode(player)
-                ? nightVisionWord(plugin.getNightVision().modeFor(player)) : "reset";
-        for (int i = 0; i < words.length; i++) {
-            String word = words[i];
-            choice(page, 10 + 2 * i, icons[i], "menu-nightvision-" + word, word.equals(now),
-                    click -> act(player, () -> plugin.getNightVision().command(player, new String[]{word})));
-        }
-        put(page, SLOT_SMALL_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
-        player.openInventory(inventory);
-    }
-
-    /** One choice of a small page; the one that holds now shines and says so under its name. */
-    private void choice(Page page, int slot, ItemStack item, String key, boolean now, Consumer<ClickType> action) {
-        List<String> lore = new ArrayList<>(lines(messages.getMessage(key + "-lore")));
-        if (now) {
-            lore.addAll(lines(messages.getMessage("menu-state-current")));
-        }
-        put(page, slot, shine(labelled(item, messages.getMessage(key), lore), now), action);
     }
 
     // ------------------------------------------------------------ admin pages

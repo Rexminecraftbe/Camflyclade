@@ -209,11 +209,13 @@ messages:
   # menu-new-spot-count says on the button of a new spot how many spots he has ({count}), may have ({max},
   # viewpoints.max-per-player) and may still save ({left}); -full once there is no room left, -unlimited without a
   # limit. menu-sort is the button that sorts a list, {sort} being one of the menu-sort-... orders; under it every
-  # order, the one in use as menu-sort-option-current, the others as menu-sort-option. menu-time and menu-weather
-  # are stepped through on their button, without a page of their own and without the menu closing: {time} is one of
-  # menu-time-reset, -day, -noon, -sunset, -night, -midnight, -sunrise or menu-time-ticks for a time without a name
-  # ({ticks}), {weather} one of menu-weather-reset, -clear or -rain; under the -lore every one of them, the one that
-  # holds now as menu-choice-option-current, the others as menu-choice-option ({choice}), then menu-choice-action.
+  # order, the one in use as menu-sort-option-current, the others as menu-sort-option. menu-time, menu-weather and
+  # menu-nightvision are stepped through on their button, without a page of their own and without the menu closing:
+  # {time} is one of menu-time-reset, -day, -noon, -sunset, -night, -midnight, -sunrise or menu-time-ticks for a time
+  # without a name ({ticks}), {weather} one of menu-weather-reset, -clear or -rain, {mode} one of
+  # menu-nightvision-reset - {mode} there being the mode of night-vision.mode, as menu-nightvision-on, -dark or -off
+  # name it -, -on, -dark or -off; under the -lore every one of them, the one that holds now as
+  # menu-choice-option-current, the others as menu-choice-option ({choice}), then menu-choice-action.
   # menu-tour-... are the page of /cam follow (the keys keep the name it had, tour), menu-tour-view the button that
   # switches between the leader's view and looking round freely; menu-tour-lead-restricted and
   # menu-tour-join-restricted what keeps him from leading or following, menu-tour-disabled that following is
@@ -423,13 +425,12 @@ messages:
   menu-new-spot-lore: "&7Where you are, looking the way you look.\n&7Then type its name in the chat."
   menu-new-spot-lore-public: "&7Where you are, looking the way you look.\n&7Then type its name in the chat.\n&fLeft-click: private\n&eRight-click: public - it is one of\n&eyour spots all the same"
   menu-next: "&7Next page »"
-  menu-nightvision: "&eNight vision"
-  menu-nightvision-dark: "&eOnly in the dark"
+  menu-nightvision: "&eNight vision: &f{mode}"
+  menu-nightvision-dark: "only in the dark"
   menu-nightvision-lore: "&7When you see in the dark in cam mode."
-  menu-nightvision-off: "&7Never"
-  menu-nightvision-on: "&aAlways"
-  menu-nightvision-reset: "&cAs the server has it"
-  menu-nightvision-title: "&8Night vision"
+  menu-nightvision-off: "never"
+  menu-nightvision-on: "always"
+  menu-nightvision-reset: "as the server has it ({mode})"
   menu-off: "&c/cam menu is switched off."
   menu-offer: "&e{owner}:{spot}"
   menu-offer-actions: "&eOffered to you\n&aLeft-click: accept\n&cRight-click: turn down"
@@ -510,9 +511,9 @@ messages:
   menu-spots-title-private: "&8Spots: yours"
   menu-spots-title-public: "&8Spots: public"
   menu-spots-title-shared: "&8Spots: shared with you"
-  # How photo mode and the night vision stand now, under their buttons: menu-state with {state} being menu-state-on
-  # or -off, or the mode of the night vision (menu-nightvision-...). On its page, the choice that holds now has
-  # menu-state-current under its name.
+  # How photo mode stands now, under its button: menu-state with {state} being menu-state-on or -off (the view on
+  # the page of /cam follow the same way). The tab of the spots that is open, and "for good" on the page of a ban,
+  # have menu-state-current under their name.
   menu-state: "&7Now: &f{state}"
   menu-state-current: "&a» Now"
   menu-state-off: "&7off"

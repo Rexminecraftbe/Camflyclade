@@ -9538,13 +9538,15 @@ def menue_checks(env, bot):
     zeigt einen, Rechtsklick zeigt ihn und bringt den Bot an seinen Start, der
     letzte Knopf zeigt alle.
 
-    Foto-Modus und Nachtsicht sagen unter ihrem Namen, wie sie stehen, der
-    Foto-Modus off und nach einem Klick on. Die Zeit sagt es in ihrem Namen:
+    Der Foto-Modus sagt unter seinem Namen, wie er steht: off und nach einem
+    Klick on. Die Zeit sagt es in ihrem Namen:
     vor dem Sonnenuntergang die der Welt, danach sunset, auch im wieder
     geoeffneten Menue; darunter stehen alle Zeiten, die von jetzt markiert.
-    Das Wetter schaltet mit einem Rechtsklick von dem der Welt von hinten
-    herum zu rain, mit einem Linksklick wieder zu dem der Welt - das Menue
-    bleibt offen, der Chat sagt beides.
+    Die Nachtsicht schaltet mit einem Linksklick von der des Servers zu
+    always, mit einem Rechtsklick wieder zurueck. Das Wetter schaltet mit
+    einem Rechtsklick von dem der Welt von hinten herum zu rain, mit einem
+    Linksklick wieder zu dem der Welt - das Menue bleibt offen, der Chat
+    sagt jedes Mal, was gilt.
 
     menu.buttons: start auf Platz 4 steht dort und startet von dort, back auf
     dem Platz der Nachtsicht wird gemeldet und kommt auf seinen eigenen, ein
@@ -9597,7 +9599,7 @@ def menue_checks(env, bot):
         FIND.test("Vor dem Cam-Modus: Zeit der Welt, Foto-Modus aus, Nachtsicht nur im Dunkeln",
                   "Time of day: the world's" in item_text(knopf.get("15"))
                   and "Now: off" in item_text(knopf.get("14"))
-                  and "Now: Only in the dark" in item_text(knopf.get("17")),
+                  and "Night vision: as the server has it (only in the dark)" in item_text(knopf.get("17")),
                   f"{item_text(knopf.get('15'))} / {item_text(knopf.get('14'))} / {item_text(knopf.get('17'))}")
         FIND.test("Die Knoepfe stehen auf ihren Plaetzen",
                   all(str(i) in f.get("slots", {}) for i in (9, 10, 11, 12, 14, 15, 16, 17, 22))
@@ -9642,6 +9644,22 @@ def menue_checks(env, bot):
                   item_text(knopf.get("14")))
         klick(14, warten=2.0)
         menue()
+        seit = bot.mark()
+        klick(17, warten=2.0)
+        f = fenster()
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Linksklick auf die Nachtsicht des Servers: always, und das Menue bleibt offen",
+                  gesagt(zeilen, r"Night vision in cam mode: always") and f.get("open")
+                  and "Night vision: always" in item_text(f.get("slots", {}).get("17")),
+                  f"{zeige(zeilen)} / {item_text(f.get('slots', {}).get('17'))}")
+        seit = bot.mark()
+        klick(17, button=1, warten=2.0)
+        f = fenster()
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Rechtsklick: wieder die Nachtsicht des Servers",
+                  gesagt(zeilen, r"Night vision in cam mode: only in the dark, as the server has it") and f.get("open")
+                  and "» as the server has it" in item_text(f.get("slots", {}).get("17")),
+                  f"{zeige(zeilen)} / {item_text(f.get('slots', {}).get('17'))}")
         seit = bot.mark()
         klick(16, button=1, warten=2.0)
         f = fenster()

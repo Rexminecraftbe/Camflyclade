@@ -624,11 +624,11 @@ menu:
   # Jeder Knopf braucht einen eigenen Platz - nur start und end dürfen sich einen teilen, da ist immer nur einer von
   # beiden. Steht ein Knopf, wo schon ein anderer ist, meldet /cam reload das, und er kommt auf einen freien Platz.
   # Ein Knopf, dessen Sache in dieser Datei aus ist (z. B. back-command.enabled: false), fehlt im Menü.
-  # Foto-Modus und Nachtsicht zeigen unter ihrem Namen, wie sie gerade stehen; was gerade gilt, glänzt (auf der Seite
-  # der Nachtsicht auch). Tageszeit und Wetter haben keine eigene Seite: man schaltet sie direkt auf ihrem Knopf durch,
-  # wie beim Sortieren der Aussichtspunkte - Linksklick die nächste, Rechtsklick die davor -, und das Menü bleibt
-  # dabei offen. Unter dem Knopf stehen alle zur Wahl, die gerade gilt markiert; er glänzt, solange es nicht die der
-  # Welt ist.
+  # Der Foto-Modus zeigt unter seinem Namen, wie er gerade steht, und glänzt, solange er an ist. Tageszeit, Wetter und
+  # Nachtsicht haben keine eigene Seite: man schaltet sie direkt auf ihrem Knopf durch, wie beim Sortieren der
+  # Aussichtspunkte - Linksklick die nächste, Rechtsklick die davor -, und das Menü bleibt dabei offen. Unter dem
+  # Knopf stehen alle zur Wahl, die gerade gilt markiert; er glänzt, solange es nicht die der Welt (bei der
+  # Nachtsicht: die des Servers, night-vision.mode) ist.
   buttons:
     # Cam-Modus starten (ohne Cam-Modus) und beenden (im Cam-Modus)
     start:
@@ -637,7 +637,8 @@ menu:
     end:
       item: barrier
       slot: 22
-    # Die eigene Nachtsicht (bei night-vision.player-choice: true)
+    # Die eigene Nachtsicht (bei night-vision.player-choice: true): wie der Server sie hat (night-vision.mode), immer,
+    # nur im Dunkeln, nie - und wieder von vorn
     nightvision:
       item: night_vision_potion
       slot: 17
