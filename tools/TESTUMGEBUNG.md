@@ -22,13 +22,16 @@ wie früher mit `--alle`.
 python3 tools/camfly_testenv.py --steps build,crosscheck,apicheck  # nur bauen und prüfen
 python3 tools/camfly_testenv.py --steps names                      # nach einem Update: fehlen Namen?
 python3 tools/camfly_testenv.py --skip jdk,paperapi                # Schritte auslassen
-python3 tools/camfly_testenv.py --keep-running                     # Server bleibt oben
-python3 tools/camfly_testenv.py --stop                             # laufenden Server beenden
+python3 tools/camfly_testenv.py --keep-running                     # Server bleiben oben
+python3 tools/camfly_testenv.py --stop                             # laufende Server beenden
 python3 tools/camfly_testenv.py --workdir /pfad/woanders           # anderer Arbeitsordner
 python3 tools/camfly_testenv.py --nur-auswahl                      # nur zeigen, welche Abschnitte liefen
 python3 tools/camfly_testenv.py --alle                             # alle Abschnitte, ohne Auswahl
 python3 tools/camfly_testenv.py --abschnitte flugspur,menue        # genau diese Abschnitte
 python3 tools/camfly_testenv.py --seit HEAD~3                      # mit einem anderen Stand vergleichen
+python3 tools/camfly_testenv.py --alle --parallel 6                # auf sechs Servern nebeneinander
+python3 tools/camfly_testenv.py --parallel 1                       # alles hintereinander auf einem Server
+python3 tools/camfly_testenv.py --port 25700                       # falls 25565 belegt ist
 ```
 
 Läuft der Server weiter, gehen Konsolenbefehle über die FIFO:
@@ -36,6 +39,9 @@ Läuft der Server weiter, gehen Konsolenbefehle über die FIFO:
 ```bash
 echo "say hallo" > ~/camfly-testenv/server/console.fifo
 ```
+
+Liefen die Tests auf mehreren Servern, hat jeder seine eigene: `server/`,
+`server-2/`, `server-3/` …
 
 ## Die neun Schritte
 
@@ -49,7 +55,7 @@ echo "say hallo" > ~/camfly-testenv/server/console.fifo
 | `names`      | Die Namenslisten der Sprachdatei gegen die Daten des Spiels prüfen, siehe unten. |
 | `server`     | Paper-Server holen, einrichten, starten, Konsole an eine FIFO hängen. Dazu die Attrappen von BlueMap, Dynmap und squaremap, siehe unten. |
 | `bot`        | `mineflayer` holen, auf Protokoll 26.2 flicken und seine Kollision wie im echten Client rechnen lassen. |
-| `tests`      | Der Bot spielt die Testfälle im laufenden Server durch: die Grundprobe und die Abschnitte, die die Testauswahl wählt. |
+| `tests`      | Der Bot spielt die Testfälle im laufenden Server durch: die Grundprobe und die Abschnitte, die die Testauswahl wählt. Sind es viele, laufen sie auf mehreren Servern nebeneinander, siehe [Mehrere Server nebeneinander](#mehrere-server-nebeneinander). |
 
 ## Welche Abschnitte laufen
 
@@ -131,6 +137,99 @@ ihn nur öfter laufen, einer zu wenig lässt ihn aus, wenn sich dort etwas
 braucht nichts weiter, eine Änderung an einer bestehenden erreicht die
 Abschnitte, die sie benutzen. Das Abschalten (`abschalten`) und der
 Absturztest stehen zuletzt, sie starten den Server neu.
+
+## Mehrere Server nebeneinander
+
+Die Tests warten vor allem - darauf, dass im Spiel Zeit vergeht. Ein
+Testserver braucht dabei nur einen Bruchteil eines Kerns. Der Schritt `tests`
+verteilt die Abschnitte deshalb auf mehrere Server, die nebeneinander laufen.
+Jeder hat seinen eigenen Ordner, seine eigene Welt, seinen eigenen Port und
+seine eigenen Bots, und jeder fährt seine Abschnitte genau so, wie sie auf
+einem einzelnen Server liefen:
+
+| Server | Ordner      | Port  | Mitschrift   |
+|--------|-------------|-------|--------------|
+| 1      | `server/`   | 25565 | `teil-1.log` |
+| 2      | `server-2/` | 25566 | `teil-2.log` |
+| 3      | `server-3/` | 25567 | `teil-3.log` |
+
+Auf einem gemeinsamen Server ginge das nicht: Die Abschnitte stellen die
+Konfiguration um, laden sie neu und drehen an Zeit und Wetter der Welt.
+
+* **Wie viele Server**: so viele, wie Kerne da sind und der freie
+  Arbeitsspeicher trägt - gerechnet werden 3 GiB je Server, Java nimmt sich
+  bis zu 2 -, höchstens acht. Und nur so viele, wie es bei der Arbeit lohnt:
+  Unter zwei Minuten geschätzter Arbeit je Server kommt keiner dazu, eine
+  Handvoll ausgewählter Abschnitte läuft also weiter auf einem. `--parallel N`
+  legt die Zahl fest, `--parallel 1` fährt alles hintereinander auf einem
+  Server, wie früher.
+* **Wer was fährt**: Jeder Server bekommt ein Stück der Liste `ABSCHNITTE` am
+  Stück, in ihrer Reihenfolge, und die Schnitte liegen so, dass alle etwa
+  gleich lange brauchen. Am Stück, damit jeder Abschnitt dieselben Vorgänger
+  hat wie auf einem Server allein; nur der erste eines Stücks folgt gleich auf
+  die Grundprobe, wie bei `--abschnitte`. Das Abschalten und der Absturztest
+  bleiben die letzten. Geschätzt wird mit den Zeiten, die der letzte Lauf
+  gemessen hat (`dauer.json` im Arbeitsordner), beim ersten Lauf mit
+  `DAUER_VORGABE` im Skript.
+* **Die Grundprobe** fährt jeder Server für sich: Seine Abschnitte finden
+  damit vor, was sie auf einem einzelnen Server auch vorfänden. Sie zählt aber
+  nur beim ersten. Bei den anderen steht sie nur dann in der Zusammenfassung,
+  wenn sie durchfällt, mit der Nummer des Servers dahinter.
+* **Im Terminal** steht während der Tests, was durchfällt, jeder Hinweis und
+  jeder fertige Abschnitt mit seiner Zeit, vorn die Nummer des Servers. Alles
+  andere steht in `teil-N.log` im Arbeitsordner, vorn mit den Sekunden seit
+  dem Start. Die Zusammenfassung und `ergebnis.json` sind die eines einzigen
+  Laufs: alle Proben in der Reihenfolge von `ABSCHNITTE`, dazu wie lange jeder
+  Abschnitt gebraucht hat (`dauer`).
+* **Bricht ein Server ab**, laufen die anderen weiter. Welche Abschnitte nicht
+  mehr gelaufen sind, steht in der Zusammenfassung und in `ergebnis.json`
+  (`nicht_gelaufen`); der nächste Lauf holt sie nach wie die durchgefallenen.
+* Jeder Server ist ein eigener Aufruf des Skripts mit den Schritten `server`
+  und `tests` (`--teil N`, nur dafür gedacht). Gebaut und geprüft wird einmal
+  davor, und mineflayer liegt für alle im selben Ordner. Was Paperclip beim
+  ersten Start holt und zusammensetzt, nehmen sich die weiteren Server vom
+  ersten.
+* `--keep-running` lässt alle Server oben, `--stop` beendet alle.
+
+## Worauf die Tests warten
+
+Im Skript stehen zwei Arten von Wartezeit, und nur eine davon lässt sich
+kürzen, ohne dass die Tests etwas anderes prüfen:
+
+* **Im Spiel soll Zeit vergehen**: Ein Akku läuft leer, eine Sperre läuft ab,
+  ein Pfeil fliegt, die Action-Bar wiederholt ihre Zeile - oder es soll gerade
+  *nichts* passieren, und eine Probe sieht nach, dass auch nichts kam. Diese
+  Zeiten stehen fest da (`time.sleep`, `befehl(..., warten=...)`,
+  `console(..., pause=...)`, die anderthalb Sekunden in `cam_schalten`) und
+  bleiben, wie sie sind. Das Plugin rechnet an vielen Stellen mit der echten
+  Uhr (`System.currentTimeMillis`), an anderen in Ticks: Mit einer höheren
+  Tickrate des Servers liefen die beiden auseinander, der Bot bewegte sich
+  weiter im Takt des echten Clients, und die Tests prüften einen Zustand, den
+  es auf einem echten Server nie gibt. Die Tickrate bleibt deshalb bei 20.
+* **Etwas soll fertig sein**, und ob es fertig ist, lässt sich feststellen.
+  Dort wartet das Skript auf das Zeichen statt auf die Uhr:
+  * `set_option` und `set_options` laden über `neu_laden` neu. `cam reload`
+    macht alles in einem Zug und schreibt danach den Erfolg ins Log. Gewartet
+    wird auf diese Zeile und eine Viertelsekunde Nachlauf - für das, was das
+    Ende eines Cam-Modus auf den nächsten Tick legt - statt fest zwei
+    Sekunden. Kommt die Zeile nicht, weil die Datei kaputt ist, die Sprache
+    eine andere oder die Meldung aus, bleibt es bei den zwei Sekunden.
+  * `server_says` und was darauf aufbaut (`spielmodus_ist`, `nbt_frage`,
+    `entity_da`, `block_is` …), `server_data` und `server_pos`: Der Server
+    antwortet gleich oder gar nicht. Der Bot fragt deshalb hinter seinem
+    Kommando mit einer Tab-Vervollständigung für `/` nach (`verarbeitet` in
+    `BOT_JS`). Die löst im Spiel nichts aus, der Server beantwortet sie von
+    seinem Haupt-Thread aus, nach allem, was vorher von diesem Client kam, und
+    die Antwort kommt hinter allem an, was er davor geschickt hat. Ist die
+    Marke oder der Wert dann nicht da, kommt er auch nicht mehr: Ein Nein
+    steht nach einem Tick fest statt nach den vier Sekunden (bei `server_data`
+    acht), die früher auf eine Antwort gewartet wurde, die nie kam.
+
+Der Takt, in dem das Skript auf die Antworten des Bots sieht (alle 50 ms, im
+Bot alle 100 ms), bleibt dagegen, obwohl er sich leicht wegnehmen ließe. Er
+gibt dem Server nach jedem Befehl einen Moment, bevor der nächste kommt - auch
+der eines anderen Bots, der sonst vor diesem ankommen könnte -, und manche
+Probe verlässt sich darauf, siehe die Fallen unten.
 
 ## Warum gegen beide APIs geprüft wird
 
@@ -1280,6 +1379,34 @@ einzutragen.
   dem Void an der Grenze hängt. `flug_genommen` prüft deshalb nicht den
   Rauswurf, sondern ob der Kamera-Spieler gleich wieder fliegen darf
   (`abilities.mayfly`).
+* **Was ein Spieler mit `/say` sagt, kommt nicht sofort.** Der Server schickt
+  es durch die Kette der Chatnachrichten und erst hinaus, wenn das Kommando
+  längst fertig ist - auch nach der Antwort auf eine Tab-Vervollständigung,
+  die der Bot gleich danach schickt. Die Kommandos für `server_says` schreiben
+  ihre Marke weiter mit `run say {marke}`; `server_says` lässt sie dem Bot
+  aber mit `tellraw` sagen, das kommt noch im selben Zug. Nur so steht mit der
+  Antwort auf die Tab-Vervollständigung fest, dass keine Marke mehr kommt.
+  Die Marke sieht damit nur noch der Bot, der gefragt hat, und im Server-Log
+  steht sie nicht mehr.
+* **Der Spielmodus wechselt erst zwei Ticks nach der Zeile zum Start**
+  (`CameraMode` legt den Wechsel mit `runTaskLater` dorthin). Wer gleich nach
+  `expect("Cam mode activated")` den Spielmodus beim Bot abliest (`state`),
+  liest noch den alten - es sei denn, bis dahin ist ein Zehntel vergangen.
+  Genau das tut der Takt, in dem das Skript auf die Antworten des Bots sieht,
+  und `effekte_beim_start` verlässt sich darauf. Ein Versuch, die Antworten
+  ohne Takt abzuholen, ließ dort den Bot im Cam-Modus stehen und die nächste
+  Probe durchfallen. Der Takt bleibt deshalb, siehe
+  [Worauf die Tests warten](#worauf-die-tests-warten).
+* **Der Heiltest braucht einen Hungerbalken, der nicht voll ist.** Mit vollem
+  Balken und Sättigung heilt `peaceful` auf zwei Wegen zugleich, der Bot ist
+  nach den sechs Sekunden bis zum Cam-Modus wieder ganz gesund, und die Probe
+  darin hätte nichts mehr zu prüfen. Der Hungertest davor hinterlässt den
+  Balken unten - lief `heilung` ohne ihn, allein oder als erster Abschnitt
+  eines Servers, fiel „geht verletzt in den Cam-Modus“ durch. Der Abschnitt
+  holt den Balken deshalb selbst herunter, wenn er voll ist.
+* **Zwei Läufe im selben Arbeitsordner zur selben Zeit vertragen sich
+  nicht**: Sie teilen sich die Server-Ordner und die Ports. Nebeneinander
+  geht es mit `--workdir` und `--port` für den zweiten.
 
 ## Was die Tests abdecken
 

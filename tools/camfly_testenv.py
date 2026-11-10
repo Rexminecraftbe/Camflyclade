@@ -271,12 +271,9 @@ class Env:
             d.mkdir(parents=True, exist_ok=True)
 
     def eigen(self, name):
-        """Der Name eines Ordners oder einer Datei, die jeder Server fuer
-        sich hat: beim ersten name, bei den anderen name-2, name-3 ..."""
-        if self.nr == 1:
-            return name
-        stamm, punkt, endung = name.partition(".")
-        return f"{stamm}-{self.nr}{punkt}{endung}"
+        """Der Name eines Ordners, den jeder Server fuer sich hat: beim
+        ersten name, bei den anderen name-2, name-3 ..."""
+        return name if self.nr == 1 else f"{name}-{self.nr}"
 
     # --- JDK 25 ---
     @property
@@ -926,10 +923,39 @@ def server_running(env):
         return None
 
 
+def java_laeuft(pgid):
+    """Ob in der Prozessgruppe des Servers noch Java laeuft. None, wenn sich
+    das nicht feststellen laesst - ohne /proc, also nicht unter Linux."""
+    proc = Path("/proc")
+    if not (proc / "self" / "stat").exists():
+        return None
+    for eintrag in proc.iterdir():
+        if not eintrag.name.isdigit():
+            continue
+        try:
+            stat = (eintrag / "stat").read_text(errors="replace")
+        except OSError:
+            continue    # der Prozess ist schon wieder weg
+        # "Nummer (Name) Zustand Elternprozess Gruppe ..." - der Name kann
+        # selbst Klammern und Leerzeichen enthalten.
+        auf, zu = stat.find("("), stat.rfind(")")
+        felder = stat[zu + 2:].split()
+        if len(felder) > 2 and felder[2] == str(pgid) and stat[auf + 1:zu] == "java":
+            return True
+    return False
+
+
 def stop_server(env, quiet=False):
     """Erst freundlich ueber die Konsole, dann die ganze Prozessgruppe.
     Kein pkill mit einem Muster, das in der eigenen Kommandozeile steht -
-    das schiesst die eigene Shell ab."""
+    das schiesst die eigene Shell ab.
+
+    Fertig ist der Server, sobald sein Java zu Ende ist, nach ein, zwei
+    Sekunden. Die Gruppe lebt danach weiter: Das tail -f an der FIFO merkt
+    erst beim naechsten Kommando, dass ihm niemand mehr zuhoert. Darauf wurde
+    frueher jedes Mal die vollen dreissig Sekunden gewartet; jetzt geht der
+    Rest der Gruppe gleich hinterher, wenn Java weg ist.
+    """
     pgid = server_running(env)
     if pgid is None:
         return
@@ -941,12 +967,15 @@ def stop_server(env, quiet=False):
         pass
     for _ in range(60):
         time.sleep(0.5)
-        if server_running(env) is None:
+        if server_running(env) is None or java_laeuft(pgid) is False:
             break
     if server_running(env) is not None:
         try:
             os.killpg(pgid, signal.SIGTERM)
-            time.sleep(3)
+            for _ in range(30):
+                time.sleep(0.1)
+                if server_running(env) is None:
+                    break
             os.killpg(pgid, signal.SIGKILL)
         except ProcessLookupError:
             pass
@@ -2449,6 +2478,20 @@ bot.on('message', (msg) => {
   try { text = msg.toString(); } catch (e) { text = String(msg); }
   messages.push({ t: Date.now(), text });
 });
+// Wann der Bot zuletzt Schaden genommen hat: Sein Leben ist gesunken, oder
+// der Server hat einen Treffer an ihm gemeldet. Danach laesst cam-safety
+// fuenf Sekunden lang kein /cam zu, siehe sperre_abwarten.
+let lastHurt = 0;
+let lastHealth = null;
+bot._client.on('update_health', (packet) => {
+  if (lastHealth !== null && packet.health < lastHealth) lastHurt = Date.now();
+  lastHealth = packet.health;
+});
+for (const name of ['damage_event', 'hurt_animation']) {
+  bot._client.on(name, (packet) => {
+    if (bot.entity && packet.entityId === bot.entity.id) lastHurt = Date.now();
+  });
+}
 bot.once('spawn', () => { spawned = true; out({ event: 'spawn' }); });
 bot.on('death', () => { dead = true; out({ event: 'death' }); });
 bot.on('kicked', (reason) => out({ event: 'kicked', reason: String(reason) }));
@@ -2763,6 +2806,7 @@ async function handle(cmd) {
         food: bot.food,
         level: bot.experience ? bot.experience.level : null,
         dead,
+        hurtAgo: lastHurt ? Date.now() - lastHurt : null,
         pos: bot.entity ? [bot.entity.position.x, bot.entity.position.y, bot.entity.position.z] : null
       };
     case 'entities': {
@@ -19099,10 +19143,47 @@ def auswahl_zeigen(auswahl):
     Log.detail("Alle Abschnitte mit --alle, einzelne mit --abschnitte name,name")
 
 
+def sperre_abwarten(bot):
+    """Vor einem Abschnitt abwarten, bis die cam-safety-Sperre abgelaufen
+    ist, die ein Treffer aus dem Abschnitt davor hinterlassen hat.
+
+    Fast jeder Abschnitt faengt mit /cam an, und fuenf Sekunden nach einem
+    Schaden lehnt das Plugin es ab - der Abschnitt bricht dann gleich ab, ohne
+    etwas geprueft zu haben. Wer den Bot zuletzt trifft, wartet die Sperre
+    deshalb am Ende selbst ab (CAM_SAFETY_SEKUNDEN). Wo das fehlte, fiel es
+    nicht auf, solange nach dem Treffer noch eine Frage an den Server kam,
+    deren Nein vier Sekunden brauchte. Hier wird fuer jeden Abschnitt
+    nachgesehen: Der Bot weiss, wann er zuletzt Schaden genommen hat.
+    """
+    try:
+        her = bot.call("state").get("hurtAgo")
+    except Exception:
+        return    # der Abschnitt merkt selbst, dass der Bot nicht mehr laeuft
+    rest = CAM_SAFETY_SEKUNDEN + 0.5 - her / 1000 if her is not None else 0
+    if rest > 0:
+        Log.detail(f"cam-safety vom Abschnitt davor: noch {rest:.1f} s abwarten")
+        time.sleep(rest)
+
+
+def nicht_gelaufen(offen):
+    """Die Abschnitte festhalten, die an der Reihe gewesen waeren, aber nicht
+    mehr liefen: weil der Server nicht lief, die Grundprobe nicht durchkam
+    oder ein Abschnitt davor geworfen hat. Der naechste Lauf holt sie nach,
+    wie die durchgefallenen."""
+    FIND.nicht_gelaufen = list(offen)
+    if offen:
+        FIND.problem("Nicht mehr gelaufen, weil der Lauf vorher abbrach: " + ", ".join(offen))
+
+
 def step_tests(env):
     Log.step("9. Tests im laufenden Spiel")
+    # Die Abschnitte, die die Testauswahl fuer diesen Stand braucht, und
+    # davon die, die noch nicht durch sind.
+    gewaehlt = [a for a in ABSCHNITTE if AUSWAHL is None or AUSWAHL.gewaehlt(a.name)]
+    offen = [a.name for a in gewaehlt]
     if server_running(env) is None:
         FIND.nebenbei("Tests", False, "Der Server laeuft nicht")
+        nicht_gelaufen(offen)
         return False
 
     # --- Plugin ueberhaupt geladen? ---
@@ -19121,9 +19202,6 @@ def step_tests(env):
     # Der Abschnitt, der gerade laeuft: Wirft er, gehoert der Fehler ihm.
     # Die Proben der Schritte davor gehoeren keinem.
     laufend, erste = None, len(FIND.tests)
-    # Die Abschnitte, die noch nicht durch sind; None, solange die
-    # Grundprobe laeuft.
-    offen = None
     try:
         bot.start()
         spawned = bot.call("wait_spawn", wait=90, timeout=75000).get("spawned")
@@ -19247,14 +19325,11 @@ def step_tests(env):
         markieren("grundprobe", erste)
         FIND.rahmen = False
 
-        # --- Die Abschnitte, die die Testauswahl fuer diesen Stand braucht ---
-        gewaehlt = [a for a in ABSCHNITTE if AUSWAHL is None or AUSWAHL.gewaehlt(a.name)]
-        offen = [a.name for a in gewaehlt]
-
         def fahren(abschnitt, letzter=True):
             """Einen Abschnitt fahren und festhalten, wie lange er brauchte.
             letzter: ob er danach nicht noch einmal drankommt, mit dem
             anderen Koerpertyp."""
+            sperre_abwarten(bot)
             start = time.time()
             abschnitt.funktion(env, bot)
             sekunden = time.time() - start
@@ -19288,15 +19363,13 @@ def step_tests(env):
         if laufend is not None:
             markieren(laufend.name, erste)
         passed = False
-        if offen is not None:
-            # Der Abschnitt, der geworfen hat, ist durchgefallen. Die danach
-            # sind gar nicht gelaufen - der naechste Lauf holt sie nach.
-            FIND.nicht_gelaufen = [n for n in offen if laufend is None or n != laufend.name]
-            if FIND.nicht_gelaufen:
-                FIND.problem("Nicht mehr gelaufen, weil der Lauf vorher abbrach: "
-                             + ", ".join(FIND.nicht_gelaufen))
+        # Der Abschnitt, der geworfen hat, ist durchgefallen und kommt beim
+        # naechsten Lauf schon deshalb wieder dran.
+        if laufend is not None and laufend.name in offen:
+            offen.remove(laufend.name)
     finally:
         FIND.rahmen = True
+        nicht_gelaufen(offen)
         for e in bot.events:
             if e.get("event") in ("kicked", "error", "death"):
                 FIND.problem(f"Bot-Ereignis: {e}")
@@ -19512,11 +19585,16 @@ def parallel_fahren(env, teile, geschaetzt, keep_running):
                 if TEIL_MELDET.search(zeile):
                     with drucken:
                         print(f"  [{nr}] {zeile.strip()}", flush=True)
+        proc.wait()
+        with drucken:
+            Log.info(f"[{nr}] fertig nach {minuten(time.time() - start)} min")
 
+    # Was ein frueherer Lauf hinterlassen hat, womoeglich mit mehr Servern.
+    for alt in list(env.work.glob("teil-*.json")) + list(env.work.glob("teil-*.log")):
+        alt.unlink(missing_ok=True)
     laeufe = []
     try:
         for nr, namen in enumerate(teile, 1):
-            (env.work / f"teil-{nr}.json").unlink(missing_ok=True)
             cmd = [sys.executable, "-u", str(Path(__file__).resolve()),
                    "--repo", str(env.repo), "--workdir", str(env.work),
                    "--steps", "server,tests", "--abschnitte", ",".join(namen), "--teil", str(nr),
@@ -19532,8 +19610,6 @@ def parallel_fahren(env, teile, geschaetzt, keep_running):
         for nr, namen, proc, leser in laeufe:
             proc.wait()
             leser.join(timeout=10)
-            with drucken:
-                Log.info(f"[{nr}] fertig nach {minuten(time.time() - start)} min")
     finally:
         # Bricht der Mensch ab, bekommen die Laeufe das Strg-C selbst und
         # raeumen auf; was dann noch laeuft, wird beendet.
@@ -19551,8 +19627,12 @@ def parallel_fahren(env, teile, geschaetzt, keep_running):
         try:
             teil = json.loads((env.work / f"teil-{nr}.json").read_text(encoding="utf-8"))
         except (OSError, ValueError):
+            # Der Lauf ist ohne Ergebnis zu Ende gegangen, etwa weil ihn
+            # jemand beendet hat. Was er schon gefahren hatte, ist damit auch
+            # weg - der naechste Lauf faehrt seine Abschnitte noch einmal.
             FIND.test(f"Server {nr} liefert sein Ergebnis ab", False,
                       f"siehe {env.work / f'teil-{nr}.log'}")
+            FIND.problem(f"Ohne Ergebnis von Server {nr}: " + ", ".join(namen))
             FIND.nicht_gelaufen.extend(namen)
             ergebnis["tests"] = False
             continue
