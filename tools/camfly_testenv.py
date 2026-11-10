@@ -44,6 +44,7 @@ import signal
 import struct
 import subprocess
 import sys
+import threading
 import time
 import uuid
 import zipfile
@@ -96,7 +97,19 @@ EXPECTED_API_CALLS = 348
 BOT_NAME = "CamFlyTester"
 
 SERVER_HOST = "127.0.0.1"
+# Der Port des ersten Servers. Laufen mehrere nebeneinander (--parallel),
+# liegt jeder weitere einen Port hoeher.
 SERVER_PORT = 25565
+
+# Wie viele Server nebeneinander die Abschnitte fahren, wenn --parallel nichts
+# anderes sagt: so viele, wie Kerne da sind und der freie Arbeitsspeicher
+# traegt, und nie mehr als PARALLEL_HOECHSTENS. Ein Testserver braucht kaum
+# Rechenzeit - die Tests warten vor allem -, aber bis zu 2 GiB fuer Java und
+# dazu seine Bots. Unter PARALLEL_AB_SEKUNDEN geschaetzter Arbeit je Server
+# lohnt ein weiterer nicht: Jeder startet und richtet sich erst ein.
+PARALLEL_HOECHSTENS = 8
+RAM_JE_SERVER_GIB = 3
+PARALLEL_AB_SEKUNDEN = 120
 
 STEPS = ["jdk", "build", "paperapi", "crosscheck", "apicheck", "names",
          "server", "bot", "tests"]
@@ -143,6 +156,29 @@ class Findings:
         # Haengt an jedem Namen, solange ein Abschnitt mit einem bestimmten
         # Koerpertyp laeuft, siehe mit_koerpertyp.
         self.zusatz = ""
+        # Wie lange jeder Abschnitt gebraucht hat, in Sekunden.
+        self.dauer = {}
+        # Abschnitte, die an der Reihe gewesen waeren, aber nicht mehr liefen,
+        # weil der Lauf vorher abbrach.
+        self.nicht_gelaufen = []
+        # Solange der Rahmen laeuft - der Server startet, die Grundprobe -,
+        # und kein Abschnitt, siehe nebenbei.
+        self.rahmen = True
+
+    def nebenbei(self, name, passed, detail=""):
+        """Eine Probe des Rahmens: ob der Server gestartet ist, die
+        Grundprobe, das Log am Ende. Jeder Server faehrt sie fuer sich, sie
+        zaehlt aber nur beim ersten: Sonst stuende sie in der Zusammenfassung
+        so oft da, wie Server nebeneinander laufen. Bei den anderen zaehlt
+        sie nur, wenn sie durchfaellt, und sagt dann, bei welchem. In einem
+        Abschnitt - der Absturztest startet den Server neu - zaehlt sie
+        ueberall."""
+        if NEBEN_SERVER is None or not self.rahmen:
+            return self.test(name, passed, detail)
+        if not passed:
+            return self.test(f"{name} (Server {NEBEN_SERVER})", False, detail)
+        Log.ok(f"{name}{(' - ' + detail) if detail else ''}")
+        return True
 
     def test(self, name, passed, detail=""):
         name += self.zusatz
@@ -162,6 +198,10 @@ class Findings:
 
 
 FIND = Findings()
+
+# Die Nummer dieses Servers, wenn er einer von mehreren nebeneinander ist und
+# nicht der erste, sonst None. Siehe Findings.nebenbei.
+NEBEN_SERVER = None
 
 # ---------------------------------------------------------------------------
 # Kleine Helfer
@@ -188,7 +228,10 @@ def download(url, dest, what=None):
         Log.detail(f"aus dem Cache: {dest.name}")
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_suffix(dest.suffix + ".part")
+    # Mit der Prozessnummer im Namen: Laden zwei Laeufe nebeneinander
+    # dieselbe Datei, schreibt jeder in seine eigene und legt sie am Ende im
+    # Ganzen hin.
+    tmp = dest.with_suffix(f"{dest.suffix}.{os.getpid()}.part")
     Log.info(f"lade {what or dest.name} ...")
     run(["curl", "-sSL", "--fail", "--retry", "4", "--retry-delay", "2",
          "-o", str(tmp), url])
@@ -206,19 +249,34 @@ def maven_url(group, artifact, version, repo):
 # ---------------------------------------------------------------------------
 
 class Env:
-    def __init__(self, repo, workdir):
+    """Wo was liegt. nr ist die Nummer des Servers: Der erste liegt unter
+    server/ und hoert auf SERVER_PORT, jeder weitere (--parallel) hat seinen
+    eigenen Ordner server-2/, server-3/ ... und den naechsten Port. Alles
+    andere - JDK, paper-api, das gebaute Jar, der Bot - teilen sie sich."""
+
+    def __init__(self, repo, workdir, nr=1):
         self.repo = Path(repo).resolve()
         self.work = Path(workdir).resolve()
+        self.nr = nr
+        self.port = SERVER_PORT + nr - 1
         self.cache = self.work / "cache"
         self.jdk = self.work / "jdk25"
         self.paperapi = self.work / "paper-api"
         self.crosscheck = self.work / "crosscheck"
         self.apicheck = self.work / "apicheck"
-        self.server = self.work / "server"
+        self.server = self.work / self.eigen("server")
         self.bot = self.work / "bot"
         self.artifacts = self.work / "artifacts"
         for d in (self.cache, self.artifacts):
             d.mkdir(parents=True, exist_ok=True)
+
+    def eigen(self, name):
+        """Der Name eines Ordners oder einer Datei, die jeder Server fuer
+        sich hat: beim ersten name, bei den anderen name-2, name-3 ..."""
+        if self.nr == 1:
+            return name
+        stamm, punkt, endung = name.partition(".")
+        return f"{stamm}-{self.nr}{punkt}{endung}"
 
     # --- JDK 25 ---
     @property
@@ -682,8 +740,7 @@ def spiel_jar(env):
     if not jar.exists():
         if not env.java.exists():
             raise RuntimeError("Erst Schritt 'jdk' laufen lassen")
-        url, name = paper_jar_url()
-        paperclip = download(url, env.cache / name, f"Paper {MC_VERSION} Build {PAPER_BUILD}")
+        paperclip = paper_jar(env)
         env.server.mkdir(parents=True, exist_ok=True)
         Log.info("Paperclip setzt das Jar des Servers zusammen ...")
         run([str(env.java), "-Dpaperclip.patchonly=true", "-jar", str(paperclip)],
@@ -773,14 +830,14 @@ def step_names(env):
 # 7. Paper-Testserver
 # ---------------------------------------------------------------------------
 
-SERVER_PROPERTIES = f"""\
+SERVER_PROPERTIES = """\
 online-mode=false
 level-type=flat
 level-name=world
 view-distance=2
 simulation-distance=2
 spawn-protection=0
-server-port={SERVER_PORT}
+server-port={port}
 max-players=10
 motd=CamFly Testserver
 enable-command-block=false
@@ -798,9 +855,51 @@ def paper_jar_url():
     return dl["url"], dl["name"]
 
 
+def paper_jar(env):
+    """Der Download von Paper, aus dem Cache oder frisch geholt.
+
+    Wie die Datei heisst und wo sie liegt, sagt die API von Paper. Die
+    Antwort bleibt neben der Datei liegen: Ein Build aendert sich nicht mehr,
+    und so fragt nicht jeder Start eines Servers dort nach - mehrere Server
+    nebeneinander starten zugleich, der Absturztest startet seinen mehrmals.
+    """
+    zettel = env.cache / f"paper-{MC_VERSION}-{PAPER_BUILD}.json"
+    try:
+        jar = env.cache / json.loads(zettel.read_text(encoding="utf-8"))["name"]
+        if jar.exists() and jar.stat().st_size > 0:
+            Log.detail(f"aus dem Cache: {jar.name}")
+            return jar
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    url, name = paper_jar_url()
+    jar = download(url, env.cache / name, f"Paper {MC_VERSION} Build {PAPER_BUILD}")
+    zettel.write_text(json.dumps({"url": url, "name": name}), encoding="utf-8")
+    return jar
+
+
 def server_log(env):
     path = env.server / "server.log"
     return path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+
+
+def log_stand(env):
+    """Wie lang das Server-Log gerade ist, in Bytes. Mit log_seit zusammen:
+    was nach dieser Stelle hineingekommen ist."""
+    try:
+        return (env.server / "server.log").stat().st_size
+    except OSError:
+        return 0
+
+
+def log_seit(env, stand):
+    """Was seit log_stand ins Server-Log gekommen ist. Gelesen wird nur das
+    Neue, nicht jedes Mal das ganze Log."""
+    try:
+        with open(env.server / "server.log", "rb") as log:
+            log.seek(stand)
+            return log.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
 
 
 def console(env, command, pause=0.3):
@@ -1321,6 +1420,48 @@ permissions:
 """
 
 
+def hilfsplugin_bauen(env, ordner, klasse, quelltext, yml, dazu=()):
+    """Ein Hilfsplugin des Testservers gegen paper-api uebersetzen und als
+    Jar in ordner legen. Gibt (Jar, "") zurueck oder (None, Fehlertext).
+
+    dazu sind Jars, gegen die es ausserdem uebersetzt wird und deren Klassen
+    mit ins Plugin kommen. Gebaut wird nur, wenn sich am Quelltext, an der
+    plugin.yml oder an den Jars etwas geaendert hat: Der Absturztest und das
+    Abschalten starten den Server mehrmals neu, und jeder Start richtet ihn
+    frisch ein.
+    """
+    jars = list(env.paper_api_jars) + list(dazu)
+    stand = hashlib.sha256("\0".join(
+        [quelltext, yml] + [f"{j.name}:{j.stat().st_size}" for j in jars]).encode("utf-8")).hexdigest()
+    fertig = ordner / f"{klasse}.jar"
+    marke = ordner / "stand"
+    if fertig.exists() and marke.exists() and marke.read_text(encoding="utf-8") == stand:
+        return fertig, ""
+    clean_dir(ordner)
+    quelle = ordner / f"{klasse}.java"
+    quelle.write_text(quelltext, encoding="utf-8")
+    klassen = ordner / "classes"
+    klassen.mkdir()
+    proc = run([str(env.javac), "-nowarn", "--release", "25",
+                "-cp", os.pathsep.join(str(j) for j in jars),
+                "-d", str(klassen), str(quelle)], check=False, timeout=300)
+    if proc.returncode != 0:
+        return None, (proc.stdout or "").strip()
+    with zipfile.ZipFile(fertig, "w") as jar:
+        jar.writestr("plugin.yml", yml)
+        for datei in klassen.rglob("*.class"):
+            jar.write(datei, datei.relative_to(klassen).as_posix())
+        schon = set(jar.namelist())
+        for api in dazu:
+            with zipfile.ZipFile(api) as quelle_jar:
+                for eintrag in quelle_jar.namelist():
+                    if eintrag.endswith(".class") and eintrag not in schon:
+                        jar.writestr(eintrag, quelle_jar.read(eintrag))
+                        schon.add(eintrag)
+    marke.write_text(stand, encoding="utf-8")
+    return fertig, ""
+
+
 def tpa_helfer_bauen(env, plugins):
     """Das Hilfsplugin gegen paper-api uebersetzen und zu den Plugins legen.
 
@@ -1332,20 +1473,12 @@ def tpa_helfer_bauen(env, plugins):
     if not env.paper_api_jars:
         Log.warn(f"{TPA_HELFER_NAME} fehlt: ohne paper-api nicht zu bauen")
         return
-    ordner = clean_dir(env.work / "tpa-helfer")
-    quelle = ordner / "TpaHelfer.java"
-    quelle.write_text(TPA_HELFER_JAVA, encoding="utf-8")
-    klassen = ordner / "classes"
-    klassen.mkdir()
-    proc = run([str(env.javac), "-nowarn", "--release", "25", "-cp", env.paper_api_cp,
-                "-d", str(klassen), str(quelle)], check=False, timeout=300)
-    if proc.returncode != 0:
-        Log.warn(f"{TPA_HELFER_NAME} liess sich nicht uebersetzen: {(proc.stdout or '').strip()[:300]}")
+    jar, fehler = hilfsplugin_bauen(env, env.work / env.eigen("tpa-helfer"), "TpaHelfer",
+                                    TPA_HELFER_JAVA, TPA_HELFER_YML)
+    if jar is None:
+        Log.warn(f"{TPA_HELFER_NAME} liess sich nicht uebersetzen: {fehler[:300]}")
         return
-    with zipfile.ZipFile(ziel, "w") as jar:
-        jar.writestr("plugin.yml", TPA_HELFER_YML)
-        for datei in klassen.rglob("*.class"):
-            jar.write(datei, datei.relative_to(klassen).as_posix())
+    shutil.copy2(jar, ziel)
 
 
 # ---------------------------------------------------------------------------
@@ -2057,38 +2190,23 @@ def karten_attrappen_bauen(env, plugins):
         Log.warn(f"Die Schnittstellen der Web-Karten liessen sich nicht laden: {exc}")
         return
     for name, klasse, befehl, quelltext in KARTEN_ATTRAPPEN:
-        ordner = clean_dir(env.work / "karten" / name)
-        quelle = ordner / f"{klasse}.java"
-        quelle.write_text(quelltext, encoding="utf-8")
-        klassen = ordner / "classes"
-        klassen.mkdir()
-        cp = os.pathsep.join([env.paper_api_cp] + [str(j) for j in jars[name]])
-        proc = run([str(env.javac), "-nowarn", "--release", "25", "-cp", cp,
-                    "-d", str(klassen), str(quelle)], check=False, timeout=300)
-        if proc.returncode != 0:
-            Log.warn(f"Die Attrappe von {name} liess sich nicht uebersetzen: {(proc.stdout or '').strip()[:400]}")
-            continue
         yml = (f"name: {name}\nversion: fake\nmain: camflytest.{klasse}\napi-version: '{MC_VERSION}'\n"
                f"commands:\n  {befehl}:\n    permission: camflytest.{befehl}\n"
                f"permissions:\n  camflytest.{befehl}:\n    default: op\n")
-        with zipfile.ZipFile(plugins / f"Fake{name}.jar", "w") as jar:
-            jar.writestr("plugin.yml", yml)
-            for datei in klassen.rglob("*.class"):
-                jar.write(datei, datei.relative_to(klassen).as_posix())
-            # Die Schnittstelle gehoert ins Plugin, wie beim echten.
-            schon = set(jar.namelist())
-            for api in jars[name]:
-                with zipfile.ZipFile(api) as quelle_jar:
-                    for eintrag in quelle_jar.namelist():
-                        if eintrag.endswith(".class") and eintrag not in schon:
-                            jar.writestr(eintrag, quelle_jar.read(eintrag))
-                            schon.add(eintrag)
+        # Die Schnittstelle gehoert ins Plugin, wie beim echten.
+        jar, fehler = hilfsplugin_bauen(env, env.work / env.eigen("karten") / name, klasse,
+                                        quelltext, yml, dazu=jars[name])
+        if jar is None:
+            Log.warn(f"Die Attrappe von {name} liess sich nicht uebersetzen: {fehler[:400]}")
+            continue
+        shutil.copy2(jar, plugins / f"Fake{name}.jar")
 
 
 def prepare_server_files(env):
     env.server.mkdir(parents=True, exist_ok=True)
     (env.server / "eula.txt").write_text("eula=true\n", encoding="utf-8")
-    (env.server / "server.properties").write_text(SERVER_PROPERTIES, encoding="utf-8")
+    (env.server / "server.properties").write_text(SERVER_PROPERTIES.format(port=env.port),
+                                                  encoding="utf-8")
 
     plugins = env.server / "plugins"
     plugins.mkdir(exist_ok=True)
@@ -2167,13 +2285,28 @@ def prepare_server_files(env):
     return text
 
 
+def spieldaten_uebernehmen(env):
+    """Ein weiterer Server (--parallel) nimmt sich vom ersten, was Paperclip
+    beim ersten Start holt und zusammensetzt: das Jar von Mojang, das
+    gepatchte Jar und die Bibliotheken. Sonst lueden mehrere Server zugleich
+    dasselbe noch einmal. Fehlt beim ersten etwas, holt es sich jeder selbst,
+    und was nicht passt, setzt Paperclip neu zusammen."""
+    if env.nr == 1:
+        return
+    erster = env.work / "server"
+    for name in ("cache", "versions", "libraries"):
+        quelle, ziel = erster / name, env.server / name
+        if quelle.is_dir() and not ziel.exists():
+            shutil.copytree(quelle, ziel)
+
+
 def step_server(env):
-    Log.step("7. Paper-Testserver")
+    Log.step("7. Paper-Testserver" + (f" (Server {env.nr}, Port {env.port})" if env.nr > 1 else ""))
     stop_server(env, quiet=True)
 
-    url, name = paper_jar_url()
-    jar = download(url, env.cache / name, f"Paper {MC_VERSION} Build {PAPER_BUILD}")
+    jar = paper_jar(env)
     prepare_server_files(env)
+    spieldaten_uebernehmen(env)
     shutil.copy2(jar, env.server / "paper.jar")
 
     log = env.server / "server.log"
@@ -2204,10 +2337,10 @@ def step_server(env):
             break
     took = time.time() - started
     if not ok:
-        FIND.test("Server gestartet", False, "kein 'Done (' im Log")
+        FIND.nebenbei("Server gestartet", False, "kein 'Done (' im Log")
         print("\n".join(server_log(env).splitlines()[-30:]))
         return False
-    FIND.test("Server gestartet", True, f"{took:.1f}s")
+    FIND.nebenbei("Server gestartet", True, f"{took:.1f}s")
 
     # Ohne "peaceful" erschlaegt ein Zombie den Bot, und danach verweigert das
     # Plugin /cam wegen der cam-safety-Sperre.
@@ -2461,16 +2594,57 @@ bot.on('blockUpdate', (alt, neu) => {
   if (folge) folge.push(neu.name);
 });
 
-function waitFor(check, timeout) {
+// Warten, bis check() etwas liefert, hoechstens timeout Millisekunden. Mit
+// answered ist das Gesuchte die Antwort auf etwas, das der Bot eben geschickt
+// hat und die der Server gleich gibt oder gar nicht: Gewartet wird dann nur,
+// bis der Server es verarbeitet hat (siehe verarbeitet) - ist sie dann nicht
+// da, kommt sie auch nicht mehr, und es geht ohne sie weiter statt erst nach
+// timeout.
+function waitFor(check, timeout, answered) {
   return new Promise((resolve) => {
     const started = Date.now();
+    let fertig = false;
+    const ende = (hit) => { if (!fertig) { fertig = true; resolve(hit); } };
     const tick = () => {
+      if (fertig) return;
       const hit = check();
-      if (hit) return resolve(hit);
-      if (Date.now() - started > timeout) return resolve(null);
+      if (hit) return ende(hit);
+      if (Date.now() - started > timeout) return ende(null);
       setTimeout(tick, 100);
     };
     tick();
+    if (answered) {
+      // Meldet sich der Server nicht, bleibt es beim Warten bis zum Ablauf.
+      verarbeitet(timeout).then((ok) => { if (ok) ende(check() || null); });
+    }
+  });
+}
+
+// Ob der Server alles verarbeitet hat, was der Bot bis hierher geschickt hat,
+// und der Bot alles bekommen hat, was der Server bis dahin fuer ihn hatte.
+// Gefragt wird mit einer Tab-Vervollstaendigung fuer "/": Sie loest im Spiel
+// nichts aus, der Server beantwortet sie von seinem Haupt-Thread aus, nach
+// allem, was vorher von diesem Client kam, und die Antwort kommt hinter
+// allem an, was er davor geschickt hat. Kommt keine, gilt nach timeout
+// false.
+let syncNummer = 700000;
+function verarbeitet(timeout) {
+  return new Promise((resolve) => {
+    const nummer = ++syncNummer;
+    let timer = null;
+    const ende = (ok) => {
+      clearTimeout(timer);
+      bot._client.removeListener('tab_complete', onPacket);
+      resolve(ok);
+    };
+    const onPacket = (packet) => { if (packet.transactionId === nummer) ende(true); };
+    timer = setTimeout(() => ende(false), timeout);
+    bot._client.on('tab_complete', onPacket);
+    try {
+      bot._client.write('tab_complete', { transactionId: nummer, text: '/' });
+    } catch (e) {
+      ende(false);
+    }
   });
 }
 
@@ -2512,6 +2686,8 @@ async function handle(cmd) {
       return { messages: messages.slice(cmd.since || 0), count: messages.length };
     case 'mark':
       return { count: messages.length };
+    case 'processed':
+      return { processed: await verarbeitet(cmd.timeout || 4000) };
     case 'sounds':
       return { sounds: sounds.slice(cmd.since || 0), count: sounds.length };
     case 'chat_packets':
@@ -2539,7 +2715,7 @@ async function handle(cmd) {
           if (re.test(messages[i].text)) return messages[i];
         }
         return null;
-      }, cmd.timeout || 5000);
+      }, cmd.timeout || 5000, cmd.answered);
       return { matched: hit, count: messages.length };
     }
     case 'pos': {
@@ -2558,7 +2734,7 @@ async function handle(cmd) {
           if (m) return m;
         }
         return null;
-      }, cmd.timeout || 5000);
+      }, cmd.timeout || 5000, true);
       return hit ? { pos: [parseFloat(hit[1]), parseFloat(hit[2]), parseFloat(hit[3])] }
                  : { pos: null };
     }
@@ -2574,7 +2750,7 @@ async function handle(cmd) {
           if (m) return m;
         }
         return null;
-      }, cmd.timeout || 5000);
+      }, cmd.timeout || 5000, true);
       return { value: hit ? parseFloat(hit[1]) : null };
     }
     case 'sky':
@@ -3207,7 +3383,7 @@ class BotClient:
         botenv.update({
             "CAMFLY_MC": MC_VERSION, "CAMFLY_FALLBACK": FALLBACK_DATA_VERSION,
             "CAMFLY_PROTO": str(PROTOCOL_VERSION), "CAMFLY_BOT": self.name,
-            "CAMFLY_HOST": SERVER_HOST, "CAMFLY_PORT": str(SERVER_PORT)})
+            "CAMFLY_HOST": SERVER_HOST, "CAMFLY_PORT": str(self.env.port)})
         self.proc = subprocess.Popen(
             ["node", "bot.js"], cwd=str(self.env.bot), env=botenv,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -3276,10 +3452,15 @@ class BotClient:
     def chat(self, text):
         return self.call("chat", text=text)
 
-    def expect(self, pattern, since, timeout=8000):
-        """Wartet auf eine Chatzeile. timeout ist Millisekunden fuer den Bot."""
-        return self.call("wait_message", wait=timeout / 1000 + 10,
-                         pattern=pattern, since=since, timeout=timeout).get("matched")
+    def expect(self, pattern, since, timeout=8000, answered=False):
+        """Wartet auf eine Chatzeile. timeout ist Millisekunden fuer den Bot.
+
+        Mit answered ist die Zeile die Antwort auf etwas, das der Bot eben
+        geschickt hat, und die der Server gleich gibt oder gar nicht: Gewartet
+        wird dann nur, bis der Server es verarbeitet hat. Ohne die Zeile ist
+        die Antwort damit ein Nein, nach einem Tick statt nach timeout."""
+        return self.call("wait_message", wait=timeout / 1000 + 10, pattern=pattern,
+                         since=since, timeout=timeout, answered=answered).get("matched")
 
     def server_pos(self):
         return self.call("server_pos", wait=20, timeout=8000).get("pos")
@@ -3461,6 +3642,22 @@ def heal_checks(env, bot):
       es schnell, das ist SATIATED, und wenn sie leer ist, langsam weiter
       ueber den vollen Balken.
     """
+    # Der erste Durchgang braucht einen Balken, der nicht voll ist. Mit
+    # vollem Balken und Saettigung heilt "peaceful" auf beiden Wegen zugleich,
+    # der Bot ist in den Sekunden bis zum Cam-Modus wieder ganz gesund, und
+    # die Probe darin haette nichts mehr zu pruefen. Laeuft der Hungertest
+    # davor, hinterlaesst er den Balken unten; laeuft er nicht davor - der
+    # Abschnitt allein, oder auf einem anderen Server -, holt ihn derselbe
+    # Hungereffekt hier herunter.
+    if (bot.server_data("foodLevel") or 0) >= 18:
+        console(env, "difficulty easy")
+        try:
+            bot.chat("/effect give @s minecraft:hunger 5 255")
+            time.sleep(6)
+            bot.chat("/effect clear @s minecraft:hunger")
+            time.sleep(1)
+        finally:
+            console(env, "difficulty peaceful")
     heal_probe(bot, "peaceful")
 
     # Satt in den zweiten Durchgang: ohne vollen Balken regeneriert "easy"
@@ -3542,7 +3739,37 @@ def set_options(env, changes):
             FIND.problem(f"{key} steht {n} Mal in {datei} auf dem Testserver{where}")
     for datei, text in texte.items():
         (data_dir / datei).write_text(text, encoding="utf-8")
-    console(env, "cam reload", pause=2)
+    neu_laden(env)
+
+
+# So lange wartet neu_laden hoechstens auf den Reload, und so lange danach
+# noch, wenn er sich gemeldet hat, in Sekunden.
+RELOAD_HOECHSTENS = 2.0
+RELOAD_NACHLAUF = 0.25
+
+
+def neu_laden(env):
+    """Die Konfiguration des Testservers neu laden und warten, bis sie gilt.
+
+    cam reload macht alles in einem Zug - die Dateien lesen, jeden aus dem
+    Cam-Modus holen, alles neu einrichten - und meldet danach im Log den
+    Erfolg. Sobald die Zeile da ist, gilt die neue Konfiguration; der
+    Nachlauf laesst dem Server noch ein paar Ticks fuer das, was das Ende
+    eines Cam-Modus auf den naechsten Tick legt, und den Bots Zeit, es zu
+    bekommen. Das dauert einen Bruchteil der zwei Sekunden, die hier frueher
+    fest gewartet wurde.
+
+    Meldet der Reload keinen Erfolg - eine kaputte Datei, eine andere
+    Sprache, abgeschaltete Meldungen -, bleibt es bei den zwei Sekunden.
+    """
+    stand = log_stand(env)
+    console(env, "cam reload", pause=0)
+    ende = time.time() + RELOAD_HOECHSTENS
+    while time.time() < ende:
+        if "reload successful" in log_seit(env, stand):
+            time.sleep(RELOAD_NACHLAUF)
+            return
+        time.sleep(0.01)
 
 
 def drehungen_pro_sekunde(pakete):
@@ -15618,12 +15845,25 @@ NETHER_SLICE = 16
 
 def server_says(bot, command, timeout=4000):
     """Eine Ja-Nein-Frage an den Server. Das Kommando traegt {marke} und sagt
-    diese Marke genau dann, wenn die Bedingung zutrifft."""
+    diese Marke genau dann, wenn die Bedingung zutrifft.
+
+    Gesagt wird sie dem Bot mit tellraw statt, wie das Kommando es schreibt,
+    allen mit say: Was say sagt, geht beim Server durch die Kette der
+    Chatnachrichten und kommt erst an, nachdem das Kommando schon fertig ist;
+    tellraw schickt es gleich. Damit steht die Antwort fest, sobald der
+    Server das Kommando verarbeitet hat - ein Nein nach einem Tick statt
+    nach den vier Sekunden, die frueher auf eine Marke gewartet wurde, die
+    nie kam.
+    """
     _server_yes_zaehler[0] += 1
     marke = f"{SERVER_YES}-{_server_yes_zaehler[0]}"
+    text = command.format(marke=marke)
+    gleich = text.endswith(f"run say {marke}")
+    if gleich:
+        text = text[:-len(f"say {marke}")] + f'tellraw {bot.name} "{marke}"'
     since = bot.mark()
-    bot.chat(command.format(marke=marke))
-    return bool(bot.expect(re.escape(marke), since, timeout))
+    bot.chat(text)
+    return bool(bot.expect(re.escape(marke), since, timeout, answered=gleich))
 
 
 def block_is(bot, dimension, where, block):
@@ -18687,7 +18927,8 @@ ABSCHNITTE = [
     Abschnitt("angriff", angriff_checks, "start/StartChecks"),
     Abschnitt("afk", afk_checks, "afk"),
     Abschnitt("herzen", herzen_checks,
-              "body/BodySpawner body/MannequinLabel display/SpriteText display/NameDisplay"),
+              "body/BodySpawner body/MannequinLabel display/SpriteText display/NameDisplay "
+              "session/PausedEffects session/CameraMode session/CameraData"),
     Abschnitt("wartezeit", wartezeit_checks, "timelimit storage session/SessionListener"),
     Abschnitt("akku_speicher", akku_speicher_checks, "battery storage"),
     Abschnitt("startverzoegerung", startverzoegerung_checks, "start/StartDelay start/CamStarter"),
@@ -18742,7 +18983,6 @@ ABSCHNITTE = [
     Abschnitt("fall", fall_checks, "start/StartChecks"),
     Abschnitt("zustand", zustand_checks, "session/CameraMode body/BodySpawner"),
     Abschnitt("kamerakopf", kamerakopf_checks, "session/CameraMode session/CameraHead"),
-    Abschnitt("herzen", herzen_checks, "session/PausedEffects session/CameraMode session/CameraData"),
     Abschnitt("reiten", reiten_checks, "start/StartChecks start/CamStarter"),
     Abschnitt("bett", bett_checks, "start/StartChecks start/CamStarter"),
     Abschnitt("flug_genommen", flug_genommen_checks, "movement/CamMovementGuard session/CameraMode"),
@@ -18797,14 +19037,15 @@ def markieren(name, ab):
 
 def letzte_fehler(env):
     """Die Abschnitte, die beim letzten Lauf in diesem Arbeitsordner
-    durchgefallen sind, aus seinem ergebnis.json."""
+    durchgefallen oder, weil er abbrach, nicht mehr gelaufen sind, aus seinem
+    ergebnis.json."""
     try:
         alt = json.loads((env.work / "ergebnis.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return set()
     namen = {a.name for a in ABSCHNITTE}
-    return {t.get("abschnitt") for t in alt.get("tests", [])
-            if not t.get("ok") and t.get("abschnitt") in namen}
+    durchgefallen = {t.get("abschnitt") for t in alt.get("tests", []) if not t.get("ok")}
+    return (durchgefallen | set(alt.get("nicht_gelaufen") or [])) & namen
 
 
 def auswahl_laden(env, alle=False, seit=None, namen=None):
@@ -18829,7 +19070,7 @@ def auswahl_laden(env, alle=False, seit=None, namen=None):
         # Lieber alle als eine Auswahl, die an sich selbst gescheitert ist.
         return testauswahl.Auswahl(alle=f"die Testauswahl ging schief ({type(exc).__name__}: {exc})")
     for name in sorted(letzte_fehler(env)):
-        auswahl.dazu(name, "beim letzten Lauf durchgefallen")
+        auswahl.dazu(name, "beim letzten Lauf durchgefallen oder nicht mehr gelaufen")
     return auswahl
 
 
@@ -18861,15 +19102,15 @@ def auswahl_zeigen(auswahl):
 def step_tests(env):
     Log.step("9. Tests im laufenden Spiel")
     if server_running(env) is None:
-        FIND.test("Tests", False, "Der Server laeuft nicht")
+        FIND.nebenbei("Tests", False, "Der Server laeuft nicht")
         return False
 
     # --- Plugin ueberhaupt geladen? ---
     log = server_log(env)
     enabled = "Enabling CamFly" in log or re.search(r"CamFly.*Enabl", log) is not None
     broken = "Could not load 'plugins/CamFly.jar'" in log or "Could not load plugin" in log
-    FIND.test("Plugin geladen", enabled and not broken,
-              "CamFly ist aktiviert" if enabled and not broken else "siehe server.log")
+    FIND.nebenbei("Plugin geladen", enabled and not broken,
+                  "CamFly ist aktiviert" if enabled and not broken else "siehe server.log")
     plugin_warnings = [l.strip() for l in log.splitlines()
                        if "CamFly" in l and ("WARN" in l or "ERROR" in l)]
     for w in plugin_warnings[:15]:
@@ -18880,10 +19121,13 @@ def step_tests(env):
     # Der Abschnitt, der gerade laeuft: Wirft er, gehoert der Fehler ihm.
     # Die Proben der Schritte davor gehoeren keinem.
     laufend, erste = None, len(FIND.tests)
+    # Die Abschnitte, die noch nicht durch sind; None, solange die
+    # Grundprobe laeuft.
+    offen = None
     try:
         bot.start()
         spawned = bot.call("wait_spawn", wait=90, timeout=75000).get("spawned")
-        if not FIND.test("Bot verbindet sich", spawned, BOT_NAME):
+        if not FIND.nebenbei("Bot verbindet sich", spawned, BOT_NAME):
             for e in bot.events[-10:]:
                 Log.detail(str(e))
             return False
@@ -18899,14 +19143,14 @@ def step_tests(env):
         before_entities = {e["id"] for e in bot.call("entities", radius=6)["entities"]}
         bot.chat("/cam")
         hit = bot.expect("Camera mode activated|Cam mode activated", since, 8000)
-        FIND.test("/cam startet ohne op", bool(hit),
-                  strip_colors(hit["text"]) if hit else "keine Bestaetigung im Chat")
+        FIND.nebenbei("/cam startet ohne op", bool(hit),
+                      strip_colors(hit["text"]) if hit else "keine Bestaetigung im Chat")
         time.sleep(1.5)
 
         after = bot.call("entities", radius=6)["entities"]
         new = [e for e in after if e["id"] not in before_entities]
-        FIND.test("Koerper wird gesetzt", bool(new),
-                  ", ".join(sorted({e["type"] or "?" for e in new})) if new else "keine neue Entitaet")
+        FIND.nebenbei("Koerper wird gesetzt", bool(new),
+                      ", ".join(sorted({e["type"] or "?" for e in new})) if new else "keine neue Entitaet")
 
         state = bot.call("state")
         Log.detail(f"Spielmodus im Cam-Modus: {state.get('gameMode')}")
@@ -18914,13 +19158,13 @@ def step_tests(env):
         since = bot.mark()
         bot.chat("/cam")
         hit = bot.expect("Camera mode ended|Cam mode ended", since, 8000)
-        FIND.test("/cam beendet sich wieder", bool(hit),
-                  strip_colors(hit["text"]) if hit else "keine Bestaetigung im Chat")
+        FIND.nebenbei("/cam beendet sich wieder", bool(hit),
+                      strip_colors(hit["text"]) if hit else "keine Bestaetigung im Chat")
         time.sleep(1)
         rest = [e for e in bot.call("entities", radius=6)["entities"]
                 if e["id"] not in before_entities]
-        FIND.test("Koerper wird wieder eingesammelt", not rest,
-                  "" if not rest else f"{len(rest)} Entitaeten bleiben stehen")
+        FIND.nebenbei("Koerper wird wieder eingesammelt", not rest,
+                      "" if not rest else f"{len(rest)} Entitaeten bleiben stehen")
 
         # --- ab hier mit op: /data und /fillbiome brauchen es ---
         console(env, f"op {BOT_NAME}")
@@ -18931,8 +19175,8 @@ def step_tests(env):
         # Erst den Boden: Alles Weitere baut vom Startplatz aus.
         boden_ebnen(bot)
         start_pos = bot.server_pos()
-        if not FIND.test("Serverseitige Position lesbar", start_pos is not None,
-                         str(start_pos)):
+        if not FIND.nebenbei("Serverseitige Position lesbar", start_pos is not None,
+                             str(start_pos)):
             return False
 
         # --- Fliegen im Cam-Modus ---
@@ -18947,8 +19191,8 @@ def step_tests(env):
         flown = bot.server_pos()
         moved = (flown is not None and start_pos is not None
                  and max(abs(a - b) for a, b in zip(flown, start_pos)) > 2.0)
-        FIND.test("Fliegen im Cam-Modus bewegt den Spieler", moved,
-                  f"{start_pos} -> {flown}")
+        FIND.nebenbei("Fliegen im Cam-Modus bewegt den Spieler", moved,
+                      f"{start_pos} -> {flown}")
 
         # --- Zurueck zum Koerper ---
         since = bot.mark()
@@ -18958,19 +19202,19 @@ def step_tests(env):
         back = bot.server_pos()
         near = (back is not None and start_pos is not None
                 and max(abs(a - b) for a, b in zip(back, start_pos)) < 2.5)
-        FIND.test("Nach dem Cam-Modus steht der Spieler wieder am Koerper", near,
-                  f"{start_pos} -> {back}")
+        FIND.nebenbei("Nach dem Cam-Modus steht der Spieler wieder am Koerper", near,
+                      f"{start_pos} -> {back}")
 
         # --- Reload, von der Konsole und vom Spieler ---
         console(env, "cam reload", pause=2)
-        FIND.test("/cam reload von der Konsole",
-                  "reload successful" in strip_colors(server_log(env)).lower(),
-                  "")
+        FIND.nebenbei("/cam reload von der Konsole",
+                      "reload successful" in strip_colors(server_log(env)).lower(),
+                      "")
         since = bot.mark()
         bot.chat("/cam reload")
         hit = bot.expect("reload successful|Plugin is restarting", since, 8000)
-        FIND.test("/cam reload vom Spieler (op)", bool(hit),
-                  strip_colors(hit["text"]) if hit else "keine Antwort im Chat")
+        FIND.nebenbei("/cam reload vom Spieler (op)", bool(hit),
+                      strip_colors(hit["text"]) if hit else "keine Antwort im Chat")
 
         # --- Verbotenes Biom: cam-area ---
         pos = bot.server_pos() or start_pos
@@ -18984,8 +19228,8 @@ def step_tests(env):
         since = bot.mark()
         bot.chat("/cam")
         hit = bot.expect("cannot start cam mode|cannot go any further", since, 8000)
-        FIND.test("Verbotenes Biom sperrt /cam", bool(hit),
-                  strip_colors(hit["text"]) if hit else "der Cam-Modus startete trotzdem")
+        FIND.nebenbei("Verbotenes Biom sperrt /cam", bool(hit),
+                      strip_colors(hit["text"]) if hit else "der Cam-Modus startete trotzdem")
         if not hit:
             # aufraeumen, falls er doch gestartet ist
             bot.chat("/cam")
@@ -18995,15 +19239,31 @@ def step_tests(env):
         since = bot.mark()
         bot.chat("/cam")
         hit = bot.expect("Camera mode activated|Cam mode activated", since, 8000)
-        FIND.test("Nach der Rueckkehr ins erlaubte Biom geht /cam wieder", bool(hit), "")
+        FIND.nebenbei("Nach der Rueckkehr ins erlaubte Biom geht /cam wieder", bool(hit), "")
         if hit:
             bot.chat("/cam")
             time.sleep(1)
 
         markieren("grundprobe", erste)
+        FIND.rahmen = False
 
         # --- Die Abschnitte, die die Testauswahl fuer diesen Stand braucht ---
         gewaehlt = [a for a in ABSCHNITTE if AUSWAHL is None or AUSWAHL.gewaehlt(a.name)]
+        offen = [a.name for a in gewaehlt]
+
+        def fahren(abschnitt, letzter=True):
+            """Einen Abschnitt fahren und festhalten, wie lange er brauchte.
+            letzter: ob er danach nicht noch einmal drankommt, mit dem
+            anderen Koerpertyp."""
+            start = time.time()
+            abschnitt.funktion(env, bot)
+            sekunden = time.time() - start
+            FIND.dauer[abschnitt.name] = round(FIND.dauer.get(abschnitt.name, 0.0) + sekunden, 1)
+            markieren(abschnitt.name, erste)
+            if letzter and abschnitt.name in offen:
+                offen.remove(abschnitt.name)
+            Log.info(f"Abschnitt {abschnitt.name}{FIND.zusatz} fertig nach {sekunden:.0f} s")
+
         i = 0
         while i < len(gewaehlt):
             # Was hintereinander mit beiden Koerpertypen laeuft, laeuft in
@@ -19015,14 +19275,12 @@ def step_tests(env):
             i += len(gruppe)
             laufend = gruppe[0]
             if not laufend.koerpertypen:
-                laufend.funktion(env, bot)
-                markieren(laufend.name, erste)
+                fahren(laufend)
                 continue
             for typ in KOERPERTYPEN:
                 with mit_koerpertyp(env, typ):
                     for laufend in gruppe:
-                        laufend.funktion(env, bot)
-                        markieren(laufend.name, erste)
+                        fahren(laufend, letzter=typ == KOERPERTYPEN[-1])
         laufend = None
 
     except Exception as exc:
@@ -19030,7 +19288,15 @@ def step_tests(env):
         if laufend is not None:
             markieren(laufend.name, erste)
         passed = False
+        if offen is not None:
+            # Der Abschnitt, der geworfen hat, ist durchgefallen. Die danach
+            # sind gar nicht gelaufen - der naechste Lauf holt sie nach.
+            FIND.nicht_gelaufen = [n for n in offen if laufend is None or n != laufend.name]
+            if FIND.nicht_gelaufen:
+                FIND.problem("Nicht mehr gelaufen, weil der Lauf vorher abbrach: "
+                             + ", ".join(FIND.nicht_gelaufen))
     finally:
+        FIND.rahmen = True
         for e in bot.events:
             if e.get("event") in ("kicked", "error", "death"):
                 FIND.problem(f"Bot-Ereignis: {e}")
@@ -19038,18 +19304,287 @@ def step_tests(env):
 
     # --- Das Log zum Schluss ---
     hits = log_problems(env)
-    FIND.test("Server-Log ohne Fehler des Plugins", not hits,
-              "" if not hits else f"{len(hits)} verdaechtige Zeilen")
+    FIND.nebenbei("Server-Log ohne Fehler des Plugins", not hits,
+                  "" if not hits else f"{len(hits)} verdaechtige Zeilen")
     for h in hits[:25]:
         Log.detail(h)
     return passed and not hits
 
 
 # ---------------------------------------------------------------------------
+# Mehrere Server nebeneinander
+# ---------------------------------------------------------------------------
+#
+# Die Tests warten vor allem: auf den Server, auf den Bot, darauf, dass im
+# Spiel Zeit vergeht. Ein Testserver braucht dabei nur einen Bruchteil eines
+# Kerns. Statt alle Abschnitte hintereinander auf einem Server zu fahren,
+# verteilt der Lauf sie deshalb auf mehrere, die nebeneinander laufen. Jeder
+# hat seinen eigenen Ordner, seine eigene Welt, seinen eigenen Port und seine
+# eigenen Bots, und jeder faehrt seine Abschnitte genau so, wie sie auf einem
+# einzelnen Server liefen - samt der Grundprobe davor. Auf einem gemeinsamen
+# Server ginge das nicht: Die Abschnitte stellen die Konfiguration um, laden
+# sie neu und drehen an Zeit und Wetter der Welt.
+#
+# Jeder Server ist ein eigener Aufruf dieses Skripts mit --teil. Der Aufruf,
+# den der Mensch gestartet hat, baut und prueft wie immer, startet die
+# anderen, liest mit und legt ihre Ergebnisse am Ende zusammen.
+
+# Wie lange die Abschnitte brauchen, in Sekunden - mit beiden Koerpertypen,
+# wo ein Abschnitt mit beiden laeuft. Danach werden sie verteilt, solange im
+# Arbeitsordner noch nichts gemessen ist; jeder Lauf schreibt seine Zeiten
+# nach dauer.json, und die gelten dann. Ein Abschnitt, der hier fehlt, zaehlt
+# wie der mittlere.
+DAUER_VORGABE = {
+}
+
+# So lange braucht ein Server, bis sein erster Abschnitt anfaengt: starten,
+# den Bot verbinden, die Grundprobe.
+RAHMEN_SEKUNDEN = 75
+
+# Die Nummer dieses Laufs, wenn er einer von mehreren nebeneinander ist
+# (--teil), sonst None.
+TEIL = None
+
+
+def dauer_laden(env):
+    """Wie lange jeder Abschnitt braucht, in Sekunden: zuletzt in diesem
+    Arbeitsordner gemessen, sonst die Vorgabe, sonst der mittlere Wert."""
+    bekannt = dict(DAUER_VORGABE)
+    try:
+        gemessen = json.loads((env.work / "dauer.json").read_text(encoding="utf-8"))
+        bekannt.update({n: float(d) for n, d in gemessen.items()})
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    werte = sorted(d for n, d in bekannt.items() if n in {a.name for a in ABSCHNITTE})
+    mittel = werte[len(werte) // 2] if werte else 60.0
+    return {a.name: bekannt.get(a.name, mittel) for a in ABSCHNITTE}
+
+
+def dauer_merken(env):
+    """Die Zeiten dieses Laufs zu denen im Arbeitsordner schreiben."""
+    if not FIND.dauer:
+        return
+    datei = env.work / "dauer.json"
+    try:
+        bekannt = json.loads(datei.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        bekannt = {}
+    if not isinstance(bekannt, dict):
+        bekannt = {}
+    bekannt.update(FIND.dauer)
+    datei.write_text(json.dumps(bekannt, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def freier_speicher_gib():
+    """Der freie Arbeitsspeicher in GiB, oder None, wenn er sich nicht
+    lesen laesst."""
+    try:
+        for zeile in Path("/proc/meminfo").read_text().splitlines():
+            if zeile.startswith("MemAvailable:"):
+                return int(zeile.split()[1]) / (1024 * 1024)
+    except (OSError, ValueError, IndexError):
+        pass
+    try:
+        return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / (1024 ** 3)
+    except (ValueError, OSError, AttributeError):
+        return None
+
+
+def server_anzahl(wunsch, namen, dauer):
+    """Auf wie viele Server die Abschnitte verteilt werden.
+
+    Mit --parallel so viele wie gewuenscht. Sonst so viele, wie Kerne da
+    sind, wie der freie Arbeitsspeicher traegt und wie es bei der Arbeit
+    lohnt, hoechstens PARALLEL_HOECHSTENS. Nie mehr, als Abschnitte laufen.
+    """
+    if not namen:
+        return 1
+    if wunsch is not None:
+        return max(1, min(wunsch, len(namen)))
+    grenzen = [os.cpu_count() or 1, PARALLEL_HOECHSTENS, len(namen),
+               int(sum(dauer[n] for n in namen) // PARALLEL_AB_SEKUNDEN)]
+    frei = freier_speicher_gib()
+    if frei is not None:
+        grenzen.append(int(frei // RAM_JE_SERVER_GIB))
+    return max(1, min(grenzen))
+
+
+def verteilen(namen, anzahl, dauer):
+    """Die Abschnitte auf anzahl Server verteilen. Gibt je Server seine
+    Abschnitte zurueck und die geschaetzten Sekunden.
+
+    Jeder Server bekommt ein Stueck der Liste am Stueck, in der Reihenfolge
+    von ABSCHNITTE, und die Schnitte liegen so, dass der Server mit der
+    meisten Arbeit so wenig wie moeglich hat. Am Stueck, weil jeder Abschnitt
+    damit dieselben Vorgaenger hat wie auf einem Server allein - nur der
+    erste eines Stuecks folgt gleich auf die Grundprobe, wie bei
+    --abschnitte. Das Abschalten und der Absturztest bleiben die letzten.
+    """
+    zeiten = [dauer[n] for n in namen]
+    bis = [0.0]
+    for z in zeiten:
+        bis.append(bis[-1] + z)
+    n = len(namen)
+    # beste[k][i]: die kleinste groesste Last, wenn die ersten i Abschnitte
+    # auf k Server kommen; schnitt[k][i]: wo das letzte Stueck dabei anfaengt.
+    unendlich = float("inf")
+    beste = [[unendlich] * (n + 1) for _ in range(anzahl + 1)]
+    schnitt = [[0] * (n + 1) for _ in range(anzahl + 1)]
+    beste[0][0] = 0.0
+    for k in range(1, anzahl + 1):
+        for i in range(k, n + 1):
+            for j in range(k - 1, i):
+                last = max(beste[k - 1][j], bis[i] - bis[j])
+                if last < beste[k][i]:
+                    beste[k][i], schnitt[k][i] = last, j
+    teile, i = [], n
+    for k in range(anzahl, 0, -1):
+        j = schnitt[k][i]
+        teile.append(namen[j:i])
+        i = j
+    teile.reverse()
+    return teile, [RAHMEN_SEKUNDEN + sum(dauer[x] for x in teil) for teil in teile]
+
+
+def minuten(sekunden):
+    """Sekunden als m:ss."""
+    sekunden = int(round(sekunden))
+    return f"{sekunden // 60}:{sekunden % 60:02d}"
+
+
+def alle_server(env):
+    """Ein Env fuer jeden Server, den es im Arbeitsordner gibt."""
+    gefunden = []
+    for ordner in sorted(env.work.glob("server*")):
+        treffer = re.fullmatch(r"server(?:-(\d+))?", ordner.name)
+        if treffer and ordner.is_dir():
+            gefunden.append(Env(env.repo, env.work, int(treffer.group(1) or 1)))
+    return sorted(gefunden, key=lambda e: e.nr)
+
+
+def alle_server_beenden(env, quiet=True):
+    """Jeden Testserver im Arbeitsordner beenden, der noch laeuft. Gibt
+    zurueck, wie viele es waren."""
+    beendet = 0
+    for einer in alle_server(env):
+        if server_running(einer) is not None:
+            stop_server(einer, quiet=quiet)
+            beendet += 1
+    return beendet
+
+
+# Was vom Lauf eines Servers gleich im Terminal steht; alles andere steht in
+# seiner Mitschrift.
+TEIL_MELDET = re.compile(r"FEHLT|HINWEIS|Abschnitt \S+.* fertig nach \d+ s|"
+                         r"Server gestartet|Bot verbindet sich")
+
+
+def parallel_fahren(env, teile, geschaetzt, keep_running):
+    """Die Schritte server und tests auf mehreren Servern nebeneinander.
+
+    teile sind die Abschnitte je Server. Gibt je Schritt zurueck, ob er auf
+    allen gelungen ist, und legt die Proben, Hinweise und Zeiten aller in
+    FIND zusammen.
+    """
+    Log.step(f"7. und 9. Paper-Testserver und Tests, auf {len(teile)} Servern nebeneinander")
+    # Was der erste Server beim ersten Start zusammensetzt, nehmen sich die
+    # anderen von ihm - also muss es da sein, bevor sie starten.
+    try:
+        spiel_jar(env)
+    except Exception as exc:
+        Log.warn(f"Das Jar des Servers liess sich nicht vorbereiten ({exc}) - "
+                 f"jeder Server holt es sich selbst")
+    alle_server_beenden(env)
+    for nr, namen in enumerate(teile, 1):
+        Log.info(f"Server {nr} (Port {SERVER_PORT + nr - 1}): {len(namen)} Abschnitte, "
+                 f"etwa {minuten(geschaetzt[nr - 1])} min")
+        Log.detail("  " + ", ".join(namen))
+    Log.info(f"Mitschrift je Server: {env.work / 'teil-N.log'}")
+
+    start = time.time()
+    drucken = threading.Lock()
+
+    def mitlesen(nr, proc, datei):
+        with open(datei, "w", encoding="utf-8") as mitschrift:
+            for zeile in proc.stdout:
+                mitschrift.write(f"{time.time() - start:7.1f} {zeile}")
+                mitschrift.flush()
+                if TEIL_MELDET.search(zeile):
+                    with drucken:
+                        print(f"  [{nr}] {zeile.strip()}", flush=True)
+
+    laeufe = []
+    try:
+        for nr, namen in enumerate(teile, 1):
+            (env.work / f"teil-{nr}.json").unlink(missing_ok=True)
+            cmd = [sys.executable, "-u", str(Path(__file__).resolve()),
+                   "--repo", str(env.repo), "--workdir", str(env.work),
+                   "--steps", "server,tests", "--abschnitte", ",".join(namen), "--teil", str(nr),
+                   "--port", str(SERVER_PORT)]
+            if keep_running:
+                cmd.append("--keep-running")
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    stdin=subprocess.DEVNULL, text=True, errors="replace", bufsize=1)
+            leser = threading.Thread(target=mitlesen, args=(nr, proc, env.work / f"teil-{nr}.log"),
+                                     daemon=True)
+            leser.start()
+            laeufe.append((nr, namen, proc, leser))
+        for nr, namen, proc, leser in laeufe:
+            proc.wait()
+            leser.join(timeout=10)
+            with drucken:
+                Log.info(f"[{nr}] fertig nach {minuten(time.time() - start)} min")
+    finally:
+        # Bricht der Mensch ab, bekommen die Laeufe das Strg-C selbst und
+        # raeumen auf; was dann noch laeuft, wird beendet.
+        for nr, namen, proc, leser in laeufe:
+            if proc.poll() is None:
+                try:
+                    proc.wait(timeout=90)
+                except (subprocess.TimeoutExpired, KeyboardInterrupt):
+                    proc.kill()
+
+    # --- Die Ergebnisse zusammenlegen ---
+    platz = {a.name: i for i, a in enumerate(ABSCHNITTE)}
+    proben, ergebnis = [], {"server": True, "tests": True}
+    for nr, namen, proc, leser in laeufe:
+        try:
+            teil = json.loads((env.work / f"teil-{nr}.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            FIND.test(f"Server {nr} liefert sein Ergebnis ab", False,
+                      f"siehe {env.work / f'teil-{nr}.log'}")
+            FIND.nicht_gelaufen.extend(namen)
+            ergebnis["tests"] = False
+            continue
+        for schritt in ergebnis:
+            ergebnis[schritt] = ergebnis[schritt] and bool(teil.get("steps", {}).get(schritt))
+        # Die Proben in der Reihenfolge von ABSCHNITTE, wie bei einem Server
+        # allein: vorn, was vor der Grundprobe kam, hinten das Log am Schluss.
+        vorn = True
+        for probe in teil.get("tests", []):
+            abschnitt = probe.get("abschnitt")
+            if abschnitt == "grundprobe":
+                rang = -1
+            elif abschnitt in platz:
+                rang, vorn = platz[abschnitt], False
+            else:
+                rang = -2 if vorn else len(ABSCHNITTE)
+            proben.append((rang, probe))
+        FIND.problems.extend(teil.get("problems", []))
+        FIND.nicht_gelaufen.extend(teil.get("nicht_gelaufen", []))
+        for name, sekunden in teil.get("dauer", {}).items():
+            FIND.dauer[name] = round(FIND.dauer.get(name, 0.0) + sekunden, 1)
+    proben.sort(key=lambda p: p[0])
+    FIND.tests.extend(probe for _, probe in proben)
+    return ergebnis
+
+
+# ---------------------------------------------------------------------------
 # 10. Zusammenfassung
 # ---------------------------------------------------------------------------
 
-def summary(env, results):
+def summary(env, results, lauf=None):
+    """lauf: wie der Schritt tests lief - {"server": Anzahl, "sekunden": ...}."""
     print(f"\n{Log.BLUE}=== Zusammenfassung ==={Log.OFF}")
     ok = [t for t in FIND.tests if t["ok"]]
     print(f"  {len(ok)} von {len(FIND.tests)} Pruefungen bestanden")
@@ -19068,17 +19603,35 @@ def summary(env, results):
                   f"siehe Testauswahl oben. Alle mit --alle.")
         auswahl = {"basis": AUSWAHL.basis, "alle": AUSWAHL.alle,
                    "abschnitte": AUSWAHL.abschnitte, "ausgelassen": ausgelassen}
+    if FIND.dauer and lauf:
+        hintereinander = sum(FIND.dauer.values())
+        if lauf.get("server", 1) > 1:
+            print(f"\n  Tests: {minuten(lauf['sekunden'])} min auf {lauf['server']} Servern nebeneinander - "
+                  f"die Abschnitte allein brauchten zusammen {minuten(hintereinander)} min")
+        else:
+            print(f"\n  Tests: {minuten(lauf['sekunden'])} min, davon die Abschnitte "
+                  f"{minuten(hintereinander)} min")
+        laengste = sorted(FIND.dauer.items(), key=lambda e: -e[1])[:5]
+        print("  Am laengsten: " + ", ".join(f"{n} {minuten(d)}" for n, d in laengste))
     print(f"\n  Arbeitsordner: {env.work}")
-    print(f"  Server-Log:    {env.server / 'server.log'}")
+    if lauf and lauf.get("server", 1) > 1:
+        print(f"  Server-Logs:   {env.work / 'server'}/server.log, {env.work / 'server-2'}/server.log ...")
+        print(f"  Mitschriften:  {env.work / 'teil-1.log'} ...")
+    else:
+        print(f"  Server-Log:    {env.server / 'server.log'}")
     print(f"  ApiCheck:      {env.apicheck / 'report.json'}")
-    report = env.work / "ergebnis.json"
+    report = env.work / ("ergebnis.json" if TEIL is None else f"teil-{TEIL}.json")
     report.write_text(json.dumps(
-        {"tests": FIND.tests, "problems": FIND.problems, "steps": results, "auswahl": auswahl},
+        {"tests": FIND.tests, "problems": FIND.problems, "steps": results, "auswahl": auswahl,
+         "dauer": FIND.dauer, "nicht_gelaufen": FIND.nicht_gelaufen, "lauf": lauf},
         indent=2, ensure_ascii=False), encoding="utf-8")
+    if TEIL is None:
+        dauer_merken(env)
     print(f"  Ergebnis:      {report}")
 
 
 def main(argv=None):
+    global AUSWAHL, TEIL, NEBEN_SERVER, SERVER_PORT
     parser = argparse.ArgumentParser(
         description="CamFly-Testumgebung aufbauen und Tests fahren",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -19093,7 +19646,7 @@ def main(argv=None):
     parser.add_argument("--keep-running", action="store_true",
                         help="Server nach den Tests weiterlaufen lassen")
     parser.add_argument("--stop", action="store_true",
-                        help="Nur einen laufenden Testserver beenden")
+                        help="Nur die laufenden Testserver beenden")
     parser.add_argument("--alle", action="store_true",
                         help="Alle Abschnitte der Tests fahren, nicht nur die, die die Aenderungen betreffen")
     parser.add_argument("--seit", metavar="REF",
@@ -19102,13 +19655,27 @@ def main(argv=None):
                         help="Genau diese Abschnitte der Tests fahren")
     parser.add_argument("--nur-auswahl", action="store_true",
                         help="Nur zeigen, welche Abschnitte der Tests laufen wuerden und warum")
+    parser.add_argument("--parallel", metavar="N", type=int,
+                        help="Die Abschnitte auf N Server nebeneinander verteilen (voreingestellt: so viele, "
+                             "wie Kerne und Arbeitsspeicher tragen; 1 faehrt alles hintereinander auf einem)")
+    parser.add_argument("--port", metavar="PORT", type=int, default=SERVER_PORT,
+                        help=f"Der Port des Testservers (voreingestellt {SERVER_PORT}); "
+                             f"mehrere Server nehmen diesen und die folgenden")
+    # Fuer die Aufrufe, die --parallel selbst startet: der wievielte Server.
+    parser.add_argument("--teil", type=int, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if args.parallel is not None and args.parallel < 1:
+        parser.error("--parallel braucht eine Zahl ab 1")
 
-    env = Env(args.repo, args.workdir)
+    SERVER_PORT = args.port
+    if args.teil:
+        TEIL = args.teil
+        NEBEN_SERVER = args.teil if args.teil > 1 else None
+    env = Env(args.repo, args.workdir, args.teil or 1)
 
     if args.stop:
-        stop_server(env)
-        print("Server beendet.")
+        anzahl = alle_server_beenden(env, quiet=False)
+        print("Server beendet." if anzahl <= 1 else f"{anzahl} Server beendet.")
         return 0
 
     wanted = [s.strip() for s in args.steps.split(",") if s.strip()]
@@ -19125,7 +19692,6 @@ def main(argv=None):
     if args.alle and namen:
         parser.error("--alle und --abschnitte schliessen sich aus")
 
-    global AUSWAHL
     if args.nur_auswahl:
         auswahl_zeigen(auswahl_laden(env, args.alle, args.seit, namen))
         return 0
@@ -19134,15 +19700,39 @@ def main(argv=None):
     print(f"  Plugin:        {env.repo}")
     print(f"  Arbeitsordner: {env.work}")
     print(f"  Schritte:      {', '.join(plan)}")
+    # Auf wie viele Server die Abschnitte kommen. Mehrere gibt es nur, wenn
+    # dieser Lauf die Server auch selbst startet.
+    teile, geschaetzt = [], []
     if "tests" in plan:
         AUSWAHL = auswahl_laden(env, args.alle, args.seit, namen)
         auswahl_zeigen(AUSWAHL)
+        if "server" in plan and TEIL is None:
+            gewaehlt = [a.name for a in ABSCHNITTE if AUSWAHL.gewaehlt(a.name)]
+            dauer = dauer_laden(env)
+            anzahl = server_anzahl(args.parallel, gewaehlt, dauer)
+            if anzahl > 1:
+                teile, geschaetzt = verteilen(gewaehlt, anzahl, dauer)
+        elif args.parallel and args.parallel > 1 and TEIL is None:
+            Log.warn("--parallel braucht den Schritt server: Die Tests laufen auf dem einen Server, der schon laeuft")
 
-    results = {}
+    results, lauf = {}, None
     try:
+        if "server" in plan and TEIL is None and not teile:
+            # Was ein Lauf mit mehreren Servern zurueckgelassen hat.
+            for einer in alle_server(env):
+                if einer.nr > 1 and server_running(einer) is not None:
+                    stop_server(einer, quiet=True)
         for name in plan:
+            if teile and name == "server":
+                continue    # startet jeder Lauf fuer sich, siehe tests
             try:
-                results[name] = bool(globals()["step_" + name](env))
+                start = time.time()
+                if teile and name == "tests":
+                    results.update(parallel_fahren(env, teile, geschaetzt, args.keep_running))
+                else:
+                    results[name] = bool(globals()["step_" + name](env))
+                if name == "tests":
+                    lauf = {"server": max(1, len(teile)), "sekunden": round(time.time() - start, 1)}
             except Exception as exc:
                 results[name] = False
                 FIND.test(f"Schritt {name}", False, f"{type(exc).__name__}: {exc}")
@@ -19150,15 +19740,23 @@ def main(argv=None):
                     break   # ohne die geht nichts weiter
     finally:
         if not args.keep_running and "server" in plan:
-            stop_server(env)
-        summary(env, results)
+            if TEIL is None:
+                alle_server_beenden(env)
+            else:
+                stop_server(env)
+        summary(env, results, lauf)
 
-    if args.keep_running and "server" in plan:
-        print(f"\n  Der Server laeuft weiter. Konsole: "
-              f"echo \"say hallo\" > {env.server / 'console.fifo'}")
+    if args.keep_running and "server" in plan and TEIL is None:
+        laufende = [e for e in alle_server(env) if server_running(e) is not None]
+        if len(laufende) > 1:
+            print(f"\n  {len(laufende)} Server laufen weiter. Konsole je Server, zum Beispiel: "
+                  f"echo \"say hallo\" > {laufende[0].server / 'console.fifo'}")
+        else:
+            print(f"\n  Der Server laeuft weiter. Konsole: "
+                  f"echo \"say hallo\" > {env.server / 'console.fifo'}")
         print(f"  Beenden mit: python3 {Path(__file__).name} --stop")
 
-    return 1 if FIND.failed else 0
+    return 1 if FIND.failed or FIND.nicht_gelaufen else 0
 
 
 if __name__ == "__main__":
