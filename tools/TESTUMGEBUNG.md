@@ -15,7 +15,8 @@ Gefahren werden nicht alle Abschnitte der Tests, sondern die, die die
 Änderungen gegenüber `master` betreffen, siehe
 [Welche Abschnitte laufen](#welche-abschnitte-laufen). Alle wie früher mit
 `--alle`: Hintereinander auf einem Server brauchen sie rund zwei Stunden, auf
-vier Servern nebeneinander eine gute halbe, siehe
+sieben Servern nebeneinander - so viele trägt ein Rechner mit 15 GiB - knapp
+zwanzig Minuten, siehe
 [Mehrere Server nebeneinander](#mehrere-server-nebeneinander).
 
 ## Nützliche Aufrufe
@@ -143,8 +144,8 @@ Absturztest stehen zuletzt, sie starten den Server neu.
 ## Mehrere Server nebeneinander
 
 Die Tests warten vor allem - darauf, dass im Spiel Zeit vergeht. Ein
-Testserver braucht dabei nur einen Bruchteil eines Kerns, gemessen etwa ein
-Zwanzigstel, und anderthalb Gigabyte Arbeitsspeicher. Der Schritt `tests`
+Testserver braucht dabei nur einen Bruchteil eines Kerns, gemessen gut ein
+Zehntel, und höchstens 1,6 GiB Arbeitsspeicher. Der Schritt `tests`
 verteilt die Abschnitte deshalb auf mehrere Server, die nebeneinander laufen.
 Jeder hat seinen eigenen Ordner, seine eigene Welt, seinen eigenen Port und
 seine eigenen Bots, und jeder fährt seine Abschnitte genau so, wie sie auf
@@ -159,13 +160,29 @@ einem einzelnen Server liefen:
 Auf einem gemeinsamen Server ginge das nicht: Die Abschnitte stellen die
 Konfiguration um, laden sie neu und drehen an Zeit und Wetter der Welt.
 
-* **Wie viele Server**: so viele, wie Kerne da sind und der freie
-  Arbeitsspeicher trägt - gerechnet werden 3 GiB je Server, Java nimmt sich
-  bis zu 2 -, höchstens acht. Und nur so viele, wie es bei der Arbeit lohnt:
-  Unter zwei Minuten geschätzter Arbeit je Server kommt keiner dazu, eine
-  Handvoll ausgewählter Abschnitte läuft also weiter auf einem. `--parallel N`
-  legt die Zahl fest, `--parallel 1` fährt alles hintereinander auf einem
-  Server, wie früher.
+* **Wie viele Server**: so viele, wie der freie Arbeitsspeicher sicher
+  trägt - bei allen Abschnitten genauso wie bei einer Auswahl oder
+  `--abschnitte`. Gerechnet werden 1,9 GiB je Server, ein GiB bleibt für das
+  System frei. Der größte Posten ist fest: Der Heap des Servers ist auf
+  `SERVER_HEAP` (1 GiB) festgelegt, Anfang und Grenze zugleich, er wächst
+  also nicht darüber. Gemessen braucht ein Server damit höchstens 1,6 GiB, mit Bots und
+  seinem Lauf des Skripts 1,8; im Heap liegen davon nur rund 300 MiB
+  echte Daten. Auf einem Rechner mit 15 GiB laufen so sieben Server.
+  Die Kerne begrenzen kaum: Ein Server braucht gut ein Zehntel eines Kerns,
+  vier je Kern sind nur ein Netz für Rechner mit viel Speicher und wenigen
+  Kernen. Wie viel frei ist und wie viele Server das trägt, steht vor den
+  Tests im Terminal.
+* **Nur so viele, wie den Lauf kürzer machen**: Ein weiterer Server startet
+  nur, wenn der Lauf damit um mehr als fünf Sekunden kürzer wird. Bei
+  `flugspur,menue` sind das zwei, bei `rueckstoss` und drei kurzen Abschnitten
+  auch zwei - `rueckstoss` allein dauert länger als die drei zusammen, ein
+  dritter Server brächte nichts. Ein einzelner Abschnitt läuft auf einem.
+  `--parallel N` legt die Zahl fest, `--parallel 1` fährt alles
+  hintereinander auf einem Server, wie früher.
+* **Kürzer als der längste Abschnitt geht es nicht**: Ein Abschnitt läuft
+  immer ganz auf einem Server. `rueckstoss` braucht allein gut neun Minuten,
+  mit Start und Grundprobe sind es gut zehn - so lange dauert der Lauf
+  mindestens, egal wie viele Server es sind.
 * **Wer was fährt**: Jeder Server bekommt ein Stück der Liste `ABSCHNITTE` am
   Stück, in ihrer Reihenfolge, und die Schnitte liegen so, dass alle etwa
   gleich lange brauchen. Am Stück, damit jeder Abschnitt dieselben Vorgänger
