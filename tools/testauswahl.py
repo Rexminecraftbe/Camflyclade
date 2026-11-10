@@ -1,8 +1,9 @@
 """
 CamFly - welche Abschnitte der Tests ein Stand des Plugins braucht.
 
-Alle Abschnitte zu fahren dauert ueber anderthalb Stunden, die meisten
-Aenderungen beruehren aber nur wenige davon. Dieses Modul vergleicht den Stand
+Alle Abschnitte zu fahren dauert hintereinander rund zwei Stunden und auch
+auf mehreren Servern nebeneinander eine halbe, die meisten Aenderungen
+beruehren aber nur wenige davon. Dieses Modul vergleicht den Stand
 im Arbeitsordner mit einer Basis - voreingestellt dem Stand von master, von dem
 der Zweig abging - und sucht die Abschnitte heraus, die etwas pruefen, das neu
 ist, sich geaendert hat oder davon betroffen sein kann:
@@ -80,6 +81,12 @@ SKRIPT_EGAL = {
     "STRUKTUREN_ORDNER", "spiel_jar", "namen_in", "step_names",
     "summary", "main", "Abschnitt", "ABSCHNITTE", "AUSWAHL",
     "markieren", "auswahl_laden", "auswahl_zeigen", "letzte_fehler",
+    # Wie die Abschnitte auf mehrere Server verteilt werden: Das aendert, wo
+    # ein Abschnitt laeuft, nicht, was er prueft.
+    "PARALLEL_HOECHSTENS", "RAM_JE_SERVER_GIB", "PARALLEL_AB_SEKUNDEN", "DAUER_VORGABE",
+    "RAHMEN_SEKUNDEN", "TEIL", "TEIL_MELDET", "dauer_laden", "dauer_merken",
+    "freier_speicher_gib", "server_anzahl", "verteilen", "minuten", "alle_server",
+    "alle_server_beenden", "parallel_fahren",
 }
 
 BEZEICHNER = re.compile(r"[A-Za-z_]\w*")
