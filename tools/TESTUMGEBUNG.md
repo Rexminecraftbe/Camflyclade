@@ -162,11 +162,11 @@ Konfiguration um, laden sie neu und drehen an Zeit und Wetter der Welt.
 
 * **Wie viele Server**: so viele, wie der freie Arbeitsspeicher sicher
   trägt - bei allen Abschnitten genauso wie bei einer Auswahl oder
-  `--abschnitte`. Gerechnet werden 2 GiB je Server, ein GiB bleibt für das
-  System frei. Das ist eine feste Obergrenze, keine Schätzung: Der Heap des
-  Servers ist auf `SERVER_HEAP` (1 GiB) festgelegt, Anfang und Grenze
-  zugleich. Gemessen braucht ein Server damit höchstens 1,6 GiB, mit Bots und
-  seinem Lauf des Skripts etwa 1,9; im Heap liegen davon nur rund 300 MiB
+  `--abschnitte`. Gerechnet werden 1,9 GiB je Server, ein GiB bleibt für das
+  System frei. Der größte Posten ist fest: Der Heap des Servers ist auf
+  `SERVER_HEAP` (1 GiB) festgelegt, Anfang und Grenze zugleich, er wächst
+  also nicht darüber. Gemessen braucht ein Server damit höchstens 1,6 GiB, mit Bots und
+  seinem Lauf des Skripts 1,8; im Heap liegen davon nur rund 300 MiB
   echte Daten. Auf einem Rechner mit 15 GiB laufen so sieben Server.
   Die Kerne begrenzen kaum: Ein Server braucht gut ein Zehntel eines Kerns,
   vier je Kern sind nur ein Netz für Rechner mit viel Speicher und wenigen

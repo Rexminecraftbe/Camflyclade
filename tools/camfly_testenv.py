@@ -115,7 +115,7 @@ SERVER_PORT = 25565
 # SERVER_JE_KERN ist nur ein Netz fuer Rechner mit viel Speicher und wenig
 # Kernen: Darueber stiessen die Server einander beim Rechnen an.
 SERVER_HEAP = "1G"
-RAM_JE_SERVER_GIB = 2.0
+RAM_JE_SERVER_GIB = 1.9
 RAM_RESERVE_GIB = 1.0
 SERVER_JE_KERN = 4
 # Ein weiterer Server muss den Lauf um mehr als so viele Sekunden kuerzer
