@@ -209,10 +209,15 @@ messages:
   # menu-new-spot-count says on the button of a new spot how many spots he has ({count}), may have ({max},
   # viewpoints.max-per-player) and may still save ({left}); -full once there is no room left, -unlimited without a
   # limit. menu-sort is the button that sorts a list, {sort} being one of the menu-sort-... orders; under it every
-  # order, the one in use as menu-sort-option-current, the others as menu-sort-option. menu-tour-... are the page
-  # of /cam follow (the keys keep the name it had, tour), menu-tour-view the button that switches between the leader's
-  # view and looking round freely; menu-tour-lead-restricted and menu-tour-join-restricted what keeps him from leading
-  # or following, menu-tour-disabled that following is switched off ({time} and {reason} as with /cam ban);
+  # order, the one in use as menu-sort-option-current, the others as menu-sort-option. menu-time and menu-weather
+  # are stepped through on their button, without a page of their own and without the menu closing: {time} is one of
+  # menu-time-reset, -day, -noon, -sunset, -night, -midnight, -sunrise or menu-time-ticks for a time without a name
+  # ({ticks}), {weather} one of menu-weather-reset, -clear or -rain; under the -lore every one of them, the one that
+  # holds now as menu-choice-option-current, the others as menu-choice-option ({choice}), then menu-choice-action.
+  # menu-tour-... are the page of /cam follow (the keys keep the name it had, tour), menu-tour-view the button that
+  # switches between the leader's view and looking round freely; menu-tour-lead-restricted and
+  # menu-tour-join-restricted what keeps him from leading or following, menu-tour-disabled that following is
+  # switched off ({time} and {reason} as with /cam ban);
   # menu-tour-candidate-restricted- and -disabled-lore under a player he cannot invite for that;
   # menu-tour-candidate-invited-lore under one whose invitation still holds ({expires}, the seconds it still does),
   # -wait-lore under one he may not invite again yet (follow.invite-cooldown-seconds, {seconds} left).
@@ -393,6 +398,9 @@ messages:
   menu-answer-cancelled: "&7Cancelled."
   menu-back: "&bBack to your body"
   menu-back-lore: "&7The camera goes back to your body,\n&7cam mode goes on."
+  menu-choice-action: "&eLeft-click: the next one\n&eRight-click: the one before"
+  menu-choice-option: "&7   {choice}"
+  menu-choice-option-current: "&a» {choice}"
   menu-end: "&cEnd cam mode"
   menu-end-lore: "&7Back to your body."
   menu-features-off: "&cThat is switched off on this server."
@@ -502,33 +510,28 @@ messages:
   menu-spots-title-private: "&8Spots: yours"
   menu-spots-title-public: "&8Spots: public"
   menu-spots-title-shared: "&8Spots: shared with you"
-  # How photo mode, the time, the weather and the night vision stand now, under their buttons: menu-state with
-  # {state} being menu-state-on or -off, the name of the time (menu-time-...), menu-state-ticks for a time without
-  # a name, menu-state-world-time, the weather (menu-weather-clear, -rain) or menu-state-world-weather, and the
-  # mode of the night vision (menu-nightvision-...). On their pages, the choice that holds now has
+  # How photo mode and the night vision stand now, under their buttons: menu-state with {state} being menu-state-on
+  # or -off, or the mode of the night vision (menu-nightvision-...). On its page, the choice that holds now has
   # menu-state-current under its name.
   menu-state: "&7Now: &f{state}"
   menu-state-current: "&a» Now"
   menu-state-off: "&7off"
   menu-state-on: "&aon"
-  menu-state-ticks: "&f{ticks} ticks"
-  menu-state-world-time: "&7the time of the world"
-  menu-state-world-weather: "&7the weather of the world"
   menu-start: "&aStart cam mode"
   menu-start-lore: "&7Fly as a camera, your body stays here."
   menu-stats: "&bStatistics"
   menu-stats-actions: "&eClick: in the chat"
   menu-stats-actions-reset: "&eClick: in the chat\n&cShift-click: reset"
-  menu-time: "&eTime of day"
-  menu-time-day: "&eDay"
+  menu-time: "&eTime of day: &f{time}"
+  menu-time-day: "day"
   menu-time-lore: "&7A time of your own, only you see it."
-  menu-time-midnight: "&8Midnight"
-  menu-time-night: "&9Night"
-  menu-time-noon: "&eNoon"
-  menu-time-reset: "&cThe time of the world"
-  menu-time-sunrise: "&6Sunrise"
-  menu-time-sunset: "&6Sunset"
-  menu-time-title: "&8Time of day"
+  menu-time-midnight: "midnight"
+  menu-time-night: "night"
+  menu-time-noon: "noon"
+  menu-time-reset: "the world's"
+  menu-time-sunrise: "sunrise"
+  menu-time-sunset: "sunset"
+  menu-time-ticks: "{ticks} ticks"
   menu-title: "&8Cam"
   menu-to-admin: "&7« Back"
   menu-to-players: "&7« Back"
@@ -582,12 +585,11 @@ messages:
   menu-tour-view-free: "&efree"
   menu-tour-view-guide: "&athe leader's"
   menu-tour-view-lore: "&7Through the eyes of the leader,\n&7or look round freely."
-  menu-weather: "&bWeather"
-  menu-weather-clear: "&eClear"
+  menu-weather: "&bWeather: &f{weather}"
+  menu-weather-clear: "clear"
   menu-weather-lore: "&7A weather of your own, only you see it."
-  menu-weather-rain: "&9Rain"
-  menu-weather-reset: "&cThe weather of the world"
-  menu-weather-title: "&8Weather"
+  menu-weather-rain: "rain"
+  menu-weather-reset: "the world's"
   # /cam nightvision (night-vision.player-choice): {mode} in nightvision-set and nightvision-reset is
   # nightvision-always, nightvision-never or nightvision-dark. nightvision-set with player-settings.storage: file,
   # nightvision-set-memory with memory.

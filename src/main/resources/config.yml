@@ -624,8 +624,11 @@ menu:
   # Jeder Knopf braucht einen eigenen Platz - nur start und end dürfen sich einen teilen, da ist immer nur einer von
   # beiden. Steht ein Knopf, wo schon ein anderer ist, meldet /cam reload das, und er kommt auf einen freien Platz.
   # Ein Knopf, dessen Sache in dieser Datei aus ist (z. B. back-command.enabled: false), fehlt im Menü.
-  # Foto-Modus, Tageszeit, Wetter und Nachtsicht zeigen unter ihrem Namen, wie sie gerade stehen; was gerade gilt,
-  # glänzt (auf ihren eigenen Seiten auch).
+  # Foto-Modus und Nachtsicht zeigen unter ihrem Namen, wie sie gerade stehen; was gerade gilt, glänzt (auf der Seite
+  # der Nachtsicht auch). Tageszeit und Wetter haben keine eigene Seite: man schaltet sie direkt auf ihrem Knopf durch,
+  # wie beim Sortieren der Aussichtspunkte - Linksklick die nächste, Rechtsklick die davor -, und das Menü bleibt
+  # dabei offen. Unter dem Knopf stehen alle zur Wahl, die gerade gilt markiert; er glänzt, solange es nicht die der
+  # Welt ist.
   buttons:
     # Cam-Modus starten (ohne Cam-Modus) und beenden (im Cam-Modus)
     start:
@@ -668,11 +671,11 @@ menu:
     photo:
       item: painting
       slot: 14
-    # /cam time
+    # /cam time: die Zeit der Welt, day, noon, sunset, night, midnight, sunrise - und wieder von vorn
     time:
       item: clock
       slot: 15
-    # /cam weather
+    # /cam weather: das Wetter der Welt, clear, rain - und wieder von vorn
     weather:
       item: sunflower
       slot: 16

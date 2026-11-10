@@ -8,6 +8,7 @@ import de.elia.cameraplugin.spot.SpotLook;
 import org.bukkit.WeatherType;
 import org.bukkit.entity.Player;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -114,6 +115,11 @@ public final class CamSky {
         String[] words = TIMES.keySet().toArray(new String[TIMES.size() + 1]);
         words[TIMES.size()] = "reset";
         return words;
+    }
+
+    /** The times {@code /cam time} knows by name, in the order of the day, with their ticks, for the menu. */
+    public static Map<String, Long> namedTimes() {
+        return Collections.unmodifiableMap(TIMES);
     }
 
     /** The words that may follow {@code /cam weather}, for the tab completion. */

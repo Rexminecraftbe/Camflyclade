@@ -9506,8 +9506,10 @@ def menue_checks(env, bot):
     mit den Knoepfen auf ihren Plaetzen - die Fuehrung auf 9, die Punkte auf
     10, die Nachtsicht auf 17, Platz 13 frei -; der auf Platz 22 - der Kamera-Kopf -
     startet den Cam-Modus und schliesst das Fenster. Im Cam-Modus oeffnet es trotzdem, wo jedes andere Fenster zu
-    bleibt, und nichts kommt dabei ins Inventar. Zeit, dann Sonnenuntergang
-    gibt dem Bot 12000. Aussichtspunkte, "Save a spot here" fragt im Chat
+    bleibt, und nichts kommt dabei ins Inventar. Die Zeit hat keine eigene
+    Seite: drei Linksklicks auf ihren Knopf schalten von der Zeit der Welt
+    ueber day und noon zu sunset - der Bot sieht 12000 -, ein Rechtsklick
+    eine zurueck, und das Menue bleibt dabei offen. Aussichtspunkte, "Save a spot here" fragt im Chat
     nach dem Namen, und die naechste Zeile speichert ihn; ein Linksklick auf
     den Punkt springt hin, ein Klick mit Umschalt loescht ihn.
 
@@ -9536,10 +9538,13 @@ def menue_checks(env, bot):
     zeigt einen, Rechtsklick zeigt ihn und bringt den Bot an seinen Start, der
     letzte Knopf zeigt alle.
 
-    Foto-Modus, Zeit und Nachtsicht sagen unter ihrem Namen, wie sie stehen:
-    vor dem Sonnenuntergang die Zeit der Welt, danach Sunset, der Foto-Modus
-    off und nach einem Klick on; auf der Seite der Zeiten hat Sunset "Now"
-    darunter, die Zeit der Welt nicht.
+    Foto-Modus und Nachtsicht sagen unter ihrem Namen, wie sie stehen, der
+    Foto-Modus off und nach einem Klick on. Die Zeit sagt es in ihrem Namen:
+    vor dem Sonnenuntergang die der Welt, danach sunset, auch im wieder
+    geoeffneten Menue; darunter stehen alle Zeiten, die von jetzt markiert.
+    Das Wetter schaltet mit einem Rechtsklick von dem der Welt von hinten
+    herum zu rain, mit einem Linksklick wieder zu dem der Welt - das Menue
+    bleibt offen, der Chat sagt beides.
 
     menu.buttons: start auf Platz 4 steht dort und startet von dort, back auf
     dem Platz der Nachtsicht wird gemeldet und kommt auf seinen eigenen, ein
@@ -9590,7 +9595,7 @@ def menue_checks(env, bot):
                   "Times in cam mode:" in item_text(knopf.get("21")), item_text(knopf.get("21")))
         FIND.test("Der Bot mit op hat den Knopf der Admin-Seite auf Platz 23", "23" in knopf, str(sorted(knopf)))
         FIND.test("Vor dem Cam-Modus: Zeit der Welt, Foto-Modus aus, Nachtsicht nur im Dunkeln",
-                  "Now: the time of the world" in item_text(knopf.get("15"))
+                  "Time of day: the world's" in item_text(knopf.get("15"))
                   and "Now: off" in item_text(knopf.get("14"))
                   and "Now: Only in the dark" in item_text(knopf.get("17")),
                   f"{item_text(knopf.get('15'))} / {item_text(knopf.get('14'))} / {item_text(knopf.get('17'))}")
@@ -9607,28 +9612,52 @@ def menue_checks(env, bot):
                   str(f)[:300])
         klick(15)
         f = fenster()
-        FIND.test("Zeit - die Seite mit den Tageszeiten", f.get("open") and "Time of day" in (f.get("title") or ""),
-                  str(f)[:300])
-        klick(12, warten=2.0)
-        FIND.test("Sonnenuntergang - der Bot sieht 12000, und das Fenster ist zu",
-                  bot.call("sky").get("timeOfDay") == 12000 and not fenster().get("open"),
+        FIND.test("Linksklick auf die Zeit: day - der Bot sieht 1000, und das Menue bleibt offen",
+                  bot.call("sky").get("timeOfDay") == 1000 and f.get("open") and "Cam" in (f.get("title") or ""),
+                  f"{bot.call('sky').get('timeOfDay')} / {str(f)[:200]}")
+        klick(15)
+        klick(15, warten=2.0)
+        f = fenster()
+        text = item_text(f.get("slots", {}).get("15"))
+        FIND.test("Zwei Linksklicks weiter: sunset - der Bot sieht 12000, das Menue ist noch offen",
+                  bot.call("sky").get("timeOfDay") == 12000 and f.get("open"),
+                  f"{bot.call('sky').get('timeOfDay')} / {f.get('open')}")
+        FIND.test("Die Zeit sagt im Namen, wie sie steht, und markiert sie unter allen Zeiten",
+                  "Time of day: sunset" in text and "» sunset" in text and "» noon" not in text
+                  and "the world's" in text and "midnight" in text, text)
+        klick(15, button=1, warten=2.0)
+        FIND.test("Rechtsklick: eine zurueck, noon - der Bot sieht 6000",
+                  bot.call("sky").get("timeOfDay") == 6000 and fenster().get("open"),
                   str(bot.call("sky").get("timeOfDay")))
+        klick(15, warten=2.0)
         FIND.test("Im Menue kommt nichts ins Inventar", bot.call("inventory").get("count") == 0,
                   str(bot.call("inventory")))
+        bot.call("close_window", wait=10)
         knopf = menue().get("slots", {})
-        FIND.test("Die Zeit sagt, wie sie steht: Sunset", "Now: Sunset" in item_text(knopf.get("15")),
-                  item_text(knopf.get("15")))
+        FIND.test("Neu geoeffnet sagt die Zeit, wie sie steht: sunset",
+                  "Time of day: sunset" in item_text(knopf.get("15")), item_text(knopf.get("15")))
         klick(14, warten=2.0)
         knopf = menue().get("slots", {})
         FIND.test("Der Foto-Modus sagt, wie er steht: on", "Now: on" in item_text(knopf.get("14")),
                   item_text(knopf.get("14")))
         klick(14, warten=2.0)
         menue()
-        klick(15)
-        knopf = fenster().get("slots", {})
-        FIND.test("Auf der Seite der Zeiten hat Sunset \"Now\" darunter, die Zeit der Welt nicht",
-                  "Now" in item_text(knopf.get("12")) and "Now" not in item_text(knopf.get("16")),
-                  f"{item_text(knopf.get('12'))} / {item_text(knopf.get('16'))}")
+        seit = bot.mark()
+        klick(16, button=1, warten=2.0)
+        f = fenster()
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Rechtsklick auf das Wetter der Welt: von hinten herum rain, und das Menue bleibt offen",
+                  gesagt(zeilen, r"Your own weather: rain") and f.get("open")
+                  and "Weather: rain" in item_text(f.get("slots", {}).get("16")),
+                  f"{zeige(zeilen)} / {item_text(f.get('slots', {}).get('16'))}")
+        seit = bot.mark()
+        klick(16, warten=2.0)
+        f = fenster()
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Linksklick nach rain: wieder das Wetter der Welt",
+                  gesagt(zeilen, r"You see the weather of the world again") and f.get("open")
+                  and "Weather: the world's" in item_text(f.get("slots", {}).get("16")),
+                  f"{zeige(zeilen)} / {item_text(f.get('slots', {}).get('16'))}")
         bot.call("close_window", wait=10)
 
         menue()

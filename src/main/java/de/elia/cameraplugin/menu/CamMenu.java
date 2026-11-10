@@ -72,7 +72,9 @@ import java.util.function.ToLongFunction;
  * the spots of {@code /cam spot} - private, public and shared with him, each
  * on a tab of its own -, the tour of {@code /cam follow}, {@code photo},
  * {@code time}, {@code weather}, {@code nightvision} and the own
- * {@code stats}; and for admins a page of their own: who is in camera mode
+ * {@code stats} - the time and the weather stepped through on their button,
+ * a click on to the next, a right-click back to the one before -; and for
+ * admins a page of their own: who is in camera mode
  * ({@code list}, {@code tp}, {@code stop}), the statistics of others, the
  * bans and the flights of {@code /cam trail}. The lists of spots and of
  * players have a button that sorts them.
@@ -374,8 +376,9 @@ public final class CamMenu implements Listener {
 
     /**
      * The main page: each button where {@code menu.buttons} puts it, showing
-     * the item it names. Photo mode, the time, the weather and the night
-     * vision say under their name how they stand now.
+     * the item it names. Photo mode and the night vision say under their name
+     * how they stand now; the time and the weather are stepped through right
+     * there, see {@link #choicesButton}.
      */
     private void openMain(Player player) {
         Page page = new Page();
@@ -406,12 +409,10 @@ public final class CamMenu implements Listener {
                     click -> act(player, () -> plugin.getPhotoMode().command(player)));
         }
         if (settings.isCamTimeEnabled()) {
-            button(page, MenuButton.TIME, "menu-time", timeState(player), false,
-                    click -> later(() -> openTime(player)));
+            timeButton(player, page);
         }
         if (settings.isCamWeatherEnabled()) {
-            button(page, MenuButton.WEATHER, "menu-weather", weatherState(player), false,
-                    click -> later(() -> openWeather(player)));
+            weatherButton(player, page);
         }
         button(page, inCam ? MenuButton.END : MenuButton.START, inCam ? "menu-end" : "menu-start", null, false,
                 click -> act(player, () -> plugin.getStarter().toggle(player)));
@@ -529,24 +530,116 @@ public final class CamMenu implements Listener {
         };
     }
 
-    /** How his time stands: the name of his own, its ticks, or the time of the world. */
-    private String timeState(Player player) {
-        Long ticks = plugin.getSky().ownTime(player);
-        if (ticks == null) {
-            return messages.getMessage("menu-state-world-time");
-        }
-        String word = CamSky.timeWord(ticks);
-        return word != null ? messages.getMessage("menu-time-" + word)
-                : messages.getMessage("menu-state-ticks").replace("{ticks}", String.valueOf(ticks));
+    /** One of the choices a button steps through: the word of its command, and how the button names it. */
+    private record Choice(String word, String name) {
     }
 
-    /** How his weather stands: clear, rain, or the weather of the world. */
-    private String weatherState(Player player) {
-        WeatherType weather = plugin.getSky().ownWeather(player);
-        if (weather == null) {
-            return messages.getMessage("menu-state-world-weather");
+    /** The choices a button steps through, in their order, and which of them holds now. */
+    private record Choices(List<Choice> all, int now) {
+
+        /** The next choice, or with {@code back} the one before; after the last comes the first again. */
+        Choice step(boolean back) {
+            int size = all.size();
+            return all.get(Math.floorMod(now + (back ? -1 : 1), size));
         }
-        return messages.getMessage(weather == WeatherType.CLEAR ? "menu-weather-clear" : "menu-weather-rain");
+    }
+
+    /**
+     * The times of {@code /cam time}: the time of the world first, then those
+     * it knows by name, in the order of the day. A time of his own in ticks
+     * that has no name stands where it falls between them, so that a step
+     * from it goes on to the next one of the day, or back to the one before.
+     */
+    private Choices timeChoices(Player player) {
+        Long own = plugin.getSky().ownTime(player);
+        List<Choice> all = new ArrayList<>();
+        all.add(new Choice("reset", messages.getMessage("menu-time-reset")));
+        int now = own == null ? 0 : -1;
+        for (Map.Entry<String, Long> named : CamSky.namedTimes().entrySet()) {
+            long ticks = named.getValue();
+            if (now < 0 && own < ticks) {
+                now = all.size();
+                all.add(ticksChoice(own));
+            }
+            if (own != null && own == ticks) {
+                now = all.size();
+            }
+            all.add(new Choice(named.getKey(), messages.getMessage("menu-time-" + named.getKey())));
+        }
+        if (now < 0) {
+            now = all.size();
+            all.add(ticksChoice(own));
+        }
+        return new Choices(all, now);
+    }
+
+    /** A time without a name, in ticks: it only ever stands for the one he has, never to be stepped to. */
+    private Choice ticksChoice(long ticks) {
+        return new Choice(null, messages.getMessage("menu-time-ticks").replace("{ticks}", String.valueOf(ticks)));
+    }
+
+    /** The weathers of {@code /cam weather}: the weather of the world first, then clear and rain. */
+    private Choices weatherChoices(Player player) {
+        WeatherType own = plugin.getSky().ownWeather(player);
+        List<Choice> all = List.of(
+                new Choice("reset", messages.getMessage("menu-weather-reset")),
+                new Choice("clear", messages.getMessage("menu-weather-clear")),
+                new Choice("rain", messages.getMessage("menu-weather-rain")));
+        return new Choices(all, own == null ? 0 : own == WeatherType.CLEAR ? 1 : 2);
+    }
+
+    /** The button of the time of day on the main page; a click picks the next time, a right-click the one before. */
+    private void timeButton(Player player, Page page) {
+        choicesButton(player, page, MenuButton.TIME, "menu-time", "{time}", timeChoices(player), back -> {
+            plugin.getSky().timeCommand(player, new String[]{timeChoices(player).step(back).word()});
+            timeButton(player, page);
+        });
+    }
+
+    /** The button of the weather on the main page; a click picks the next weather, a right-click the one before. */
+    private void weatherButton(Player player, Page page) {
+        choicesButton(player, page, MenuButton.WEATHER, "menu-weather", "{weather}", weatherChoices(player), back -> {
+            plugin.getSky().weatherCommand(player, new String[]{weatherChoices(player).step(back).word()});
+            weatherButton(player, page);
+        });
+    }
+
+    /**
+     * A button of the main page that steps through choices, the way the
+     * button that sorts a list does: the choice that holds now in its name,
+     * under it the text with {@code -lore} after the key, every choice - the
+     * one that holds now marked, the others greyed out - and how to step. It
+     * shines while the choice is not the first one, that of the world.
+     *
+     * <p>The menu stays open: the click does what the command does, with its
+     * messages, and the button is put in anew in the window he has open, as
+     * it stands then. A second click in quick succession sends a double
+     * click after it as well - the window is still the same one -, which
+     * steps no further.</p>
+     *
+     * @param fill the placeholder in the name that the choice of now takes
+     * @param step takes a step, a tick after the click: back to the one before for {@code true}
+     */
+    private void choicesButton(Player player, Page page, MenuButton which, String key, String fill, Choices choices,
+                               Consumer<Boolean> step) {
+        List<String> lore = new ArrayList<>(lines(messages.getMessage(key + "-lore")));
+        for (int i = 0; i < choices.all().size(); i++) {
+            lore.addAll(lines(messages.getMessage(i == choices.now() ? "menu-choice-option-current"
+                    : "menu-choice-option").replace("{choice}", choices.all().get(i).name())));
+        }
+        lore.addAll(lines(messages.getMessage("menu-choice-action")));
+        String name = messages.getMessage(key).replace(fill, choices.all().get(choices.now()).name());
+        ItemStack item = labelled(settings.getMenuIcon(which).create(plugin.getLogger()), name, lore);
+        put(page, settings.getMenuSlot(which), shine(item, choices.now() != 0), click -> {
+            boolean back = click.isRightClick();
+            if (back || (click.isLeftClick() && click != ClickType.DOUBLE_CLICK)) {
+                later(() -> {
+                    if (player.isOnline()) {
+                        step.accept(back);
+                    }
+                });
+            }
+        });
     }
 
     /**
@@ -1222,41 +1315,6 @@ public final class CamMenu implements Listener {
                     tour.toggleView(player);
                     openTour(player, 0);
                 }));
-    }
-
-    /** The times of day; the one he sees now shines, {@code reset} while it is the world's. */
-    private void openTime(Player player) {
-        Page page = new Page();
-        Inventory inventory = create(page, SMALL, messages.getMessage("menu-time-title"));
-        String[] words = {"day", "noon", "sunset", "night", "midnight", "sunrise", "reset"};
-        Material[] icons = {Material.SUNFLOWER, Material.GLOWSTONE, Material.ORANGE_DYE, Material.BLUE_DYE,
-                Material.BLACK_DYE, Material.YELLOW_DYE, Material.BARRIER};
-        Long own = plugin.getSky().ownTime(player);
-        String now = own == null ? "reset" : CamSky.timeWord(own);
-        for (int i = 0; i < words.length; i++) {
-            String word = words[i];
-            choice(page, 10 + i, new ItemStack(icons[i]), "menu-time-" + word, word.equals(now),
-                    click -> act(player, () -> plugin.getSky().timeCommand(player, new String[]{word})));
-        }
-        put(page, SLOT_SMALL_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
-        player.openInventory(inventory);
-    }
-
-    /** The weathers; the one he sees now shines, {@code reset} while it is the world's. */
-    private void openWeather(Player player) {
-        Page page = new Page();
-        Inventory inventory = create(page, SMALL, messages.getMessage("menu-weather-title"));
-        String[] words = {"clear", "rain", "reset"};
-        Material[] icons = {Material.SUNFLOWER, Material.WATER_BUCKET, Material.BARRIER};
-        WeatherType own = plugin.getSky().ownWeather(player);
-        String now = own == null ? "reset" : own == WeatherType.CLEAR ? "clear" : "rain";
-        for (int i = 0; i < words.length; i++) {
-            String word = words[i];
-            choice(page, 11 + 2 * i, new ItemStack(icons[i]), "menu-weather-" + word, word.equals(now),
-                    click -> act(player, () -> plugin.getSky().weatherCommand(player, new String[]{word})));
-        }
-        put(page, SLOT_SMALL_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
-        player.openInventory(inventory);
     }
 
     /** The modes of the night vision; the one he picked shines, {@code reset} while he picked none. */
