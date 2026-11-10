@@ -104,14 +104,23 @@ SERVER_HOST = "127.0.0.1"
 SERVER_PORT = 25565
 
 # Wie viele Server nebeneinander die Abschnitte fahren, wenn --parallel nichts
-# anderes sagt: so viele, wie Kerne da sind und der freie Arbeitsspeicher
-# traegt, und nie mehr als PARALLEL_HOECHSTENS. Ein Testserver braucht kaum
-# Rechenzeit - die Tests warten vor allem -, aber bis zu 2 GiB fuer Java und
-# dazu seine Bots. Unter PARALLEL_AB_SEKUNDEN geschaetzter Arbeit je Server
-# lohnt ein weiterer nicht: Jeder startet und richtet sich erst ein.
-PARALLEL_HOECHSTENS = 8
-RAM_JE_SERVER_GIB = 3
-PARALLEL_AB_SEKUNDEN = 120
+# anderes sagt: so viele, wie der freie Arbeitsspeicher sicher traegt - bei
+# allen Abschnitten wie bei einer Auswahl. Ein Testserver braucht kaum
+# Rechenzeit, die Tests warten vor allem: gemessen gut ein Zehntel eines
+# Kerns. Was er an Speicher braucht, ist dagegen fest: SERVER_HEAP fuer den
+# Heap (Anfang und Grenze zugleich, er waechst also nicht darueber), etwa ein
+# halbes GiB fuer den Rest von Java, dazu seine Bots und der Lauf des Skripts,
+# der ihn faehrt - gemessen hoechstens 1,8 GiB zusammen, gerechnet
+# RAM_JE_SERVER_GIB. RAM_RESERVE_GIB bleibt fuer das System frei.
+# SERVER_JE_KERN ist nur ein Netz fuer Rechner mit viel Speicher und wenig
+# Kernen: Darueber stiessen die Server einander beim Rechnen an.
+SERVER_HEAP = "1G"
+RAM_JE_SERVER_GIB = 2.0
+RAM_RESERVE_GIB = 1.0
+SERVER_JE_KERN = 4
+# Ein weiterer Server muss den Lauf um mehr als so viele Sekunden kuerzer
+# machen, sonst startet er nicht: Die Zeiten sind ohnehin nur geschaetzt.
+PARALLEL_GEWINN_SEKUNDEN = 5
 
 STEPS = ["jdk", "build", "paperapi", "crosscheck", "apicheck", "names",
          "server", "bot", "tests"]
@@ -2349,7 +2358,7 @@ def step_server(env):
     started = time.time()
     # tail -f haelt die FIFO offen, sonst bekaeme der Server nach dem ersten
     # Kommando ein EOF auf stdin.
-    cmd = (f'tail -f "{fifo}" | "{env.java}" -Xms1G -Xmx2G '
+    cmd = (f'tail -f "{fifo}" | "{env.java}" -Xms{SERVER_HEAP} -Xmx{SERVER_HEAP} '
            f'-jar paper.jar nogui > "{log}" 2>&1')
     proc = subprocess.Popen(["bash", "-c", cmd], cwd=str(env.server),
                             start_new_session=True,
@@ -7244,7 +7253,6 @@ def foto_checks(env, bot):
                             r"(?:\s*#.*\n)*\s*hide-items:\s*true\s*$", ausgeliefert(env)) is not None, "")
         schwein_hin(schwein)
         stein_hin(stein)
-        console(env, f"summon minecraft:experience_orb {kugel[0]} {kugel[1]} {kugel[2]} {{{marke},Value:1s}}")
         zeilen = befehl(bot, "/cam photo")
         FIND.test("/cam photo ohne Cam-Modus geht nicht", gesagt(zeilen, r"only works in cam mode"), zeige(zeilen))
         FIND.test("Ohne Cam-Modus schlaegt /cam kein photo vor", "photo" not in tab("/cam "), "")
@@ -7254,6 +7262,11 @@ def foto_checks(env, bot):
             return
         time.sleep(1.5)
         zuschauer_hin()
+        # Die Kugel erst jetzt: Der zweite Spieler kommt dort herein, wo ihn
+        # ein frueherer Abschnitt zurueckgelassen hat. Lag das keine acht
+        # Bloecke von der Kugel weg, flog sie ihm in den anderthalb Sekunden
+        # bis zum Teleport zu, und er sammelte sie ein.
+        console(env, f"summon minecraft:experience_orb {kugel[0]} {kugel[1]} {kugel[2]} {{{marke},Value:1s}}")
         if not FIND.test("Cam-Modus fuer den Foto-Modus gestartet", bot_kamera(), ""):
             return
         FIND.test("Im Cam-Modus schlaegt /cam photo vor", "photo" in tab("/cam "), "")
@@ -19500,23 +19513,57 @@ def freier_speicher_gib():
         return None
 
 
+def speicher_grenze(frei):
+    """Wie viele Server frei GiB Arbeitsspeicher sicher tragen, mindestens
+    einer."""
+    return max(1, int((frei - RAM_RESERVE_GIB) // RAM_JE_SERVER_GIB))
+
+
 def server_anzahl(wunsch, namen, dauer):
     """Auf wie viele Server die Abschnitte verteilt werden.
 
-    Mit --parallel so viele wie gewuenscht. Sonst so viele, wie Kerne da
-    sind, wie der freie Arbeitsspeicher traegt und wie es bei der Arbeit
-    lohnt, hoechstens PARALLEL_HOECHSTENS. Nie mehr, als Abschnitte laufen.
+    Mit --parallel so viele wie gewuenscht. Sonst so viele, wie der freie
+    Arbeitsspeicher sicher traegt (und SERVER_JE_KERN je Kern) - aber nur so
+    viele, wie den Lauf kuerzer machen: Dauert ein Abschnitt allein schon
+    laenger als die anderen zusammen, braucht es fuer sie keinen dritten
+    Server. Nie mehr, als Abschnitte laufen.
     """
     if not namen:
         return 1
     if wunsch is not None:
         return max(1, min(wunsch, len(namen)))
-    grenzen = [os.cpu_count() or 1, PARALLEL_HOECHSTENS, len(namen),
-               int(sum(dauer[n] for n in namen) // PARALLEL_AB_SEKUNDEN)]
+    grenze = min(len(namen), (os.cpu_count() or 1) * SERVER_JE_KERN)
     frei = freier_speicher_gib()
     if frei is not None:
-        grenzen.append(int(frei // RAM_JE_SERVER_GIB))
-    return max(1, min(grenzen))
+        grenze = min(grenze, speicher_grenze(frei))
+    grenze = max(1, grenze)
+    beste, _ = aufteilung([dauer[n] for n in namen], grenze)
+    kuerzeste = beste[grenze][len(namen)]
+    for anzahl in range(1, grenze + 1):
+        if beste[anzahl][len(namen)] <= kuerzeste + PARALLEL_GEWINN_SEKUNDEN:
+            return anzahl
+    return grenze
+
+
+def aufteilung(zeiten, anzahl):
+    """Die Tabellen fuer verteilen: beste[k][i] ist die kleinste groesste
+    Last, wenn die ersten i Abschnitte am Stueck auf k Server kommen,
+    schnitt[k][i], wo das letzte Stueck dabei anfaengt."""
+    bis = [0.0]
+    for z in zeiten:
+        bis.append(bis[-1] + z)
+    n = len(zeiten)
+    unendlich = float("inf")
+    beste = [[unendlich] * (n + 1) for _ in range(anzahl + 1)]
+    schnitt = [[0] * (n + 1) for _ in range(anzahl + 1)]
+    beste[0][0] = 0.0
+    for k in range(1, anzahl + 1):
+        for i in range(k, n + 1):
+            for j in range(k - 1, i):
+                last = max(beste[k - 1][j], bis[i] - bis[j])
+                if last < beste[k][i]:
+                    beste[k][i], schnitt[k][i] = last, j
+    return beste, schnitt
 
 
 def verteilen(namen, anzahl, dauer):
@@ -19530,23 +19577,8 @@ def verteilen(namen, anzahl, dauer):
     erste eines Stuecks folgt gleich auf die Grundprobe, wie bei
     --abschnitte. Das Abschalten und der Absturztest bleiben die letzten.
     """
-    zeiten = [dauer[n] for n in namen]
-    bis = [0.0]
-    for z in zeiten:
-        bis.append(bis[-1] + z)
     n = len(namen)
-    # beste[k][i]: die kleinste groesste Last, wenn die ersten i Abschnitte
-    # auf k Server kommen; schnitt[k][i]: wo das letzte Stueck dabei anfaengt.
-    unendlich = float("inf")
-    beste = [[unendlich] * (n + 1) for _ in range(anzahl + 1)]
-    schnitt = [[0] * (n + 1) for _ in range(anzahl + 1)]
-    beste[0][0] = 0.0
-    for k in range(1, anzahl + 1):
-        for i in range(k, n + 1):
-            for j in range(k - 1, i):
-                last = max(beste[k - 1][j], bis[i] - bis[j])
-                if last < beste[k][i]:
-                    beste[k][i], schnitt[k][i] = last, j
+    _, schnitt = aufteilung([dauer[x] for x in namen], anzahl)
     teile, i = [], n
     for k in range(anzahl, 0, -1):
         j = schnitt[k][i]
@@ -19774,7 +19806,8 @@ def main(argv=None):
                         help="Nur zeigen, welche Abschnitte der Tests laufen wuerden und warum")
     parser.add_argument("--parallel", metavar="N", type=int,
                         help="Die Abschnitte auf N Server nebeneinander verteilen (voreingestellt: so viele, "
-                             "wie Kerne und Arbeitsspeicher tragen; 1 faehrt alles hintereinander auf einem)")
+                             "wie der Arbeitsspeicher sicher traegt und den Lauf kuerzer machen; "
+                             "1 faehrt alles hintereinander auf einem)")
     parser.add_argument("--port", metavar="PORT", type=int, default=SERVER_PORT,
                         help=f"Der Port des Testservers (voreingestellt {SERVER_PORT}); "
                              f"mehrere Server nehmen diesen und die folgenden")
@@ -19824,9 +19857,16 @@ def main(argv=None):
         AUSWAHL = auswahl_laden(env, args.alle, args.seit, namen)
         auswahl_zeigen(AUSWAHL)
         if "server" in plan and TEIL is None:
+            # Server, die ein frueherer Lauf hat weiterlaufen lassen, belegen
+            # Speicher, den die neuen brauchen - beendet wuerden sie ohnehin.
+            alle_server_beenden(env)
             gewaehlt = [a.name for a in ABSCHNITTE if AUSWAHL.gewaehlt(a.name)]
             dauer = dauer_laden(env)
             anzahl = server_anzahl(args.parallel, gewaehlt, dauer)
+            frei = freier_speicher_gib()
+            if args.parallel is None and frei is not None:
+                Log.info(f"Arbeitsspeicher frei: {frei:.1f} GiB, das traegt "
+                         f"{speicher_grenze(frei)} Server - es laufen {anzahl}")
             if anzahl > 1:
                 teile, geschaetzt = verteilen(gewaehlt, anzahl, dauer)
         elif args.parallel and args.parallel > 1 and TEIL is None:
