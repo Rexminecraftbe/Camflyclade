@@ -1430,6 +1430,11 @@ einzutragen.
   Balken unten - lief `heilung` ohne ihn, allein oder als erster Abschnitt
   eines Servers, fiel „geht verletzt in den Cam-Modus“ durch. Der Abschnitt
   holt den Balken deshalb selbst herunter, wenn er voll ist.
+* **Zwei Abschnitte dürfen nicht dieselbe Funktion haben.** Lange hießen zwei
+  Tests `herzen_checks` - die Herzen am Namen über dem Körper und die Herzen,
+  die an ruhenden Effekten hängen. Die zweite Funktion überschrieb die erste,
+  beide Einträge in `ABSCHNITTE` fuhren den zweiten Test, und der erste lief
+  nie. Er heißt jetzt `herzen_am_namen`.
 * **Zwei Läufe im selben Arbeitsordner zur selben Zeit vertragen sich
   nicht**: Sie teilen sich die Server-Ordner und die Ports. Nebeneinander
   geht es mit `--workdir` und `--port` für den zweiten.

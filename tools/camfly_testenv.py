@@ -11210,7 +11210,7 @@ def funk_checks(env, bot):
             FIND.problem(f"Aufraeumen nach dem Test des Funksignals: {exc}")
 
 
-def herzen_checks(env, bot):
+def herzen_am_namen_checks(env, bot):
     """body.health-visible: die Herzen des Spielers am Namen ueber dem Koerper.
 
     Voreingestellt ist es aus, und es stuende ueber dem Namen, mit gelben
@@ -18986,9 +18986,8 @@ ABSCHNITTE = [
     Abschnitt("welten", welten_checks, "area"),
     Abschnitt("angriff", angriff_checks, "start/StartChecks"),
     Abschnitt("afk", afk_checks, "afk"),
-    Abschnitt("herzen", herzen_checks,
-              "body/BodySpawner body/MannequinLabel display/SpriteText display/NameDisplay "
-              "session/PausedEffects session/CameraMode session/CameraData"),
+    Abschnitt("herzen_am_namen", herzen_am_namen_checks,
+              "body/BodySpawner body/MannequinLabel display/SpriteText display/NameDisplay"),
     Abschnitt("wartezeit", wartezeit_checks, "timelimit storage session/SessionListener"),
     Abschnitt("akku_speicher", akku_speicher_checks, "battery storage"),
     Abschnitt("startverzoegerung", startverzoegerung_checks, "start/StartDelay start/CamStarter"),
@@ -19043,6 +19042,7 @@ ABSCHNITTE = [
     Abschnitt("fall", fall_checks, "start/StartChecks"),
     Abschnitt("zustand", zustand_checks, "session/CameraMode body/BodySpawner"),
     Abschnitt("kamerakopf", kamerakopf_checks, "session/CameraMode session/CameraHead"),
+    Abschnitt("herzen", herzen_checks, "session/PausedEffects session/CameraMode session/CameraData"),
     Abschnitt("reiten", reiten_checks, "start/StartChecks start/CamStarter"),
     Abschnitt("bett", bett_checks, "start/StartChecks start/CamStarter"),
     Abschnitt("flug_genommen", flug_genommen_checks, "movement/CamMovementGuard session/CameraMode"),
@@ -19428,7 +19428,7 @@ DAUER_VORGABE = {
     "liste": 21, "aktionsleiste": 34, "tempo": 32, "nachtsicht": 32, "toene": 28, "taste": 32,
     "protokoll": 26, "akku": 46, "kosten": 28, "statistik": 34, "alte_absturzdatei": 10,
     "zurueck": 23, "endwarnung": 48, "alarm": 49, "knoepfe": 38, "stopp": 41, "bann": 93,
-    "welten": 18, "angriff": 62, "afk": 56, "herzen": 18, "wartezeit": 46, "akku_speicher": 35,
+    "welten": 18, "angriff": 62, "afk": 56, "herzen_am_namen": 34, "herzen": 18, "wartezeit": 46, "akku_speicher": 35,
     "startverzoegerung": 44, "flugspur": 58, "vorschlaege": 10, "aussichtspunkte": 103, "foto": 84,
     "zeit_wetter": 46, "nachtsicht_wahl": 66, "naehe": 60, "einstellungen": 89, "teilen": 92,
     "fuehrung": 199, "fuehrung_ohne_cam": 148, "gaestebuch": 178, "weiter": 34, "ausspaehen": 50,
