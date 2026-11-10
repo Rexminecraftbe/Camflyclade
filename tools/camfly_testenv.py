@@ -13,17 +13,19 @@ Das Skript macht alles, was sonst von Hand gemacht wurde:
   7. mineflayer holen, auf Protokoll 26.2 flicken, seine Kollision wie im
      echten Client rechnen lassen, Bot verbinden
   8. Tests im laufenden Spiel fahren: die Grundprobe und die Abschnitte, die
-     die Aenderungen gegenueber master betreffen (tools/testauswahl.py)
+     die Aenderungen gegenueber master betreffen (tools/testauswahl.py) -
+     viele Abschnitte auf mehreren Servern nebeneinander
   9. Aufraeumen: Server und Bot beenden
 
 Aufruf:
     python3 tools/camfly_testenv.py                  # alles, nur betroffene Abschnitte
     python3 tools/camfly_testenv.py --alle           # alle Abschnitte
+    python3 tools/camfly_testenv.py --parallel 1     # alles auf einem Server
     python3 tools/camfly_testenv.py --nur-auswahl    # nur zeigen, welche liefen
     python3 tools/camfly_testenv.py --steps build,apicheck
     python3 tools/camfly_testenv.py --steps names    # nach einem Update: fehlen Namen?
     python3 tools/camfly_testenv.py --keep-running   # Server laeuft weiter
-    python3 tools/camfly_testenv.py --stop           # laufenden Server beenden
+    python3 tools/camfly_testenv.py --stop           # laufende Server beenden
 
 Das Skript aendert NICHTS am Plugin. Es baut, prueft und berichtet.
 Alles, was es herunterlaedt, liegt unter --workdir (Standard:
@@ -18052,6 +18054,18 @@ def mobtreffer_checks(env, bot):
         hinstellen(bot, x - 8, y + 4, z)
         return True
 
+    def mob_weg():
+        """Warten, bis der Mob der Probe davor weg ist. Das Hilfsplugin nimmt
+        ihn nach zehn Sekunden wieder weg, und so lange steht er anderthalb
+        Bloecke neben dem Koerper - genau dort, wo der Witherschaedel
+        entlangfliegt: Der traefe ihn statt des Koerpers. Frueher war er bis
+        zur naechsten Probe immer schon weg, weil dazwischen zwei Fragen an
+        den Server lagen, deren Nein je vier Sekunden brauchte."""
+        ende = time.time() + 15
+        while time.time() < ende and server_says(
+                bot, "/execute if entity @e[tag=camflymobhieb] run say {marke}"):
+            time.sleep(0.5)
+
     try:
         # Vor der ersten Frage: Ein Abschnitt davor mag den Bot verletzt
         # haben, und cam-safety lehnte dann das /cam ab, mit dem cam_off
@@ -18062,6 +18076,7 @@ def mobtreffer_checks(env, bot):
         console(env, "difficulty normal", pause=0.3)
         console(env, "gamerule mob_griefing false", pause=0.3)
         for name, art, wirkung, wort in proben:
+            mob_weg()
             if not FIND.test(f"/cam startet fuer den Treffer: {name}", bereit(), ""):
                 continue
             console(env, f"testmobhieb {x} {y} {z} {art}", pause=2.0)
@@ -18080,6 +18095,7 @@ def mobtreffer_checks(env, bot):
                 # Gegenprobe: Trifft den Koerper nur die Explosion, gibt es
                 # keinen Wither - ohne Cam-Modus ebenso.
                 cam_off(bot)
+                mob_weg()
                 if FIND.test("/cam startet fuer den Witherschaedel daneben", bereit(), ""):
                     console(env, f"testmobhieb {x} {y} {z} wither_skull_daneben", pause=2.0)
                     geendet = not spielmodus_ist(bot, "adventure")
@@ -19408,6 +19424,27 @@ def step_tests(env):
 # nach dauer.json, und die gelten dann. Ein Abschnitt, der hier fehlt, zaehlt
 # wie der mittlere.
 DAUER_VORGABE = {
+    "hunger": 17, "heilung": 33, "effekte_beim_start": 15, "meldungen": 23, "sprache": 23,
+    "liste": 21, "aktionsleiste": 34, "tempo": 32, "nachtsicht": 32, "toene": 28, "taste": 32,
+    "protokoll": 26, "akku": 46, "kosten": 28, "statistik": 34, "alte_absturzdatei": 10,
+    "zurueck": 23, "endwarnung": 48, "alarm": 49, "knoepfe": 38, "stopp": 41, "bann": 93,
+    "welten": 18, "angriff": 62, "afk": 56, "herzen": 18, "wartezeit": 46, "akku_speicher": 35,
+    "startverzoegerung": 44, "flugspur": 58, "vorschlaege": 10, "aussichtspunkte": 103, "foto": 84,
+    "zeit_wetter": 46, "nachtsicht_wahl": 66, "naehe": 60, "einstellungen": 89, "teilen": 92,
+    "fuehrung": 199, "fuehrung_ohne_cam": 148, "gaestebuch": 178, "weiter": 34, "ausspaehen": 50,
+    "menue": 163, "spotreiter": 112, "spotmoderation": 130, "tourmoderation": 99,
+    "spot_nur_im_cam": 28, "spot_ansicht": 91, "webkarte": 75, "erze": 69, "anstupsen": 81,
+    "funk": 77, "traenke": 58, "treffergrund": 77, "anfassen": 79, "sulfur_cube": 59,
+    "ruestung": 10, "rueckstoss": 560, "rueckstoss_mob": 183, "schieben": 45, "waerter_ziel": 80,
+    "uebergabe": 89, "blick": 56, "name": 87, "spielername": 152, "spielmodus": 116, "medium": 204,
+    "fall": 19, "zustand": 19, "kamerakopf": 12, "reiten": 13, "bett": 13, "flug_genommen": 12,
+    "tippfehler": 11, "brand": 18, "tod": 18, "koerpersperre": 24, "treffer_unterwegs": 11,
+    "grenze": 140, "portale": 318, "fuehrung_nether": 82, "unbewacht": 177, "liegengeblieben": 40,
+    "teleport": 108, "rueckweg": 21, "befehle_im_cam": 30, "koerper_weg": 37, "effekt_weg": 13,
+    "feuerhieb": 23, "modusinventar": 25, "spawnen": 102, "fortschritt": 72, "fundsachen": 46,
+    "zerschlagen": 72, "team": 15, "toeten": 16, "tod_fern": 26, "leuchtfeuer": 25,
+    "schutzgebiet": 20, "mobtreffer": 99, "schlaeger": 59, "fuehrung_kette": 41, "umgebung": 23,
+    "abschalten": 61, "absturz": 129,
 }
 
 # So lange braucht ein Server, bis sein erster Abschnitt anfaengt: starten,

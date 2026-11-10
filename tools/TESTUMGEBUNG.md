@@ -11,10 +11,12 @@ Beim ersten Mal dauert es ein paar Minuten, weil JDK, paper-api, der Server und
 mineflayer geholt werden. Alles davon landet unter `~/camfly-testenv` und wird
 danach wiederverwendet.
 
-Gefahren werden nicht alle Abschnitte der Tests - alle zusammen dauern über
-anderthalb Stunden -, sondern die, die die Änderungen gegenüber `master`
-betreffen, siehe [Welche Abschnitte laufen](#welche-abschnitte-laufen). Alle
-wie früher mit `--alle`.
+Gefahren werden nicht alle Abschnitte der Tests, sondern die, die die
+Änderungen gegenüber `master` betreffen, siehe
+[Welche Abschnitte laufen](#welche-abschnitte-laufen). Alle wie früher mit
+`--alle`: Hintereinander auf einem Server brauchen sie rund zwei Stunden, auf
+vier Servern nebeneinander eine gute halbe, siehe
+[Mehrere Server nebeneinander](#mehrere-server-nebeneinander).
 
 ## Nützliche Aufrufe
 
@@ -59,7 +61,7 @@ Liefen die Tests auf mehreren Servern, hat jeder seine eigene: `server/`,
 
 ## Welche Abschnitte laufen
 
-Die Tests bestehen aus der **Grundprobe** und gut achtzig **Abschnitten**. Die
+Die Tests bestehen aus der **Grundprobe** und gut hundert **Abschnitten**. Die
 Grundprobe läuft immer, sie ist kurz: `/cam` an und aus, der Körper, Fliegen,
 zurück zum Körper, `/cam reload`, ein verbotenes Biom. Die
 Abschnitte stehen in `ABSCHNITTE` im Skript, jeder mit seinem Namen, seiner
@@ -141,7 +143,8 @@ Absturztest stehen zuletzt, sie starten den Server neu.
 ## Mehrere Server nebeneinander
 
 Die Tests warten vor allem - darauf, dass im Spiel Zeit vergeht. Ein
-Testserver braucht dabei nur einen Bruchteil eines Kerns. Der Schritt `tests`
+Testserver braucht dabei nur einen Bruchteil eines Kerns, gemessen etwa ein
+Zwanzigstel, und anderthalb Gigabyte Arbeitsspeicher. Der Schritt `tests`
 verteilt die Abschnitte deshalb auf mehrere Server, die nebeneinander laufen.
 Jeder hat seinen eigenen Ordner, seine eigene Welt, seinen eigenen Port und
 seine eigenen Bots, und jeder fährt seine Abschnitte genau so, wie sie auf
@@ -224,6 +227,29 @@ kürzen, ohne dass die Tests etwas anderes prüfen:
     Marke oder der Wert dann nicht da, kommt er auch nicht mehr: Ein Nein
     steht nach einem Tick fest statt nach den vier Sekunden (bei `server_data`
     acht), die früher auf eine Antwort gewartet wurde, die nie kam.
+  * `stop_server`: Fertig ist der Server, sobald sein Java zu Ende ist, nach
+    ein, zwei Sekunden. Die Prozessgruppe lebt danach weiter, weil das
+    `tail -f` an der FIFO erst beim nächsten Kommando merkt, dass ihm niemand
+    mehr zuhört - darauf wurde früher jedes Mal volle dreißig Sekunden
+    gewartet. Jetzt geht der Rest der Gruppe gleich hinterher.
+
+Die langen Nein-Antworten hatten eine Nebenwirkung, auf die sich zwei Stellen
+verlassen haben, ohne dass es dastand. Beide warten jetzt ausdrücklich:
+
+* **Zwischen zwei Abschnitten** (`sperre_abwarten`): Fünf Sekunden nach einem
+  Schaden lehnt `cam-safety` jedes `/cam` ab, und fast jeder Abschnitt fängt
+  mit `/cam` an - abgelehnt, bricht er gleich ab, ohne etwas geprüft zu haben.
+  Wer den Bot zuletzt trifft, wartet die Sperre deshalb am Ende selbst ab
+  (`CAM_SAFETY_SEKUNDEN`). `treffer_unterwegs` tat das nicht; es fiel nicht
+  auf, weil nach dem Treffer noch eine Frage kam, deren Nein vier Sekunden
+  brauchte. Jetzt sieht der Rahmen vor jedem Abschnitt nach: Der Bot weiß,
+  wann er zuletzt Schaden genommen hat (`hurtAgo` in `state`), und was an den
+  fünf Sekunden noch fehlt, wird abgewartet.
+* **Zwischen zwei Proben von `mobtreffer`** (`mob_weg`): Das Hilfsplugin nimmt
+  den Mob einer Probe erst nach zehn Sekunden wieder weg, und so lange steht
+  er neben dem Körper - dort, wo der Witherschädel der nächsten Probe
+  entlangfliegt. Früher lagen zwischen zwei Proben immer mehr als zehn
+  Sekunden; jetzt wartet die Probe, bis der Mob weg ist.
 
 Der Takt, in dem das Skript auf die Antworten des Bots sieht (alle 50 ms, im
 Bot alle 100 ms), bleibt dagegen, obwohl er sich leicht wegnehmen ließe. Er

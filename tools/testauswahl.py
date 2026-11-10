@@ -1,8 +1,9 @@
 """
 CamFly - welche Abschnitte der Tests ein Stand des Plugins braucht.
 
-Alle Abschnitte zu fahren dauert ueber anderthalb Stunden, die meisten
-Aenderungen beruehren aber nur wenige davon. Dieses Modul vergleicht den Stand
+Alle Abschnitte zu fahren dauert hintereinander rund zwei Stunden und auch
+auf mehreren Servern nebeneinander eine halbe, die meisten Aenderungen
+beruehren aber nur wenige davon. Dieses Modul vergleicht den Stand
 im Arbeitsordner mit einer Basis - voreingestellt dem Stand von master, von dem
 der Zweig abging - und sucht die Abschnitte heraus, die etwas pruefen, das neu
 ist, sich geaendert hat oder davon betroffen sein kann:
