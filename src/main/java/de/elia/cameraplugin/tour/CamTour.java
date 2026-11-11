@@ -115,8 +115,8 @@ import java.util.UUID;
  * time of day, the weather and the night vision the guide has in camera mode
  * stand in for his own, see {@link #takeLook}; while the guide leads out of
  * camera mode, the time and weather of the world and no night vision - the
- * guide sees no other. Should a guest pick one of them himself, his own holds
- * for that part until the tour is over.</p>
+ * guide sees no other. A guest may pick his own all the same: they are kept,
+ * but he sees the guide's until the tour is over, and his own after it.</p>
  *
  * <p>With {@code follow.invite-all} a guide invites everybody he could invite
  * at once, {@code /cam follow invite all}, see {@link #inviteAll}.</p>

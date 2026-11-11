@@ -9450,10 +9450,13 @@ def fuehrung_himmel_checks(env, bot):
     er die Fuehrung, wieder seine eigenen. Im Cam-Modus hat der Bot
     Mitternacht, Regen und keine Nachtsicht: Der Gast sieht 18000, Regen und
     hat keine Nachtsicht. Stellt der Bot noon ein, sieht der Gast 6000;
-    /cam nightvision on beim Bot gibt sie auch dem Gast. Stellt der Gast
-    selbst sunset ein, sieht er 12000, und dabei bleibt es fuer ihn, auch wenn
-    der Bot danach wieder Mitternacht einstellt. Verlaesst er die Fuehrung,
-    sieht er seine eigene Zeit, das Wetter der Welt und hat seine Nachtsicht.
+    /cam nightvision on beim Bot gibt sie auch dem Gast. Stellt der Gast beim
+    Folgen selbst sunrise und keine Nachtsicht ein, wird das gemerkt - die
+    Meldung sagt, dass es nach dem Folgen gilt -, er sieht aber weiter 6000 und
+    hat Nachtsicht; im Menue stehen bei Zeit und Nachtsicht seine eigenen, mit
+    dem Hinweis darauf. Stellt der Bot danach Mitternacht ein, sieht der Gast
+    18000. Verlaesst er die Fuehrung, gelten seine eigenen, mit dem, was er
+    beim Folgen eingestellt hat: 23000, das Wetter der Welt, keine Nachtsicht.
     Mit guide-time, guide-weather und guide-night-vision: false sieht er auch
     beim Folgen seine eigenen.
     """
@@ -9532,15 +9535,33 @@ def fuehrung_himmel_checks(env, bot):
         FIND.test("Stellt der Bot noon ein, sieht der Gast 6000", zeit(zuschauer) == 6000, str(zeit(zuschauer)))
         befehl(bot, "/cam nightvision on", warten=1.5)
         FIND.test("/cam nightvision on beim Bot gibt dem Gast Nachtsicht", nachtsicht(), "")
-        befehl(zuschauer, "/cam time sunset", warten=1.5)
+        zeit_zeilen = befehl(zuschauer, "/cam time sunrise", warten=1.5)
+        nacht_zeilen = befehl(zuschauer, "/cam nightvision off", warten=1.5)
+        FIND.test("Stellt der Gast beim Folgen selbst sunrise und keine Nachtsicht ein, wird es gemerkt, und die "
+                  "Meldung sagt, dass es nach dem Folgen gilt",
+                  gesagt(zeit_zeilen, r"Your own time in cam mode: sunrise")
+                  and gesagt(zeit_zeilen, r"yours holds again once you stop following")
+                  and gesagt(nacht_zeilen, r"Night vision in cam mode: never")
+                  and gesagt(nacht_zeilen, r"yours holds again once you stop following"),
+                  f"{zeige(zeit_zeilen)} / {zeige(nacht_zeilen)}")
+        FIND.test("... er sieht aber weiter die Zeit des Bots (6000) und hat seine Nachtsicht",
+                  zeit(zuschauer) == 6000 and nachtsicht(), str(zeit(zuschauer)))
+        befehl(zuschauer, "/cam menu", warten=1.0)
+        knopf = zuschauer.call("window_slots", wait=10).get("slots", {})
+        zuschauer.call("close_window", wait=10)
+        uhr, trank = item_text(knopf.get("15")), item_text(knopf.get("17"))
+        FIND.test("Im Menue stehen bei Zeit und Nachtsicht seine eigenen, mit dem Hinweis, dass sie nach dem "
+                  "Folgen gelten",
+                  "Time of day: sunrise" in uhr and "While you follow, you see the leader's" in uhr
+                  and "Night vision: never" in trank and "While you follow, you see the leader's" in trank,
+                  f"{uhr} / {trank}")
         befehl(bot, "/cam time midnight", warten=1.5)
-        FIND.test("Stellt der Gast selbst sunset ein, bleibt es fuer ihn dabei, auch wenn der Bot danach "
-                  "Mitternacht einstellt",
-                  zeit(zuschauer) == 12000 and zeit(bot) == 18000, f"{zeit(zuschauer)} / {zeit(bot)}")
-        befehl(bot, "/cam nightvision off", warten=1.5)
+        FIND.test("Stellt der Bot danach Mitternacht ein, sieht der Gast auch die (18000)", zeit(zuschauer) == 18000,
+                  str(zeit(zuschauer)))
         befehl(zuschauer, "/cam follow leave", warten=2.0)
-        FIND.test("Verlaesst er die Fuehrung: seine Zeit, das Wetter der Welt und seine Nachtsicht",
-                  zeit(zuschauer) == 12000 and regen(zuschauer) == 0 and nachtsicht(),
+        FIND.test("Verlaesst er die Fuehrung, gelten seine eigenen, mit dem, was er beim Folgen eingestellt hat: "
+                  "sunrise (23000), das Wetter der Welt, keine Nachtsicht",
+                  zeit(zuschauer) == 23000 and regen(zuschauer) == 0 and not nachtsicht(),
                   f"{zeit(zuschauer)} / {regen(zuschauer)}")
 
         set_options(env, [("guide-time", "false", "follow"), ("guide-weather", "false", "follow"),
@@ -9548,8 +9569,9 @@ def fuehrung_himmel_checks(env, bot):
         cam_on(bot)
         zuschauer_cam_an(env, zuschauer, *gast)
         if FIND.test("Er folgt dem Bot mit guide-...: false", folgen(warten=6.5), ""):
-            FIND.test("guide-time, -weather, -night-vision: false - er sieht beim Folgen seine eigenen",
-                      zeit(zuschauer) == 12000 and regen(zuschauer) == 0 and nachtsicht(),
+            FIND.test("guide-time, -weather, -night-vision: false - er sieht beim Folgen seine eigenen (23000, kein "
+                      "Regen, keine Nachtsicht) statt der des Bots (18000, Regen, Nachtsicht)",
+                      zeit(zuschauer) == 23000 and regen(zuschauer) == 0 and not nachtsicht(),
                       f"{zeit(zuschauer)} / {regen(zuschauer)}")
     finally:
         try:

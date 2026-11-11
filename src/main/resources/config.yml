@@ -971,9 +971,10 @@ web-map:
 # statt seiner eigenen - ist der Leader im Cam-Modus, die, die er dort hat (die er sich mit /cam time, /cam weather und
 # /cam nightvision eingestellt hat, oder die eines Aussichtspunkts, an dem er gerade ist); ist er nicht im Cam-Modus
 # (lead-without-cam), die Zeit und das Wetter der Welt und keine Nachtsicht - mehr sieht der Leader dann auch nicht.
-# Ändert der Leader etwas, sehen es seine Follower gleich mit. Stellt ein Follower selbst etwas davon ein, gilt für
-# diesen Teil seine eigene Einstellung, bis er aufhört zu folgen. Hört er auf, sieht er wieder seine eigene; für seine
-# nächsten Flüge gemerkt wird vom Leader nichts.
+# Ändert der Leader etwas, sehen es seine Follower gleich mit. Ein Follower kann beim Folgen trotzdem seine eigenen
+# einstellen (Befehl oder Menü - dort stehen dann seine eigenen, mit einem Hinweis): Sie werden gemerkt, aber er sieht
+# weiter die des Leaders (Text: tour-own-later). Hört er auf zu folgen, gelten wieder seine eigenen, mit dem, was er
+# unterwegs eingestellt hat; für seine nächsten Flüge gemerkt wird vom Leader nichts.
 follow:
   enabled: true
   # Wie nah die Kamera eines anderen der eigenen sein muss, damit man ihn einladen kann, in Blöcken (1 bis 128)

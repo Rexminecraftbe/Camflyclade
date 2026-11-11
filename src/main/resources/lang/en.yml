@@ -431,6 +431,9 @@ messages:
   menu-nightvision-off: "never"
   menu-nightvision-on: "always"
   menu-nightvision-reset: "as the server has it ({mode})"
+  # Under the buttons of the time, the weather and the night vision while the leader one follows shows his in their
+  # place (follow.guide-time, -weather, -night-vision): what one picks there holds once one stops following.
+  menu-own-later: "&6While you follow, you see the leader's.\n&6What you pick here holds\n&6once you stop following."
   menu-off: "&c/cam menu is switched off."
   menu-offer: "&e{owner}:{spot}"
   menu-offer-actions: "&eOffered to you\n&aLeft-click: accept\n&cRight-click: turn down"
@@ -935,6 +938,9 @@ messages:
   tour-on-done: "&aFollowing is switched on again for everybody."
   tour-other-busy: "&c{player} leads or follows already."
   tour-other-not-in-cam: "&c{player} is not in cam mode. Only who flies as a camera already can follow."
+  # After /cam time, /cam weather or /cam nightvision while the leader one follows shows his in its place: the choice
+  # is kept and holds once one stops following.
+  tour-own-later: "&7While you follow, you see the leader's - yours holds again once you stop following."
   tour-out-of-reach: "&c{player} could not follow you from there: you are out of the reach of their camera."
   tour-reach-lost: "&c{player} was out of your reach for too long: you no longer follow them."
   tour-reach-lost-guide: "&c{player} could not follow you for too long and no longer does."
@@ -1611,6 +1617,7 @@ message-settings:
   tour-on-done: true
   tour-other-busy: true
   tour-other-not-in-cam: true
+  tour-own-later: true
   tour-out-of-reach: true
   tour-reach-lost: true
   tour-reach-lost-guide: true

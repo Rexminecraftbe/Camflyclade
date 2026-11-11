@@ -609,7 +609,7 @@ public final class CamMenu implements Listener {
                 new Choice("on", messages.getMessage("menu-nightvision-on")),
                 new Choice("dark", messages.getMessage("menu-nightvision-dark")),
                 new Choice("off", messages.getMessage("menu-nightvision-off")));
-        String now = nightVision.hasOwnMode(player) ? nightVisionWord(nightVision.modeFor(player)) : "reset";
+        String now = nightVision.hasOwnMode(player) ? nightVisionWord(nightVision.ownModeFor(player)) : "reset";
         int at = 0;
         for (int i = 0; i < all.size(); i++) {
             if (all.get(i).word().equals(now)) {
@@ -622,7 +622,7 @@ public final class CamMenu implements Listener {
     /** The button of the night vision on the main page; a click picks the next mode, a right-click the one before. */
     private void nightVisionButton(Player player, Page page) {
         choicesButton(player, page, MenuButton.NIGHT_VISION, "menu-nightvision", "{mode}", nightVisionChoices(player),
-                back -> {
+                plugin.getNightVision().guideStandsIn(player), back -> {
                     String word = nightVisionChoices(player).step(back).word();
                     plugin.getNightVision().command(player, new String[]{word});
                     nightVisionButton(player, page);
@@ -631,7 +631,8 @@ public final class CamMenu implements Listener {
 
     /** The button of the time of day on the main page; a click picks the next time, a right-click the one before. */
     private void timeButton(Player player, Page page) {
-        choicesButton(player, page, MenuButton.TIME, "menu-time", "{time}", timeChoices(player), back -> {
+        choicesButton(player, page, MenuButton.TIME, "menu-time", "{time}", timeChoices(player),
+                plugin.getSky().guideStandsIn(player, true), back -> {
             plugin.getSky().timeCommand(player, new String[]{timeChoices(player).step(back).word()});
             timeButton(player, page);
         });
@@ -639,7 +640,8 @@ public final class CamMenu implements Listener {
 
     /** The button of the weather on the main page; a click picks the next weather, a right-click the one before. */
     private void weatherButton(Player player, Page page) {
-        choicesButton(player, page, MenuButton.WEATHER, "menu-weather", "{weather}", weatherChoices(player), back -> {
+        choicesButton(player, page, MenuButton.WEATHER, "menu-weather", "{weather}", weatherChoices(player),
+                plugin.getSky().guideStandsIn(player, false), back -> {
             plugin.getSky().weatherCommand(player, new String[]{weatherChoices(player).step(back).word()});
             weatherButton(player, page);
         });
@@ -659,12 +661,19 @@ public final class CamMenu implements Listener {
      * click after it as well - the window is still the same one -, which
      * steps no further.</p>
      *
-     * @param fill the placeholder in the name that the choice of now takes
-     * @param step takes a step, a tick after the click: back to the one before for {@code true}
+     * <p>While the guide he follows shows him his in its place, the choices
+     * are his own, which hold again after the tour, and the button says so.</p>
+     *
+     * @param fill   the placeholder in the name that the choice of now takes
+     * @param guide  whether the guide he follows shows him his in place of the choice
+     * @param step   takes a step, a tick after the click: back to the one before for {@code true}
      */
     private void choicesButton(Player player, Page page, MenuButton which, String key, String fill, Choices choices,
-                               Consumer<Boolean> step) {
+                               boolean guide, Consumer<Boolean> step) {
         List<String> lore = new ArrayList<>(lines(messages.getMessage(key + "-lore")));
+        if (guide) {
+            lore.addAll(lines(messages.getMessage("menu-own-later")));
+        }
         for (int i = 0; i < choices.all().size(); i++) {
             lore.addAll(lines(messages.getMessage(i == choices.now() ? "menu-choice-option-current"
                     : "menu-choice-option").replace("{choice}", choices.all().get(i).name())));

@@ -335,7 +335,7 @@ public final class CamSpots {
         if (!plugin.isInCameraMode(player)) {
             return SpotLook.NONE;
         }
-        SpotLook look = new SpotLook(plugin.getSky().ownTime(player), plugin.getSky().ownWeather(player),
+        SpotLook look = new SpotLook(plugin.getSky().seenTime(player), plugin.getSky().seenWeather(player),
                 plugin.getNightVision().chosenMode(player));
         return look.isEmpty() ? SpotLook.NONE : look;
     }
