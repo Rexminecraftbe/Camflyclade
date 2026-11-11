@@ -655,13 +655,17 @@ menu:
     # einer der eigenen und lässt sich auf der öffentlichen Seite mit Rechtsklick wieder offline nehmen, ohne ihn zu
     # löschen. Ein Linksklick auf einen Punkt springt hin, auf einen geteilten oder öffentlichen genauso wie auf einen
     # eigenen: nur, wohin die Kamera auch fliegen dürfte; ohne Cam-Modus startet er erst, wenn der Punkt nah genug ist
-    # (viewpoints.start-distance).
+    # (viewpoints.start-distance). Rechtsklick auf einen eigenen öffnet die Seite zum Teilen: die Spieler, und unten
+    # rechts das Leuchtfeuer, das ihn öffentlich macht (oder wieder privat) - am selben Platz wie das Leuchtfeuer, das
+    # beim Folgen alle einlädt.
     # Wartet ein Angebot, glänzt der Knopf.
     spots:
       item: filled_map
       slot: 10
     # Folgen (follow): einladen, Einladungen annehmen, Follower wegschicken, aufhören, alle gehen lassen, und der
-    # Blick (des Leaders oder frei). Hieß früher tour - ein Abschnitt unter dem alten Namen geht weiter.
+    # Blick (des Leaders oder frei). Unten von links: zurück, alle gehen lassen, die Seite davor, in der Mitte der
+    # Blick (Enderauge oder Fernglas), die Seite danach und ganz rechts das Leuchtfeuer, das alle auf einmal einlädt
+    # (follow.invite-all). Hieß früher tour - ein Abschnitt unter dem alten Namen geht weiter.
     follow:
       item: lead
       slot: 9
@@ -918,7 +922,8 @@ web-map:
 #                                    Blöcke von der eigenen weg ist, oder einen ohne Cam-Modus, der nicht weiter als
 #                                    start-distance vom Leader steht (im Menü stehen nur solche)
 #   /cam follow invite all         = alle auf einmal einladen, die gerade so in der Nähe sind (invite-all; im Menü
-#                                    der Knopf mit der Glocke)
+#                                    das Leuchtfeuer unten rechts, das sagt, wie nah sie sein müssen: start-distance
+#                                    und radius)
 #   /cam follow accept <Spieler>   = eine Einladung annehmen (sie gilt eine Minute; auch der Knopf im Chat, der sie
 #                                    gleich annimmt): die Kamera geht zum Leader, schaut wie er und fliegt von da an
 #                                    mit ihm mit. Ohne Cam-Modus startet er dafür erst, dort wo man steht.

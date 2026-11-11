@@ -572,10 +572,12 @@ messages:
   menu-tour-invitation: "&e{player}"
   menu-tour-invitation-lore: "&7Invites you to follow them.\n&aLeft-click: follow\n&cRight-click: turn down"
   menu-tour-invitations: "&eInvitations for you: {count}"
-  # The button that invites everybody to invite at once (follow.invite-all); {count} is how many it invites - not
-  # those invited already, those invited a moment ago or those kept from following.
+  # The beacon that invites everybody to invite at once (follow.invite-all); {count} is how many it invites - not
+  # those invited already, those invited a moment ago or those kept from following -, {start} follow.start-distance
+  # and {radius} follow.radius: how close they have to be. -cam-only while follow.start-distance is 0.
   menu-tour-invite-all: "&aInvite everybody"
-  menu-tour-invite-all-lore: "&7Invites the {count} players\n&7close to you at once.\n&eClick: invite all"
+  menu-tour-invite-all-lore: "&7Invites everybody close enough\n&7at once - {count} players now:\n&7- without cam mode: within {start} blocks\n&7- in cam mode: within {radius} blocks\n&eClick: invite all"
+  menu-tour-invite-all-lore-cam-only: "&7Invites everybody in cam mode\n&7whose camera is within {radius} blocks\n&7of you at once - {count} players now.\n&eClick: invite all"
   menu-tour-join-restricted: "&7Sorry, you may not follow anybody"
   menu-tour-join-restricted-lore: "&7You are restricted\n&7{time}{reason}."
   menu-tour-lead-restricted: "&7Sorry, you may not lead"
@@ -870,8 +872,9 @@ messages:
   # holds ({seconds}, follow.invitation-seconds). tour-invite-wait: he invited that player too short a time ago
   # (follow.invite-cooldown-seconds, {seconds} left). /cam follow invite all (follow.invite-all): tour-invited-all
   # says whom ({players}) and how many ({count}) it invited, tour-invite-all-none that there was nobody to invite -
-  # those invited already, invited a moment ago or kept from following are left out -, tour-invite-all-off that it
-  # is switched off. tour-view-guide and tour-view-free answer
+  # those invited already, invited a moment ago or kept from following are left out -, and how close they have to
+  # be ({start} follow.start-distance, {radius} follow.radius; tour-invite-all-none-cam-only while start-distance is
+  # 0), tour-invite-all-off that it is switched off. tour-view-guide and tour-view-free answer
   # /cam follow view, tour-view-unavailable says that the leader's view does not work on the server
   # (follow.guide-view). tour-guide-spectator: a player out of cam mode (follow.lead-without-cam) can't lead in
   # spectator mode; tour-guide-cannot-lead: the leader can't lead any more when he is accepted (tour-guide-gone while
@@ -909,7 +912,8 @@ messages:
   tour-guide-out-of-reach: "&c{player} is out of the reach of your camera."
   tour-guide-spectator: "&cNot in spectator mode: it flies through walls."
   tour-invitation: "&e{player} invites you to follow them with your camera - it runs out in {seconds} seconds."
-  tour-invite-all-none: "&eNobody close to you to invite right now."
+  tour-invite-all-none: "&eNobody to invite right now: without cam mode they have to be within {start} blocks of you, in cam mode within {radius} blocks."
+  tour-invite-all-none-cam-only: "&eNobody to invite right now: they have to be in cam mode, within {radius} blocks of you."
   tour-invite-all-off: "&cInviting everybody at once is switched off."
   tour-invite-wait: "&cYou invited {player} a moment ago: you can invite them again in {seconds} seconds."
   tour-invited: "&aYou invited {player} to follow you. The invitation runs out in {seconds} seconds."
@@ -1585,6 +1589,7 @@ message-settings:
   tour-guide-spectator: true
   tour-invitation: true
   tour-invite-all-none: true
+  tour-invite-all-none-cam-only: true
   tour-invite-all-off: true
   tour-invite-wait: true
   tour-invited: true

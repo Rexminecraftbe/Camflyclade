@@ -128,8 +128,18 @@ public final class CamMenu implements Listener {
     private static final int SLOT_SPOT_NEW = 53;
     /** The button that sorts a list of players on the admin pages. */
     private static final int SLOT_ADMIN_SORT = 53;
-    /** The button on the page of the tour that invites everybody he could invite at once. */
-    private static final int SLOT_TOUR_INVITE_ALL = 51;
+    /**
+     * The button that does something for everybody at once, a beacon in the
+     * corner of the last row: on the page of the tour the one that invites
+     * everybody he could invite, on the page that shares a spot the one that
+     * makes it public. Where the button for a new spot is on the pages of
+     * the spots.
+     */
+    private static final int SLOT_EVERYBODY = 53;
+    /** The button on the page of the tour that switches between the guide's view and looking round freely. */
+    private static final int SLOT_TOUR_VIEW = 49;
+    /** The button on the page of the tour that ends it, or what keeps him from leading or following. */
+    private static final int SLOT_TOUR_END = 47;
 
     /** How long the menu waits for an answer in the chat, in milliseconds. */
     private static final long ANSWER_WAIT = 60_000L;
@@ -1029,10 +1039,12 @@ public final class CamMenu implements Listener {
     }
 
     /**
-     * Whom one of his spots is shared with: public first, then the players
-     * online and those it is shared with or offered to who are not, a page of
-     * {@value #ENTRIES} at a time. A click on a player offers it to him, or
-     * takes it back; a click on the first makes it public, or private again.
+     * Whom one of his spots is shared with: the players online and those it
+     * is shared with or offered to who are not, a page of {@value #ENTRIES}
+     * at a time. A click on a player offers it to him, or takes it back. The
+     * beacon in the corner of the last row, on every page, makes it public,
+     * or private again - where the page of the tour has the button that
+     * invites everybody.
      */
     private void openShare(Player player, String key, int pageNumber) {
         CamSpots spots = plugin.getSpots();
@@ -1065,25 +1077,23 @@ public final class CamMenu implements Listener {
             }
         }
         List<Map.Entry<UUID, String>> list = new ArrayList<>(people.entrySet());
-        // The first slot of the first page is for everybody.
-        int total = list.size() + 1;
+        int total = list.size();
         int pages = Math.max(1, (total + ENTRIES - 1) / ENTRIES);
         int number = Math.min(Math.max(0, pageNumber), pages - 1);
         Page page = new Page();
         Inventory inventory = create(page, LIST,
                 messages.getMessage("menu-share-title").replace("{spot}", spot.name()));
+        boolean everybody = share != null && share.isEveryone();
+        put(page, SLOT_EVERYBODY, shine(item(Material.BEACON, messages.getMessage("menu-share-everybody"),
+                lines(messages.getMessage(everybody ? "menu-share-public-lore" : "menu-share-private-lore"))),
+                everybody), click -> later(() -> {
+                    spots.makePublic(player, target, !everybody);
+                    openShare(player, key, number);
+                }));
         for (int slot = 0; slot < ENTRIES; slot++) {
             int index = number * ENTRIES + slot;
-            if (index == 0) {
-                boolean everybody = share != null && share.isEveryone();
-                put(page, slot, shine(item(Material.BEACON, messages.getMessage("menu-share-everybody"),
-                        lines(messages.getMessage(everybody ? "menu-share-public-lore" : "menu-share-private-lore"))),
-                        everybody), click -> later(() -> {
-                            spots.makePublic(player, target, !everybody);
-                            openShare(player, key, number);
-                        }));
-            } else if (index < total) {
-                Map.Entry<UUID, String> entry = list.get(index - 1);
+            if (index < total) {
+                Map.Entry<UUID, String> entry = list.get(index);
                 boolean with = share != null && share.isAcceptedBy(entry.getKey());
                 boolean offered = share != null && share.isOfferedTo(entry.getKey());
                 String state = with ? "on" : offered ? "offered" : "off";
@@ -1196,13 +1206,14 @@ public final class CamMenu implements Listener {
      * from taking part shows up all the same, with why he cannot be invited.
      * Is there nobody, the page says how close they would have to be. While
      * he has guests, the last row has the button that ends the tour, and
-     * while there is anybody to invite, with {@code follow.invite-all}, the one
-     * that invites all of them at once. A
+     * while there is anybody to invite, with {@code follow.invite-all}, the
+     * beacon in its corner that invites all of them at once. A
      * restriction that keeps him from leading takes the place of the players
      * to invite, one that keeps him from taking part that of the button that
      * ends the tour - his own, or the one of everybody, which says that it
      * is switched off. Both pages have the button that switches between the
-     * guide's view and looking round freely, where the guide's view works.
+     * guide's view and looking round freely in the middle of their last row,
+     * where the guide's view works.
      */
     private void openTour(Player player, int pageNumber) {
         CamTour tour = plugin.getTour();
@@ -1308,24 +1319,26 @@ public final class CamMenu implements Listener {
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
         if (!guests.isEmpty()) {
-            put(page, SLOT_NEW, Material.BARRIER, "menu-tour-end", click -> act(player, () -> tour.end(player)));
+            put(page, SLOT_TOUR_END, Material.BARRIER, "menu-tour-end", click -> act(player, () -> tour.end(player)));
         } else if (lead != null && !entries.isEmpty()) {
-            put(page, SLOT_NEW, tourKept(TourBans.What.LEAD, lead), click -> { });
+            put(page, SLOT_TOUR_END, tourKept(TourBans.What.LEAD, lead), click -> { });
         } else if (join != null) {
-            put(page, SLOT_NEW, tourKept(TourBans.What.JOIN, join), click -> { });
+            put(page, SLOT_TOUR_END, tourKept(TourBans.What.JOIN, join), click -> { });
         }
         if (settings.isTourInviteAll() && lead == null && tour.canLead(player)) {
             inviteAllButton(player, page);
         }
-        viewButton(player, page, SLOT_ADMIN_SORT);
+        viewButton(player, page, SLOT_TOUR_VIEW);
         paging(page, number, pages, n -> openTour(player, n));
         player.openInventory(inventory);
     }
 
     /**
-     * The button that invites everybody he could invite at once: how many
-     * under it, and that a click invites them. Only while anybody is there to
-     * be invited - not those already invited, those he may not invite again
+     * The beacon that invites everybody he could invite at once: how many,
+     * and how close they have to be for it - out of camera mode
+     * {@code follow.start-distance}, in camera mode {@code follow.radius} -,
+     * and that a click invites them. Only while anybody is there to be
+     * invited - not those already invited, those he may not invite again
      * yet, nor those kept from taking part.
      */
     private void inviteAllButton(Player player, Page page) {
@@ -1333,9 +1346,14 @@ public final class CamMenu implements Listener {
         if (count == 0) {
             return;
         }
-        put(page, SLOT_TOUR_INVITE_ALL, shine(item(Material.BELL, messages.getMessage("menu-tour-invite-all"),
-                lines(messages.getMessage("menu-tour-invite-all-lore").replace("{count}", String.valueOf(count)))),
-                true), click -> later(() -> {
+        double start = settings.getTourStartDistance();
+        String lore = messages.getMessage(start > 0.0 ? "menu-tour-invite-all-lore"
+                        : "menu-tour-invite-all-lore-cam-only")
+                .replace("{count}", String.valueOf(count))
+                .replace("{start}", String.valueOf(Math.round(start)))
+                .replace("{radius}", String.valueOf(Math.round(settings.getTourRadius())));
+        put(page, SLOT_EVERYBODY, shine(item(Material.BEACON, messages.getMessage("menu-tour-invite-all"),
+                lines(lore)), true), click -> later(() -> {
                     plugin.getTour().inviteAll(player);
                     openTour(player, 0);
                 }));

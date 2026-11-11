@@ -9308,13 +9308,17 @@ def alle_einladen_checks(env, bot):
     mitbringt. Der Bot ist im Cam-Modus, der zweite und der dritte Spieler
     stehen ohne Cam-Modus vier Bloecke neben ihm (start-distance 16). Die
     Tab-Vervollstaendigung bietet nach /cam follow invite auch all an, und auf
-    der Seite der Fuehrung steht der Knopf "Invite everybody", der die beiden
-    zaehlt. Ein Klick darauf laedt beide ein - beide bekommen die Einladung,
-    der Bot liest, wen -, danach ist niemand mehr einzuladen: der Knopf ist
-    weg, all wird nicht mehr angeboten, und /cam follow invite all sagt, dass
-    niemand da ist. Ist die Fuehrung voll (max-guests: 1), sagt
-    /cam follow invite all das. Mit invite-all: false gibt es den Knopf nicht,
-    all wird nicht angeboten und ist ein Name wie jeder andere.
+    der Seite der Fuehrung steht unten rechts (53) der Knopf "Invite
+    everybody", der die beiden zaehlt und sagt, wie nah sie sein muessen
+    (start-distance und radius, je 16). Ein Klick darauf laedt beide ein -
+    beide bekommen die Einladung, der Bot liest, wen -, danach ist niemand
+    mehr einzuladen: der Knopf ist weg, all wird nicht mehr angeboten, und
+    /cam follow invite all sagt, dass niemand da ist und wie nah sie sein
+    muessten. Folgt der zweite, steht unten in der Mitte (49) der Blick und
+    links (47) der Knopf, der alle gehen laesst. Ist die Fuehrung voll
+    (max-guests: 1), sagt /cam follow invite all das. Mit invite-all: false
+    gibt es den Knopf nicht, all wird nicht angeboten und ist ein Name wie
+    jeder andere.
     """
     def tab(client, text):
         return client.call("tab", text=text).get("matches", [])
@@ -9326,12 +9330,15 @@ def alle_einladen_checks(env, bot):
         client.call("click_window", wait=15, slot=slot, button=0, mode=0)
         time.sleep(warten)
 
-    def knopf():
-        """Was auf dem Platz des Knopfs steht, der alle einlaedt, auf der Seite der Fuehrung."""
+    def seite():
+        """Die Seite der Fuehrung des Bots, offen."""
         befehl(bot, "/cam menu", warten=1.0)
         klick(bot, 9)
-        text = item_text(fenster(bot).get("slots", {}).get("51"))
-        return text
+        return fenster(bot).get("slots", {})
+
+    def knopf():
+        """Was auf dem Platz des Knopfs steht, der alle einlaedt, auf der Seite der Fuehrung."""
+        return item_text(seite().get("53"))
 
     if not FIND.test("Cam-Modus ist vor dem Test des Einladens aller aus", cam_off(bot), ""):
         return
@@ -9364,12 +9371,14 @@ def alle_einladen_checks(env, bot):
         FIND.test("Tab nach /cam follow invite bietet all an, und die beiden daneben",
                   "all" in tabs and ZUSCHAUER_NAME in tabs and DRITTER_NAME in tabs, str(tabs))
         text = knopf()
-        FIND.test("Menue: auf der Seite der Fuehrung steht \"Invite everybody\" und zaehlt die beiden",
-                  "Invite everybody" in text and "Invites the 2 players" in text, text)
+        FIND.test("Menue: unten rechts auf der Seite der Fuehrung steht \"Invite everybody\", zaehlt die beiden und "
+                  "sagt, wie nah sie sein muessen",
+                  "Invite everybody" in text and "2 players now" in text
+                  and "without cam mode: within 16 blocks" in text and "in cam mode: within 16 blocks" in text, text)
         seit = bot.mark()
         seit_zuschauer = zuschauer.mark()
         seit_dritter = dritter.mark()
-        klick(bot, 51, warten=2.0)
+        klick(bot, 53, warten=2.0)
         hier = zeilen_seit(bot, seit)
         FIND.test("Ein Klick auf den Knopf laedt beide ein, und der Bot liest, wen",
                   gesagt(hier, rf"You invited 2 players to follow you: {DRITTER_NAME}, {ZUSCHAUER_NAME}"),
@@ -9377,16 +9386,24 @@ def alle_einladen_checks(env, bot):
         FIND.test("Beide bekommen die Einladung",
                   gesagt(zeilen_seit(zuschauer, seit_zuschauer), rf"{BOT_NAME} invites you to follow them")
                   and gesagt(zeilen_seit(dritter, seit_dritter), rf"{BOT_NAME} invites you to follow them"), "")
-        danach = item_text(fenster(bot).get("slots", {}).get("51"))
+        danach = item_text(fenster(bot).get("slots", {}).get("53"))
         FIND.test("Danach ist niemand mehr einzuladen: der Knopf ist weg", "Invite everybody" not in danach, danach)
         bot.call("close_window", wait=10)
         tabs = tab(bot, "/cam follow invite ")
         zeilen = befehl(bot, "/cam follow invite all")
-        FIND.test("... all wird nicht mehr angeboten, und /cam follow invite all sagt, dass niemand da ist",
-                  "all" not in tabs and gesagt(zeilen, r"Nobody close to you to invite right now"),
+        FIND.test("... all wird nicht mehr angeboten, und /cam follow invite all sagt, dass niemand da ist und wie "
+                  "nah sie sein muessten",
+                  "all" not in tabs and gesagt(zeilen, r"Nobody to invite right now: without cam mode they have to be "
+                                                       r"within 16 blocks of you, in cam mode within 16 blocks"),
                   f"{tabs} / {zeige(zeilen)}")
         dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
         FIND.test("Der zweite nimmt die Einladung an", gesagt(dort, rf"You follow {BOT_NAME} now"), zeige(dort))
+        unten = seite()
+        bot.call("close_window", wait=10)
+        FIND.test("Unten in der Mitte (49) der Blick, links (47) der Knopf, der alle gehen laesst",
+                  "View when following" in item_text(unten.get("49"))
+                  and "Let everybody go" in item_text(unten.get("47")),
+                  f"{item_text(unten.get('49'))} / {item_text(unten.get('47'))}")
 
         set_option(env, "max-guests", "1", "follow")
         cam_on(bot)
@@ -10587,6 +10604,28 @@ def spotreiter_checks(env, bot):
         FIND.test("Rechtsklick nimmt den eigenen oeffentlichen offline - bei den eigenen bleibt er",
                   gesagt(zeilen, r"Spot Gamma is private again") and platz is not None and "Public" not in eigene,
                   f"{zeige(zeilen)} / {namen(f)}")
+        klick(bot, platz if platz is not None else 0, button=1)
+        f = fenster(bot)
+        oeffentlich = item_text(f.get("slots", {}).get("53"))
+        FIND.test("Rechtsklick auf einen eigenen oeffnet die Seite zum Teilen: die Spieler ab Platz 0, unten rechts "
+                  "(53) der Knopf, der ihn oeffentlich macht",
+                  "Share Gamma" in (f.get("title") or "") and any(ZUSCHAUER_NAME in n for n in namen(f))
+                  and "Public" not in item_text(f.get("slots", {}).get("0"))
+                  and "Public" in oeffentlich and "click to make it public" in oeffentlich,
+                  f"{f.get('title')} / {namen(f)} / {oeffentlich}")
+        seit = bot.mark()
+        klick(bot, 53)
+        zeilen = zeilen_seit(bot, seit)
+        f = fenster(bot)
+        oeffentlich = f.get("slots", {}).get("53") or {}
+        FIND.test("Ein Klick darauf macht ihn oeffentlich, der Knopf glaenzt und bleibt auf seinem Platz",
+                  gesagt(zeilen, r"Spot Gamma is public now") and "click to make it private" in item_text(oeffentlich)
+                  and oeffentlich.get("glint") is True, f"{zeige(zeilen)} / {item_text(oeffentlich)}")
+        seit = bot.mark()
+        klick(bot, 53)
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Noch ein Klick macht ihn wieder privat", gesagt(zeilen, r"Spot Gamma is private again"),
+                  zeige(zeilen))
         bot.call("close_window", wait=10)
 
         befehl(bot, f"/cam spot share Alpha {ZUSCHAUER_NAME}")
@@ -11100,7 +11139,7 @@ def tourmoderation_checks(env, bot):
                   "You can't invite him" in er and "he may not follow anybody" in er, er)
         zeilen = befehl(zuschauer, f"/cam follow accept {BOT_NAME}")
         f = fuehrung_seite(zuschauer)
-        unten = item_text(f.get("slots", {}).get("49"))
+        unten = item_text(f.get("slots", {}).get("47"))
         FIND.test("Annehmen sagt ihm, dass er nicht teilnehmen darf, und seine Seite der Fuehrung sagt es unten",
                   gesagt(zeilen, r"You may not follow anybody for good")
                   and "Sorry, you may not follow anybody" in unten and "You are restricted" in unten,
@@ -11158,8 +11197,8 @@ def tourmoderation_checks(env, bot):
         FIND.test("Aus: einladen sagt, dass Fuehrungen abgeschaltet sind, seine Seite sagt es einmal, in der Mitte",
                   gesagt(zeilen, r"Following is switched off for good")
                   and "Following is switched off" in mitte and "It is off for everybody" in mitte
-                  and "switched off" not in item_text(seite.get("slots", {}).get("49")),
-                  f"{zeige(zeilen)} / {mitte} / {item_text(seite.get('slots', {}).get('49'))}")
+                  and "switched off" not in item_text(seite.get("slots", {}).get("47")),
+                  f"{zeige(zeilen)} / {mitte} / {item_text(seite.get('slots', {}).get('47'))}")
         zeilen = befehl(zuschauer, f"/cam follow accept {BOT_NAME}")
         FIND.test("Aus: annehmen geht auch nicht", gesagt(zeilen, r"Following is switched off for good"), zeige(zeilen))
         zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")

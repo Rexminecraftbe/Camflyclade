@@ -942,7 +942,7 @@ public final class CamTour implements Listener {
      * all but those he has invited and whose invitation still holds, those he
      * may not invite again yet, and those a restriction keeps from taking
      * part, who are left out without a word. He hears whom he invited, or
-     * that there was nobody.
+     * that there was nobody, and how close they would have to be.
      */
     public void inviteAll(Player guide) {
         if (!settings.isTourInviteAll()) {
@@ -963,7 +963,12 @@ public final class CamTour implements Listener {
             invited.add(other.getName());
         }
         if (invited.isEmpty()) {
-            messages.sendConfiguredMessage(guide, "tour-invite-all-none");
+            // How close they would have to be: out of camera mode to him,
+            // in camera mode camera to camera.
+            double start = settings.getTourStartDistance();
+            messages.sendConfiguredMessage(guide, start > 0.0 ? "tour-invite-all-none" : "tour-invite-all-none-cam-only",
+                    "{start}", String.valueOf(Math.round(start)),
+                    "{radius}", String.valueOf(Math.round(settings.getTourRadius())));
             return;
         }
         messages.sendConfiguredMessage(guide, "tour-invited-all", "{count}", String.valueOf(invited.size()),
