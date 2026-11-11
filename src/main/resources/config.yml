@@ -312,10 +312,11 @@ night-vision:
   # für immer oder bis der Spieler den Server verlässt. Texte: nightvision-set, nightvision-set-memory, nightvision-reset.
   player-choice: true
 
-# Eigene Einstellungen der Spieler: was jeder für sich im Cam-Modus wählt, gilt auch für seine nächsten Flüge.
-# Die Nachtsicht von /cam nightvision (bei night-vision.player-choice: true) wird immer gemerkt, der Rest nach den
-# Schaltern hier. Ist ein Schalter aus, beginnt jeder Flug wieder wie vorher: mit flight-speed.start, der Zeit und dem
-# Wetter der Welt.
+# Eigene Einstellungen der Spieler: was jeder für sich wählt, gilt auch für seine nächsten Flüge.
+# Die Nachtsicht von /cam nightvision (bei night-vision.player-choice: true), die Tageszeit von /cam time und das Wetter
+# von /cam weather werden immer gemerkt, bis der Spieler sie mit reset zurücksetzt - gewählt im Cam-Modus (gilt sofort)
+# oder davor (gilt ab dem nächsten Flug), im Menü wie mit dem Befehl. Die Fluggeschwindigkeit nach dem Schalter hier;
+# ist er aus, beginnt jeder Flug wieder mit flight-speed.start.
 player-settings:
   # Wo die Einstellungen liegen:
   #   file   = in plugins/CamFly/playerdata/stats/<UUID>.yml - sie bleiben nach dem Verlassen, /cam reload und einem
@@ -325,10 +326,6 @@ player-settings:
   # Die Fluggeschwindigkeit vom Mausrad merken: Der nächste Flug beginnt so schnell, wie der letzte aufgehört hat
   # (zwischen flight-speed.min und max)
   flight-speed: true
-  # Die eigene Zeit von /cam time merken, bis /cam time reset (Text: time-set-kept statt time-set)
-  time: false
-  # Das eigene Wetter von /cam weather merken, bis /cam weather reset (Text: weather-set-kept statt weather-set)
-  weather: false
 
 # Töne im Cam-Modus. Nur der Spieler selbst hört sie, sonst würden sie einen unsichtbaren Spieler verraten.
 #   enabled = Ton an (true) oder aus (false)
@@ -1049,16 +1046,17 @@ photo-mode:
 #   /cam time day | noon | sunset | night | midnight | sunrise   = 1000, 6000, 12000, 13000, 18000, 23000
 #   /cam time <Zahl>                                             = in Ticks, 0 bis 23999
 #   /cam time reset                                              = wieder die Zeit der Welt
-# Die Zeit steht still. Nur der Spieler selbst sieht sie, die Welt läuft mit ihrer eigenen Zeit weiter.
-# Mit dem Ende des Cam-Modus sieht er wieder, was er vorher sah (Texte: time-set, time-reset). Mit
-# player-settings.time: true beginnt der nächste Flug wieder mit ihr, bis /cam time reset.
+# Die Zeit steht still. Nur der Spieler selbst sieht sie, und nur im Cam-Modus; die Welt läuft mit ihrer eigenen Zeit
+# weiter. Geht im Cam-Modus (sofort) und davor (für den nächsten Flug). Gemerkt wird sie wie die Nachtsicht, für jeden
+# Flug bis /cam time reset - wie lange, sagt player-settings.storage: für immer oder bis der Spieler den Server
+# verlässt. Mit dem Ende des Cam-Modus sieht er wieder, was er vorher sah. Texte: time-set, time-set-memory, time-reset.
 cam-time:
   enabled: true
 
-# /cam weather: ein eigenes Wetter im Cam-Modus, wie /cam time nur für ihn und nur bis zum Ende des Cam-Modus.
+# /cam weather: ein eigenes Wetter im Cam-Modus, wie /cam time nur für ihn, auch davor wählbar und ebenso gemerkt.
 #   /cam weather clear | rain | reset   = klar, Regen (Schnee, wo es schneit), wieder das Wetter der Welt
-# Ein Gewitter für einen einzelnen Spieler kennt das Spiel nicht. Texte: weather-set, weather-reset. Mit
-# player-settings.weather: true beginnt der nächste Flug wieder mit ihm, bis /cam weather reset.
+# Ein Gewitter für einen einzelnen Spieler kennt das Spiel nicht. Texte: weather-set, weather-set-memory,
+# weather-reset.
 cam-weather:
   enabled: true
 

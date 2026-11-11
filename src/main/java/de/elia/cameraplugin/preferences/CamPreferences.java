@@ -14,14 +14,13 @@ import java.util.UUID;
 
 /**
  * The settings each player picks for himself, {@code player-settings}: his
- * night vision of {@code /cam nightvision}, the speed he last flew at, and the
- * time and weather of {@code /cam time} and {@code /cam weather}.
+ * night vision of {@code /cam nightvision}, the time and weather of
+ * {@code /cam time} and {@code /cam weather}, and the speed he last flew at.
  *
- * <p>The night vision is always kept - that is what picking it is for. The
- * speed, the time and the weather only while their switch under
- * {@code player-settings} is on; otherwise every flight starts with
- * {@code flight-speed.start} and the time and weather of the world, as it did
- * before.</p>
+ * <p>The night vision, the time and the weather are always kept - that is
+ * what picking them is for, before camera mode as well as in it. The speed
+ * only while {@code player-settings.flight-speed} is on; otherwise every
+ * flight starts with {@code flight-speed.start}.</p>
  *
  * <p>Where they are kept is {@code player-settings.storage}: in the file of the
  * player, where they outlast his leaving and a restart, or in memory until
@@ -118,16 +117,8 @@ public final class CamPreferences {
         }
     }
 
-    /** Whether his time of {@code /cam time} is kept for the next flight, {@code player-settings.time}. */
-    public boolean keepsTime() {
-        return settings.isPlayerSettingsTime();
-    }
-
-    /** The time he last picked, or {@code null} for none or while it is not kept. */
+    /** The time of {@code /cam time} he picked, or {@code null} for none. */
     public Long time(Player player) {
-        if (!keepsTime()) {
-            return null;
-        }
         if (inFile()) {
             return record(player).getCamTime();
         }
@@ -135,28 +126,21 @@ public final class CamPreferences {
         return picked == null ? null : picked.time;
     }
 
-    /** Keeps the time he picked, {@code null} for none; written with the end of camera mode. */
+    /**
+     * Keeps the time he picked, {@code null} for none. Written at once, as
+     * the night vision is: he picks it before camera mode as well as in it.
+     */
     public void setTime(Player player, Long ticks) {
-        if (!keepsTime()) {
-            return;
-        }
         if (inFile()) {
             record(player).setCamTime(ticks);
+            store.save(player.getUniqueId());
         } else {
             picked(player).time = ticks;
         }
     }
 
-    /** Whether his weather of {@code /cam weather} is kept for the next flight, {@code player-settings.weather}. */
-    public boolean keepsWeather() {
-        return settings.isPlayerSettingsWeather();
-    }
-
-    /** The weather he last picked, or {@code null} for none or while it is not kept. */
+    /** The weather of {@code /cam weather} he picked, or {@code null} for none. */
     public WeatherType weather(Player player) {
-        if (!keepsWeather()) {
-            return null;
-        }
         if (inFile()) {
             return record(player).getCamWeather();
         }
@@ -164,13 +148,11 @@ public final class CamPreferences {
         return picked == null ? null : picked.weather;
     }
 
-    /** Keeps the weather he picked, {@code null} for none; written with the end of camera mode. */
+    /** Keeps the weather he picked, {@code null} for none; written at once, as the time is. */
     public void setWeather(Player player, WeatherType weather) {
-        if (!keepsWeather()) {
-            return;
-        }
         if (inFile()) {
             record(player).setCamWeather(weather);
+            store.save(player.getUniqueId());
         } else {
             picked(player).weather = weather;
         }

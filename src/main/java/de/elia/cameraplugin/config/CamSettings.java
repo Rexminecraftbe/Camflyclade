@@ -487,10 +487,6 @@ public final class CamSettings {
     private StorageMode playerSettingsStorage;
     /** Whether the speed he last flew at is kept, {@code player-settings.flight-speed}. */
     private boolean playerSettingsFlightSpeed;
-    /** Whether his time of {@code /cam time} is kept, {@code player-settings.time}. */
-    private boolean playerSettingsTime;
-    /** Whether his weather of {@code /cam weather} is kept, {@code player-settings.weather}. */
-    private boolean playerSettingsWeather;
 
     /** Whether players far away are hidden from a camera player, {@code anti-scouting.enabled}. */
     private boolean antiScoutingEnabled;
@@ -886,8 +882,6 @@ public final class CamSettings {
         resumeStorage = readStorage(config, "resume-command.storage");
         playerSettingsStorage = readStorage(config, "player-settings.storage");
         playerSettingsFlightSpeed = config.getBoolean("player-settings.flight-speed", true);
-        playerSettingsTime = config.getBoolean("player-settings.time", false);
-        playerSettingsWeather = config.getBoolean("player-settings.weather", false);
         antiScoutingEnabled = config.getBoolean("anti-scouting.enabled", false);
         antiScoutingRadius = config.getDouble("anti-scouting.radius", 32.0, 0.0, MAX_SCOUT_RADIUS);
         antiScoutingFrom = config.getChoice("anti-scouting.measured-from", "body", "body", "camera")
@@ -2135,14 +2129,6 @@ public final class CamSettings {
 
     public boolean isPlayerSettingsFlightSpeed() {
         return playerSettingsFlightSpeed;
-    }
-
-    public boolean isPlayerSettingsTime() {
-        return playerSettingsTime;
-    }
-
-    public boolean isPlayerSettingsWeather() {
-        return playerSettingsWeather;
     }
 
     public boolean isAntiScoutingEnabled() {
