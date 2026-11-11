@@ -291,7 +291,7 @@ public final class PlayerStore {
         // flight was on (visit-owner, visit-spot): that is gone, the flight
         // goes on where it ended.
         return new LastFlight(world, section.getDouble("x"), section.getDouble("y"), section.getDouble("z"),
-                (float) section.getDouble("yaw"), (float) section.getDouble("pitch"));
+                (float) section.getDouble("yaw"), (float) section.getDouble("pitch"), SpotLook.read(section));
     }
 
     /**
@@ -372,6 +372,7 @@ public final class PlayerStore {
             file.set("last-flight.z", flight.z());
             file.set("last-flight.yaw", (double) flight.yaw());
             file.set("last-flight.pitch", (double) flight.pitch());
+            flight.look().write(file, "last-flight");
         }
         // Counted as saved as soon as it is handed over: only a change from
         // now on has it written again. Should the disk turn it away, it counts

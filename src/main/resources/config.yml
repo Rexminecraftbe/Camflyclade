@@ -766,6 +766,11 @@ back-command:
 # prüft und kostet), im Cam-Modus springt die Kamera gleich. Gemerkt wird das Ende jedes Flugs, egal wodurch er endete.
 # Gesprungen wird nur, wohin die Kamera auch fliegen dürfte - wie bei /cam spot, gemessen vom Körper, wo er jetzt
 # steht. Sonst sagt eine Meldung, warum nicht, und ohne Cam-Modus startet er dann gar nicht erst.
+# Gemerkt wird mit dem Ende auch, welche Tageszeit, welches Wetter und welche Nachtsicht der Flug da hatte - die man
+# sich selbst eingestellt hatte, oder die eines Aussichtspunkts oder des Leaders, dem man folgte (nie die Zeit und das
+# Wetter der Welt). /cam resume (auch der Knopf im Menü) stellt sie wieder ein, wie ein Aussichtspunkt es tut: Sie
+# gelten statt der eigenen, bis die Kamera woanders hingesetzt wird oder man selbst etwas einstellt; was der Flug nicht
+# hatte, ist die eigene Einstellung. Welche davon, sagen time, weather und night-vision unten.
 # Ton: sounds.spot, Texte: resume-...
 resume-command:
   enabled: true
@@ -773,6 +778,12 @@ resume-command:
   #   file   = in plugins/CamFly/playerdata/stats/<UUID>.yml - es bleibt nach /cam reload und einem Neustart
   #   memory = nur im Arbeitsspeicher - nach einem Neustart ist es weg
   storage: file
+  # Ob /cam resume die Tageszeit des letzten Flugs wieder einstellt (nur mit cam-time.enabled)
+  time: true
+  # Ob es das Wetter des letzten Flugs wieder einstellt (nur mit cam-weather.enabled)
+  weather: true
+  # Ob es die Nachtsicht des letzten Flugs wieder einstellt (nur mit night-vision.player-choice)
+  night-vision: true
 
 # Aussichtspunkte: Stellen mit Blickrichtung, an die die Kamera springt - für einen Bau, den man sich immer wieder von
 # derselben Stelle aus ansieht.
@@ -803,9 +814,9 @@ resume-command:
 # Was ein Punkt zeigt: Setzt man ihn im Cam-Modus, nimmt er die Tageszeit, das Wetter und die Nachtsicht mit, die man
 # sich selbst eingestellt hat (/cam time, /cam weather, /cam nightvision) - nie die Zeit und das Wetter der Welt.
 # Wer hinspringt, sieht den Bau dann so, z. B. im Sonnenuntergang im Regen, nur auf seinem eigenen
-# Bildschirm - bis seine Kamera woanders hingesetzt wird (ein Punkt ohne eigene Einstellung, /cam back, /cam resume,
-# Folgen) oder er selbst etwas einstellt. Danach sieht er wieder seine eigene; für seine nächsten Flüge gemerkt wird
-# davon nichts. Ist cam-time, cam-weather oder night-vision.player-choice aus, gilt dieser Teil nicht, weder beim
+# Bildschirm - bis seine Kamera woanders hingesetzt wird (ein Punkt ohne eigene Einstellung, /cam back, /cam resume
+# mit dem, was der letzte Flug hatte, Folgen mit dem, was der Leader hat) oder er selbst etwas einstellt. Danach
+# sieht er wieder seine eigene; für seine nächsten Flüge gemerkt wird davon nichts. Ist cam-time, cam-weather oder night-vision.player-choice aus, gilt dieser Teil nicht, weder beim
 # Setzen noch beim Hinspringen - im Punkt bleibt er trotzdem stehen und gilt wieder, sobald der Schalter wieder an ist.
 # Zu Fuß sieht man die Zeit und das Wetter der Welt, ein Punkt von dort nimmt nichts mit.
 # (Texte: spot-saved-look, spot-list-look, menu-spot-look, spot-look-...)
@@ -906,6 +917,8 @@ web-map:
 #   /cam follow invite <Spieler>   = einen Spieler einladen: einen im Cam-Modus, dessen Kamera nicht weiter als radius
 #                                    Blöcke von der eigenen weg ist, oder einen ohne Cam-Modus, der nicht weiter als
 #                                    start-distance vom Leader steht (im Menü stehen nur solche)
+#   /cam follow invite all         = alle auf einmal einladen, die gerade so in der Nähe sind (invite-all; im Menü
+#                                    der Knopf mit der Glocke)
 #   /cam follow accept <Spieler>   = eine Einladung annehmen (sie gilt eine Minute; auch der Knopf im Chat, der sie
 #                                    gleich annimmt): die Kamera geht zum Leader, schaut wie er und fliegt von da an
 #                                    mit ihm mit. Ohne Cam-Modus startet er dafür erst, dort wo man steht.
@@ -949,6 +962,13 @@ web-map:
 # ihren eigenen Frost.
 # Mit guide-view sieht ein Follower durch seine Augen: Die Herzen dort zeichnet das Spiel selbst - und den Hunger
 # dabei immer voll, den schickt das Spiel von niemandem an andere.
+# Tageszeit, Wetter und Nachtsicht (guide-time, guide-weather, guide-night-vision): Ein Follower sieht die des Leaders
+# statt seiner eigenen - ist der Leader im Cam-Modus, die, die er dort hat (die er sich mit /cam time, /cam weather und
+# /cam nightvision eingestellt hat, oder die eines Aussichtspunkts, an dem er gerade ist); ist er nicht im Cam-Modus
+# (lead-without-cam), die Zeit und das Wetter der Welt und keine Nachtsicht - mehr sieht der Leader dann auch nicht.
+# Ändert der Leader etwas, sehen es seine Follower gleich mit. Stellt ein Follower selbst etwas davon ein, gilt für
+# diesen Teil seine eigene Einstellung, bis er aufhört zu folgen. Hört er auf, sieht er wieder seine eigene; für seine
+# nächsten Flüge gemerkt wird vom Leader nichts.
 follow:
   enabled: true
   # Wie nah die Kamera eines anderen der eigenen sein muss, damit man ihn einladen kann, in Blöcken (1 bis 128)
@@ -1020,6 +1040,18 @@ follow:
   # und an ihrer Stelle die Ortungsleiste (andere Spieler als Punkte), sobald es dort jemanden gibt: dann den
   # Fortschritt wie immer nur ein paar Sekunden nach einer Änderung, das Level bleibt stehen.
   mirror-experience: false
+  # Ob der Leader alle auf einmal einladen kann, die er gerade einladen könnte (/cam follow invite all und der Knopf
+  # im Menü): alle, die im Menü zum Einladen stehen - außer wer schon eingeladen ist, wen er gerade erst eingeladen hat
+  # (invite-cooldown-seconds) und wer nicht folgen darf. Für jeden gilt dasselbe wie bei einer einzelnen Einladung
+  # (Texte: tour-invited-all, tour-invite-all-none)
+  invite-all: true
+  # Ob ein Follower die Tageszeit des Leaders sieht statt seiner eigenen (siehe oben, nur mit cam-time.enabled)
+  guide-time: true
+  # Ob er das Wetter des Leaders sieht (nur mit cam-weather.enabled)
+  guide-weather: true
+  # Ob er die Nachtsicht des Leaders hat: die, die für den Leader im Cam-Modus gilt - seine eigene Wahl oder sonst
+  # night-vision.mode -, und keine, solange der Leader nicht im Cam-Modus ist
+  guide-night-vision: true
 
 # /cam photo: der Foto-Modus, an und wieder aus, nur im Cam-Modus. Für Bilder und Videos der eigenen Bauten blendet er
 # nur für den Spieler selbst aus, was im Bild stört - alle anderen sehen weiter alles wie vorher, und an der Welt ändert

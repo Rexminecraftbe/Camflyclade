@@ -110,6 +110,17 @@ import java.util.UUID;
  * {@link #stackedOver}. A guest left behind at the border of his reach is
  * seen at his own camera again, with his own name.</p>
  *
+ * <p>What a guest sees of the sky is the guide's: with
+ * {@code follow.guide-time}, {@code -weather} and {@code -night-vision}, the
+ * time of day, the weather and the night vision the guide has in camera mode
+ * stand in for his own, see {@link #takeLook}; while the guide leads out of
+ * camera mode, the time and weather of the world and no night vision - the
+ * guide sees no other. Should a guest pick one of them himself, his own holds
+ * for that part until the tour is over.</p>
+ *
+ * <p>With {@code follow.invite-all} a guide invites everybody he could invite
+ * at once, {@code /cam follow invite all}, see {@link #inviteAll}.</p>
+ *
  * <p>A jump of his own - {@code /cam back}, a spot, {@code resume} -
  * takes a guest off the tour, as does the end of his camera mode. The end of
  * the guide's camera mode ends the whole tour.</p>
@@ -118,6 +129,13 @@ public final class CamTour implements Listener {
 
     /** Paper's event at the end of every tick, see {@link #watchTickEnd()}. */
     private static final String TICK_END = "com.destroystokyo.paper.event.server.ServerTickEndEvent";
+
+    /**
+     * The word after {@code /cam follow invite} that invites everybody he
+     * could invite, see {@link #inviteAll}. A player of that name is invited
+     * with it only while {@code follow.invite-all} is off.
+     */
+    public static final String ALL = "all";
 
     /** Why the server kicks a player who hits or clicks his own player, see {@link #onSelfInteraction}. */
     private static final String SELF_INTERACTION = "Cannot interact with self!";
@@ -831,7 +849,10 @@ public final class CamTour implements Listener {
             return;
         }
         String word = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
-        if (args.length == 2 && word.equals("invite")) {
+        if (args.length == 2 && word.equals("invite") && args[1].equalsIgnoreCase(ALL)
+                && settings.isTourInviteAll()) {
+            inviteAll(player);
+        } else if (args.length == 2 && word.equals("invite")) {
             invite(player, Bukkit.getPlayerExact(args[1]), args[1]);
         } else if (args.length == 2 && word.equals("accept")) {
             accept(player, Bukkit.getPlayerExact(args[1]), args[1]);
@@ -910,14 +931,80 @@ public final class CamTour implements Listener {
             messages.sendConfiguredMessage(guide, "tour-out-of-reach", "{player}", other.getName());
             return;
         }
+        sendInvitation(guide, other);
+        messages.sendConfiguredMessage(guide, "tour-invited", "{player}", other.getName(),
+                "{seconds}", String.valueOf(settings.getTourInvitationSeconds()));
+    }
+
+    /**
+     * {@code /cam follow invite all}, and the button of the menu: invites
+     * everybody he could invite now, the players of {@link #candidates} -
+     * all but those he has invited and whose invitation still holds, those he
+     * may not invite again yet, and those a restriction keeps from taking
+     * part, who are left out without a word. He hears whom he invited, or
+     * that there was nobody.
+     */
+    public void inviteAll(Player guide) {
+        if (!settings.isTourInviteAll()) {
+            messages.sendConfiguredMessage(guide, "tour-invite-all-off");
+            return;
+        }
+        if (!checkGuide(guide)) {
+            return;
+        }
+        if (isFull(guide)) {
+            messages.sendConfiguredMessage(guide, "tour-full-guide", "{max}",
+                    String.valueOf(settings.getTourMaxGuests()));
+            return;
+        }
+        List<String> invited = new ArrayList<>();
+        for (Player other : invitable(guide)) {
+            sendInvitation(guide, other);
+            invited.add(other.getName());
+        }
+        if (invited.isEmpty()) {
+            messages.sendConfiguredMessage(guide, "tour-invite-all-none");
+            return;
+        }
+        messages.sendConfiguredMessage(guide, "tour-invited-all", "{count}", String.valueOf(invited.size()),
+                "{players}", String.join(", ", invited),
+                "{seconds}", String.valueOf(settings.getTourInvitationSeconds()));
+    }
+
+    /**
+     * Whom {@link #inviteAll} would invite now: the players he could invite,
+     * see {@link #candidates}, but for those already invited, those he may
+     * not invite again yet and those a restriction keeps from taking part.
+     * Nobody while his tour is full, nor while he may not lead.
+     */
+    public List<Player> invitable(Player guide) {
+        List<Player> found = new ArrayList<>();
+        if (isFull(guide) || !plugin.getTourModeration().may(guide, TourBans.What.LEAD)) {
+            return found;
+        }
+        for (Player other : candidates(guide)) {
+            if (hasInvited(guide, other) || inviteWait(guide, other) > 0L
+                    || !plugin.getTourModeration().may(other, TourBans.What.JOIN)
+                    || !cameraPlayers.contains(other.getUniqueId()) && settings.getTourStartDistance() <= 0.0) {
+                continue;
+            }
+            found.add(other);
+        }
+        return found;
+    }
+
+    /**
+     * Invites him, once everything has been asked: the invitation holds for
+     * {@code follow.invitation-seconds}, and he hears about it with the
+     * buttons to accept and to turn it down.
+     */
+    private void sendInvitation(Player guide, Player other) {
         long now = System.currentTimeMillis();
         int holds = settings.getTourInvitationSeconds();
         invitations.computeIfAbsent(other.getUniqueId(), id -> new HashMap<>())
                 .put(guide.getUniqueId(), now + holds * 1000L);
         forgetWaits(now);
         lastInvited.computeIfAbsent(other.getUniqueId(), id -> new HashMap<>()).put(guide.getUniqueId(), now);
-        messages.sendConfiguredMessage(guide, "tour-invited", "{player}", other.getName(),
-                "{seconds}", String.valueOf(holds));
         tellInvited(other, guide, holds);
         settings.getTourInviteSound().play(other);
     }
@@ -1114,6 +1201,8 @@ public final class CamTour implements Listener {
         tour.guests.put(guest.getUniqueId(), new Guest());
         guideOf.put(guest.getUniqueId(), guide.getUniqueId());
         plugin.getFlightSpeed().hold(guest);
+        // From the first moment on, not only from the next tick of the tour.
+        takeLook(guide, guest);
         syncVisibility();
         messages.sendConfiguredMessage(guest, "tour-joined", "{player}", guide.getName());
         messages.sendConfiguredMessage(guide, "tour-joined-guide", "{player}", guest.getName());
@@ -1222,6 +1311,9 @@ public final class CamTour implements Listener {
             guest.setVelocity(new Vector());
             // Whatever frost his client counted up by itself since the last send.
             ClientFrost.resend(guest);
+            // His own time, weather and night vision again.
+            plugin.getSky().leaveGuide(guest);
+            plugin.getNightVision().leaveGuide(guest);
         }
         syncVisibility();
         if (tours.isEmpty()) {
@@ -1495,6 +1587,7 @@ public final class CamTour implements Listener {
                 if (!tour.guests.containsKey(next.getKey())) {
                     continue;
                 }
+                takeLook(guide, guest);
                 if (mirrored) {
                     mirror.update(guide, guest);
                 } else {
@@ -1524,6 +1617,18 @@ public final class CamTour implements Listener {
             forgetAgain();
             mirror.tickEnd();
         }
+    }
+
+    /**
+     * Lets the guide's sky stand in for a guest's own, every tick, as far as
+     * {@code follow.guide-time}, {@code -weather} and {@code -night-vision}
+     * say: what the guide has in camera mode, the time and weather of the
+     * world and no night vision while he leads out of it. Only a change goes
+     * to the client.
+     */
+    private void takeLook(Player guide, Player guest) {
+        plugin.getSky().showGuide(guest, guide);
+        plugin.getNightVision().showGuide(guest, guide);
     }
 
     /**

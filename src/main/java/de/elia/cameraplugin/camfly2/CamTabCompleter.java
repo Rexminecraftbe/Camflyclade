@@ -205,6 +205,11 @@ public class CamTabCompleter implements TabCompleter {
                 default -> List.of();
             };
             List<String> names = new ArrayList<>();
+            // Everybody at once, while there is anybody to invite that way.
+            if (args[1].equalsIgnoreCase("invite") && plugin.getSettings().isTourInviteAll()
+                    && !tour.invitable(own).isEmpty()) {
+                names.add(CamTour.ALL);
+            }
             for (Player other : whom) {
                 names.add(other.getName());
             }

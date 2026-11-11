@@ -6,6 +6,7 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.display.GlowMode;
 import de.elia.cameraplugin.progress.CamProgressGuard;
 import de.elia.cameraplugin.scoreboard.NoCollisionTeam;
+import de.elia.cameraplugin.spot.SpotLook;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -417,6 +418,9 @@ public final class CameraMode {
             plugin.getCamModeObjective().setScore(player, 0);
             return;
         }
+        // What the flight showed, for /cam resume: before a tour he follows
+        // ends, and before the sky of the world comes back.
+        SpotLook lastLook = plugin.getSpots().lookOf(player);
         // First: his guests are dropped while he is still where his camera is.
         plugin.getTour().stopFor(player);
         plugin.getTimeLimit().cancelTimeLimit(player);
@@ -438,7 +442,7 @@ public final class CameraMode {
         // For the log, before he is put back at his body.
         Location cameraAt = player.getLocation();
         // Where /cam resume goes on.
-        plugin.getResume().remember(player, cameraData, cameraAt);
+        plugin.getResume().remember(player, cameraData, cameraAt, lastLook);
         // Before the teleport to the body as well, which is no part of the flight.
         plugin.getTrail().stopFor(player, cameraAt);
 

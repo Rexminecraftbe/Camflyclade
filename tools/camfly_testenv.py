@@ -8423,8 +8423,9 @@ def fuehrung_checks(env, bot):
                   gesagt(zeilen, rf"{ZUSCHAUER_NAME} is too far away"), zeige(zeilen))
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
         tabs = tab(bot, "/cam follow invite ")
-        FIND.test("Tab nach /cam follow invite: der Spieler daneben, auch ohne Cam-Modus", tabs == [ZUSCHAUER_NAME],
-                  str(tabs))
+        # Dazu all, das alle auf einmal einlaedt (follow.invite-all).
+        FIND.test("Tab nach /cam follow invite: der Spieler daneben, auch ohne Cam-Modus, und all",
+                  sorted(tabs) == sorted([ZUSCHAUER_NAME, "all"]), str(tabs))
         # Wie ein echter Client im Flug: die Geschwindigkeit des Servers, ohne Schwerkraft.
         zuschauer.call("velocity", on=True)
         seit = zuschauer.mark()
@@ -9298,6 +9299,258 @@ def fuehrung_ohne_cam_checks(env, bot):
             FIND.problem(f"Aufraeumen nach dem Test der Fuehrung ohne Cam-Modus: {exc}")
 
 
+def alle_einladen_checks(env, bot):
+    """follow.invite-all: /cam follow invite all und der Knopf mit der Glocke
+    auf der Seite der Fuehrung laden alle auf einmal ein, die der Leader
+    gerade einladen koennte.
+
+    Voreingestellt ist es an - nachgesehen in der Datei, die das Plugin
+    mitbringt. Der Bot ist im Cam-Modus, der zweite und der dritte Spieler
+    stehen ohne Cam-Modus vier Bloecke neben ihm (start-distance 16). Die
+    Tab-Vervollstaendigung bietet nach /cam follow invite auch all an, und auf
+    der Seite der Fuehrung steht der Knopf "Invite everybody", der die beiden
+    zaehlt. Ein Klick darauf laedt beide ein - beide bekommen die Einladung,
+    der Bot liest, wen -, danach ist niemand mehr einzuladen: der Knopf ist
+    weg, all wird nicht mehr angeboten, und /cam follow invite all sagt, dass
+    niemand da ist. Ist die Fuehrung voll (max-guests: 1), sagt
+    /cam follow invite all das. Mit invite-all: false gibt es den Knopf nicht,
+    all wird nicht angeboten und ist ein Name wie jeder andere.
+    """
+    def tab(client, text):
+        return client.call("tab", text=text).get("matches", [])
+
+    def fenster(client):
+        return client.call("window_slots", wait=10)
+
+    def klick(client, slot, warten=1.5):
+        client.call("click_window", wait=15, slot=slot, button=0, mode=0)
+        time.sleep(warten)
+
+    def knopf():
+        """Was auf dem Platz des Knopfs steht, der alle einlaedt, auf der Seite der Fuehrung."""
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 9)
+        text = item_text(fenster(bot).get("slots", {}).get("51"))
+        return text
+
+    if not FIND.test("Cam-Modus ist vor dem Test des Einladens aller aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    console(env, f"fill {_floor(x) - 6} {y} {_floor(z) - 6} {_floor(x) + 6} {y + 6} {_floor(z) + 6} minecraft:air",
+            pause=0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    dritter = BotClient(env, name=DRITTER_NAME)
+    try:
+        FIND.test("Voreingestellt steht follow.invite-all: true da",
+                  re.search(r"(?m)^\s+invite-all:\s*true\s*$", quelle_config(env)) is not None, "")
+        zuschauer.start()
+        dritter.start()
+        if not FIND.test("Zweiter und dritter Spieler fuer das Einladen aller kommen herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned")
+                         and dritter.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        cam_off(dritter)
+        hinstellen(bot, x, y, z)
+        console(env, f"tp {ZUSCHAUER_NAME} {x - 4} {y} {z}", pause=0.5)
+        console(env, f"tp {DRITTER_NAME} {x + 4} {y} {z}", pause=0.5)
+        if not FIND.test("Cam-Modus fuer das Einladen aller gestartet", cam_on(bot), ""):
+            return
+        tabs = tab(bot, "/cam follow invite ")
+        FIND.test("Tab nach /cam follow invite bietet all an, und die beiden daneben",
+                  "all" in tabs and ZUSCHAUER_NAME in tabs and DRITTER_NAME in tabs, str(tabs))
+        text = knopf()
+        FIND.test("Menue: auf der Seite der Fuehrung steht \"Invite everybody\" und zaehlt die beiden",
+                  "Invite everybody" in text and "Invites the 2 players" in text, text)
+        seit = bot.mark()
+        seit_zuschauer = zuschauer.mark()
+        seit_dritter = dritter.mark()
+        klick(bot, 51, warten=2.0)
+        hier = zeilen_seit(bot, seit)
+        FIND.test("Ein Klick auf den Knopf laedt beide ein, und der Bot liest, wen",
+                  gesagt(hier, rf"You invited 2 players to follow you: {DRITTER_NAME}, {ZUSCHAUER_NAME}"),
+                  zeige(hier))
+        FIND.test("Beide bekommen die Einladung",
+                  gesagt(zeilen_seit(zuschauer, seit_zuschauer), rf"{BOT_NAME} invites you to follow them")
+                  and gesagt(zeilen_seit(dritter, seit_dritter), rf"{BOT_NAME} invites you to follow them"), "")
+        danach = item_text(fenster(bot).get("slots", {}).get("51"))
+        FIND.test("Danach ist niemand mehr einzuladen: der Knopf ist weg", "Invite everybody" not in danach, danach)
+        bot.call("close_window", wait=10)
+        tabs = tab(bot, "/cam follow invite ")
+        zeilen = befehl(bot, "/cam follow invite all")
+        FIND.test("... all wird nicht mehr angeboten, und /cam follow invite all sagt, dass niemand da ist",
+                  "all" not in tabs and gesagt(zeilen, r"Nobody close to you to invite right now"),
+                  f"{tabs} / {zeige(zeilen)}")
+        dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
+        FIND.test("Der zweite nimmt die Einladung an", gesagt(dort, rf"You follow {BOT_NAME} now"), zeige(dort))
+
+        set_option(env, "max-guests", "1", "follow")
+        cam_on(bot)
+        befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
+        zeilen = befehl(bot, "/cam follow invite all")
+        FIND.test("max-guests: 1 - die Fuehrung ist voll, /cam follow invite all sagt das",
+                  gesagt(zeilen, r"You have as many followers as there may be: 1"), zeige(zeilen))
+        cam_off(zuschauer)
+
+        set_options(env, [("max-guests", "5", "follow"), ("invite-all", "false", "follow")])
+        cam_on(bot)
+        tabs = tab(bot, "/cam follow invite ")
+        zeilen = befehl(bot, "/cam follow invite all")
+        text = knopf()
+        bot.call("close_window", wait=10)
+        FIND.test("invite-all: false - kein Knopf, all wird nicht angeboten und ist ein Name wie jeder andere",
+                  "all" not in tabs and gesagt(zeilen, r"Nobody called all is online")
+                  and "Invite everybody" not in text, f"{tabs} / {zeige(zeilen)} / {text}")
+    finally:
+        try:
+            for client in (zuschauer, dritter):
+                if client.proc is not None:
+                    cam_off(client)
+                    client.stop()
+            bot.call("close_window", wait=10)
+            cam_off(bot)
+            set_options(env, [("max-guests", "5", "follow"), ("invite-all", "true", "follow")])
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test des Einladens aller: {exc}")
+
+
+def fuehrung_himmel_checks(env, bot):
+    """follow.guide-time, -weather und -night-vision: Ein Follower sieht die
+    Tageszeit, das Wetter und die Nachtsicht seines Leaders statt seiner
+    eigenen.
+
+    Voreingestellt sind alle drei an - nachgesehen in der Datei, die das
+    Plugin mitbringt. Die Welt steht am Tag still (1000), ohne Regen. Der
+    zweite Spieler hat sich im Cam-Modus Sonnenuntergang und Nachtsicht
+    eingestellt. Folgt er dem Bot, der nicht im Cam-Modus ist, sieht er Tag
+    und hat keine Nachtsicht - mehr sieht der Bot auch nicht -, und verlaesst
+    er die Fuehrung, wieder seine eigenen. Im Cam-Modus hat der Bot
+    Mitternacht, Regen und keine Nachtsicht: Der Gast sieht 18000, Regen und
+    hat keine Nachtsicht. Stellt der Bot noon ein, sieht der Gast 6000;
+    /cam nightvision on beim Bot gibt sie auch dem Gast. Stellt der Gast
+    selbst sunset ein, sieht er 12000, und dabei bleibt es fuer ihn, auch wenn
+    der Bot danach wieder Mitternacht einstellt. Verlaesst er die Fuehrung,
+    sieht er seine eigene Zeit, das Wetter der Welt und hat seine Nachtsicht.
+    Mit guide-time, guide-weather und guide-night-vision: false sieht er auch
+    beim Folgen seine eigenen.
+    """
+    def zeit(client):
+        return client.call("sky").get("timeOfDay")
+
+    def regen(client):
+        return client.call("sky").get("rain") or 0
+
+    def nachtsicht():
+        return nbt_frage(bot, ZUSCHAUER_NAME, NACHTSICHT)
+
+    def folgen(warten=3.0):
+        befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=warten)
+        return gesagt(dort, rf"You follow {BOT_NAME} now")
+
+    def zuruecksetzen(client):
+        for wort in ("time", "weather", "nightvision"):
+            befehl(client, f"/cam {wort} reset", warten=0.5)
+
+    if not FIND.test("Cam-Modus ist vor dem Test des Himmels der Fuehrung aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    gast = (x - 4, y, z)
+    console(env, f"fill {_floor(x) - 6} {y} {_floor(z) - 4} {_floor(x) + 4} {y + 6} {_floor(z) + 4} minecraft:air",
+            pause=0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    try:
+        quelle = quelle_config(env)
+        FIND.test("Voreingestellt stehen follow.guide-time, guide-weather und guide-night-vision auf true da",
+                  all(re.search(rf"(?m)^\s+{schluessel}:\s*true\s*$", quelle) is not None
+                      for schluessel in ("guide-time", "guide-weather", "guide-night-vision")), "")
+        console(env, "weather clear", pause=0.5)
+        console(env, "time set day", pause=1.0)
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer den Himmel der Fuehrung kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        zuruecksetzen(bot)
+        zuruecksetzen(zuschauer)
+        bot.chat("/effect clear @s")
+        hinstellen(bot, x, y, z)
+        if not FIND.test("Der zweite Spieler ist im Cam-Modus", zuschauer_cam_an(env, zuschauer, *gast), ""):
+            return
+        befehl(zuschauer, "/cam time sunset", warten=0.5)
+        befehl(zuschauer, "/cam nightvision on", warten=1.5)
+        FIND.test("Der zweite Spieler sieht seine eigene Zeit (sunset, 12000) und hat Nachtsicht",
+                  zeit(zuschauer) == 12000 and nachtsicht(), str(zeit(zuschauer)))
+
+        if not FIND.test("Er folgt dem Bot, der nicht im Cam-Modus ist", folgen(), ""):
+            return
+        FIND.test("Leader ohne Cam-Modus: der Gast sieht die Zeit der Welt (1000) und hat keine Nachtsicht",
+                  zeit(zuschauer) == 1000 and not nachtsicht(), str(zeit(zuschauer)))
+        befehl(zuschauer, "/cam follow leave", warten=2.0)
+        FIND.test("Verlaesst er die Fuehrung, sieht er wieder seine eigene Zeit und hat seine Nachtsicht",
+                  zeit(zuschauer) == 12000 and nachtsicht(), str(zeit(zuschauer)))
+
+        if not FIND.test("Cam-Modus des Bots fuer den Himmel der Fuehrung gestartet", cam_on(bot), ""):
+            return
+        befehl(bot, "/cam time midnight", warten=0.5)
+        befehl(bot, "/cam weather rain", warten=0.5)
+        befehl(bot, "/cam nightvision off", warten=0.5)
+        if not FIND.test("Er folgt dem Bot im Cam-Modus", folgen(warten=6.5), ""):
+            return
+        FIND.test("Leader im Cam-Modus: der Gast sieht seine Zeit (midnight, 18000), seinen Regen und hat seine "
+                  "Nachtsicht (keine)",
+                  zeit(zuschauer) == 18000 and regen(zuschauer) > 0.99 and not nachtsicht(),
+                  f"{zeit(zuschauer)} / {regen(zuschauer)}")
+        befehl(bot, "/cam time noon", warten=1.5)
+        FIND.test("Stellt der Bot noon ein, sieht der Gast 6000", zeit(zuschauer) == 6000, str(zeit(zuschauer)))
+        befehl(bot, "/cam nightvision on", warten=1.5)
+        FIND.test("/cam nightvision on beim Bot gibt dem Gast Nachtsicht", nachtsicht(), "")
+        befehl(zuschauer, "/cam time sunset", warten=1.5)
+        befehl(bot, "/cam time midnight", warten=1.5)
+        FIND.test("Stellt der Gast selbst sunset ein, bleibt es fuer ihn dabei, auch wenn der Bot danach "
+                  "Mitternacht einstellt",
+                  zeit(zuschauer) == 12000 and zeit(bot) == 18000, f"{zeit(zuschauer)} / {zeit(bot)}")
+        befehl(bot, "/cam nightvision off", warten=1.5)
+        befehl(zuschauer, "/cam follow leave", warten=2.0)
+        FIND.test("Verlaesst er die Fuehrung: seine Zeit, das Wetter der Welt und seine Nachtsicht",
+                  zeit(zuschauer) == 12000 and regen(zuschauer) == 0 and nachtsicht(),
+                  f"{zeit(zuschauer)} / {regen(zuschauer)}")
+
+        set_options(env, [("guide-time", "false", "follow"), ("guide-weather", "false", "follow"),
+                          ("guide-night-vision", "false", "follow")])
+        cam_on(bot)
+        zuschauer_cam_an(env, zuschauer, *gast)
+        if FIND.test("Er folgt dem Bot mit guide-...: false", folgen(warten=6.5), ""):
+            FIND.test("guide-time, -weather, -night-vision: false - er sieht beim Folgen seine eigenen",
+                      zeit(zuschauer) == 12000 and regen(zuschauer) == 0 and nachtsicht(),
+                      f"{zeit(zuschauer)} / {regen(zuschauer)}")
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                cam_off(zuschauer)
+                zuruecksetzen(zuschauer)
+                zuschauer.stop()
+            cam_off(bot)
+            zuruecksetzen(bot)
+            set_options(env, [("guide-time", "true", "follow"), ("guide-weather", "true", "follow"),
+                              ("guide-night-vision", "true", "follow")])
+            console(env, "weather clear", pause=0.3)
+            console(env, "time set day", pause=0.3)
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test des Himmels der Fuehrung: {exc}")
+
+
 def weiter_checks(env, bot):
     """resume-command: /cam resume macht dort weiter, wo der letzte Flug
     aufhoerte.
@@ -9401,6 +9654,106 @@ def weiter_checks(env, bot):
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test von /cam resume: {exc}")
+
+
+def weiter_himmel_checks(env, bot):
+    """resume-command.time, .weather und .night-vision: /cam resume stellt die
+    Tageszeit, das Wetter und die Nachtsicht des letzten Flugs wieder ein.
+
+    Voreingestellt sind alle drei an - nachgesehen in der Datei, die das
+    Plugin mitbringt. Die Welt steht am Tag still (1000), ohne Regen. Der Bot
+    fliegt mit sunset, Regen und Nachtsicht, und in seiner Datei steht das
+    unter last-flight. Danach stellt er alles zurueck (Nachtsicht off), und
+    /cam resume startet den Cam-Modus mit 12000, Regen und Nachtsicht.
+    Gemerkt wird davon nichts: der naechste Flug mit /cam beginnt mit seinen
+    eigenen. Mit time, weather und night-vision: false bringt /cam resume
+    nichts davon zurueck.
+    """
+    def zeit():
+        return bot.call("sky").get("timeOfDay")
+
+    def regen():
+        return bot.call("sky").get("rain") or 0
+
+    def nachtsicht():
+        return nbt_frage(bot, "@s", NACHTSICHT)
+
+    def einstellen():
+        befehl(bot, "/cam time sunset", warten=0.5)
+        befehl(bot, "/cam weather rain", warten=0.5)
+        befehl(bot, "/cam nightvision on", warten=0.5)
+
+    def zuruecksetzen():
+        befehl(bot, "/cam time reset", warten=0.5)
+        befehl(bot, "/cam weather reset", warten=0.5)
+        befehl(bot, "/cam nightvision off", warten=0.5)
+
+    if not FIND.test("Cam-Modus ist vor dem Test des Himmels von /cam resume aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    console(env, f"fill {_floor(x) - 3} {y} {_floor(z) - 3} {_floor(x) + 3} {y + 8} {_floor(z) + 3} minecraft:air",
+            pause=0.5)
+    try:
+        quelle = quelle_config(env)
+        FIND.test("Voreingestellt stehen resume-command.time, weather und night-vision auf true da",
+                  re.search(r"(?m)^resume-command:\s*\n(?:\s+.*\n|\s*\n)*?\s+time:\s*true\s*\n(?:\s*#.*\n)*"
+                            r"\s+weather:\s*true\s*\n(?:\s*#.*\n)*\s+night-vision:\s*true\s*$", quelle) is not None,
+                  "")
+        console(env, "weather clear", pause=0.5)
+        console(env, "time set day", pause=1.0)
+        bot.chat("/effect clear @s")
+        hinstellen(bot, x, y, z)
+        if not FIND.test("Cam-Modus fuer den Himmel von /cam resume gestartet", cam_on(bot), ""):
+            return
+        einstellen()
+        bot.call("fly", wait=30, dy=3, timeout=15000)
+        time.sleep(1.0)
+        cam_off(bot)
+        datei = spielerdatei(env)
+        text = datei.read_text(encoding="utf-8") if datei else ""
+        abschnitt = re.search(r"(?m)^last-flight:\s*\n((?:\s+.*\n?)*)", text)
+        teil = abschnitt.group(1) if abschnitt else ""
+        FIND.test("In der Datei steht unter last-flight die Zeit, das Wetter und die Nachtsicht des Flugs",
+                  re.search(r"(?m)^\s+time:\s*12000\s*$", teil) is not None
+                  and re.search(r"(?m)^\s+weather:\s*rain\s*$", teil) is not None
+                  and re.search(r"(?m)^\s+night-vision:\s*'?on'?\s*$", teil) is not None, teil or text[-300:])
+
+        zuruecksetzen()
+        zeilen = befehl(bot, "/cam resume", warten=6.5)
+        FIND.test("/cam resume: wieder sunset (12000), Regen und Nachtsicht wie im letzten Flug",
+                  gesagt(zeilen, r"Back where your last flight ended") and zeit() == 12000 and regen() > 0.99
+                  and nachtsicht(), f"{zeige(zeilen)} / {zeit()} / {regen()}")
+        cam_off(bot)
+        cam_on(bot)
+        time.sleep(2.0)
+        FIND.test("Gemerkt wird davon nichts: der naechste Flug mit /cam beginnt mit den eigenen",
+                  zeit() == 1000 and regen() == 0 and not nachtsicht(), f"{zeit()} / {regen()}")
+        einstellen()
+        bot.call("fly", wait=30, dy=3, timeout=15000)
+        time.sleep(1.0)
+        set_options(env, [("time", "false", "resume-command"), ("weather", "false", "resume-command"),
+                          ("night-vision", "false", "resume-command")])
+        zuruecksetzen()
+        zeilen = befehl(bot, "/cam resume", warten=3.0)
+        FIND.test("time, weather und night-vision: false - /cam resume bringt nichts davon zurueck",
+                  gesagt(zeilen, r"Back where your last flight ended") and zeit() == 1000 and regen() == 0
+                  and not nachtsicht(), f"{zeige(zeilen)} / {zeit()} / {regen()}")
+    finally:
+        try:
+            cam_off(bot)
+            set_options(env, [("time", "true", "resume-command"), ("weather", "true", "resume-command"),
+                              ("night-vision", "true", "resume-command")])
+            befehl(bot, "/cam time reset", warten=0.3)
+            befehl(bot, "/cam weather reset", warten=0.3)
+            befehl(bot, "/cam nightvision reset", warten=0.3)
+            bot.chat("/effect clear @s")
+            console(env, "weather clear", pause=0.3)
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test des Himmels von /cam resume: {exc}")
 
 
 def ausspaeh_checks(env, bot):
@@ -19131,6 +19484,10 @@ ABSCHNITTE = [
     Abschnitt("fuehrung_ohne_cam", fuehrung_ohne_cam_checks, "tour display/CamNameTag scoreboard/GuideTeam"),
     Abschnitt("gaestebuch", gaestebuch_checks, "spot/SpotGuestbook spot/CamSpots spot/SpotViews menu/CamMenu"),
     Abschnitt("weiter", weiter_checks, "resume"),
+    Abschnitt("weiter_himmel", weiter_himmel_checks,
+              "resume sky nightvision spot/CamSpots storage/PlayerStore session/CameraMode"),
+    Abschnitt("alle_einladen", alle_einladen_checks, "tour/CamTour menu/CamMenu camfly2/CamTabCompleter"),
+    Abschnitt("fuehrung_himmel", fuehrung_himmel_checks, "tour/CamTour sky nightvision"),
     Abschnitt("ausspaehen", ausspaeh_checks, "scout"),
     Abschnitt("menue", menue_checks, "menu"),
     Abschnitt("spotreiter", spotreiter_checks, "menu spot"),
@@ -19558,7 +19915,8 @@ DAUER_VORGABE = {
     "welten": 18, "angriff": 62, "afk": 56, "herzen_am_namen": 34, "herzen": 18, "wartezeit": 46, "akku_speicher": 35,
     "startverzoegerung": 44, "flugspur": 58, "vorschlaege": 10, "aussichtspunkte": 103, "foto": 84,
     "zeit_wetter": 46, "nachtsicht_wahl": 66, "naehe": 60, "einstellungen": 89, "teilen": 92,
-    "fuehrung": 199, "fuehrung_ohne_cam": 148, "gaestebuch": 178, "weiter": 34, "ausspaehen": 50,
+    "fuehrung": 199, "fuehrung_ohne_cam": 148, "gaestebuch": 178, "weiter": 34,
+    "weiter_himmel": 45, "alle_einladen": 70, "fuehrung_himmel": 80, "ausspaehen": 50,
     "menue": 163, "spotreiter": 112, "spotmoderation": 130, "tourmoderation": 99,
     "spot_nur_im_cam": 28, "spot_ansicht": 91, "webkarte": 75, "erze": 69, "anstupsen": 81,
     "funk": 77, "traenke": 58, "treffergrund": 77, "anfassen": 79, "sulfur_cube": 59,

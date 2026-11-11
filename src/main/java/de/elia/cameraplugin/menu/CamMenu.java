@@ -128,6 +128,8 @@ public final class CamMenu implements Listener {
     private static final int SLOT_SPOT_NEW = 53;
     /** The button that sorts a list of players on the admin pages. */
     private static final int SLOT_ADMIN_SORT = 53;
+    /** The button on the page of the tour that invites everybody he could invite at once. */
+    private static final int SLOT_TOUR_INVITE_ALL = 51;
 
     /** How long the menu waits for an answer in the chat, in milliseconds. */
     private static final long ANSWER_WAIT = 60_000L;
@@ -1193,7 +1195,9 @@ public final class CamMenu implements Listener {
      * how far away they are; a click invites one. One a restriction keeps
      * from taking part shows up all the same, with why he cannot be invited.
      * Is there nobody, the page says how close they would have to be. While
-     * he has guests, the last row has the button that ends the tour. A
+     * he has guests, the last row has the button that ends the tour, and
+     * while there is anybody to invite, with {@code follow.invite-all}, the one
+     * that invites all of them at once. A
      * restriction that keeps him from leading takes the place of the players
      * to invite, one that keeps him from taking part that of the button that
      * ends the tour - his own, or the one of everybody, which says that it
@@ -1310,9 +1314,31 @@ public final class CamMenu implements Listener {
         } else if (join != null) {
             put(page, SLOT_NEW, tourKept(TourBans.What.JOIN, join), click -> { });
         }
+        if (settings.isTourInviteAll() && lead == null && tour.canLead(player)) {
+            inviteAllButton(player, page);
+        }
         viewButton(player, page, SLOT_ADMIN_SORT);
         paging(page, number, pages, n -> openTour(player, n));
         player.openInventory(inventory);
+    }
+
+    /**
+     * The button that invites everybody he could invite at once: how many
+     * under it, and that a click invites them. Only while anybody is there to
+     * be invited - not those already invited, those he may not invite again
+     * yet, nor those kept from taking part.
+     */
+    private void inviteAllButton(Player player, Page page) {
+        int count = plugin.getTour().invitable(player).size();
+        if (count == 0) {
+            return;
+        }
+        put(page, SLOT_TOUR_INVITE_ALL, shine(item(Material.BELL, messages.getMessage("menu-tour-invite-all"),
+                lines(messages.getMessage("menu-tour-invite-all-lore").replace("{count}", String.valueOf(count)))),
+                true), click -> later(() -> {
+                    plugin.getTour().inviteAll(player);
+                    openTour(player, 0);
+                }));
     }
 
     /**

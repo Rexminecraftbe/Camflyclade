@@ -5,6 +5,7 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.spot.JumpCheck;
+import de.elia.cameraplugin.spot.SpotLook;
 import de.elia.cameraplugin.storage.PlayerStore;
 import de.elia.cameraplugin.storage.StorageMode;
 import org.bukkit.Location;
@@ -20,7 +21,14 @@ import java.util.UUID;
  * the way it looked - for a build looked at a bit at a time, with a walk in
  * between.
  *
- * <p>Where each flight ends is noted when camera mode ends, whatever ends it.</p>
+ * <p>Where each flight ends is noted when camera mode ends, whatever ends it -
+ * with the time of day, the weather and the night vision it had then, the
+ * way a spot keeps them, see {@link SpotLook}: those he picked himself, or
+ * that a spot or the guide he followed showed him. Once the camera goes on
+ * there, they stand in for his own as those of a spot do, as far as
+ * {@code resume-command.time}, {@code .weather} and {@code .night-vision}
+ * say - until his camera is put down somewhere else, or he picks one
+ * himself.</p>
  *
  * <p>The camera is put down there only where it could fly to, see
  * {@link JumpCheck}: in the world of the body, within {@code max-distance} of
@@ -69,12 +77,13 @@ public final class CamResume {
      * with the rest of it, at the end of camera mode.
      *
      * @param cameraAt where the camera was, before it is put back at the body
+     * @param look     the time, weather and night vision the flight had at its end
      */
-    public void remember(Player player, CameraData data, Location cameraAt) {
+    public void remember(Player player, CameraData data, Location cameraAt, SpotLook look) {
         if (!settings.isResumeEnabled() || cameraAt.getWorld() == null) {
             return;
         }
-        LastFlight flight = LastFlight.at(cameraAt);
+        LastFlight flight = LastFlight.at(cameraAt, look);
         if (inFile()) {
             store.get(player.getUniqueId()).setLastFlight(flight);
         } else {
@@ -143,12 +152,24 @@ public final class CamResume {
         if (!plugin.getMovementGuard().jumpTo(player, data, target)) {
             return;
         }
-        // Where his last flight ended is no spot he jumped to.
-        plugin.getSpots().dropLook(player);
+        // What the flight showed there stands in for his own again, as far
+        // as resume-command lets it; what it leaves out is his own.
+        plugin.getSpots().showLook(player, lookToShow(flight.look()));
         settings.getSpotSound().play(player);
         if (messages.isMessageEnabled("resume-jumped")) {
             plugin.getActionBar().flash(player, messages.getMessage("resume-jumped"));
         }
+    }
+
+    /**
+     * What of the look of the last flight is shown again: the parts
+     * {@code resume-command.time}, {@code .weather} and {@code .night-vision}
+     * let through.
+     */
+    private SpotLook lookToShow(SpotLook look) {
+        return new SpotLook(settings.isResumeTime() ? look.time() : null,
+                settings.isResumeWeather() ? look.weather() : null,
+                settings.isResumeNightVision() ? look.nightVision() : null);
     }
 
     /** Forgets every flight kept in memory, when the plugin is switched off. */
