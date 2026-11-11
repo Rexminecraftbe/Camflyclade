@@ -366,10 +366,10 @@ public final class MobTargeting implements Listener {
      *
      * <p>So does an experience orb picking the player it flies to. It is no
      * mob and is turned down in every mode: it stays where it lies. The
-     * server asks only when an orb changes the player it follows, so one that
-     * was flying to the player already when camera mode started keeps
-     * following the camera. What the clients make of an orb that is turned
-     * down is {@link de.elia.cameraplugin.orb.CamOrbGuard}'s business.</p>
+     * server asks only when an orb changes the player it follows; the orbs
+     * that were flying to the player already when camera mode started, and
+     * what the clients make of an orb that is turned down, are
+     * {@link de.elia.cameraplugin.orb.CamOrbGuard}'s business.</p>
      */
     @EventHandler
     public void onMobTarget(EntityTargetEvent event) {

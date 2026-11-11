@@ -18219,16 +18219,19 @@ def kugeln_checks(env, bot):
     Bloecke weg steht und die Kamera sieht, viele Male an. Auf dem Server
     liegt sie danach noch, wo sie hinfiel, und der Bot sieht sie dort - sie
     ist nicht versteckt geblieben. Eine Kugel siebzehn Bloecke weg kommt nur
-    einmal.
+    einmal. Im Flug reicht es weiter: Eine Kugel 13,5 Bloecke weg kommt neu,
+    solange die Kamera fliegt, und nicht, solange sie stillsteht.
+
+    Eine Kugel, die dem Spieler beim Start schon folgt, fragt der Server
+    nicht noch einmal - sie folgte der Kamera weiter und zog mit ihr zur
+    Seite. CamOrbGuard nimmt sie beim Start fuer einen Tick weg, danach
+    bleibt sie beim Startplatz liegen, als die Kamera sechs Bloecke
+    wegfliegt.
 
     Gegenproben: Nach dem Cam-Modus kommt die Kugel nicht mehr neu, sie
     fliegt zum Bot und er sammelt sie ein. Mit player_visibility_mode: cam
     sieht der zweite Spieler die Kamera nicht, sein Client hat sie gar nicht,
     und ihm wird die Kugel nicht neu geschickt - dem Bot schon.
-
-    Die Kugeln kommen erst nach dem Start des Cam-Modus: Eine, die dem
-    Spieler beim Start schon folgte, folgt der Kamera auf dem Server weiter,
-    denn der Server fragt nur, wenn eine Kugel den Spieler wechselt.
     """
     if not FIND.test("Cam-Modus ist vor dem Test der Erfahrungskugeln aus", cam_off(bot), ""):
         return
@@ -18311,6 +18314,25 @@ def kugeln_checks(env, bot):
         FIND.test("Der Kamera-Spieler sieht die Kugel weiter, dort, wo der Server sie hat",
                   wo is not None and sieht_bei(bot, wo), str(wo))
 
+        # Im Flug reicht es weiter: Der eigene Client ist der Kamera auf dem
+        # Server voraus, die anderen sind hinterher. Eine Kugel 13,5 Bloecke
+        # weg kommt nicht neu, solange die Kamera stillsteht, und neu, waehrend
+        # sie mit einem halben Block je Tick hin und her fliegt.
+        seitlich = (x + 13.5, y, z)
+        kugel_hin(seitlich, "camfly_kugel_flug")
+        time.sleep(1.0)
+        ab = zaehler(bot)
+        time.sleep(1.5)
+        ruhig = geschickt(bot, ab, seitlich)
+        ab = zaehler(bot)
+        bot.call("fly", wait=30, dz=4, timeout=15000)
+        bot.call("fly", wait=30, dz=-4, timeout=15000)
+        im_flug = geschickt(bot, ab, seitlich)
+        FIND.test("Eine Kugel 13,5 Bloecke von der stillstehenden Kamera kommt nicht neu",
+                  len(ruhig) == 0, f"{len(ruhig)} Mal")
+        FIND.test("Fliegt die Kamera, reicht es weiter: dieselbe Kugel kommt im Flug neu",
+                  len(im_flug) >= 4, f"{len(im_flug)} Mal")
+
         # Gegenprobe: Nach dem Cam-Modus kommt dieselbe Kugel nicht mehr neu.
         nummern = {s["id"] for s in bot_nah}
         cam_off(bot)
@@ -18322,6 +18344,30 @@ def kugeln_checks(env, bot):
         noch_da = liegt("camfly_kugel_nah")
         FIND.test("Gegenprobe: nach dem Cam-Modus fliegt sie zum Bot, und er sammelt sie ein",
                   not noch_da, "liegt noch" if noch_da else "")
+
+        # Eine Kugel, die dem Spieler beim Start schon folgt: Count 400, so
+        # sammelt er sie zwanzig Sekunden lang ein und sie pendelt um ihn, als
+        # der Cam-Modus beginnt. Danach fliegt die Kamera sechs Bloecke zur
+        # Seite - nicht nach oben: Fuenf Bloecke hoch zieht ein Spieler eine
+        # Kugel schwaecher, als sie faellt, sie kaeme auch folgend nicht nach.
+        console(env, weg, pause=0.3)
+        hinstellen(bot, x, y, z)
+        console(env, f'summon minecraft:experience_orb {x + 3} {y + 0.3} {z} '
+                     f'{{Tags:["{marke}","camfly_kugel_folgt"],Value:1s,Count:400}}', pause=1.5)
+        if FIND.test("Cam-Modus mit einer Kugel, die dem Spieler schon folgt, gestartet", cam_on(bot), ""):
+            bot.call("fly", wait=30, dx=-6, timeout=15000)
+            time.sleep(2.5)
+            kugel = bot.call("server_pos", selector="@e[tag=camfly_kugel_folgt,limit=1]").get("pos")
+            kamera = bot.server_pos()
+            # Folgt sie, zieht die Kamera sie mit zur Seite, und meist schiesst
+            # sie noch an ihr vorbei - am Abstand zur Kamera ist das nicht zu
+            # sehen, daran, wie weit sie vom Start weg ist, schon.
+            FIND.test("Eine Kugel, die dem Spieler beim Start schon folgte, folgt der Kamera nicht, "
+                      "sie bleibt beim Startplatz",
+                      kugel is not None and kamera is not None
+                      and math.dist((kugel[0], kugel[2]), (x, z)) < 2.5 and kamera[0] < x - 4.0,
+                      f"Kugel {kugel}, Startplatz {[x, y, z]}, Kamera {kamera}")
+        cam_off(bot)
 
         # Mit player_visibility_mode: cam hat der Client des zweiten Spielers
         # die Kamera nicht - zu ihr fliegt dort nichts.
@@ -18349,6 +18395,8 @@ def kugeln_checks(env, bot):
             if sichtbarkeit_geaendert:
                 set_option(env, "player_visibility_mode", "true")
             console(env, weg, pause=0.3)
+            console(env, f"xp set {BOT_NAME} 0 levels", pause=0.2)
+            console(env, f"xp set {BOT_NAME} 0 points", pause=0.2)
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test der Erfahrungskugeln: {exc}")

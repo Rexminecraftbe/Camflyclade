@@ -1552,9 +1552,10 @@ jedes davon sehr wohl · das Inventar ist im Cam-Modus leer und danach wieder
 da · die Rüstung ist im Cam-Modus abgelegt und danach wieder angezogen · eine
 Erfahrungskugel neben der Kamera wird dem Kamera-Spieler und dem, der ihn
 sieht, laufend neu geschickt, damit sie auch bei ihnen liegen bleibt, und
-liegt auf dem Server noch, wo sie hinfiel · eine weiter weg nicht, nach dem
-Cam-Modus keine mehr, und mit `player_visibility_mode: cam` dem nicht, der die
-Kamera nicht sieht · ein
+liegt auf dem Server noch, wo sie hinfiel · eine weiter weg nicht, außer
+während die Kamera fliegt, nach dem Cam-Modus keine mehr, und mit
+`player_visibility_mode: cam` dem nicht, der die Kamera nicht sieht · eine
+Kugel, die dem Spieler beim Start schon folgte, folgt der Kamera nicht · ein
 Pfeil, ein Pfeil mit Schlag II, ein geworfener Dreizack, TNT und die
 Schläge eines Spielers auf den Körper stoßen den Spieler genau dorthin, wo
 derselbe Treffer ihn ohne Cam-Modus hinstößt - vom Schützen weg und nicht

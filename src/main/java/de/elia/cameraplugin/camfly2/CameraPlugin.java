@@ -614,6 +614,10 @@ public final class CameraPlugin extends JavaPlugin {
         return mobTargeting;
     }
 
+    public CamOrbGuard getOrbGuard() {
+        return orbGuard;
+    }
+
     public CamParticles getParticles() {
         return particles;
     }
