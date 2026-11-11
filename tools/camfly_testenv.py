@@ -2521,6 +2521,14 @@ for (const name of ['sound_effect', 'entity_sound_effect']) {
 const particleLog = [];
 bot._client.on('world_particles', (packet) => particleLog.push(
   { t: Date.now(), pos: [packet.x, packet.y, packet.z], far: !!packet.longDistance }));
+// Die Entitaeten, die der Server diesem Client schickt (Paket spawn_entity),
+// mit ihrer Nummer und der Stelle, an die sie kommen. Fuer die
+// Erfahrungskugeln, die CamOrbGuard neben einem Kamera-Spieler jeden Tick
+// neu schickt: Ihren Flug rechnet mineflayer nicht, zu sehen ist nur, wie oft
+// sie ankommen.
+const spawnLog = [];
+bot._client.on('spawn_entity', (packet) => spawnLog.push(
+  { t: Date.now(), id: packet.entityId, pos: [packet.x, packet.y, packet.z] }));
 // Die Chatzeilen des Servers als Text des ganzen Pakets, wie bei den Toenen:
 // Klick und Hover stehen nur dort, der Text der Zeile hat sie nicht mehr.
 const chatPackets = [];
@@ -2748,6 +2756,8 @@ async function handle(cmd) {
       return { packets: chatPackets.slice(cmd.since || 0), count: chatPackets.length };
     case 'particles':
       return { particles: particleLog.slice(cmd.since || 0), count: particleLog.length };
+    case 'spawns':
+      return { spawns: spawnLog.slice(cmd.since || 0), count: spawnLog.length };
     case 'tab': {
       // Was der Server zur Tab-Vervollstaendigung vorschlaegt, fuer den Text
       // samt dem Schraegstrich vorn, so wie der Client ihn schickt. Hat er
@@ -18189,6 +18199,161 @@ def fundsachen_checks(env, bot):
         hinstellen(bot, heim[0], heim[1], heim[2])
 
 
+def kugeln_checks(env, bot):
+    """Erfahrungskugeln bleiben liegen, wo ein Kamera-Spieler vorbeikommt -
+    auf dem Server und auf dem Bildschirm.
+
+    Auf dem Server haelt MobTargeting die Kugel ab: Sie fragt wie ein Mob,
+    wem sie folgt, und bekommt den Kamera-Spieler nicht. Den Flug einer Kugel
+    rechnet der Client aber selbst, zwischen zwei Positionen, die der Server
+    hoechstens einmal in der Sekunde schickt - und liess sie der Kamera
+    trotzdem hinterherfliegen. CamOrbGuard schickt deshalb jede Kugel nahe
+    einem Kamera-Spieler jeden Tick neu, an jeden Client, der die Kugel und
+    den Kamera-Spieler hat: den Kamera-Spieler selbst und jeden, der ihn
+    sieht. Eine eben geschickte Kugel bewegt der Client im ersten Tick nicht.
+
+    mineflayer rechnet keinen Flug, das Hinterherfliegen sieht der Bot also
+    nicht. Gezaehlt wird, wie oft das Paket spawn_entity fuer die Kugel
+    ankommt: neu geschickt jeden Tick, sonst einmal. Eine Kugel vier Bloecke
+    neben der Kamera kommt beim Bot und beim zweiten Spieler, der dreizehn
+    Bloecke weg steht und die Kamera sieht, viele Male an. Auf dem Server
+    liegt sie danach noch, wo sie hinfiel, und der Bot sieht sie dort - sie
+    ist nicht versteckt geblieben. Eine Kugel siebzehn Bloecke weg kommt nur
+    einmal.
+
+    Gegenproben: Nach dem Cam-Modus kommt die Kugel nicht mehr neu, sie
+    fliegt zum Bot und er sammelt sie ein. Mit player_visibility_mode: cam
+    sieht der zweite Spieler die Kamera nicht, sein Client hat sie gar nicht,
+    und ihm wird die Kugel nicht neu geschickt - dem Bot schon.
+
+    Die Kugeln kommen erst nach dem Start des Cam-Modus: Eine, die dem
+    Spieler beim Start schon folgte, folgt der Kamera auf dem Server weiter,
+    denn der Server fragt nur, wenn eine Kugel den Spieler wechselt.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test der Erfahrungskugeln aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    nah = (x + 4, y, z)
+    fern = (x + 17, y, z)
+    marke = "camfly_kugel"
+    weg = f"kill @e[tag={marke}]"
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    sichtbarkeit_geaendert = False
+    # Mindestens so oft muss eine Kugel neben der Kamera in WARTEN Sekunden
+    # ankommen: ein Fuenftel der Ticks, mit Luft fuer einen langsamen Server.
+    # Ohne CamOrbGuard kommt sie einmal.
+    WARTEN = 2.5
+    MINDESTENS = 10
+
+    def kugel_hin(wo, name):
+        console(env, f'summon minecraft:experience_orb {wo[0]} {wo[1] + 0.3} {wo[2]} '
+                     f'{{Tags:["{marke}","{name}"],Value:1s}}', pause=0.2)
+
+    def zaehler(client):
+        return client.call("spawns").get("count", 0)
+
+    def geschickt(client, seit, wo):
+        """Die Pakete spawn_entity seit der Marke, die an diese Stelle kamen."""
+        return [s for s in client.call("spawns", since=seit).get("spawns", [])
+                if math.dist((s["pos"][0], s["pos"][2]), (wo[0], wo[2])) < 1.0]
+
+    def liegt(name):
+        return server_says(bot, f"/execute if entity @e[tag={name}] run say {{marke}}")
+
+    def sieht_bei(client, wo):
+        """Ob der Client an dieser Stelle etwas hat. Mehrmals gefragt: Ein
+        Blick genau zwischen dem Entfernen und dem neuen Schicken saehe
+        nichts."""
+        for _ in range(3):
+            if any(math.dist(e["pos"], wo) < 0.6
+                   for e in client.call("entities", radius=24).get("entities", [])):
+                return True
+            time.sleep(0.1)
+        return False
+
+    try:
+        console(env, weg, pause=0.3)
+        console(env, f"fill {_floor(x) - 10} {y} {_floor(z) - 2} {_floor(x) + 18} {y + 3} {_floor(z) + 2} "
+                     f"minecraft:air", pause=0.5)
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer den Test der Erfahrungskugeln kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        # Dreizehn Bloecke von der nahen Kugel: Zu ihm fliegt sie nicht.
+        console(env, f"tp {ZUSCHAUER_NAME} {x - 9} {y} {z} -90 0", pause=1.0)
+        hinstellen(bot, x, y, z)
+        if not FIND.test("Cam-Modus fuer den Test der Erfahrungskugeln gestartet", cam_on(bot), ""):
+            return
+        time.sleep(1.0)
+        beim_bot, beim_zuschauer = zaehler(bot), zaehler(zuschauer)
+        kugel_hin(nah, "camfly_kugel_nah")
+        kugel_hin(fern, "camfly_kugel_fern")
+        time.sleep(WARTEN)
+        bot_nah = geschickt(bot, beim_bot, nah)
+        zuschauer_nah = geschickt(zuschauer, beim_zuschauer, nah)
+        bot_fern = geschickt(bot, beim_bot, fern)
+        zuschauer_fern = geschickt(zuschauer, beim_zuschauer, fern)
+        FIND.test(f"Eine Kugel neben der Kamera wird dem Kamera-Spieler laufend neu geschickt "
+                  f"(mindestens {MINDESTENS} Mal in {WARTEN} s)",
+                  len(bot_nah) >= MINDESTENS, f"{len(bot_nah)} Mal")
+        FIND.test("Dem zweiten Spieler, der die Kamera sieht, wird sie auch laufend neu geschickt",
+                  len(zuschauer_nah) >= MINDESTENS, f"{len(zuschauer_nah)} Mal")
+        FIND.test("Eine Kugel siebzehn Bloecke von der Kamera kommt nur einmal, bei beiden",
+                  len(bot_fern) <= 1 and len(zuschauer_fern) <= 1,
+                  f"beim Bot {len(bot_fern)}, beim zweiten Spieler {len(zuschauer_fern)} Mal")
+        wo = bot.call("server_pos", selector="@e[tag=camfly_kugel_nah,limit=1]").get("pos")
+        FIND.test("Auf dem Server liegt die Kugel neben der Kamera noch, wo sie hinfiel",
+                  wo is not None and math.dist((wo[0], wo[2]), (nah[0], nah[2])) < 0.3, str(wo))
+        FIND.test("Der Kamera-Spieler sieht die Kugel weiter, dort, wo der Server sie hat",
+                  wo is not None and sieht_bei(bot, wo), str(wo))
+
+        # Gegenprobe: Nach dem Cam-Modus kommt dieselbe Kugel nicht mehr neu.
+        nummern = {s["id"] for s in bot_nah}
+        cam_off(bot)
+        danach = zaehler(bot)
+        time.sleep(WARTEN)
+        neu_danach = [s for s in bot.call("spawns", since=danach).get("spawns", []) if s["id"] in nummern]
+        FIND.test("Gegenprobe: nach dem Cam-Modus wird die Kugel nicht mehr neu geschickt",
+                  len(neu_danach) <= 1, f"{len(neu_danach)} Mal")
+        noch_da = liegt("camfly_kugel_nah")
+        FIND.test("Gegenprobe: nach dem Cam-Modus fliegt sie zum Bot, und er sammelt sie ein",
+                  not noch_da, "liegt noch" if noch_da else "")
+
+        # Mit player_visibility_mode: cam hat der Client des zweiten Spielers
+        # die Kamera nicht - zu ihr fliegt dort nichts.
+        console(env, weg, pause=0.3)
+        sichtbarkeit_geaendert = True
+        set_option(env, "player_visibility_mode", "cam")
+        hinstellen(bot, x, y, z)
+        if not FIND.test("Cam-Modus mit player_visibility_mode: cam gestartet", cam_on(bot), ""):
+            return
+        time.sleep(1.0)
+        beim_bot, beim_zuschauer = zaehler(bot), zaehler(zuschauer)
+        kugel_hin(nah, "camfly_kugel_nah")
+        time.sleep(WARTEN)
+        bot_nah = geschickt(bot, beim_bot, nah)
+        zuschauer_nah = geschickt(zuschauer, beim_zuschauer, nah)
+        FIND.test("player_visibility_mode: cam - dem Kamera-Spieler wird die Kugel laufend neu geschickt",
+                  len(bot_nah) >= MINDESTENS, f"{len(bot_nah)} Mal")
+        FIND.test("player_visibility_mode: cam - dem zweiten Spieler, der die Kamera nicht sieht, nicht",
+                  len(zuschauer_nah) <= 1, f"{len(zuschauer_nah)} Mal")
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                zuschauer.stop()
+            cam_off(bot)
+            if sichtbarkeit_geaendert:
+                set_option(env, "player_visibility_mode", "true")
+            console(env, weg, pause=0.3)
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Erfahrungskugeln: {exc}")
+
+
 def zerschlagen_checks(env, bot):
     """Die Kamera schlaegt nichts kaputt: kein Boot, keine Lore, keinen Rahmen
     und kein Bild.
@@ -19629,6 +19794,7 @@ ABSCHNITTE = [
     Abschnitt("spawnen", spawn_checks, "spawning"),
     Abschnitt("fortschritt", fortschritt_checks, "progress session/CameraMode session/CameraData"),
     Abschnitt("fundsachen", fundsachen_checks, "inventory session/CameraMode"),
+    Abschnitt("kugeln", kugeln_checks, "orb mob/MobTargeting inventory/CamInventoryGuard"),
     Abschnitt("zerschlagen", zerschlagen_checks, "interaction session/CamGameMode"),
     Abschnitt("team", team_checks, "scoreboard/NoCollisionTeam session/CameraMode"),
     Abschnitt("toeten", toeten_checks, "mirrordamage/DamageMirror session/SessionListener"),
