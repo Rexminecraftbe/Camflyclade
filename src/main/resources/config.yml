@@ -995,7 +995,8 @@ follow:
   invitation-seconds: 60
   # Wie lange ein Leader denselben Spieler nach einer Einladung nicht noch einmal einladen kann, in Sekunden (0 bis
   # 3600, 0 = sofort wieder) - auch nicht, wenn er abgelehnt hat. So kann niemand einen anderen mit Einladungen
-  # zuschütten (Text: tour-invite-wait).
+  # zuschütten (Text: tour-invite-wait). Nimmt er die Einladung an, ist die Wartezeit vorbei: Hat er aufgehört zu
+  # folgen, kann der Leader ihn gleich wieder einladen.
   invite-cooldown-seconds: 60
   # Ob ein Follower durch die Augen des Leaders sieht - so flüssig wie im Zuschauermodus, nur ohne ihn: kein Fliegen
   # durch Wände, kein Teleport-Menü. Jeder Follower kann mit /cam follow view auf freies Umsehen umschalten. Ist der

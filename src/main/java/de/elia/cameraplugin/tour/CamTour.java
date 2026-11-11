@@ -198,6 +198,8 @@ public final class CamTour implements Listener {
     /**
      * When each player was last invited, by the id of the guide, while that
      * guide may not invite him again, see {@code follow.invite-cooldown-seconds}.
+     * Once he accepts, the guide may invite him again straight away - after
+     * he left the tour, say -, see {@link #join}.
      */
     private final Map<UUID, Map<UUID, Long>> lastInvited = new HashMap<>();
     /** What moves the guests, while there is a tour at all. */
@@ -1197,6 +1199,12 @@ public final class CamTour implements Listener {
             return;
         }
         invitations.get(guest.getUniqueId()).remove(guide.getUniqueId());
+        // He accepted: the wait is there against invitations nobody wants,
+        // and this one was wanted. The guide may invite him again at once.
+        Map<UUID, Long> invitedBy = lastInvited.get(guest.getUniqueId());
+        if (invitedBy != null && invitedBy.remove(guide.getUniqueId()) != null && invitedBy.isEmpty()) {
+            lastInvited.remove(guest.getUniqueId());
+        }
         if (!plugin.getMovementGuard().jumpTo(guest, data, guide.getLocation())) {
             return;
         }

@@ -873,7 +873,7 @@ messages:
   # tour-reach-lost-guide say when it is over. tour-invitation has the buttons tour-button-accept and
   # tour-button-decline behind it, and what hovering over them says; it and tour-invited say for how many seconds it
   # holds ({seconds}, follow.invitation-seconds). tour-invite-wait: he invited that player too short a time ago
-  # (follow.invite-cooldown-seconds, {seconds} left). /cam follow invite all (follow.invite-all): tour-invited-all
+  # (follow.invite-cooldown-seconds, {seconds} left; once that player accepted, there is no wait). /cam follow invite all (follow.invite-all): tour-invited-all
   # says whom ({players}) and how many ({count}) it invited, tour-invite-all-none that there was nobody to invite -
   # those invited already, invited a moment ago or kept from following are left out -, and how close they have to
   # be ({start} follow.start-distance, {radius} follow.radius; tour-invite-all-none-cam-only while start-distance is

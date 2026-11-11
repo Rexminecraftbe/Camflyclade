@@ -9315,7 +9315,10 @@ def alle_einladen_checks(env, bot):
     mehr einzuladen: der Knopf ist weg, all wird nicht mehr angeboten, und
     /cam follow invite all sagt, dass niemand da ist und wie nah sie sein
     muessten. Folgt der zweite, steht unten in der Mitte (49) der Blick und
-    links (47) der Knopf, der alle gehen laesst. Ist die Fuehrung voll
+    links (47) der Knopf, der alle gehen laesst. Mit invite-cooldown-seconds:
+    60 wartet der Bot danach beim dritten, der nicht angenommen hat - den
+    zweiten, der angenommen hat, laedt er nach dem Ende seines Folgens gleich
+    wieder ein. Ist die Fuehrung voll
     (max-guests: 1), sagt /cam follow invite all das. Mit invite-all: false
     gibt es den Knopf nicht, all wird nicht angeboten und ist ein Name wie
     jeder andere.
@@ -9365,6 +9368,8 @@ def alle_einladen_checks(env, bot):
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {x - 4} {y} {z}", pause=0.5)
         console(env, f"tp {DRITTER_NAME} {x + 4} {y} {z}", pause=0.5)
+        # Der Testserver startet ohne Wartezeit zwischen zwei Einladungen.
+        set_option(env, "invite-cooldown-seconds", "60", "follow")
         if not FIND.test("Cam-Modus fuer das Einladen aller gestartet", cam_on(bot), ""):
             return
         tabs = tab(bot, "/cam follow invite ")
@@ -9404,8 +9409,18 @@ def alle_einladen_checks(env, bot):
                   "View when following" in item_text(unten.get("49"))
                   and "Let everybody go" in item_text(unten.get("47")),
                   f"{item_text(unten.get('49'))} / {item_text(unten.get('47'))}")
+        befehl(zuschauer, "/cam follow leave", warten=1.0)
+        wieder = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        dritter_zeilen = befehl(bot, f"/cam follow invite {DRITTER_NAME}")
+        FIND.test("invite-cooldown-seconds: 60 - wer angenommen hat, kann gleich wieder eingeladen werden, der "
+                  "andere nicht",
+                  gesagt(wieder, rf"You invited {ZUSCHAUER_NAME} to follow you")
+                  and gesagt(dritter_zeilen, rf"You invited {DRITTER_NAME} a moment ago"),
+                  f"{zeige(wieder)} / {zeige(dritter_zeilen)}")
 
-        set_option(env, "max-guests", "1", "follow")
+        # Ohne Wartezeit: Der Reload beendet seinen Cam-Modus, und damit
+        # verfaellt die Einladung von eben - der Bot laedt ihn gleich neu ein.
+        set_options(env, [("max-guests", "1", "follow"), ("invite-cooldown-seconds", "0", "follow")])
         cam_on(bot)
         befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
@@ -9431,7 +9446,8 @@ def alle_einladen_checks(env, bot):
                     client.stop()
             bot.call("close_window", wait=10)
             cam_off(bot)
-            set_options(env, [("max-guests", "5", "follow"), ("invite-all", "true", "follow")])
+            set_options(env, [("max-guests", "5", "follow"), ("invite-all", "true", "follow"),
+                              ("invite-cooldown-seconds", "0", "follow")])
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test des Einladens aller: {exc}")
