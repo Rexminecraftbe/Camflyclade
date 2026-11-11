@@ -7390,7 +7390,8 @@ def foto_checks(env, bot):
 def zeit_wetter_checks(env, bot):
     """cam-time und cam-weather: /cam time und /cam weather geben dem
     Kamera-Spieler eine eigene Tageszeit und ein eigenes Wetter, nur fuer ihn
-    und nur bis zum Ende des Cam-Modus.
+    und nur im Cam-Modus - gewaehlt werden sie wie die Nachtsicht auch davor,
+    fuer den naechsten Flug.
 
     Voreingestellt sind beide an - nachgesehen in der ausgelieferten Datei.
     Die Welt steht am Tag still (advance_time: false, 1000), ohne Regen. Was
@@ -7402,9 +7403,10 @@ def zeit_wetter_checks(env, bot):
     sunset ist 12000, eine Zahl gilt in Ticks, 24000 ist keine Tageszeit mehr,
     reset gibt die Zeit der Welt zurueck. Regen ist nach den fuenf Sekunden,
     in denen er einsetzt, voll da; ein Gewitter gibt es nicht. Das Ende des
-    Cam-Modus gibt beides zurueck. Ohne Cam-Modus geht keins von beiden, mit
-    enabled: false gar nicht, und die Tab-Vervollstaendigung bietet die Worte
-    nur im Cam-Modus an.
+    Cam-Modus gibt beides zurueck. Ohne Cam-Modus gewaehlt, sieht der Bot
+    weiter die Zeit der Welt, und der naechste Flug beginnt mit der Wahl; die
+    Tab-Vervollstaendigung bietet time und weather auch ohne Cam-Modus an.
+    Mit enabled: false geht keins von beiden.
     """
     def zeit(client):
         return client.call("sky").get("timeOfDay")
@@ -7435,15 +7437,22 @@ def zeit_wetter_checks(env, bot):
         time.sleep(1.5)
         console(env, f"tp {ZUSCHAUER_NAME} {x + 3} {y} {z}", pause=1.0)
         hinstellen(bot, x, y, z)
+        befehl(bot, "/cam time reset")
+        befehl(bot, "/cam weather reset")
 
         zeilen = befehl(bot, "/cam time sunset", warten=2.0)
-        FIND.test("/cam time ohne Cam-Modus geht nicht, die Zeit bleibt",
-                  gesagt(zeilen, r"only works in cam mode") and zeit(bot) == 1000, f"{zeige(zeilen)} / {zeit(bot)}")
+        FIND.test("/cam time ohne Cam-Modus: fuer den naechsten Flug gemerkt, zu Fuss bleibt die Zeit der Welt",
+                  gesagt(zeilen, r"Your own time in cam mode: sunset\. Only you see it\. Kept for your next flights")
+                  and zeit(bot) == 1000, f"{zeige(zeilen)} / {zeit(bot)}")
         jetzt = tab("/cam ")
-        FIND.test("Ohne Cam-Modus schlaegt /cam weder time noch weather vor",
-                  "time" not in jetzt and "weather" not in jetzt, str(jetzt))
+        FIND.test("Auch ohne Cam-Modus schlaegt /cam time und weather vor",
+                  "time" in jetzt and "weather" in jetzt, str(jetzt))
         if not FIND.test("Cam-Modus fuer die eigene Zeit gestartet", cam_on(bot), ""):
             return
+        time.sleep(1.0)
+        FIND.test("Der Flug beginnt mit der vorher gewaehlten Zeit: sunset, 12000", zeit(bot) == 12000,
+                  str(zeit(bot)))
+        befehl(bot, "/cam time reset", warten=1.5)
         jetzt = tab("/cam ")
         worte = tab("/cam time ")
         wetter = tab("/cam weather ")
@@ -7452,7 +7461,7 @@ def zeit_wetter_checks(env, bot):
                   and sorted(wetter) == ["clear", "rain", "reset"], f"{jetzt} / {worte} / {wetter}")
 
         zeilen = befehl(bot, "/cam time sunset", warten=2.0)
-        FIND.test("/cam time sunset - der Bot sieht 12000", gesagt(zeilen, r"Your own time: sunset")
+        FIND.test("/cam time sunset - der Bot sieht 12000", gesagt(zeilen, r"Your own time in cam mode: sunset")
                   and zeit(bot) == 12000, f"{zeige(zeilen)} / {zeit(bot)}")
         FIND.test("/cam time: der zweite Spieler sieht weiter die Zeit der Welt", zeit(zuschauer) == 1000,
                   str(zeit(zuschauer)))
@@ -7467,7 +7476,7 @@ def zeit_wetter_checks(env, bot):
 
         befehl(bot, "/cam time sunset")
         zeilen = befehl(bot, "/cam weather rain", warten=6.5)
-        FIND.test("/cam weather rain - beim Bot regnet es voll", gesagt(zeilen, r"Your own weather: rain")
+        FIND.test("/cam weather rain - beim Bot regnet es voll", gesagt(zeilen, r"Your own weather in cam mode: rain")
                   and regen(bot) > 0.99, f"{zeige(zeilen)} / {regen(bot)}")
         FIND.test("/cam weather: beim zweiten Spieler regnet es nicht", regen(zuschauer) == 0,
                   str(regen(zuschauer)))
@@ -7478,6 +7487,12 @@ def zeit_wetter_checks(env, bot):
         time.sleep(2.0)
         FIND.test("Das Ende des Cam-Modus gibt Zeit und Wetter der Welt zurueck",
                   zeit(bot) == 1000 and regen(bot) == 0, f"{zeit(bot)} / {regen(bot)}")
+        zeit_weg = befehl(bot, "/cam time reset")
+        wetter_weg = befehl(bot, "/cam weather reset")
+        FIND.test("reset geht auch ohne Cam-Modus",
+                  gesagt(zeit_weg, r"In cam mode you see the time of the world again")
+                  and gesagt(wetter_weg, r"In cam mode you see the weather of the world again"),
+                  f"{zeige(zeit_weg)} / {zeige(wetter_weg)}")
 
         set_options(env, [("enabled", "false", "cam-time"), ("enabled", "false", "cam-weather")])
         cam_on(bot)
@@ -7493,6 +7508,8 @@ def zeit_wetter_checks(env, bot):
                 zuschauer.stop()
             cam_off(bot)
             set_options(env, [("enabled", "true", "cam-time"), ("enabled", "true", "cam-weather")])
+            befehl(bot, "/cam time reset")
+            befehl(bot, "/cam weather reset")
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test der eigenen Zeit: {exc}")
@@ -7620,16 +7637,22 @@ def einstellungen_checks(env, bot):
     """player-settings: was jeder fuer sich im Cam-Modus waehlt, gilt auch fuer
     seine naechsten Fluege - in seiner Datei, oder bis er geht.
 
-    Voreingestellt stehen storage: file, flight-speed: true, time: false und
-    weather: false da - nachgesehen in der Datei, die das Plugin mitbringt:
-    der Testserver schaltet flight-speed fuer alle anderen Abschnitte ab. Mit
-    flight-speed: true beginnt der naechste Flug so schnell, wie der letzte
-    aufhoerte, auch nach dem Ab- und Anmelden, und in der Datei des Bots steht
-    es unter settings; mit false wieder mit flight-speed.start. Voreingestellt
-    endet die eigene Zeit mit dem Cam-Modus; mit time: true und weather: true
-    sagt die Meldung, dass sie bleiben, der naechste Flug beginnt mit dem
-    Sonnenuntergang und dem Regen von vorher, und reset nimmt beides auch fuer
-    den naechsten Flug zurueck.
+    Voreingestellt stehen storage: file und flight-speed: true da, Schalter
+    fuer time und weather gibt es nicht mehr - nachgesehen in der Datei, die
+    das Plugin mitbringt: der Testserver schaltet flight-speed fuer alle
+    anderen Abschnitte ab. Mit flight-speed: true beginnt der naechste Flug so
+    schnell, wie der letzte aufhoerte, auch nach dem Ab- und Anmelden, und in
+    der Datei des Bots steht es unter settings; mit false wieder mit
+    flight-speed.start.
+
+    Die eigene Zeit und das eigene Wetter bleiben immer, wie die Nachtsicht:
+    die Meldung sagt es, das Ende des Cam-Modus gibt trotzdem die der Welt
+    zurueck, der naechste Flug beginnt mit Sonnenuntergang und Regen, auch
+    nach dem Ab- und Anmelden, und in der Datei des Bots steht time: 12000 und
+    weather: rain unter settings. Ohne Cam-Modus gewaehlt gilt es ebenso ab
+    dem naechsten Flug, und reset nimmt beides auch fuer den naechsten Flug
+    zurueck. Mit storage: memory sagt die Meldung, dass es bis zum Verlassen
+    gilt, und nach dem Ab- und Anmelden ist es vergessen.
     """
     def tempo():
         return bot.server_data("abilities.flySpeed")
@@ -7650,10 +7673,9 @@ def einstellungen_checks(env, bot):
         return bot.call("sky").get("rain") or 0
 
     quelle = (env.repo / "src" / "main" / "resources" / "config.yml").read_text(encoding="utf-8")
-    FIND.test("Voreingestellt steht player-settings mit storage: file, flight-speed: true, time und weather: false da",
+    FIND.test("Voreingestellt steht player-settings mit storage: file und flight-speed: true da, ohne time und weather",
               re.search(r"(?m)^player-settings:\s*\n(?:\s*#.*\n)*\s*storage:\s*file\s*\n(?:\s*#.*\n)*"
-                        r"\s*flight-speed:\s*true\s*\n(?:\s*#.*\n)*\s*time:\s*false\s*\n(?:\s*#.*\n)*"
-                        r"\s*weather:\s*false\s*$", quelle) is not None, "")
+                        r"\s*flight-speed:\s*true[ \t]*\n(?![ \t]+[\w#])", quelle) is not None, "")
     try:
         cam_off(bot)
         console(env, "weather clear", pause=0.5)
@@ -7688,23 +7710,15 @@ def einstellungen_checks(env, bot):
                   str(tempo()))
         cam_off(bot)
 
-        cam_on(bot)
-        zeilen = befehl(bot, "/cam time sunset", warten=2.0)
-        FIND.test("time: false - die Meldung sagt: bis der Cam-Modus endet",
-                  gesagt(zeilen, r"Your own time: sunset\. Only you see it, until cam mode ends"), zeige(zeilen))
-        cam_off(bot)
-        cam_on(bot)
-        time.sleep(1.5)
-        FIND.test("time: false - der naechste Flug hat wieder die Zeit der Welt", zeit() == 1000, str(zeit()))
-        cam_off(bot)
-
-        set_options(env, [("time", "true", "player-settings"), ("weather", "true", "player-settings")])
+        befehl(bot, "/cam time reset")
+        befehl(bot, "/cam weather reset")
         cam_on(bot)
         zeilen = befehl(bot, "/cam time sunset", warten=2.0)
         wetter = befehl(bot, "/cam weather rain", warten=2.0)
-        FIND.test("time und weather: true - die Meldungen sagen, dass sie bleiben",
-                  gesagt(zeilen, r"Your own time: sunset\. Only you see it, in every flight until you reset it")
-                  and gesagt(wetter, r"Your own weather: rain\. Only you see it, in every flight until you reset it"),
+        FIND.test("Zeit und Wetter: die Meldungen sagen, dass sie bleiben",
+                  gesagt(zeilen, r"Your own time in cam mode: sunset\. Only you see it\. Kept for your next flights")
+                  and gesagt(wetter, r"Your own weather in cam mode: rain\. Only you see it\. Kept for your next "
+                                     r"flights"),
                   f"{zeige(zeilen)} / {zeige(wetter)}")
         cam_off(bot)
         time.sleep(6.5)
@@ -7712,21 +7726,59 @@ def einstellungen_checks(env, bot):
                   zeit() == 1000 and regen() == 0, f"{zeit()} / {regen()}")
         cam_on(bot)
         time.sleep(6.5)
-        FIND.test("time und weather: true - der naechste Flug beginnt mit Sonnenuntergang und Regen",
+        FIND.test("Der naechste Flug beginnt mit Sonnenuntergang und Regen",
                   zeit() == 12000 and regen() > 0.99, f"{zeit()} / {regen()}")
-        befehl(bot, "/cam time reset")
-        befehl(bot, "/cam weather reset")
         cam_off(bot)
+        datei = spielerdatei(env)
+        text = datei.read_text(encoding="utf-8") if datei else ""
+        FIND.test("storage: file - Zeit und Wetter stehen in der Datei des Bots unter settings",
+                  re.search(r"(?m)^settings:\s*\n(?:\s+.*\n)*?\s+time:\s*12000\s*$", text) is not None
+                  and re.search(r"(?m)^settings:\s*\n(?:\s+.*\n)*?\s+weather:\s*'?rain'?\s*$", text) is not None,
+                  text[-300:] or "keine Datei")
+        if FIND.test("Neu angemeldet fuer Zeit und Wetter", neu_anmelden(bot), ""):
+            cam_on(bot)
+            time.sleep(6.5)
+            FIND.test("storage: file - nach dem Ab- und Anmelden beginnt der Flug weiter mit Sonnenuntergang und Regen",
+                      zeit() == 12000 and regen() > 0.99, f"{zeit()} / {regen()}")
+            cam_off(bot)
+
+        zeilen = befehl(bot, "/cam time night", warten=1.0)
+        wetter_weg = befehl(bot, "/cam weather reset", warten=1.0)
+        FIND.test("Ohne Cam-Modus gewaehlt: zu Fuss weiter die Zeit der Welt",
+                  gesagt(zeilen, r"Your own time in cam mode: night") and zeit() == 1000
+                  and gesagt(wetter_weg, r"In cam mode you see the weather of the world again"),
+                  f"{zeige(zeilen)} / {zeige(wetter_weg)} / {zeit()}")
         cam_on(bot)
         time.sleep(6.5)
-        FIND.test("reset nimmt beides zurueck, auch fuer den naechsten Flug", zeit() == 1000 and regen() == 0,
-                  f"{zeit()} / {regen()}")
+        FIND.test("... und der naechste Flug beginnt mit night (13000) und ohne Regen",
+                  zeit() == 13000 and regen() == 0, f"{zeit()} / {regen()}")
+        befehl(bot, "/cam time reset")
         cam_off(bot)
+        cam_on(bot)
+        time.sleep(1.5)
+        FIND.test("reset nimmt die Zeit zurueck, auch fuer den naechsten Flug", zeit() == 1000, str(zeit()))
+        cam_off(bot)
+
+        set_option(env, "storage", "memory", "player-settings")
+        zeilen = befehl(bot, "/cam time sunset")
+        wetter = befehl(bot, "/cam weather rain")
+        FIND.test("storage: memory - die Meldungen sagen, dass es bis zum Verlassen gilt",
+                  gesagt(zeilen, r"Your own time in cam mode: sunset\. Only you see it\. Holds until you leave "
+                                 r"the server")
+                  and gesagt(wetter, r"Your own weather in cam mode: rain\. Only you see it\. Holds until you leave "
+                                     r"the server"), f"{zeige(zeilen)} / {zeige(wetter)}")
+        if FIND.test("Neu angemeldet fuer Zeit und Wetter im Speicher", neu_anmelden(bot), ""):
+            cam_on(bot)
+            time.sleep(6.5)
+            FIND.test("storage: memory - nach dem Ab- und Anmelden ist es vergessen: Tag ohne Regen",
+                      zeit() == 1000 and regen() == 0, f"{zeit()} / {regen()}")
+            cam_off(bot)
     finally:
         try:
             cam_off(bot)
-            set_options(env, [("flight-speed", "false", "player-settings"), ("time", "false", "player-settings"),
-                              ("weather", "false", "player-settings")])
+            set_options(env, [("flight-speed", "false", "player-settings"), ("storage", "file", "player-settings")])
+            befehl(bot, "/cam time reset")
+            befehl(bot, "/cam weather reset")
             bot.call("hotbar", slot=0)
             console(env, "weather clear", pause=0.5)
         except Exception as exc:
@@ -9506,8 +9558,10 @@ def menue_checks(env, bot):
     mit den Knoepfen auf ihren Plaetzen - die Fuehrung auf 9, die Punkte auf
     10, die Nachtsicht auf 17, Platz 13 frei -; der auf Platz 22 - der Kamera-Kopf -
     startet den Cam-Modus und schliesst das Fenster. Im Cam-Modus oeffnet es trotzdem, wo jedes andere Fenster zu
-    bleibt, und nichts kommt dabei ins Inventar. Zeit, dann Sonnenuntergang
-    gibt dem Bot 12000. Aussichtspunkte, "Save a spot here" fragt im Chat
+    bleibt, und nichts kommt dabei ins Inventar. Die Zeit hat keine eigene
+    Seite: drei Linksklicks auf ihren Knopf schalten von der Zeit der Welt
+    ueber day und noon zu sunset - der Bot sieht 12000 -, ein Rechtsklick
+    eine zurueck, und das Menue bleibt dabei offen. Aussichtspunkte, "Save a spot here" fragt im Chat
     nach dem Namen, und die naechste Zeile speichert ihn; ein Linksklick auf
     den Punkt springt hin, ein Klick mit Umschalt loescht ihn.
 
@@ -9536,10 +9590,15 @@ def menue_checks(env, bot):
     zeigt einen, Rechtsklick zeigt ihn und bringt den Bot an seinen Start, der
     letzte Knopf zeigt alle.
 
-    Foto-Modus, Zeit und Nachtsicht sagen unter ihrem Namen, wie sie stehen:
-    vor dem Sonnenuntergang die Zeit der Welt, danach Sunset, der Foto-Modus
-    off und nach einem Klick on; auf der Seite der Zeiten hat Sunset "Now"
-    darunter, die Zeit der Welt nicht.
+    Der Foto-Modus sagt unter seinem Namen, wie er steht: off und nach einem
+    Klick on. Die Zeit sagt es in ihrem Namen:
+    vor dem Sonnenuntergang die der Welt, danach sunset, auch im wieder
+    geoeffneten Menue; darunter stehen alle Zeiten, die von jetzt markiert.
+    Die Nachtsicht schaltet mit einem Linksklick von der des Servers zu
+    always, mit einem Rechtsklick wieder zurueck. Das Wetter schaltet mit
+    einem Rechtsklick von dem der Welt von hinten herum zu rain, mit einem
+    Linksklick wieder zu dem der Welt - das Menue bleibt offen, der Chat
+    sagt jedes Mal, was gilt.
 
     menu.buttons: start auf Platz 4 steht dort und startet von dort, back auf
     dem Platz der Nachtsicht wird gemeldet und kommt auf seinen eigenen, ein
@@ -9582,6 +9641,9 @@ def menue_checks(env, bot):
                   re.search(r"(?m)^  admin-access:\s*menu\s*$", quelle) is not None, "")
         spots_loeschen(bot, "Menue")
         console(env, "time set day", pause=1.0)
+        befehl(bot, "/cam time reset")
+        befehl(bot, "/cam weather reset")
+        befehl(bot, "/cam nightvision reset")
         hinstellen(bot, x, y, z)
         f = menue()
         FIND.test("/cam menu oeffnet das Menue", f.get("open") and "Cam" in (f.get("title") or ""), str(f)[:300])
@@ -9590,9 +9652,9 @@ def menue_checks(env, bot):
                   "Times in cam mode:" in item_text(knopf.get("21")), item_text(knopf.get("21")))
         FIND.test("Der Bot mit op hat den Knopf der Admin-Seite auf Platz 23", "23" in knopf, str(sorted(knopf)))
         FIND.test("Vor dem Cam-Modus: Zeit der Welt, Foto-Modus aus, Nachtsicht nur im Dunkeln",
-                  "Now: the time of the world" in item_text(knopf.get("15"))
+                  "Time of day: the world's" in item_text(knopf.get("15"))
                   and "Now: off" in item_text(knopf.get("14"))
-                  and "Now: Only in the dark" in item_text(knopf.get("17")),
+                  and "Night vision: as the server has it (only in the dark)" in item_text(knopf.get("17")),
                   f"{item_text(knopf.get('15'))} / {item_text(knopf.get('14'))} / {item_text(knopf.get('17'))}")
         FIND.test("Die Knoepfe stehen auf ihren Plaetzen",
                   all(str(i) in f.get("slots", {}) for i in (9, 10, 11, 12, 14, 15, 16, 17, 22))
@@ -9607,28 +9669,68 @@ def menue_checks(env, bot):
                   str(f)[:300])
         klick(15)
         f = fenster()
-        FIND.test("Zeit - die Seite mit den Tageszeiten", f.get("open") and "Time of day" in (f.get("title") or ""),
-                  str(f)[:300])
-        klick(12, warten=2.0)
-        FIND.test("Sonnenuntergang - der Bot sieht 12000, und das Fenster ist zu",
-                  bot.call("sky").get("timeOfDay") == 12000 and not fenster().get("open"),
+        FIND.test("Linksklick auf die Zeit: day - der Bot sieht 1000, und das Menue bleibt offen",
+                  bot.call("sky").get("timeOfDay") == 1000 and f.get("open") and "Cam" in (f.get("title") or ""),
+                  f"{bot.call('sky').get('timeOfDay')} / {str(f)[:200]}")
+        klick(15)
+        klick(15, warten=2.0)
+        f = fenster()
+        text = item_text(f.get("slots", {}).get("15"))
+        FIND.test("Zwei Linksklicks weiter: sunset - der Bot sieht 12000, das Menue ist noch offen",
+                  bot.call("sky").get("timeOfDay") == 12000 and f.get("open"),
+                  f"{bot.call('sky').get('timeOfDay')} / {f.get('open')}")
+        FIND.test("Die Zeit sagt im Namen, wie sie steht, und markiert sie unter allen Zeiten",
+                  "Time of day: sunset" in text and "» sunset" in text and "» noon" not in text
+                  and "the world's" in text and "midnight" in text, text)
+        klick(15, button=1, warten=2.0)
+        FIND.test("Rechtsklick: eine zurueck, noon - der Bot sieht 6000",
+                  bot.call("sky").get("timeOfDay") == 6000 and fenster().get("open"),
                   str(bot.call("sky").get("timeOfDay")))
+        klick(15, warten=2.0)
         FIND.test("Im Menue kommt nichts ins Inventar", bot.call("inventory").get("count") == 0,
                   str(bot.call("inventory")))
+        bot.call("close_window", wait=10)
         knopf = menue().get("slots", {})
-        FIND.test("Die Zeit sagt, wie sie steht: Sunset", "Now: Sunset" in item_text(knopf.get("15")),
-                  item_text(knopf.get("15")))
+        FIND.test("Neu geoeffnet sagt die Zeit, wie sie steht: sunset",
+                  "Time of day: sunset" in item_text(knopf.get("15")), item_text(knopf.get("15")))
         klick(14, warten=2.0)
         knopf = menue().get("slots", {})
         FIND.test("Der Foto-Modus sagt, wie er steht: on", "Now: on" in item_text(knopf.get("14")),
                   item_text(knopf.get("14")))
         klick(14, warten=2.0)
         menue()
-        klick(15)
-        knopf = fenster().get("slots", {})
-        FIND.test("Auf der Seite der Zeiten hat Sunset \"Now\" darunter, die Zeit der Welt nicht",
-                  "Now" in item_text(knopf.get("12")) and "Now" not in item_text(knopf.get("16")),
-                  f"{item_text(knopf.get('12'))} / {item_text(knopf.get('16'))}")
+        seit = bot.mark()
+        klick(17, warten=2.0)
+        f = fenster()
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Linksklick auf die Nachtsicht des Servers: always, und das Menue bleibt offen",
+                  gesagt(zeilen, r"Night vision in cam mode: always") and f.get("open")
+                  and "Night vision: always" in item_text(f.get("slots", {}).get("17")),
+                  f"{zeige(zeilen)} / {item_text(f.get('slots', {}).get('17'))}")
+        seit = bot.mark()
+        klick(17, button=1, warten=2.0)
+        f = fenster()
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Rechtsklick: wieder die Nachtsicht des Servers",
+                  gesagt(zeilen, r"Night vision in cam mode: only in the dark, as the server has it") and f.get("open")
+                  and "» as the server has it" in item_text(f.get("slots", {}).get("17")),
+                  f"{zeige(zeilen)} / {item_text(f.get('slots', {}).get('17'))}")
+        seit = bot.mark()
+        klick(16, button=1, warten=2.0)
+        f = fenster()
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Rechtsklick auf das Wetter der Welt: von hinten herum rain, und das Menue bleibt offen",
+                  gesagt(zeilen, r"Your own weather in cam mode: rain") and f.get("open")
+                  and "Weather: rain" in item_text(f.get("slots", {}).get("16")),
+                  f"{zeige(zeilen)} / {item_text(f.get('slots', {}).get('16'))}")
+        seit = bot.mark()
+        klick(16, warten=2.0)
+        f = fenster()
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Linksklick nach rain: wieder das Wetter der Welt",
+                  gesagt(zeilen, r"you see the weather of the world again") and f.get("open")
+                  and "Weather: the world's" in item_text(f.get("slots", {}).get("16")),
+                  f"{zeige(zeilen)} / {item_text(f.get('slots', {}).get('16'))}")
         bot.call("close_window", wait=10)
 
         menue()
@@ -9917,6 +10019,8 @@ def menue_checks(env, bot):
                               ("enabled", "false", "stop-command")])
             console(env, "cam unban all", pause=0.5)
             spots_loeschen(bot, "Menue")
+            befehl(bot, "/cam time reset")
+            befehl(bot, "/cam weather reset")
             console(env, "time set day", pause=0.5)
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
@@ -18666,6 +18770,7 @@ def webkarte_checks(env, bot):
         befehl(bot, "/cam time sunset")
         befehl(bot, "/cam spot set Karte")
         befehl(bot, "/cam spot share Karte all", warten=1.0)
+        befehl(bot, "/cam time reset")
         cam_off(bot)
 
         karten = alle()

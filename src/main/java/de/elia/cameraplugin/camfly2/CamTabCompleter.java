@@ -210,10 +210,10 @@ public class CamTabCompleter implements TabCompleter {
             }
             return matching(names, args[2]);
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("time") && own != null && sky.mayUseTime(own)) {
+        if (args.length == 2 && args[0].equalsIgnoreCase("time") && own != null && sky.mayUseTime()) {
             return startingWith(args[1].toLowerCase(Locale.ROOT), CamSky.timeWords());
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("weather") && own != null && sky.mayUseWeather(own)) {
+        if (args.length == 2 && args[0].equalsIgnoreCase("weather") && own != null && sky.mayUseWeather()) {
             return startingWith(args[1].toLowerCase(Locale.ROOT), CamSky.weatherWords());
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("nightvision") && own != null
@@ -225,8 +225,8 @@ public class CamTabCompleter implements TabCompleter {
         }
         String partial = args[0].toLowerCase();
         List<String> completions = new ArrayList<>();
-        // Only offered where they do something: back, photo, time and weather
-        // to a player in camera mode, nightvision and spot while they are on.
+        // Only offered where they do something: back and photo to a player in
+        // camera mode, nightvision, time, weather and spot while they are on.
         if (own != null && back.mayUse(own) && "back".startsWith(partial)) {
             completions.add("back");
         }
@@ -239,10 +239,10 @@ public class CamTabCompleter implements TabCompleter {
         if (own != null && spots.isEnabled() && "spot".startsWith(partial)) {
             completions.add("spot");
         }
-        if (own != null && sky.mayUseTime(own) && "time".startsWith(partial)) {
+        if (own != null && sky.mayUseTime() && "time".startsWith(partial)) {
             completions.add("time");
         }
-        if (own != null && sky.mayUseWeather(own) && "weather".startsWith(partial)) {
+        if (own != null && sky.mayUseWeather() && "weather".startsWith(partial)) {
             completions.add("weather");
         }
         if (own != null && plugin.getResume().hasFlight(own) && "resume".startsWith(partial)) {

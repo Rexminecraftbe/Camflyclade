@@ -8,6 +8,7 @@ import de.elia.cameraplugin.spot.SpotLook;
 import org.bukkit.WeatherType;
 import org.bukkit.entity.Player;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -21,15 +22,17 @@ import java.util.UUID;
  *
  * <p>Only his client is told about it, nobody else sees anything of it, and
  * the world goes on with its own time and weather - it changes what he sees,
- * not what happens. That is also why it is for camera mode alone: out there
- * on his feet, a night of his own would be a way to look through the dark of
- * the server.</p>
+ * not what happens. That is also why he only sees it in camera mode: out
+ * there on his feet, a night of his own would be a way to look through the
+ * dark of the server.</p>
  *
- * <p>It ends with camera mode, and he sees what he saw before it again: the
- * time and weather of the world, or one another plugin gave him. With
- * {@code player-settings.time} and {@code player-settings.weather} the next
- * flight starts with them once more, until he resets them, see
- * {@link de.elia.cameraplugin.preferences.CamPreferences}.</p>
+ * <p>He picks them as he picks his night vision: in camera mode, where they
+ * hold at once, and before it, for the next flight. Either way they are
+ * kept, and every flight starts with them, until he resets them - kept as
+ * {@code player-settings.storage} says, see
+ * {@link de.elia.cameraplugin.preferences.CamPreferences}. When camera mode
+ * ends he sees what he saw before it again: the time and weather of the
+ * world, or one another plugin gave him.</p>
  *
  * <p>A spot saved with a time or a weather of its own, see
  * {@link de.elia.cameraplugin.spot.SpotLook}, shows them to whoever jumps
@@ -99,14 +102,14 @@ public final class CamSky {
         this.messages = plugin.getMessages();
     }
 
-    /** Whether {@code /cam time} does anything for this player right now. */
-    public boolean mayUseTime(Player player) {
-        return settings.isCamTimeEnabled() && plugin.isInCameraMode(player);
+    /** Whether {@code /cam time} is there: in camera mode and before it, for the next flight. */
+    public boolean mayUseTime() {
+        return settings.isCamTimeEnabled();
     }
 
-    /** Whether {@code /cam weather} does anything for this player right now. */
-    public boolean mayUseWeather(Player player) {
-        return settings.isCamWeatherEnabled() && plugin.isInCameraMode(player);
+    /** Whether {@code /cam weather} is there: in camera mode and before it, for the next flight. */
+    public boolean mayUseWeather() {
+        return settings.isCamWeatherEnabled();
     }
 
     /** The words that may follow {@code /cam time}, for the tab completion. */
@@ -114,6 +117,11 @@ public final class CamSky {
         String[] words = TIMES.keySet().toArray(new String[TIMES.size() + 1]);
         words[TIMES.size()] = "reset";
         return words;
+    }
+
+    /** The times {@code /cam time} knows by name, in the order of the day, with their ticks, for the menu. */
+    public static Map<String, Long> namedTimes() {
+        return Collections.unmodifiableMap(TIMES);
     }
 
     /** The words that may follow {@code /cam weather}, for the tab completion. */
@@ -124,15 +132,12 @@ public final class CamSky {
     /**
      * {@code /cam time}: a time by name or in ticks, 0 to 23999, which stands
      * still - the sun does not move on while he takes his picture -, or
-     * {@code reset} for the time of the world again.
+     * {@code reset} for the time of the world again. In camera mode it holds
+     * at once; before it, from the next flight on. It is kept either way.
      */
     public void timeCommand(Player player, String[] args) {
         if (!settings.isCamTimeEnabled()) {
             messages.sendConfiguredMessage(player, "time-off");
-            return;
-        }
-        if (!plugin.isInCameraMode(player)) {
-            messages.sendConfiguredMessage(player, "not-in-cam");
             return;
         }
         if (args.length != 1) {
@@ -141,9 +146,12 @@ public final class CamSky {
         }
         String word = args[0].toLowerCase(Locale.ROOT);
         CamPreferences preferences = plugin.getPreferences();
+        boolean inCam = plugin.isInCameraMode(player);
         if (word.equals("reset")) {
-            dropStandIn(player, true, false);
-            resetTime(player);
+            if (inCam) {
+                dropStandIn(player, true, false);
+                resetTime(player);
+            }
             preferences.setTime(player, null);
             messages.sendConfiguredMessage(player, "time-reset");
             return;
@@ -156,10 +164,12 @@ public final class CamSky {
             messages.sendConfiguredMessage(player, "time-usage");
             return;
         }
-        dropStandIn(player, true, false);
-        showTime(player, ticks);
+        if (inCam) {
+            dropStandIn(player, true, false);
+            showTime(player, ticks);
+        }
         preferences.setTime(player, ticks);
-        messages.sendConfiguredMessage(player, preferences.keepsTime() ? "time-set-kept" : "time-set",
+        messages.sendConfiguredMessage(player, preferences.keepsForGood() ? "time-set" : "time-set-memory",
                 "{time}", word);
     }
 
@@ -188,15 +198,12 @@ public final class CamSky {
     /**
      * {@code /cam weather}: {@code clear} or {@code rain} - snow where it
      * snows -, or {@code reset} for the weather of the world again. The game
-     * gives a single player no thunderstorm of his own.
+     * gives a single player no thunderstorm of his own. In camera mode and
+     * before it, as {@link #timeCommand} has it.
      */
     public void weatherCommand(Player player, String[] args) {
         if (!settings.isCamWeatherEnabled()) {
             messages.sendConfiguredMessage(player, "weather-off");
-            return;
-        }
-        if (!plugin.isInCameraMode(player)) {
-            messages.sendConfiguredMessage(player, "not-in-cam");
             return;
         }
         if (args.length != 1) {
@@ -205,9 +212,12 @@ public final class CamSky {
         }
         String word = args[0].toLowerCase(Locale.ROOT);
         CamPreferences preferences = plugin.getPreferences();
+        boolean inCam = plugin.isInCameraMode(player);
         if (word.equals("reset")) {
-            dropStandIn(player, false, true);
-            resetWeather(player);
+            if (inCam) {
+                dropStandIn(player, false, true);
+                resetWeather(player);
+            }
             preferences.setWeather(player, null);
             messages.sendConfiguredMessage(player, "weather-reset");
             return;
@@ -221,10 +231,12 @@ public final class CamSky {
             messages.sendConfiguredMessage(player, "weather-usage");
             return;
         }
-        dropStandIn(player, false, true);
-        showWeather(player, type);
+        if (inCam) {
+            dropStandIn(player, false, true);
+            showWeather(player, type);
+        }
         preferences.setWeather(player, type);
-        messages.sendConfiguredMessage(player, preferences.keepsWeather() ? "weather-set-kept" : "weather-set",
+        messages.sendConfiguredMessage(player, preferences.keepsForGood() ? "weather-set" : "weather-set-memory",
                 "{weather}", word);
     }
 
@@ -270,8 +282,8 @@ public final class CamSky {
     }
 
     /**
-     * At the start of camera mode: the time and the weather he picked in an
-     * earlier flight, while they are kept and {@code /cam time} and
+     * At the start of camera mode: the time and the weather he picked, in an
+     * earlier flight or before this one, while {@code /cam time} and
      * {@code /cam weather} are there at all.
      */
     public void startFor(Player player) {
