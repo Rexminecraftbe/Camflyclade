@@ -211,6 +211,43 @@ Konfiguration um, laden sie neu und drehen an Zeit und Wetter der Welt.
   ersten.
 * `--keep-running` lässt alle Server oben, `--stop` beendet alle.
 
+## Einen Lauf im Hintergrund beobachten
+
+Wer einen Lauf nicht im Vordergrund abwartet, sondern ihn beobachten lässt -
+etwa mit dem Monitor von Claude Code -, beobachtet den Lauf selbst, nicht nur
+seine Mitschrift. Der Monitor endet, sobald der Befehl endet, den er
+beobachtet. `tail -f` auf eine Logdatei endet nie: Der Monitor liefe nach dem
+letzten Abschnitt weiter, bis seine Zeit abgelaufen ist, und das Ergebnis käme
+erst mit der Meldung darüber. Mit `tail -f` auf jedes `teil-N.log` bei
+mehreren Servern ist es dasselbe.
+
+* **Den Lauf selbst durch den Filter schicken.** Endet das Skript, endet der
+  Monitor mit ihm:
+
+  ```bash
+  set -o pipefail; python3 -u tools/camfly_testenv.py 2>&1 | grep --line-buffered -E "FEHLT|HINWEIS|fertig nach|===|bestanden|durchgefallen|Ergebnis:|Traceback"
+  ```
+
+  Der Filter lässt durch, was auch bei mehreren Servern im Terminal steht -
+  was durchfällt, jeden Hinweis, jeden fertigen Abschnitt -, dazu die
+  Überschriften der Schritte, die Zusammenfassung und einen Absturz des
+  Skripts. Die vielen `OK`-Zeilen bleiben draußen. `-u` schreibt jede Zeile
+  sofort in die Pipe und nicht erst blockweise; so starten auch die Läufe der
+  weiteren Server. Mit `pipefail` meldet der Monitor am Ende den Exit-Code des
+  Skripts: 0, wenn alles bestanden ist, 1, wenn etwas durchgefallen oder nicht
+  gelaufen ist.
+* **Auch mit `--keep-running`** endet die Pipe mit dem Skript: Die Server
+  schreiben nicht in sie, ihre Ausgabe geht nach `server.log`.
+* **Läuft das Skript schon** und schreibt in eine Datei, hängt man `tail` an
+  seinen Prozess: `tail -f --pid=<PID> <Datei>` hört auf, sobald das Skript zu
+  Ende ist. Bei mehreren Servern ist das die PID des ersten Aufrufs, nicht die
+  eines Laufs mit `--teil`.
+* **Nicht auf `ergebnis.json` warten**: Die Datei liegt vom letzten Lauf noch
+  da, wer nur prüft, ob es sie gibt, ist sofort fertig. Das Zeichen für das
+  Ende ist das Ende des Prozesses.
+* Steht die Zusammenfassung da und der Monitor läuft trotzdem noch, beendet man
+  ihn gleich, statt den Ablauf abzuwarten.
+
 ## Worauf die Tests warten
 
 Im Skript stehen zwei Arten von Wartezeit, und nur eine davon lässt sich
