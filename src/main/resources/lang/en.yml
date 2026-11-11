@@ -431,6 +431,9 @@ messages:
   menu-nightvision-off: "never"
   menu-nightvision-on: "always"
   menu-nightvision-reset: "as the server has it ({mode})"
+  # Under the buttons of the time, the weather and the night vision while the leader one follows shows his in their
+  # place (follow.guide-time, -weather, -night-vision): what one picks there holds once one stops following.
+  menu-own-later: "&6While you follow, you see the leader's.\n&6What you pick here holds\n&6once you stop following."
   menu-off: "&c/cam menu is switched off."
   menu-offer: "&e{owner}:{spot}"
   menu-offer-actions: "&eOffered to you\n&aLeft-click: accept\n&cRight-click: turn down"
@@ -572,6 +575,12 @@ messages:
   menu-tour-invitation: "&e{player}"
   menu-tour-invitation-lore: "&7Invites you to follow them.\n&aLeft-click: follow\n&cRight-click: turn down"
   menu-tour-invitations: "&eInvitations for you: {count}"
+  # The beacon that invites everybody to invite at once (follow.invite-all); {count} is how many it invites - not
+  # those invited already, those invited a moment ago or those kept from following -, {start} follow.start-distance
+  # and {radius} follow.radius: how close they have to be. -cam-only while follow.start-distance is 0.
+  menu-tour-invite-all: "&aInvite everybody"
+  menu-tour-invite-all-lore: "&7Invites everybody close enough\n&7at once - {count} players now:\n&7- without cam mode: within {start} blocks\n&7- in cam mode: within {radius} blocks\n&eClick: invite all"
+  menu-tour-invite-all-lore-cam-only: "&7Invites everybody in cam mode\n&7whose camera is within {radius} blocks\n&7of you at once - {count} players now.\n&eClick: invite all"
   menu-tour-join-restricted: "&7Sorry, you may not follow anybody"
   menu-tour-join-restricted-lore: "&7You are restricted\n&7{time}{reason}."
   menu-tour-lead-restricted: "&7Sorry, you may not lead"
@@ -864,7 +873,11 @@ messages:
   # tour-reach-lost-guide say when it is over. tour-invitation has the buttons tour-button-accept and
   # tour-button-decline behind it, and what hovering over them says; it and tour-invited say for how many seconds it
   # holds ({seconds}, follow.invitation-seconds). tour-invite-wait: he invited that player too short a time ago
-  # (follow.invite-cooldown-seconds, {seconds} left). tour-view-guide and tour-view-free answer
+  # (follow.invite-cooldown-seconds, {seconds} left; once that player accepted, there is no wait). /cam follow invite all (follow.invite-all): tour-invited-all
+  # says whom ({players}) and how many ({count}) it invited, tour-invite-all-none that there was nobody to invite -
+  # those invited already, invited a moment ago or kept from following are left out -, and how close they have to
+  # be ({start} follow.start-distance, {radius} follow.radius; tour-invite-all-none-cam-only while start-distance is
+  # 0), tour-invite-all-off that it is switched off. tour-view-guide and tour-view-free answer
   # /cam follow view, tour-view-unavailable says that the leader's view does not work on the server
   # (follow.guide-view). tour-guide-spectator: a player out of cam mode (follow.lead-without-cam) can't lead in
   # spectator mode; tour-guide-cannot-lead: the leader can't lead any more when he is accepted (tour-guide-gone while
@@ -902,8 +915,12 @@ messages:
   tour-guide-out-of-reach: "&c{player} is out of the reach of your camera."
   tour-guide-spectator: "&cNot in spectator mode: it flies through walls."
   tour-invitation: "&e{player} invites you to follow them with your camera - it runs out in {seconds} seconds."
+  tour-invite-all-none: "&eNobody to invite right now: without cam mode they have to be within {start} blocks of you, in cam mode within {radius} blocks."
+  tour-invite-all-none-cam-only: "&eNobody to invite right now: they have to be in cam mode, within {radius} blocks of you."
+  tour-invite-all-off: "&cInviting everybody at once is switched off."
   tour-invite-wait: "&cYou invited {player} a moment ago: you can invite them again in {seconds} seconds."
   tour-invited: "&aYou invited {player} to follow you. The invitation runs out in {seconds} seconds."
+  tour-invited-all: "&aYou invited {count} players to follow you: {players}. The invitations run out in {seconds} seconds."
   tour-joined: "&aYou follow {player} now. Stop with /cam follow leave, /cam back or the menu."
   tour-joined-guide: "&a{player} follows you now."
   tour-kicked: "&e{player} sent you away: you no longer follow them."
@@ -921,6 +938,9 @@ messages:
   tour-on-done: "&aFollowing is switched on again for everybody."
   tour-other-busy: "&c{player} leads or follows already."
   tour-other-not-in-cam: "&c{player} is not in cam mode. Only who flies as a camera already can follow."
+  # After /cam time, /cam weather or /cam nightvision while the leader one follows shows his in its place: the choice
+  # is kept and holds once one stops following.
+  tour-own-later: "&7While you follow, you see the leader's - yours holds again once you stop following."
   tour-out-of-reach: "&c{player} could not follow you from there: you are out of the reach of their camera."
   tour-reach-lost: "&c{player} was out of your reach for too long: you no longer follow them."
   tour-reach-lost-guide: "&c{player} could not follow you for too long and no longer does."
@@ -943,7 +963,7 @@ messages:
   tour-unknown-player: "&cNobody called {player} is online."
   tour-unrestrict-done: "&a{player} may lead and follow again."
   tour-unrestricted-now: "&a{player} lifted your follow restriction."
-  tour-usage: "&eUse /cam follow invite|accept|decline|kick <player>, /cam follow leave, /cam follow end or /cam follow view."
+  tour-usage: "&eUse /cam follow invite|accept|decline|kick <player>, /cam follow invite all, /cam follow leave, /cam follow end or /cam follow view."
   # /cam trail: {number} which of the kept flights (1 the newest), {distance} in blocks, {time} how long the flight
   # took, {when} trail-flying or trail-ago (with {time} how long ago it ended), {place} as trail-place has it, {world}
   # the worlds of the flight in trail-elsewhere. trail-flights is followed by a button for each kept flight,
@@ -1574,8 +1594,12 @@ message-settings:
   tour-guide-out-of-reach: true
   tour-guide-spectator: true
   tour-invitation: true
+  tour-invite-all-none: true
+  tour-invite-all-none-cam-only: true
+  tour-invite-all-off: true
   tour-invite-wait: true
   tour-invited: true
+  tour-invited-all: true
   tour-joined: true
   tour-joined-guide: true
   tour-kicked: true
@@ -1593,6 +1617,7 @@ message-settings:
   tour-on-done: true
   tour-other-busy: true
   tour-other-not-in-cam: true
+  tour-own-later: true
   tour-out-of-reach: true
   tour-reach-lost: true
   tour-reach-lost-guide: true

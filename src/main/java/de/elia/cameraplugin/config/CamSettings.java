@@ -437,6 +437,14 @@ public final class CamSettings {
     private boolean tourMirrorExperience;
     /** Whether guests in the guide's view are held turned between the ticks too, {@code follow.fine-hold}. */
     private boolean tourFineHold;
+    /** Whether a guide may invite everybody he could invite at once, {@code follow.invite-all}. */
+    private boolean tourInviteAll;
+    /** Whether the guests see the guide's time of day, {@code follow.guide-time}. */
+    private boolean tourGuideTime;
+    /** Whether the guests see the guide's weather, {@code follow.guide-weather}. */
+    private boolean tourGuideWeather;
+    /** Whether the guests have the guide's night vision, {@code follow.guide-night-vision}. */
+    private boolean tourGuideNightVision;
     /** Whether the owner of a spot hears how often it was looked at and liked, {@code viewpoints.guestbook}. */
     private boolean viewpointsGuestbook;
     /** How often the guestbook tells the owners online what came, {@code viewpoints.guestbook-interval-minutes}. */
@@ -482,6 +490,12 @@ public final class CamSettings {
     private boolean resumeEnabled;
     /** Where the end of the last flight is kept, {@code resume-command.storage}. */
     private StorageMode resumeStorage;
+    /** Whether {@code /cam resume} shows the time of day of the last flight again, {@code resume-command.time}. */
+    private boolean resumeTime;
+    /** Whether it shows the weather of the last flight again, {@code resume-command.weather}. */
+    private boolean resumeWeather;
+    /** Whether it gives the night vision of the last flight again, {@code resume-command.night-vision}. */
+    private boolean resumeNightVision;
 
     /** Where the settings players pick for themselves are kept, {@code player-settings.storage}. */
     private StorageMode playerSettingsStorage;
@@ -857,6 +871,10 @@ public final class CamSettings {
         tourMirrorFrost = config.getBoolean(follow + ".mirror-frost", true);
         tourMirrorExperience = config.getBoolean(follow + ".mirror-experience", false);
         tourFineHold = config.getBoolean(follow + ".fine-hold", true);
+        tourInviteAll = config.getBoolean(follow + ".invite-all", true);
+        tourGuideTime = config.getBoolean(follow + ".guide-time", true);
+        tourGuideWeather = config.getBoolean(follow + ".guide-weather", true);
+        tourGuideNightVision = config.getBoolean(follow + ".guide-night-vision", true);
         viewpointsGuestbook = config.getBoolean("viewpoints.guestbook", true);
         guestbookIntervalMinutes = config.getInt("viewpoints.guestbook-interval-minutes", 10, 1,
                 MAX_GUESTBOOK_INTERVAL_MINUTES);
@@ -880,6 +898,9 @@ public final class CamSettings {
         webMapLink = config.getString("web-map.link", "").trim();
         resumeEnabled = config.getBoolean("resume-command.enabled", true);
         resumeStorage = readStorage(config, "resume-command.storage");
+        resumeTime = config.getBoolean("resume-command.time", true);
+        resumeWeather = config.getBoolean("resume-command.weather", true);
+        resumeNightVision = config.getBoolean("resume-command.night-vision", true);
         playerSettingsStorage = readStorage(config, "player-settings.storage");
         playerSettingsFlightSpeed = config.getBoolean("player-settings.flight-speed", true);
         antiScoutingEnabled = config.getBoolean("anti-scouting.enabled", false);
@@ -1990,6 +2011,33 @@ public final class CamSettings {
         return tourFineHold;
     }
 
+    /** Whether a guide may invite everybody he could invite at once, {@code /cam follow invite all}. */
+    public boolean isTourInviteAll() {
+        return tourInviteAll;
+    }
+
+    /**
+     * Whether the guests see the time of day of their guide: the one he
+     * sees in camera mode, the time of the world while he is out of it. Only
+     * while {@code cam-time} lets anybody have a time of his own.
+     */
+    public boolean isTourGuideTime() {
+        return tourGuideTime && camTimeEnabled;
+    }
+
+    /** Whether the guests see the weather of their guide, the way {@link #isTourGuideTime} has it. */
+    public boolean isTourGuideWeather() {
+        return tourGuideWeather && camWeatherEnabled;
+    }
+
+    /**
+     * Whether the guests have the night vision of their guide: the mode that
+     * holds for him in camera mode, none while he is out of it.
+     */
+    public boolean isTourGuideNightVision() {
+        return tourGuideNightVision;
+    }
+
     /**
      * Whether the owner of a spot hears who looked at it and liked it -
      * which only others do, so only while spots may be shared.
@@ -2119,6 +2167,25 @@ public final class CamSettings {
 
     public StorageMode getResumeStorage() {
         return resumeStorage;
+    }
+
+    /** Whether {@code /cam resume} shows the time of day of the last flight again, while {@code cam-time} is on. */
+    public boolean isResumeTime() {
+        return resumeTime && camTimeEnabled;
+    }
+
+    /** Whether {@code /cam resume} shows the weather of the last flight again, while {@code cam-weather} is on. */
+    public boolean isResumeWeather() {
+        return resumeWeather && camWeatherEnabled;
+    }
+
+    /**
+     * Whether {@code /cam resume} gives the night vision of the last flight
+     * again, while {@code night-vision.player-choice} lets anybody have one of
+     * his own - as a spot gives its night vision.
+     */
+    public boolean isResumeNightVision() {
+        return resumeNightVision && nightVisionPlayerChoice;
     }
 
     // ------------------------------------------- player-settings, anti-scouting, menu

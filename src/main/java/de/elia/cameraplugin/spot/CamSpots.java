@@ -326,15 +326,16 @@ public final class CamSpots {
     /**
      * What a spot saved now takes along, see {@link SpotLook}: the time, the
      * weather and the night vision he picked for himself - or that a spot he
-     * was put down at shows him - in camera mode, as far as the config file
-     * lets anybody pick them. Out of camera mode he sees the time and weather
-     * of the world, and the spot takes nothing.
+     * was put down at, or the guide he follows, shows him - in camera mode, as
+     * far as the config file lets anybody pick them. Out of camera mode he
+     * sees the time and weather of the world, and the spot takes nothing.
+     * Also what the end of a flight keeps for {@code /cam resume}.
      */
-    private SpotLook lookOf(Player player) {
+    public SpotLook lookOf(Player player) {
         if (!plugin.isInCameraMode(player)) {
             return SpotLook.NONE;
         }
-        SpotLook look = new SpotLook(plugin.getSky().ownTime(player), plugin.getSky().ownWeather(player),
+        SpotLook look = new SpotLook(plugin.getSky().seenTime(player), plugin.getSky().seenWeather(player),
                 plugin.getNightVision().chosenMode(player));
         return look.isEmpty() ? SpotLook.NONE : look;
     }
@@ -374,14 +375,24 @@ public final class CamSpots {
      * {@link SpotLook}.
      */
     public void showLook(Player player, Spot spot) {
-        plugin.getSky().showSpot(player, spot.look());
-        plugin.getNightVision().showSpot(player, spot.look().nightVision());
+        showLook(player, spot.look());
+    }
+
+    /**
+     * His camera was put down where it shows this look - at a spot, or at
+     * the end of his last flight, see {@link de.elia.cameraplugin.resume.CamResume}
+     * -: its time, weather and night vision stand in for his own, as those of
+     * a spot do.
+     */
+    public void showLook(Player player, SpotLook look) {
+        plugin.getSky().showSpot(player, look);
+        plugin.getNightVision().showSpot(player, look.nightVision());
     }
 
     /**
      * His camera was put down somewhere that is no spot - back at his body,
-     * at the end of his last flight, at a player he follows -: his own time,
-     * weather and night vision hold again.
+     * at a player he follows -: his own time, weather and night vision hold
+     * again.
      */
     public void dropLook(Player player) {
         plugin.getSky().leaveSpot(player);

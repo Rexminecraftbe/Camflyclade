@@ -10,9 +10,12 @@ import org.bukkit.entity.Player;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -39,7 +42,17 @@ import java.util.UUID;
  * there, in place of his own - until his camera is put down
  * somewhere else, see {@link #showSpot} and {@link #leaveSpot}, or he picks
  * one himself. His own comes back then; what a spot showed him is never kept
- * for his next flight.</p>
+ * for his next flight. {@code /cam resume} shows him the time and weather of
+ * his last flight again the same way, see
+ * {@link de.elia.cameraplugin.resume.CamResume}.</p>
+ *
+ * <p>A guest on a tour sees the time and weather of his guide in place of
+ * his own, {@code follow.guide-time} and {@code follow.guide-weather}: the
+ * ones the guide sees in camera mode, the ones of the world while the guide
+ * leads out of it, see {@link #showGuide}. He may pick his own all the same,
+ * in camera mode as before it: it is kept, but he goes on seeing the guide's
+ * until he is off the tour; then his own comes back, with what he picked on
+ * the way, see {@link #leaveGuide}.</p>
  */
 public final class CamSky {
 
@@ -67,8 +80,14 @@ public final class CamSky {
     private final Map<UUID, Long> shownTime = new HashMap<>();
     /** The weather each camera player sees as his own now, for the menu. */
     private final Map<UUID, WeatherType> shownWeather = new HashMap<>();
-    /** What the spot each camera player was put down at last shows him in place of his own, see {@link #showSpot}. */
+    /**
+     * What stands in for the own time and weather of each camera player: the
+     * spot he was put down at last, see {@link #showSpot}, or the guide he
+     * follows, see {@link #showGuide}.
+     */
     private final Map<UUID, StandIn> standIns = new HashMap<>();
+    /** The camera players on a tour whose guide's sky stands in for their own, see {@link #showGuide}. */
+    private final Set<UUID> following = new HashSet<>();
 
     /**
      * What a player saw before camera mode gave him a time or a weather of
@@ -85,9 +104,9 @@ public final class CamSky {
     }
 
     /**
-     * Which parts of what a player sees a spot stands in for, each with his
-     * own under it - {@code null} for the time or weather of the world -, to
-     * be given back once the spot no longer counts.
+     * Which parts of what a player sees a spot or a guide stands in for, each
+     * with his own under it - {@code null} for the time or weather of the
+     * world -, to be given back once the spot or the guide no longer counts.
      */
     private static final class StandIn {
         boolean time;
@@ -148,12 +167,16 @@ public final class CamSky {
         CamPreferences preferences = plugin.getPreferences();
         boolean inCam = plugin.isInCameraMode(player);
         if (word.equals("reset")) {
-            if (inCam) {
+            StandIn guide = guideStandIn(player, true);
+            if (guide != null) {
+                guide.ownTime = null;
+            } else if (inCam) {
                 dropStandIn(player, true, false);
                 resetTime(player);
             }
             preferences.setTime(player, null);
             messages.sendConfiguredMessage(player, "time-reset");
+            tellLater(player, guide);
             return;
         }
         Long ticks = TIMES.get(word);
@@ -164,13 +187,46 @@ public final class CamSky {
             messages.sendConfiguredMessage(player, "time-usage");
             return;
         }
-        if (inCam) {
+        StandIn guide = guideStandIn(player, true);
+        if (guide != null) {
+            guide.ownTime = ticks;
+        } else if (inCam) {
             dropStandIn(player, true, false);
             showTime(player, ticks);
         }
         preferences.setTime(player, ticks);
         messages.sendConfiguredMessage(player, preferences.keepsForGood() ? "time-set" : "time-set-memory",
                 "{time}", word);
+        tellLater(player, guide);
+    }
+
+    /**
+     * The stand-in of the guide he follows, while the guide's time - or
+     * weather - stands in for his own; {@code null} otherwise. What he picks
+     * then goes under it: it is his own once the tour is over.
+     */
+    private StandIn guideStandIn(Player player, boolean time) {
+        if (!following.contains(player.getUniqueId())) {
+            return null;
+        }
+        StandIn in = standIns.get(player.getUniqueId());
+        return in != null && (time ? in.time : in.weather) ? in : null;
+    }
+
+    /** Tells him that what he picked holds once he stops following, while the guide's stands in for it. */
+    private void tellLater(Player player, StandIn guide) {
+        if (guide != null) {
+            messages.sendConfiguredMessage(player, "tour-own-later");
+        }
+    }
+
+    /**
+     * Whether the guide he follows shows him his time, or his weather, in
+     * place of his own right now: what he picks holds only after the tour.
+     * For the menu.
+     */
+    public boolean guideStandsIn(Player player, boolean time) {
+        return guideStandIn(player, time) != null;
     }
 
     /** Shows him a time of his own, standing still, after noting what he saw before. */
@@ -214,12 +270,16 @@ public final class CamSky {
         CamPreferences preferences = plugin.getPreferences();
         boolean inCam = plugin.isInCameraMode(player);
         if (word.equals("reset")) {
-            if (inCam) {
+            StandIn guide = guideStandIn(player, false);
+            if (guide != null) {
+                guide.ownWeather = null;
+            } else if (inCam) {
                 dropStandIn(player, false, true);
                 resetWeather(player);
             }
             preferences.setWeather(player, null);
             messages.sendConfiguredMessage(player, "weather-reset");
+            tellLater(player, guide);
             return;
         }
         WeatherType type = switch (word) {
@@ -231,13 +291,17 @@ public final class CamSky {
             messages.sendConfiguredMessage(player, "weather-usage");
             return;
         }
-        if (inCam) {
+        StandIn guide = guideStandIn(player, false);
+        if (guide != null) {
+            guide.ownWeather = type;
+        } else if (inCam) {
             dropStandIn(player, false, true);
             showWeather(player, type);
         }
         preferences.setWeather(player, type);
         messages.sendConfiguredMessage(player, preferences.keepsForGood() ? "weather-set" : "weather-set-memory",
                 "{weather}", word);
+        tellLater(player, guide);
     }
 
     /** Shows him a weather of his own, after noting what he saw before. */
@@ -254,9 +318,14 @@ public final class CamSky {
     /**
      * The time of his own, for the menu: the one he sees in camera mode, the
      * one kept for his next flight before it, or {@code null} for the time of
-     * the world.
+     * the world. While the guide he follows shows him his, the one that holds
+     * for him again after the tour - which is what he changes there.
      */
     public Long ownTime(Player player) {
+        StandIn guide = guideStandIn(player, true);
+        if (guide != null) {
+            return guide.ownTime;
+        }
         if (plugin.isInCameraMode(player)) {
             return shownTime.get(player.getUniqueId());
         }
@@ -265,10 +334,28 @@ public final class CamSky {
 
     /** The weather of his own, for the menu, the way {@link #ownTime} has it; {@code null} for the world's. */
     public WeatherType ownWeather(Player player) {
+        StandIn guide = guideStandIn(player, false);
+        if (guide != null) {
+            return guide.ownWeather;
+        }
         if (plugin.isInCameraMode(player)) {
             return shownWeather.get(player.getUniqueId());
         }
         return settings.isCamWeatherEnabled() ? plugin.getPreferences().weather(player) : null;
+    }
+
+    /**
+     * The time he sees in camera mode, standing still: his own, or that of a
+     * spot or of the guide he follows; {@code null} for the time of the world,
+     * and out of camera mode. What a spot saved now takes along.
+     */
+    public Long seenTime(Player player) {
+        return shownTime.get(player.getUniqueId());
+    }
+
+    /** The weather he sees in camera mode, the way {@link #seenTime} has it; {@code null} for the world's. */
+    public WeatherType seenWeather(Player player) {
+        return shownWeather.get(player.getUniqueId());
     }
 
     /** The name {@code /cam time} knows a time by, or {@code null} for a time it has no name for. */
@@ -341,33 +428,76 @@ public final class CamSky {
         if (!plugin.isInCameraMode(player)) {
             return;
         }
-        UUID id = player.getUniqueId();
         Long time = settings.isCamTimeEnabled() ? look.time() : null;
         WeatherType weather = settings.isCamWeatherEnabled() ? look.weather() : null;
+        standIn(player, time != null, time, weather != null, weather);
+    }
+
+    /**
+     * A guest follows his guide on a tour, every tick: the guide's time and
+     * weather stand in for his own, as far as {@code follow.guide-time} and
+     * {@code follow.guide-weather} say - those the guide sees in camera mode,
+     * the ones of the world while he leads out of it. What the guest picks
+     * meanwhile goes under them, see {@link #guideStandIn}. Only a change goes
+     * to his client.
+     */
+    public void showGuide(Player guest, Player guide) {
+        if (!plugin.isInCameraMode(guest)) {
+            return;
+        }
+        following.add(guest.getUniqueId());
+        boolean guideInCam = plugin.isInCameraMode(guide);
+        standIn(guest, settings.isTourGuideTime(), guideInCam ? shownTime.get(guide.getUniqueId()) : null,
+                settings.isTourGuideWeather(), guideInCam ? shownWeather.get(guide.getUniqueId()) : null);
+    }
+
+    /** He is off the tour he followed: his own time and weather hold again, with what he picked on it. */
+    public void leaveGuide(Player guest) {
+        if (following.remove(guest.getUniqueId())) {
+            leaveSpot(guest);
+        }
+    }
+
+    /**
+     * Lets a time and a weather stand in for his own, each with his own noted
+     * under it the first time, or shows him his own again for a part nothing
+     * stands in for any more. Only a change goes to his client.
+     *
+     * @param time    whether a time stands in
+     * @param ticks   the time that stands in, {@code null} for the one of the world
+     * @param weather whether a weather stands in
+     * @param type    the weather that stands in, {@code null} for the one of the world
+     */
+    private void standIn(Player player, boolean time, Long ticks, boolean weather, WeatherType type) {
+        UUID id = player.getUniqueId();
         StandIn in = standIns.get(id);
-        if (in == null && (time != null || weather != null)) {
+        if (in == null && (time || weather)) {
             in = new StandIn();
             standIns.put(id, in);
         }
         if (in == null) {
             return;
         }
-        if (time != null) {
+        if (time) {
             if (!in.time) {
                 in.time = true;
                 in.ownTime = shownTime.get(id);
             }
-            showTime(player, time);
+            if (!Objects.equals(shownTime.get(id), ticks)) {
+                restoreTime(player, ticks);
+            }
         } else if (in.time) {
             in.time = false;
             restoreTime(player, in.ownTime);
         }
-        if (weather != null) {
+        if (weather) {
             if (!in.weather) {
                 in.weather = true;
                 in.ownWeather = shownWeather.get(id);
             }
-            showWeather(player, weather);
+            if (shownWeather.get(id) != type) {
+                restoreWeather(player, type);
+            }
         } else if (in.weather) {
             in.weather = false;
             restoreWeather(player, in.ownWeather);
@@ -378,9 +508,9 @@ public final class CamSky {
     }
 
     /**
-     * His camera was put down somewhere that is no spot - at his body, at the
-     * end of his last flight, at a player he follows: what a spot showed him
-     * gives way to his own time and weather again.
+     * His camera was put down somewhere that is no spot - at his body, at a
+     * player he follows -, or he is off a tour: what a spot or a guide showed
+     * him gives way to his own time and weather again.
      */
     public void leaveSpot(Player player) {
         StandIn in = standIns.remove(player.getUniqueId());
@@ -397,8 +527,8 @@ public final class CamSky {
 
     /**
      * He picks a time or a weather himself: for that part no spot stands in
-     * any more, and his own from before the spot is forgotten - the new one
-     * is his own now.
+     * any more, and his own from before is forgotten - the new one is his own
+     * now. A guide does not give way, see {@link #guideStandIn}.
      */
     private void dropStandIn(Player player, boolean time, boolean weather) {
         StandIn in = standIns.get(player.getUniqueId());
@@ -416,7 +546,7 @@ public final class CamSky {
         }
     }
 
-    /** Shows him his own time again: the one he picked, or the one of the world for {@code null}. */
+    /** Shows him a time: the one given - his own, say -, or the one of the world for {@code null}. */
     private void restoreTime(Player player, Long own) {
         if (own != null) {
             showTime(player, own);
@@ -425,7 +555,7 @@ public final class CamSky {
         }
     }
 
-    /** Shows him his own weather again: the one he picked, or the one of the world for {@code null}. */
+    /** Shows him a weather: the one given - his own, say -, or the one of the world for {@code null}. */
     private void restoreWeather(Player player, WeatherType own) {
         if (own != null) {
             showWeather(player, own);
@@ -437,6 +567,7 @@ public final class CamSky {
     /** At the end of camera mode: the time and the weather he saw before it. */
     public void stopFor(Player player) {
         standIns.remove(player.getUniqueId());
+        following.remove(player.getUniqueId());
         resetTime(player);
         resetWeather(player);
         before.remove(player.getUniqueId());

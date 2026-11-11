@@ -40,7 +40,15 @@ import java.util.UUID;
  * {@link de.elia.cameraplugin.spot.SpotLook}, gives it to whoever jumps there
  * in place of his own, while {@code player-choice} lets anybody
  * pick one at all - until his camera is put down somewhere else, or he picks
- * one himself. It is never kept as his own.</p>
+ * one himself. It is never kept as his own. {@code /cam resume} gives him the
+ * night vision of his last flight again the same way.</p>
+ *
+ * <p>A guest on a tour has the night vision of his guide in place of his own,
+ * {@code follow.guide-night-vision}: the mode that holds for the guide in
+ * camera mode, none while the guide leads out of it - the guide sees no
+ * brighter world either, see {@link #showGuide}. He may pick his own all the
+ * same: it is kept, but the guide's holds until he is off the tour; then his
+ * own does, with what he picked on the way.</p>
  */
 public final class CamNightVision {
 
@@ -68,6 +76,8 @@ public final class CamNightVision {
     private final Set<UUID> given = new HashSet<>();
     /** The mode of the spot each camera player was put down at last, in place of his own, see {@link #showSpot}. */
     private final Map<UUID, NightVisionMode> spotModes = new HashMap<>();
+    /** The mode of the guide each guest follows, in place of his own, see {@link #showGuide}. */
+    private final Map<UUID, NightVisionMode> guideModes = new HashMap<>();
 
     public CamNightVision(JavaPlugin plugin, CamSettings settings, Messages messages, CameraPlayers cameraPlayers,
                           CamPreferences preferences) {
@@ -81,7 +91,8 @@ public final class CamNightVision {
     /**
      * The mode that holds for this player: the one he picked, while
      * {@code player-choice} lets him, otherwise {@code night-vision.mode}.
-     * The mode of a spot his camera was put down at stands in for his own.
+     * The mode of a spot his camera was put down at, or of the guide he
+     * follows, stands in for his own.
      */
     public NightVisionMode modeFor(Player player) {
         NightVisionMode own = chosenMode(player);
@@ -89,17 +100,71 @@ public final class CamNightVision {
     }
 
     /**
-     * The mode he picked himself, or the one of the spot his camera was put
+     * The mode of the guide he follows, while it stands in for his own; else
+     * the mode he picked himself, or the one of the spot his camera was put
      * down at, while {@code player-choice} lets anybody pick one; {@code null}
      * while {@code night-vision.mode} holds for him. What a spot he saves now
-     * takes along.
+     * takes along, and where his last flight ends.
      */
     public NightVisionMode chosenMode(Player player) {
+        NightVisionMode guide = guideModes.get(player.getUniqueId());
+        if (guide != null) {
+            return guide;
+        }
         if (!settings.isNightVisionPlayerChoice()) {
             return null;
         }
         NightVisionMode spot = spotModes.get(player.getUniqueId());
         return spot != null ? spot : preferences.nightVision(player);
+    }
+
+    /**
+     * A guest follows his guide on a tour, every tick: the mode that holds
+     * for the guide in camera mode stands in for his own - none while the
+     * guide leads out of it -, with {@code follow.guide-night-vision}. What he
+     * picks himself meanwhile is kept and holds after the tour. Only a change
+     * counts.
+     */
+    public void showGuide(Player guest, Player guide) {
+        UUID id = guest.getUniqueId();
+        if (!cameraPlayers.contains(id)) {
+            return;
+        }
+        NightVisionMode wanted = !settings.isTourGuideNightVision() ? null
+                : cameraPlayers.contains(guide.getUniqueId()) ? modeFor(guide) : NightVisionMode.OFF;
+        NightVisionMode was = wanted == null ? guideModes.remove(id) : guideModes.put(id, wanted);
+        if (was != wanted) {
+            restart(guest);
+        }
+    }
+
+    /** He is off the tour he followed: his own night vision holds again, with what he picked on it. */
+    public void leaveGuide(Player guest) {
+        if (guideModes.remove(guest.getUniqueId()) != null) {
+            restart(guest);
+        }
+    }
+
+    /**
+     * Whether the guide he follows gives him his night vision in place of his
+     * own right now: what he picks holds only after the tour. For the menu.
+     */
+    public boolean guideStandsIn(Player player) {
+        return guideModes.containsKey(player.getUniqueId());
+    }
+
+    /**
+     * His own mode, for the menu and {@code /cam nightvision}: while the guide
+     * he follows gives him his, the one that holds for him again after the
+     * tour - which is what he changes there -, otherwise the one that holds
+     * for him now.
+     */
+    public NightVisionMode ownModeFor(Player player) {
+        if (!guideStandsIn(player)) {
+            return modeFor(player);
+        }
+        NightVisionMode own = settings.isNightVisionPlayerChoice() ? preferences.nightVision(player) : null;
+        return own != null ? own : settings.getNightVisionMode();
     }
 
     /**
@@ -136,7 +201,10 @@ public final class CamNightVision {
      */
     public void startFor(Player player) {
         NightVisionMode mode = modeFor(player);
-        if (mode == NightVisionMode.OFF) {
+        // While the plugin is being switched off - the server stops in the
+        // middle of a tour, say, and the guest gets his own mode back - Bukkit
+        // turns every new task down. His camera mode ends right after anyway.
+        if (mode == NightVisionMode.OFF || !plugin.isEnabled()) {
             return;
         }
         BukkitRunnable old = tasks.remove(player.getUniqueId());
@@ -190,6 +258,7 @@ public final class CamNightVision {
      */
     public void stopFor(Player player) {
         spotModes.remove(player.getUniqueId());
+        guideModes.remove(player.getUniqueId());
         stopLooking(player);
     }
 
@@ -221,16 +290,20 @@ public final class CamNightVision {
             return;
         }
         String word = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
+        // While the guide he follows gives him his, what he picks is kept for
+        // after the tour, and the guide's holds until then.
+        boolean later = guideStandsIn(player);
         if (word.equals("reset")) {
             // His own choice: a spot no longer stands in for it.
             spotModes.remove(player.getUniqueId());
             preferences.setNightVision(player, null);
             restart(player);
-            messages.sendConfiguredMessage(player, "nightvision-reset", "{mode}", name(modeFor(player)));
+            messages.sendConfiguredMessage(player, "nightvision-reset", "{mode}", name(ownModeFor(player)));
+            tellLater(player, later);
             return;
         }
         NightVisionMode mode = switch (word) {
-            case "" -> modeFor(player) == NightVisionMode.OFF ? NightVisionMode.ALWAYS : NightVisionMode.OFF;
+            case "" -> ownModeFor(player) == NightVisionMode.OFF ? NightVisionMode.ALWAYS : NightVisionMode.OFF;
             case "on" -> NightVisionMode.ALWAYS;
             case "off" -> NightVisionMode.OFF;
             case "dark" -> NightVisionMode.DARK;
@@ -245,6 +318,14 @@ public final class CamNightVision {
         restart(player);
         messages.sendConfiguredMessage(player, preferences.keepsForGood() ? "nightvision-set" : "nightvision-set-memory",
                 "{mode}", name(mode));
+        tellLater(player, later);
+    }
+
+    /** Tells him that what he picked holds once he stops following, while the guide's stands in for it. */
+    private void tellLater(Player player, boolean later) {
+        if (later) {
+            messages.sendConfiguredMessage(player, "tour-own-later");
+        }
     }
 
     /** Whether he picked a mode of his own, which the menu marks; otherwise the one of the file holds. */
@@ -285,6 +366,7 @@ public final class CamNightVision {
 
     public void onDisable() {
         spotModes.clear();
+        guideModes.clear();
         for (BukkitRunnable task : tasks.values()) {
             task.cancel();
         }
