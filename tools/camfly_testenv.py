@@ -1033,6 +1033,9 @@ def stop_server(env, quiet=False):
 #                                  eigener Angriff es taete (attack()): cave_spider, bee,
 #                                  wither_skeleton, husk; wither_skull und shulker_bullet
 #                                  fliegen darauf zu, wither_skull_daneben in den Boden daneben
+#   testwiederzeigen <spieler> <fuer> - verbirgt ihn vor dem anderen (hidePlayer) und zeigt ihn
+#                                  fuenf Ticks spaeter wieder, wie ein Vanish-Plugin: Dessen
+#                                  Client lernt ihn neu kennen, mit allem in einem Buendel
 TPA_HELFER_NAME = "CamFlyTpaHelfer"
 
 TPA_HELFER_JAVA = r'''
@@ -1204,6 +1207,17 @@ public final class TpaHelfer extends JavaPlugin implements Listener {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         String name = command.getName().toLowerCase(java.util.Locale.ROOT);
+        if (name.equals("testwiederzeigen")) {
+            Player wer = args.length == 2 ? Bukkit.getPlayerExact(args[0]) : null;
+            Player fuer = args.length == 2 ? Bukkit.getPlayerExact(args[1]) : null;
+            if (wer == null || fuer == null) {
+                return false;
+            }
+            fuer.hidePlayer(this, wer);
+            Bukkit.getScheduler().runTaskLater(this, () -> fuer.showPlayer(this, wer), 5L);
+            sender.sendMessage("testwiederzeigen: ok");
+            return true;
+        }
         if (name.equals("testgiftpfeil")) {
             if (args.length != 3) {
                 return false;
@@ -1453,6 +1467,8 @@ commands:
   testmelder:
     permission: camflytest.plugintp
   testmobhieb:
+    permission: camflytest.plugintp
+  testwiederzeigen:
     permission: camflytest.plugintp
 permissions:
   camflytest.plugintp:
@@ -8860,8 +8876,10 @@ def fuehrung_ohne_cam_checks(env, bot):
     das Item in seiner Hand und das in der zweiten als eigene Ausruestung - am
     Server bleiben seine Haende leer. Mit mirror-count: false, voreingestellt,
     ohne die Zahl im Stapel: 16 Steine kommen als einer, und die Hand des Bots
-    selbst, die im Blick des Bots die Hotbar fuellt, auch - gleich nach der
-    echten des Servers im selben Tick; der dritte bekommt die echte. Setzt der
+    selbst, die im Blick des Bots die Hotbar fuellt, auch - das Paket des
+    Servers aendert CamFly auf dem Weg zum Gast, die echte Zahl kommt dort nie
+    an, auch nicht, wenn sein Client den Bot neu kennenlernt (verborgen und
+    wieder gezeigt); der dritte bekommt die echte. Setzt der
     Bot einen Block, kommt der Stein mit gewechselter Marke in den Daten, im
     Ueberleben wie im Kreativmodus, damit sein Client ihn absinken laesst.
     Mit mirror-enchantments und -durability: false, voreingestellt, kommt ein
@@ -9063,24 +9081,20 @@ def fuehrung_ohne_cam_checks(env, bot):
             return sorted(e.get("level") for e in (bestandteile(paket).get(art) or {}).get("enchantments", []))
         fremd_dritter = dritter.call("other_equipment").get("count", 0)
         ausruestung = zuschauer.call("own_equipment").get("count", 0)
-        # Ein Befehl von der Konsole kommt nach dem Blick des Servers auf die
-        # Haende des Bots: Die echte Zahl geht erst im naechsten Tick hinaus.
-        # Dreimal, damit keine Auffrischung (alle zehn Ticks) zufaellig
-        # gerade danach kommt.
-        abstaende = []
+        # Die Hand des Bots schickt der Server allen, wenn sie sich aendert -
+        # dem Gast aendert CamFly das Paket auf dem Weg: Es kommt schon als ein
+        # Stein an, die echte Zahl nie. Nachgeschickt wird nichts mehr.
+        am_bot_je = []
         for zahl in (16, 12, 16):
             fremd_gast = zuschauer.call("other_equipment").get("count", 0)
             console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:stone {zahl}", pause=1.0)
-            am_bot = haende_des_bots(zuschauer, fremd_gast)
-            echt = [p for p in am_bot if p.get("count") == zahl]
-            danach = [p for p in am_bot if echt and p.get("count") == 1 and p["t"] >= echt[-1]["t"]]
-            abstaende.append(danach[0]["t"] - echt[-1]["t"] if danach and am_bot[-1].get("count") == 1 else None)
+            am_bot_je.append([p.get("count") for p in haende_des_bots(zuschauer, fremd_gast)])
         eigen = eigene_hand(ausruestung)
         FIND.test("mirror-count: false - 16, 12 und 16 Steine des Bots kommen beim Gast als eigener Stein ohne Zahl "
                   "(als einer)", bool(eigen) and all(p.get("count") == 1 for p in eigen), str(eigen[-4:]))
-        FIND.test("Die Hand des Bots selbst (im Blick des Bots seine Hotbar) bekommt der Gast auch als einen Stein - "
-                  "nach jeder echten des Servers (16, 12, 16) im selben Tick, dreimal hintereinander",
-                  all(a is not None and a < 50 for a in abstaende), str(abstaende))
+        FIND.test("Die Hand des Bots selbst (im Blick des Bots seine Hotbar): das Paket des Servers kommt beim Gast "
+                  "schon als ein Stein an, die echte Zahl (16, 12, 16) nie",
+                  all(zahlen and all(z == 1 for z in zahlen) for zahlen in am_bot_je), str(am_bot_je))
         beim_dritten = haende_des_bots(dritter, fremd_dritter)
         FIND.test("Der dritte Spieler, der nicht folgt, bekommt die echte Zahl (16, 12, 16)",
                   [p.get("count") for p in beim_dritten][-3:] == [16, 12, 16]
@@ -9147,8 +9161,9 @@ def fuehrung_ohne_cam_checks(env, bot):
         FIND.test("mirror-enchantments und -durability: false - das Schwert des Bots (Schaerfe V, Pluenderung III, 100 "
                   "Schaden) kommt beim Gast als eigenes mit einer Verzauberung, die nichts sagt (Stufe 1, im Tooltip "
                   "ausgeblendet), und ohne Schaden", bool(eigen) and verborgen(eigen[-1]), str(eigen[-2:]))
-        FIND.test("Die Hand des Bots selbst (im Blick des Bots seine Hotbar) bekommt der Gast genauso",
-                  bool(am_bot) and verborgen(am_bot[-1]), str(am_bot[-2:]))
+        FIND.test("Die Hand des Bots selbst (im Blick des Bots seine Hotbar) bekommt der Gast genauso - nie mit den "
+                  "echten Verzauberungen oder dem Schaden",
+                  bool(am_bot) and all(verborgen(p) for p in am_bot), str(am_bot[-2:]))
         FIND.test("Der dritte Spieler bekommt das echte Schwert: zwei Verzauberungen (III und V), 100 Schaden",
                   bool(beim_dritten) and stufen(beim_dritten[-1]) == [3, 5]
                   and bestandteile(beim_dritten[-1]).get("damage") == 100, str(beim_dritten[-2:]))
@@ -9163,6 +9178,15 @@ def fuehrung_ohne_cam_checks(env, bot):
                   bool(neu) and verborgen(neu[-1])
                   and ("custom_data" in neu[-1].get("components", "")) != ("custom_data" in vorher),
                   f"{vorher[-120:]} / {neu[-1:]}")
+        # Lernt sein Client den Bot neu kennen - wie bei einem Vanish-Plugin,
+        # das ihn verbirgt und wieder zeigt -, schickt der Server alles von
+        # ihm auf einmal, die Haende mit. Auch das kommt geaendert an.
+        fremd_gast = zuschauer.call("other_equipment").get("count", 0)
+        console(env, f"testwiederzeigen {BOT_NAME} {ZUSCHAUER_NAME}", pause=2.0)
+        am_bot = haende_des_bots(zuschauer, fremd_gast)
+        FIND.test("Lernt der Client des Gastes den Bot neu kennen (verborgen und wieder gezeigt), kommt das Schwert "
+                  "auch dabei ohne die echten Verzauberungen und ohne Schaden",
+                  bool(am_bot) and all(verborgen(p) for p in am_bot), str(am_bot[-2:]))
         ausruestung = zuschauer.call("own_equipment").get("count", 0)
         console(env, f"item replace entity {BOT_NAME} weapon.offhand with "
                      f"minecraft:enchanted_book[stored_enchantments={{mending:1}}]", pause=1.0)

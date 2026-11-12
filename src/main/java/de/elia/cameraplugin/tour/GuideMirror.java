@@ -23,6 +23,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.UnaryOperator;
 
 /**
  * What a guest of a guide out of camera mode sees of the guide on his own
@@ -79,12 +80,12 @@ import java.util.UUID;
  * they are, unless {@code follow.mirror-durability}. Seen through the guide's
  * eyes, the hotbar a client draws is not the guest's but the guide's, filled
  * with what the server sends everybody of the guide's hands - the real ones.
- * Those go to the guest's client as shown as well, see {@link #guideHands}:
- * at the end of every tick they changed in and of the one after - the server
- * sends the real ones in the tick of the change, or, changed after it looked,
- * in the next -, now and then anyway, and whenever the guide's view goes out
- * to the guest, see {@link #viewed}. Everybody else still gets the real ones,
- * and so does the guest again once off the tour.</p>
+ * On their way to the guest, those packets are changed, see
+ * {@link GuideHands}: the real ones never reach his client. Where that does
+ * not work, the guide's hands go to the guest's client as shown right after
+ * the server's, see {@link #guideHands} - and the real ones are there for a
+ * moment now and then. Everybody else still gets the real ones, and so does
+ * the guest again once off the tour.</p>
  *
  * <p>A client lowers the item in its player's hand and brings it up again
  * where it takes it for another one: when the guide places a block, after a
@@ -119,6 +120,10 @@ final class GuideMirror {
     private final NamespacedKey mark;
     /** Shows a guest the guide's frost as his own. */
     private final GuideFrost frost;
+    /** Changes the server's packets with the guide's hands on their way to a guest. */
+    private final GuideHands hands;
+    /** An item of the guide's as the guests are shown it, for {@link GuideHands}. */
+    private final UnaryOperator<ItemStack> asShown = item -> shown(item, false);
     /** What each guest's client was sent, by the id of the guest. */
     private final Map<UUID, Shown> shown = new HashMap<>();
 
@@ -161,6 +166,8 @@ final class GuideMirror {
         boolean guideHandsAgain;
         /** Whether they changed by the end of the last tick: they go out once more, see {@link #guideHands}. */
         boolean guideHandsChanged;
+        /** Whether the server's packets with them are changed on their way to the guest, see {@link GuideHands}. */
+        boolean guideHandsWatched;
         /** Ticks since everything was last sent. */
         int sinceRefresh;
         /** Whether everything is sent at the next update, whatever the time. */
@@ -182,9 +189,10 @@ final class GuideMirror {
         int sinceFrost;
     }
 
-    GuideMirror(CamSettings settings, GuideFrost frost, NamespacedKey mark) {
+    GuideMirror(CamSettings settings, GuideFrost frost, GuideHands hands, NamespacedKey mark) {
         this.settings = settings;
         this.frost = frost;
+        this.hands = hands;
         this.mark = mark;
     }
 
@@ -202,6 +210,12 @@ final class GuideMirror {
         }
         state.refreshed |= refresh;
         state.guide = guide;
+        if (hides()) {
+            state.guideHandsWatched = hands.watch(guest, guide.getEntityId(), asShown);
+        } else if (state.guideHandsWatched) {
+            hands.unwatch(guest);
+            state.guideHandsWatched = false;
+        }
         int slot = guest.getInventory().getHeldItemSlot();
         if (state.slot >= 0 && slot != state.slot) {
             // The picture stayed in the slot his client held before.
@@ -448,6 +462,11 @@ final class GuideMirror {
      * a command from the console, a plugin at the end of the tick - it sends
      * only in the next tick: so a change goes out as shown at the end of that
      * one again.</p>
+     *
+     * <p>Where the server's packets are changed on their way, see
+     * {@link GuideHands}, they reach the guest's client as shown anyway: his
+     * client is sent the guide's hands only once, for what it had of them
+     * before.</p>
      */
     private void guideHands(Player guide, Player guest, Shown state, boolean refresh) {
         ItemStack mainHand = guide.getInventory().getItemInMainHand();
@@ -464,7 +483,8 @@ final class GuideMirror {
         }
         boolean changed = state.guideMainHand == null || !mainHand.equals(state.guideMainHand)
                 || !offHand.equals(state.guideOffHand);
-        if (refresh || again || changed || state.guideHandsChanged) {
+        if (state.guideMainHand == null
+                || !state.guideHandsWatched && (refresh || again || changed || state.guideHandsChanged)) {
             guest.sendEquipmentChange(guide, Map.of(EquipmentSlot.HAND, shown(mainHand, false),
                     EquipmentSlot.OFF_HAND, shown(offHand, false)));
             state.guideMainHand = mainHand.clone();
@@ -598,6 +618,8 @@ final class GuideMirror {
      * guide's hands back as they are.
      */
     void clear(Player guest) {
+        // What goes to him goes as it is again - the guide's real hands below too.
+        hands.unwatch(guest);
         Shown state = shown.remove(guest.getUniqueId());
         if (state == null) {
             return;
@@ -637,6 +659,7 @@ final class GuideMirror {
     /** A guest who left the server: his client gets what is his when he joins again. */
     void forget(UUID guest) {
         shown.remove(guest);
+        hands.forget(guest);
     }
 
     /**
