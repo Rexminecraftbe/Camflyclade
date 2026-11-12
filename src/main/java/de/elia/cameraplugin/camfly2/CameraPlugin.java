@@ -43,6 +43,7 @@ import de.elia.cameraplugin.movement.CamBorderWall;
 import de.elia.cameraplugin.movement.CamMovementGuard;
 import de.elia.cameraplugin.nightvision.CamNightVision;
 import de.elia.cameraplugin.nudge.CamNudge;
+import de.elia.cameraplugin.orb.CamOrbGuard;
 import de.elia.cameraplugin.ore.CamOreHider;
 import de.elia.cameraplugin.photo.CamPhotoMode;
 import de.elia.cameraplugin.potion.CamPotionGuard;
@@ -147,6 +148,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final StartCost startCost = new StartCost(settings, messages, log);
     private final MobTargeting mobTargeting = new MobTargeting(this, settings, cameraPlayers);
     private final MobGaze mobGaze = new MobGaze(this, settings, cameraPlayers);
+    private final CamOrbGuard orbGuard = new CamOrbGuard(this, cameraPlayers);
     private final BodyWatch bodyWatch = new BodyWatch(this);
     private final EndWarning endWarning = new EndWarning(this);
     private final BodyAlarm bodyAlarm = new BodyAlarm(this);
@@ -308,6 +310,7 @@ public final class CameraPlugin extends JavaPlugin {
         new CamSpawnFilter(this).register();
         progressGuard.register();
         mobGaze.start();
+        orbGuard.start();
         movementGuard.startHoldingFlight();
     }
 
@@ -391,6 +394,7 @@ public final class CameraPlugin extends JavaPlugin {
         borderWall.onDisable();
         movementGuard.stopHoldingFlight();
         mobGaze.onDisable();
+        orbGuard.onDisable();
         particles.onDisable();
         sightGlow.onDisable();
         nameTag.onDisable();
@@ -608,6 +612,10 @@ public final class CameraPlugin extends JavaPlugin {
 
     public MobTargeting getMobTargeting() {
         return mobTargeting;
+    }
+
+    public CamOrbGuard getOrbGuard() {
+        return orbGuard;
     }
 
     public CamParticles getParticles() {

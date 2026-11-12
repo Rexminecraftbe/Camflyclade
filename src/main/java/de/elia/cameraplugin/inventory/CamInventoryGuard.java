@@ -83,8 +83,10 @@ public class CamInventoryGuard {
      * being there. The game hands an orb only to a player whose pickup delay
      * has run out, so the camera gets one that does not run out while it
      * flies. That orbs do not fly towards the camera either is
-     * {@link de.elia.cameraplugin.mob.MobTargeting}'s business: an orb picks
-     * the player it follows the way a mob picks its target.</p>
+     * {@link de.elia.cameraplugin.mob.MobTargeting}'s business on the server:
+     * an orb picks the player it follows the way a mob picks its target. On
+     * the screen it is {@link de.elia.cameraplugin.orb.CamOrbGuard}'s: the
+     * client works out the flight of an orb by itself.</p>
      */
     public void startFor(Player player) {
         player.setExpCooldown(Integer.MAX_VALUE);

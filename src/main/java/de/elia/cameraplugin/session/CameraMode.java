@@ -216,6 +216,9 @@ public final class CameraMode {
         // found and would keep him as their target. The ones steered by their
         // brain are only noted down here and handed over in the creative tick.
         plugin.getMobTargeting().turnMobsFromPlayer(player, damageTarget);
+        // The experience orbs flying to the player already: the server would
+        // not ask again whom they follow, and they would follow the camera.
+        plugin.getOrbGuard().turnOrbsFromPlayer(player);
 
         // His own things stay in his pockets until the game mode has changed:
         // see switchGameMode, which empties them right after.
