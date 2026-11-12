@@ -83,10 +83,12 @@ import java.util.UUID;
  * hotbar a client draws is not the guest's but the guide's, filled with what
  * the server sends everybody of the guide's hands - with the real counts.
  * Those go to the guest's client as one each as well, see
- * {@link #guideHands}: at the end of every tick they changed in, after the
- * server's, now and then anyway, and whenever the guide's view goes out to
- * the guest, see {@link #viewed}. Everybody else still gets the real ones,
- * and so does the guest again once off the tour.</p>
+ * {@link #guideHands}: at the end of every tick they changed in and of the
+ * one after - the server sends the real ones in the tick of the change, or,
+ * changed after it looked, in the next -, now and then anyway, and whenever
+ * the guide's view goes out to the guest, see {@link #viewed}. Everybody else
+ * still gets the real ones, and so does the guest again once off the
+ * tour.</p>
  *
  * <p>Hearts of 0 are never sent: the client would show the screen of death.
  * A guide who dies ends the tour first, see {@link CamTour}.</p>
@@ -151,6 +153,8 @@ final class GuideMirror {
         ItemStack guideOffHand;
         /** Whether the guide's hands go out as one each at the end of the tick, whatever changed. */
         boolean guideHandsAgain;
+        /** Whether they changed by the end of the last tick: they go out once more, see {@link #guideHands}. */
+        boolean guideHandsChanged;
         /** Ticks since everything was last sent. */
         int sinceRefresh;
         /** Whether everything is sent at the next update, whatever the time. */
@@ -392,6 +396,12 @@ final class GuideMirror {
      * the real ones -, if it is time, or if the guide's view just went out.
      * Seen through the guide's eyes, they fill the hotbar there. Once the
      * guests see the count again, the real ones go out.
+     *
+     * <p>The server looks for a change of a player's hands once a tick, at
+     * his own tick, and sends the real ones then. What changes after that -
+     * a command from the console, a plugin at the end of the tick - it sends
+     * only in the next tick: so a change goes out as one each at the end of
+     * that one again.</p>
      */
     private void guideHands(Player guide, Player guest, Shown state, boolean refresh) {
         ItemStack mainHand = guide.getInventory().getItemInMainHand();
@@ -406,13 +416,15 @@ final class GuideMirror {
             }
             return;
         }
-        if (refresh || again || state.guideMainHand == null || !mainHand.equals(state.guideMainHand)
-                || !offHand.equals(state.guideOffHand)) {
+        boolean changed = state.guideMainHand == null || !mainHand.equals(state.guideMainHand)
+                || !offHand.equals(state.guideOffHand);
+        if (refresh || again || changed || state.guideHandsChanged) {
             guest.sendEquipmentChange(guide, Map.of(EquipmentSlot.HAND, shown(mainHand, false, false),
                     EquipmentSlot.OFF_HAND, shown(offHand, false, false)));
             state.guideMainHand = mainHand.clone();
             state.guideOffHand = offHand.clone();
         }
+        state.guideHandsChanged = changed;
     }
 
     /** Sends the guest the guide's effects that changed, or all of them now and then. */

@@ -9042,23 +9042,30 @@ def fuehrung_ohne_cam_checks(env, bot):
         def eigene_hand(seit, platz=0):
             return [p for p in zuschauer.call("own_equipment", since=seit).get("packets", [])
                     if p.get("slot") == platz]
-        fremd_gast = zuschauer.call("other_equipment").get("count", 0)
         fremd_dritter = dritter.call("other_equipment").get("count", 0)
         ausruestung = zuschauer.call("own_equipment").get("count", 0)
-        console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:stone 16", pause=1.0)
+        # Ein Befehl von der Konsole kommt nach dem Blick des Servers auf die
+        # Haende des Bots: Die echte Zahl geht erst im naechsten Tick hinaus.
+        # Dreimal, damit keine Auffrischung (alle zehn Ticks) zufaellig
+        # gerade danach kommt.
+        abstaende = []
+        for zahl in (16, 12, 16):
+            fremd_gast = zuschauer.call("other_equipment").get("count", 0)
+            console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:stone {zahl}", pause=1.0)
+            am_bot = haende_des_bots(zuschauer, fremd_gast)
+            echt = [p for p in am_bot if p.get("count") == zahl]
+            danach = [p for p in am_bot if echt and p.get("count") == 1 and p["t"] >= echt[-1]["t"]]
+            abstaende.append(danach[0]["t"] - echt[-1]["t"] if danach and am_bot[-1].get("count") == 1 else None)
         eigen = eigene_hand(ausruestung)
-        FIND.test("mirror-count: false - die 16 Steine des Bots kommen beim Gast als eigener Stein ohne Zahl (als einer)",
-                  bool(eigen) and all(p.get("count") == 1 for p in eigen), str(eigen[-4:]))
-        am_bot = haende_des_bots(zuschauer, fremd_gast)
-        echt = [p for p in am_bot if p.get("count") == 16]
+        FIND.test("mirror-count: false - 16, 12 und 16 Steine des Bots kommen beim Gast als eigener Stein ohne Zahl "
+                  "(als einer)", bool(eigen) and all(p.get("count") == 1 for p in eigen), str(eigen[-4:]))
         FIND.test("Die Hand des Bots selbst (im Blick des Bots seine Hotbar) bekommt der Gast auch als einen Stein - "
-                  "gleich nach der echten des Servers (16), im selben Tick",
-                  bool(echt) and am_bot[-1].get("count") == 1
-                  and any(p.get("count") == 1 and 0 <= p["t"] - echt[-1]["t"] < 100 for p in am_bot),
-                  str(am_bot[-4:]))
+                  "nach jeder echten des Servers (16, 12, 16) im selben Tick, dreimal hintereinander",
+                  all(a is not None and a < 50 for a in abstaende), str(abstaende))
         beim_dritten = haende_des_bots(dritter, fremd_dritter)
-        FIND.test("Der dritte Spieler, der nicht folgt, bekommt die echte Zahl (16)",
-                  bool(beim_dritten) and all(p.get("count") == 16 for p in beim_dritten), str(beim_dritten[-4:]))
+        FIND.test("Der dritte Spieler, der nicht folgt, bekommt die echte Zahl (16, 12, 16)",
+                  [p.get("count") for p in beim_dritten][-3:] == [16, 12, 16]
+                  and all(p.get("count") != 1 for p in beim_dritten), str(beim_dritten[-4:]))
         ohne_marke = eigen[-1].get("components") if eigen else None
         schwuenge = zuschauer.call("own_swings").get("count", 0)
         ausruestung = zuschauer.call("own_equipment").get("count", 0)
@@ -9075,11 +9082,15 @@ def fuehrung_ohne_cam_checks(env, bot):
         def marken(pakete):
             return [p.get("components") for p in pakete]
         neu = eigene_hand(ausruestung)
+        # Vor dem Setzen kann eine Auffrischung den Stein noch ohne Marke
+        # bringen - danach kommt er nur noch mit.
+        liste = marken(neu)
+        ab = liste.index(liste[-1]) if liste else 0
         FIND.test("Setzt der Bot im Ueberleben einen Block (16 auf 15), bekommt der Gast den Stein wieder als einen - "
                   "mit der Marke, die vorher nicht dran war",
-                  bool(neu) and all(p.get("count") == 1 for p in neu) and len(set(marken(neu))) == 1
-                  and ohne_marke is not None and neu[-1].get("components") != ohne_marke
-                  and "custom_data" in str(neu[-1].get("components")), str(neu[-3:]))
+                  bool(neu) and all(p.get("count") == 1 for p in neu) and set(liste[:ab]) <= {ohne_marke}
+                  and all(m == liste[-1] for m in liste[ab:]) and ohne_marke is not None and liste[-1] != ohne_marke and "custom_data" in liste[-1],
+                  str(neu[-3:]))
         mit_marke = neu[-1].get("components") if neu else None
         # Im Kreativmodus bleibt die Zahl: Die Marke wechselt bei jedem Block,
         # damit auch sein Client das Item absinken laesst - ab, dran, ab.
