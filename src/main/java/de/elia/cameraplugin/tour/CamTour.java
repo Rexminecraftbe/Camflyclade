@@ -41,6 +41,7 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -150,11 +151,18 @@ public final class CamTour implements Listener {
 
     /**
      * How much of the gap to the guide the speed of a guest closes each tick,
-     * on top of the step the guide took. The client is a tick or two behind
-     * what the server knows, so a whole gap would make the camera overshoot
-     * and swing.
+     * on top of the step the guide took: of the gap that is left after what
+     * his camera flew already, see {@link #ahead}. That is only a guess - his
+     * ping changes, a wall stops his camera -, so a whole gap would make the
+     * camera overshoot and swing.
      */
     private static final double PULL = 0.3;
+
+    /**
+     * The most ticks the client of a guest is taken to be behind, see
+     * {@link #ahead}: a second.
+     */
+    private static final int MAX_LAG = 20;
 
     /** The fastest a guest is sent after the guide, in blocks per tick. */
     private static final double MAX_SPEED = 4.0;
@@ -265,6 +273,8 @@ public final class CamTour implements Listener {
         int centered;
         /** Ticks since his frost was last sent to his client. */
         int sinceFrost;
+        /** The speeds he was sent in the last ticks, the newest last, see {@link #ahead}. */
+        final ArrayDeque<Vector> sent = new ArrayDeque<>();
     }
 
     public CamTour(CameraPlugin plugin) {
@@ -1700,6 +1710,7 @@ public final class CamTour implements Listener {
                 state.shownSeconds = -1L;
                 state.resting = true;
                 guest.setVelocity(new Vector());
+                state.sent.clear();
                 // Back to his own camera, which stands at its border: he sees
                 // no further than he could fly himself.
                 unview(guest, state);
@@ -1734,7 +1745,7 @@ public final class CamTour implements Listener {
             settings.getSignalBackSound().play(guest);
         }
         Location from = guest.getLocation();
-        Vector gap = at.toVector().subtract(from.toVector());
+        Vector gap = at.toVector().subtract(from.toVector()).subtract(ahead(guest, state));
         if (!from.getWorld().equals(at.getWorld()) || gap.lengthSquared() > CATCH_UP * CATCH_UP) {
             Location target = at.clone();
             target.setYaw(from.getYaw());
@@ -1742,6 +1753,9 @@ public final class CamTour implements Listener {
             plugin.getMovementGuard().jumpTo(guest, data, target);
             guest.setVelocity(new Vector());
             state.resting = true;
+            // Put where the server knows he is: nothing he was sent before
+            // takes him any further.
+            state.sent.clear();
             // After the jump the client may have to find the guide anew: the
             // guide's view goes out again the next tick he follows him. Until
             // then his client may still see through the guide, so the tour
@@ -1761,8 +1775,36 @@ public final class CamTour implements Listener {
             guest.setVelocity(still ? new Vector() : speed);
         }
         state.resting = still;
+        state.sent.addLast(still ? new Vector() : speed);
+        if (state.sent.size() > MAX_LAG) {
+            state.sent.removeFirst();
+        }
         updateView(guide, guest, state);
         return null;
+    }
+
+    /**
+     * How far the camera of a guest has flown beyond where the server knows
+     * it is: the speeds it was sent in as many of the last ticks as its client
+     * is behind - one, and its ping on top.
+     *
+     * <p>The server learns where the camera is only once its client says so,
+     * a ping and a tick after the camera was sent its speed. Pulled by the gap
+     * to where it was then, it would be sent after the guide once more for
+     * what it flew already: when he stopped, it shot past him by as far as it
+     * flies in its ping, and from a ping of about a quarter of a second, it
+     * swung after him ever more widely. Should the camera not have flown all
+     * of it - a wall stopped it, say -, its client says so a ping later, and
+     * {@link #PULL} makes up for it.</p>
+     */
+    private static Vector ahead(Player guest, Guest state) {
+        int lag = Math.min(MAX_LAG, 1 + (int) Math.round(Math.max(0, guest.getPing()) / 50.0));
+        Vector flown = new Vector();
+        Iterator<Vector> last = state.sent.descendingIterator();
+        for (int i = 0; i < lag && last.hasNext(); i++) {
+            flown.add(last.next());
+        }
+        return flown;
     }
 
     /**
