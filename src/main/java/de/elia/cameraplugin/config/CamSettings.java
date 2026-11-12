@@ -437,6 +437,10 @@ public final class CamSettings {
     private boolean tourMirrorExperience;
     /** Whether they see how many of his items are in a stack, {@code follow.mirror-count}. */
     private boolean tourMirrorCount;
+    /** Whether they see which enchantments his items have, {@code follow.mirror-enchantments}. */
+    private boolean tourMirrorEnchantments;
+    /** Whether they see how worn his items are, {@code follow.mirror-durability}. */
+    private boolean tourMirrorDurability;
     /** Whether guests in the guide's view are held turned between the ticks too, {@code follow.fine-hold}. */
     private boolean tourFineHold;
     /** Whether a guide may invite everybody he could invite at once, {@code follow.invite-all}. */
@@ -873,6 +877,8 @@ public final class CamSettings {
         tourMirrorFrost = config.getBoolean(follow + ".mirror-frost", true);
         tourMirrorExperience = config.getBoolean(follow + ".mirror-experience", false);
         tourMirrorCount = config.getBoolean(follow + ".mirror-count", false);
+        tourMirrorEnchantments = config.getBoolean(follow + ".mirror-enchantments", false);
+        tourMirrorDurability = config.getBoolean(follow + ".mirror-durability", false);
         tourFineHold = config.getBoolean(follow + ".fine-hold", true);
         tourInviteAll = config.getBoolean(follow + ".invite-all", true);
         tourGuideTime = config.getBoolean(follow + ".guide-time", true);
@@ -2015,6 +2021,19 @@ public final class CamSettings {
      */
     public boolean isTourMirrorCount() {
         return tourMirrorCount;
+    }
+
+    /**
+     * Whether the guests see which enchantments the guide's items have -
+     * otherwise only that they have some, by their glint.
+     */
+    public boolean isTourMirrorEnchantments() {
+        return tourMirrorEnchantments;
+    }
+
+    /** Whether the guests see how worn the guide's items are: the bar under them, and the tooltip. */
+    public boolean isTourMirrorDurability() {
+        return tourMirrorDurability;
     }
 
     /** Whether guests who see through the guide's eyes are held turned between the ticks too. */

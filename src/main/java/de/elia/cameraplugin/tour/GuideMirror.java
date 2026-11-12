@@ -5,14 +5,19 @@ import de.elia.cameraplugin.session.ClientFrost;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.Damageable;
+import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -67,28 +72,29 @@ import java.util.UUID;
  * own frost - goes out during the tick, and the guide's goes over it before
  * his client draws the next picture.</p>
  *
- * <p>When the guide places a block, a client lowers the item in his hand and
- * brings it up again - after a change of its count, and in creative mode,
- * where the count stays, at every use of its own. The guest's client is sent
- * the item anew, see {@link #placed}; in creative mode with a mark of the
- * plugin's own in its custom data put on or taken off, see {@link #MARK}. The
- * mark shows nowhere, but to the client it is another item, which it lowers
- * and raises too.</p>
+ * <p>What the guests do not see of the guide's items, their clients are not
+ * sent, see {@link #shown}: how many are in a stack, unless
+ * {@code follow.mirror-count}; which enchantments they have, unless
+ * {@code follow.mirror-enchantments} - only that they have some -; how worn
+ * they are, unless {@code follow.mirror-durability}. Seen through the guide's
+ * eyes, the hotbar a client draws is not the guest's but the guide's, filled
+ * with what the server sends everybody of the guide's hands - the real ones.
+ * Those go to the guest's client as shown as well, see {@link #guideHands}:
+ * at the end of every tick they changed in and of the one after - the server
+ * sends the real ones in the tick of the change, or, changed after it looked,
+ * in the next -, now and then anyway, and whenever the guide's view goes out
+ * to the guest, see {@link #viewed}. Everybody else still gets the real ones,
+ * and so does the guest again once off the tour.</p>
  *
- * <p>How many items are in the stacks, the guests see only with
- * {@code follow.mirror-count}. Otherwise the guide's items go to the guest's
- * client as one each - and where the count changes, as it does when the guide
- * places a block in survival mode, with the mark put on or taken off, so
- * that the item still sinks and comes up. Seen through the guide's eyes, the
- * hotbar a client draws is not the guest's but the guide's, filled with what
- * the server sends everybody of the guide's hands - with the real counts.
- * Those go to the guest's client as one each as well, see
- * {@link #guideHands}: at the end of every tick they changed in and of the
- * one after - the server sends the real ones in the tick of the change, or,
- * changed after it looked, in the next -, now and then anyway, and whenever
- * the guide's view goes out to the guest, see {@link #viewed}. Everybody else
- * still gets the real ones, and so does the guest again once off the
- * tour.</p>
+ * <p>A client lowers the item in its player's hand and brings it up again
+ * where it takes it for another one: when the guide places a block, after a
+ * change of its count, and in creative mode, where the count stays, at every
+ * use of its own. The guest's client goes by what it is shown. Where that
+ * stays the same while the guide's changed - in creative mode, see
+ * {@link #placed}, or where only what the guests do not see changed -, a mark
+ * of the plugin's own in its custom data is put on or taken off, see
+ * {@link #MARK}. The mark shows nowhere, but to the client the item is another
+ * one, which it lowers and raises as the guide's does.</p>
  *
  * <p>Hearts of 0 are never sent: the client would show the screen of death.
  * A guide who dies ends the tour first, see {@link CamTour}.</p>
@@ -147,11 +153,11 @@ final class GuideMirror {
         int slot = -1;
         /**
          * The guide's hands as they were when last sent to the guest's client
-         * as one each, see {@link #guideHands}; {@code null} while they were not.
+         * as shown, see {@link #guideHands}; {@code null} while they were not.
          */
         ItemStack guideMainHand;
         ItemStack guideOffHand;
-        /** Whether the guide's hands go out as one each at the end of the tick, whatever changed. */
+        /** Whether the guide's hands go out as shown at the end of the tick, whatever changed. */
         boolean guideHandsAgain;
         /** Whether they changed by the end of the last tick: they go out once more, see {@link #guideHands}. */
         boolean guideHandsChanged;
@@ -205,47 +211,45 @@ final class GuideMirror {
         state.slot = slot;
         ItemStack mainHand = guide.getInventory().getItemInMainHand();
         ItemStack offHand = guide.getInventory().getItemInOffHand();
-        boolean count = settings.isTourMirrorCount();
-        // Another item: shown without the mark again.
-        state.mainHandMarked &= state.mainHand != null && state.mainHand.isSimilar(mainHand);
-        state.offHandMarked &= state.offHand != null && state.offHand.isSimilar(offHand);
-        // The item sinks and comes up on the guide's screen, so it does on
-        // the guest's: shown with the mark put on or taken off.
-        boolean mainHandSinks = sinks(state.mainHandUsed, state.mainHand, mainHand, count);
-        boolean offHandSinks = sinks(state.offHandUsed, state.offHand, offHand, count);
+        boolean mainHandMarked = marked(state.mainHandMarked, state.mainHandUsed, state.mainHand, mainHand);
+        boolean offHandMarked = marked(state.offHandMarked, state.offHandUsed, state.offHand, offHand);
+        // The mark changed: sent, changed or not.
+        boolean mainHandAgain = mainHandMarked != state.mainHandMarked;
+        boolean offHandAgain = offHandMarked != state.offHandMarked;
+        state.mainHandMarked = mainHandMarked;
+        state.offHandMarked = offHandMarked;
         state.mainHandUsed = false;
         state.offHandUsed = false;
-        state.mainHandMarked ^= mainHandSinks;
-        state.offHandMarked ^= offHandSinks;
         state.mainHand = mirror(guest, EquipmentSlot.HAND, settings.isTourMirrorMainHand(), mainHand,
-                guest.getInventory().getItemInMainHand(), state.mainHand, state.mainHandMarked, count,
-                refresh || mainHandSinks);
+                guest.getInventory().getItemInMainHand(), state.mainHand, mainHandMarked, refresh || mainHandAgain);
         state.offHand = mirror(guest, EquipmentSlot.OFF_HAND, settings.isTourMirrorOffHand(), offHand,
-                guest.getInventory().getItemInOffHand(), state.offHand, state.offHandMarked, count,
-                refresh || offHandSinks);
+                guest.getInventory().getItemInOffHand(), state.offHand, offHandMarked, refresh || offHandAgain);
         state.head = mirror(guest, EquipmentSlot.HEAD, settings.isTourMirrorHead(),
-                guide.getInventory().getHelmet(), guest.getInventory().getHelmet(), state.head, false, count,
-                refresh);
+                guide.getInventory().getHelmet(), guest.getInventory().getHelmet(), state.head, false, refresh);
     }
 
     /**
-     * Whether the item in a hand needs the mark put on or taken off for the
-     * guest's client to lower and raise it as the guide's does: after a block
-     * placed with it in creative mode, where the count stays - and, while the
-     * guests do not see the count, after any change of it, which shown as one
-     * would change nothing.
+     * Whether the item in a hand is shown with the mark from now on. The
+     * guest's client is to take it for another one where the guide's does:
+     * where the guide's item changed, or a block was placed with it in
+     * creative mode, where the count stays and the guide's client lowers and
+     * raises it all the same. Where what the guests are shown of it stays the
+     * same nonetheless - only the count, the enchantments or the wear changed,
+     * which they do not see, or nothing -, the mark is put on or taken off;
+     * where it changed anyway, it is shown without.
      *
-     * @param used  whether the guide placed a block with it, see {@link #placed}
-     * @param count whether the guests see the count
+     * @param used   whether the guide placed a block with it, see {@link #placed}
+     * @param before the guide's item when last looked at, {@code null} while
+     *               none was sent
      */
-    private static boolean sinks(boolean used, ItemStack before, ItemStack now, boolean count) {
+    private boolean marked(boolean marked, boolean used, ItemStack before, ItemStack now) {
         if (before == null) {
             return false;
         }
-        if (used && now.equals(before)) {
-            return true;
+        if (now.equals(before)) {
+            return used != marked;
         }
-        return !count && before.isSimilar(now) && before.getAmount() != now.getAmount();
+        return shown(before, false).equals(shown(now, false)) && !marked;
     }
 
     /**
@@ -254,12 +258,11 @@ final class GuideMirror {
      * camera mode keeps it.
      *
      * @param marked whether to show it with the mark, see {@link #shown}
-     * @param count  whether to show it with its count
      * @return the guide's item his client was sent there, {@code null} for
      *         nothing sent
      */
     private ItemStack mirror(Player guest, EquipmentSlot slot, boolean on, ItemStack item, ItemStack own,
-                             ItemStack before, boolean marked, boolean count, boolean refresh) {
+                             ItemStack before, boolean marked, boolean refresh) {
         if (!on) {
             if (before != null) {
                 guest.sendEquipmentChange(guest, slot, own == null ? new ItemStack(Material.AIR) : own);
@@ -268,41 +271,84 @@ final class GuideMirror {
         }
         ItemStack now = item == null ? new ItemStack(Material.AIR) : item;
         if (refresh || before == null || !now.equals(before)) {
-            guest.sendEquipmentChange(guest, slot, shown(now, marked, count));
+            guest.sendEquipmentChange(guest, slot, shown(now, marked));
         }
         return now.clone();
     }
 
     /**
-     * The item as the guest's client is shown it: as one, unless the guests
-     * see the count, and with the mark, if so. The mark is a byte in the
-     * item's custom data, which a client shows nowhere - but an item with it
-     * is another one to the client than the same without, and one that comes
-     * in place of another in a hand, it lowers and raises.
+     * The item as the guests' clients are shown it: as one, unless the guests
+     * see the count; without its enchantments, unless they see them; as new,
+     * unless they see the wear - and with the mark, if so. The mark is a byte
+     * in the item's custom data, which a client shows nowhere - but an item
+     * with it is another one to the client than the same without, and one
+     * that comes in place of another in a hand, it lowers and raises.
      */
-    private ItemStack shown(ItemStack item, boolean marked, boolean count) {
-        if (item.getType().isAir() || !marked && (count || item.getAmount() == 1)) {
+    private ItemStack shown(ItemStack item, boolean marked) {
+        if (item.getType().isAir()) {
+            return item;
+        }
+        boolean asOne = !settings.isTourMirrorCount() && item.getAmount() != 1;
+        ItemMeta meta = item.hasItemMeta() ? item.getItemMeta() : null;
+        boolean enchanted = !settings.isTourMirrorEnchantments() && meta != null
+                && (meta.hasEnchants() || meta instanceof EnchantmentStorageMeta stored && stored.hasStoredEnchants());
+        boolean worn = !settings.isTourMirrorDurability() && meta instanceof Damageable damageable
+                && damageable.hasDamage();
+        if (!marked && !asOne && !enchanted && !worn) {
             return item;
         }
         ItemStack copy = item.clone();
-        if (!count) {
+        if (asOne) {
             copy.setAmount(1);
         }
-        if (marked) {
-            ItemMeta meta = copy.getItemMeta();
-            if (meta != null) {
-                meta.getPersistentDataContainer().set(mark, PersistentDataType.BYTE, (byte) 1);
-                copy.setItemMeta(meta);
+        if (marked || enchanted || worn) {
+            ItemMeta changed = meta != null ? meta : copy.getItemMeta();
+            if (changed != null) {
+                if (enchanted) {
+                    hideEnchantments(changed);
+                }
+                if (worn) {
+                    // Undamaged, an item has no bar - and no durability in
+                    // the tooltip either, not even with F3+H.
+                    ((Damageable) changed).setDamage(0);
+                }
+                if (marked) {
+                    changed.getPersistentDataContainer().set(mark, PersistentDataType.BYTE, (byte) 1);
+                }
+                copy.setItemMeta(changed);
             }
         }
         return copy;
     }
 
     /**
+     * Takes the enchantments off an item as the guests are shown it. One that
+     * says nothing takes their place, hidden from the tooltip: the client
+     * still draws it as enchanted - with its glint, and its name in the
+     * colour of an enchanted one -, without being told which. An enchanted
+     * book keeps its glint.
+     */
+    private static void hideEnchantments(ItemMeta meta) {
+        if (meta.hasEnchants()) {
+            meta.removeEnchantments();
+            meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        }
+        if (meta instanceof EnchantmentStorageMeta stored && stored.hasStoredEnchants()) {
+            for (Enchantment enchantment : new ArrayList<>(stored.getStoredEnchants().keySet())) {
+                stored.removeStoredEnchant(enchantment);
+            }
+            if (!stored.hasEnchantmentGlintOverride()) {
+                stored.setEnchantmentGlintOverride(true);
+            }
+        }
+    }
+
+    /**
      * The guide placed a block with the item in this hand. The next update -
      * on Paper still in this tick, once the server has taken the block off
      * the stack - sends it: changed anyway, or in creative mode, where the
-     * count stays, with the mark put on or taken off.
+     * count stays, with the mark put on or taken off, see {@link #marked}.
      */
     void placed(UUID guest, boolean offHand) {
         Shown state = shown.get(guest);
@@ -391,24 +437,24 @@ final class GuideMirror {
     }
 
     /**
-     * Sends the guest's client the guide's hands as one each, while the
-     * guests do not see the count: if they changed - the server has just sent
-     * the real ones -, if it is time, or if the guide's view just went out.
-     * Seen through the guide's eyes, they fill the hotbar there. Once the
-     * guests see the count again, the real ones go out.
+     * Sends the guest's client the guide's hands as the guests are shown them,
+     * see {@link #shown}, while they do not see all of them: if they changed -
+     * the server has just sent the real ones -, if it is time, or if the
+     * guide's view just went out. Seen through the guide's eyes, they fill
+     * the hotbar there. Once the guests see all again, the real ones go out.
      *
      * <p>The server looks for a change of a player's hands once a tick, at
      * his own tick, and sends the real ones then. What changes after that -
      * a command from the console, a plugin at the end of the tick - it sends
-     * only in the next tick: so a change goes out as one each at the end of
-     * that one again.</p>
+     * only in the next tick: so a change goes out as shown at the end of that
+     * one again.</p>
      */
     private void guideHands(Player guide, Player guest, Shown state, boolean refresh) {
         ItemStack mainHand = guide.getInventory().getItemInMainHand();
         ItemStack offHand = guide.getInventory().getItemInOffHand();
         boolean again = state.guideHandsAgain;
         state.guideHandsAgain = false;
-        if (settings.isTourMirrorCount()) {
+        if (!hides()) {
             if (state.guideMainHand != null) {
                 guest.sendEquipmentChange(guide, Map.of(EquipmentSlot.HAND, mainHand, EquipmentSlot.OFF_HAND, offHand));
                 state.guideMainHand = null;
@@ -419,8 +465,8 @@ final class GuideMirror {
         boolean changed = state.guideMainHand == null || !mainHand.equals(state.guideMainHand)
                 || !offHand.equals(state.guideOffHand);
         if (refresh || again || changed || state.guideHandsChanged) {
-            guest.sendEquipmentChange(guide, Map.of(EquipmentSlot.HAND, shown(mainHand, false, false),
-                    EquipmentSlot.OFF_HAND, shown(offHand, false, false)));
+            guest.sendEquipmentChange(guide, Map.of(EquipmentSlot.HAND, shown(mainHand, false),
+                    EquipmentSlot.OFF_HAND, shown(offHand, false)));
             state.guideMainHand = mainHand.clone();
             state.guideOffHand = offHand.clone();
         }
@@ -518,8 +564,8 @@ final class GuideMirror {
     /**
      * The guest's client was just sent the guide's view. It may have found
      * the guide anew since the guide's hands last went out to it - with the
-     * real ones, which would fill the hotbar there now: they go out as one
-     * each again at the end of the tick, see {@link #guideHands}.
+     * real ones, which would fill the hotbar there now: they go out as shown
+     * again at the end of the tick, see {@link #guideHands}.
      */
     void viewed(UUID guest) {
         Shown state = shown.get(guest);
@@ -549,7 +595,7 @@ final class GuideMirror {
      * Puts back on his client what is his: his own health, his own
      * experience, his own hands and head, his own effects and frost - and
      * takes the guide's effects off the guide's body there, and gives the
-     * guide's hands their real counts again.
+     * guide's hands back as they are.
      */
     void clear(Player guest) {
         Shown state = shown.remove(guest.getUniqueId());
@@ -595,11 +641,17 @@ final class GuideMirror {
 
     /**
      * Whether anything of the guide is shown to anybody at all - anything
-     * switched on, or the guide's hands without the count.
+     * switched on, or the guide's hands without what the guests do not see.
      */
     boolean isOn() {
         return settings.isTourMirrorHealth() || settings.isTourMirrorMainHand() || settings.isTourMirrorOffHand()
                 || settings.isTourMirrorHead() || settings.isTourMirrorEffects() || settings.isTourMirrorFrost()
-                || settings.isTourMirrorExperience() || !settings.isTourMirrorCount();
+                || settings.isTourMirrorExperience() || hides();
+    }
+
+    /** Whether the guests do not see all of the guide's items: their count, enchantments or wear. */
+    private boolean hides() {
+        return !settings.isTourMirrorCount() || !settings.isTourMirrorEnchantments()
+                || !settings.isTourMirrorDurability();
     }
 }
