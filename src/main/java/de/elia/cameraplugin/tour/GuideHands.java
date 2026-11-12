@@ -9,6 +9,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -158,8 +159,9 @@ final class GuideHands {
             second = pair.getMethod("getSecond");
             pairOf = pair.getMethod("of", Object.class, Object.class);
             Class<?> craftItem = PacketSender.internal(CRAFT_ITEM_STACK);
-            asBukkit = craftItem.getMethod("asBukkitCopy", PacketSender.internal(ITEM_STACK));
-            asServer = craftItem.getMethod("asNMSCopy", ItemStack.class);
+            Class<?> serverItem = PacketSender.internal(ITEM_STACK);
+            asBukkit = converter(craftItem, "asBukkitCopy", serverItem, ItemStack.class);
+            asServer = converter(craftItem, "asNMSCopy", ItemStack.class, serverItem);
             connection = PacketSender.internal(LISTENER).getField("connection");
             channel = connection.getType().getField("channel");
             pipeline = channel.getType().getMethod("pipeline");
@@ -194,6 +196,36 @@ final class GuideHands {
                         + " moment on this version of the server: " + ex);
             }
         }
+    }
+
+    /**
+     * The method of CraftBukkit by this name that turns an item of one kind
+     * into one of the other. What it takes, the server changed: up to 26.2
+     * {@code asBukkitCopy} takes an item of the server, since 26.3 anything
+     * that holds one - so it is found by what it can be given, not by what it
+     * says it takes. Of several, the one that says most exactly.
+     *
+     * @param from what it is given
+     * @param to   what it gives back
+     */
+    private static Method converter(Class<?> craftItem, String name, Class<?> from, Class<?> to)
+            throws NoSuchMethodException {
+        Method best = null;
+        for (Method method : craftItem.getMethods()) {
+            if (!method.getName().equals(name) || !Modifier.isStatic(method.getModifiers())
+                    || method.getParameterCount() != 1 || !to.isAssignableFrom(method.getReturnType())) {
+                continue;
+            }
+            Class<?> takes = method.getParameterTypes()[0];
+            if (takes.isAssignableFrom(from)
+                    && (best == null || best.getParameterTypes()[0].isAssignableFrom(takes))) {
+                best = method;
+            }
+        }
+        if (best == null) {
+            throw new NoSuchMethodException(craftItem.getName() + "." + name + "(" + from.getName() + ")");
+        }
+        return best;
     }
 
     /**
