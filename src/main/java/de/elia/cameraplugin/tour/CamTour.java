@@ -1791,11 +1791,11 @@ public final class CamTour implements Listener {
      * <p>The server learns where the camera is only once its client says so,
      * a ping and a tick after the camera was sent its speed. Pulled by the gap
      * to where it was then, it would be sent after the guide once more for
-     * what it flew already: when he stopped, it shot past him by as far as it
-     * flies in its ping, and from a ping of about a quarter of a second, it
-     * swung after him ever more widely. Should the camera not have flown all
-     * of it - a wall stopped it, say -, its client says so a ping later, and
-     * {@link #PULL} makes up for it.</p>
+     * what it flew already: when he stopped, it shot past him - the further,
+     * the higher its ping -, and with a high ping it swung to and fro after
+     * him, now and then even back a little. Should the camera not have flown
+     * all of it - a wall stopped it, say -, its client says so a ping later,
+     * and {@link #PULL} makes up for it.</p>
      */
     private static Vector ahead(Player guest, Guest state) {
         int lag = Math.min(MAX_LAG, 1 + (int) Math.round(Math.max(0, guest.getPing()) / 50.0));
