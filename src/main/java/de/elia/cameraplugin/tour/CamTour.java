@@ -19,6 +19,7 @@ import net.md_5.bungee.api.chat.hover.content.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
@@ -218,6 +219,8 @@ public final class CamTour implements Listener {
     private final FineHold fineHold = new FineHold(sender);
     /** The internals that show a guest the frost of his guide as his own. */
     private final GuideFrost frost = new GuideFrost(sender);
+    /** The internals that change the guide's hands on their way to a guest, see {@link GuideMirror}. */
+    private final GuideHands hands = new GuideHands(sender);
     /** Who looks round freely on tours instead of through the guide's eyes, while he is online. */
     private final Set<UUID> freeLook = new HashSet<>();
     /** The players the tour hid from each viewer with {@code hidePlayer}, see {@link #syncVisibility}. */
@@ -267,7 +270,7 @@ public final class CamTour implements Listener {
         this.settings = plugin.getSettings();
         this.messages = plugin.getMessages();
         this.cameraPlayers = plugin.getCameraPlayers();
-        this.mirror = new GuideMirror(settings, frost);
+        this.mirror = new GuideMirror(settings, frost, hands, new NamespacedKey(plugin, GuideMirror.MARK));
     }
 
     /** Whether {@code /cam follow} is there at all. */
@@ -285,6 +288,9 @@ public final class CamTour implements Listener {
         swing.load(settings.isTourEnabled() && settings.isTourMirrorSwing() ? log : null);
         fineHold.load(settings.isTourEnabled() && settings.isTourGuideView() && settings.isTourFineHold() ? log : null);
         frost.load(settings.isTourEnabled() && settings.isTourMirrorFrost() ? log : null);
+        boolean hides = !settings.isTourMirrorCount() || !settings.isTourMirrorEnchantments()
+                || !settings.isTourMirrorDurability();
+        hands.load(settings.isTourEnabled() && hides ? log : null);
     }
 
     /**
@@ -1755,6 +1761,8 @@ public final class CamTour implements Listener {
         // through before, it still does.
         if (view.show(guest, guide)) {
             state.viewing = true;
+            // The hotbar there is the guide's now, see GuideMirror.
+            mirror.viewed(guest.getUniqueId());
         }
         state.sinceView = 0;
         holdTurned(guest, state);
