@@ -435,6 +435,8 @@ public final class CamSettings {
     private boolean tourMirrorFrost;
     /** Whether they see his experience bar and level as theirs, {@code follow.mirror-experience}. */
     private boolean tourMirrorExperience;
+    /** Whether they see how many of his items are in a stack, {@code follow.mirror-count}. */
+    private boolean tourMirrorCount;
     /** Whether guests in the guide's view are held turned between the ticks too, {@code follow.fine-hold}. */
     private boolean tourFineHold;
     /** Whether a guide may invite everybody he could invite at once, {@code follow.invite-all}. */
@@ -870,6 +872,7 @@ public final class CamSettings {
         tourMirrorEffects = config.getBoolean(follow + ".mirror-effects", true);
         tourMirrorFrost = config.getBoolean(follow + ".mirror-frost", true);
         tourMirrorExperience = config.getBoolean(follow + ".mirror-experience", false);
+        tourMirrorCount = config.getBoolean(follow + ".mirror-count", false);
         tourFineHold = config.getBoolean(follow + ".fine-hold", true);
         tourInviteAll = config.getBoolean(follow + ".invite-all", true);
         tourGuideTime = config.getBoolean(follow + ".guide-time", true);
@@ -2004,6 +2007,14 @@ public final class CamSettings {
     /** Whether the guests see the guide's experience bar and level as theirs. */
     public boolean isTourMirrorExperience() {
         return tourMirrorExperience;
+    }
+
+    /**
+     * Whether the guests see how many items are in the stacks in the guide's
+     * hands - in their hotbar, and in his where they see through his eyes.
+     */
+    public boolean isTourMirrorCount() {
+        return tourMirrorCount;
     }
 
     /** Whether guests who see through the guide's eyes are held turned between the ticks too. */

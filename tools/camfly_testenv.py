@@ -2590,17 +2590,35 @@ bot._client.on('entity_metadata', (packet) => {
 // Fuehrers hinein. Dazu, wie oft das ganze eigene Inventar neu kam
 // (window_items von Fenster 0), was das Bild wieder wegnimmt, und wann der
 // Server zuletzt etwas davon schickte - das ganze oder einen Platz daraus
-// (set_slot von Fenster 0).
+// (set_slot von Fenster 0). Und was er fuer andere schickt (otherEquipment,
+// mit ihrer Nummer): Im Blick des Fuehrers fuellen dessen Haende die Hotbar.
+// Zu jedem Item seine Komponenten als Text - eine Marke darin macht es fuer
+// den Client zu einem anderen Item.
 const ownEquipment = [];
+const otherEquipment = [];
 let inventoryResends = 0;
 let lastInventoryResend = 0;
+function componentsText(item) {
+  try {
+    return JSON.stringify(item.components || [], (k, v) => (typeof v === 'bigint' ? String(v) : v));
+  } catch (e) {
+    return String(e);
+  }
+}
 bot._client.on('entity_equipment', (packet) => {
-  if (!bot.entity || packet.entityId !== bot.entity.id) return;
+  if (!bot.entity) return;
+  const own = packet.entityId === bot.entity.id;
   for (const e of packet.equipments || []) {
     const item = e.item || {};
     const count = item.itemCount !== undefined ? item.itemCount : (item.present ? (item.count || 1) : 0);
-    ownEquipment.push({ t: Date.now(), slot: e.slot, count,
-                        id: item.itemId !== undefined ? item.itemId : null });
+    const seen = { t: Date.now(), slot: e.slot, count, id: item.itemId !== undefined ? item.itemId : null,
+                   components: componentsText(item) };
+    if (own) {
+      ownEquipment.push(seen);
+    } else {
+      seen.entityId = packet.entityId;
+      otherEquipment.push(seen);
+    }
   }
 });
 bot._client.on('window_items', (packet) => {
@@ -3319,6 +3337,10 @@ async function handle(cmd) {
     case 'own_equipment':
       return { packets: ownEquipment.slice(cmd.since || 0), count: ownEquipment.length,
                resends: inventoryResends, last_resend: lastInventoryResend };
+    case 'other_equipment':
+      // Nur die fuer die Entitaet mit dieser Nummer; count zaehlt alle.
+      return { packets: otherEquipment.slice(cmd.since || 0).filter((p) => p.entityId === cmd.entity),
+               count: otherEquipment.length };
     case 'quit':
       setTimeout(() => process.exit(0), 200);
       try { bot.quit(); } catch (e) { /* egal */ }
@@ -8836,7 +8858,13 @@ def fuehrung_ohne_cam_checks(env, bot):
     der Bot unsichtbar ist. Der Gast bekommt die Herzen des Bots auf seinen
     Bildschirm (max_health 10: 10 statt seiner 20, am Server bleiben es 20),
     das Item in seiner Hand und das in der zweiten als eigene Ausruestung - am
-    Server bleiben seine Haende leer. Schwingt der Bot den Arm, schwingt der
+    Server bleiben seine Haende leer. Mit mirror-count: false, voreingestellt,
+    ohne die Zahl im Stapel: 16 Steine kommen als einer, und die Hand des Bots
+    selbst, die im Blick des Bots die Hotbar fuellt, auch - gleich nach der
+    echten des Servers im selben Tick; der dritte bekommt die echte. Setzt der
+    Bot einen Block, kommt der Stein mit gewechselter Marke in den Daten, im
+    Ueberleben wie im Kreativmodus, damit sein Client ihn absinken laesst.
+    Schwingt der Bot den Arm, schwingt der
     Gast seinen mit (Paket animation mit der eigenen Nummer: 0, und 3 fuer die
     zweite Hand). Seine Effekte kommen beim Gast am Bot an und als eigene -
     Schwebe nur am Bot -, sein Kuerbis auf dem Kopf und sein Frost (vom
@@ -8850,7 +8878,8 @@ def fuehrung_ohne_cam_checks(env, bot):
     seine eigenen Herzen, und der Bot ist aus dem Team; endet der Cam-Modus,
     endet sie. Im Zuschauermodus fuehrt keiner, und wechselt der Bot dahin,
     endet die Fuehrung. Mit mirror-main-hand: false kommt nur die zweite
-    Hand, mit mirror-swing: false schwingt nichts mit, mit mirror-effects:
+    Hand, mit mirror-count: true mit ihrer Zahl, als eigene und am Bot, mit
+    mirror-swing: false schwingt nichts mit, mit mirror-effects:
     false kommen keine Effekte, mit fine-hold: false haelt ihn der Server nur
     jeden Tick fest. Mit guide-name: above bleibt sein Name, ueber ihm steht nur der
     Gast, und das Team gibt es nicht. Mit lead-without-cam: false heisst es
@@ -8921,14 +8950,14 @@ def fuehrung_ohne_cam_checks(env, bot):
     try:
         quelle = quelle_config(env)
         FIND.test("Voreingestellt stehen lead-without-cam: true, guide-name: replace, sieben mirror-... und "
-                  "fine-hold auf true, mirror-experience auf false da",
+                  "fine-hold auf true, mirror-experience und mirror-count auf false da",
                   all(re.search(rf"(?m)^\s+{schluessel}:\s*{wert}\s*$", quelle) is not None
                       for schluessel, wert in (("lead-without-cam", "true"), ("guide-name", "replace"),
                                                ("mirror-health", "true"), ("mirror-main-hand", "true"),
                                                ("mirror-off-hand", "true"), ("mirror-swing", "true"),
                                                ("mirror-head", "true"), ("mirror-effects", "true"),
                                                ("mirror-frost", "true"), ("mirror-experience", "false"),
-                                               ("fine-hold", "true"))), "")
+                                               ("mirror-count", "false"), ("fine-hold", "true"))), "")
         zuschauer.start()
         dritter.start()
         if not FIND.test("Zweiter und dritter Spieler fuer die Fuehrung ohne Cam-Modus kommen herein",
@@ -9000,7 +9029,37 @@ def fuehrung_ohne_cam_checks(env, bot):
         # Schwung beim Setzen. Hier, auf 26.2, darf es nur einer sein.
         unter = (_floor(x) + 1, BODEN_Y, _floor(z))
         console(env, f"setblock {unter[0]} {unter[1] + 1} {unter[2]} minecraft:air", pause=0.3)
+        # Die Zahl im Stapel sieht der Gast voreingestellt nicht: in seiner
+        # Hotbar, wo der Stein als sein eigener liegt, und in der des Bots,
+        # durch dessen Augen er sieht - die fuellt sein Client mit dem, was
+        # der Server allen von den Haenden des Bots schickt.
+        bot_nummer = bot.call("effects").get("self")
+
+        def haende_des_bots(client, seit, platz=0):
+            return [p for p in client.call("other_equipment", since=seit, entity=bot_nummer).get("packets", [])
+                    if p.get("slot") == platz]
+
+        def eigene_hand(seit, platz=0):
+            return [p for p in zuschauer.call("own_equipment", since=seit).get("packets", [])
+                    if p.get("slot") == platz]
+        fremd_gast = zuschauer.call("other_equipment").get("count", 0)
+        fremd_dritter = dritter.call("other_equipment").get("count", 0)
+        ausruestung = zuschauer.call("own_equipment").get("count", 0)
         console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:stone 16", pause=1.0)
+        eigen = eigene_hand(ausruestung)
+        FIND.test("mirror-count: false - die 16 Steine des Bots kommen beim Gast als eigener Stein ohne Zahl (als einer)",
+                  bool(eigen) and all(p.get("count") == 1 for p in eigen), str(eigen[-4:]))
+        am_bot = haende_des_bots(zuschauer, fremd_gast)
+        echt = [p for p in am_bot if p.get("count") == 16]
+        FIND.test("Die Hand des Bots selbst (im Blick des Bots seine Hotbar) bekommt der Gast auch als einen Stein - "
+                  "gleich nach der echten des Servers (16), im selben Tick",
+                  bool(echt) and am_bot[-1].get("count") == 1
+                  and any(p.get("count") == 1 and 0 <= p["t"] - echt[-1]["t"] < 100 for p in am_bot),
+                  str(am_bot[-4:]))
+        beim_dritten = haende_des_bots(dritter, fremd_dritter)
+        FIND.test("Der dritte Spieler, der nicht folgt, bekommt die echte Zahl (16)",
+                  bool(beim_dritten) and all(p.get("count") == 16 for p in beim_dritten), str(beim_dritten[-4:]))
+        ohne_marke = eigen[-1].get("components") if eigen else None
         schwuenge = zuschauer.call("own_swings").get("count", 0)
         ausruestung = zuschauer.call("own_equipment").get("count", 0)
         gesetzt = bot.call("place", wait=10, x=unter[0], y=unter[1], z=unter[2], timeout=8000)
@@ -9009,17 +9068,21 @@ def fuehrung_ohne_cam_checks(env, bot):
         FIND.test("Setzt der Bot einen Block, schwingt beim Gast der Arm genau einmal mit (26.2: der gemeldete "
                   "Schwung, keiner doppelt)", gesetzt.get("placed") and neu == [0], f"{gesetzt} / {neu}")
         # Das Item in der Hand sinkt beim Setzen ab und kommt wieder hoch: Der
-        # Client tut das, sobald sich die Zahl im Stapel aendert - im
-        # Ueberleben einmal, auf 15.
-        def zahlen(seit):
-            return [p.get("count") for p in zuschauer.call("own_equipment", since=seit).get("packets", [])
-                    if p.get("slot") == 0]
-        zahl = zahlen(ausruestung)
-        FIND.test("Setzt der Bot im Ueberleben einen Block, bekommt der Gast den Stapel einmal mit einem weniger",
-                  bool(zahl) and zahl[-1] == 15 and 14 not in zahl, str(zahl))
-        # Im Kreativmodus bleibt die Zahl: Der Gast bekommt sie eins daneben,
-        # damit auch sein Client das Item absinken laesst - und beim naechsten
-        # Block wieder die echte.
+        # Client tut das, sobald es ein anderes ist - beim Bot, weil sich die
+        # Zahl aendert (auf 15). Die sieht der Gast nicht, er bekommt den
+        # Stein mit einer Marke in den Daten, die er nicht sieht, die ihn
+        # fuer seinen Client aber zu einem anderen macht.
+        def marken(pakete):
+            return [p.get("components") for p in pakete]
+        neu = eigene_hand(ausruestung)
+        FIND.test("Setzt der Bot im Ueberleben einen Block (16 auf 15), bekommt der Gast den Stein wieder als einen - "
+                  "mit der Marke, die vorher nicht dran war",
+                  bool(neu) and all(p.get("count") == 1 for p in neu) and len(set(marken(neu))) == 1
+                  and ohne_marke is not None and neu[-1].get("components") != ohne_marke
+                  and "custom_data" in str(neu[-1].get("components")), str(neu[-3:]))
+        mit_marke = neu[-1].get("components") if neu else None
+        # Im Kreativmodus bleibt die Zahl: Die Marke wechselt bei jedem Block,
+        # damit auch sein Client das Item absinken laesst - ab, dran, ab.
         console(env, f"gamemode creative {BOT_NAME}", pause=1.0)
         kreativ = []
         for _ in range(2):
@@ -9027,11 +9090,13 @@ def fuehrung_ohne_cam_checks(env, bot):
             ausruestung = zuschauer.call("own_equipment").get("count", 0)
             bot.call("place", wait=10, x=unter[0], y=unter[1], z=unter[2], timeout=8000)
             time.sleep(1.0)
-            kreativ.append(zahlen(ausruestung))
-        FIND.test("Setzt der Bot im Kreativmodus Bloecke, bekommt der Gast den Stapel abwechselnd eins daneben "
-                  "(14) und wieder echt (15)",
-                  all(kreativ) and kreativ[0][-1] == 14 and kreativ[1][-1] == 15 and 13 not in kreativ[0] + kreativ[1],
-                  str(kreativ))
+            kreativ.append(eigene_hand(ausruestung))
+        FIND.test("Setzt der Bot im Kreativmodus Bloecke, bekommt der Gast den Stein immer als einen, die Marke "
+                  "abwechselnd ab und wieder dran",
+                  all(kreativ) and all(p.get("count") == 1 for p in kreativ[0] + kreativ[1])
+                  and kreativ[0][-1].get("components") == ohne_marke
+                  and kreativ[1][-1].get("components") == mit_marke and ohne_marke != mit_marke,
+                  str([marken(k)[-1:] for k in kreativ]))
         console(env, f"gamemode survival {BOT_NAME}", pause=0.5)
         console(env, f"setblock {unter[0]} {unter[1] + 1} {unter[2]} minecraft:air", pause=0.3)
         console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:diamond_sword", pause=1.0)
@@ -9102,7 +9167,6 @@ def fuehrung_ohne_cam_checks(env, bot):
         # Bildschirm als seine eigenen - die Effekte auch am Bot, durch dessen
         # Augen er sieht (der Nebel der Blindheit, die Farbe der Herzen). Am
         # Server bleibt beim Gast alles, wie es war.
-        bot_nummer = bot.call("effects").get("self")
         effekte = zuschauer.call("effects").get("count", 0)
         console(env, f"effect give {BOT_NAME} minecraft:speed 30 1", pause=0.3)
         console(env, f"effect give {BOT_NAME} minecraft:levitation 30 0", pause=1.5)
@@ -9174,10 +9238,22 @@ def fuehrung_ohne_cam_checks(env, bot):
                   f"{nach_westen} / {nach_osten}")
 
         console(env, f"effect give {BOT_NAME} minecraft:speed 30 1", pause=1.5)
+        # Fuenf Fackeln in der zweiten Hand des Bots: beim Gast eine, und
+        # verlaesst er die Fuehrung, wieder fuenf.
+        fremd_gast = zuschauer.call("other_equipment").get("count", 0)
+        console(env, f"item replace entity {BOT_NAME} weapon.offhand with minecraft:torch 5", pause=1.0)
+        fackeln = haende_des_bots(zuschauer, fremd_gast, 1)
+        fremd_gast = zuschauer.call("other_equipment").get("count", 0)
         effekte = zuschauer.call("effects").get("count", 0)
         resends = zuschauer.call("own_equipment").get("resends", 0)
         seit = bot.mark()
         dort = befehl(zuschauer, "/cam follow leave", warten=2.0)
+        danach = haende_des_bots(zuschauer, fremd_gast, 1)
+        FIND.test("Die zweite Hand des Bots (5 Fackeln) sieht der Gast als eine - verlaesst er die Fuehrung, mit der "
+                  "echten Zahl",
+                  bool(fackeln) and fackeln[-1].get("count") == 1 and bool(danach) and danach[-1].get("count") == 5,
+                  f"{fackeln[-3:]} / {danach[-3:]}")
+        console(env, f"item replace entity {BOT_NAME} weapon.offhand with minecraft:shield", pause=0.3)
         pakete = zuschauer.call("effects", since=effekte).get("packets", [])
         FIND.test("Verlaesst er die Fuehrung, sind die Effekte des Bots bei ihm weg - als seine und am Bot",
                   any(p.get("own") and p.get("removed") for p in pakete)
@@ -9233,7 +9309,7 @@ def fuehrung_ohne_cam_checks(env, bot):
         # Jeder Reload beendet den Cam-Modus des Gastes: danach von vorn.
         set_options(env, [("mirror-main-hand", "false", "follow"), ("mirror-swing", "false", "follow"),
                           ("mirror-effects", "false", "follow"), ("fine-hold", "false", "follow"),
-                          ("mirror-experience", "true", "follow")])
+                          ("mirror-experience", "true", "follow"), ("mirror-count", "true", "follow")])
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         ausruestung = zuschauer.call("own_equipment").get("count", 0)
@@ -9243,6 +9319,15 @@ def fuehrung_ohne_cam_checks(env, bot):
         FIND.test("mirror-main-hand: false - nur die zweite Hand kommt",
                   not any(p.get("slot") == 0 and p.get("count", 0) > 0 for p in pakete)
                   and any(p.get("slot") == 1 and p.get("count", 0) > 0 for p in pakete), str(pakete[-6:]))
+        fremd_gast = zuschauer.call("other_equipment").get("count", 0)
+        ausruestung = zuschauer.call("own_equipment").get("count", 0)
+        console(env, f"item replace entity {BOT_NAME} weapon.offhand with minecraft:torch 5", pause=1.5)
+        eigen = eigene_hand(ausruestung, 1)
+        am_bot = haende_des_bots(zuschauer, fremd_gast, 1)
+        FIND.test("mirror-count: true - der Gast sieht die Zahl: 5 Fackeln in der zweiten Hand, als eigene und am Bot",
+                  bool(eigen) and eigen[-1].get("count") == 5 and bool(am_bot)
+                  and all(p.get("count") == 5 for p in am_bot), f"{eigen[-3:]} / {am_bot[-3:]}")
+        console(env, f"item replace entity {BOT_NAME} weapon.offhand with minecraft:shield", pause=0.3)
         schwuenge = zuschauer.call("own_swings").get("count", 0)
         bot.call("swing")
         time.sleep(1.0)
@@ -9273,7 +9358,8 @@ def fuehrung_ohne_cam_checks(env, bot):
 
         set_options(env, [("mirror-main-hand", "true", "follow"), ("mirror-swing", "true", "follow"),
                           ("mirror-effects", "true", "follow"), ("fine-hold", "true", "follow"),
-                          ("mirror-experience", "false", "follow"), ("guide-name", "above", "follow")])
+                          ("mirror-experience", "false", "follow"), ("mirror-count", "false", "follow"),
+                          ("guide-name", "above", "follow")])
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         einladen_und_annehmen()
@@ -9304,7 +9390,7 @@ def fuehrung_ohne_cam_checks(env, bot):
             console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:air", pause=0.3)
             console(env, f"item replace entity {BOT_NAME} weapon.offhand with minecraft:air", pause=0.3)
             set_options(env, [("lead-without-cam", "true", "follow"), ("guide-name", "replace", "follow"),
-                              ("mirror-main-hand", "true", "follow")])
+                              ("mirror-main-hand", "true", "follow"), ("mirror-count", "false", "follow")])
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test der Fuehrung ohne Cam-Modus: {exc}")

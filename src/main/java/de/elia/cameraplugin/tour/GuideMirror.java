@@ -4,9 +4,12 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.ClientFrost;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
@@ -67,10 +70,23 @@ import java.util.UUID;
  * <p>When the guide places a block, a client lowers the item in his hand and
  * brings it up again - after a change of its count, and in creative mode,
  * where the count stays, at every use of its own. The guest's client is sent
- * the item anew, see {@link #placed}; in creative mode with a count one off
- * from the one it shows, so that it lowers and raises the item too. Seen
- * through the guide's eyes, the count shows nowhere: the hotbar there is the
- * guide's.</p>
+ * the item anew, see {@link #placed}; in creative mode with a mark of the
+ * plugin's own in its custom data put on or taken off, see {@link #MARK}. The
+ * mark shows nowhere, but to the client it is another item, which it lowers
+ * and raises too.</p>
+ *
+ * <p>How many items are in the stacks, the guests see only with
+ * {@code follow.mirror-count}. Otherwise the guide's items go to the guest's
+ * client as one each - and where the count changes, as it does when the guide
+ * places a block in survival mode, with the mark put on or taken off, so
+ * that the item still sinks and comes up. Seen through the guide's eyes, the
+ * hotbar a client draws is not the guest's but the guide's, filled with what
+ * the server sends everybody of the guide's hands - with the real counts.
+ * Those go to the guest's client as one each as well, see
+ * {@link #guideHands}: at the end of every tick they changed in, after the
+ * server's, now and then anyway, and whenever the guide's view goes out to
+ * the guest, see {@link #viewed}. Everybody else still gets the real ones,
+ * and so does the guest again once off the tour.</p>
  *
  * <p>Hearts of 0 are never sent: the client would show the screen of death.
  * A guide who dies ends the tour first, see {@link CamTour}.</p>
@@ -87,7 +103,12 @@ final class GuideMirror {
     private static final Set<PotionEffectType> MOVING = Set.of(PotionEffectType.LEVITATION,
             PotionEffectType.SLOW_FALLING, PotionEffectType.JUMP_BOOST, PotionEffectType.DOLPHINS_GRACE);
 
+    /** The name of the mark that makes an item another one to a client, see {@link #shown}. */
+    static final String MARK = "guide_mirror";
+
     private final CamSettings settings;
+    /** The mark itself, in the custom data of an item. */
+    private final NamespacedKey mark;
     /** Shows a guest the guide's frost as his own. */
     private final GuideFrost frost;
     /** What each guest's client was sent, by the id of the guest. */
@@ -114,14 +135,22 @@ final class GuideMirror {
         ItemStack mainHand;
         ItemStack offHand;
         ItemStack head;
-        /** Whether the item in a hand is shown with a count one off, see {@link #placed}. */
-        boolean mainHandShift;
-        boolean offHandShift;
+        /** Whether the item in a hand is shown with the mark, see {@link #shown}. */
+        boolean mainHandMarked;
+        boolean offHandMarked;
         /** Whether the guide placed a block with the item in a hand since the last update. */
         boolean mainHandUsed;
         boolean offHandUsed;
         /** The slot of the hotbar his client held the item of the hand in. */
         int slot = -1;
+        /**
+         * The guide's hands as they were when last sent to the guest's client
+         * as one each, see {@link #guideHands}; {@code null} while they were not.
+         */
+        ItemStack guideMainHand;
+        ItemStack guideOffHand;
+        /** Whether the guide's hands go out as one each at the end of the tick, whatever changed. */
+        boolean guideHandsAgain;
         /** Ticks since everything was last sent. */
         int sinceRefresh;
         /** Whether everything is sent at the next update, whatever the time. */
@@ -143,9 +172,10 @@ final class GuideMirror {
         int sinceFrost;
     }
 
-    GuideMirror(CamSettings settings, GuideFrost frost) {
+    GuideMirror(CamSettings settings, GuideFrost frost, NamespacedKey mark) {
         this.settings = settings;
         this.frost = frost;
+        this.mark = mark;
     }
 
     /**
@@ -171,23 +201,47 @@ final class GuideMirror {
         state.slot = slot;
         ItemStack mainHand = guide.getInventory().getItemInMainHand();
         ItemStack offHand = guide.getInventory().getItemInOffHand();
-        // Another item: shown with its own count again.
-        state.mainHandShift &= state.mainHand != null && state.mainHand.isSimilar(mainHand);
-        state.offHandShift &= state.offHand != null && state.offHand.isSimilar(offHand);
-        // Placed a block, and the count stayed - creative mode: one off now.
-        boolean mainHandUsed = state.mainHandUsed && mainHand.equals(state.mainHand);
-        boolean offHandUsed = state.offHandUsed && offHand.equals(state.offHand);
+        boolean count = settings.isTourMirrorCount();
+        // Another item: shown without the mark again.
+        state.mainHandMarked &= state.mainHand != null && state.mainHand.isSimilar(mainHand);
+        state.offHandMarked &= state.offHand != null && state.offHand.isSimilar(offHand);
+        // The item sinks and comes up on the guide's screen, so it does on
+        // the guest's: shown with the mark put on or taken off.
+        boolean mainHandSinks = sinks(state.mainHandUsed, state.mainHand, mainHand, count);
+        boolean offHandSinks = sinks(state.offHandUsed, state.offHand, offHand, count);
         state.mainHandUsed = false;
         state.offHandUsed = false;
-        state.mainHandShift ^= mainHandUsed;
-        state.offHandShift ^= offHandUsed;
+        state.mainHandMarked ^= mainHandSinks;
+        state.offHandMarked ^= offHandSinks;
         state.mainHand = mirror(guest, EquipmentSlot.HAND, settings.isTourMirrorMainHand(), mainHand,
-                guest.getInventory().getItemInMainHand(), state.mainHand, state.mainHandShift,
-                refresh || mainHandUsed);
+                guest.getInventory().getItemInMainHand(), state.mainHand, state.mainHandMarked, count,
+                refresh || mainHandSinks);
         state.offHand = mirror(guest, EquipmentSlot.OFF_HAND, settings.isTourMirrorOffHand(), offHand,
-                guest.getInventory().getItemInOffHand(), state.offHand, state.offHandShift, refresh || offHandUsed);
+                guest.getInventory().getItemInOffHand(), state.offHand, state.offHandMarked, count,
+                refresh || offHandSinks);
         state.head = mirror(guest, EquipmentSlot.HEAD, settings.isTourMirrorHead(),
-                guide.getInventory().getHelmet(), guest.getInventory().getHelmet(), state.head, false, refresh);
+                guide.getInventory().getHelmet(), guest.getInventory().getHelmet(), state.head, false, count,
+                refresh);
+    }
+
+    /**
+     * Whether the item in a hand needs the mark put on or taken off for the
+     * guest's client to lower and raise it as the guide's does: after a block
+     * placed with it in creative mode, where the count stays - and, while the
+     * guests do not see the count, after any change of it, which shown as one
+     * would change nothing.
+     *
+     * @param used  whether the guide placed a block with it, see {@link #placed}
+     * @param count whether the guests see the count
+     */
+    private static boolean sinks(boolean used, ItemStack before, ItemStack now, boolean count) {
+        if (before == null) {
+            return false;
+        }
+        if (used && now.equals(before)) {
+            return true;
+        }
+        return !count && before.isSimilar(now) && before.getAmount() != now.getAmount();
     }
 
     /**
@@ -195,12 +249,13 @@ final class GuideMirror {
      * time; a slot no longer mirrored is sent his own again - as empty as
      * camera mode keeps it.
      *
-     * @param shift whether to show it with a count one off, see {@link #placed}
+     * @param marked whether to show it with the mark, see {@link #shown}
+     * @param count  whether to show it with its count
      * @return the guide's item his client was sent there, {@code null} for
      *         nothing sent
      */
-    private static ItemStack mirror(Player guest, EquipmentSlot slot, boolean on, ItemStack item, ItemStack own,
-                                    ItemStack before, boolean shift, boolean refresh) {
+    private ItemStack mirror(Player guest, EquipmentSlot slot, boolean on, ItemStack item, ItemStack own,
+                             ItemStack before, boolean marked, boolean count, boolean refresh) {
         if (!on) {
             if (before != null) {
                 guest.sendEquipmentChange(guest, slot, own == null ? new ItemStack(Material.AIR) : own);
@@ -209,18 +264,33 @@ final class GuideMirror {
         }
         ItemStack now = item == null ? new ItemStack(Material.AIR) : item;
         if (refresh || before == null || !now.equals(before)) {
-            guest.sendEquipmentChange(guest, slot, shown(now, shift));
+            guest.sendEquipmentChange(guest, slot, shown(now, marked, count));
         }
         return now.clone();
     }
 
-    /** The item as the guest's client is shown it: with a count one off, if so. */
-    private static ItemStack shown(ItemStack item, boolean shift) {
-        if (!shift || item.getType().isAir()) {
+    /**
+     * The item as the guest's client is shown it: as one, unless the guests
+     * see the count, and with the mark, if so. The mark is a byte in the
+     * item's custom data, which a client shows nowhere - but an item with it
+     * is another one to the client than the same without, and one that comes
+     * in place of another in a hand, it lowers and raises.
+     */
+    private ItemStack shown(ItemStack item, boolean marked, boolean count) {
+        if (item.getType().isAir() || !marked && (count || item.getAmount() == 1)) {
             return item;
         }
         ItemStack copy = item.clone();
-        copy.setAmount(item.getAmount() > 1 ? item.getAmount() - 1 : item.getAmount() + 1);
+        if (!count) {
+            copy.setAmount(1);
+        }
+        if (marked) {
+            ItemMeta meta = copy.getItemMeta();
+            if (meta != null) {
+                meta.getPersistentDataContainer().set(mark, PersistentDataType.BYTE, (byte) 1);
+                copy.setItemMeta(meta);
+            }
+        }
         return copy;
     }
 
@@ -228,7 +298,7 @@ final class GuideMirror {
      * The guide placed a block with the item in this hand. The next update -
      * on Paper still in this tick, once the server has taken the block off
      * the stack - sends it: changed anyway, or in creative mode, where the
-     * count stays, one off from what the guest's client shows.
+     * count stays, with the mark put on or taken off.
      */
     void placed(UUID guest, boolean offHand) {
         Shown state = shown.get(guest);
@@ -260,6 +330,7 @@ final class GuideMirror {
             state.effectsAgain = false;
             hearts(state.guide, guest, state, refreshed);
             experience(state.guide, guest, state, refreshed);
+            guideHands(state.guide, guest, state, refreshed);
             effects(state.guide, guest, state, refresh);
             frost(state.guide, guest, state);
         }
@@ -312,6 +383,35 @@ final class GuideMirror {
             state.sentExp = exp;
             state.sentLevel = level;
             state.ownExperience = guest.getTotalExperience();
+        }
+    }
+
+    /**
+     * Sends the guest's client the guide's hands as one each, while the
+     * guests do not see the count: if they changed - the server has just sent
+     * the real ones -, if it is time, or if the guide's view just went out.
+     * Seen through the guide's eyes, they fill the hotbar there. Once the
+     * guests see the count again, the real ones go out.
+     */
+    private void guideHands(Player guide, Player guest, Shown state, boolean refresh) {
+        ItemStack mainHand = guide.getInventory().getItemInMainHand();
+        ItemStack offHand = guide.getInventory().getItemInOffHand();
+        boolean again = state.guideHandsAgain;
+        state.guideHandsAgain = false;
+        if (settings.isTourMirrorCount()) {
+            if (state.guideMainHand != null) {
+                guest.sendEquipmentChange(guide, Map.of(EquipmentSlot.HAND, mainHand, EquipmentSlot.OFF_HAND, offHand));
+                state.guideMainHand = null;
+                state.guideOffHand = null;
+            }
+            return;
+        }
+        if (refresh || again || state.guideMainHand == null || !mainHand.equals(state.guideMainHand)
+                || !offHand.equals(state.guideOffHand)) {
+            guest.sendEquipmentChange(guide, Map.of(EquipmentSlot.HAND, shown(mainHand, false, false),
+                    EquipmentSlot.OFF_HAND, shown(offHand, false, false)));
+            state.guideMainHand = mainHand.clone();
+            state.guideOffHand = offHand.clone();
         }
     }
 
@@ -404,6 +504,19 @@ final class GuideMirror {
     }
 
     /**
+     * The guest's client was just sent the guide's view. It may have found
+     * the guide anew since the guide's hands last went out to it - with the
+     * real ones, which would fill the hotbar there now: they go out as one
+     * each again at the end of the tick, see {@link #guideHands}.
+     */
+    void viewed(UUID guest) {
+        Shown state = shown.get(guest);
+        if (state != null) {
+            state.guideHandsAgain = true;
+        }
+    }
+
+    /**
      * The server sent the guest some of his own effects: the guide's go out
      * again at the end of the tick.
      */
@@ -423,7 +536,8 @@ final class GuideMirror {
     /**
      * Puts back on his client what is his: his own health, his own
      * experience, his own hands and head, his own effects and frost - and
-     * takes the guide's effects off the guide's body there.
+     * takes the guide's effects off the guide's body there, and gives the
+     * guide's hands their real counts again.
      */
     void clear(Player guest) {
         Shown state = shown.remove(guest.getUniqueId());
@@ -446,6 +560,11 @@ final class GuideMirror {
             for (PotionEffectType type : state.onGuide.keySet()) {
                 guest.sendPotionEffectChangeRemove(state.guide, type);
             }
+            if (state.guideMainHand != null && state.guide.isOnline()) {
+                guest.sendEquipmentChange(state.guide, Map.of(
+                        EquipmentSlot.HAND, state.guide.getInventory().getItemInMainHand(),
+                        EquipmentSlot.OFF_HAND, state.guide.getInventory().getItemInOffHand()));
+            }
         }
         if (state.frost >= 0) {
             ClientFrost.resend(guest);
@@ -462,10 +581,13 @@ final class GuideMirror {
         shown.remove(guest);
     }
 
-    /** Whether anything of the guide is shown to anybody at all - anything switched on. */
+    /**
+     * Whether anything of the guide is shown to anybody at all - anything
+     * switched on, or the guide's hands without the count.
+     */
     boolean isOn() {
         return settings.isTourMirrorHealth() || settings.isTourMirrorMainHand() || settings.isTourMirrorOffHand()
                 || settings.isTourMirrorHead() || settings.isTourMirrorEffects() || settings.isTourMirrorFrost()
-                || settings.isTourMirrorExperience();
+                || settings.isTourMirrorExperience() || !settings.isTourMirrorCount();
     }
 }

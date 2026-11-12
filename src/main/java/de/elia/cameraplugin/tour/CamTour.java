@@ -19,6 +19,7 @@ import net.md_5.bungee.api.chat.hover.content.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
@@ -267,7 +268,7 @@ public final class CamTour implements Listener {
         this.settings = plugin.getSettings();
         this.messages = plugin.getMessages();
         this.cameraPlayers = plugin.getCameraPlayers();
-        this.mirror = new GuideMirror(settings, frost);
+        this.mirror = new GuideMirror(settings, frost, new NamespacedKey(plugin, GuideMirror.MARK));
     }
 
     /** Whether {@code /cam follow} is there at all. */
@@ -1755,6 +1756,8 @@ public final class CamTour implements Listener {
         // through before, it still does.
         if (view.show(guest, guide)) {
             state.viewing = true;
+            // The hotbar there is the guide's now, see GuideMirror.
+            mirror.viewed(guest.getUniqueId());
         }
         state.sinceView = 0;
         holdTurned(guest, state);

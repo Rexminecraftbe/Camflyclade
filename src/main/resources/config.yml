@@ -959,10 +959,11 @@ web-map:
 # Folgen. Über ihm stehen die Namen gestapelt wie über der Kamera eines Leaders, solange Follower ihm folgen - ganz
 # unten seiner (Text: player.tour-builder-format), siehe guide-name. Nie mehr, als sein eigener Name zeigen würde:
 # nicht, solange er unsichtbar ist, und nicht durch Wände, solange er schleicht.
-# Seine Follower sehen auf ihrem eigenen Bildschirm seine Herzen, die Items in seinen Händen und auf seinem Kopf, seine
-# Effekte und seinen Frost (mirror-...) - nur auf ihrem Bildschirm: Am Server bleiben ihre Herzen, Effekte und ihr
-# Frost ihre, und ihre Hände bleiben leer wie im Cam-Modus; nehmen, wegwerfen oder benutzen lässt sich nichts davon,
-# und sein übriges Inventar sehen sie nicht. Ihr Hunger bleibt ihrer, ihre XP auch, außer mit mirror-experience.
+# Seine Follower sehen auf ihrem eigenen Bildschirm seine Herzen, die Items in seinen Händen (voreingestellt ohne die
+# Zahl im Stapel, siehe mirror-count) und auf seinem Kopf, seine Effekte und seinen Frost (mirror-...) - nur auf ihrem
+# Bildschirm: Am Server bleiben ihre Herzen, Effekte und ihr Frost ihre, und ihre Hände bleiben leer wie im Cam-Modus;
+# nehmen, wegwerfen oder benutzen lässt sich nichts davon, und sein übriges Inventar sehen sie nicht. Ihr Hunger
+# bleibt ihrer, ihre XP auch, außer mit mirror-experience.
 # Hören sie auf zu folgen (oder startet er den Cam-Modus), sehen sie wieder ihre eigenen Herzen, Hände, Effekte und
 # ihren eigenen Frost.
 # Mit guide-view sieht ein Follower durch seine Augen: Die Herzen dort zeichnet das Spiel selbst - und den Hunger
@@ -1023,10 +1024,13 @@ follow:
   guide-name: replace
   # Was die Follower eines Leaders ohne Cam-Modus von ihm sehen: seine Herzen, das Item in seiner Hand und das in
   # seiner zweiten Hand. Setzt er einen Block, sinkt das Item bei ihnen kurz ab und kommt wieder hoch wie bei ihm,
-  # auch im Kreativmodus (dort mit einer Zahl im Stapel, die eins daneben liegt - im Blick des Leaders sieht man sie nicht)
+  # auch im Kreativmodus
   mirror-health: true
   mirror-main-hand: true
   mirror-off-hand: true
+  # Ob sie sehen, wie viele Items in den Stapeln in den Händen des Leaders sind: die Zahl in ihrer Hotbar und - im Blick
+  # des Leaders - in dessen Hotbar. Mit false sehen sie die Items ohne Zahl; am Server und für alle anderen bleibt sie.
+  mirror-count: false
   # Ob ihr Arm mit seinem Item schwingt, wenn seiner schwingt (schlagen, abbauen, Blöcke setzen). Nur der Schwung:
   # Wie das Item nach einem Schlag oder dem Setzen absinkt und wieder hochkommt, zeigt ein Client nur bei eigenen.
   # Geht wie guide-view nur auf Paper (ein Paket über das Innere des Servers).
