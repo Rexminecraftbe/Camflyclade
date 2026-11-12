@@ -2862,7 +2862,8 @@ async function handle(cmd) {
         cmd.x !== undefined ? cmd.x : p.x + (cmd.dx || 0),
         cmd.y !== undefined ? cmd.y : p.y + (cmd.dy || 0),
         cmd.z !== undefined ? cmd.z : p.z + (cmd.dz || 0));
-      const STEP = 0.5;
+      // Mit 'step' ein anderer Schritt je 50 ms, fuer einen schnellen Flug.
+      const STEP = cmd.step || 0.5;
       const deadline = Date.now() + (cmd.timeout || 12000);
       try { bot.creative.startFlying(); } catch (e) { /* egal */ }
       let done = 'Zeit abgelaufen';
@@ -18208,19 +18209,25 @@ def kugeln_checks(env, bot):
     rechnet der Client aber selbst, zwischen zwei Positionen, die der Server
     hoechstens einmal in der Sekunde schickt - und liess sie der Kamera
     trotzdem hinterherfliegen. CamOrbGuard schickt deshalb jede Kugel nahe
-    einem Kamera-Spieler jeden Tick neu, an jeden Client, der die Kugel und
-    den Kamera-Spieler hat: den Kamera-Spieler selbst und jeden, der ihn
-    sieht. Eine eben geschickte Kugel bewegt der Client im ersten Tick nicht.
+    einem Kamera-Spieler laufend neu, an jeden Client, der die Kugel und den
+    Kamera-Spieler hat: den Kamera-Spieler selbst und jeden, der ihn sieht.
+    Eine eben geschickte Kugel bewegt der Client im ersten Tick nicht. Wie
+    oft, haengt am Abstand - je naeher, desto staerker zieht der Client -:
+    unter 4 Bloecken jeden Tick, bis 6 jeden zweiten, bis 8 jeden vierten,
+    darueber jeden zehnten.
 
     mineflayer rechnet keinen Flug, das Hinterherfliegen sieht der Bot also
     nicht. Gezaehlt wird, wie oft das Paket spawn_entity fuer die Kugel
-    ankommt: neu geschickt jeden Tick, sonst einmal. Eine Kugel vier Bloecke
+    ankommt: neu geschickt laufend, sonst einmal. Eine Kugel vier Bloecke
     neben der Kamera kommt beim Bot und beim zweiten Spieler, der dreizehn
     Bloecke weg steht und die Kamera sieht, viele Male an. Auf dem Server
     liegt sie danach noch, wo sie hinfiel, und der Bot sieht sie dort - sie
-    ist nicht versteckt geblieben. Eine Kugel siebzehn Bloecke weg kommt nur
-    einmal. Im Flug reicht es weiter: Eine Kugel 13,5 Bloecke weg kommt neu,
-    solange die Kamera fliegt, und nicht, solange sie stillsteht.
+    ist nicht versteckt geblieben. Kugeln zwei, sechseinhalb und zehn Bloecke
+    weg kommen je nach Abstand seltener, gemessen an der zwei Bloecke weg:
+    vier Bloecke halb so oft, sechseinhalb ein Viertel, zehn ein Zehntel. Eine
+    Kugel siebzehn Bloecke weg kommt nur einmal. Im Flug reicht es weiter,
+    aber nur in Flugrichtung: Fliegt die Kamera schnell los, kommt eine Kugel
+    zwanzig Bloecke voraus neu, eine fuenfzehn Bloecke zur Seite nicht.
 
     Eine Kugel, die dem Spieler beim Start schon folgt, fragt der Server
     nicht noch einmal - sie folgte der Kamera weiter und zog mit ihr zur
@@ -18241,6 +18248,9 @@ def kugeln_checks(env, bot):
     x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
     nah = (x + 4, y, z)
     fern = (x + 17, y, z)
+    dicht = (x + 2, y, z)
+    mittel = (x + 6.5, y, z)
+    rand = (x + 10, y, z)
     marke = "camfly_kugel"
     weg = f"kill @e[tag={marke}]"
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
@@ -18279,7 +18289,7 @@ def kugeln_checks(env, bot):
 
     try:
         console(env, weg, pause=0.3)
-        console(env, f"fill {_floor(x) - 10} {y} {_floor(z) - 2} {_floor(x) + 18} {y + 3} {_floor(z) + 2} "
+        console(env, f"fill {_floor(x) - 10} {y} {_floor(z) - 2} {_floor(x) + 18} {y + 3} {_floor(z) + 22} "
                      f"minecraft:air", pause=0.5)
         zuschauer.start()
         if not FIND.test("Zweiter Spieler fuer den Test der Erfahrungskugeln kommt herein",
@@ -18295,11 +18305,17 @@ def kugeln_checks(env, bot):
         beim_bot, beim_zuschauer = zaehler(bot), zaehler(zuschauer)
         kugel_hin(nah, "camfly_kugel_nah")
         kugel_hin(fern, "camfly_kugel_fern")
+        kugel_hin(dicht, "camfly_kugel_dicht")
+        kugel_hin(mittel, "camfly_kugel_mittel")
+        kugel_hin(rand, "camfly_kugel_rand")
         time.sleep(WARTEN)
         bot_nah = geschickt(bot, beim_bot, nah)
         zuschauer_nah = geschickt(zuschauer, beim_zuschauer, nah)
         bot_fern = geschickt(bot, beim_bot, fern)
         zuschauer_fern = geschickt(zuschauer, beim_zuschauer, fern)
+        bot_dicht = len(geschickt(bot, beim_bot, dicht))
+        bot_mittel = len(geschickt(bot, beim_bot, mittel))
+        bot_rand = len(geschickt(bot, beim_bot, rand))
         FIND.test(f"Eine Kugel neben der Kamera wird dem Kamera-Spieler laufend neu geschickt "
                   f"(mindestens {MINDESTENS} Mal in {WARTEN} s)",
                   len(bot_nah) >= MINDESTENS, f"{len(bot_nah)} Mal")
@@ -18308,30 +18324,46 @@ def kugeln_checks(env, bot):
         FIND.test("Eine Kugel siebzehn Bloecke von der Kamera kommt nur einmal, bei beiden",
                   len(bot_fern) <= 1 and len(zuschauer_fern) <= 1,
                   f"beim Bot {len(bot_fern)}, beim zweiten Spieler {len(zuschauer_fern)} Mal")
+        # Gemessen an der Kugel zwei Bloecke weg, die jeden Tick kommt: So
+        # haengt es nicht daran, wie schnell der Server gerade tickt.
+        zaehlung = (f"2 Bloecke {bot_dicht}, 4 Bloecke {len(bot_nah)}, 6,5 Bloecke {bot_mittel}, "
+                    f"10 Bloecke {bot_rand} Mal")
+        FIND.test(f"Zwei Bloecke von der Kamera kommt eine Kugel jeden Tick neu (mindestens 35 Mal in {WARTEN} s)",
+                  bot_dicht >= 35, zaehlung)
+        FIND.test("Je weiter weg, desto seltener: vier Bloecke etwa halb so oft, sechseinhalb ein Viertel, "
+                  "zehn ein Zehntel",
+                  bot_dicht > 0 and len(bot_nah) <= 0.7 * bot_dicht
+                  and 3 <= bot_mittel <= 0.4 * bot_dicht and 2 <= bot_rand <= 0.2 * bot_dicht, zaehlung)
         wo = bot.call("server_pos", selector="@e[tag=camfly_kugel_nah,limit=1]").get("pos")
         FIND.test("Auf dem Server liegt die Kugel neben der Kamera noch, wo sie hinfiel",
                   wo is not None and math.dist((wo[0], wo[2]), (nah[0], nah[2])) < 0.3, str(wo))
         FIND.test("Der Kamera-Spieler sieht die Kugel weiter, dort, wo der Server sie hat",
                   wo is not None and sieht_bei(bot, wo), str(wo))
 
-        # Im Flug reicht es weiter: Der eigene Client ist der Kamera auf dem
-        # Server voraus, die anderen sind hinterher. Eine Kugel 13,5 Bloecke
-        # weg kommt nicht neu, solange die Kamera stillsteht, und neu, waehrend
-        # sie mit einem halben Block je Tick hin und her fliegt.
-        seitlich = (x + 13.5, y, z)
-        kugel_hin(seitlich, "camfly_kugel_flug")
+        # Im Flug reicht es weiter, in Flugrichtung: Der eigene Client ist der
+        # Kamera auf dem Server voraus, die anderen sind hinterher. Die Kamera
+        # fliegt mit anderthalb Bloecken je Tick sechs Bloecke los, auf eine
+        # Kugel zwanzig Bloecke voraus zu und an einer fuenfzehn Bloecke zur
+        # Seite vorbei. Im Stillstand kommt keine von beiden neu.
+        voraus = (x, y, z + 20)
+        seitlich = (x + 15, y, z)
+        kugel_hin(voraus, "camfly_kugel_voraus")
+        kugel_hin(seitlich, "camfly_kugel_seitlich")
         time.sleep(1.0)
         ab = zaehler(bot)
         time.sleep(1.5)
-        ruhig = geschickt(bot, ab, seitlich)
+        ruhig = len(geschickt(bot, ab, voraus)) + len(geschickt(bot, ab, seitlich))
         ab = zaehler(bot)
-        bot.call("fly", wait=30, dz=4, timeout=15000)
-        bot.call("fly", wait=30, dz=-4, timeout=15000)
-        im_flug = geschickt(bot, ab, seitlich)
-        FIND.test("Eine Kugel 13,5 Bloecke von der stillstehenden Kamera kommt nicht neu",
-                  len(ruhig) == 0, f"{len(ruhig)} Mal")
-        FIND.test("Fliegt die Kamera, reicht es weiter: dieselbe Kugel kommt im Flug neu",
-                  len(im_flug) >= 4, f"{len(im_flug)} Mal")
+        bot.call("fly", wait=30, dz=6, step=1.5, timeout=15000)
+        time.sleep(1.0)
+        im_flug_voraus = len(geschickt(bot, ab, voraus))
+        im_flug_seitlich = len(geschickt(bot, ab, seitlich))
+        FIND.test("Kugeln zwanzig und fuenfzehn Bloecke von der stillstehenden Kamera kommen nicht neu",
+                  ruhig == 0, f"{ruhig} Mal")
+        FIND.test("Fliegt die Kamera schnell los, kommt eine Kugel zwanzig Bloecke voraus neu",
+                  im_flug_voraus >= 1, f"{im_flug_voraus} Mal")
+        FIND.test("Eine Kugel fuenfzehn Bloecke neben der Flugbahn kommt nicht neu",
+                  im_flug_seitlich == 0, f"{im_flug_seitlich} Mal")
 
         # Gegenprobe: Nach dem Cam-Modus kommt dieselbe Kugel nicht mehr neu.
         nummern = {s["id"] for s in bot_nah}

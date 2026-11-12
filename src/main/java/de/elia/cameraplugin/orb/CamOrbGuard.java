@@ -44,15 +44,18 @@ import java.util.UUID;
  * has is hiding an entity from a player and showing it again: the client
  * drops the orb and is sent it anew, at the place it has on the server. And a
  * client keeps an orb it has just been sent still for its first tick - the
- * game works out the flight from the second tick on. An orb sent anew every
- * tick therefore does not move on that screen at all: it lies where it lies
- * on the server, and moves as it moves there.</p>
+ * game works out the flight from the second tick on.</p>
  *
- * <p>That is done once a tick for every orb near a camera player, see
- * {@link #reachOf}, for every player whose client has both the orb and that
- * camera player: the camera player and whoever sees the camera player. A
- * client that does not know a camera player lets no orb fly to it, and is
- * left alone.</p>
+ * <p>So the orbs near a camera player are sent anew, to every player whose
+ * client has both the orb and that camera player: the camera player and
+ * whoever sees the camera player. A client that does not know a camera player
+ * lets no orb fly to it, and is left alone. Each time costs some 75 bytes for
+ * every orb and every one of those players, so an orb is sent only as often
+ * as its distance needs, see {@link #everyTicks(double)}: the closer the
+ * camera, the harder the client pulls. Close by that is every tick, further
+ * away every few ticks, and an orb no client pulls at all only now and then.
+ * How close the camera player may be on some screen, see
+ * {@link #closestOnAScreen}.</p>
  *
  * <p>Left alone as well are orbs that are hidden from somebody - by photo
  * mode, or by another plugin: the server does not send them to that player,
@@ -61,16 +64,19 @@ import java.util.UUID;
  * from then on, and it would no longer go when the plugin that showed it
  * hides it again.</p>
  *
- * <p>What it costs: an orb sent anew starts its colours over every tick, so
+ * <p>What it costs besides: an orb sent anew starts its colours over, so
  * near a camera player orbs keep one shade instead of shimmering. A player who
- * walks up to an orb next to a camera player sees it come closer tick by tick,
- * the way it does on the server, instead of smoothly. And every orb sent anew
+ * walks up to an orb next to a camera player sees it come closer in steps, the
+ * way it does on the server, instead of smoothly. And every orb sent anew
  * comes with a {@code PlayerHideEntityEvent} and a
  * {@code PlayerShowEntityEvent}.</p>
  *
- * <p>What is still possible: when the server falls behind, a client may tick
- * twice before the orb comes anew, and moves it for one tick - a hundredth to
- * a tenth of a block, put back with the next tick of the server.</p>
+ * <p>What is still possible: an orb sent every few ticks moves on the screen
+ * in between, by a few centimetres at the most, see
+ * {@link #everyTicks(double)}. And when the server falls behind, a client
+ * may tick twice before an orb close by comes anew, and moves it for one tick
+ * - by up to a tenth of a block, put back with the next tick of the
+ * server.</p>
  */
 public final class CamOrbGuard {
 
@@ -78,18 +84,37 @@ public final class CamOrbGuard {
     private static final double FOLLOW_RANGE = 8.0;
 
     /**
-     * How far around a camera player who keeps still the orbs are sent anew,
-     * in blocks: {@link #FOLLOW_RANGE}, with room for a client that has the
-     * camera player a little away from where the server has them.
+     * How far around a camera player the orbs are looked at, in blocks:
+     * {@link #FOLLOW_RANGE}, with room for a client that has the camera player
+     * a little away from where the server has them even when they keep still.
+     * Measured from the stretch of {@link #closestOnAScreen} while they fly.
      */
     private static final double REACH = FOLLOW_RANGE + 4.0;
 
     /**
-     * For how many ticks of flight the reach grows, see {@link #reachOf}: the
-     * camera player's own client is that far ahead of the server - by the time
-     * its movement takes to arrive -, and every other client that far behind -
-     * by the time the server's takes to arrive, and the ticks the client
-     * takes to glide a player to the place it was sent.
+     * The distances below which an orb is sent anew every
+     * {@link #EVERY_TICKS} ticks, in blocks, see {@link #everyTicks(double)}.
+     */
+    private static final double[] CLOSER_THAN = {4.0, 6.0, FOLLOW_RANGE};
+
+    /** How often an orb closer than each of {@link #CLOSER_THAN} is sent anew, in ticks. */
+    private static final int[] EVERY_TICKS = {1, 2, 4};
+
+    /**
+     * How often an orb is sent anew that is further than {@link #FOLLOW_RANGE}
+     * from the camera player on every screen, in ticks. No client pulls it at
+     * all; it is sent only in case a client has the camera player further off
+     * than reckoned.
+     */
+    private static final int OUTSIDE_EVERY_TICKS = 10;
+
+    /**
+     * For how many ticks of flight the camera player may be off on a screen,
+     * see {@link #closestOnAScreen}: the camera player's own client is that
+     * far ahead of the server - by the time its movement takes to arrive -,
+     * and every other client that far behind - by the time the server's takes
+     * to arrive, and the ticks the client takes to glide a player to the place
+     * it was sent.
      */
     private static final double LEAD_TICKS = 6.0;
 
@@ -97,15 +122,15 @@ public final class CamOrbGuard {
      * The most a camera player can fly in a tick, in blocks, with room to
      * spare: sprinting at the highest {@code flight-speed} the config allows
      * comes to five and a half. A step further than that is a teleport, and
-     * says nothing about the speed.
+     * says nothing about the flight.
      */
     private static final double MAX_FLIGHT_STEP = 8.0;
 
     /**
      * What is left of the speed of a camera player from one tick to the next
      * when they stop. The server gets the movement of a client at uneven
-     * times - none in one tick, two steps in the next -, and the reach must
-     * not shrink and grow with that.
+     * times - none in one tick, two steps in the next -, and the stretch of
+     * {@link #closestOnAScreen} must not shrink and grow with that.
      */
     private static final double SLOWDOWN = 0.8;
 
@@ -118,16 +143,26 @@ public final class CamOrbGuard {
 
     private final JavaPlugin plugin;
     private final CameraPlayers cameraPlayers;
-    /** How fast each camera player has been flying, by player id. */
+    /** How each camera player has been flying, by player id. */
     private final Map<UUID, Flight> flights = new HashMap<>();
     /** The orbs taken up by {@link #turnOrbsFromPlayer}, with the place they go back to. */
     private final Map<ExperienceOrb, Location> takenUp = new HashMap<>();
+    /** When each orb near a camera player was last sent anew, in ticks of {@link #ticks}. */
+    private final Map<ExperienceOrb, Long> lastSent = new HashMap<>();
+    /** The ticks this class has looked at the orbs, counted from the start. */
+    private long ticks;
     private BukkitTask task;
 
-    /** Where a camera player was a tick ago, and how fast they have been flying, in blocks per tick. */
+    /** Where a camera player was a tick ago, and how far a tick of their flight has gone lately. */
     private static final class Flight {
         Location last;
-        double speed;
+        Vector perTick = new Vector();
+    }
+
+    /** An orb near camera players: which ones, and how close the nearest may be on a screen. */
+    private static final class Near {
+        final List<Player> cameras = new ArrayList<>(1);
+        double closest = Double.MAX_VALUE;
     }
 
     public CamOrbGuard(JavaPlugin plugin, CameraPlayers cameraPlayers) {
@@ -158,6 +193,7 @@ public final class CamOrbGuard {
         }
         takenUp.clear();
         flights.clear();
+        lastSent.clear();
     }
 
     /**
@@ -232,23 +268,32 @@ public final class CamOrbGuard {
         return true;
     }
 
-    /** Sends every orb near a camera player anew to the clients that would let it fly there. */
+    /**
+     * Sends the orbs near a camera player anew whose turn it is, to the
+     * clients that would let them fly there.
+     */
     private void sendOrbsAnew() {
         if (cameraPlayers.isEmpty()) {
             flights.clear();
+            lastSent.clear();
             return;
         }
+        ticks++;
         flights.keySet().retainAll(cameraPlayers.ids());
-        Map<ExperienceOrb, List<Player>> near = orbsNearCameras();
-        if (near.isEmpty()) {
-            return;
-        }
+        Map<ExperienceOrb, Near> near = orbsNearCameras();
+        // An orb that is no longer near is sent at once when it comes near again.
+        lastSent.keySet().retainAll(near.keySet());
         // Who has each camera player, asked once a tick and not once an orb.
         Map<Player, Set<Player>> seenBy = new HashMap<>();
-        for (Map.Entry<ExperienceOrb, List<Player>> entry : near.entrySet()) {
+        for (Map.Entry<ExperienceOrb, Near> entry : near.entrySet()) {
             ExperienceOrb orb = entry.getKey();
+            Long last = lastSent.get(orb);
+            if (last != null && ticks - last < everyTicks(entry.getValue().closest)) {
+                continue;
+            }
+            lastSent.put(orb, ticks);
             for (Player viewer : orb.getTrackedBy()) {
-                if (knowsOne(viewer, entry.getValue(), seenBy)) {
+                if (knowsOne(viewer, entry.getValue().cameras, seenBy)) {
                     sendAnew(viewer, orb);
                 }
             }
@@ -260,20 +305,57 @@ public final class CamOrbGuard {
         viewer.showEntity(plugin, orb);
     }
 
-    /** The orbs within the reach of a camera player, each with the camera players it is near. */
-    private Map<ExperienceOrb, List<Player>> orbsNearCameras() {
-        Map<ExperienceOrb, List<Player>> near = new HashMap<>();
+    /**
+     * How often an orb is sent anew, in ticks, by how close the camera player
+     * may be to it on some screen, in blocks.
+     *
+     * <p>A client pulls an orb towards a player by a tenth of a block per tick
+     * times {@code (1 - distance / 8)} squared, a little more with every tick,
+     * and not at all in the first tick after it was sent. So:</p>
+     *
+     * <ul>
+     * <li>closer than 4 blocks, an orb would move 2.5 to 10 centimetres in a
+     * tick: it is sent every tick;</li>
+     * <li>from 4 to 6 blocks, 2.5 centimetres at the most, in the one tick
+     * between: every second tick;</li>
+     * <li>from 6 to 8 blocks, it would move less than 4 centimetres in the
+     * three ticks between: every fourth tick;</li>
+     * <li>further than 8 blocks on every screen, no client pulls it:
+     * every {@link #OUTSIDE_EVERY_TICKS} ticks, in case.</li>
+     * </ul>
+     */
+    private static int everyTicks(double closest) {
+        for (int i = 0; i < CLOSER_THAN.length; i++) {
+            if (closest < CLOSER_THAN[i]) {
+                return EVERY_TICKS[i];
+            }
+        }
+        return OUTSIDE_EVERY_TICKS;
+    }
+
+    /** The orbs within {@link #REACH} of a camera player on some screen, with those camera players. */
+    private Map<ExperienceOrb, Near> orbsNearCameras() {
+        Map<ExperienceOrb, Near> near = new HashMap<>();
         for (UUID id : cameraPlayers.ids()) {
             Player camera = plugin.getServer().getPlayer(id);
             if (camera == null) {
                 continue;
             }
             Location at = camera.getLocation();
-            double reach = reachOf(id, at);
-            for (Entity entity : camera.getNearbyEntities(reach, reach, reach)) {
-                if (entity instanceof ExperienceOrb orb && orb.isValid() && orb.isVisibleByDefault()
-                        && !takenUp.containsKey(orb) && orb.getLocation().distanceSquared(at) <= reach * reach) {
-                    near.computeIfAbsent(orb, o -> new ArrayList<>(1)).add(camera);
+            Vector centre = at.toVector();
+            Vector lead = flightOf(id, at).multiply(LEAD_TICKS);
+            List<Entity> around = camera.getNearbyEntities(REACH + Math.abs(lead.getX()),
+                    REACH + Math.abs(lead.getY()), REACH + Math.abs(lead.getZ()));
+            for (Entity entity : around) {
+                if (!(entity instanceof ExperienceOrb orb) || !orb.isValid() || !orb.isVisibleByDefault()
+                        || takenUp.containsKey(orb)) {
+                    continue;
+                }
+                double closest = closestOnAScreen(orb.getLocation().toVector(), centre, lead);
+                if (closest <= REACH) {
+                    Near entry = near.computeIfAbsent(orb, o -> new Near());
+                    entry.cameras.add(camera);
+                    entry.closest = Math.min(entry.closest, closest);
                 }
             }
         }
@@ -281,24 +363,43 @@ public final class CamOrbGuard {
     }
 
     /**
-     * How far around this camera player the orbs are sent anew, in blocks.
+     * How close the camera player may be to this point on some screen, in
+     * blocks.
      *
-     * <p>{@link #REACH}, and more the faster they fly: the camera player's
-     * own client is ahead of where the server has them, every other client
-     * behind, each by the way {@link #LEAD_TICKS} ticks of flight cover. An
-     * orb further away than that may still move on a screen for a tick or
-     * two before it is reached, and is put back then.</p>
+     * <p>Keeping still, everybody has them where the server has them. Flying,
+     * their own client is ahead by {@link #LEAD_TICKS} ticks of flight, every
+     * other client behind by as many - somewhere on the stretch from
+     * {@code centre - lead} to {@code centre + lead}. What counts is the
+     * distance to that stretch: an orb ahead of a fast camera is reached
+     * early, one beside the flight no earlier than one beside a camera that
+     * keeps still.</p>
      */
-    private double reachOf(UUID id, Location at) {
-        Flight flight = flights.computeIfAbsent(id, key -> new Flight());
-        double step = flight.last != null && at.getWorld() != null && at.getWorld().equals(flight.last.getWorld())
-                ? flight.last.distance(at) : 0.0;
-        if (step > MAX_FLIGHT_STEP) {
-            step = 0.0;
+    private static double closestOnAScreen(Vector point, Vector centre, Vector lead) {
+        Vector offset = point.clone().subtract(centre);
+        double length = lead.lengthSquared();
+        if (length < 1.0E-9) {
+            return offset.length();
         }
-        flight.speed = Math.max(step, flight.speed * SLOWDOWN);
+        double along = Math.max(-1.0, Math.min(1.0, offset.dot(lead) / length));
+        return offset.subtract(lead.clone().multiply(along)).length();
+    }
+
+    /**
+     * How far a tick of flight of this camera player has gone lately, and in
+     * which direction, in blocks per tick - a new vector, to be changed at
+     * will. Notes down where they are for the next tick.
+     */
+    private Vector flightOf(UUID id, Location at) {
+        Flight flight = flights.computeIfAbsent(id, key -> new Flight());
+        Vector step = flight.last != null && at.getWorld() != null && at.getWorld().equals(flight.last.getWorld())
+                ? at.toVector().subtract(flight.last.toVector()) : new Vector();
+        if (step.lengthSquared() > MAX_FLIGHT_STEP * MAX_FLIGHT_STEP) {
+            step = new Vector();
+        }
+        Vector slowed = flight.perTick.clone().multiply(SLOWDOWN);
+        flight.perTick = step.lengthSquared() >= slowed.lengthSquared() ? step : slowed;
         flight.last = at;
-        return REACH + flight.speed * LEAD_TICKS;
+        return flight.perTick.clone();
     }
 
     /**

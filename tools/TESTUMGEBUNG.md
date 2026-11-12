@@ -1490,8 +1490,10 @@ einzutragen.
   rechnet keinen Flug, bei ihm liegt jede Kugel, wo der Server sie zuletzt
   hinschickte. Der Abschnitt `kugeln` zählt deshalb, wie oft eine Kugel
   geschickt wird (Bot-Aktion `spawns`): CamOrbGuard schickt sie neben einer
-  Kamera jeden Tick neu, und eine eben geschickte Kugel bewegt der Client im
-  ersten Tick nicht.
+  Kamera laufend neu, je näher, desto öfter, und eine eben geschickte Kugel
+  bewegt der Client im ersten Tick nicht. Verglichen wird mit einer Kugel,
+  die jeden Tick kommt, nicht mit festen Zahlen - so hängt es nicht daran,
+  wie schnell der Server gerade tickt.
 * **Zwei Abschnitte dürfen nicht dieselbe Funktion haben.** Lange hießen zwei
   Tests `herzen_checks` - die Herzen am Namen über dem Körper und die Herzen,
   die an ruhenden Effekten hängen. Die zweite Funktion überschrieb die erste,
@@ -1552,8 +1554,11 @@ jedes davon sehr wohl · das Inventar ist im Cam-Modus leer und danach wieder
 da · die Rüstung ist im Cam-Modus abgelegt und danach wieder angezogen · eine
 Erfahrungskugel neben der Kamera wird dem Kamera-Spieler und dem, der ihn
 sieht, laufend neu geschickt, damit sie auch bei ihnen liegen bleibt, und
-liegt auf dem Server noch, wo sie hinfiel · eine weiter weg nicht, außer
-während die Kamera fliegt, nach dem Cam-Modus keine mehr, und mit
+liegt auf dem Server noch, wo sie hinfiel · je weiter weg, desto seltener -
+vier Blöcke halb so oft wie zwei, sechseinhalb ein Viertel, zehn ein Zehntel
+- und siebzehn Blöcke weg gar nicht · fliegt die Kamera schnell, kommt eine
+Kugel zwanzig Blöcke voraus neu, eine fünfzehn Blöcke neben der Flugbahn
+nicht · nach dem Cam-Modus keine mehr, und mit
 `player_visibility_mode: cam` dem nicht, der die Kamera nicht sieht · eine
 Kugel, die dem Spieler beim Start schon folgte, folgt der Kamera nicht · ein
 Pfeil, ein Pfeil mit Schlag II, ein geworfener Dreizack, TNT und die
