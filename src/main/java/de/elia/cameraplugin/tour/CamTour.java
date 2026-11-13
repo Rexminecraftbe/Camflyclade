@@ -82,11 +82,12 @@ import java.util.UUID;
  * tour goes on.</p>
  *
  * <p>The camera of a guest is not teleported along every tick: it is given
- * the speed that takes it to the guide, and flies there like any camera -
- * through the checks of a step, with the wall in its way. Its own keys move
- * it no longer, its fly speed is 0 while it follows. Only when it falls far
- * behind - the guide jumped to a spot, say - is it put next to him, if he is
- * within its reach.</p>
+ * the speed that takes it along the way of the guide, two ticks after him,
+ * see {@link #trail}, and flies there like any camera - through the checks
+ * of a step, with the wall in its way. Its own keys move it no longer, its
+ * fly speed is 0 while it follows. Only when it falls far behind - the guide
+ * jumped to a spot, say - is it put next to him, if he is within its
+ * reach.</p>
  *
  * <p>What the guest sees: with {@code follow.guide-view}, on Paper, the world
  * through the eyes of the guide, as smoothly as spectator mode shows another
@@ -143,18 +144,19 @@ public final class CamTour implements Listener {
     private static final String SELF_INTERACTION = "Cannot interact with self!";
 
     /**
-     * How far a guest may fall behind before his camera is put next to the
-     * guide, in blocks. Flying on the speed it is given, it trails a block or
-     * two at most; beyond this, something else moved one of the two.
+     * How far the camera of a guest may be from where it should be, see
+     * {@link #trail}, before it is put next to the guide, in blocks. Flying on
+     * the speed it is given, it is off by a block at most; beyond this,
+     * something else moved one of the two.
      */
     private static final double CATCH_UP = 6.0;
 
     /**
-     * How much of the gap to the guide the speed of a guest closes each tick,
-     * on top of the step the guide took: of the gap that is left after what
-     * his camera flew already, see {@link #ahead}. That is only a guess - his
-     * ping changes, a wall stops his camera -, so a whole gap would make the
-     * camera overshoot and swing.
+     * How much of the gap to where his camera should be, see {@link #trail},
+     * the speed of a guest closes each tick, on top of the step the guide took
+     * there: of the gap that is left after what his camera flew already, see
+     * {@link #ahead}. That is only a guess - his ping changes, a wall stops
+     * his camera -, so a whole gap would make the camera overshoot and swing.
      */
     private static final double PULL = 0.3;
 
@@ -242,8 +244,10 @@ public final class CamTour implements Listener {
     private static final class Tour {
         final Map<UUID, Guest> guests = new LinkedHashMap<>();
         Location last;
-        /** The guide's last three steps, the oldest first, see {@link #smoothStep}. */
-        final Vector[] steps = {new Vector(), new Vector(), new Vector()};
+        /** Where the guide was in the last three ticks, the oldest first, see {@link #trail}. */
+        final Vector[] path = new Vector[3];
+        /** The steps that took him there, the oldest first. */
+        final Vector[] steps = new Vector[3];
         /** The seconds the warning in the guide's action bar showed last, -1 while it shows none. */
         long shownSeconds = -1L;
         /** Whom that warning named. */
@@ -1595,10 +1599,10 @@ public final class CamTour implements Listener {
             }
             boolean mirrored = !cameraPlayers.contains(guideId) && mirror.isOn();
             Location at = guide.getLocation();
-            Vector step = tour.last != null && tour.last.getWorld().equals(at.getWorld())
-                    ? at.toVector().subtract(tour.last.toVector()) : new Vector();
+            boolean along = tour.last != null && tour.last.getWorld().equals(at.getWorld());
+            Vector step = along ? at.toVector().subtract(tour.last.toVector()) : new Vector();
             tour.last = at.clone();
-            Vector smooth = smoothStep(tour, step);
+            Vector pace = trail(tour, at.toVector(), step, along);
             List<String> away = new ArrayList<>();
             long soonest = Long.MAX_VALUE;
             Iterator<Map.Entry<UUID, Guest>> guests = new ArrayList<>(tour.guests.entrySet()).iterator();
@@ -1611,7 +1615,7 @@ public final class CamTour implements Listener {
                     continue;
                 }
                 Guest state = next.getValue();
-                Long left = follow(guide, guest, data, state, at, step, smooth, now);
+                Long left = follow(guide, guest, data, state, at, tour.path[0], pace, now);
                 if (left != null) {
                     away.add(guest.getName());
                     soonest = Math.min(soonest, left);
@@ -1664,21 +1668,49 @@ public final class CamTour implements Listener {
     }
 
     /**
-     * The step of the guide as the camera of a guest flies it while he sees
-     * through his own eyes: of the last three, the middle one, axis by axis.
+     * Remembers where the guide is now, and gives the cameras of his guests
+     * their way: they fly his way two ticks after him. Each should be where
+     * he was two ticks ago, {@code tour.path[0]}, and go on from there at the
+     * pace returned - the step he took next, smoothed.
      *
-     * <p>The guide's client says where he is every tick, but the network
-     * hands the server none of it in one tick and two in the next. Taken as
-     * it comes, the camera would stop and leap after him by turns - through
-     * the guide's eyes nobody sees his own camera, but looking round freely
-     * he does. The middle one leaves out a single step too short or too long,
-     * even a jump of the guide, which {@link #CATCH_UP} takes care of, and
-     * follows a change of his speed one tick late; what the camera fell behind
-     * meanwhile, {@link #PULL} makes up. An average would spread such a step
-     * over three ticks instead, and send a camera on after a jump.</p>
+     * <p>Pulled to where the guide is now, a camera reached his place a tick
+     * or two after him, still going: when he stopped, it shot past him and
+     * came back. Where he was two ticks ago, he really was: when he stops, the
+     * cameras stop there two ticks later, and when he turns back, they turn
+     * where he did.</p>
+     *
+     * <p>His client says where he is every tick, but the network hands the
+     * server none of it in one tick and two in the next. Flown as it comes, a
+     * camera would stop and leap after him by turns. So the pace is the middle
+     * one of the step he took next and the steps on either side of it, axis
+     * by axis - two ticks after him, the step after it is known already. The
+     * middle one leaves out a single step too short or too long, even a jump
+     * of the guide, which {@link #CATCH_UP} takes care of, and still follows
+     * him in the very tick he speeds up or stops.</p>
+     *
+     * <p>A tenth of a second after him nobody sees: looking round freely, a
+     * guest does not see his guide, see {@link #keepsApart}, and through the
+     * guide's eyes, he does not see his own camera.</p>
+     *
+     * @param at    where the guide is now
+     * @param step  the step he took since the last tick
+     * @param along whether he was in this world last tick, too
+     * @return the pace at which the cameras go on from where they should be
      */
-    private static Vector smoothStep(Tour tour, Vector step) {
+    private static Vector trail(Tour tour, Vector at, Vector step, boolean along) {
+        Vector[] path = tour.path;
         Vector[] steps = tour.steps;
+        if (!along || path[0] == null) {
+            // A new tour, or a new world: he has been standing here.
+            for (int i = 0; i < path.length; i++) {
+                path[i] = at.clone();
+                steps[i] = new Vector();
+            }
+            return new Vector();
+        }
+        path[0] = path[1];
+        path[1] = path[2];
+        path[2] = at.clone();
         steps[0] = steps[1];
         steps[1] = steps[2];
         steps[2] = step.clone();
@@ -1696,14 +1728,14 @@ public final class CamTour implements Listener {
      * Moves one guest after his guide, or counts down while the guide is out
      * of his reach - and drops him from the tour once the time is up.
      *
-     * @param step   the step the guide took since the last tick
-     * @param smooth the same, smoothed for a guest who sees his own camera
-     *               move, see {@link #smoothStep}
+     * @param at     where the guide is now
+     * @param behind where the camera of the guest should be, see {@link #trail}
+     * @param pace   how fast it should go on from there
      * @return the seconds he has left while the guide is out of his reach,
      *         or {@code null} while the guide is within it, or he is gone
      */
-    private Long follow(Player guide, Player guest, CameraData data, Guest state, Location at, Vector step,
-                        Vector smooth, long now) {
+    private Long follow(Player guide, Player guest, CameraData data, Guest state, Location at, Vector behind,
+                        Vector pace, long now) {
         if (!inReach(guest, data, at)) {
             if (state.outSince == 0L) {
                 state.outSince = now;
@@ -1745,8 +1777,9 @@ public final class CamTour implements Listener {
             settings.getSignalBackSound().play(guest);
         }
         Location from = guest.getLocation();
-        Vector gap = at.toVector().subtract(from.toVector()).subtract(ahead(guest, state));
+        Vector gap = behind.clone().subtract(from.toVector()).subtract(ahead(guest, state));
         if (!from.getWorld().equals(at.getWorld()) || gap.lengthSquared() > CATCH_UP * CATCH_UP) {
+            // Next to the guide himself, whom the reach was measured to.
             Location target = at.clone();
             target.setYaw(from.getYaw());
             target.setPitch(from.getPitch());
@@ -1764,9 +1797,7 @@ public final class CamTour implements Listener {
             state.sinceView = VIEW_REFRESH;
             return null;
         }
-        // Through the guide's eyes his own camera is not seen: it keeps up
-        // with the guide on the step as it came, a tick sooner.
-        Vector speed = (state.viewing ? step : smooth).clone().add(gap.multiply(PULL));
+        Vector speed = pace.clone().add(gap.multiply(PULL));
         if (speed.lengthSquared() > MAX_SPEED * MAX_SPEED) {
             speed.normalize().multiply(MAX_SPEED);
         }
