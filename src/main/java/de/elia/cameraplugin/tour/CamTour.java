@@ -231,6 +231,8 @@ public final class CamTour implements Listener {
     private final GuideFrost frost = new GuideFrost(sender);
     /** The internals that change the guide's hands on their way to a guest, see {@link GuideMirror}. */
     private final GuideHands hands = new GuideHands(sender);
+    /** The internals that show a guest hearts without a hit, see {@link GuideMirror}. */
+    private final QuietHearts quietHearts = new QuietHearts(sender);
     /** Who looks round freely on tours instead of through the guide's eyes, while he is online. */
     private final Set<UUID> freeLook = new HashSet<>();
     /** The players the tour hid from each viewer with {@code hidePlayer}, see {@link #syncVisibility}. */
@@ -286,7 +288,8 @@ public final class CamTour implements Listener {
         this.settings = plugin.getSettings();
         this.messages = plugin.getMessages();
         this.cameraPlayers = plugin.getCameraPlayers();
-        this.mirror = new GuideMirror(settings, frost, hands, new NamespacedKey(plugin, GuideMirror.MARK));
+        this.mirror = new GuideMirror(settings, frost, hands, quietHearts,
+                new NamespacedKey(plugin, GuideMirror.MARK));
     }
 
     /** Whether {@code /cam follow} is there at all. */
@@ -304,6 +307,7 @@ public final class CamTour implements Listener {
         swing.load(settings.isTourEnabled() && settings.isTourMirrorSwing() ? log : null);
         fineHold.load(settings.isTourEnabled() && settings.isTourGuideView() && settings.isTourFineHold() ? log : null);
         frost.load(settings.isTourEnabled() && settings.isTourMirrorFrost() ? log : null);
+        quietHearts.load(settings.isTourEnabled() && settings.isTourMirrorHealth() ? log : null);
         boolean hides = !settings.isTourMirrorCount() || !settings.isTourMirrorEnchantments()
                 || !settings.isTourMirrorDurability();
         hands.load(settings.isTourEnabled() && hides ? log : null);
