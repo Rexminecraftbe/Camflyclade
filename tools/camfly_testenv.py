@@ -20862,7 +20862,7 @@ DAUER_VORGABE = {
     "grenze": 140, "portale": 318, "fuehrung_nether": 82, "unbewacht": 177, "liegengeblieben": 40,
     "teleport": 108, "rueckweg": 21, "befehle_im_cam": 30, "koerper_weg": 37, "effekt_weg": 13,
     "feuerhieb": 23, "modusinventar": 25, "spawnen": 102, "fortschritt": 72, "fundsachen": 46,
-    "zerschlagen": 72, "team": 15, "ortungsleiste": 100, "toeten": 16, "tod_fern": 26, "leuchtfeuer": 25,
+    "zerschlagen": 72, "team": 15, "ortungsleiste": 114, "toeten": 16, "tod_fern": 26, "leuchtfeuer": 25,
     "schutzgebiet": 20, "mobtreffer": 99, "schlaeger": 59, "fuehrung_kette": 41, "umgebung": 23,
     "abschalten": 61, "absturz": 129,
 }
