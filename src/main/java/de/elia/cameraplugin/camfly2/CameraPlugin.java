@@ -145,7 +145,8 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamLocatorBar locatorBar = new CamLocatorBar(this);
     private final CamBattery battery = new CamBattery(this, playerStore);
     private final CamTimeLimit timeLimit = new CamTimeLimit(this, playerStore);
-    private final CamStats stats = new CamStats(settings, messages, playerStore, battery, timeLimit);
+    private final CamStats stats = new CamStats(settings, messages, playerStore, battery, timeLimit,
+            cameraPlayers);
     private final CamLog camLog = new CamLog(this, settings, log, writer);
     private final StartCost startCost = new StartCost(settings, messages, log);
     private final MobTargeting mobTargeting = new MobTargeting(this, settings, cameraPlayers);

@@ -844,6 +844,9 @@ messages:
   stats-cooldown: "&7Cam mode again in: &f{time}"
   stats-distance: "&7Distance flown: &f{distance} blocks"
   stats-farthest: "&7Farthest from the body: &f{distance} blocks"
+  # While he is in cam mode: how long the flight has been going on ({time}). The numbers under it count it already,
+  # as they will once it ends - in the menu they grow by the second.
+  stats-flying: "&aIn cam mode right now: &f{time} &7(counted in)"
   stats-header: "&eCam mode statistics of {player}:"
   stats-longest: "&7Longest flight: &f{time}"
   stats-none: "&e{player} has not been in cam mode yet."
@@ -1554,6 +1557,7 @@ message-settings:
   stats-cooldown: true
   stats-distance: true
   stats-farthest: true
+  stats-flying: true
   stats-header: true
   stats-longest: true
   stats-none: true

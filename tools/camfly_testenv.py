@@ -5579,6 +5579,10 @@ def statistik_checks(env, bot):
             return
         bot.call("fly", wait=30, dy=6, timeout=15000)
         time.sleep(1)
+        z = befehl(bot, "/cam stats")
+        FIND.test("/cam stats im Flug: der Flug, der gerade laeuft, zaehlt schon mit und sagt, wie lange er geht",
+                  zahl(z, r"Times in cam mode: (\d+)") == mal + 1 and gesagt(z, r"In cam mode right now: "),
+                  zeige(z))
         cam_off(bot)
         z = befehl(bot, "/cam stats")
         FIND.test("/cam stats zaehlt den Flug", zahl(z, r"Times in cam mode: (\d+)") == mal + 1, zeige(z))
@@ -10833,6 +10837,12 @@ def menue_live_checks(env, bot):
     Endet er, bleibt sein Platz grau; neu geoeffnet ist er weg, und die
     Liste sagt, dass niemand im Cam-Modus ist.
 
+    Die Statistik zaehlt den Flug, der gerade laeuft, schon mit: Auf der
+    Admin-Seite der Statistik steht unter dem zweiten Spieler im Cam-Modus
+    "In cam mode right now", und was dort steht, waechst von selbst. Unter
+    dem Knopf der eigenen Statistik (21) genauso, solange der Bot fliegt;
+    endet sein Flug, sagt /cam stats so viele Fluege, wie eben dort standen.
+
     Mit live-update: false bleibt die offene Liste, wie sie war, als sie
     aufging; neu geoeffnet zeigt sie, was jetzt gilt.
     """
@@ -10995,6 +11005,37 @@ def menue_live_checks(env, bot):
                   "0" not in f.get("slots", {}) and "Nobody is in cam mode" in item_text(f.get("slots", {}).get("22")),
                   str(sorted(f.get("slots", {})))[:200])
         bot.call("close_window", wait=10)
+
+        # --- Die Statistik zaehlt den Flug, der gerade laeuft
+        if FIND.test("Der zweite Spieler fliegt fuer die Statistik", cam_on(zuschauer), ""):
+            befehl(bot, "/cam menu", warten=1.0)
+            klick(bot, 23)
+            klick(bot, 14)
+            f = fenster(bot)
+            slot = next((n for n, item in f.get("slots", {}).items()
+                         if int(n) < 45 and ZUSCHAUER_NAME in item_text(item)), None)
+            vorher = item_text(f.get("slots", {}).get(slot)) if slot else ""
+            time.sleep(2.5)
+            nachher = platz(bot, slot) if slot else ""
+            FIND.test("Admin-Statistik: der Flug, der gerade laeuft, zaehlt mit, und was dasteht, waechst von selbst",
+                      "In cam mode right now" in vorher and "In cam mode right now" in nachher and nachher != vorher,
+                      f"{vorher} -> {nachher}")
+            bot.call("close_window", wait=10)
+            cam_off(zuschauer)
+        if FIND.test("Der Bot fliegt fuer seine eigene Statistik", cam_on(bot), ""):
+            befehl(bot, "/cam menu", warten=1.0)
+            vorher = platz(bot, 21)
+            time.sleep(2.5)
+            nachher = platz(bot, 21)
+            FIND.test("Erste Seite: die eigene Statistik zaehlt den Flug mit und waechst von selbst",
+                      "In cam mode right now" in vorher and "In cam mode right now" in nachher and nachher != vorher,
+                      f"{vorher} -> {nachher}")
+            mal = re.search(r"Times in cam mode: (\d+)", nachher)
+            bot.call("close_window", wait=10)
+            cam_off(bot)
+            z = befehl(bot, "/cam stats")
+            FIND.test("Endet der Flug, springt nichts: /cam stats sagt so viele Fluege, wie eben im Menue standen",
+                      mal is not None and gesagt(z, rf"Times in cam mode: {mal.group(1)}$"), zeige(z))
 
         # --- Ohne live-update
         set_option(env, "live-update", "false", "menu")
@@ -20643,7 +20684,7 @@ ABSCHNITTE = [
     Abschnitt("fuehrung_himmel", fuehrung_himmel_checks, "tour/CamTour sky nightvision"),
     Abschnitt("ausspaehen", ausspaeh_checks, "scout"),
     Abschnitt("menue", menue_checks, "menu"),
-    Abschnitt("menue_live", menue_live_checks, "menu tour/CamTour config/CamSettings"),
+    Abschnitt("menue_live", menue_live_checks, "menu tour/CamTour config/CamSettings stats"),
     Abschnitt("spotreiter", spotreiter_checks, "menu spot"),
     Abschnitt("spotmoderation", spotmoderation_checks, "menu spot/SpotModeration spot/SpotBans spot/CamSpots"),
     Abschnitt("tourmoderation", tourmoderation_checks, "menu tour/TourModeration tour/TourBans tour/CamTour"),
@@ -21074,7 +21115,7 @@ DAUER_VORGABE = {
     "zeit_wetter": 46, "nachtsicht_wahl": 66, "naehe": 60, "einstellungen": 89, "teilen": 92,
     "fuehrung": 199, "fuehrung_ohne_cam": 148, "herzen_folgen": 60, "gaestebuch": 178, "weiter": 34,
     "weiter_himmel": 45, "alle_einladen": 70, "fuehrung_himmel": 80, "ausspaehen": 50,
-    "menue": 163, "menue_live": 75, "spotreiter": 112, "spotmoderation": 130, "tourmoderation": 99,
+    "menue": 163, "menue_live": 95, "spotreiter": 112, "spotmoderation": 130, "tourmoderation": 99,
     "spot_nur_im_cam": 28, "spot_ansicht": 91, "webkarte": 75, "erze": 69, "anstupsen": 81,
     "funk": 77, "traenke": 58, "treffergrund": 77, "anfassen": 79, "sulfur_cube": 59,
     "ruestung": 10, "rueckstoss": 560, "rueckstoss_mob": 183, "schieben": 45, "waerter_ziel": 80,
