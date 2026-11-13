@@ -2600,6 +2600,26 @@ bot._client.on('entity_metadata', (packet) => {
     if (m.key === 7) frosts.push({ t: Date.now(), value: m.value });
   }
 });
+// Die eigenen Herzen, wie ein echter Client sie haelt: aus dem Paket
+// update_health und aus Eintrag 9 der eigenen Entitaetsdaten, mit dem Wert,
+// den er davor hielt. Bringt ein update_health weniger, spielt ein echter
+// Client einen Treffer, bringt es mehr, blinken die Herzen - nur das erste
+// nach dem Betreten nimmt er hin, wie es ist. Die Entitaetsdaten nimmt er
+// immer hin. Fuer die Herzen des Leaders beim Folgen.
+const hearts = [];
+let heartsHeld = null;
+bot._client.on('update_health', (packet) => {
+  hearts.push({ t: Date.now(), kind: 'health', before: heartsHeld, value: packet.health });
+  heartsHeld = packet.health;
+});
+bot._client.on('entity_metadata', (packet) => {
+  if (!bot.entity || packet.entityId !== bot.entity.id) return;
+  for (const m of packet.metadata || []) {
+    if (m.key !== 9) continue;
+    hearts.push({ t: Date.now(), kind: 'data', before: heartsHeld, value: m.value });
+    heartsHeld = m.value;
+  }
+});
 // Was der Server diesem Client fuer den eigenen Spieler in die Haende legt
 // (Paket entity_equipment mit der eigenen Nummer: Platz 0 die Hand, 1 die
 // zweite Hand) - eine Fuehrung ohne Cam-Modus malt ihm so die Items des
@@ -3350,6 +3370,8 @@ async function handle(cmd) {
       // Den Arm schwingen, wie ein echter Client beim Schlagen und Abbauen.
       bot._client.write('arm_animation', { hand: cmd.off ? 'off_hand' : 'main_hand' });
       return { swung: true };
+    case 'hearts':
+      return { packets: hearts.slice(cmd.since || 0), count: hearts.length, held: heartsHeld };
     case 'own_equipment':
       return { packets: ownEquipment.slice(cmd.since || 0), count: ownEquipment.length,
                resends: inventoryResends, last_resend: lastInventoryResend };
@@ -9501,6 +9523,124 @@ def fuehrung_ohne_cam_checks(env, bot):
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test der Fuehrung ohne Cam-Modus: {exc}")
+
+
+def herzen_folgen_checks(env, bot):
+    """follow.mirror-health ohne Treffer: Beginnt eine Fuehrung, sieht der
+    Gast die Herzen des Leaders ohne Cam-Modus als seine, endet sie, wieder
+    seine eigenen - und keins von beiden spielt sein Client als Treffer oder
+    laesst die Herzen blinken.
+
+    Ein echter Client haelt die Herzen aus update_health gegen die davor:
+    weniger ist ein Treffer, mehr blinkt. Die Herzen in den Entitaetsdaten
+    nimmt er hin. Der Bot des Gastes schreibt beides mit (Aktion hearts),
+    gezaehlt wird jedes update_health, das am gehaltenen Wert etwas aendert.
+
+    Der Bot hat 10 Herzen (max_health 10), der Gast 20: Folgt er, haelt sein
+    Client 10, ohne Treffer. Trifft den Bot ein Schaden von 2, kommt der beim
+    Gast als Treffer an, von 10 auf 8 - der Bot heilt gleich wieder, und das
+    geht beim Gast mit. Verlaesst er die Fuehrung, haelt er
+    wieder 20, ohne Blinken. Dann umgekehrt: der Bot 20, der Gast 6
+    (max_health 6). Folgt er, haelt er 20, ohne Blinken, und verlaesst er
+    die Fuehrung, wieder 6, ohne Treffer.
+    """
+    def folgen():
+        befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
+        return gesagt(dort, rf"You follow {BOT_NAME} now")
+
+    def herzen():
+        return zuschauer.call("hearts")
+
+    def sichtbar(seit):
+        """Die update_health seit seit, die am gehaltenen Wert etwas aendern:
+        die Treffer und das Blinken eines echten Clients."""
+        return [p for p in zuschauer.call("hearts", since=seit).get("packets", [])
+                if p.get("kind") == "health" and p.get("before") is not None
+                and abs(p.get("value", 0.0) - p["before"]) > 1e-4]
+
+    def haelt(antwort, wert):
+        return antwort.get("held") is not None and abs(antwort["held"] - wert) < 0.01
+
+    def am_server(name):
+        since = bot.mark()
+        bot.chat(f"/data get entity {name} Health")
+        hit = bot.expect("entity data", since, 4000)
+        treffer = re.search(r"entity data:\s*(-?[\d.]+)", strip_colors(hit["text"])) if hit else None
+        return float(treffer.group(1)) if treffer else None
+
+    def bereitstellen(leader, gast_max):
+        """Den Bot auf leader Herzen bringen, den Gast auf gast_max, beide
+        ausserhalb des Cam-Modus nebeneinander."""
+        cam_off(zuschauer)
+        console(env, f"attribute {BOT_NAME} minecraft:max_health base set {leader}", pause=0.3)
+        console(env, f"effect give {BOT_NAME} minecraft:instant_health 1 3 true", pause=0.3)
+        console(env, f"attribute {ZUSCHAUER_NAME} minecraft:max_health base set {gast_max}", pause=0.3)
+        console(env, f"effect give {ZUSCHAUER_NAME} minecraft:instant_health 1 3 true", pause=1.0)
+        hinstellen(bot, x, y, z)
+        console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
+
+    if not FIND.test("Cam-Modus ist vor dem Test der Herzen beim Folgen aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    gast = (x - 4, y, z)
+    console(env, f"fill {_floor(x) - 6} {y} {_floor(z) - 4} {_floor(x) + 4} {y + 6} {_floor(z) + 4} minecraft:air",
+            pause=0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    try:
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Herzen beim Folgen kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+
+        bereitstellen(10, 20)
+        FIND.test("Der Bot hat 10 Herzen, der Gast 20", am_server(BOT_NAME) == 10.0
+                  and am_server(ZUSCHAUER_NAME) == 20.0 and haelt(herzen(), 20.0), str(herzen().get("held")))
+        seit = herzen().get("count", 0)
+        if not FIND.test("Der Gast folgt dem Bot mit 10 Herzen", folgen(), ""):
+            return
+        FIND.test("Beim Start sieht der Gast die 10 Herzen des Bots, ohne Treffer",
+                  haelt(herzen(), 10.0) and not sichtbar(seit), f"{herzen().get('held')} / {sichtbar(seit)}")
+        seit = herzen().get("count", 0)
+        console(env, f"damage {BOT_NAME} 2", pause=1.0)
+        treffer = sichtbar(seit)
+        # Danach heilt er gleich wieder: die Herzen des Gastes gehen mit.
+        FIND.test("Ein Treffer des Bots kommt beim Gast als Treffer an, von 10 auf 8",
+                  any(abs(p["before"] - 10.0) < 0.01 and abs(p["value"] - 8.0) < 0.01 for p in treffer), str(treffer))
+        seit = herzen().get("count", 0)
+        befehl(zuschauer, "/cam follow leave", warten=2.0)
+        FIND.test("Verlaesst er die Fuehrung, sieht er wieder seine 20, ohne Blinken",
+                  haelt(herzen(), 20.0) and not sichtbar(seit), f"{herzen().get('held')} / {sichtbar(seit)}")
+
+        bereitstellen(20, 6)
+        FIND.test("Der Bot hat 20 Herzen, der Gast 6", am_server(BOT_NAME) == 20.0
+                  and am_server(ZUSCHAUER_NAME) == 6.0 and haelt(herzen(), 6.0), str(herzen().get("held")))
+        seit = herzen().get("count", 0)
+        if not FIND.test("Der Gast folgt dem Bot mit 20 Herzen", folgen(), ""):
+            return
+        FIND.test("Beim Start sieht der Gast die 20 Herzen des Bots, ohne Blinken",
+                  haelt(herzen(), 20.0) and not sichtbar(seit), f"{herzen().get('held')} / {sichtbar(seit)}")
+        seit = herzen().get("count", 0)
+        befehl(zuschauer, "/cam follow leave", warten=2.0)
+        FIND.test("Verlaesst er die Fuehrung, sieht er wieder seine 6, ohne Treffer",
+                  haelt(herzen(), 6.0) and not sichtbar(seit), f"{herzen().get('held')} / {sichtbar(seit)}")
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                cam_off(zuschauer)
+                console(env, f"attribute {ZUSCHAUER_NAME} minecraft:max_health base set 20", pause=0.3)
+                console(env, f"effect give {ZUSCHAUER_NAME} minecraft:instant_health 1 3 true", pause=0.5)
+                zuschauer.stop()
+            cam_off(bot)
+            console(env, f"attribute {BOT_NAME} minecraft:max_health base set 20", pause=0.3)
+            console(env, f"effect give {BOT_NAME} minecraft:instant_health 1 3 true", pause=0.3)
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Herzen beim Folgen: {exc}")
 
 
 def alle_einladen_checks(env, bot):
@@ -19997,6 +20137,7 @@ ABSCHNITTE = [
     Abschnitt("teilen", teilen_checks, "spot"),
     Abschnitt("fuehrung", fuehrung_checks, "tour speed"),
     Abschnitt("fuehrung_ohne_cam", fuehrung_ohne_cam_checks, "tour display/CamNameTag scoreboard/GuideTeam"),
+    Abschnitt("herzen_folgen", herzen_folgen_checks, "tour/GuideMirror tour/QuietHearts"),
     Abschnitt("gaestebuch", gaestebuch_checks, "spot/SpotGuestbook spot/CamSpots spot/SpotViews menu/CamMenu"),
     Abschnitt("weiter", weiter_checks, "resume"),
     Abschnitt("weiter_himmel", weiter_himmel_checks,
@@ -20431,7 +20572,7 @@ DAUER_VORGABE = {
     "welten": 18, "angriff": 62, "afk": 56, "herzen_am_namen": 34, "herzen": 18, "wartezeit": 46, "akku_speicher": 35,
     "startverzoegerung": 44, "flugspur": 58, "vorschlaege": 10, "aussichtspunkte": 103, "foto": 84,
     "zeit_wetter": 46, "nachtsicht_wahl": 66, "naehe": 60, "einstellungen": 89, "teilen": 92,
-    "fuehrung": 199, "fuehrung_ohne_cam": 148, "gaestebuch": 178, "weiter": 34,
+    "fuehrung": 199, "fuehrung_ohne_cam": 148, "herzen_folgen": 60, "gaestebuch": 178, "weiter": 34,
     "weiter_himmel": 45, "alle_einladen": 70, "fuehrung_himmel": 80, "ausspaehen": 50,
     "menue": 163, "spotreiter": 112, "spotmoderation": 130, "tourmoderation": 99,
     "spot_nur_im_cam": 28, "spot_ansicht": 91, "webkarte": 75, "erze": 69, "anstupsen": 81,

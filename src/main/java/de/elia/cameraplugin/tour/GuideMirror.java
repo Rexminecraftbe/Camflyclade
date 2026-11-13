@@ -5,6 +5,8 @@ import de.elia.cameraplugin.session.ClientFrost;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
@@ -97,6 +99,11 @@ import java.util.function.UnaryOperator;
  * {@link #MARK}. The mark shows nowhere, but to the client the item is another
  * one, which it lowers and raises as the guide's does.</p>
  *
+ * <p>A client plays a hit where the hearts it is sent are fewer than before.
+ * The guide's hearts at the start of the tour and the guest's own at its end
+ * are no hit, so they go to his client in a way that plays none, see
+ * {@link QuietHearts}. A hit of the guide's, his guests see.</p>
+ *
  * <p>Hearts of 0 are never sent: the client would show the screen of death.
  * A guide who dies ends the tour first, see {@link CamTour}.</p>
  */
@@ -122,6 +129,8 @@ final class GuideMirror {
     private final GuideFrost frost;
     /** Changes the server's packets with the guide's hands on their way to a guest. */
     private final GuideHands hands;
+    /** Shows a guest hearts without a hit. */
+    private final QuietHearts quietHearts;
     /** An item of the guide's as the guests are shown it, for {@link GuideHands}. */
     private final UnaryOperator<ItemStack> asShown = item -> shown(item, false);
     /** What each guest's client was sent, by the id of the guest. */
@@ -189,10 +198,12 @@ final class GuideMirror {
         int sinceFrost;
     }
 
-    GuideMirror(CamSettings settings, GuideFrost frost, GuideHands hands, NamespacedKey mark) {
+    GuideMirror(CamSettings settings, GuideFrost frost, GuideHands hands, QuietHearts quietHearts,
+                NamespacedKey mark) {
         this.settings = settings;
         this.frost = frost;
         this.hands = hands;
+        this.quietHearts = quietHearts;
         this.mark = mark;
     }
 
@@ -404,11 +415,18 @@ final class GuideMirror {
      * Sends the guest the guide's hearts - with his own hunger -, if they or
      * his own changed, or now and then. Hearts of 0 never: his client would
      * show the screen of death.
+     *
+     * <p>Before each update his client is shown, without a hit, the guide's
+     * hearts it was sent last - at the start, the guide's of now -, see
+     * {@link QuietHearts}. Whatever of his own the server sent in between
+     * does not count then: all his client plays is what the guide's hearts
+     * did, a hit where the guide was hit. The start of the tour it plays as
+     * nothing.</p>
      */
     private void hearts(Player guide, Player guest, Shown state, boolean refresh) {
         if (!settings.isTourMirrorHealth()) {
             if (state.heartsShown) {
-                guest.sendHealthUpdate();
+                ownHearts(guest);
                 state.heartsShown = false;
             }
             return;
@@ -420,6 +438,7 @@ final class GuideMirror {
         boolean ownChanged = guest.getHealth() != state.ownHealth || guest.getFoodLevel() != state.ownFood
                 || guest.getSaturation() != state.ownSaturation;
         if (refresh || !state.heartsShown || ownChanged || health != state.sentHealth) {
+            quietHearts.show(guest, state.heartsShown ? state.sentHealth : health);
             guest.sendHealthUpdate(health, guest.getFoodLevel(), guest.getSaturation());
             state.heartsShown = true;
             state.sentHealth = health;
@@ -427,6 +446,28 @@ final class GuideMirror {
             state.ownFood = guest.getFoodLevel();
             state.ownSaturation = guest.getSaturation();
         }
+    }
+
+    /**
+     * Gives the guest's client his own hearts back, without a hit: fewer than
+     * the guide's, they would look like one, see {@link QuietHearts}.
+     */
+    private void ownHearts(Player guest) {
+        quietHearts.show(guest, ownShown(guest));
+        guest.sendHealthUpdate();
+    }
+
+    /**
+     * The guest's own hearts as {@code sendHealthUpdate} sends them: scaled,
+     * where the server scales them for him, see {@code Player#setHealthScale}.
+     */
+    private static double ownShown(Player guest) {
+        AttributeInstance max = guest.getAttribute(Attribute.MAX_HEALTH);
+        if (!guest.isHealthScaled() || max == null || max.getValue() <= 0.0) {
+            return guest.getHealth();
+        }
+        // The server divides by the maximum as a float.
+        return guest.getHealth() * guest.getHealthScale() / (float) max.getValue();
     }
 
     /** Sends the guest the guide's experience bar and level, if it or his own changed, or now and then. */
@@ -625,7 +666,7 @@ final class GuideMirror {
             return;
         }
         if (state.heartsShown) {
-            guest.sendHealthUpdate();
+            ownHearts(guest);
         }
         if (state.experienceShown) {
             guest.sendExperienceChange(guest.getExp(), guest.getLevel());
