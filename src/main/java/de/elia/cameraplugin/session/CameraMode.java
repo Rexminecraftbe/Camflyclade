@@ -10,6 +10,7 @@ import de.elia.cameraplugin.spot.SpotLook;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
+import org.bukkit.Color;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.entity.LivingEntity;
@@ -157,6 +158,9 @@ public final class CameraMode {
         double absorption = player.getAbsorptionAmount();
         // Health boost takes the health above the normal maximum with it.
         double health = player.getHealth();
+        // Before the effects are paused as well: the invisibility among them
+        // keeps him off the locator bar, and then his body stays off it too.
+        Color locatorBarPoint = plugin.getLocatorBar().pointOf(player);
         Collection<PotionEffect> pausedEffects = new ArrayList<>();
         for (PotionEffect effect : player.getActivePotionEffects()) {
             pausedEffects.add(effect);
@@ -252,6 +256,7 @@ public final class CameraMode {
         // Before he joins the team of camera mode, further down: the crash file
         // keeps the one he stands in now.
         cameraData.setTeamAtStart(plugin.getNoCollisionTeam().teamOf(player));
+        cameraData.setLocatorBarPoint(locatorBarPoint);
         cameraPlayers.put(player.getUniqueId(), cameraData);
 
         // Two ticks and not one: the world has to tick once with him in
@@ -279,6 +284,10 @@ public final class CameraMode {
                 if (settings.isCameraHeadEnabled()) {
                     player.getInventory().setHelmet(CameraHead.create(plugin.getLogger()));
                 }
+                // As he turns invisible, his point on the locator bar moves
+                // over to his body - and the body has lived through its first
+                // tick by now, which the bar waits for.
+                plugin.getLocatorBar().startFor(player, cameraData);
                 // With what the game mode of the camera brought along.
                 plugin.getCrashGuard().save(player, cameraData);
             }
@@ -417,6 +426,7 @@ public final class CameraMode {
             plugin.getScoutGuard().stopFor(player);
             plugin.getSky().stopFor(player);
             plugin.getOreHider().stopFor(player);
+            plugin.getLocatorBar().stopFor(player);
             team.updateViewerTeam(player);
             plugin.getCamModeObjective().setScore(player, 0);
             return;
@@ -486,6 +496,9 @@ public final class CameraMode {
         player.updateInventory();
 
         player.removePotionEffect(PotionEffectType.INVISIBILITY);
+        // Back on the locator bar where he stands now, at his body - whose
+        // point goes with it further down, in this same tick.
+        plugin.getLocatorBar().stopFor(player);
         // Before the paused effects come back: night vision among them would
         // otherwise be taken off along with the one of camera mode.
         plugin.getNightVision().stopFor(player);
