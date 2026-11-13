@@ -2524,6 +2524,10 @@ bot.on('death', () => { dead = true; out({ event: 'death' }); });
 bot.on('kicked', (reason) => out({ event: 'kicked', reason: String(reason) }));
 bot.on('error', (err) => out({ event: 'error', message: String(err && err.message || err) }));
 bot.on('end', (reason) => { out({ event: 'end', reason: String(reason) }); });
+// Wie oft der Server ein Fenster geoeffnet hat: Bleibt die Zahl, ist es noch
+// dasselbe Fenster, nur neu befuellt.
+let windowOpens = 0;
+bot.on('windowOpen', () => { windowOpens++; });
 function soundText(packet) {
   try {
     return JSON.stringify(packet, (k, v) => (typeof v === 'bigint' ? String(v) : v));
@@ -3296,6 +3300,8 @@ async function handle(cmd) {
       // auch mit leeren Haenden, als Paket ohne Ort.
       bot._client.write('block_dig', { status: 6, location: { x: 0, y: 0, z: 0 }, face: 0, sequence: 0 });
       return { swapped: true };
+    case 'window_opens':
+      return { count: windowOpens, id: bot.currentWindow ? bot.currentWindow.id : null };
     case 'window':
       return { open: !!bot.currentWindow,
                title: bot.currentWindow ? String(bot.currentWindow.title || '') : null };
@@ -5573,6 +5579,10 @@ def statistik_checks(env, bot):
             return
         bot.call("fly", wait=30, dy=6, timeout=15000)
         time.sleep(1)
+        z = befehl(bot, "/cam stats")
+        FIND.test("/cam stats im Flug: der Flug, der gerade laeuft, zaehlt schon mit und sagt, wie lange er geht",
+                  zahl(z, r"Times in cam mode: (\d+)") == mal + 1 and gesagt(z, r"In cam mode right now: "),
+                  zeige(z))
         cam_off(bot)
         z = befehl(bot, "/cam stats")
         FIND.test("/cam stats zaehlt den Flug", zahl(z, r"Times in cam mode: (\d+)") == mal + 1, zeige(z))
@@ -10798,6 +10808,258 @@ def menue_checks(env, bot):
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test des Menues: {exc}")
+
+
+def menue_live_checks(env, bot):
+    """menu.live-update: Offene Seiten des Menues zeigen von selbst, was sich
+    aendert - im selben Fenster, ohne dass der Bot etwas tut.
+
+    Voreingestellt steht live-update: true da - nachgesehen in der Datei, die
+    das Plugin mitbringt. Der Bot ist im Cam-Modus und hat die Seite des
+    Folgens offen, niemand ist in der Naehe: "Nobody to invite". Kommt der
+    zweite Spieler auf vier Bloecke heran, steht er gleich darauf vorn (0),
+    mit seiner Entfernung; geht er auf neun, steht dort neun. Geht er weit
+    weg, bleibt sein Platz grau stehen ("No longer here", mit seinem Namen),
+    und kommt er zurueck, steht er wieder auf demselben Platz. Ein Klick
+    darauf gleich, nachdem er von selbst wieder da ist, zaehlt nicht (der
+    Klickschutz von drei Vierteln einer Sekunde); ein Klick danach laedt ihn
+    ein, und die Zeit, die die Einladung noch hat, zaehlt unter ihm von
+    selbst herunter. Nimmt er an, steht er auf demselben Platz als Follower,
+    und links unten (47) kommt "Let everybody go" dazu. Das alles im selben
+    Fenster: Der Bot zaehlt, wie oft der Server ein Fenster geoeffnet hat.
+
+    Die erste Seite: Laedt der zweite Spieler den Bot ein, steht unter dem
+    Knopf des Folgens (9) von selbst "Invitations for you: 1", und er
+    glaenzt; endet sein Cam-Modus, ist das wieder weg.
+
+    Die Admin-Seite, wer im Cam-Modus ist: Startet der zweite Spieler, steht
+    er von selbst in der Liste, und die Zeit im Cam-Modus zaehlt weiter.
+    Endet er, bleibt sein Platz grau; neu geoeffnet ist er weg, und die
+    Liste sagt, dass niemand im Cam-Modus ist.
+
+    Die Statistik zaehlt den Flug, der gerade laeuft, schon mit: Auf der
+    Admin-Seite der Statistik steht unter dem zweiten Spieler im Cam-Modus
+    "In cam mode right now", und was dort steht, waechst von selbst. Unter
+    dem Knopf der eigenen Statistik (21) genauso, solange der Bot fliegt;
+    endet sein Flug, sagt /cam stats so viele Fluege, wie eben dort standen.
+
+    Mit live-update: false bleibt die offene Liste, wie sie war, als sie
+    aufging; neu geoeffnet zeigt sie, was jetzt gilt.
+    """
+    def fenster(client):
+        return client.call("window_slots", wait=10)
+
+    def klick(client, slot, warten=1.5):
+        client.call("click_window", wait=15, slot=slot, button=0, mode=0)
+        time.sleep(warten)
+
+    def geoeffnet(client):
+        return client.call("window_opens", wait=10).get("count")
+
+    def platz(client, slot):
+        return item_text(fenster(client).get("slots", {}).get(str(slot)))
+
+    def warten_auf(client, slot, bedingung, sekunden=4.0):
+        """Bis ein Platz des offenen Fensters von selbst zeigt, was die
+        Bedingung will - der Bot tut dabei nichts als nachzusehen."""
+        ende = time.time() + sekunden
+        text = ""
+        while time.time() < ende:
+            text = platz(client, slot)
+            if bedingung(text):
+                return True, text
+            time.sleep(0.1)
+        return False, text
+
+    def bloecke(text):
+        treffer = re.search(r"(\d+) blocks away", text)
+        return int(treffer.group(1)) if treffer else None
+
+    def sekunden(text, muster):
+        treffer = re.search(muster, text)
+        return int(treffer.group(1)) if treffer else None
+
+    def admin_liste():
+        """Die Liste der Admin-Seite, wer im Cam-Modus ist, neu geoeffnet."""
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 23)
+        klick(bot, 10)
+        return fenster(bot)
+
+    if not FIND.test("Cam-Modus ist vor dem Test der lebenden Seiten aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    console(env, f"fill {_floor(x) - 10} {y} {_floor(z) - 3} {_floor(x) + 2} {y + 6} {_floor(z) + 3} minecraft:air",
+            pause=0.5)
+    weit = f"{x + 60} {y} {z}"
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    try:
+        FIND.test("Voreingestellt steht menu.live-update: true da",
+                  re.search(r"(?m)^  live-update:\s*true\s*$", quelle_config(env)) is not None, "")
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die lebenden Seiten kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        hinstellen(bot, x, y, z)
+        console(env, f"tp {ZUSCHAUER_NAME} {weit}", pause=0.5)
+        if not FIND.test("Cam-Modus fuer die lebende Seite des Folgens gestartet", cam_on(bot), ""):
+            return
+
+        # --- Die Seite des Folgens
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 9)
+        f = fenster(bot)
+        anfang = geoeffnet(bot)
+        FIND.test("Die Seite des Folgens ist offen, niemand in der Naehe",
+                  "Follow" in (f.get("title") or "") and "Nobody to invite" in item_text(f.get("slots", {}).get("22")),
+                  str(f)[:300])
+        console(env, f"tp {ZUSCHAUER_NAME} {x - 4} {y} {z}", pause=0)
+        da, text = warten_auf(bot, 0, lambda t: ZUSCHAUER_NAME in t and bloecke(t) is not None)
+        nah = bloecke(text)
+        FIND.test("Kommt er heran, steht er von selbst vorn auf der offenen Seite, mit seiner Entfernung",
+                  da and nah is not None and nah <= 6, text)
+        FIND.test("... und \"Nobody to invite\" ist weg", "Nobody to invite" not in platz(bot, 22), platz(bot, 22))
+        console(env, f"tp {ZUSCHAUER_NAME} {x - 9} {y} {z}", pause=0)
+        da, text = warten_auf(bot, 0, lambda t: bloecke(t) is not None and bloecke(t) > (nah or 0) + 2)
+        FIND.test("Geht er weiter weg, steht von selbst die neue Entfernung da", da, text)
+        console(env, f"tp {ZUSCHAUER_NAME} {weit}", pause=0)
+        da, text = warten_auf(bot, 0, lambda t: "No longer here" in t)
+        FIND.test("Geht er ganz weg, bleibt sein Platz grau stehen, mit seinem Namen",
+                  da and ZUSCHAUER_NAME in text, text)
+        seit_zuschauer = zuschauer.mark()
+        seit_bot = bot.mark()
+        console(env, f"tp {ZUSCHAUER_NAME} {x - 4} {y} {z}", pause=0)
+        da, text = warten_auf(bot, 0, lambda t: bloecke(t) is not None)
+        if da:
+            # Sofort, wie einer, der schon auf den grauen Platz gezielt hatte.
+            klick(bot, 0, warten=1.5)
+        FIND.test("Kommt er zurueck, steht er wieder auf demselben Platz", da and ZUSCHAUER_NAME in text, text)
+        FIND.test("Ein Klick gleich, nachdem er von selbst wieder da ist, zaehlt nicht: keine Einladung",
+                  not gesagt(zeilen_seit(zuschauer, seit_zuschauer), rf"{BOT_NAME} invites you to follow them")
+                  and not gesagt(zeilen_seit(bot, seit_bot), rf"You invited {ZUSCHAUER_NAME}"),
+                  zeige(zeilen_seit(bot, seit_bot)))
+        klick(bot, 0, warten=1.5)
+        FIND.test("Ein Klick danach laedt ihn ein",
+                  gesagt(zeilen_seit(zuschauer, seit_zuschauer), rf"{BOT_NAME} invites you to follow them"),
+                  zeige(zeilen_seit(zuschauer, seit_zuschauer)))
+        vorher = sekunden(platz(bot, 0), r"runs out\s*in (\d+) s")
+        time.sleep(2.5)
+        nachher = sekunden(platz(bot, 0), r"runs out\s*in (\d+) s")
+        FIND.test("Die Zeit, die die Einladung noch hat, zaehlt von selbst herunter",
+                  vorher is not None and nachher is not None and nachher < vorher, f"{vorher} -> {nachher}")
+        befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=0.5)
+        da, text = warten_auf(bot, 0, lambda t: "Follows you" in t, sekunden=5.0)
+        FIND.test("Nimmt er an, steht er auf demselben Platz als Follower", da and ZUSCHAUER_NAME in text, text)
+        da, text = warten_auf(bot, 47, lambda t: "Let everybody go" in t)
+        FIND.test("... und links unten kommt von selbst \"Let everybody go\" dazu", da, text)
+        f = fenster(bot)
+        FIND.test("Das alles im selben Fenster: keins wurde neu geoeffnet",
+                  geoeffnet(bot) == anfang and f.get("open") and "Follow" in (f.get("title") or ""),
+                  f"{anfang} -> {geoeffnet(bot)}")
+        bot.call("close_window", wait=10)
+        cam_off(zuschauer)
+        cam_off(bot)
+
+        # --- Die erste Seite: eine Einladung kommt, und sie verfaellt
+        if FIND.test("Der zweite Spieler startet den Cam-Modus, um einzuladen", cam_on(zuschauer), ""):
+            befehl(bot, "/cam menu", warten=1.0)
+            anfang = geoeffnet(bot)
+            FIND.test("Vorher steht unter dem Knopf des Folgens keine Einladung",
+                      "Invitations for you" not in platz(bot, 9), platz(bot, 9))
+            befehl(zuschauer, f"/cam follow invite {BOT_NAME}", warten=0)
+            da, text = warten_auf(bot, 9, lambda t: "Invitations for you: 1" in t)
+            FIND.test("Erste Seite: die Einladung steht von selbst unter dem Knopf des Folgens, und er glaenzt",
+                      da and (fenster(bot).get("slots", {}).get("9") or {}).get("glint"), text)
+            cam_off(zuschauer)
+            da, text = warten_auf(bot, 9, lambda t: "Invitations for you" not in t)
+            FIND.test("Endet sein Cam-Modus, ist die Einladung von selbst wieder weg", da, text)
+            FIND.test("... im selben Fenster", geoeffnet(bot) == anfang, f"{anfang} -> {geoeffnet(bot)}")
+            bot.call("close_window", wait=10)
+
+        # --- Admin: wer im Cam-Modus ist
+        f = admin_liste()
+        anfang = geoeffnet(bot)
+        FIND.test("Die Admin-Liste ist offen, niemand im Cam-Modus",
+                  "Who is in cam mode" in (f.get("title") or "")
+                  and "Nobody is in cam mode" in item_text(f.get("slots", {}).get("22")), str(f)[:300])
+        cam_on(zuschauer)
+        da, text = warten_auf(bot, 0, lambda t: ZUSCHAUER_NAME in t and "In cam mode for" in t)
+        FIND.test("Admin: wer den Cam-Modus startet, steht von selbst in der Liste", da, text)
+        vorher = platz(bot, 0)
+        time.sleep(2.5)
+        nachher = platz(bot, 0)
+        FIND.test("... und die Zeit im Cam-Modus zaehlt von selbst weiter",
+                  "In cam mode for" in nachher and nachher != vorher, f"{vorher} -> {nachher}")
+        cam_off(zuschauer)
+        da, text = warten_auf(bot, 0, lambda t: "No longer here" in t)
+        FIND.test("Endet er, bleibt sein Platz grau stehen", da and ZUSCHAUER_NAME in text, text)
+        FIND.test("... im selben Fenster", geoeffnet(bot) == anfang, f"{anfang} -> {geoeffnet(bot)}")
+        bot.call("close_window", wait=10)
+        f = admin_liste()
+        FIND.test("Neu geoeffnet ist er weg, und die Liste sagt, dass niemand im Cam-Modus ist",
+                  "0" not in f.get("slots", {}) and "Nobody is in cam mode" in item_text(f.get("slots", {}).get("22")),
+                  str(sorted(f.get("slots", {})))[:200])
+        bot.call("close_window", wait=10)
+
+        # --- Die Statistik zaehlt den Flug, der gerade laeuft
+        if FIND.test("Der zweite Spieler fliegt fuer die Statistik", cam_on(zuschauer), ""):
+            befehl(bot, "/cam menu", warten=1.0)
+            klick(bot, 23)
+            klick(bot, 14)
+            f = fenster(bot)
+            slot = next((n for n, item in f.get("slots", {}).items()
+                         if int(n) < 45 and ZUSCHAUER_NAME in item_text(item)), None)
+            vorher = item_text(f.get("slots", {}).get(slot)) if slot else ""
+            time.sleep(2.5)
+            nachher = platz(bot, slot) if slot else ""
+            FIND.test("Admin-Statistik: der Flug, der gerade laeuft, zaehlt mit, und was dasteht, waechst von selbst",
+                      "In cam mode right now" in vorher and "In cam mode right now" in nachher and nachher != vorher,
+                      f"{vorher} -> {nachher}")
+            bot.call("close_window", wait=10)
+            cam_off(zuschauer)
+        if FIND.test("Der Bot fliegt fuer seine eigene Statistik", cam_on(bot), ""):
+            befehl(bot, "/cam menu", warten=1.0)
+            vorher = platz(bot, 21)
+            time.sleep(2.5)
+            nachher = platz(bot, 21)
+            FIND.test("Erste Seite: die eigene Statistik zaehlt den Flug mit und waechst von selbst",
+                      "In cam mode right now" in vorher and "In cam mode right now" in nachher and nachher != vorher,
+                      f"{vorher} -> {nachher}")
+            mal = re.search(r"Times in cam mode: (\d+)", nachher)
+            bot.call("close_window", wait=10)
+            cam_off(bot)
+            z = befehl(bot, "/cam stats")
+            FIND.test("Endet der Flug, springt nichts: /cam stats sagt so viele Fluege, wie eben im Menue standen",
+                      mal is not None and gesagt(z, rf"Times in cam mode: {mal.group(1)}$"), zeige(z))
+
+        # --- Ohne live-update
+        set_option(env, "live-update", "false", "menu")
+        admin_liste()
+        cam_on(zuschauer)
+        time.sleep(3.0)
+        text = platz(bot, 0)
+        FIND.test("live-update: false - die offene Liste bleibt, wie sie war", ZUSCHAUER_NAME not in text, text)
+        bot.call("close_window", wait=10)
+        f = admin_liste()
+        FIND.test("... neu geoeffnet zeigt sie ihn", ZUSCHAUER_NAME in item_text(f.get("slots", {}).get("0")),
+                  str(f)[:300])
+        bot.call("close_window", wait=10)
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                cam_off(zuschauer)
+                zuschauer.stop()
+            bot.call("close_window", wait=10)
+            cam_off(bot)
+            set_option(env, "live-update", "true", "menu")
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der lebenden Seiten: {exc}")
 
 
 def spotreiter_checks(env, bot):
@@ -20422,6 +20684,7 @@ ABSCHNITTE = [
     Abschnitt("fuehrung_himmel", fuehrung_himmel_checks, "tour/CamTour sky nightvision"),
     Abschnitt("ausspaehen", ausspaeh_checks, "scout"),
     Abschnitt("menue", menue_checks, "menu"),
+    Abschnitt("menue_live", menue_live_checks, "menu tour/CamTour config/CamSettings stats"),
     Abschnitt("spotreiter", spotreiter_checks, "menu spot"),
     Abschnitt("spotmoderation", spotmoderation_checks, "menu spot/SpotModeration spot/SpotBans spot/CamSpots"),
     Abschnitt("tourmoderation", tourmoderation_checks, "menu tour/TourModeration tour/TourBans tour/CamTour"),
@@ -20852,7 +21115,7 @@ DAUER_VORGABE = {
     "zeit_wetter": 46, "nachtsicht_wahl": 66, "naehe": 60, "einstellungen": 89, "teilen": 92,
     "fuehrung": 199, "fuehrung_ohne_cam": 148, "herzen_folgen": 60, "gaestebuch": 178, "weiter": 34,
     "weiter_himmel": 45, "alle_einladen": 70, "fuehrung_himmel": 80, "ausspaehen": 50,
-    "menue": 163, "spotreiter": 112, "spotmoderation": 130, "tourmoderation": 99,
+    "menue": 163, "menue_live": 95, "spotreiter": 112, "spotmoderation": 130, "tourmoderation": 99,
     "spot_nur_im_cam": 28, "spot_ansicht": 91, "webkarte": 75, "erze": 69, "anstupsen": 81,
     "funk": 77, "traenke": 58, "treffergrund": 77, "anfassen": 79, "sulfur_cube": 59,
     "ruestung": 10, "rueckstoss": 560, "rueckstoss_mob": 183, "schieben": 45, "waerter_ziel": 80,

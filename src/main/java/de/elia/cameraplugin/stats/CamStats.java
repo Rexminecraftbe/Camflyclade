@@ -4,6 +4,7 @@ import de.elia.cameraplugin.battery.CamBattery;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
+import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.storage.PlayerRecord;
 import de.elia.cameraplugin.storage.PlayerStore;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
@@ -30,7 +31,10 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  *
  * <p>A camera mode counts once it has ended. One that a crash cut short
- * never ended and is not counted.</p>
+ * never ended and is not counted. While one is going on, it is shown along
+ * with them as it would count if it ended now - one flight more, its time,
+ * its way and how far it got -, so that the numbers grow as it goes and do
+ * not jump when it ends; see {@link #lines}.</p>
  */
 public final class CamStats {
 
@@ -42,14 +46,16 @@ public final class CamStats {
     private final PlayerStore store;
     private final CamBattery battery;
     private final CamTimeLimit timeLimit;
+    private final CameraPlayers cameraPlayers;
 
     public CamStats(CamSettings settings, Messages messages, PlayerStore store, CamBattery battery,
-                    CamTimeLimit timeLimit) {
+                    CamTimeLimit timeLimit, CameraPlayers cameraPlayers) {
         this.settings = settings;
         this.messages = messages;
         this.store = store;
         this.battery = battery;
         this.timeLimit = timeLimit;
+        this.cameraPlayers = cameraPlayers;
     }
 
     /**
@@ -61,9 +67,13 @@ public final class CamStats {
         if (!settings.isStatsEnabled()) {
             return;
         }
-        long seconds = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - data.getStartedAt());
-        store.get(player.getUniqueId()).addSession(player.getName(), seconds,
+        store.get(player.getUniqueId()).addSession(player.getName(), seconds(data),
                 data.getDistanceFlown(), data.getFarthestFromBody());
+    }
+
+    /** How long a camera mode has been going on, in whole seconds, the way it counts once it ends. */
+    private static long seconds(CameraData data) {
+        return TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - data.getStartedAt());
     }
 
     /**
@@ -166,6 +176,11 @@ public final class CamStats {
      * them and the menu shows them under its button: the header, the
      * numbers, his battery while there is one and his cooldown while it
      * runs - or {@code stats-off} alone, with nothing to show.
+     *
+     * <p>While he is in camera mode, the flight going on is in the numbers
+     * already, as {@link #record} will add it once it ends, and
+     * {@code stats-flying} says how long it has been going: the menu, which
+     * draws them anew every second, shows them growing.</p>
      */
     public List<Line> lines(UUID id, String name) {
         List<Line> lines = new ArrayList<>();
@@ -175,19 +190,29 @@ public final class CamStats {
             return lines;
         }
         PlayerRecord record = store.peek(id);
+        CameraData flight = cameraPlayers.get(id);
+        long now = flight == null ? 0L : seconds(flight);
+        long sessions = record.getSessions() + (flight == null ? 0L : 1L);
         if (!settings.isStatsEnabled()) {
             // Only the battery is left to show.
             lines.add(new Line("stats-header", "{player}", name));
-        } else if (record.getSessions() == 0) {
+        } else if (sessions == 0) {
             lines.add(new Line("stats-none", "{player}", name));
         } else {
+            double flown = record.getDistanceFlown() + (flight == null ? 0.0 : flight.getDistanceFlown());
+            double farthest = Math.max(record.getFarthestFromBody(),
+                    flight == null ? 0.0 : flight.getFarthestFromBody());
             lines.add(new Line("stats-header", "{player}", name));
-            lines.add(new Line("stats-sessions", "{count}", String.valueOf(record.getSessions())));
-            lines.add(new Line("stats-total-time", "{time}", CamTimeLimit.formatDuration(record.getTotalSeconds())));
-            lines.add(new Line("stats-longest", "{time}", CamTimeLimit.formatDuration(record.getLongestSeconds())));
-            lines.add(new Line("stats-distance", "{distance}", String.valueOf(Math.round(record.getDistanceFlown()))));
-            lines.add(new Line("stats-farthest", "{distance}",
-                    String.valueOf(Math.round(record.getFarthestFromBody()))));
+            if (flight != null) {
+                lines.add(new Line("stats-flying", "{time}", CamTimeLimit.formatDuration(now)));
+            }
+            lines.add(new Line("stats-sessions", "{count}", String.valueOf(sessions)));
+            lines.add(new Line("stats-total-time", "{time}",
+                    CamTimeLimit.formatDuration(record.getTotalSeconds() + now)));
+            lines.add(new Line("stats-longest", "{time}",
+                    CamTimeLimit.formatDuration(Math.max(record.getLongestSeconds(), now))));
+            lines.add(new Line("stats-distance", "{distance}", String.valueOf(Math.round(flown))));
+            lines.add(new Line("stats-farthest", "{distance}", String.valueOf(Math.round(farthest))));
         }
         if (settings.isBatteryEnabled()) {
             lines.add(new Line("stats-battery",

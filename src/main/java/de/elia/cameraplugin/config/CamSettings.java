@@ -532,6 +532,8 @@ public final class CamSettings {
      * page or takes away, {@code menu.ban-shift-step}.
      */
     private int banShiftStep;
+    /** Whether the pages of the menu that are open are drawn anew by themselves, {@code menu.live-update}. */
+    private boolean menuLiveUpdate;
     private final Map<AdminButton, Integer> adminSlots = new EnumMap<>(AdminButton.class);
 
     /** Whether {@code /cam photo} is there, {@code photo-mode.enabled}. */
@@ -924,6 +926,7 @@ public final class CamSettings {
         readButtons(config, "menu.buttons", MenuButton.values(), menuIcons, menuSlots);
         readButtons(config, "menu.admin-buttons", AdminButton.values(), adminIcons, adminSlots);
         banShiftStep = config.getInt("menu.ban-shift-step", 10, 1, MAX_BAN_SHIFT_STEP);
+        menuLiveUpdate = config.getBoolean("menu.live-update", true);
         photoModeEnabled = config.getBoolean("photo-mode.enabled", true);
         photoHidePlayers = config.getBoolean("photo-mode.hide-players", true);
         photoHideBodies = config.getBoolean("photo-mode.hide-bodies", true);
@@ -2259,6 +2262,11 @@ public final class CamSettings {
     /** How many days, hours or minutes a click with shift adds to a ban in the menu or takes away. */
     public int getBanShiftStep() {
         return banShiftStep;
+    }
+
+    /** Whether the pages of the menu that are open are drawn anew by themselves, as things change. */
+    public boolean isMenuLiveUpdate() {
+        return menuLiveUpdate;
     }
 
     /** What a button of the main page of the menu shows. */
