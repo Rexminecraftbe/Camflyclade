@@ -14,6 +14,7 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.attribute.AttributeModifier;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
@@ -26,6 +27,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.EquipmentSlotGroup;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataContainer;
@@ -68,6 +70,8 @@ public final class BodySpawner implements Listener {
     private final NamespacedKey hitboxKey;
     private final NamespacedKey nameKey;
     private final NamespacedKey hiddenArmorAsset;
+    /** The modifier on the head of the armour stand, see {@link #keepOnLocatorBar}. */
+    private final NamespacedKey locatorBarHead;
     /** Whether the missing way to hide the "NPC" line has already been reported. */
     private boolean mannequinLabelReported = false;
 
@@ -84,6 +88,7 @@ public final class BodySpawner implements Listener {
         // Deliberately not a real equipment asset: the client finds nothing for
         // it and therefore draws nothing.
         hiddenArmorAsset = new NamespacedKey(plugin, "hidden_armor");
+        locatorBarHead = new NamespacedKey(plugin, "locator-bar-head");
     }
 
     /**
@@ -583,10 +588,28 @@ public final class BodySpawner implements Listener {
             // A plain head while the server has no skin of his: it would be
             // asked of Mojang for nothing, see PlayerSkins.
             PlayerSkins.putOn(skullMeta, player);
+            keepOnLocatorBar(skullMeta);
             playerHead.setItemMeta(skullMeta);
         }
         equipment.setHelmet(playerHead);
         return armorStand;
+    }
+
+    /**
+     * Takes from the head of the armour stand what keeps its wearer off the
+     * locator bar. Every head does that in the game, a player's head as much
+     * as a mob's, and the armour stand of the armorstand body would never get
+     * there, see {@link de.elia.cameraplugin.locator.CamLocatorBar}.
+     *
+     * <p>The head stands for the player's face here, not for a head he
+     * wears: whether something on his own head kept him off the bar was
+     * decided at the start, on him. The game takes the modifiers of an item
+     * as a whole, so one that changes nothing is enough to replace those it
+     * has of its kind.</p>
+     */
+    private void keepOnLocatorBar(SkullMeta head) {
+        head.addAttributeModifier(Attribute.WAYPOINT_TRANSMIT_RANGE, new AttributeModifier(locatorBarHead, 0.0,
+                AttributeModifier.Operation.ADD_NUMBER, EquipmentSlotGroup.HEAD));
     }
 
     /**

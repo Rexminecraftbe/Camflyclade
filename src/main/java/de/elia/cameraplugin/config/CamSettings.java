@@ -260,6 +260,8 @@ public final class CamSettings {
     private boolean bodyVisible;
     /** Whether the armour the body wears is drawn, {@code body.armor-visible}. */
     private boolean bodyArmorVisible;
+    /** Whether the locator bar points at the body instead of the camera, {@code body.locator-bar}. */
+    private boolean bodyOnLocatorBar;
     private BodyType bodyType;
     private MovementSensitivity movementSensitivity;
     /** {@code body.move-threshold} squared, so the square root can be skipped. */
@@ -772,6 +774,7 @@ public final class CamSettings {
         bodyNameStyle = NameStyle.read(config, "body.name", ChatColor.YELLOW);
         bodyVisible = config.getBoolean("body.visible", true);
         bodyArmorVisible = config.getBoolean("body.armor-visible", true);
+        bodyOnLocatorBar = config.getBoolean("body.locator-bar", true);
         movementSensitivity = resolveMovementSensitivity(config,
                 config.getInt("body.movement-sensitivity", MovementSensitivity.NORMAL.getId()));
         double moveThreshold = config.getDouble("body.move-threshold", 0.05, MIN_MOVE_THRESHOLD);
@@ -1689,6 +1692,11 @@ public final class CamSettings {
 
     public boolean isBodyArmorVisible() {
         return bodyArmorVisible;
+    }
+
+    /** {@code body.locator-bar}, see {@link de.elia.cameraplugin.locator.CamLocatorBar}. */
+    public boolean isBodyOnLocatorBar() {
+        return bodyOnLocatorBar;
     }
 
     public MovementSensitivity getMovementSensitivity() {

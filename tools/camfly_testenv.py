@@ -2545,6 +2545,21 @@ bot._client.on('world_particles', (packet) => particleLog.push(
 const spawnLog = [];
 bot._client.on('spawn_entity', (packet) => spawnLog.push(
   { t: Date.now(), id: packet.entityId, pos: [packet.x, packet.y, packet.z] }));
+// Die Punkte der Locator Bar (Paket tracked_waypoint): welcher dazukommt,
+// welcher sich bewegt und welcher geht, mit seiner Farbe - null, wenn der
+// Server keine schickt und der Client sie aus der UUID macht - und, wenn der
+// Punkt nah genug ist, seiner Stelle. Fuer body.locator-bar.
+const waypointLog = [];
+bot._client.on('tracked_waypoint', (packet) => {
+  const w = packet.waypoint || {};
+  const color = w.icon && w.icon.color;
+  const data = w.data;
+  waypointLog.push({
+    t: Date.now(), op: packet.operation, uuid: w.uuid ? String(w.uuid).toLowerCase() : null,
+    id: w.id || null, color: color ? (color.red << 16 | color.green << 8 | color.blue) : null,
+    type: w.type, pos: data && data.x !== undefined ? [data.x, data.y, data.z] : null
+  });
+});
 // Die Chatzeilen des Servers als Text des ganzen Pakets, wie bei den Toenen:
 // Klick und Hover stehen nur dort, der Text der Zeile hat sie nicht mehr.
 const chatPackets = [];
@@ -2812,6 +2827,12 @@ async function handle(cmd) {
       return { particles: particleLog.slice(cmd.since || 0), count: particleLog.length };
     case 'spawns':
       return { spawns: spawnLog.slice(cmd.since || 0), count: spawnLog.length };
+    case 'waypoints':
+      return { waypoints: waypointLog.slice(cmd.since || 0), count: waypointLog.length };
+    case 'control':
+      // Eine Taste festhalten oder loslassen, etwa sneak zum Schleichen.
+      bot.setControlState(cmd.state, !!cmd.value);
+      return {};
     case 'tab': {
       // Was der Server zur Tab-Vervollstaendigung vorschlaegt, fuer den Text
       // samt dem Schraegstrich vorn, so wie der Client ihn schickt. Hat er
@@ -18898,6 +18919,261 @@ def team_checks(env, bot):
         console(env, f"team remove {team}", pause=0.3)
 
 
+# ---------------------------------------------------------------------------
+# Die Locator Bar im Cam-Modus
+# ---------------------------------------------------------------------------
+
+def _f32(wert):
+    """Ein Wert auf float gerundet, wie Java ihn nach jedem Schritt in float
+    haelt. Fuer +, -, * und / gibt das genau das Ergebnis in float: double hat
+    Stellen genug, dass zweimal runden nichts verschiebt."""
+    return struct.unpack("f", struct.pack("f", wert))[0]
+
+
+def punktfarbe(text):
+    """Die Farbe, in der der Client den Punkt eines Spielers ohne eigene Farbe
+    und ohne Team auf der Locator Bar zeichnet, als 0xRRGGBB: der Hash seiner
+    UUID mit der Helligkeit 0.9, wie LocatorBar und ARGB.setBrightness sie
+    setzen. In float gerechnet wie dort - in double weicht hier und da ein
+    Kanal um eins ab."""
+    zahl = uuid.UUID(text).int
+    hilo = (zahl >> 64) ^ (zahl & 0xFFFFFFFFFFFFFFFF)
+    rgb = ((hilo >> 32) ^ hilo) & 0xFFFFFF
+    rot, gruen, blau = rgb >> 16 & 0xFF, rgb >> 8 & 0xFF, rgb & 0xFF
+    hell = _f32(0.9)
+    hoch, tief = max(rot, gruen, blau), min(rot, gruen, blau)
+    spanne = float(hoch - tief)
+    saettigung = _f32(spanne / hoch) if hoch else 0.0
+
+    def kanal(wert):
+        return math.floor(_f32(wert * 255.0) + 0.5)
+
+    if saettigung == 0.0:
+        grau = kanal(hell)
+        return grau << 16 | grau << 8 | grau
+    rot_anteil = _f32((hoch - rot) / spanne)
+    gruen_anteil = _f32((hoch - gruen) / spanne)
+    blau_anteil = _f32((hoch - blau) / spanne)
+    if rot == hoch:
+        ton = _f32(blau_anteil - gruen_anteil)
+    elif gruen == hoch:
+        ton = _f32(_f32(2.0 + rot_anteil) - blau_anteil)
+    else:
+        ton = _f32(_f32(4.0 + gruen_anteil) - rot_anteil)
+    ton = _f32(ton / 6.0)
+    if ton < 0.0:
+        ton = _f32(ton + 1.0)
+    sektor = _f32(_f32(ton - math.floor(ton)) * 6.0)
+    innen = _f32(sektor - math.floor(sektor))
+    unten = _f32(hell * _f32(1.0 - saettigung))
+    fallend = _f32(hell * _f32(1.0 - _f32(saettigung * innen)))
+    steigend = _f32(hell * _f32(1.0 - _f32(saettigung * _f32(1.0 - innen))))
+    r, g, b = {0: (hell, steigend, unten), 1: (fallend, hell, unten), 2: (unten, hell, steigend),
+               3: (unten, fallend, hell), 4: (steigend, unten, hell), 5: (hell, unten, fallend)}[int(sektor)]
+    return kanal(r) << 16 | kanal(g) << 8 | kanal(b)
+
+
+def leiste(wer):
+    """Die Punkte, die ein Bot gerade auf seiner Locator Bar hat, nach den
+    Paketen tracked_waypoint: UUID -> der letzte Stand des Punkts."""
+    punkte = {}
+    for punkt in wer.call("waypoints").get("waypoints", []):
+        schluessel = punkt.get("uuid") or punkt.get("id")
+        if punkt.get("op") == "untrack":
+            punkte.pop(schluessel, None)
+        else:
+            punkte[schluessel] = punkt
+    return punkte
+
+
+def ortungsleiste_checks(env, bot):
+    """body.locator-bar: Im Cam-Modus zeigt die Locator Bar auf den Koerper.
+
+    Auf der Leiste steht jedes Lebewesen, dessen waypoint_transmit_range
+    ueber null liegt - ein Spieler mit sechzig Millionen Bloecken, alles
+    andere mit null. Der Koerper bekommt die Reichweite des Spielers und seine
+    Farbe, die Kamera einen Modifikator, der ihre auf null bringt.
+
+    Der Zuschauer steht daneben und sieht, was ein anderer Spieler auf der
+    Leiste hat: ohne Cam-Modus den Bot, im Cam-Modus statt seiner einen
+    Punkt an der Stelle des Koerpers, in der Farbe des Bots - der aus seiner
+    UUID, oder der seines Teams -, und danach wieder den Bot. Wer beim Start
+    nicht auf der Leiste ist, mit einem geschnitzten Kuerbis auf dem Kopf,
+    dessen Koerper auch nicht; ein unsichtbarer Koerper nie, und mit
+    locator-bar: false keiner.
+
+    Bleibt der Modifikator nach einem Absturz am Spieler haengen, waere er
+    fuer immer von der Leiste: Wer damit hereinkommt, verliert ihn.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test der Locator Bar aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    ich = offline_uuid(BOT_NAME)
+    er = offline_uuid(ZUSCHAUER_NAME)
+    team = "camflyleiste"
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+
+    def koerperpunkte(wer):
+        """Was auf der Leiste steht und keiner der beiden Spieler ist."""
+        return {k: v for k, v in leiste(wer).items() if k not in (ich, er)}
+
+    def bis(bedingung, sekunden=4.0):
+        ende = time.time() + sekunden
+        while time.time() < ende:
+            if bedingung():
+                return True
+            time.sleep(0.2)
+        return bedingung()
+
+    def bot_drauf():
+        return ich in leiste(zuschauer)
+
+    def zeige_leiste(wer):
+        return ", ".join(f"{k[:8]} {v.get('op')} Farbe {v.get('color')} bei {v.get('pos')}"
+                         for k, v in leiste(wer).items()) or "leer"
+
+    def ohne_punkt(was):
+        """Cam-Modus an: weder der Bot noch ein Koerper auf der Leiste. Danach aus,
+        und der Bot ist wieder da."""
+        if not FIND.test(f"/cam startet ({was})", cam_on(bot), ""):
+            return
+        time.sleep(1.5)
+        FIND.test(f"{was}: im Cam-Modus ist der Bot nicht auf der Leiste des Zuschauers",
+                  bis(lambda: not bot_drauf()), zeige_leiste(zuschauer))
+        FIND.test(f"{was}: und kein Koerper steht darauf", not koerperpunkte(zuschauer), zeige_leiste(zuschauer))
+        cam_off(bot)
+
+    try:
+        FIND.test("Voreingestellt steht body.locator-bar: true da",
+                  re.search(r"(?m)^  locator-bar:\s*true\s*$", ausgeliefert(env)) is not None, "")
+        hinstellen(bot, x, y, z)
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Locator Bar kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 5} {y} {z} 90 0", pause=1.0)
+        if not FIND.test("Ohne Cam-Modus hat der Zuschauer den Bot auf der Leiste", bis(bot_drauf),
+                         zeige_leiste(zuschauer)):
+            return
+        FIND.test("Ohne Team schickt der Server fuer den Bot keine Farbe, der Client macht sie aus der UUID",
+                  leiste(zuschauer)[ich].get("color") is None, zeige_leiste(zuschauer))
+
+        # --- Der gewoehnliche Fall ---
+        if FIND.test("/cam startet fuer den Test der Locator Bar", cam_on(bot), ""):
+            FIND.test("Im Cam-Modus ist der Bot nicht mehr auf der Leiste des Zuschauers",
+                      bis(lambda: not bot_drauf()), zeige_leiste(zuschauer))
+            bis(lambda: len(koerperpunkte(zuschauer)) == 1)
+            punkte = koerperpunkte(zuschauer)
+            if FIND.test("Statt seiner steht genau ein Punkt auf der Leiste, der seines Koerpers",
+                         len(punkte) == 1, zeige_leiste(zuschauer)):
+                koerper_id, punkt = next(iter(punkte.items()))
+                FIND.test("Der Punkt steht, wo der Bot den Cam-Modus gestartet hat",
+                          punkt.get("pos") == [_floor(x), y, _floor(z)],
+                          f"bei {punkt.get('pos')}, erwartet {[_floor(x), y, _floor(z)]}")
+                FIND.test("Der Punkt hat die Farbe, die der Client dem Bot gibt",
+                          punkt.get("color") == punktfarbe(ich),
+                          f"{punkt.get('color')!r:>10}, erwartet {punktfarbe(ich):#08x}")
+                FIND.test("Der Kamera-Spieler selbst sieht seinen Koerper auf der Leiste",
+                          bis(lambda: koerper_id in leiste(bot)), zeige_leiste(bot))
+                bot.call("fly", wait=30, dy=6, timeout=15000)
+                time.sleep(1.0)
+                FIND.test("Fliegt die Kamera weg, bleibt der Punkt beim Koerper, und die Kamera kommt nicht auf "
+                          "die Leiste",
+                          not bot_drauf() and leiste(zuschauer).get(koerper_id, {}).get("pos")
+                          == [_floor(x), y, _floor(z)], zeige_leiste(zuschauer))
+                cam_off(bot)
+                FIND.test("Nach dem Cam-Modus ist der Bot wieder auf der Leiste", bis(bot_drauf),
+                          zeige_leiste(zuschauer))
+                FIND.test("und der Punkt des Koerpers ist weg", bis(lambda: koerper_id not in leiste(zuschauer)),
+                          zeige_leiste(zuschauer))
+        cam_off(bot)
+        hinstellen(bot, x, y, z)
+
+        # --- Die Farbe seines Teams ---
+        console(env, f"team add {team}", pause=0.3)
+        console(env, f"team modify {team} color red", pause=0.3)
+        console(env, f"team join {team} {BOT_NAME}", pause=1.0)
+        if FIND.test("In einem roten Team hat der Bot auf der Leiste die Farbe des Teams",
+                     bis(lambda: leiste(zuschauer).get(ich, {}).get("color") == 0xFF5555),
+                     zeige_leiste(zuschauer)) and FIND.test("/cam startet im roten Team", cam_on(bot), ""):
+            bis(lambda: len(koerperpunkte(zuschauer)) == 1)
+            punkte = koerperpunkte(zuschauer)
+            FIND.test("Im Cam-Modus hat sein Koerper die Farbe des Teams",
+                      [p.get("color") for p in punkte.values()] == [0xFF5555], zeige_leiste(zuschauer))
+            cam_off(bot)
+        console(env, f"team remove {team}", pause=0.5)
+
+        # --- Wer nicht auf der Leiste ist, dessen Koerper auch nicht ---
+        console(env, f"item replace entity {BOT_NAME} armor.head with minecraft:carved_pumpkin", pause=1.0)
+        if FIND.test("Mit einem geschnitzten Kuerbis auf dem Kopf ist der Bot nicht auf der Leiste",
+                     bis(lambda: not bot_drauf()), zeige_leiste(zuschauer)):
+            ohne_punkt("Kuerbis auf dem Kopf")
+        console(env, f"item replace entity {BOT_NAME} armor.head with minecraft:air", pause=1.0)
+        FIND.test("Ohne den Kuerbis ist er wieder auf der Leiste", bis(bot_drauf), zeige_leiste(zuschauer))
+
+        # Schleicht er beim Start, bleibt er drauf: Der Koerper schleicht nicht.
+        bot.call("control", state="sneak", value=True)
+        time.sleep(1.0)
+        geduckt = not bot_drauf()
+        if FIND.test("Schleicht der Bot, ist er nicht auf der Leiste", geduckt, zeige_leiste(zuschauer)):
+            bot.chat("/cam")
+            time.sleep(0.5)
+            bot.call("control", state="sneak", value=False)
+            time.sleep(1.5)
+            FIND.test("Schleicht er beim Start, steht sein Koerper trotzdem auf der Leiste",
+                      bis(lambda: len(koerperpunkte(zuschauer)) == 1), zeige_leiste(zuschauer))
+            cam_off(bot)
+        bot.call("control", state="sneak", value=False)
+        hinstellen(bot, x, y, z)
+
+        # --- Ein unsichtbarer Koerper, und abgeschaltet ---
+        set_option(env, "visible", "false", "body")
+        try:
+            ohne_punkt("unsichtbarer Koerper")
+        finally:
+            set_option(env, "visible", "true", "body")
+        set_option(env, "locator-bar", "false", "body")
+        try:
+            if FIND.test("/cam startet mit locator-bar: false", cam_on(bot), ""):
+                time.sleep(1.5)
+                FIND.test("locator-bar: false: kein Koerper auf der Leiste", not koerperpunkte(zuschauer),
+                          zeige_leiste(zuschauer))
+                cam_off(bot)
+                FIND.test("locator-bar: false: nach dem Cam-Modus ist der Bot wieder auf der Leiste",
+                          bis(bot_drauf), zeige_leiste(zuschauer))
+        finally:
+            set_option(env, "locator-bar", "true", "body")
+
+        # --- Der Modifikator nach einem Absturz ---
+        # Am Zuschauer, so wie ein Absturz ihn am Kamera-Spieler liesse: Er
+        # geht hinaus und kommt wieder herein.
+        console(env, f"attribute {ZUSCHAUER_NAME} minecraft:waypoint_transmit_range modifier add "
+                     f"camfly:locator-bar-camera -1 add_multiplied_total", pause=1.0)
+        if FIND.test("Mit dem Modifikator der Kamera ist der Zuschauer beim Bot nicht auf der Leiste",
+                     bis(lambda: er not in leiste(bot)), zeige_leiste(bot)):
+            zuschauer.stop()
+            time.sleep(1.0)
+            zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+            zuschauer.start()
+            if FIND.test("Der Zuschauer kommt wieder herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+                FIND.test("Kommt er mit dem Modifikator herein und ist nicht im Cam-Modus, ist er wieder auf "
+                          "der Leiste", bis(lambda: er in leiste(bot), 6.0), zeige_leiste(bot))
+    finally:
+        cam_off(bot)
+        bot.call("control", state="sneak", value=False)
+        console(env, f"team remove {team}", pause=0.3)
+        console(env, f"item replace entity {BOT_NAME} armor.head with minecraft:air", pause=0.3)
+        console(env, f"attribute {ZUSCHAUER_NAME} minecraft:waypoint_transmit_range modifier remove "
+                     f"camfly:locator-bar-camera", pause=0.3)
+        zuschauer.stop()
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
 def toeten_checks(env, bot):
     """/kill trifft auch einen Spieler im Cam-Modus.
 
@@ -20211,6 +20487,8 @@ ABSCHNITTE = [
     Abschnitt("kugeln", kugeln_checks, "orb mob/MobTargeting inventory/CamInventoryGuard"),
     Abschnitt("zerschlagen", zerschlagen_checks, "interaction session/CamGameMode"),
     Abschnitt("team", team_checks, "scoreboard/NoCollisionTeam session/CameraMode"),
+    Abschnitt("ortungsleiste", ortungsleiste_checks, "locator body/BodySpawner session/CameraMode",
+              koerpertypen=True),
     Abschnitt("toeten", toeten_checks, "mirrordamage/DamageMirror session/SessionListener"),
     Abschnitt("tod_fern", tod_fern_checks, "session/SessionListener"),
     Abschnitt("leuchtfeuer", leuchtfeuer_checks, "potion hunger/CamRegenGuard"),
@@ -20584,7 +20862,7 @@ DAUER_VORGABE = {
     "grenze": 140, "portale": 318, "fuehrung_nether": 82, "unbewacht": 177, "liegengeblieben": 40,
     "teleport": 108, "rueckweg": 21, "befehle_im_cam": 30, "koerper_weg": 37, "effekt_weg": 13,
     "feuerhieb": 23, "modusinventar": 25, "spawnen": 102, "fortschritt": 72, "fundsachen": 46,
-    "zerschlagen": 72, "team": 15, "toeten": 16, "tod_fern": 26, "leuchtfeuer": 25,
+    "zerschlagen": 72, "team": 15, "ortungsleiste": 100, "toeten": 16, "tod_fern": 26, "leuchtfeuer": 25,
     "schutzgebiet": 20, "mobtreffer": 99, "schlaeger": 59, "fuehrung_kette": 41, "umgebung": 23,
     "abschalten": 61, "absturz": 129,
 }

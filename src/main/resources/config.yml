@@ -255,6 +255,13 @@ body:
   # Rüstung des Spielers am Körper zeigen (nur Optik, armorstand zeigt keinen Helm, dort sitzt der Kopf.)
   armor-visible: true
 
+  # Locator Bar (die Leiste mit den Punkten der anderen Spieler über der Erfahrungsleiste) im Cam-Modus:
+  #   true  = der Punkt des Spielers zeigt auf seinen Körper, in seiner Farbe. Die Kamera selbst steht nie darauf.
+  #           Wer beim Start nicht auf der Leiste ist (Mob-Kopf oder geschnitzter Kürbis auf dem Kopf, Unsichtbarkeit),
+  #           dessen Körper auch nicht. Ein unsichtbarer Körper (visible: false) steht nie darauf.
+  #   false = der Cam-Modus lässt die Leiste, wie sie ist
+  locator-bar: true
+
   # Wodurch sich der Körper verschieben lässt:
   #   0 = durch nichts, er steht fest
   #   1 = durch Schwerkraft, Wasser und Kolben

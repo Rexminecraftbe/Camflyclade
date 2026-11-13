@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.session;
 
 import org.bukkit.Chunk;
+import org.bukkit.Color;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Statistic;
@@ -76,6 +77,12 @@ public class CameraData {
      * or {@code null}, see {@link de.elia.cameraplugin.scoreboard.NoCollisionTeam#teamOf}.
      */
     private String teamAtStart;
+    /**
+     * The colour he had on the locator bar when camera mode started, or
+     * {@code null} when he was not on it, see
+     * {@link de.elia.cameraplugin.locator.CamLocatorBar#pointOf}.
+     */
+    private Color locatorBarPoint;
 
     public CameraData(LivingEntity body, Mannequin hitbox, TextDisplay nameDisplay, Chunk bodyChunk, GameMode originalGameMode, boolean originalAllowFlight, boolean originalFlying, boolean originalGlowing, ItemStack[] originalInventoryContents, Collection<PotionEffect> pausedEffects) {
         this.body = body;
@@ -175,5 +182,14 @@ public class CameraData {
 
     public void setTeamAtStart(String team) {
         this.teamAtStart = team;
+    }
+
+    /** The point his body takes over on the locator bar, or {@code null} for none. */
+    public Color getLocatorBarPoint() {
+        return locatorBarPoint;
+    }
+
+    public void setLocatorBarPoint(Color point) {
+        this.locatorBarPoint = point;
     }
 }

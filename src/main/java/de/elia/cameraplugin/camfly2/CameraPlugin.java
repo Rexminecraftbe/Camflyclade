@@ -31,6 +31,7 @@ import de.elia.cameraplugin.inventory.CamInventoryGuard;
 import de.elia.cameraplugin.inventory.CamInventoryLock;
 import de.elia.cameraplugin.list.CamList;
 import de.elia.cameraplugin.list.CamListTeleport;
+import de.elia.cameraplugin.locator.CamLocatorBar;
 import de.elia.cameraplugin.log.CamLog;
 import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.menu.CamMenu;
@@ -141,6 +142,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamBan ban = new CamBan(this, new BanList(this, log));
     private final CamCrashGuard crashGuard = new CamCrashGuard(this, log);
     private final GlowMark glowMark = new GlowMark(this);
+    private final CamLocatorBar locatorBar = new CamLocatorBar(this);
     private final CamBattery battery = new CamBattery(this, playerStore);
     private final CamTimeLimit timeLimit = new CamTimeLimit(this, playerStore);
     private final CamStats stats = new CamStats(settings, messages, playerStore, battery, timeLimit);
@@ -246,6 +248,7 @@ public final class CameraPlugin extends JavaPlugin {
         // Before the crash files: what they give back is saved right away,
         // and the note of the outline is to be gone by then.
         glowMark.giveBackOnline();
+        locatorBar.giveBackOnline();
         crashGuard.restoreOnline();
         // Started by hand on a running server: for the battery and the
         // cooldowns, everybody online joins now.
@@ -283,6 +286,7 @@ public final class CameraPlugin extends JavaPlugin {
                 flightSpeed,
                 crashGuard,
                 glowMark,
+                locatorBar,
                 new SessionTracker(cameraPlayers),
                 trail,
                 new ExitKey(this),
@@ -668,6 +672,10 @@ public final class CameraPlugin extends JavaPlugin {
 
     public GlowMark getGlowMark() {
         return glowMark;
+    }
+
+    public CamLocatorBar getLocatorBar() {
+        return locatorBar;
     }
 
     public CamFireGuard getFireGuard() {
