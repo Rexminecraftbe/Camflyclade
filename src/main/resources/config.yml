@@ -759,6 +759,18 @@ menu:
   # Wie viele Tage, Stunden oder Minuten ein Klick mit Umschalt auf der Seite einer Sperre dazugibt oder wegnimmt
   # (ohne Umschalt einen), 1 bis 100
   ban-shift-step: 10
+  # Offene Seiten des Menüs aktualisieren sich von selbst, ohne dass man es neu öffnen muss: Einladungen und Follower
+  # beim Folgen, wer in der Nähe ist und wie weit weg, neue Angebote und Likes bei den Aussichtspunkten, wer im Cam-Modus
+  # ist und seit wann, Sperren, die ablaufen ... - jede Sekunde, die Listen der Admin-Seite mit Spielern, die offline
+  # sein können (Spieler, Punkte aller, Folgen), alle fünf Sekunden. Was man selbst gerade einstellt (Sperren und
+  # Einschränkungen), bleibt, wie man es lässt.
+  # Damit nichts unter der Maus wegrutscht: Solange eine Liste offen ist, bleibt ihre Reihenfolge, auch beim Blättern -
+  # Neues kommt hinten dazu, und was wegfällt, bleibt grau an seinem Platz (Text: menu-gone), bis man etwas anklickt
+  # oder die Liste neu öffnet. Neu sortiert wird beim Wechsel des Reiters oder der Sortierung. Ein Klick auf einen
+  # Platz, auf dem sich eben erst von selbst etwas geändert hat, zählt eine Dreiviertelsekunde lang nicht - er war für
+  # das gedacht, was vorher dort stand.
+  # false = die Seiten bleiben, wie sie beim Öffnen waren (nach einem eigenen Klick zeigen sie trotzdem den neuen Stand).
+  live-update: true
 
 # Den Cam-Modus mit der Taste zum Tauschen der Hände beenden (voreingestellt F), wie mit /cam.
 # Geht mit leeren Händen. Hat ein Spieler die Taste anders belegt, gilt seine - und der Hinweis

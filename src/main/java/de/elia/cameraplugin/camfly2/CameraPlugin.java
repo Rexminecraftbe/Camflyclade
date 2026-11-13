@@ -315,6 +315,7 @@ public final class CameraPlugin extends JavaPlugin {
         progressGuard.register();
         mobGaze.start();
         orbGuard.start();
+        menu.start();
         movementGuard.startHoldingFlight();
     }
 
@@ -399,6 +400,7 @@ public final class CameraPlugin extends JavaPlugin {
         movementGuard.stopHoldingFlight();
         mobGaze.onDisable();
         orbGuard.onDisable();
+        menu.onDisable();
         particles.onDisable();
         sightGlow.onDisable();
         nameTag.onDisable();

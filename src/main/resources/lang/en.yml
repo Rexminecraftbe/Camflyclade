@@ -406,6 +406,12 @@ messages:
   menu-end: "&cEnd cam mode"
   menu-end-lore: "&7Back to your body."
   menu-features-off: "&cThat is switched off on this server."
+  # What keeps the place of an entry that is no longer on a list while the page is open (menu.live-update) - a player
+  # who left, a spot that was deleted -, so that nothing moves under the mouse: {name} is what the entry was called.
+  # It goes once a click of his changes the page, or when the list is opened again. menu-gone-lore alone names one
+  # that was never shown.
+  menu-gone: "&8{name}"
+  menu-gone-lore: "&7No longer here"
   menu-guestbook: "&6Guestbook: &f{mode}"
   menu-guestbook-action: "&eLeft-click: the next one\n&eRight-click: the one before"
   menu-guestbook-interval: "&8On: updates every {minutes} min\n&8while you play"

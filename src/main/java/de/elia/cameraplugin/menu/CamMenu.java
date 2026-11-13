@@ -23,6 +23,7 @@ import de.elia.cameraplugin.spot.SpotBans;
 import de.elia.cameraplugin.spot.SpotGuestbook;
 import de.elia.cameraplugin.spot.SpotModeration;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
@@ -41,6 +42,7 @@ import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -66,6 +68,7 @@ import java.util.function.Function;
 import java.util.function.LongConsumer;
 import java.util.function.ToIntFunction;
 import java.util.function.ToLongFunction;
+import java.util.logging.Level;
 
 /**
  * {@code /cam menu}: what camera mode offers, in a window to click instead of
@@ -96,6 +99,13 @@ import java.util.function.ToLongFunction;
  * click in it is turned away and only read for the button it hit, so nothing
  * gets in or out - in camera mode as well, where every other window stays
  * shut.</p>
+ *
+ * <p>With {@code menu.live-update} a page that is open shows what changes
+ * while it is - an invitation that comes, a player who comes close, how long
+ * somebody is in camera mode - without being opened anew: it is drawn anew in
+ * the same window by itself, see {@link #refresh}, the lists in the order they
+ * had, see {@link #list}. What an admin is setting up - a ban, a
+ * restriction - stays as he leaves it.</p>
  */
 public final class CamMenu implements Listener {
 
@@ -154,6 +164,30 @@ public final class CamMenu implements Listener {
     /** The longest ban the buttons of the time add up to, in minutes: 999 days. */
     private static final long MAX_BAN_MINUTES = 999L * DAY;
 
+    /** How often the open pages are looked at, whether one is to be drawn anew by itself, in ticks. */
+    private static final long LIVE_TICKS = 20L;
+    /**
+     * How often a page is drawn anew by itself, in milliseconds: one that
+     * counts seconds - how long somebody is in camera mode, how far away he
+     * is, how long an invitation still holds - every second.
+     */
+    private static final long EVERY_SECOND = 1_000L;
+    /**
+     * The same for a page that reads the files of players who are offline -
+     * the lists of the admin page with the players who are banned or
+     * restricted, and their spots -: every five seconds, so that a page left
+     * open does not keep reading them.
+     */
+    private static final long EVERY_FIVE_SECONDS = 5_000L;
+    /**
+     * How long a click on a slot is turned away after the page, drawn anew by
+     * itself, put something else there - an entry that came, one that is
+     * gone, a button in place of another -, in milliseconds: the click was
+     * meant for what stood there before, which the client may still have
+     * shown, or which the player had his mouse on already.
+     */
+    private static final long CLICK_GUARD = 750L;
+
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
@@ -184,6 +218,11 @@ public final class CamMenu implements Listener {
 
     /** How each admin has the spots of a player sorted on the admin page, while he is online. */
     private final Map<UUID, SpotSort> adminSpotSorts = new HashMap<>();
+
+    /** What draws the open pages anew by themselves, see {@link #start}. */
+    private BukkitTask live;
+    /** Whether a page is being drawn anew by itself right now, and not after a click. */
+    private boolean refreshing;
 
     /**
      * The tabs of the spots: all his own, the public ones of everybody and
@@ -350,15 +389,60 @@ public final class CamMenu implements Listener {
         }
     }
 
-    /** One window of the menu, and what each of its slots does when clicked. */
+    /**
+     * One window of the menu, and what each of its slots does when clicked.
+     *
+     * <p>While it is open, it is drawn anew in place - by itself every
+     * {@link #every} with {@code menu.live-update}, and after a click that
+     * changes what it shows -: the same window, emptied and filled again, so
+     * that only what changed reaches the client and nothing flickers.</p>
+     */
     public static final class Page implements InventoryHolder {
         private final Map<Integer, Consumer<ClickType>> buttons = new HashMap<>();
         private Inventory inventory;
+        /** Its title, which a page drawn anew in place keeps. */
+        private String title;
+        /** What draws it anew as it stands then, by itself; {@code null} for a page that is not. */
+        private Runnable again;
+        /** How long it waits between two times it is drawn anew by itself, in milliseconds. */
+        private long every;
+        /** When it is drawn anew by itself next, in milliseconds. */
+        private long next;
+        /** The list it shows, in the order it shows it; {@code null} for a page with none. */
+        private Listing listing;
+        /** The list of the page that was open before it was drawn, for the order of its own; see {@link #list}. */
+        private Listing earlier;
+        /** What each slot held before the page was drawn anew in place, see {@link #identity}; {@code null} after. */
+        private String[] before;
+        /** Until when a click on a slot is turned away, by slot: something else came there by itself. */
+        private final Map<Integer, Long> guarded = new HashMap<>();
 
         @Override
         public Inventory getInventory() {
             return inventory;
         }
+    }
+
+    /**
+     * A list as a page shows it: which list it is, its entries in the order
+     * they stand, and what each was called the last time it was shown - what
+     * stands in its place once it is gone.
+     *
+     * @param list which list, such as {@code tour}; the same list on another
+     *             page number is the same one
+     */
+    private record Listing(String list, List<Object> order, Map<Object, String> names) {
+    }
+
+    /**
+     * One entry of a list: what it is - a player, a spot -, which keeps it in
+     * its place while the page is drawn anew, and what puts it into a slot.
+     */
+    private record Row(Object key, Consumer<Integer> put) {
+    }
+
+    /** Where a list stands once its entries are in: on which of how many pages, and whether it has none at all. */
+    private record Listed(int number, int pages, boolean empty) {
     }
 
     public CamMenu(CameraPlugin plugin) {
@@ -386,6 +470,223 @@ public final class CamMenu implements Listener {
         openMain(player);
     }
 
+    // ------------------------------------------------------------------ live
+
+    /**
+     * Starts drawing the open pages anew by themselves, with
+     * {@code menu.live-update}: each where it waited long enough - see
+     * {@link #EVERY_SECOND} and {@link #EVERY_FIVE_SECONDS} -, as it stands
+     * then, in the window that is open. The setting is read each time, so a
+     * reload switches it on and off.
+     */
+    public void start() {
+        if (live == null) {
+            live = Bukkit.getScheduler().runTaskTimer(plugin, this::refresh, LIVE_TICKS, LIVE_TICKS);
+        }
+    }
+
+    public void onDisable() {
+        if (live != null) {
+            live.cancel();
+            live = null;
+        }
+    }
+
+    /**
+     * Draws each open page anew that waited long enough. One that fails is
+     * left as it is from then on, said once in the console, instead of
+     * failing every second.
+     */
+    private void refresh() {
+        if (!settings.isMenuLiveUpdate()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            Page page = openPage(player);
+            if (page == null || page.again == null || now < page.next) {
+                continue;
+            }
+            Runnable again = page.again;
+            refreshing = true;
+            try {
+                again.run();
+            } catch (RuntimeException ex) {
+                page.again = null;
+                plugin.getLogger().log(Level.WARNING, "Could not draw the menu of " + player.getName() + " anew", ex);
+            } finally {
+                refreshing = false;
+            }
+        }
+    }
+
+    /** The page of the menu he has open, or {@code null} while it is none. */
+    private static Page openPage(Player player) {
+        return player.getOpenInventory().getTopInventory().getHolder() instanceof Page page ? page : null;
+    }
+
+    /**
+     * The page to draw: the one he has open, emptied, where it has the same
+     * size and title - it is drawn anew in place -, else a new one, which
+     * {@link #show} opens. Either way, the list of the page that was open
+     * goes along, for the order of its own, see {@link #list}.
+     */
+    private Page page(Player player, int size, String title) {
+        Page open = openPage(player);
+        Listing earlier = open == null ? null : open.listing;
+        Page page;
+        if (open != null && open.inventory.getSize() == size && open.title.equals(title)) {
+            page = open;
+            page.before = new String[size];
+            for (int slot = 0; slot < size; slot++) {
+                page.before[slot] = identity(page.inventory.getItem(slot));
+            }
+            page.inventory.clear();
+            page.buttons.clear();
+        } else {
+            page = new Page();
+            page.inventory = Bukkit.createInventory(page, size, title);
+            page.title = title;
+        }
+        page.earlier = earlier;
+        page.listing = null;
+        page.again = null;
+        return page;
+    }
+
+    /** {@link #show(Player, Page, long, Runnable)} for a page that is only drawn anew after a click. */
+    private void show(Player player, Page page) {
+        show(player, page, 0L, null);
+    }
+
+    /**
+     * Shows a page that is drawn: opens it, unless it was drawn in place. A
+     * slot that holds something else after the page was drawn anew by itself
+     * turns clicks away for {@link #CLICK_GUARD}, see {@link #onClick}; so
+     * does every slot of a new window opened that way - the page he had open
+     * became another, a tour that ended, say.
+     *
+     * @param every how long it waits until it is drawn anew by itself, in milliseconds
+     * @param again what draws it anew as it stands then; {@code null} for a page that is not drawn anew by itself
+     */
+    private void show(Player player, Page page, long every, Runnable again) {
+        long now = System.currentTimeMillis();
+        page.again = again;
+        page.every = every;
+        // Half a round early: the rounds of refresh() come only every
+        // LIVE_TICKS, and one that comes a moment too soon would leave the
+        // page for a whole round more.
+        page.next = now + every - LIVE_TICKS * 25L;
+        page.earlier = null;
+        String[] before = page.before;
+        page.before = null;
+        if (before == null) {
+            player.openInventory(page.inventory);
+        }
+        if (!refreshing) {
+            return;
+        }
+        for (int slot = 0; slot < page.inventory.getSize(); slot++) {
+            if (before == null || !before[slot].equals(identity(page.inventory.getItem(slot)))) {
+                page.guarded.put(slot, now + CLICK_GUARD);
+            }
+        }
+    }
+
+    /**
+     * Puts the entries of a list into the first {@value #ENTRIES} slots of a
+     * page, a page of them at a time.
+     *
+     * <p>While the same list stays open, its entries keep their order - also
+     * on the other pages of it, and after a click -: what came since stands
+     * after them, so that nothing moves under the mouse. One that is gone
+     * keeps its place, greyed out, while the page is drawn anew by itself;
+     * after a click, or when the list is opened anew, it goes and the rest
+     * moves up. A list opened anew, in another order or on another tab, is in
+     * the order it comes in.</p>
+     *
+     * @param list       which list it is, such as {@code tour}: the same one on another page number is the same
+     * @param rows       its entries, in their own order
+     * @param pageNumber which page of it, from 0; one past the last shows the last
+     */
+    private Listed list(Page page, String list, List<Row> rows, int pageNumber) {
+        Map<Object, Row> fresh = new LinkedHashMap<>();
+        for (Row row : rows) {
+            Object key = row.key();
+            for (int n = 2; fresh.containsKey(key); n++) {
+                // Two entries that are the same thing each keep a place of their own.
+                key = List.of(row.key(), n);
+            }
+            fresh.put(key, new Row(key, row.put()));
+        }
+        Listing earlier = page.earlier != null && page.earlier.list().equals(list) ? page.earlier : null;
+        List<Row> ordered = new ArrayList<>(fresh.size());
+        Map<Object, String> names = new HashMap<>();
+        if (earlier != null) {
+            for (Object key : earlier.order()) {
+                Row row = fresh.remove(key);
+                if (row != null) {
+                    ordered.add(row);
+                } else if (refreshing) {
+                    String name = earlier.names().get(key);
+                    ordered.add(new Row(key, slot -> put(page, slot, gone(name), click -> { })));
+                    // What it was called, not what stands in its place.
+                    names.put(key, name == null ? "" : name);
+                }
+            }
+        }
+        ordered.addAll(fresh.values());
+        int pages = Math.max(1, (ordered.size() + ENTRIES - 1) / ENTRIES);
+        int number = Math.min(Math.max(0, pageNumber), pages - 1);
+        List<Object> order = new ArrayList<>(ordered.size());
+        for (int index = 0; index < ordered.size(); index++) {
+            Row row = ordered.get(index);
+            order.add(row.key());
+            int slot = index - number * ENTRIES;
+            if (slot >= 0 && slot < ENTRIES) {
+                row.put().accept(slot);
+                names.putIfAbsent(row.key(), displayName(page.inventory.getItem(slot)));
+            } else if (!names.containsKey(row.key()) && earlier != null && earlier.names().containsKey(row.key())) {
+                names.put(row.key(), earlier.names().get(row.key()));
+            }
+        }
+        page.listing = new Listing(list, order, names);
+        return new Listed(number, pages, ordered.isEmpty());
+    }
+
+    /**
+     * What stands in the place of an entry that is gone while the page is
+     * open, see {@link #list}: what it was called, greyed out, and that it is
+     * no longer there. A click does nothing.
+     */
+    private ItemStack gone(String name) {
+        String was = name == null ? "" : ChatColor.stripColor(name);
+        if (was.isEmpty()) {
+            // Never shown, so without a name: what it says is name enough.
+            return item(Material.GRAY_STAINED_GLASS_PANE, messages.getMessage("menu-gone-lore"), List.of());
+        }
+        return item(Material.GRAY_STAINED_GLASS_PANE, messages.getMessage("menu-gone").replace("{name}", was),
+                lines(messages.getMessage("menu-gone-lore")));
+    }
+
+    /**
+     * What a slot holds, as far as a click on it goes: the kind of item and
+     * its name - empty for nothing. What is written under it may change
+     * without the click meaning anything else, a countdown or a distance.
+     */
+    private static String identity(ItemStack item) {
+        if (item == null || item.getType().isAir()) {
+            return "";
+        }
+        return item.getType().name() + "|" + displayName(item);
+    }
+
+    /** The name an item of the menu was given, or an empty one. */
+    private static String displayName(ItemStack item) {
+        ItemMeta meta = item == null ? null : item.getItemMeta();
+        return meta != null && meta.hasDisplayName() ? meta.getDisplayName() : "";
+    }
+
     // ------------------------------------------------------------------ pages
 
     /**
@@ -395,9 +696,8 @@ public final class CamMenu implements Listener {
      * there, see {@link #choicesButton}.
      */
     private void openMain(Player player) {
-        Page page = new Page();
+        Page page = page(player, MenuButton.SLOTS, messages.getMessage("menu-title"));
         boolean inCam = plugin.isInCameraMode(player);
-        Inventory inventory = create(page, MenuButton.SLOTS, messages.getMessage("menu-title"));
         if (settings.isNightVisionPlayerChoice()) {
             nightVisionButton(player, page);
         }
@@ -447,7 +747,7 @@ public final class CamMenu implements Listener {
         if (settings.getAdminAccess().allowsMenu() && hasAdminPage(player)) {
             button(page, MenuButton.ADMIN, "menu-admin", null, false, click -> later(() -> openAdmin(player)));
         }
-        player.openInventory(inventory);
+        show(player, page, EVERY_SECOND, () -> openMain(player));
     }
 
     /**
@@ -708,8 +1008,9 @@ public final class CamMenu implements Listener {
         SpotTab tab = sharing ? wanted : SpotTab.PRIVATE;
         SpotSort sort = spotSort(player, tab);
         Location from = nearFrom(player);
-        List<Consumer<Integer>> entries = new ArrayList<>();
-        Page page = new Page();
+        List<Row> entries = new ArrayList<>();
+        Page page = page(player, LIST, messages.getMessage(sharing ? "menu-spots-title-" + tab.key
+                : "menu-spots-title"));
         // A tab of the spots a restriction keeps him from looking at shows him only that.
         SpotModeration.Hold kept = plugin.getSpotModeration().lookHold(player, SpotBans.Kind.valueOf(tab.name()));
         if (kept == null) {
@@ -717,38 +1018,34 @@ public final class CamMenu implements Listener {
                 case PRIVATE -> {
                     for (Spot spot : sorted(spots.own(player), sort, own -> own, own -> "", own -> 0,
                             own -> spots.views(player.getUniqueId(), own), from)) {
-                        entries.add(slot -> putOwnSpot(player, page, slot, spot));
+                        entries.add(new Row(spot.key(), slot -> putOwnSpot(player, page, slot, spot)));
                     }
                 }
                 case PUBLIC -> {
                     for (Share share : sorted(spots.publicSpots(), sort, Share::getSpot, Share::getOwnerName,
                             Share::likes, share -> spots.views(share.getOwner(), share.getSpot()), from)) {
-                        entries.add(slot -> putPublicSpot(player, page, slot, share));
+                        entries.add(new Row(shareKey(share), slot -> putPublicSpot(player, page, slot, share)));
                     }
                 }
                 case SHARED -> {
+                    // An offer he accepts stays where it is, as one of the spots shared with him.
                     for (Share share : spots.offers(player)) {
-                        entries.add(slot -> putOffer(player, page, slot, share));
+                        entries.add(new Row(shareKey(share), slot -> putOffer(player, page, slot, share)));
                     }
                     for (Share share : sorted(spots.accepted(player), sort, Share::getSpot, Share::getOwnerName,
                             Share::likes, share -> spots.views(share.getOwner(), share.getSpot()), from)) {
-                        entries.add(slot -> putSharedSpot(player, page, slot, share));
+                        entries.add(new Row(shareKey(share), slot -> putSharedSpot(player, page, slot, share)));
                     }
                 }
             }
         }
-        int pages = Math.max(1, (entries.size() + ENTRIES - 1) / ENTRIES);
-        int number = Math.min(Math.max(0, pageNumber), pages - 1);
-        Inventory inventory = create(page, LIST, messages.getMessage(sharing ? "menu-spots-title-" + tab.key
-                : "menu-spots-title"));
-        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < entries.size(); slot++) {
-            entries.get(number * ENTRIES + slot).accept(slot);
-        }
+        Listed listed = list(page, "spots:" + tab.key + ":" + sort.key, entries, pageNumber);
+        int number = listed.number();
         if (kept != null) {
             String key = kept.everybody() ? "menu-spots-disabled" : "menu-spots-restricted";
             put(page, 22, Material.GRAY_DYE, messages.getMessage(key),
                     lines(plugin.getSpotModeration().fill(messages.getMessage(key + "-lore"), kept)), click -> { });
-        } else if (entries.isEmpty()) {
+        } else if (listed.empty()) {
             put(page, 22, Material.GRAY_DYE, "menu-spots-empty-" + tab.key, click -> { });
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
@@ -772,8 +1069,13 @@ public final class CamMenu implements Listener {
         if (settings.isGuestbookEnabled()) {
             guestbookButton(player, page, () -> openSpots(player, tab, number));
         }
-        paging(page, number, pages, n -> openSpots(player, tab, n), SLOT_SPOT_PREVIOUS, SLOT_SPOT_NEXT);
-        player.openInventory(inventory);
+        paging(page, number, listed.pages(), n -> openSpots(player, tab, n), SLOT_SPOT_PREVIOUS, SLOT_SPOT_NEXT);
+        show(player, page, EVERY_SECOND, () -> openSpots(player, tab, number));
+    }
+
+    /** A spot shared by its owner, as an entry of a list: the same spot offered and accepted is the same one. */
+    private static String shareKey(Share share) {
+        return share.getOwner() + "/" + share.getSpot().key();
     }
 
     /**
@@ -1085,27 +1387,15 @@ public final class CamMenu implements Listener {
                 people.putIfAbsent(entry.getKey(), entry.getValue());
             }
         }
-        List<Map.Entry<UUID, String>> list = new ArrayList<>(people.entrySet());
-        int total = list.size();
-        int pages = Math.max(1, (total + ENTRIES - 1) / ENTRIES);
-        int number = Math.min(Math.max(0, pageNumber), pages - 1);
-        Page page = new Page();
-        Inventory inventory = create(page, LIST,
-                messages.getMessage("menu-share-title").replace("{spot}", spot.name()));
-        boolean everybody = share != null && share.isEveryone();
-        put(page, SLOT_EVERYBODY, shine(item(Material.BEACON, messages.getMessage("menu-share-everybody"),
-                lines(messages.getMessage(everybody ? "menu-share-public-lore" : "menu-share-private-lore"))),
-                everybody), click -> later(() -> {
-                    spots.makePublic(player, target, !everybody);
-                    openShare(player, key, number);
-                }));
-        for (int slot = 0; slot < ENTRIES; slot++) {
-            int index = number * ENTRIES + slot;
-            if (index < total) {
-                Map.Entry<UUID, String> entry = list.get(index);
-                boolean with = share != null && share.isAcceptedBy(entry.getKey());
-                boolean offered = share != null && share.isOfferedTo(entry.getKey());
-                String state = with ? "on" : offered ? "offered" : "off";
+        Page page = page(player, LIST, messages.getMessage("menu-share-title").replace("{spot}", spot.name()));
+        // Filled in below, once the list knows which page of it is shown.
+        int[] shown = new int[1];
+        List<Row> entries = new ArrayList<>();
+        for (Map.Entry<UUID, String> entry : people.entrySet()) {
+            boolean with = share != null && share.isAcceptedBy(entry.getKey());
+            boolean offered = share != null && share.isOfferedTo(entry.getKey());
+            String state = with ? "on" : offered ? "offered" : "off";
+            entries.add(new Row(entry.getKey(), slot -> {
                 ItemStack head = item(Material.PLAYER_HEAD,
                         messages.getMessage(with || offered ? "menu-share-player-" + state : "menu-share-player")
                                 .replace("{player}", entry.getValue()),
@@ -1124,14 +1414,24 @@ public final class CamMenu implements Listener {
                         OfflinePlayer whom = other != null ? other : Bukkit.getOfflinePlayer(entry.getKey());
                         spots.shareWith(player, target, whom);
                     }
+                    openShare(player, key, shown[0]);
+                }));
+            }));
+        }
+        Listed listed = list(page, "share:" + key, entries, pageNumber);
+        int number = listed.number();
+        shown[0] = number;
+        boolean everybody = share != null && share.isEveryone();
+        put(page, SLOT_EVERYBODY, shine(item(Material.BEACON, messages.getMessage("menu-share-everybody"),
+                lines(messages.getMessage(everybody ? "menu-share-public-lore" : "menu-share-private-lore"))),
+                everybody), click -> later(() -> {
+                    spots.makePublic(player, target, !everybody);
                     openShare(player, key, number);
                 }));
-            }
-        }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-spots",
                 click -> later(() -> openSpots(player, SpotTab.PRIVATE, 0)));
-        paging(page, number, pages, n -> openShare(player, key, n));
-        player.openInventory(inventory);
+        paging(page, number, listed.pages(), n -> openShare(player, key, n));
+        show(player, page, EVERY_SECOND, () -> openShare(player, key, number));
     }
 
     /** How he has a tab of the spots sorted: the newest first, until he picks another order. */
@@ -1232,22 +1532,25 @@ public final class CamMenu implements Listener {
         }
         Player guide = tour.guideOf(player);
         if (guide != null) {
-            Page page = new Page();
-            Inventory inventory = create(page, SMALL, messages.getMessage("menu-tour-title"));
+            Page page = page(player, SMALL, messages.getMessage("menu-tour-title"));
             put(page, 11, head(guide, messages.getMessage("menu-tour-guide").replace("{player}", guide.getName()),
                     lines(messages.getMessage("menu-tour-guide-lore").replace("{player}", guide.getName()))),
                     click -> { });
             viewButton(player, page, 13);
             put(page, 15, Material.BARRIER, "menu-tour-leave", click -> act(player, () -> tour.leave(player)));
             put(page, SLOT_SMALL_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
-            player.openInventory(inventory);
+            show(player, page, EVERY_SECOND, () -> openTour(player, 0));
             return;
         }
-        List<Consumer<Integer>> entries = new ArrayList<>();
-        Page page = new Page();
+        // Each player keeps his place, whether he invited him, follows him or
+        // could be invited: one who accepts an invitation stays where he was,
+        // as a guest. Who invited him is an entry of its own - he could be
+        // invited by him as well.
+        List<Row> entries = new ArrayList<>();
+        Page page = page(player, LIST, messages.getMessage("menu-tour-title"));
         for (Player inviter : tour.invitationsOf(player)) {
             String name = inviter.getName();
-            entries.add(slot -> put(page, slot, shine(head(inviter,
+            entries.add(new Row("invitation/" + inviter.getUniqueId(), slot -> put(page, slot, shine(head(inviter,
                     messages.getMessage("menu-tour-invitation").replace("{player}", name),
                     lines(messages.getMessage("menu-tour-invitation-lore").replace("{player}", name))), true),
                     click -> {
@@ -1259,7 +1562,7 @@ public final class CamMenu implements Listener {
                         } else if (click.isLeftClick()) {
                             act(player, () -> tour.accept(player, inviter, name));
                         }
-                    }));
+                    })));
         }
         TourModeration moderation = plugin.getTourModeration();
         TourModeration.Hold lead = moderation.hold(player, TourBans.What.LEAD);
@@ -1271,12 +1574,12 @@ public final class CamMenu implements Listener {
         List<Player> guests = tour.guestsOf(player);
         for (Player guest : guests) {
             String name = guest.getName();
-            entries.add(slot -> put(page, slot, head(guest,
+            entries.add(new Row(guest.getUniqueId(), slot -> put(page, slot, head(guest,
                     messages.getMessage("menu-tour-guest").replace("{player}", name),
                     lines(messages.getMessage("menu-tour-guest-lore"))), click -> later(() -> {
                         tour.kick(player, guest, name);
                         openTour(player, 0);
-                    })));
+                    }))));
         }
         // Whom he could invite - unless he may not lead; one who may not take
         // part shows up all the same, with why he cannot be invited.
@@ -1298,23 +1601,19 @@ public final class CamMenu implements Listener {
                 String lore = messages.getMessage(key).replace("{blocks}", String.valueOf(blocks))
                         .replace("{max}", String.valueOf(settings.getTourMaxGuests()))
                         .replace("{expires}", String.valueOf(holds)).replace("{seconds}", String.valueOf(wait));
-                entries.add(slot -> put(page, slot, head(other,
+                entries.add(new Row(other.getUniqueId(), slot -> put(page, slot, head(other,
                         messages.getMessage("menu-tour-candidate").replace("{player}", name), lines(lore)),
                         click -> later(() -> {
                             tour.invite(player, other, name);
                             openTour(player, 0);
-                        })));
+                        }))));
             }
         }
-        int pages = Math.max(1, (entries.size() + ENTRIES - 1) / ENTRIES);
-        int number = Math.min(Math.max(0, pageNumber), pages - 1);
-        Inventory inventory = create(page, LIST, messages.getMessage("menu-tour-title"));
-        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < entries.size(); slot++) {
-            entries.get(number * ENTRIES + slot).accept(slot);
-        }
-        if (entries.isEmpty() && lead != null) {
+        Listed listed = list(page, "tour", entries, pageNumber);
+        int number = listed.number();
+        if (listed.empty() && lead != null) {
             put(page, 22, tourKept(TourBans.What.LEAD, lead), click -> { });
-        } else if (entries.isEmpty() && tour.canLead(player)) {
+        } else if (listed.empty() && tour.canLead(player)) {
             // How close one has to be: out of camera mode to the guide's
             // camera, in camera mode camera to camera.
             double start = settings.getTourStartDistance();
@@ -1323,13 +1622,13 @@ public final class CamMenu implements Listener {
                             .replace("{start}", String.valueOf(Math.round(start)))
                             .replace("{radius}", String.valueOf(Math.round(settings.getTourRadius())))),
                     click -> { });
-        } else if (entries.isEmpty()) {
+        } else if (listed.empty()) {
             put(page, 22, Material.GRAY_DYE, "menu-tour-not-in-cam", click -> { });
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
         if (!guests.isEmpty()) {
             put(page, SLOT_TOUR_END, Material.BARRIER, "menu-tour-end", click -> act(player, () -> tour.end(player)));
-        } else if (lead != null && !entries.isEmpty()) {
+        } else if (lead != null && !listed.empty()) {
             put(page, SLOT_TOUR_END, tourKept(TourBans.What.LEAD, lead), click -> { });
         } else if (join != null) {
             put(page, SLOT_TOUR_END, tourKept(TourBans.What.JOIN, join), click -> { });
@@ -1338,8 +1637,8 @@ public final class CamMenu implements Listener {
             inviteAllButton(player, page);
         }
         viewButton(player, page, SLOT_TOUR_VIEW);
-        paging(page, number, pages, n -> openTour(player, n));
-        player.openInventory(inventory);
+        paging(page, number, listed.pages(), n -> openTour(player, n));
+        show(player, page, EVERY_SECOND, () -> openTour(player, number));
     }
 
     /**
@@ -1431,8 +1730,7 @@ public final class CamMenu implements Listener {
             openMain(player);
             return;
         }
-        Page page = new Page();
-        Inventory inventory = create(page, MenuButton.SLOTS, messages.getMessage("menu-admin-title"));
+        Page page = page(player, MenuButton.SLOTS, messages.getMessage("menu-admin-title"));
         if (plugin.getCamList().mayUse(player)) {
             adminButton(page, AdminButton.LIST, "menu-admin-list", click -> later(() -> openCamList(player, 0)));
         }
@@ -1452,7 +1750,8 @@ public final class CamMenu implements Listener {
             adminButton(page, AdminButton.FOLLOW, "menu-admin-tours", click -> later(() -> openTourPlayers(player, 0)));
         }
         adminButton(page, AdminButton.BACK, "menu-to-main", click -> later(() -> openMain(player)));
-        player.openInventory(inventory);
+        // Nothing on it changes by itself.
+        show(player, page);
     }
 
     /** One button of the admin page, with the item and in the slot {@code menu.admin-buttons} gives it. */
@@ -1474,33 +1773,35 @@ public final class CamMenu implements Listener {
         boolean teleport = plugin.getListTeleport().mayUse(player);
         List<Player> cameras = cameraPlayersSorted();
         sortPlayers(player, cameras, Player::getName, Player::getUniqueId);
-        int pages = Math.max(1, (cameras.size() + ENTRIES - 1) / ENTRIES);
-        int number = Math.min(Math.max(0, pageNumber), pages - 1);
-        Page page = new Page();
-        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-list-title"));
-        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < cameras.size(); slot++) {
-            Player camera = cameras.get(number * ENTRIES + slot);
-            List<String> lore = new ArrayList<>(camLines(camera));
-            if (teleport) {
-                lore.addAll(lines(messages.getMessage("menu-admin-list-actions")));
-            }
-            String name = camera.getName();
-            put(page, slot, head(camera, messages.getMessage("menu-admin-player").replace("{player}", name), lore),
-                    click -> {
-                        if (click.isRightClick() && teleport) {
-                            act(player, () -> plugin.getListTeleport().command(player, new String[]{name, "body"}));
-                        } else if (click.isLeftClick() && teleport) {
-                            act(player, () -> plugin.getListTeleport().command(player, new String[]{name, "camera"}));
-                        }
-                    });
+        Page page = page(player, LIST, messages.getMessage("menu-admin-list-title"));
+        List<Row> entries = new ArrayList<>();
+        for (Player camera : cameras) {
+            entries.add(new Row(camera.getUniqueId(), slot -> {
+                List<String> lore = new ArrayList<>(camLines(camera));
+                if (teleport) {
+                    lore.addAll(lines(messages.getMessage("menu-admin-list-actions")));
+                }
+                String name = camera.getName();
+                put(page, slot, head(camera, messages.getMessage("menu-admin-player").replace("{player}", name), lore),
+                        click -> {
+                            if (click.isRightClick() && teleport) {
+                                act(player, () -> plugin.getListTeleport().command(player, new String[]{name, "body"}));
+                            } else if (click.isLeftClick() && teleport) {
+                                act(player, () -> plugin.getListTeleport().command(player,
+                                        new String[]{name, "camera"}));
+                            }
+                        });
+            }));
         }
-        if (cameras.isEmpty()) {
+        Listed listed = list(page, "cameras:" + playerSort(player).key, entries, pageNumber);
+        int number = listed.number();
+        if (listed.empty()) {
             put(page, 22, Material.GRAY_DYE, "menu-admin-list-empty", click -> { });
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
         playerSortButton(player, page, () -> openCamList(player, 0));
-        paging(page, number, pages, n -> openCamList(player, n));
-        player.openInventory(inventory);
+        paging(page, number, listed.pages(), n -> openCamList(player, n));
+        show(player, page, EVERY_SECOND, () -> openCamList(player, number));
     }
 
     /** The players in camera mode, by name. */
@@ -1582,22 +1883,23 @@ public final class CamMenu implements Listener {
         }
         List<Player> online = onlineSorted(player);
         sortPlayers(player, online, Player::getName, Player::getUniqueId);
-        int pages = Math.max(1, (online.size() + ENTRIES - 1) / ENTRIES);
-        int number = Math.min(Math.max(0, pageNumber), pages - 1);
-        Page page = new Page();
-        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-stats-title"));
-        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < online.size(); slot++) {
-            Player other = online.get(number * ENTRIES + slot);
-            String name = other.getName();
-            List<String> lore = statLines(other.getUniqueId(), name);
-            lore.addAll(lines(messages.getMessage("menu-admin-stats-actions")));
-            put(page, slot, head(other, messages.getMessage("menu-admin-player").replace("{player}", name), lore),
-                    click -> act(player, () -> plugin.getStats().command(player, new String[]{"player", name})));
+        Page page = page(player, LIST, messages.getMessage("menu-admin-stats-title"));
+        List<Row> entries = new ArrayList<>();
+        for (Player other : online) {
+            entries.add(new Row(other.getUniqueId(), slot -> {
+                String name = other.getName();
+                List<String> lore = statLines(other.getUniqueId(), name);
+                lore.addAll(lines(messages.getMessage("menu-admin-stats-actions")));
+                put(page, slot, head(other, messages.getMessage("menu-admin-player").replace("{player}", name), lore),
+                        click -> act(player, () -> plugin.getStats().command(player, new String[]{"player", name})));
+            }));
         }
+        Listed listed = list(page, "stats:" + playerSort(player).key, entries, pageNumber);
+        int number = listed.number();
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
         playerSortButton(player, page, () -> openStatsOf(player, 0));
-        paging(page, number, pages, n -> openStatsOf(player, n));
-        player.openInventory(inventory);
+        paging(page, number, listed.pages(), n -> openStatsOf(player, n));
+        show(player, page, EVERY_SECOND, () -> openStatsOf(player, number));
     }
 
     /**
@@ -1626,27 +1928,28 @@ public final class CamMenu implements Listener {
         }
         List<Map.Entry<UUID, String>> list = new ArrayList<>(people.entrySet());
         sortPlayers(player, list, Map.Entry::getValue, Map.Entry::getKey);
+        Page page = page(player, LIST, messages.getMessage("menu-admin-players-title"));
         // The first slot of the first page is for everybody.
-        int total = list.size() + 1;
-        int pages = Math.max(1, (total + ENTRIES - 1) / ENTRIES);
-        int number = Math.min(Math.max(0, pageNumber), pages - 1);
-        Page page = new Page();
-        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-players-title"));
-        for (int slot = 0; slot < ENTRIES; slot++) {
-            int index = number * ENTRIES + slot;
-            if (index >= total) {
-                break;
-            }
-            Target target = index == 0 ? Target.everybody(messages.getMessage("menu-admin-everybody-name"))
-                    : new Target(list.get(index - 1).getKey(), list.get(index - 1).getValue());
-            List<String> lore = new ArrayList<>(targetLines(player, target));
-            lore.addAll(lines(messages.getMessage("menu-admin-players-actions")));
-            put(page, slot, targetItem(target, lore), click -> later(() -> openTarget(player, target)));
+        List<Target> targets = new ArrayList<>();
+        targets.add(Target.everybody(messages.getMessage("menu-admin-everybody-name")));
+        for (Map.Entry<UUID, String> entry : list) {
+            targets.add(new Target(entry.getKey(), entry.getValue()));
         }
+        List<Row> entries = new ArrayList<>();
+        for (Target target : targets) {
+            entries.add(new Row(target.everybody() ? "everybody" : target.id(), slot -> {
+                List<String> lore = new ArrayList<>(targetLines(player, target));
+                lore.addAll(lines(messages.getMessage("menu-admin-players-actions")));
+                put(page, slot, targetItem(target, lore), click -> later(() -> openTarget(player, target)));
+            }));
+        }
+        Listed listed = list(page, "players:" + playerSort(player).key, entries, pageNumber);
+        int number = listed.number();
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
         playerSortButton(player, page, () -> openPlayers(player, 0));
-        paging(page, number, pages, n -> openPlayers(player, n));
-        player.openInventory(inventory);
+        paging(page, number, listed.pages(), n -> openPlayers(player, n));
+        // It looks the players banned up among all who ever played: not every second.
+        show(player, page, EVERY_FIVE_SECONDS, () -> openPlayers(player, number));
     }
 
     /**
@@ -1661,8 +1964,7 @@ public final class CamMenu implements Listener {
             return;
         }
         CamBan ban = plugin.getBan();
-        Page page = new Page();
-        Inventory inventory = create(page, SMALL, messages.getMessage("menu-admin-target-title")
+        Page page = page(player, SMALL, messages.getMessage("menu-admin-target-title")
                 .replace("{player}", target.name()));
         put(page, 13, targetItem(target, targetLines(player, target)), click -> { });
         if (plugin.getStop().mayUse(player)) {
@@ -1688,7 +1990,7 @@ public final class CamMenu implements Listener {
                     }));
         }
         put(page, SLOT_SMALL_BACK, Material.ARROW, "menu-to-players", click -> later(() -> openPlayers(player, 0)));
-        player.openInventory(inventory);
+        show(player, page, EVERY_SECOND, () -> openTarget(player, target));
     }
 
     /**
@@ -1723,8 +2025,7 @@ public final class CamMenu implements Listener {
             return;
         }
         Target target = draft.target;
-        Page page = new Page();
-        Inventory inventory = create(page, SMALL, messages.getMessage(draft.change
+        Page page = page(player, SMALL, messages.getMessage(draft.change
                 ? "menu-admin-ban-change-title" : "menu-admin-ban-title").replace("{player}", target.name()));
         put(page, 4, targetItem(target, targetLines(player, target)), click -> { });
         boolean forGood = draft.minutes == 0L;
@@ -1782,7 +2083,8 @@ public final class CamMenu implements Listener {
                     openTarget(player, target);
                 }));
         put(page, 18, Material.ARROW, "menu-to-target", click -> later(() -> openTarget(player, target)));
-        player.openInventory(inventory);
+        // A ban being set up stays as he leaves it, until he clicks.
+        show(player, page);
     }
 
     /**
@@ -1840,6 +2142,7 @@ public final class CamMenu implements Listener {
         }
         Map<UUID, String> names = new LinkedHashMap<>();
         Map<UUID, Integer> counts = new HashMap<>();
+        Page page = page(player, LIST, messages.getMessage("menu-admin-spots-title"));
         for (CamSpots.Owner owner : plugin.getSpots().owners()) {
             names.put(owner.id(), owner.name());
             counts.put(owner.id(), owner.spots());
@@ -1857,38 +2160,38 @@ public final class CamMenu implements Listener {
         List<Map.Entry<UUID, String>> list = new ArrayList<>(names.entrySet());
         sortPlayers(player, list, Map.Entry::getValue, Map.Entry::getKey);
         // The first slot of the first page is for everybody.
-        int total = list.size() + 1;
-        int pages = Math.max(1, (total + ENTRIES - 1) / ENTRIES);
-        int number = Math.min(Math.max(0, pageNumber), pages - 1);
-        Page page = new Page();
-        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-spots-title"));
-        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < total; slot++) {
-            int index = number * ENTRIES + slot;
-            if (index == 0) {
-                String everybody = messages.getMessage("menu-admin-everybody-name");
-                List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-spots-everybody-lore")));
-                lore.addAll(restrictionLines(moderation.everybodyText()));
-                lore.addAll(lines(messages.getMessage("menu-admin-spots-everybody-actions")));
-                put(page, slot, everybodyItem(lore, moderation.everybodyBan() != null), click -> later(() -> {
-                    spotDrafts.put(player.getUniqueId(), spotDraft(null, everybody));
-                    openSpotBan(player);
-                }));
-                continue;
-            }
-            UUID id = list.get(index - 1).getKey();
-            String name = list.get(index - 1).getValue();
-            List<String> lore = spotOwnerLines(id, counts.getOrDefault(id, 0));
-            lore.addAll(lines(messages.getMessage("menu-admin-spots-actions")));
-            put(page, slot, playerItem(id, name, lore, moderation.banOf(id) != null),
-                    click -> later(() -> openSpotsOf(player, id, name, 0)));
+        List<Row> entries = new ArrayList<>();
+        entries.add(new Row("everybody", slot -> {
+            String everybody = messages.getMessage("menu-admin-everybody-name");
+            List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-spots-everybody-lore")));
+            lore.addAll(restrictionLines(moderation.everybodyText()));
+            lore.addAll(lines(messages.getMessage("menu-admin-spots-everybody-actions")));
+            put(page, slot, everybodyItem(lore, moderation.everybodyBan() != null), click -> later(() -> {
+                spotDrafts.put(player.getUniqueId(), spotDraft(null, everybody));
+                openSpotBan(player);
+            }));
+        }));
+        for (Map.Entry<UUID, String> entry : list) {
+            UUID id = entry.getKey();
+            String name = entry.getValue();
+            entries.add(new Row(id, slot -> {
+                List<String> lore = spotOwnerLines(id, counts.getOrDefault(id, 0));
+                lore.addAll(lines(messages.getMessage("menu-admin-spots-actions")));
+                put(page, slot, playerItem(id, name, lore, moderation.banOf(id) != null),
+                        click -> later(() -> openSpotsOf(player, id, name, 0)));
+            }));
         }
-        if (list.isEmpty()) {
+        Listed listed = list(page, "spot-owners:" + playerSort(player).key, entries, pageNumber);
+        int number = listed.number();
+        if (page.listing.order().size() == 1) {
+            // Everybody alone, and nobody gone either.
             put(page, 22, Material.GRAY_DYE, "menu-admin-spots-empty", click -> { });
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
         playerSortButton(player, page, () -> openSpotOwners(player, 0));
-        paging(page, number, pages, n -> openSpotOwners(player, n));
-        player.openInventory(inventory);
+        paging(page, number, listed.pages(), n -> openSpotOwners(player, n));
+        // It reads the files of the players offline, to sort them by their last flight: not every second.
+        show(player, page, EVERY_FIVE_SECONDS, () -> openSpotOwners(player, number));
     }
 
     /** How many spots he has, how many of them are public or shared, and what keeps him, as lines under him. */
@@ -1959,53 +2262,17 @@ public final class CamMenu implements Listener {
             Share share = spots.shareOf(owner, spot.key());
             return share == null ? 0 : share.likes();
         }, spot -> spots.views(owner, spot), nearFrom(player));
-        int pages = Math.max(1, (list.size() + ENTRIES - 1) / ENTRIES);
-        int number = Math.min(Math.max(0, pageNumber), pages - 1);
-        Page page = new Page();
-        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-spots-of-title")
-                .replace("{player}", name));
-        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < list.size(); slot++) {
-            Spot spot = list.get(number * ENTRIES + slot);
-            Share share = spots.shareOf(owner, spot.key());
-            boolean open = share != null && share.isEveryone();
-            boolean shared = share != null && (!share.getPlayers().isEmpty() || !share.getPending().isEmpty());
-            List<String> lore = spotLore(owner, spot);
-            if (open) {
-                lore.addAll(lines(messages.getMessage("menu-spot-public-lore")
-                        .replace("{likes}", String.valueOf(share.likes()))));
-            }
-            if (share != null && !share.getPlayers().isEmpty()) {
-                lore.addAll(lines(messages.getMessage("menu-spot-shared-lore")
-                        .replace("{players}", spots.whom(share))));
-            }
-            if (share != null && !share.getPending().isEmpty()) {
-                lore.addAll(lines(messages.getMessage("menu-spot-offered-lore")
-                        .replace("{players}", spots.offeredTo(share))));
-            }
-            if (!open && !shared) {
-                lore.addAll(lines(messages.getMessage("menu-admin-spot-private")));
-            }
-            lore.addAll(lines(messages.getMessage(open || shared ? "menu-admin-spot-actions-shared"
-                    : "menu-admin-spot-actions")));
-            Material icon = open ? Material.GLOBE_BANNER_PATTERN : shared ? Material.MAP : Material.FILLED_MAP;
-            put(page, slot, item(icon, messages.getMessage("menu-spot").replace("{spot}", spot.name()), lore),
-                    click -> {
-                        if (click.isShiftClick()) {
-                            later(() -> {
-                                moderation.delete(player, owner, name, spot);
-                                openSpotsOf(player, owner, name, pageNumber);
-                            });
-                        } else if (click.isRightClick()) {
-                            act(player, () -> moderation.teleport(player, name, spot));
-                        } else if (click.isLeftClick() && (open || shared)) {
-                            later(() -> {
-                                moderation.takeDown(player, owner, name, spot);
-                                openSpotsOf(player, owner, name, pageNumber);
-                            });
-                        }
-                    });
+        Page page = page(player, LIST, messages.getMessage("menu-admin-spots-of-title").replace("{player}", name));
+        // Filled in below, once the list knows which page of it is shown.
+        int[] shown = new int[1];
+        List<Row> entries = new ArrayList<>();
+        for (Spot spot : list) {
+            entries.add(new Row(spot.key(), slot -> putSpotOf(player, page, slot, owner, name, spot, shown)));
         }
-        if (list.isEmpty()) {
+        Listed listed = list(page, "spots-of:" + owner + ":" + sort.key, entries, pageNumber);
+        int number = listed.number();
+        shown[0] = number;
+        if (listed.empty()) {
             put(page, 22, Material.GRAY_DYE, "menu-admin-spots-none", click -> { });
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-spot-owners", click -> later(() -> openSpotOwners(player, 0)));
@@ -2022,8 +2289,60 @@ public final class CamMenu implements Listener {
             adminSpotSorts.put(player.getUniqueId(), SpotSort.of(chosen));
             openSpotsOf(player, owner, name, 0);
         });
-        paging(page, number, pages, n -> openSpotsOf(player, owner, name, n));
-        player.openInventory(inventory);
+        paging(page, number, listed.pages(), n -> openSpotsOf(player, owner, name, n));
+        // The spots of a player offline come out of his file: not every second.
+        show(player, page, EVERY_FIVE_SECONDS, () -> openSpotsOf(player, owner, name, number));
+    }
+
+    /**
+     * One spot of a player on the admin page: where it is, whether it is
+     * public, shared or private, and its views. A click takes a public or
+     * shared one down, right-click takes the admin there, shift-click deletes
+     * it.
+     *
+     * @param shown which page of the list is shown, once it is known
+     */
+    private void putSpotOf(Player player, Page page, int slot, UUID owner, String name, Spot spot, int[] shown) {
+        SpotModeration moderation = plugin.getSpotModeration();
+        CamSpots spots = plugin.getSpots();
+        Share share = spots.shareOf(owner, spot.key());
+        boolean open = share != null && share.isEveryone();
+        boolean shared = share != null && (!share.getPlayers().isEmpty() || !share.getPending().isEmpty());
+        List<String> lore = spotLore(owner, spot);
+        if (open) {
+            lore.addAll(lines(messages.getMessage("menu-spot-public-lore")
+                    .replace("{likes}", String.valueOf(share.likes()))));
+        }
+        if (share != null && !share.getPlayers().isEmpty()) {
+            lore.addAll(lines(messages.getMessage("menu-spot-shared-lore")
+                    .replace("{players}", spots.whom(share))));
+        }
+        if (share != null && !share.getPending().isEmpty()) {
+            lore.addAll(lines(messages.getMessage("menu-spot-offered-lore")
+                    .replace("{players}", spots.offeredTo(share))));
+        }
+        if (!open && !shared) {
+            lore.addAll(lines(messages.getMessage("menu-admin-spot-private")));
+        }
+        lore.addAll(lines(messages.getMessage(open || shared ? "menu-admin-spot-actions-shared"
+                : "menu-admin-spot-actions")));
+        Material icon = open ? Material.GLOBE_BANNER_PATTERN : shared ? Material.MAP : Material.FILLED_MAP;
+        put(page, slot, item(icon, messages.getMessage("menu-spot").replace("{spot}", spot.name()), lore),
+                click -> {
+                    if (click.isShiftClick()) {
+                        later(() -> {
+                            moderation.delete(player, owner, name, spot);
+                            openSpotsOf(player, owner, name, shown[0]);
+                        });
+                    } else if (click.isRightClick()) {
+                        act(player, () -> moderation.teleport(player, name, spot));
+                    } else if (click.isLeftClick() && (open || shared)) {
+                        later(() -> {
+                            moderation.takeDown(player, owner, name, spot);
+                            openSpotsOf(player, owner, name, shown[0]);
+                        });
+                    }
+                });
     }
 
     /**
@@ -2075,8 +2394,7 @@ public final class CamMenu implements Listener {
                 openSpotsOf(player, draft.id, draft.name, 0);
             }
         };
-        Page page = new Page();
-        Inventory inventory = create(page, MEDIUM, messages.getMessage(draft.change
+        Page page = page(player, MEDIUM, messages.getMessage(draft.change
                 ? "menu-admin-spot-restrict-change-title" : "menu-admin-spot-restrict-title")
                 .replace("{player}", draft.name));
         String now = draft.everybody() ? moderation.everybodyText() : moderation.banText(draft.id);
@@ -2105,7 +2423,8 @@ public final class CamMenu implements Listener {
         }, back);
         put(page, 27, Material.ARROW, draft.everybody() ? "menu-to-spot-owners" : "menu-to-spots-of",
                 click -> later(back));
-        player.openInventory(inventory);
+        // A restriction being set up stays as he leaves it, until he clicks.
+        show(player, page);
     }
 
     /**
@@ -2250,37 +2569,44 @@ public final class CamMenu implements Listener {
         }
         List<Map.Entry<UUID, String>> list = new ArrayList<>(people.entrySet());
         sortPlayers(player, list, Map.Entry::getValue, Map.Entry::getKey);
-        // The first slot of the first page is for everybody.
-        int total = list.size() + 1;
-        int pages = Math.max(1, (total + ENTRIES - 1) / ENTRIES);
-        int number = Math.min(Math.max(0, pageNumber), pages - 1);
-        Page page = new Page();
-        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-tours-title"));
-        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < total; slot++) {
-            int index = number * ENTRIES + slot;
-            UUID id = index == 0 ? null : list.get(index - 1).getKey();
-            String name = index == 0 ? messages.getMessage("menu-admin-everybody-name")
-                    : list.get(index - 1).getValue();
-            List<String> lore = new ArrayList<>(id == null
-                    ? lines(messages.getMessage("menu-admin-tours-everybody-lore")) : tourLines(id));
-            lore.addAll(id == null ? switchLines(moderation.offText()) : restrictionLines(moderation.banText(id)));
-            lore.addAll(lines(messages.getMessage(id == null ? "menu-admin-tours-everybody-actions"
-                    : "menu-admin-tours-actions")));
-            ItemStack item = id == null ? everybodyItem(lore, moderation.everybodyBan() != null)
-                    : playerItem(id, name, lore, moderation.banOf(id) != null);
-            put(page, slot, item, click -> later(() -> {
-                tourDrafts.put(player.getUniqueId(), tourDraft(id, name));
-                if (id == null) {
-                    openTourSwitch(player);
-                } else {
-                    openTourBan(player);
-                }
+        Page page = page(player, LIST, messages.getMessage("menu-admin-tours-title"));
+        // The first slot of the first page is for everybody, null.
+        List<UUID> ids = new ArrayList<>();
+        Map<UUID, String> names = new HashMap<>();
+        ids.add(null);
+        for (Map.Entry<UUID, String> entry : list) {
+            ids.add(entry.getKey());
+            names.put(entry.getKey(), entry.getValue());
+        }
+        List<Row> entries = new ArrayList<>();
+        for (UUID id : ids) {
+            String name = id == null ? messages.getMessage("menu-admin-everybody-name") : names.get(id);
+            entries.add(new Row(id == null ? "everybody" : id, slot -> {
+                List<String> lore = new ArrayList<>(id == null
+                        ? lines(messages.getMessage("menu-admin-tours-everybody-lore")) : tourLines(id));
+                lore.addAll(id == null ? switchLines(moderation.offText())
+                        : restrictionLines(moderation.banText(id)));
+                lore.addAll(lines(messages.getMessage(id == null ? "menu-admin-tours-everybody-actions"
+                        : "menu-admin-tours-actions")));
+                ItemStack item = id == null ? everybodyItem(lore, moderation.everybodyBan() != null)
+                        : playerItem(id, name, lore, moderation.banOf(id) != null);
+                put(page, slot, item, click -> later(() -> {
+                    tourDrafts.put(player.getUniqueId(), tourDraft(id, name));
+                    if (id == null) {
+                        openTourSwitch(player);
+                    } else {
+                        openTourBan(player);
+                    }
+                }));
             }));
         }
+        Listed listed = list(page, "tour-players:" + playerSort(player).key, entries, pageNumber);
+        int number = listed.number();
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
         playerSortButton(player, page, () -> openTourPlayers(player, 0));
-        paging(page, number, pages, n -> openTourPlayers(player, n));
-        player.openInventory(inventory);
+        paging(page, number, listed.pages(), n -> openTourPlayers(player, n));
+        // It reads the files of the players offline, to sort them by their last flight: not every second.
+        show(player, page, EVERY_FIVE_SECONDS, () -> openTourPlayers(player, number));
     }
 
     /** Whether he shows others round or follows a tour - or that he is not online -, as lines under him. */
@@ -2346,8 +2672,7 @@ public final class CamMenu implements Listener {
             tourDrafts.remove(player.getUniqueId());
             openTourPlayers(player, 0);
         };
-        Page page = new Page();
-        Inventory inventory = create(page, MEDIUM, messages.getMessage(draft.change
+        Page page = page(player, MEDIUM, messages.getMessage(draft.change
                 ? "menu-admin-tour-restrict-change-title" : "menu-admin-tour-restrict-title")
                 .replace("{player}", draft.name));
         put(page, 4, restrictTarget(draft, restrictionLines(moderation.banText(draft.id))), click -> { });
@@ -2362,7 +2687,8 @@ public final class CamMenu implements Listener {
                 () -> moderation.ban(player, draft.id, draft.name, lead, join, draft.minutes, draft.reason),
                 () -> moderation.unban(player, draft.id, draft.name), back);
         put(page, 27, Material.ARROW, "menu-to-tour-players", click -> later(back));
-        player.openInventory(inventory);
+        // A restriction being set up stays as he leaves it, until he clicks.
+        show(player, page);
     }
 
     /**
@@ -2384,8 +2710,7 @@ public final class CamMenu implements Listener {
             tourDrafts.remove(player.getUniqueId());
             openTourPlayers(player, 0);
         };
-        Page page = new Page();
-        Inventory inventory = create(page, MEDIUM, messages.getMessage(draft.change
+        Page page = page(player, MEDIUM, messages.getMessage(draft.change
                 ? "menu-admin-tour-off-change-title" : "menu-admin-tour-off-title"));
         put(page, 4, everybodyItem(switchLines(moderation.offText()), draft.change), click -> { });
         boolean off = draft.any();
@@ -2409,7 +2734,8 @@ public final class CamMenu implements Listener {
                 () -> moderation.switchOff(player, draft.minutes, draft.reason), () -> moderation.switchOn(player),
                 back);
         put(page, 27, Material.ARROW, "menu-to-tour-players", click -> later(back));
-        player.openInventory(inventory);
+        // A restriction being set up stays as he leaves it, until he clicks.
+        show(player, page);
     }
 
     /**
@@ -2487,31 +2813,32 @@ public final class CamMenu implements Listener {
                     .thenComparing(Comparator.comparingLong((String name) -> trail.flightsOf(name).isEmpty() ? 0L
                             : trail.flightsOf(name).get(0).startedAt()).reversed()));
         }
-        int pages = Math.max(1, (names.size() + ENTRIES - 1) / ENTRIES);
-        int number = Math.min(Math.max(0, pageNumber), pages - 1);
-        Page page = new Page();
-        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-trails-title"));
-        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < names.size(); slot++) {
-            String name = names.get(number * ENTRIES + slot);
-            List<CamTrail.Flight> flights = trail.flightsOf(name);
-            Player online = Bukkit.getPlayerExact(name);
-            String label = messages.getMessage("menu-admin-player").replace("{player}", name);
-            List<String> lore = new ArrayList<>();
-            if (!flights.isEmpty()) {
-                lore.addAll(lines(messages.getMessage("menu-admin-trails-count")
-                        .replace("{count}", String.valueOf(flights.size()))
-                        .replace("{date}", date(flights.get(0).startedAt()))));
-            }
-            lore.addAll(lines(messages.getMessage("menu-admin-trails-actions")));
-            put(page, slot, online != null ? head(online, label, lore) : item(Material.LEAD, label, lore),
-                    click -> later(() -> openFlights(player, name, 0)));
+        Page page = page(player, LIST, messages.getMessage("menu-admin-trails-title"));
+        List<Row> entries = new ArrayList<>();
+        for (String name : names) {
+            entries.add(new Row(name.toLowerCase(Locale.ROOT), slot -> {
+                List<CamTrail.Flight> flights = trail.flightsOf(name);
+                Player online = Bukkit.getPlayerExact(name);
+                String label = messages.getMessage("menu-admin-player").replace("{player}", name);
+                List<String> lore = new ArrayList<>();
+                if (!flights.isEmpty()) {
+                    lore.addAll(lines(messages.getMessage("menu-admin-trails-count")
+                            .replace("{count}", String.valueOf(flights.size()))
+                            .replace("{date}", date(flights.get(0).startedAt()))));
+                }
+                lore.addAll(lines(messages.getMessage("menu-admin-trails-actions")));
+                put(page, slot, online != null ? head(online, label, lore) : item(Material.LEAD, label, lore),
+                        click -> later(() -> openFlights(player, name, 0)));
+            }));
         }
+        Listed listed = list(page, "trails:" + playerSort(player).key, entries, pageNumber);
+        int number = listed.number();
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
         put(page, SLOT_NEW, Material.BUCKET, "menu-admin-trails-hide",
                 click -> act(player, () -> trail.command(player, new String[0])));
         playerSortButton(player, page, () -> openTrails(player, 0));
-        paging(page, number, pages, n -> openTrails(player, n));
-        player.openInventory(inventory);
+        paging(page, number, listed.pages(), n -> openTrails(player, n));
+        show(player, page, EVERY_SECOND, () -> openTrails(player, number));
     }
 
     /**
@@ -2531,39 +2858,41 @@ public final class CamMenu implements Listener {
             openTrails(player, 0);
             return;
         }
-        int pages = Math.max(1, (flights.size() + ENTRIES - 1) / ENTRIES);
-        int number = Math.min(Math.max(0, pageNumber), pages - 1);
-        Page page = new Page();
-        Inventory inventory = create(page, LIST, messages.getMessage("menu-admin-flights-title")
-                .replace("{player}", name));
-        for (int slot = 0; slot < ENTRIES && number * ENTRIES + slot < flights.size(); slot++) {
-            CamTrail.Flight flight = flights.get(number * ENTRIES + slot);
-            String when = date(flight.startedAt());
-            List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-flight-lore")
-                    .replace("{date}", when)
-                    .replace("{time}", CamTimeLimit.formatDuration(TimeUnit.MILLISECONDS.toSeconds(flight.duration())))
-                    .replace("{distance}", String.valueOf(Math.round(flight.distance())))
-                    .replace("{from}", trail.place(flight.start()))
-                    .replace("{to}", trail.place(flight.last()))));
-            if (flight.flying()) {
-                lore.addAll(lines(messages.getMessage("menu-admin-flight-flying")));
-            }
-            lore.addAll(lines(messages.getMessage("menu-admin-flight-actions")));
-            String label = messages.getMessage("menu-admin-flight")
-                    .replace("{number}", String.valueOf(flight.number())).replace("{date}", when);
-            put(page, slot, flight.flying() ? Material.ENDER_EYE : Material.PAPER, label, lore, click -> {
-                if (click.isRightClick()) {
-                    act(player, () -> trail.showFlight(player, name, flight.startedAt(), true));
-                } else if (click.isLeftClick()) {
-                    act(player, () -> trail.showFlight(player, name, flight.startedAt(), false));
+        Page page = page(player, LIST, messages.getMessage("menu-admin-flights-title").replace("{player}", name));
+        List<Row> entries = new ArrayList<>();
+        for (CamTrail.Flight flight : flights) {
+            entries.add(new Row(flight.startedAt(), slot -> {
+                String when = date(flight.startedAt());
+                List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-flight-lore")
+                        .replace("{date}", when)
+                        .replace("{time}",
+                                CamTimeLimit.formatDuration(TimeUnit.MILLISECONDS.toSeconds(flight.duration())))
+                        .replace("{distance}", String.valueOf(Math.round(flight.distance())))
+                        .replace("{from}", trail.place(flight.start()))
+                        .replace("{to}", trail.place(flight.last()))));
+                if (flight.flying()) {
+                    lore.addAll(lines(messages.getMessage("menu-admin-flight-flying")));
                 }
-            });
+                lore.addAll(lines(messages.getMessage("menu-admin-flight-actions")));
+                String label = messages.getMessage("menu-admin-flight")
+                        .replace("{number}", String.valueOf(flight.number())).replace("{date}", when);
+                put(page, slot, flight.flying() ? Material.ENDER_EYE : Material.PAPER, label, lore, click -> {
+                    if (click.isRightClick()) {
+                        act(player, () -> trail.showFlight(player, name, flight.startedAt(), true));
+                    } else if (click.isLeftClick()) {
+                        act(player, () -> trail.showFlight(player, name, flight.startedAt(), false));
+                    }
+                });
+            }));
         }
+        Listed listed = list(page, "flights:" + name.toLowerCase(Locale.ROOT), entries, pageNumber);
+        int number = listed.number();
         put(page, SLOT_BACK, Material.ARROW, "menu-to-trails", click -> later(() -> openTrails(player, 0)));
         put(page, SLOT_NEW, Material.SPYGLASS, "menu-admin-flights-all",
                 click -> act(player, () -> trail.command(player, new String[]{name, "all"})));
-        paging(page, number, pages, n -> openFlights(player, name, n));
-        player.openInventory(inventory);
+        paging(page, number, listed.pages(), n -> openFlights(player, name, n));
+        // A flight still going grows by the second.
+        show(player, page, EVERY_SECOND, () -> openFlights(player, name, number));
     }
 
     /**
@@ -2685,7 +3014,9 @@ public final class CamMenu implements Listener {
     /**
      * Every click into a window of the menu is turned away - in the window
      * and in his own inventory below it, which a shift-click would empty into
-     * it -, and the button it hit is pressed.
+     * it -, and the button it hit is pressed. Not one that came there by
+     * itself only a moment ago, see {@link #CLICK_GUARD}: the click was meant
+     * for what stood there before.
      */
     @EventHandler(priority = EventPriority.HIGH)
     public void onClick(InventoryClickEvent event) {
@@ -2695,6 +3026,10 @@ public final class CamMenu implements Listener {
         event.setCancelled(true);
         // The slots of the window come first, his own inventory after them.
         if (event.getRawSlot() < 0 || event.getRawSlot() >= page.getInventory().getSize()) {
+            return;
+        }
+        Long guarded = page.guarded.get(event.getRawSlot());
+        if (guarded != null && System.currentTimeMillis() < guarded) {
             return;
         }
         Consumer<ClickType> button = page.buttons.get(event.getRawSlot());
@@ -2729,12 +3064,6 @@ public final class CamMenu implements Listener {
     }
 
     // ------------------------------------------------------------ items
-
-    private static Inventory create(Page page, int size, String title) {
-        Inventory inventory = Bukkit.createInventory(page, size, title);
-        page.inventory = inventory;
-        return inventory;
-    }
 
     /** A button by a text of the language file: its name, and under it the text with {@code -lore} after the key. */
     private void put(Page page, int slot, Material material, String key, Consumer<ClickType> action) {
