@@ -5,9 +5,6 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
-import de.elia.cameraplugin.session.EndReason;
-import de.elia.cameraplugin.spot.CamSpots;
-import de.elia.cameraplugin.spot.Spot;
 import de.elia.cameraplugin.storage.PlayerRecord;
 import de.elia.cameraplugin.storage.PlayerStore;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
@@ -21,7 +18,6 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -31,10 +27,8 @@ import java.util.concurrent.TimeUnit;
  * how often a player flew, how long and how far his camera flew altogether,
  * both for one flight on average, the longest flight and the longest way, how
  * far it got from his body - that only without a fixed border: at one, nearly
- * everybody gets there once, and all would have the same number -, how often
- * something got his body, how often others followed him and he others with
- * {@code /cam follow}, since when all this is counted, and when he was last
- * in camera mode. Below them, how often his spots were looked at.
+ * everybody gets there once, and all would have the same number - and since
+ * when all this is counted.
  *
  * <ul>
  *   <li>{@code /cam stats} - his own</li>
@@ -63,17 +57,15 @@ public final class CamStats {
     private final CamBattery battery;
     private final CamTimeLimit timeLimit;
     private final CameraPlayers cameraPlayers;
-    private final CamSpots spots;
 
     public CamStats(CamSettings settings, Messages messages, PlayerStore store, CamBattery battery,
-                    CamTimeLimit timeLimit, CameraPlayers cameraPlayers, CamSpots spots) {
+                    CamTimeLimit timeLimit, CameraPlayers cameraPlayers) {
         this.settings = settings;
         this.messages = messages;
         this.store = store;
         this.battery = battery;
         this.timeLimit = timeLimit;
         this.cameraPlayers = cameraPlayers;
-        this.spots = spots;
     }
 
     /**
@@ -81,11 +73,8 @@ public final class CamStats {
      * shorter than {@code statistics.min-seconds}, only when it ended. The
      * record is written to its file by whoever ends camera mode, together with
      * the battery.
-     *
-     * @param reason why it ended: whether something got the body, see
-     *               {@link EndReason#caughtBody()}
      */
-    public void record(Player player, CameraData data, EndReason reason) {
+    public void record(Player player, CameraData data) {
         if (!settings.isStatsEnabled()) {
             return;
         }
@@ -93,27 +82,10 @@ public final class CamStats {
         PlayerRecord record = store.get(player.getUniqueId());
         if (counts(seconds)) {
             record.addSession(player.getName(), data.getStartedAt(), seconds,
-                    data.getDistanceFlown(), data.getFarthestFromBody(), reason.caughtBody());
+                    data.getDistanceFlown(), data.getFarthestFromBody());
         } else {
             record.addUncountedSession(player.getName());
         }
-    }
-
-    /**
-     * A guest has begun to follow a guide, {@code /cam follow}: one follower
-     * more for the guide, one tour followed more for the guest - each time
-     * anew, the same guest again after he left as well. Written at once: the
-     * guide may lead out of camera mode, and then nothing else writes his
-     * record before he leaves.
-     */
-    public void followed(Player guest, Player guide) {
-        if (!settings.isStatsEnabled()) {
-            return;
-        }
-        store.get(guide.getUniqueId()).addFollower(guide.getName());
-        store.get(guest.getUniqueId()).addFollowed(guest.getName());
-        store.save(guide.getUniqueId());
-        store.save(guest.getUniqueId());
     }
 
     /** How long a camera mode has been going on, in whole seconds, the way it counts once it ends. */
@@ -208,10 +180,9 @@ public final class CamStats {
     }
 
     /**
-     * Sends the statistics of one player, the views of his spots while he
-     * has any, his battery while there is one, and his cooldown while it
-     * runs. A line whose text is empty is left out, as it is under the button
-     * of the menu.
+     * Sends the statistics of one player, his battery while there is one,
+     * and his cooldown while it runs. A line whose text is empty is left
+     * out, as it is under the button of the menu.
      */
     private void show(CommandSender sender, UUID id, String name) {
         for (Line line : lines(id, name)) {
@@ -228,9 +199,8 @@ public final class CamStats {
     /**
      * The lines of the statistics of one player, as {@code /cam stats} sends
      * them and the menu shows them under its button: the header, the
-     * numbers, the views of his spots while he has any, his battery while
-     * there is one and his cooldown while it runs - or {@code stats-off}
-     * alone, with nothing to show.
+     * numbers, his battery while there is one and his cooldown while it
+     * runs - or {@code stats-off} alone, with nothing to show.
      *
      * <p>While he is in camera mode, the flight going on is in the numbers
      * already, as {@link #record} would add it if it ended now, and
@@ -241,14 +211,9 @@ public final class CamStats {
      * numbers then, and for somebody who has no counted flight yet there are
      * none.</p>
      *
-     * <p>When he was last in camera mode, {@code stats-last}, stands under the
-     * numbers only while he is not: in it, {@code stats-flying} says it
-     * already.</p>
-     *
-     * <p>The views of his spots, the battery and the cooldown say how things
-     * stand now, not what has added up over all flights - a reset leaves the
-     * views, a spot deleted takes its own along -: {@code stats-gap} sets them
-     * apart from the numbers above them.</p>
+     * <p>The battery and the cooldown say how things stand now, not what has
+     * added up over all flights: {@code stats-gap} sets them apart from the
+     * numbers above them.</p>
      */
     public List<Line> lines(UUID id, String name) {
         List<Line> lines = new ArrayList<>();
@@ -269,8 +234,6 @@ public final class CamStats {
             lines.add(new Line("stats-header", "{player}", name));
         } else if (sessions == 0 && flight == null) {
             lines.add(new Line("stats-none", "{player}", name));
-            // He may have led without camera mode.
-            addFollow(lines, record);
         } else {
             lines.add(new Line("stats-header", "{player}", name));
             if (counted != null) {
@@ -281,31 +244,13 @@ public final class CamStats {
             }
             if (sessions > 0) {
                 addNumbers(lines, record, counted, counted == null ? 0L : now, sessions);
-                // A flight too short to count is the last one as well, and a
-                // reset leaves it; a record from before this was noted does
-                // not know.
-                if (flight == null && record.getLastFlightEnded() > 0L) {
-                    lines.add(new Line("stats-last", "{date}", date(record.getLastFlightEnded())));
-                }
-            } else {
-                addFollow(lines, record);
             }
         }
         long cooldown = timeLimit.getCooldownRemaining(id);
-        // The spots he has now: one he deleted has taken its views along.
-        Collection<Spot> ownSpots = settings.isStatsEnabled() && spots.isEnabled()
-                ? spots.spotsOf(id).values() : List.of();
-        if (settings.isStatsEnabled() && (!ownSpots.isEmpty() || settings.isBatteryEnabled() || cooldown > 0)) {
+        if (settings.isStatsEnabled() && (settings.isBatteryEnabled() || cooldown > 0)) {
             // Only under the numbers: with the statistics switched off, the
             // battery stands under the header alone.
             lines.add(new Line("stats-gap"));
-        }
-        if (!ownSpots.isEmpty()) {
-            long views = 0L;
-            for (Spot spot : ownSpots) {
-                views += spots.views(id, spot);
-            }
-            lines.add(new Line("stats-spot-views", "{views}", String.valueOf(views)));
         }
         if (settings.isBatteryEnabled()) {
             lines.add(new Line("stats-battery",
@@ -320,8 +265,8 @@ public final class CamStats {
 
     /**
      * The numbers over all flights: altogether, for one flight on average,
-     * the longest flight and the longest way, how far from the body, how often
-     * something got it, who followed whom, and since when.
+     * the longest flight and the longest way, how far from the body and since
+     * when.
      *
      * @param counted the flight going on, if it would count now, or {@code null}
      * @param now     how long that one has been going, in seconds, or 0
@@ -348,9 +293,6 @@ public final class CamStats {
                     counted == null ? 0.0 : counted.getFarthestFromBody());
             lines.add(new Line("stats-farthest", "{distance}", blocks(farthest)));
         }
-        // The flight going on has not been caught: it has not ended.
-        lines.add(new Line("stats-body-caught", "{count}", String.valueOf(record.getBodyCaught())));
-        addFollow(lines, record);
         // The first counted flight is the one going on, while the record has
         // none yet; a record from before this was noted does not know.
         long since = record.getSessions() == 0 && counted != null
@@ -361,21 +303,8 @@ public final class CamStats {
     }
 
     /**
-     * How often others began to follow him and he somebody, {@code /cam
-     * follow} - only while following is switched on, and only for whoever
-     * has done either: it is no part of every flight.
-     */
-    private void addFollow(List<Line> lines, PlayerRecord record) {
-        if (settings.isTourEnabled() && (record.getFollowers() > 0L || record.getFollowed() > 0L)) {
-            lines.add(new Line("stats-follow", "{led}", String.valueOf(record.getFollowers()),
-                    "{followed}", String.valueOf(record.getFollowed())));
-        }
-    }
-
-    /**
      * A day as {@code stats-since-date} writes it, in the time zone of the
-     * server, for {@code stats-since} and {@code stats-last}. A pattern that
-     * is none falls back on year, month and day.
+     * server. A pattern that is none falls back on year, month and day.
      */
     private String date(long millis) {
         ZonedDateTime when = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault());

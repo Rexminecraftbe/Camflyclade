@@ -1030,8 +1030,7 @@ public final class CamSpots {
 
     /**
      * The spots of a player, online or not, by {@link Spot#key()}, for the
-     * admin page and {@code /cam stats}: read from his file while he is
-     * offline.
+     * admin page: read from his file while he is offline.
      */
     public Map<String, Spot> spotsOf(UUID owner) {
         if (inFile()) {

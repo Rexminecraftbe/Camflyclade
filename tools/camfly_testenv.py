@@ -5580,11 +5580,8 @@ def statistik_checks(env, bot):
     statistics.min-seconds nicht - im Flug sagt /cam stats, ab wann er
     zaehlt, und nur wann er endete, kommt in die Datei -, einer darueber
     zaehlt, sobald er so lange laeuft, und "Counted since" nennt den Tag, an
-    dem er begann. "Last in cam mode" steht nach dem Flug darunter, im Flug
-    nicht. "Body caught" ist nach dem Reset 0 - ein mit /cam beendeter Flug
-    zaehlt nicht, der laufende auch nicht -, ein Treffer am Koerper macht 1
-    daraus, und die Zahl steht in der Datei. Mit statistics.enabled: false
-    sagt /cam stats, dass sie aus ist.
+    dem er begann. Mit statistics.enabled: false sagt /cam stats, dass sie
+    aus ist.
     """
     def zahl(zeilen, muster):
         for z in zeilen:
@@ -5682,8 +5679,6 @@ def statistik_checks(env, bot):
             z = befehl(bot, "/cam stats")
             FIND.test("min-seconds: 30 - ein kuerzerer Flug zaehlt nicht",
                       gesagt(z, rf"{BOT_NAME} has not been in cam mode yet"), zeige(z))
-            FIND.test("stats-last: ohne gezaehlten Flug steht es nicht unter stats-none",
-                      not gesagt(z, r"Last in cam mode"), zeige(z))
             FIND.test("min-seconds: 30 - wann er endete, steht trotzdem in der Datei (stats.last-flight)",
                       letzter_flug() > vorher, f"vorher {vorher}, nachher {letzter_flug()}")
 
@@ -5698,55 +5693,15 @@ def statistik_checks(env, bot):
             FIND.test("min-seconds: 8 - danach zaehlt er mit, und gezaehlt wird seit dem Tag, an dem er begann",
                       gesagt(z, r"\(counted in\)") and zahl(z, r"Flights: (\d+)") == 1
                       and gesagt(z, rf"Counted since: {heute}$"), zeige(z))
-            FIND.test("stats-last: im Flug steht nicht da, wann er zuletzt im Cam-Modus war - das sagt stats-flying",
-                      gesagt(z, r"In cam mode right now: ") and not gesagt(z, r"Last in cam mode"), zeige(z))
             cam_off(bot)
             z = befehl(bot, "/cam stats")
             FIND.test("min-seconds: 8 - nach dem Ende ein Flug, und Counted since bleibt",
                       zahl(z, r"Flights: (\d+)") == 1 and gesagt(z, rf"Counted since: {heute}$"), zeige(z))
-            seit = next((i for i, zeile in enumerate(z) if re.search(r"Counted since: ", zeile)), None)
-            zuletzt = next((i for i, zeile in enumerate(z) if re.search(rf"Last in cam mode: {heute}$", zeile)), None)
-            FIND.test("stats-last: nach dem Flug steht der Tag da, an dem er endete, unter Counted since",
-                      seit is not None and zuletzt is not None and zuletzt > seit, zeige(z))
             datei = spielerdatei(env)
             text = datei.read_text(encoding="utf-8") if datei is not None else ""
             FIND.test("statistics: seit wann gezaehlt wird, steht in der Datei (stats.counted-since)",
                       re.search(r"(?m)^\s*counted-since: \d+\s*$", text) is not None, str(datei))
         set_option(env, "min-seconds", "0", "statistics")
-
-        # --- stats-body-caught ---
-        z = befehl(bot, "/cam stats")
-        FIND.test("stats-body-caught: nach dem Reset und einem mit /cam beendeten Flug ist der Koerper nie erwischt",
-                  gesagt(z, r"Body caught: 0$"), zeige(z))
-        erwischt = zahl(z, r"Body caught: (\d+)")
-        bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
-        set_option(env, "enabled", "false", "cam-safety")
-        try:
-            if FIND.test("stats-body-caught: Cam-Modus fuer einen Treffer am Koerper gestartet", cam_on(bot), ""):
-                koerper = bot.server_pos()
-                if koerper is None:
-                    FIND.test("stats-body-caught: Standort des Koerpers lesbar", False, "")
-                    cam_off(bot)
-                else:
-                    kx, ky, kz = koerper
-                    z = befehl(bot, "/cam stats")
-                    FIND.test("stats-body-caught: der Flug, der gerade laeuft, zaehlt noch nicht mit",
-                              gesagt(z, r"In cam mode right now: ")
-                              and zahl(z, r"Body caught: (\d+)") == erwischt, zeige(z))
-                    hinstellen(bot, kx - 6, _floor(ky + 0.5), kz)
-                    console(env, f"damage @e[type=minecraft:mannequin,x={kx},y={ky},z={kz},distance=..1,limit=1] "
-                                 f"1 minecraft:cactus", pause=2)
-                    z = befehl(bot, "/cam stats")
-                    FIND.test("stats-body-caught: ein Treffer am Koerper beendet den Flug und zaehlt einmal mehr",
-                              not gesagt(z, r"In cam mode right now")
-                              and zahl(z, r"Body caught: (\d+)") == erwischt + 1, zeige(z))
-                    datei = spielerdatei(env)
-                    text = datei.read_text(encoding="utf-8") if datei is not None else ""
-                    FIND.test("stats-body-caught: die Zahl steht in der Datei (stats.body-caught)",
-                              re.search(rf"(?m)^\s*body-caught: {erwischt + 1}\s*$", text) is not None, str(datei))
-        finally:
-            bot.chat(f"/effect clear {BOT_NAME}")
-            set_option(env, "enabled", "true", "cam-safety")
 
         set_option(env, "enabled", "false", "statistics")
         z = befehl(bot, "/cam stats")
@@ -8648,16 +8603,6 @@ def fuehrung_checks(env, bot):
         # Dazu all, das alle auf einmal einlaedt (follow.invite-all).
         FIND.test("Tab nach /cam follow invite: der Spieler daneben, auch ohne Cam-Modus, und all",
                   sorted(tabs) == sorted([ZUSCHAUER_NAME, "all"]), str(tabs))
-
-        def folgen_zahlen(client):
-            """Was /cam stats bei "Follow" sagt: wie oft ihm einer folgte, wie oft er folgte - ohne die Zeile 0, 0."""
-            for zeile in befehl(client, "/cam stats"):
-                treffer = re.search(r"Follow: led (\d+) · followed (\d+)$", zeile)
-                if treffer:
-                    return int(treffer.group(1)), int(treffer.group(2))
-            return 0, 0
-
-        fuehrer_vorher, gast_vorher = folgen_zahlen(bot), folgen_zahlen(zuschauer)
         # Wie ein echter Client im Flug: die Geschwindigkeit des Servers, ohne Schwerkraft.
         zuschauer.call("velocity", on=True)
         seit = zuschauer.mark()
@@ -8724,12 +8669,6 @@ def fuehrung_checks(env, bot):
                   "(Follower)" in text and "(Leader)" in text and ZUSCHAUER_NAME in text
                   and text.index(ZUSCHAUER_NAME) < text.index("(Follower)") < text.index(BOT_NAME)
                   < text.index("(Leader)"), text)
-        fuehrer_nachher, gast_nachher = folgen_zahlen(bot), folgen_zahlen(zuschauer)
-        FIND.test("stats-follow: /cam stats zaehlt mit - der Fuehrer hat einmal mehr gefuehrt, der Gast ist einmal "
-                  "mehr gefolgt",
-                  fuehrer_nachher == (fuehrer_vorher[0] + 1, fuehrer_vorher[1])
-                  and gast_nachher == (gast_vorher[0], gast_vorher[1] + 1),
-                  f"Fuehrer {fuehrer_vorher} -> {fuehrer_nachher}, Gast {gast_vorher} -> {gast_nachher}")
         # Der Koerper des Gastes steht sechs Bloecke hinter dem Fuehrer: Der
         # fliegt hin, die Kamera des Gastes mit.
         bot.call("fly", wait=30, dx=-5, timeout=15000)
@@ -11268,14 +11207,6 @@ def spotreiter_checks(env, bot):
         treffer = re.search(r"Views: (\d+)", text)
         return int(treffer.group(1)) if treffer else None
 
-    def statistik_aufrufe():
-        """Wie oft die Punkte des Bots zusammen aufgerufen wurden, wie /cam stats es sagt."""
-        for zeile in befehl(bot, "/cam stats"):
-            treffer = re.search(r"Spot views: (\d+)$", zeile)
-            if treffer:
-                return int(treffer.group(1))
-        return None
-
     if not FIND.test("Cam-Modus ist vor dem Test der Reiter aus", cam_off(bot), ""):
         return
     heim = bot.server_pos()
@@ -11484,7 +11415,6 @@ def spotreiter_checks(env, bot):
         FIND.test("Voreingestellt steht viewpoints.views-cooldown-minutes: 10 da",
                   re.search(r"(?m)^\s*views-cooldown-minutes:\s*10\s*$", ausgeliefert(env)) is not None, "")
         hinstellen(bot, x, y, z)
-        stats_vorher = statistik_aufrufe()
         befehl(bot, "/cam spot Beta", warten=2.5)
         befehl(bot, "/cam spot Beta", warten=1.0)
         einmal = aufrufe("Beta")
@@ -11496,10 +11426,6 @@ def spotreiter_checks(env, bot):
         set_option(env, "views-cooldown-minutes", "10", "viewpoints")
         FIND.test("views-cooldown-minutes: 10 - zweimal gleich hintereinander zaehlt einmal; mit 0 zaehlt jeder Sprung",
                   einmal == 1 and jeder == 3, f"{einmal} / {jeder}")
-        stats_nachher = statistik_aufrufe()
-        FIND.test("stats-spot-views: /cam stats zaehlt die Aufrufe aller eigenen Punkte zusammen - die von Beta kommen dazu",
-                  stats_vorher is not None and jeder is not None and stats_nachher == stats_vorher + jeder,
-                  f"{stats_vorher} -> {stats_nachher}, Beta {jeder}")
     finally:
         try:
             for client in (zuschauer, bot):

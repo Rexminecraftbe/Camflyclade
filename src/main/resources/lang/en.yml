@@ -843,10 +843,6 @@ messages:
   # One flight on average: how long ({time}) and how far ({distance}, in blocks).
   stats-average: "&7Average flight: &f{time} &7· &f{distance} blocks"
   stats-battery: "&7Battery: &f{charge} &7of &f{capacity}"
-  # How many flights ended because something got the body ({count}): it was hit, moved, taken away or struck by a
-  # potion, or he died. Only flights that count (statistics.min-seconds), and not the one going on. With statistics
-  # from before this was noted, it counts from 0 on: how their flights ended is not known.
-  stats-body-caught: "&7Body caught: &f{count}"
   stats-cooldown: "&7Cam mode again in: &f{time}"
   stats-distance: "&7Distance flown: &f{distance} blocks"
   # Only without a fixed border (camera-mode.max-distance-mode: fixed with a border that holds): at one, nearly
@@ -858,18 +854,10 @@ messages:
   # In its place while the flight is shorter than statistics.min-seconds ({min}): ended now, it would not count, and
   # the numbers under it leave it out.
   stats-flying-uncounted: "&aIn cam mode right now: &f{time} &7(counts from {min})"
-  # /cam follow: how often others began to follow him ({led} - every follower, each time anew) and how often he began
-  # to follow somebody ({followed}). Only while follow is switched on, and only once either is more than 0. /cam stats
-  # reset sets both back to 0; statistics from before this was noted count from 0 on.
-  stats-follow: "&7Follow: led &f{led} &7· followed &f{followed}"
-  # The empty line between the numbers, which add up over all flights, and stats-spot-views, stats-battery and
-  # stats-cooldown, which say how things stand now. Switched off, or "", for none.
+  # The empty line between the numbers, which add up over all flights, and stats-battery and stats-cooldown, which
+  # say how things stand now. Switched off, or "", for none.
   stats-gap: " "
   stats-header: "&eCam mode statistics of {player}:"
-  # When he was last in cam mode: {date} is the day his last flight ended, as stats-since-date writes it. A flight too
-  # short for statistics.min-seconds is the last one as well, and /cam stats reset leaves it. Left out while he is in
-  # cam mode - stats-flying says so then -, and in statistics from before this was noted until his next flight.
-  stats-last: "&7Last in cam mode: &f{date}"
   # The longest flight and the longest way in one flight: the two can be of different flights, which is why they
   # stand on lines of their own - on one, like stats-average, they would read as the same flight.
   stats-longest: "&7Longest flight: &f{time}"
@@ -885,11 +873,6 @@ messages:
   # the server). Statistics from before this was noted do not say it, and the line is left out until a reset.
   stats-since: "&7Counted since: &f{date}"
   stats-since-date: "yyyy-MM-dd"
-  # How often his spots of /cam spot were looked at altogether ({views}): the views the menu shows under each of them
-  # (menu-spot-views), added up - every jump there, his own as well, the same player at the same spot once in
-  # viewpoints.views-cooldown-minutes at most. Only while he has a spot. /cam stats reset leaves them; a spot that is
-  # deleted takes its views along.
-  stats-spot-views: "&7Spot views: &f{views}"
   stats-total-time: "&7Time in cam mode: &f{time}"
   stats-unknown-player: "&cNobody called {player} has been on this server."
   stats-usage: "&eUse /cam stats, /cam stats reset or /cam stats player <name>."
@@ -1594,16 +1577,13 @@ message-settings:
   startup-skins-loading: true
   stats-average: true
   stats-battery: true
-  stats-body-caught: true
   stats-cooldown: true
   stats-distance: true
   stats-farthest: true
   stats-flying: true
   stats-flying-uncounted: true
-  stats-follow: true
   stats-gap: true
   stats-header: true
-  stats-last: true
   stats-longest: true
   stats-longest-distance: true
   stats-none: true
@@ -1611,7 +1591,6 @@ message-settings:
   stats-reset: true
   stats-sessions: true
   stats-since: true
-  stats-spot-views: true
   stats-total-time: true
   stats-unknown-player: true
   stats-usage: true
