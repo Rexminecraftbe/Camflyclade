@@ -858,12 +858,16 @@ messages:
   # say how things stand now. Switched off, or "", for none.
   stats-gap: " "
   stats-header: "&eCam mode statistics of {player}:"
+  # The longest flight and the longest way in one flight: the two can be of different flights, which is why they
+  # stand on lines of their own - on one, like stats-average, they would read as the same flight.
   stats-longest: "&7Longest flight: &f{time}"
   stats-longest-distance: "&7Longest distance in one flight: &f{distance} blocks"
   stats-none: "&e{player} has not been in cam mode yet."
   stats-off: "&cThe statistics are switched off."
   stats-reset: "&aYour cam mode statistics have been reset."
-  stats-sessions: "&7Times in cam mode: &f{count}"
+  # How many flights count ({count}): only those of statistics.min-seconds at least - one switched on and off again
+  # at once is no flight.
+  stats-sessions: "&7Flights: &f{count}"
   # Since when the numbers count: {date} is the day the first counted flight began - after /cam stats reset the next
   # one -, as stats-since-date writes it (a pattern of Java's DateTimeFormatter, e.g. dd.MM.yyyy, in the time zone of
   # the server). Statistics from before this was noted do not say it, and the line is left out until a reset.
