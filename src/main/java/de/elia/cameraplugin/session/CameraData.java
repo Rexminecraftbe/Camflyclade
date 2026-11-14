@@ -56,9 +56,20 @@ public class CameraData {
     private double distanceFlown;
     /**
      * The farthest the camera has been from the body so far, in blocks, in
-     * the world of the body.
+     * the world of the body - however it got there, for {@code cam-log}.
      */
     private double farthestFromBody;
+    /**
+     * How far flying has carried the camera from the body, in blocks: what
+     * the steps flown so far added to its distance from the body and took
+     * off it again, and never more than it is from the body now. A jump - to
+     * a spot, with {@code /cam resume}, after the guide of {@code /cam follow},
+     * back to the body, through a portal - is no step, and adds nothing to
+     * it; see {@link #noteStep}.
+     */
+    private double flownFromBody;
+    /** The most {@link #flownFromBody} has been so far, for the statistics. */
+    private double farthestFlownFromBody;
     /**
      * His statistics of moving when camera mode started, put back when it
      * ends, see {@link de.elia.cameraplugin.progress.CamProgressGuard}.
@@ -127,9 +138,27 @@ public class CameraData {
     /** How far the camera has flown so far, for {@code cam-log} and the statistics. */
     public double getDistanceFlown() { return distanceFlown; }
     public void addDistanceFlown(double blocks) { distanceFlown += blocks; }
-    /** The farthest the camera has been from the body, for {@code cam-log} and the statistics. */
+    /** The farthest the camera has been from the body, jumps and all, for {@code cam-log}. */
     public double getFarthestFromBody() { return farthestFromBody; }
     public void noteDistanceFromBody(double blocks) { farthestFromBody = Math.max(farthestFromBody, blocks); }
+    /** The farthest flying alone has carried the camera from the body, for the statistics. */
+    public double getFarthestFlownFromBody() { return farthestFlownFromBody; }
+
+    /**
+     * A step flown in the world of the body: how far the camera was from the
+     * body before the step and after it. What the step carried it away from
+     * the body goes onto {@link #flownFromBody}, what it brought it back
+     * comes off it - and it is never more than the camera is from the body
+     * now.
+     *
+     * <p>A jump in between adds nothing: far off, only what it flies on from
+     * there counts; back close to the body, what it flew out before is
+     * gone.</p>
+     */
+    public void noteStep(double before, double after) {
+        flownFromBody = Math.min(after, flownFromBody + after - before);
+        farthestFlownFromBody = Math.max(farthestFlownFromBody, flownFromBody);
+    }
     /** His statistics of moving when camera mode started. */
     public Map<Statistic, Integer> getMovementAtStart() { return movementAtStart; }
     public void setMovementAtStart(Map<Statistic, Integer> movementAtStart) { this.movementAtStart = movementAtStart; }

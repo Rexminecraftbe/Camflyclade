@@ -5580,7 +5580,10 @@ def statistik_checks(env, bot):
     statistics.min-seconds nicht - im Flug sagt /cam stats, ab wann er
     zaehlt, und nur wann er endete, kommt in die Datei -, einer darueber
     zaehlt, sobald er so lange laeuft, und "Counted since" nennt den Tag, an
-    dem er begann. Mit statistics.enabled: false sagt /cam stats, dass sie
+    dem er begann. Den weitesten Abstand zum Koerper zaehlt nur, was die
+    Kamera geflogen ist: Nach einem Sprung zu einem Punkt zehn Bloecke ueber
+    dem Koerper und vier Bloecken von dort weiter hoch sind es um die vier,
+    nicht vierzehn. Mit statistics.enabled: false sagt /cam stats, dass sie
     aus ist.
     """
     def zahl(zeilen, muster):
@@ -5702,6 +5705,36 @@ def statistik_checks(env, bot):
             FIND.test("statistics: seit wann gezaehlt wird, steht in der Datei (stats.counted-since)",
                       re.search(r"(?m)^\s*counted-since: \d+\s*$", text) is not None, str(datei))
         set_option(env, "min-seconds", "0", "statistics")
+
+        # --- Ein Sprung zu einem Punkt ist kein Flug ---
+        set_option(env, "max-distance-enabled", "false", "camera-mode")
+        heim = bot.server_pos()
+        if heim is not None:
+            hx, hy, hz = _floor(heim[0]), _floor(heim[1]), _floor(heim[2])
+            # Luft ueber ihm, falls dort ein Haus eines Dorfes steht.
+            console(env, f"fill {hx - 1} {hy} {hz - 1} {hx + 1} {hy + 14} {hz + 1} minecraft:air", pause=0.5)
+        spots_loeschen(bot, "Statistik")
+        if FIND.test("Cam-Modus fuer einen Punkt hoch ueber dem Koerper gestartet", cam_on(bot), ""):
+            bot.call("fly", wait=30, dy=10, timeout=15000)
+            time.sleep(1.0)
+            z = befehl(bot, "/cam spot set Statistik")
+            gesetzt = gesagt(z, r"Spot Statistik saved here")
+            cam_off(bot)
+            befehl(bot, "/cam stats reset")
+            if FIND.test("Punkt zehn Bloecke ueber dem Koerper gesetzt, Statistik auf null, Cam-Modus wieder an",
+                         gesetzt and cam_on(bot), zeige(z)):
+                befehl(bot, "/cam spot Statistik")
+                time.sleep(0.5)
+                bot.call("fly", wait=30, dy=4, timeout=15000)
+                time.sleep(1.0)
+                cam_off(bot)
+                z = befehl(bot, "/cam stats")
+                weitest = zahl(z, r"Farthest from the body: (\d+) blocks")
+                FIND.test("statistics: der weiteste Abstand zum Koerper zaehlt nur Geflogenes - den Sprung zum "
+                          "Punkt zehn hoeher nicht, die vier Bloecke von dort weiter hoch schon",
+                          1 <= weitest <= 7, zeige(z))
+        spots_loeschen(bot, "Statistik")
+        set_option(env, "max-distance-enabled", "true", "camera-mode")
 
         set_option(env, "enabled", "false", "statistics")
         z = befehl(bot, "/cam stats")
@@ -20723,7 +20756,7 @@ ABSCHNITTE = [
     Abschnitt("protokoll", protokoll_checks, "log session/SessionTracker"),
     Abschnitt("akku", akku_checks, "battery timelimit/FlightLimit stats session/SessionListener"),
     Abschnitt("kosten", kosten_checks, "cost"),
-    Abschnitt("statistik", statistik_checks, "stats storage session/SessionTracker"),
+    Abschnitt("statistik", statistik_checks, "stats storage session/SessionTracker session/CameraData"),
     Abschnitt("alte_absturzdatei", alte_absturzdatei_checks, "crash storage session/SessionListener"),
     Abschnitt("zurueck", zurueck_checks, "back"),
     Abschnitt("endwarnung", endwarnung_checks, "timelimit battery"),
