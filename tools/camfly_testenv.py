@@ -5580,8 +5580,11 @@ def statistik_checks(env, bot):
     statistics.min-seconds nicht - im Flug sagt /cam stats, ab wann er
     zaehlt, und nur wann er endete, kommt in die Datei -, einer darueber
     zaehlt, sobald er so lange laeuft, und "Counted since" nennt den Tag, an
-    dem er begann. Mit statistics.enabled: false sagt /cam stats, dass sie
-    aus ist.
+    dem er begann. "Last in cam mode" steht nach dem Flug darunter, im Flug
+    nicht. "Body caught" ist nach dem Reset 0 - ein mit /cam beendeter Flug
+    zaehlt nicht, der laufende auch nicht -, ein Treffer am Koerper macht 1
+    daraus, und die Zahl steht in der Datei. Mit statistics.enabled: false
+    sagt /cam stats, dass sie aus ist.
     """
     def zahl(zeilen, muster):
         for z in zeilen:
@@ -5710,6 +5713,40 @@ def statistik_checks(env, bot):
             FIND.test("statistics: seit wann gezaehlt wird, steht in der Datei (stats.counted-since)",
                       re.search(r"(?m)^\s*counted-since: \d+\s*$", text) is not None, str(datei))
         set_option(env, "min-seconds", "0", "statistics")
+
+        # --- stats-body-caught ---
+        z = befehl(bot, "/cam stats")
+        FIND.test("stats-body-caught: nach dem Reset und einem mit /cam beendeten Flug ist der Koerper nie erwischt",
+                  gesagt(z, r"Body caught: 0$"), zeige(z))
+        erwischt = zahl(z, r"Body caught: (\d+)")
+        bot.chat(f"/effect give {BOT_NAME} minecraft:resistance infinite 255 true")
+        set_option(env, "enabled", "false", "cam-safety")
+        try:
+            if FIND.test("stats-body-caught: Cam-Modus fuer einen Treffer am Koerper gestartet", cam_on(bot), ""):
+                koerper = bot.server_pos()
+                if koerper is None:
+                    FIND.test("stats-body-caught: Standort des Koerpers lesbar", False, "")
+                    cam_off(bot)
+                else:
+                    kx, ky, kz = koerper
+                    z = befehl(bot, "/cam stats")
+                    FIND.test("stats-body-caught: der Flug, der gerade laeuft, zaehlt noch nicht mit",
+                              gesagt(z, r"In cam mode right now: ")
+                              and zahl(z, r"Body caught: (\d+)") == erwischt, zeige(z))
+                    hinstellen(bot, kx - 6, _floor(ky + 0.5), kz)
+                    console(env, f"damage @e[type=minecraft:mannequin,x={kx},y={ky},z={kz},distance=..1,limit=1] "
+                                 f"1 minecraft:cactus", pause=2)
+                    z = befehl(bot, "/cam stats")
+                    FIND.test("stats-body-caught: ein Treffer am Koerper beendet den Flug und zaehlt einmal mehr",
+                              not gesagt(z, r"In cam mode right now")
+                              and zahl(z, r"Body caught: (\d+)") == erwischt + 1, zeige(z))
+                    datei = spielerdatei(env)
+                    text = datei.read_text(encoding="utf-8") if datei is not None else ""
+                    FIND.test("stats-body-caught: die Zahl steht in der Datei (stats.body-caught)",
+                              re.search(rf"(?m)^\s*body-caught: {erwischt + 1}\s*$", text) is not None, str(datei))
+        finally:
+            bot.chat(f"/effect clear {BOT_NAME}")
+            set_option(env, "enabled", "true", "cam-safety")
 
         set_option(env, "enabled", "false", "statistics")
         z = befehl(bot, "/cam stats")

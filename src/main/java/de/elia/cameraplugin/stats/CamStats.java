@@ -5,6 +5,7 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.storage.PlayerRecord;
 import de.elia.cameraplugin.storage.PlayerStore;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
@@ -27,8 +28,9 @@ import java.util.concurrent.TimeUnit;
  * how often a player flew, how long and how far his camera flew altogether,
  * both for one flight on average, the longest flight and the longest way, how
  * far it got from his body - that only without a fixed border: at one, nearly
- * everybody gets there once, and all would have the same number -, since
- * when all this is counted, and when he was last in camera mode.
+ * everybody gets there once, and all would have the same number -, how often
+ * something got his body, since when all this is counted, and when he was
+ * last in camera mode.
  *
  * <ul>
  *   <li>{@code /cam stats} - his own</li>
@@ -73,8 +75,11 @@ public final class CamStats {
      * shorter than {@code statistics.min-seconds}, only when it ended. The
      * record is written to its file by whoever ends camera mode, together with
      * the battery.
+     *
+     * @param reason why it ended: whether something got the body, see
+     *               {@link EndReason#caughtBody()}
      */
-    public void record(Player player, CameraData data) {
+    public void record(Player player, CameraData data, EndReason reason) {
         if (!settings.isStatsEnabled()) {
             return;
         }
@@ -82,7 +87,7 @@ public final class CamStats {
         PlayerRecord record = store.get(player.getUniqueId());
         if (counts(seconds)) {
             record.addSession(player.getName(), data.getStartedAt(), seconds,
-                    data.getDistanceFlown(), data.getFarthestFromBody());
+                    data.getDistanceFlown(), data.getFarthestFromBody(), reason.caughtBody());
         } else {
             record.addUncountedSession(player.getName());
         }
@@ -275,8 +280,8 @@ public final class CamStats {
 
     /**
      * The numbers over all flights: altogether, for one flight on average,
-     * the longest flight and the longest way, how far from the body and since
-     * when.
+     * the longest flight and the longest way, how far from the body, how often
+     * something got it, and since when.
      *
      * @param counted the flight going on, if it would count now, or {@code null}
      * @param now     how long that one has been going, in seconds, or 0
@@ -302,6 +307,11 @@ public final class CamStats {
             double farthest = Math.max(record.getFarthestFromBody(),
                     counted == null ? 0.0 : counted.getFarthestFromBody());
             lines.add(new Line("stats-farthest", "{distance}", blocks(farthest)));
+        }
+        // The flight going on has not been caught: it has not ended. A record
+        // from before this was noted does not know.
+        if (record.getBodyCaught() != null) {
+            lines.add(new Line("stats-body-caught", "{count}", String.valueOf(record.getBodyCaught())));
         }
         // The first counted flight is the one going on, while the record has
         // none yet; a record from before this was noted does not know.

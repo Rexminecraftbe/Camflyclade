@@ -577,7 +577,7 @@ public final class CameraMode {
         // Only now that he has everything back: until here the file is the
         // one thing that would give it to him after a crash.
         plugin.getCrashGuard().delete(player);
-        plugin.getStats().record(player, cameraData);
+        plugin.getStats().record(player, cameraData, reason);
         plugin.getCamLog().ended(player, cameraData, reason, cameraAt);
         if (!plugin.isShuttingDown()) {
             plugin.getTimeLimit().startCooldown(player, reason);

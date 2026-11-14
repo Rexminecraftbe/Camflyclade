@@ -58,6 +58,15 @@ public enum EndReason {
         return kind;
     }
 
+    /**
+     * Whether something got his body: it was hit, moved, taken away or struck
+     * by a potion, or he died. Counted in the statistics,
+     * {@code stats-body-caught}.
+     */
+    public boolean caughtBody() {
+        return this == BODY || this == DEATH;
+    }
+
     /** How the reason reads in the log, e.g. {@code time-limit}. */
     public String logName() {
         return name().toLowerCase(Locale.ROOT).replace('_', '-');

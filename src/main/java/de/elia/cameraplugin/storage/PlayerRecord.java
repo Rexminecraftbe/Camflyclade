@@ -32,6 +32,14 @@ public final class PlayerRecord {
     /** The farthest his camera has ever been from his body, in blocks. */
     private double farthestFromBody;
     /**
+     * How many of his flights ended because something got his body, see
+     * {@link de.elia.cameraplugin.session.EndReason#caughtBody()} - or
+     * {@code null} in a file from before this was noted that has flights in
+     * it: how many of those it was, nobody knows, and so it stays until the
+     * statistics are reset.
+     */
+    private Long bodyCaught = 0L;
+    /**
      * When the first flight in these numbers began, as
      * {@link System#currentTimeMillis()} counts, or 0 while none has been
      * counted since the statistics were reset - and in a file from before this
@@ -84,8 +92,8 @@ public final class PlayerRecord {
     }
 
     PlayerRecord(String name, long sessions, long totalSeconds, long longestSeconds, double distanceFlown,
-                 double longestDistance, double farthestFromBody, long countedSince, long lastFlightEnded,
-                 Double batteryCharge, long batteryUpdated, Long cooldownStarted) {
+                 double longestDistance, double farthestFromBody, Long bodyCaught, long countedSince,
+                 long lastFlightEnded, Double batteryCharge, long batteryUpdated, Long cooldownStarted) {
         this.name = name;
         this.sessions = sessions;
         this.totalSeconds = totalSeconds;
@@ -93,6 +101,7 @@ public final class PlayerRecord {
         this.distanceFlown = distanceFlown;
         this.longestDistance = longestDistance;
         this.farthestFromBody = farthestFromBody;
+        this.bodyCaught = bodyCaught;
         this.countedSince = countedSince;
         this.lastFlightEnded = lastFlightEnded;
         this.batteryCharge = batteryCharge;
@@ -107,8 +116,10 @@ public final class PlayerRecord {
      * @param seconds   how long it ran
      * @param flown     how far the camera flew, in blocks
      * @param farthest  the farthest it got from the body, in blocks
+     * @param caught    whether it ended because something got the body
      */
-    public void addSession(String playerName, long startedAt, long seconds, double flown, double farthest) {
+    public void addSession(String playerName, long startedAt, long seconds, double flown, double farthest,
+                           boolean caught) {
         name = playerName;
         if (sessions == 0) {
             countedSince = startedAt;
@@ -119,6 +130,9 @@ public final class PlayerRecord {
         distanceFlown += flown;
         longestDistance = Math.max(longestDistance, flown);
         farthestFromBody = Math.max(farthestFromBody, farthest);
+        if (caught && bodyCaught != null) {
+            bodyCaught++;
+        }
         lastFlightEnded = System.currentTimeMillis();
         dirty = true;
     }
@@ -145,6 +159,7 @@ public final class PlayerRecord {
         distanceFlown = 0.0;
         longestDistance = 0.0;
         farthestFromBody = 0.0;
+        bodyCaught = 0L;
         countedSince = 0L;
         dirty = true;
     }
@@ -230,6 +245,8 @@ public final class PlayerRecord {
     public double getDistanceFlown() { return distanceFlown; }
     public double getLongestDistance() { return longestDistance; }
     public double getFarthestFromBody() { return farthestFromBody; }
+    /** How many flights ended because something got his body, or {@code null} while that is unknown. */
+    public Long getBodyCaught() { return bodyCaught; }
     /** When the first flight in these numbers began, or 0 while that is not known. */
     public long getCountedSince() { return countedSince; }
     /** When his last camera mode ended, or 0 while none has been counted. */

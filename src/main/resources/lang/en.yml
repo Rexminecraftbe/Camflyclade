@@ -843,6 +843,10 @@ messages:
   # One flight on average: how long ({time}) and how far ({distance}, in blocks).
   stats-average: "&7Average flight: &f{time} &7· &f{distance} blocks"
   stats-battery: "&7Battery: &f{charge} &7of &f{capacity}"
+  # How many flights ended because something got the body ({count}): it was hit, moved, taken away or struck by a
+  # potion, or he died. Only flights that count (statistics.min-seconds), and not the one going on. Statistics from
+  # before this was noted do not say it, and the line is left out until a reset.
+  stats-body-caught: "&7Body caught: &f{count}"
   stats-cooldown: "&7Cam mode again in: &f{time}"
   stats-distance: "&7Distance flown: &f{distance} blocks"
   # Only without a fixed border (camera-mode.max-distance-mode: fixed with a border that holds): at one, nearly
@@ -1581,6 +1585,7 @@ message-settings:
   startup-skins-loading: true
   stats-average: true
   stats-battery: true
+  stats-body-caught: true
   stats-cooldown: true
   stats-distance: true
   stats-farthest: true
