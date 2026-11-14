@@ -879,6 +879,9 @@ messages:
   # the server). Statistics from before this was noted do not say it, and the line is left out until a reset.
   stats-since: "&7Counted since: &f{date}"
   stats-since-date: "yyyy-MM-dd"
+  # Between the groups of three digits in the numbers of /cam stats - the flights and the blocks -, so that 1234567
+  # reads as 1,234,567: e.g. "." for 1.234.567, " " for 1 234 567, "" for none. The times are written as they are.
+  stats-thousands-separator: ","
   # How long he has been in cam mode over all flights. With statistics.skip-afk-time, time in which he did nothing is
   # left out after statistics.afk-seconds - here, in stats-average and in stats-longest.
   stats-total-time: "&7Time in cam mode: &f{time}"

@@ -5584,8 +5584,11 @@ def statistik_checks(env, bot):
     dem er begann. Den weitesten Abstand zum Koerper zaehlt nur, was die
     Kamera geflogen ist: Nach einem Sprung zu einem Punkt zehn Bloecke ueber
     dem Koerper und vier Bloecken von dort weiter hoch sind es um die vier,
-    nicht vierzehn. Mit statistics.enabled: false sagt /cam stats, dass sie
-    aus ist.
+    nicht vierzehn. Grosse Zahlen stehen in Dreiergruppen: 1234 Fluege und
+    1234567 Bloecke, waehrend er abgemeldet ist in seine Datei geschrieben,
+    sind 1,234 und 1,234,567 - mit stats-thousands-separator: "." 1.234.567,
+    mit "" wieder 1234567. Mit statistics.enabled: false sagt /cam stats,
+    dass sie aus ist.
     """
     def zahl(zeilen, muster):
         for z in zeilen:
@@ -5742,6 +5745,40 @@ def statistik_checks(env, bot):
         spots_loeschen(bot, "Statistik")
         set_option(env, "max-distance-enabled", "true", "camera-mode")
 
+        # --- Grosse Zahlen in Dreiergruppen ---
+        cam_off(bot)
+        befehl(bot, "/cam stats reset")
+        ersetzt = []
+
+        def grosse_zahlen():
+            datei = spielerdatei(env)
+            text = datei.read_text(encoding="utf-8") if datei is not None else ""
+            for schluessel, wert in (("sessions", "1234"), ("distance-flown", "1234567.0"),
+                                     ("longest-distance", "2345678.0")):
+                text, n = re.subn(rf"(?m)^(\s*){schluessel}: \S+\s*$", rf"\g<1>{schluessel}: {wert}", text)
+                ersetzt.append(n)
+            if datei is not None:
+                datei.write_text(text, encoding="utf-8")
+
+        if FIND.test("Bot meldet sich neu an, dazwischen bekommt er 1234 Fluege und 1234567 Bloecke in seine Datei",
+                     neu_anmelden(bot, grosse_zahlen) and ersetzt == [1, 1, 1], str(ersetzt)):
+            z = befehl(bot, "/cam stats")
+            FIND.test("statistics: grosse Zahlen in Dreiergruppen, voreingestellt mit Komma - Fluege, Strecke, "
+                      "Schnitt und laengste Strecke",
+                      gesagt(z, r"Flights: 1,234$") and gesagt(z, r"Distance flown: 1,234,567 blocks$")
+                      and gesagt(z, r"Average flight: \S.* · 1,000 blocks$")
+                      and gesagt(z, r"Longest distance in one flight: 2,345,678 blocks$"), zeige(z))
+            set_option(env, "stats-thousands-separator", '"."', "messages")
+            z = befehl(bot, "/cam stats")
+            FIND.test("stats-thousands-separator: \".\" - 1.234.567 Bloecke",
+                      gesagt(z, r"Flights: 1\.234$") and gesagt(z, r"Distance flown: 1\.234\.567 blocks$"), zeige(z))
+            set_option(env, "stats-thousands-separator", '""', "messages")
+            z = befehl(bot, "/cam stats")
+            FIND.test("stats-thousands-separator: \"\" - die Ziffern stehen zusammen",
+                      gesagt(z, r"Flights: 1234$") and gesagt(z, r"Distance flown: 1234567 blocks$"), zeige(z))
+            set_option(env, "stats-thousands-separator", '","', "messages")
+        befehl(bot, "/cam stats reset")
+
         set_option(env, "enabled", "false", "statistics")
         z = befehl(bot, "/cam stats")
         FIND.test("statistics.enabled: false - /cam stats sagt, dass sie aus ist",
@@ -5750,7 +5787,7 @@ def statistik_checks(env, bot):
         console(env, f"op {BOT_NAME}", pause=1.5)
         set_options(env, [("enabled", "true", "statistics"), ("view-others", "admin", "statistics"),
                           ("min-seconds", "0", "statistics"), ("max-distance-enabled", "true", "camera-mode"),
-                          ("max-distance-mode", "fixed")])
+                          ("max-distance-mode", "fixed"), ("stats-thousands-separator", '","', "messages")])
 
 
 def statistik_folgen_checks(env, bot):
