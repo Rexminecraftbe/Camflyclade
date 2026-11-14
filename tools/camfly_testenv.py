@@ -6408,7 +6408,7 @@ def bann_checks(env, bot):
 
         befehl(bot, f"/cam ban {ZUSCHAUER_NAME} 3s")
         zeilen = befehl(zuschauer, "/cam")
-        gesperrt = gesagt(zeilen, r"You are banned from cam mode for \d seconds\.")
+        gesperrt = gesagt(zeilen, r"You are banned from cam mode for \d seconds?\.")
         time.sleep(3.0)
         an = kamera_an()
         cam_off(zuschauer)
@@ -6748,8 +6748,9 @@ def startverzoegerung_checks(env, bot):
                   bool(zaehlt), zeige(z[:3]))
         FIND.test("start-delay: der Cam-Modus beginnt erst nach den drei Sekunden",
                   bool(an) and 2.7 <= dauer <= 5.0, f"nach {dauer:.1f} s")
-        FIND.test("start-delay: die Action-Bar zaehlt 3, 2, 1",
-                  all(gesagt(z, rf"Cam mode in {n} seconds") for n in (3, 2, 1)), zeige(z))
+        FIND.test("start-delay: die Action-Bar zaehlt 3, 2, 1 - die letzte als \"1 second\"",
+                  all(gesagt(z, rf"Cam mode in {n} {'second' if n == 1 else 'seconds'} ") for n in (3, 2, 1)),
+                  zeige(z))
         ticks = sum("block.note_block.hat" in t["text"] for t in bot.call("sounds", since=seit).get("sounds", []))
         FIND.test("sounds.start-delay - jede Sekunde der Ton", ticks >= 3, f"{ticks} Mal")
         cam_off(bot)
