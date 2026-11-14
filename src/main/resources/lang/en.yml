@@ -840,15 +840,23 @@ messages:
   startup-skins-failed: "Skins could not be preloaded at startup: {error}"
   startup-skins-loaded: "Skins loaded successfully."
   startup-skins-loading: "Loading skins..."
+  stats-average-distance: "&7Average distance per flight: &f{distance} blocks"
+  stats-average-time: "&7Average flight: &f{time}"
   stats-battery: "&7Battery: &f{charge} &7of &f{capacity}"
   stats-cooldown: "&7Cam mode again in: &f{time}"
   stats-distance: "&7Distance flown: &f{distance} blocks"
+  # Only without a fixed border (camera-mode.max-distance-mode: fixed with a border that holds): at one, nearly
+  # everybody gets there once, and the number would be max-distance for all.
   stats-farthest: "&7Farthest from the body: &f{distance} blocks"
   # While he is in cam mode: how long the flight has been going on ({time}). The numbers under it count it already,
   # as they will once it ends - in the menu they grow by the second.
   stats-flying: "&aIn cam mode right now: &f{time} &7(counted in)"
+  # The empty line between the numbers, which add up over all flights, and stats-battery and stats-cooldown, which
+  # say how things stand now. Switched off, or "", for none.
+  stats-gap: " "
   stats-header: "&eCam mode statistics of {player}:"
   stats-longest: "&7Longest flight: &f{time}"
+  stats-longest-distance: "&7Longest distance in one flight: &f{distance} blocks"
   stats-none: "&e{player} has not been in cam mode yet."
   stats-off: "&cThe statistics are switched off."
   stats-reset: "&aYour cam mode statistics have been reset."
@@ -1553,13 +1561,17 @@ message-settings:
   startup-skins-failed: true
   startup-skins-loaded: true
   startup-skins-loading: true
+  stats-average-distance: true
+  stats-average-time: true
   stats-battery: true
   stats-cooldown: true
   stats-distance: true
   stats-farthest: true
   stats-flying: true
+  stats-gap: true
   stats-header: true
   stats-longest: true
+  stats-longest-distance: true
   stats-none: true
   stats-off: true
   stats-reset: true

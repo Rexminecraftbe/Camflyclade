@@ -20,8 +20,10 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * The statistics of camera mode, {@code statistics} and {@code /cam stats}:
- * how often a player flew, how long altogether and at most, how far his
- * camera flew, and how far it got from his body.
+ * how often a player flew, how long altogether, on average and at most, how
+ * far his camera flew altogether, on average and at most, and how far it got
+ * from his body - that last only without a fixed border: at one, nearly
+ * everybody gets there once, and all would have the same number.
  *
  * <ul>
  *   <li>{@code /cam stats} - his own</li>
@@ -159,11 +161,14 @@ public final class CamStats {
 
     /**
      * Sends the statistics of one player, his battery while there is one,
-     * and his cooldown while it runs.
+     * and his cooldown while it runs. A line whose text is empty is left
+     * out, as it is under the button of the menu.
      */
     private void show(CommandSender sender, UUID id, String name) {
         for (Line line : lines(id, name)) {
-            messages.sendConfiguredMessage(sender, line.key(), line.fills());
+            if (!messages.getMessage(line.key()).isEmpty()) {
+                messages.sendConfiguredMessage(sender, line.key(), line.fills());
+            }
         }
     }
 
@@ -181,6 +186,10 @@ public final class CamStats {
      * already, as {@link #record} will add it once it ends, and
      * {@code stats-flying} says how long it has been going: the menu, which
      * draws them anew every second, shows them growing.</p>
+     *
+     * <p>The battery and the cooldown say how things stand now, not what has
+     * added up over all flights: {@code stats-gap} sets them apart from the
+     * numbers above them.</p>
      */
     public List<Line> lines(UUID id, String name) {
         List<Line> lines = new ArrayList<>();
@@ -199,31 +208,52 @@ public final class CamStats {
         } else if (sessions == 0) {
             lines.add(new Line("stats-none", "{player}", name));
         } else {
-            double flown = record.getDistanceFlown() + (flight == null ? 0.0 : flight.getDistanceFlown());
-            double farthest = Math.max(record.getFarthestFromBody(),
-                    flight == null ? 0.0 : flight.getFarthestFromBody());
+            long totalSeconds = record.getTotalSeconds() + now;
+            double flownNow = flight == null ? 0.0 : flight.getDistanceFlown();
+            double flown = record.getDistanceFlown() + flownNow;
             lines.add(new Line("stats-header", "{player}", name));
             if (flight != null) {
                 lines.add(new Line("stats-flying", "{time}", CamTimeLimit.formatDuration(now)));
             }
             lines.add(new Line("stats-sessions", "{count}", String.valueOf(sessions)));
-            lines.add(new Line("stats-total-time", "{time}",
-                    CamTimeLimit.formatDuration(record.getTotalSeconds() + now)));
+            lines.add(new Line("stats-total-time", "{time}", CamTimeLimit.formatDuration(totalSeconds)));
+            lines.add(new Line("stats-average-time", "{time}",
+                    CamTimeLimit.formatDuration(Math.round((double) totalSeconds / sessions))));
             lines.add(new Line("stats-longest", "{time}",
                     CamTimeLimit.formatDuration(Math.max(record.getLongestSeconds(), now))));
-            lines.add(new Line("stats-distance", "{distance}", String.valueOf(Math.round(flown))));
-            lines.add(new Line("stats-farthest", "{distance}", String.valueOf(Math.round(farthest))));
+            lines.add(new Line("stats-distance", "{distance}", blocks(flown)));
+            lines.add(new Line("stats-average-distance", "{distance}", blocks(flown / sessions)));
+            lines.add(new Line("stats-longest-distance", "{distance}",
+                    blocks(Math.max(record.getLongestDistance(), flownNow))));
+            // At a fixed border nearly everybody gets there once, and from
+            // then on the number is the same for all: max-distance. It is
+            // still counted, for when the border goes.
+            if (!settings.limitsDistance()) {
+                double farthest = Math.max(record.getFarthestFromBody(),
+                        flight == null ? 0.0 : flight.getFarthestFromBody());
+                lines.add(new Line("stats-farthest", "{distance}", blocks(farthest)));
+            }
+        }
+        long cooldown = timeLimit.getCooldownRemaining(id);
+        if (settings.isStatsEnabled() && (settings.isBatteryEnabled() || cooldown > 0)) {
+            // Only under the numbers: with the statistics switched off, the
+            // battery stands under the header alone.
+            lines.add(new Line("stats-gap"));
         }
         if (settings.isBatteryEnabled()) {
             lines.add(new Line("stats-battery",
                     "{charge}", CamTimeLimit.formatDuration((long) Math.floor(battery.charge(id))),
                     "{capacity}", CamTimeLimit.formatDuration(settings.getBatteryCapacity())));
         }
-        long cooldown = timeLimit.getCooldownRemaining(id);
         if (cooldown > 0) {
             lines.add(new Line("stats-cooldown", "{time}", CamTimeLimit.formatDuration(cooldown)));
         }
         return lines;
+    }
+
+    /** A distance for {@code {distance}}, in whole blocks. */
+    private static String blocks(double distance) {
+        return String.valueOf(Math.round(distance));
     }
 
     /** The text of a line, filled in, or {@code null} while it is switched off. */
