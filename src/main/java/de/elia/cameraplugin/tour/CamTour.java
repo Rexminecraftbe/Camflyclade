@@ -928,7 +928,7 @@ public final class CamTour implements Listener {
         long wait = inviteWait(guide, other);
         if (wait > 0L) {
             messages.sendConfiguredMessage(guide, "tour-invite-wait", "{player}", other.getName(),
-                    "{seconds}", String.valueOf(wait));
+                    "{seconds}", String.valueOf(wait), "{time}", CamTimeLimit.formatSeconds(wait));
             return;
         }
         if (!plugin.getTourModeration().checkGuest(guide, other)) {
@@ -961,7 +961,8 @@ public final class CamTour implements Listener {
         }
         sendInvitation(guide, other);
         messages.sendConfiguredMessage(guide, "tour-invited", "{player}", other.getName(),
-                "{seconds}", String.valueOf(settings.getTourInvitationSeconds()));
+                "{seconds}", String.valueOf(settings.getTourInvitationSeconds()),
+                "{time}", CamTimeLimit.formatSeconds(settings.getTourInvitationSeconds()));
     }
 
     /**
@@ -1001,7 +1002,8 @@ public final class CamTour implements Listener {
         }
         messages.sendConfiguredMessage(guide, "tour-invited-all", "{count}", String.valueOf(invited.size()),
                 "{players}", String.join(", ", invited),
-                "{seconds}", String.valueOf(settings.getTourInvitationSeconds()));
+                "{seconds}", String.valueOf(settings.getTourInvitationSeconds()),
+                "{time}", CamTimeLimit.formatSeconds(settings.getTourInvitationSeconds()));
     }
 
     /**
@@ -1089,7 +1091,7 @@ public final class CamTour implements Listener {
             return;
         }
         String text = messages.getMessage("tour-invitation").replace("{player}", guide.getName())
-                .replace("{seconds}", String.valueOf(seconds));
+                .replace("{seconds}", String.valueOf(seconds)).replace("{time}", CamTimeLimit.formatSeconds(seconds));
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
         line.addAll(button("tour-button-accept", guide.getName(), "/cam follow accept " + guide.getName()));
         line.addAll(button("tour-button-decline", guide.getName(), "/cam follow decline " + guide.getName()));

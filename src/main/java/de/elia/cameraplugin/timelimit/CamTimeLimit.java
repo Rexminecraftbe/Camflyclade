@@ -67,6 +67,10 @@ public final class CamTimeLimit {
         this.store = store;
     }
 
+    /**
+     * A duration as the texts show it: under a minute in seconds - one of them
+     * as "1 second" -, above in minutes and seconds, hours, and days.
+     */
     public static String formatDuration(long seconds) {
         if (seconds >= 86400) {
             // Days only come up with a ban, see /cam ban.
@@ -84,8 +88,17 @@ public final class CamTimeLimit {
             long s = seconds % 60;
             return m + "m " + s + "s";
         } else {
-            return seconds + " seconds";
+            return formatSeconds(seconds);
         }
+    }
+
+    /**
+     * A number of seconds with its word, however many there are: "1 second",
+     * "60 seconds". For texts that count in seconds alone, like the
+     * invitations of {@code /cam follow}.
+     */
+    public static String formatSeconds(long seconds) {
+        return seconds + (seconds == 1 ? " second" : " seconds");
     }
 
     public void startTimeLimit(Player player) {

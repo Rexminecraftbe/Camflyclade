@@ -1834,8 +1834,9 @@ public final class CamMenu implements Listener {
      * Sorts a list of players the way the admin has it, kept by name
      * otherwise. By the last flight, whoever is in camera mode comes first -
      * the one who started last at the top -, then the others by when their
-     * last flight ended, as the statistics counted it; whoever never flew,
-     * or was not counted, comes last.
+     * last flight ended, as the statistics noted it - one too short to be
+     * counted as well; whoever never flew, or only while the statistics were
+     * switched off, comes last.
      */
     private <T> void sortPlayers(Player admin, List<T> list, Function<T, String> name, Function<T, UUID> id) {
         list.sort(Comparator.comparing(name, String.CASE_INSENSITIVE_ORDER));

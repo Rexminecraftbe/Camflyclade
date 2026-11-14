@@ -32,9 +32,17 @@ public final class PlayerRecord {
     /** The farthest his camera has ever been from his body, in blocks. */
     private double farthestFromBody;
     /**
+     * When the first flight in these numbers began, as
+     * {@link System#currentTimeMillis()} counts, or 0 while none has been
+     * counted since the statistics were reset - and in a file from before this
+     * was noted, which does not say it.
+     */
+    private long countedSince;
+    /**
      * When his last camera mode ended, as {@link System#currentTimeMillis()}
-     * counts, or 0 while none has been counted - for the admin pages of the
-     * menu, sorted by the last flight.
+     * counts, or 0 while none has ended - for the admin pages of the menu,
+     * sorted by the last flight. A flight too short for the statistics sets it
+     * as well: it is no count.
      */
     private long lastFlightEnded;
     /**
@@ -75,8 +83,8 @@ public final class PlayerRecord {
     }
 
     PlayerRecord(String name, long sessions, long totalSeconds, long longestSeconds, double distanceFlown,
-                 double longestDistance, double farthestFromBody, long lastFlightEnded, Double batteryCharge,
-                 long batteryUpdated, Long cooldownStarted) {
+                 double longestDistance, double farthestFromBody, long countedSince, long lastFlightEnded,
+                 Double batteryCharge, long batteryUpdated, Long cooldownStarted) {
         this.name = name;
         this.sessions = sessions;
         this.totalSeconds = totalSeconds;
@@ -84,6 +92,7 @@ public final class PlayerRecord {
         this.distanceFlown = distanceFlown;
         this.longestDistance = longestDistance;
         this.farthestFromBody = farthestFromBody;
+        this.countedSince = countedSince;
         this.lastFlightEnded = lastFlightEnded;
         this.batteryCharge = batteryCharge;
         this.batteryUpdated = batteryUpdated;
@@ -93,18 +102,33 @@ public final class PlayerRecord {
     /**
      * Adds one camera mode that has just ended.
      *
-     * @param seconds  how long it ran
-     * @param flown    how far the camera flew, in blocks
-     * @param farthest the farthest it got from the body, in blocks
+     * @param startedAt when it began, as {@link System#currentTimeMillis()} counts
+     * @param seconds   how long it ran
+     * @param flown     how far the camera flew, in blocks
+     * @param farthest  the farthest it got from the body, in blocks
      */
-    public void addSession(String playerName, long seconds, double flown, double farthest) {
+    public void addSession(String playerName, long startedAt, long seconds, double flown, double farthest) {
         name = playerName;
+        if (sessions == 0) {
+            countedSince = startedAt;
+        }
         sessions++;
         totalSeconds += seconds;
         longestSeconds = Math.max(longestSeconds, seconds);
         distanceFlown += flown;
         longestDistance = Math.max(longestDistance, flown);
         farthestFromBody = Math.max(farthestFromBody, farthest);
+        lastFlightEnded = System.currentTimeMillis();
+        dirty = true;
+    }
+
+    /**
+     * Notes a camera mode that has just ended too short for the statistics,
+     * {@code statistics.min-seconds}: nothing of it is counted, only when it
+     * ended.
+     */
+    public void addUncountedSession(String playerName) {
+        name = playerName;
         lastFlightEnded = System.currentTimeMillis();
         dirty = true;
     }
@@ -120,6 +144,7 @@ public final class PlayerRecord {
         distanceFlown = 0.0;
         longestDistance = 0.0;
         farthestFromBody = 0.0;
+        countedSince = 0L;
         dirty = true;
     }
 
@@ -204,6 +229,8 @@ public final class PlayerRecord {
     public double getDistanceFlown() { return distanceFlown; }
     public double getLongestDistance() { return longestDistance; }
     public double getFarthestFromBody() { return farthestFromBody; }
+    /** When the first flight in these numbers began, or 0 while that is not known. */
+    public long getCountedSince() { return countedSince; }
     /** When his last camera mode ended, or 0 while none has been counted. */
     public long getLastFlightEnded() { return lastFlightEnded; }
     /** The charge of the battery at {@link #getBatteryUpdated()}, or {@code null} for a battery never used. */

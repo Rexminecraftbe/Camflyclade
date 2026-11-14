@@ -244,6 +244,10 @@ public final class PlayerStore {
                 flown,
                 longestFlown,
                 Math.max(0.0, file.getDouble("stats.farthest-from-body")),
+                // A file from before this was noted does not say since when
+                // its numbers count. With numbers in it, that stays unknown
+                // until they are reset; without, the next flight says it.
+                Math.max(0L, file.getLong("stats.counted-since")),
                 Math.max(0L, file.getLong("stats.last-flight")),
                 charge == null ? null : Math.max(0.0, charge),
                 file.getLong("battery.updated"),
@@ -339,6 +343,9 @@ public final class PlayerStore {
         file.set("stats.distance-flown", Math.round(record.getDistanceFlown() * 10.0) / 10.0);
         file.set("stats.longest-distance", Math.round(record.getLongestDistance() * 10.0) / 10.0);
         file.set("stats.farthest-from-body", Math.round(record.getFarthestFromBody() * 10.0) / 10.0);
+        if (record.getCountedSince() > 0L) {
+            file.set("stats.counted-since", record.getCountedSince());
+        }
         if (record.getLastFlightEnded() > 0L) {
             file.set("stats.last-flight", record.getLastFlightEnded());
         }

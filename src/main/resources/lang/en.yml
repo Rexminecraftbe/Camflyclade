@@ -840,8 +840,8 @@ messages:
   startup-skins-failed: "Skins could not be preloaded at startup: {error}"
   startup-skins-loaded: "Skins loaded successfully."
   startup-skins-loading: "Loading skins..."
-  stats-average-distance: "&7Average distance per flight: &f{distance} blocks"
-  stats-average-time: "&7Average flight: &f{time}"
+  # One flight on average: how long ({time}) and how far ({distance}, in blocks).
+  stats-average: "&7Average flight: &f{time} &7· &f{distance} blocks"
   stats-battery: "&7Battery: &f{charge} &7of &f{capacity}"
   stats-cooldown: "&7Cam mode again in: &f{time}"
   stats-distance: "&7Distance flown: &f{distance} blocks"
@@ -851,6 +851,9 @@ messages:
   # While he is in cam mode: how long the flight has been going on ({time}). The numbers under it count it already,
   # as they will once it ends - in the menu they grow by the second.
   stats-flying: "&aIn cam mode right now: &f{time} &7(counted in)"
+  # In its place while the flight is shorter than statistics.min-seconds ({min}): ended now, it would not count, and
+  # the numbers under it leave it out.
+  stats-flying-uncounted: "&aIn cam mode right now: &f{time} &7(counts from {min})"
   # The empty line between the numbers, which add up over all flights, and stats-battery and stats-cooldown, which
   # say how things stand now. Switched off, or "", for none.
   stats-gap: " "
@@ -861,6 +864,11 @@ messages:
   stats-off: "&cThe statistics are switched off."
   stats-reset: "&aYour cam mode statistics have been reset."
   stats-sessions: "&7Times in cam mode: &f{count}"
+  # Since when the numbers count: {date} is the day the first counted flight began - after /cam stats reset the next
+  # one -, as stats-since-date writes it (a pattern of Java's DateTimeFormatter, e.g. dd.MM.yyyy, in the time zone of
+  # the server). Statistics from before this was noted do not say it, and the line is left out until a reset.
+  stats-since: "&7Counted since: &f{date}"
+  stats-since-date: "yyyy-MM-dd"
   stats-total-time: "&7Time in cam mode: &f{time}"
   stats-unknown-player: "&cNobody called {player} has been on this server."
   stats-usage: "&eUse /cam stats, /cam stats reset or /cam stats player <name>."
@@ -889,8 +897,10 @@ messages:
   # follower) and tour-reach-warning-guide (for the leader) count it down in the action bar, tour-reach-lost and
   # tour-reach-lost-guide say when it is over. tour-invitation has the buttons tour-button-accept and
   # tour-button-decline behind it, and what hovering over them says; it and tour-invited say for how many seconds it
-  # holds ({seconds}, follow.invitation-seconds). tour-invite-wait: he invited that player too short a time ago
-  # (follow.invite-cooldown-seconds, {seconds} left; once that player accepted, there is no wait). /cam follow invite all (follow.invite-all): tour-invited-all
+  # holds (follow.invitation-seconds). tour-invite-wait: he invited that player too short a time ago
+  # (follow.invite-cooldown-seconds, the seconds left; once that player accepted, there is no wait). In these and in
+  # tour-invited-all {time} is that many seconds with the word, "1 second" or "60 seconds", and {seconds} the number
+  # alone. /cam follow invite all (follow.invite-all): tour-invited-all
   # says whom ({players}) and how many ({count}) it invited, tour-invite-all-none that there was nobody to invite -
   # those invited already, invited a moment ago or kept from following are left out -, and how close they have to
   # be ({start} follow.start-distance, {radius} follow.radius; tour-invite-all-none-cam-only while start-distance is
@@ -931,13 +941,13 @@ messages:
   tour-guide-gone: "&c{player} is no longer in cam mode."
   tour-guide-out-of-reach: "&c{player} is out of the reach of your camera."
   tour-guide-spectator: "&cNot in spectator mode: it flies through walls."
-  tour-invitation: "&e{player} invites you to follow them with your camera - it runs out in {seconds} seconds."
+  tour-invitation: "&e{player} invites you to follow them with your camera - it runs out in {time}."
   tour-invite-all-none: "&eNobody to invite right now: without cam mode they have to be within {start} blocks of you, in cam mode within {radius} blocks."
   tour-invite-all-none-cam-only: "&eNobody to invite right now: they have to be in cam mode, within {radius} blocks of you."
   tour-invite-all-off: "&cInviting everybody at once is switched off."
-  tour-invite-wait: "&cYou invited {player} a moment ago: you can invite them again in {seconds} seconds."
-  tour-invited: "&aYou invited {player} to follow you. The invitation runs out in {seconds} seconds."
-  tour-invited-all: "&aYou invited {count} players to follow you: {players}. The invitations run out in {seconds} seconds."
+  tour-invite-wait: "&cYou invited {player} a moment ago: you can invite them again in {time}."
+  tour-invited: "&aYou invited {player} to follow you. The invitation runs out in {time}."
+  tour-invited-all: "&aYou invited {count} players to follow you: {players}. The invitations run out in {time}."
   tour-joined: "&aYou follow {player} now. Stop with /cam follow leave, /cam back or the menu."
   tour-joined-guide: "&a{player} follows you now."
   tour-kicked: "&e{player} sent you away: you no longer follow them."
@@ -1561,13 +1571,13 @@ message-settings:
   startup-skins-failed: true
   startup-skins-loaded: true
   startup-skins-loading: true
-  stats-average-distance: true
-  stats-average-time: true
+  stats-average: true
   stats-battery: true
   stats-cooldown: true
   stats-distance: true
   stats-farthest: true
   stats-flying: true
+  stats-flying-uncounted: true
   stats-gap: true
   stats-header: true
   stats-longest: true
@@ -1576,6 +1586,7 @@ message-settings:
   stats-off: true
   stats-reset: true
   stats-sessions: true
+  stats-since: true
   stats-total-time: true
   stats-unknown-player: true
   stats-usage: true

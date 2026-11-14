@@ -676,6 +676,8 @@ public final class CamSettings {
     private boolean statsEnabled;
     /** Who may look at the statistics of somebody else, {@code statistics.view-others}. */
     private ListAccess statsViewOthers;
+    /** How long a camera mode has to run to be counted, in seconds, {@code statistics.min-seconds}. */
+    private int statsMinSeconds;
 
     /** Whether start and end of camera mode are written down, the section {@code cam-log}. */
     private boolean camLogEnabled;
@@ -976,6 +978,7 @@ public final class CamSettings {
         readStartCost(config);
         statsEnabled = config.getBoolean("statistics.enabled", true);
         statsViewOthers = readAccess(config, "statistics.view-others");
+        statsMinSeconds = config.getInt("statistics.min-seconds", 5, 0);
         camLogEnabled = config.getBoolean("cam-log.enabled", false);
         camLogConsole = config.getBoolean("cam-log.console", false);
         camLogKeepDays = config.getInt("cam-log.keep-days", 30, 0);
@@ -2541,6 +2544,11 @@ public final class CamSettings {
 
     public ListAccess getStatsViewOthers() {
         return statsViewOthers;
+    }
+
+    /** How long a camera mode has to run to be counted, in seconds; 0 counts every one. */
+    public int getStatsMinSeconds() {
+        return statsMinSeconds;
     }
 
     public boolean isCamLogEnabled() {
