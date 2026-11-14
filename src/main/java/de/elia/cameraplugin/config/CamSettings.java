@@ -978,7 +978,7 @@ public final class CamSettings {
         readStartCost(config);
         statsEnabled = config.getBoolean("statistics.enabled", true);
         statsViewOthers = readAccess(config, "statistics.view-others");
-        statsMinSeconds = config.getInt("statistics.min-seconds", 10, 0);
+        statsMinSeconds = config.getInt("statistics.min-seconds", 5, 0);
         camLogEnabled = config.getBoolean("cam-log.enabled", false);
         camLogConsole = config.getBoolean("cam-log.console", false);
         camLogKeepDays = config.getInt("cam-log.keep-days", 30, 0);

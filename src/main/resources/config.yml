@@ -490,7 +490,7 @@ statistics:
   # So viele Sekunden muss ein Cam-Modus mindestens laufen, damit er zählt (0 = jeder zählt). Ein kürzerer - aus
   # Versehen gestartet, oder der Körper wurde gleich getroffen - zählte sonst als Flug und drückte den Schnitt.
   # Im Flug zählt /cam stats ihn erst mit, wenn er so lange läuft (Text: stats-flying-uncounted).
-  min-seconds: 10
+  min-seconds: 5
 
 # Protokoll: Jeder Start und jedes Ende des Cam-Modus kommt in eine Datei, eine pro Tag:
 # plugins/CamFly/logs/<Datum>.log. Darin steht, wer, wann, wo der Körper stand, warum der Cam-Modus

@@ -2330,7 +2330,7 @@ def prepare_server_files(env):
     text, n = replace_option(text, "set-in-cam-only", "false", "viewpoints")
     if n != 1:
         Log.warn("viewpoints.set-in-cam-only nicht in der Konfiguration gefunden")
-    # Voreingestellt zaehlt ein Flug erst nach zehn Sekunden. Die Abschnitte
+    # Voreingestellt zaehlt ein Flug erst nach fuenf Sekunden. Die Abschnitte
     # fliegen meist kuerzer und zaehlen trotzdem mit /cam stats und im Menue
     # nach; nur statistik_checks stellt die Mindestdauer fuer sich ein.
     text, n = replace_option(text, "min-seconds", "0", "statistics")
