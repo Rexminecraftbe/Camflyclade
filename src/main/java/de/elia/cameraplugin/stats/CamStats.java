@@ -32,8 +32,9 @@ import java.util.concurrent.TimeUnit;
  * both for one flight on average, the longest flight and the longest way, how
  * far it got from his body - that only without a fixed border: at one, nearly
  * everybody gets there once, and all would have the same number -, how often
- * something got his body, since when all this is counted, and when he was
- * last in camera mode. Below them, how often his spots were looked at.
+ * something got his body, how often others followed him and he others with
+ * {@code /cam follow}, since when all this is counted, and when he was last
+ * in camera mode. Below them, how often his spots were looked at.
  *
  * <ul>
  *   <li>{@code /cam stats} - his own</li>
@@ -96,6 +97,23 @@ public final class CamStats {
         } else {
             record.addUncountedSession(player.getName());
         }
+    }
+
+    /**
+     * A guest has begun to follow a guide, {@code /cam follow}: one follower
+     * more for the guide, one tour followed more for the guest - each time
+     * anew, the same guest again after he left as well. Written at once: the
+     * guide may lead out of camera mode, and then nothing else writes his
+     * record before he leaves.
+     */
+    public void followed(Player guest, Player guide) {
+        if (!settings.isStatsEnabled()) {
+            return;
+        }
+        store.get(guide.getUniqueId()).addFollower(guide.getName());
+        store.get(guest.getUniqueId()).addFollowed(guest.getName());
+        store.save(guide.getUniqueId());
+        store.save(guest.getUniqueId());
     }
 
     /** How long a camera mode has been going on, in whole seconds, the way it counts once it ends. */
@@ -251,6 +269,8 @@ public final class CamStats {
             lines.add(new Line("stats-header", "{player}", name));
         } else if (sessions == 0 && flight == null) {
             lines.add(new Line("stats-none", "{player}", name));
+            // He may have led without camera mode.
+            addFollow(lines, record);
         } else {
             lines.add(new Line("stats-header", "{player}", name));
             if (counted != null) {
@@ -267,6 +287,8 @@ public final class CamStats {
                 if (flight == null && record.getLastFlightEnded() > 0L) {
                     lines.add(new Line("stats-last", "{date}", date(record.getLastFlightEnded())));
                 }
+            } else {
+                addFollow(lines, record);
             }
         }
         long cooldown = timeLimit.getCooldownRemaining(id);
@@ -299,7 +321,7 @@ public final class CamStats {
     /**
      * The numbers over all flights: altogether, for one flight on average,
      * the longest flight and the longest way, how far from the body, how often
-     * something got it, and since when.
+     * something got it, who followed whom, and since when.
      *
      * @param counted the flight going on, if it would count now, or {@code null}
      * @param now     how long that one has been going, in seconds, or 0
@@ -328,12 +350,25 @@ public final class CamStats {
         }
         // The flight going on has not been caught: it has not ended.
         lines.add(new Line("stats-body-caught", "{count}", String.valueOf(record.getBodyCaught())));
+        addFollow(lines, record);
         // The first counted flight is the one going on, while the record has
         // none yet; a record from before this was noted does not know.
         long since = record.getSessions() == 0 && counted != null
                 ? counted.getStartedAt() : record.getCountedSince();
         if (since > 0L) {
             lines.add(new Line("stats-since", "{date}", date(since)));
+        }
+    }
+
+    /**
+     * How often others began to follow him and he somebody, {@code /cam
+     * follow} - only while following is switched on, and only for whoever
+     * has done either: it is no part of every flight.
+     */
+    private void addFollow(List<Line> lines, PlayerRecord record) {
+        if (settings.isTourEnabled() && (record.getFollowers() > 0L || record.getFollowed() > 0L)) {
+            lines.add(new Line("stats-follow", "{led}", String.valueOf(record.getFollowers()),
+                    "{followed}", String.valueOf(record.getFollowed())));
         }
     }
 

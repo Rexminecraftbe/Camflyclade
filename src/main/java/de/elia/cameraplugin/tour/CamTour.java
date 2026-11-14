@@ -1247,6 +1247,7 @@ public final class CamTour implements Listener {
         syncVisibility();
         messages.sendConfiguredMessage(guest, "tour-joined", "{player}", guide.getName());
         messages.sendConfiguredMessage(guide, "tour-joined-guide", "{player}", guest.getName());
+        plugin.getStats().followed(guest, guide);
         startTask();
     }
 

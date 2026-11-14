@@ -472,10 +472,12 @@ cam-list:
 # bleibt nach /cam stats reset; im Flug fehlt die Zeile, dann steht dort "In cam mode right now".
 # "Körper erwischt" zählt die Flüge, die endeten, weil der Körper getroffen, verschoben, entfernt oder von einem
 # Trank getroffen wurde, oder weil der Spieler starb - wie alle Zahlen nur Flüge ab min-seconds.
+# "Follow" sagt, wie oft andere ihm mit /cam follow gefolgt sind (jeder Follower, jedes Mal neu) und wie oft er
+# selbst jemandem gefolgt ist - nur mit follow.enabled: true und erst, wenn eins davon über 0 ist.
 # "Gezählt seit" ist der Beginn des ersten Flugs, der zählt - nach /cam stats reset der des nächsten. Wer schon vor
 # dieser Version Flüge in der Statistik hatte, bekommt die Zeile erst nach einem Reset: Wann sein erster war, steht
-# nirgends. "Körper erwischt" zählt bei ihnen ab dem Update von 0 an: Wie ihre Flüge von vorher endeten, weiß
-# niemand.
+# nirgends. "Körper erwischt" und "Follow" zählen bei ihnen ab dem Update von 0 an: Was bei ihren Flügen von vorher
+# war, weiß niemand.
 #   /cam stats                 = die eigene
 #   /cam stats reset           = die eigene auf null setzen (der Akku bleibt, wie er ist)
 #   /cam stats player <Name>   = die eines anderen (wer das darf, sagt view-others)

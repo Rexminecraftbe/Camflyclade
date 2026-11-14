@@ -38,6 +38,13 @@ public final class PlayerRecord {
      */
     private long bodyCaught;
     /**
+     * How often somebody began to follow him, {@code /cam follow}: every
+     * follower, each time anew. A file from before this was noted starts at 0.
+     */
+    private long followers;
+    /** How often he began to follow somebody. A file from before this was noted starts at 0. */
+    private long followed;
+    /**
      * When the first flight in these numbers began, as
      * {@link System#currentTimeMillis()} counts, or 0 while none has been
      * counted since the statistics were reset - and in a file from before this
@@ -90,8 +97,9 @@ public final class PlayerRecord {
     }
 
     PlayerRecord(String name, long sessions, long totalSeconds, long longestSeconds, double distanceFlown,
-                 double longestDistance, double farthestFromBody, long bodyCaught, long countedSince,
-                 long lastFlightEnded, Double batteryCharge, long batteryUpdated, Long cooldownStarted) {
+                 double longestDistance, double farthestFromBody, long bodyCaught, long followers,
+                 long followed, long countedSince, long lastFlightEnded, Double batteryCharge,
+                 long batteryUpdated, Long cooldownStarted) {
         this.name = name;
         this.sessions = sessions;
         this.totalSeconds = totalSeconds;
@@ -100,6 +108,8 @@ public final class PlayerRecord {
         this.longestDistance = longestDistance;
         this.farthestFromBody = farthestFromBody;
         this.bodyCaught = bodyCaught;
+        this.followers = followers;
+        this.followed = followed;
         this.countedSince = countedSince;
         this.lastFlightEnded = lastFlightEnded;
         this.batteryCharge = batteryCharge;
@@ -146,6 +156,20 @@ public final class PlayerRecord {
         dirty = true;
     }
 
+    /** Somebody began to follow him, {@code /cam follow}. */
+    public void addFollower(String playerName) {
+        name = playerName;
+        followers++;
+        dirty = true;
+    }
+
+    /** He began to follow somebody, {@code /cam follow}. */
+    public void addFollowed(String playerName) {
+        name = playerName;
+        followed++;
+        dirty = true;
+    }
+
     /**
      * Sets the statistics back to nothing, {@code /cam stats reset}. The
      * battery stays as it is, and so does when he last flew: that is no count.
@@ -158,6 +182,8 @@ public final class PlayerRecord {
         longestDistance = 0.0;
         farthestFromBody = 0.0;
         bodyCaught = 0L;
+        followers = 0L;
+        followed = 0L;
         countedSince = 0L;
         dirty = true;
     }
@@ -245,6 +271,10 @@ public final class PlayerRecord {
     public double getFarthestFromBody() { return farthestFromBody; }
     /** How many flights ended because something got his body. */
     public long getBodyCaught() { return bodyCaught; }
+    /** How often somebody began to follow him. */
+    public long getFollowers() { return followers; }
+    /** How often he began to follow somebody. */
+    public long getFollowed() { return followed; }
     /** When the first flight in these numbers began, or 0 while that is not known. */
     public long getCountedSince() { return countedSince; }
     /** When his last camera mode ended, or 0 while none has been counted. */

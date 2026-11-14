@@ -247,6 +247,9 @@ public final class PlayerStore {
                 // A file from before this was noted does not say how many of
                 // its flights ended at the body: it counts from 0 on.
                 Math.max(0L, file.getLong("stats.body-caught")),
+                // Nor who followed whom: from 0 on as well.
+                Math.max(0L, file.getLong("stats.followers")),
+                Math.max(0L, file.getLong("stats.followed")),
                 // A file from before this was noted does not say since when
                 // its numbers count. With numbers in it, that stays unknown
                 // until they are reset; without, the next flight says it.
@@ -347,6 +350,8 @@ public final class PlayerStore {
         file.set("stats.longest-distance", Math.round(record.getLongestDistance() * 10.0) / 10.0);
         file.set("stats.farthest-from-body", Math.round(record.getFarthestFromBody() * 10.0) / 10.0);
         file.set("stats.body-caught", record.getBodyCaught());
+        file.set("stats.followers", record.getFollowers());
+        file.set("stats.followed", record.getFollowed());
         if (record.getCountedSince() > 0L) {
             file.set("stats.counted-since", record.getCountedSince());
         }

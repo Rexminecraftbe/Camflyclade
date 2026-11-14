@@ -858,6 +858,10 @@ messages:
   # In its place while the flight is shorter than statistics.min-seconds ({min}): ended now, it would not count, and
   # the numbers under it leave it out.
   stats-flying-uncounted: "&aIn cam mode right now: &f{time} &7(counts from {min})"
+  # /cam follow: how often others began to follow him ({led} - every follower, each time anew) and how often he began
+  # to follow somebody ({followed}). Only while follow is switched on, and only once either is more than 0. /cam stats
+  # reset sets both back to 0; statistics from before this was noted count from 0 on.
+  stats-follow: "&7Follow: led &f{led} &7· followed &f{followed}"
   # The empty line between the numbers, which add up over all flights, and stats-spot-views, stats-battery and
   # stats-cooldown, which say how things stand now. Switched off, or "", for none.
   stats-gap: " "
@@ -1596,6 +1600,7 @@ message-settings:
   stats-farthest: true
   stats-flying: true
   stats-flying-uncounted: true
+  stats-follow: true
   stats-gap: true
   stats-header: true
   stats-last: true

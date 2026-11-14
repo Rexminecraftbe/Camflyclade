@@ -8648,6 +8648,16 @@ def fuehrung_checks(env, bot):
         # Dazu all, das alle auf einmal einlaedt (follow.invite-all).
         FIND.test("Tab nach /cam follow invite: der Spieler daneben, auch ohne Cam-Modus, und all",
                   sorted(tabs) == sorted([ZUSCHAUER_NAME, "all"]), str(tabs))
+
+        def folgen_zahlen(client):
+            """Was /cam stats bei "Follow" sagt: wie oft ihm einer folgte, wie oft er folgte - ohne die Zeile 0, 0."""
+            for zeile in befehl(client, "/cam stats"):
+                treffer = re.search(r"Follow: led (\d+) · followed (\d+)$", zeile)
+                if treffer:
+                    return int(treffer.group(1)), int(treffer.group(2))
+            return 0, 0
+
+        fuehrer_vorher, gast_vorher = folgen_zahlen(bot), folgen_zahlen(zuschauer)
         # Wie ein echter Client im Flug: die Geschwindigkeit des Servers, ohne Schwerkraft.
         zuschauer.call("velocity", on=True)
         seit = zuschauer.mark()
@@ -8714,6 +8724,12 @@ def fuehrung_checks(env, bot):
                   "(Follower)" in text and "(Leader)" in text and ZUSCHAUER_NAME in text
                   and text.index(ZUSCHAUER_NAME) < text.index("(Follower)") < text.index(BOT_NAME)
                   < text.index("(Leader)"), text)
+        fuehrer_nachher, gast_nachher = folgen_zahlen(bot), folgen_zahlen(zuschauer)
+        FIND.test("stats-follow: /cam stats zaehlt mit - der Fuehrer hat einmal mehr gefuehrt, der Gast ist einmal "
+                  "mehr gefolgt",
+                  fuehrer_nachher == (fuehrer_vorher[0] + 1, fuehrer_vorher[1])
+                  and gast_nachher == (gast_vorher[0], gast_vorher[1] + 1),
+                  f"Fuehrer {fuehrer_vorher} -> {fuehrer_nachher}, Gast {gast_vorher} -> {gast_nachher}")
         # Der Koerper des Gastes steht sechs Bloecke hinter dem Fuehrer: Der
         # fliegt hin, die Kamera des Gastes mit.
         bot.call("fly", wait=30, dx=-5, timeout=15000)
