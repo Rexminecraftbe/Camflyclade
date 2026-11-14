@@ -88,8 +88,17 @@ public final class CamTimeLimit {
             long s = seconds % 60;
             return m + "m " + s + "s";
         } else {
-            return seconds + (seconds == 1 ? " second" : " seconds");
+            return formatSeconds(seconds);
         }
+    }
+
+    /**
+     * A number of seconds with its word, however many there are: "1 second",
+     * "60 seconds". For texts that count in seconds alone, like the
+     * invitations of {@code /cam follow}.
+     */
+    public static String formatSeconds(long seconds) {
+        return seconds + (seconds == 1 ? " second" : " seconds");
     }
 
     public void startTimeLimit(Player player) {
