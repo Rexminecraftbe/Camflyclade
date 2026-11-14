@@ -466,8 +466,10 @@ cam-list:
 
 # Statistik: wie oft jemand im Cam-Modus war, wie lange und wie weit die Kamera insgesamt geflogen ist, beides im
 # Schnitt pro Flug (eine Zeile), der längste Flug und die längste Strecke in einem Flug, wie weit die Kamera höchstens
-# vom Körper weg war und seit wann gezählt wird. Der weiteste Abstand steht nur ohne feste Grenze da
-# (camera-mode.max-distance-mode: fixed): Mit ihr kommt fast jeder einmal hin, und bei allen stünde max-distance.
+# vom Körper weg war und seit wann gezählt wird. Der weiteste Abstand steht nur ohne feste Grenze und ohne Funksignal
+# da (camera-mode.max-distance-mode: fixed oder signal): Mit beiden kommt fast jeder einmal bis max-distance - beim
+# Signal in freier Luft, und weiter nur in den paar Sekunden von signal.lost-seconds -, und bei allen stünde etwa
+# dieselbe Zahl.
 # "Gezählt seit" ist der Beginn des ersten Flugs, der zählt - nach /cam stats reset der des nächsten. Wer schon vor
 # dieser Version Flüge in der Statistik hatte, bekommt die Zeile erst nach einem Reset: Wann sein erster war, steht
 # nirgends.

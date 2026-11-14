@@ -5569,7 +5569,8 @@ def statistik_checks(env, bot):
     waechst um ihn, die laengste in einem Flug ist mindestens so lang, und
     der Schnitt nach Zeit und Strecke steht in einer Zeile dabei. Den
     weitesten Abstand zum Koerper gibt es mit der festen Grenze von
-    max-distance nicht - da kaeme jeder hin -, ohne sie ist er mindestens so
+    max-distance nicht - da kaeme jeder hin -, mit dem Funksignal von
+    max-distance-mode: signal ebenso wenig, ohne beides ist er mindestens so
     gross wie der Flug. Die Zahlen stehen in der Datei des Bots unter
     playerdata/stats.
     Ein unbekannter Name wird gemeldet, ein unbekanntes Wort nach stats sagt,
@@ -5628,7 +5629,12 @@ def statistik_checks(env, bot):
         z = befehl(bot, "/cam stats")
         FIND.test("max-distance-enabled: false - ohne feste Grenze steht der weiteste Abstand zum Koerper da",
                   zahl(z, r"Farthest from the body: (\d+) blocks") >= 4, zeige(z))
-        set_option(env, "max-distance-enabled", "true", "camera-mode")
+        set_options(env, [("max-distance-enabled", "true", "camera-mode"), ("max-distance-mode", "signal")])
+        z = befehl(bot, "/cam stats")
+        FIND.test("max-distance-mode: signal - mit dem Funksignal auch kein weitester Abstand zum Koerper: in freier "
+                  "Luft kaeme jeder bis max-distance",
+                  gesagt(z, r"Distance flown: ") and not gesagt(z, r"Farthest from the body"), zeige(z))
+        set_option(env, "max-distance-mode", "fixed")
 
         z = befehl(bot, "/cam stats player NiemandHier")
         FIND.test("/cam stats player <Name> - ein unbekannter Name wird gemeldet",
@@ -5743,7 +5749,8 @@ def statistik_checks(env, bot):
     finally:
         console(env, f"op {BOT_NAME}", pause=1.5)
         set_options(env, [("enabled", "true", "statistics"), ("view-others", "admin", "statistics"),
-                          ("min-seconds", "0", "statistics"), ("max-distance-enabled", "true", "camera-mode")])
+                          ("min-seconds", "0", "statistics"), ("max-distance-enabled", "true", "camera-mode"),
+                          ("max-distance-mode", "fixed")])
 
 
 def statistik_folgen_checks(env, bot):

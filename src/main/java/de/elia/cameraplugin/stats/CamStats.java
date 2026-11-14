@@ -27,8 +27,10 @@ import java.util.concurrent.TimeUnit;
  * how often a player flew, how long and how far his camera flew altogether,
  * both for one flight on average, the longest flight and the longest way, how
  * far it flew away from his body - flown, not jumped to a spot far off; and
- * only without a fixed border: at one, nearly everybody gets there once, and
- * all would have the same number - and since when all this is counted.
+ * only without a fixed border or the signal of
+ * {@code max-distance-mode: signal}: with either, nearly everybody gets to
+ * max-distance once, and all would have about the same number - and since
+ * when all this is counted.
  * On a tour of {@code /cam follow}, the way the guide takes a guest along
  * counts as flown, while {@code statistics.count-follow-distance} says so,
  * see {@link de.elia.cameraplugin.tour.CamTour}. With
@@ -315,9 +317,11 @@ public final class CamStats {
         lines.add(new Line("stats-longest-distance", "{distance}",
                 blocks(Math.max(record.getLongestDistance(), flownNow))));
         // At a fixed border nearly everybody gets there once, and from then
-        // on the number is the same for all: max-distance. It is still
-        // counted, for when the border goes.
-        if (!settings.limitsDistance()) {
+        // on the number is the same for all: max-distance. On the signal
+        // just the same: in the open air it reaches max-distance, and beyond
+        // it only the few seconds of signal.lost-seconds - all would have
+        // about max-distance. It is still counted, for when the limit goes.
+        if (!settings.limitsDistance() && !settings.usesSignal()) {
             double farthest = Math.max(record.getFarthestFromBody(),
                     counted == null ? 0.0 : counted.getFarthestFlownFromBody());
             lines.add(new Line("stats-farthest", "{distance}", blocks(farthest)));
