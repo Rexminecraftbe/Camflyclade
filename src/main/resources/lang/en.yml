@@ -844,8 +844,8 @@ messages:
   stats-average: "&7Average flight: &f{time} &7· &f{distance} blocks"
   stats-battery: "&7Battery: &f{charge} &7of &f{capacity}"
   # How many flights ended because something got the body ({count}): it was hit, moved, taken away or struck by a
-  # potion, or he died. Only flights that count (statistics.min-seconds), and not the one going on. Statistics from
-  # before this was noted do not say it, and the line is left out until a reset.
+  # potion, or he died. Only flights that count (statistics.min-seconds), and not the one going on. With statistics
+  # from before this was noted, it counts from 0 on: how their flights ended is not known.
   stats-body-caught: "&7Body caught: &f{count}"
   stats-cooldown: "&7Cam mode again in: &f{time}"
   stats-distance: "&7Distance flown: &f{distance} blocks"

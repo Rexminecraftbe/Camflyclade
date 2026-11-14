@@ -236,15 +236,6 @@ public final class PlayerStore {
         double longestFlown = file.isSet("stats.longest-distance")
                 ? Math.max(0.0, file.getDouble("stats.longest-distance"))
                 : sessions > 0 ? flown / sessions : 0.0;
-        // A file from before this was noted does not say how many of its
-        // flights ended at the body. With flights in it, that stays unknown
-        // until they are reset, like counted-since; without, it is none.
-        Long bodyCaught = null;
-        if (file.isSet("stats.body-caught")) {
-            bodyCaught = Math.max(0L, file.getLong("stats.body-caught"));
-        } else if (sessions == 0) {
-            bodyCaught = 0L;
-        }
         PlayerRecord record = new PlayerRecord(
                 file.getString("name"),
                 sessions,
@@ -253,7 +244,9 @@ public final class PlayerStore {
                 flown,
                 longestFlown,
                 Math.max(0.0, file.getDouble("stats.farthest-from-body")),
-                bodyCaught,
+                // A file from before this was noted does not say how many of
+                // its flights ended at the body: it counts from 0 on.
+                Math.max(0L, file.getLong("stats.body-caught")),
                 // A file from before this was noted does not say since when
                 // its numbers count. With numbers in it, that stays unknown
                 // until they are reset; without, the next flight says it.
@@ -353,9 +346,7 @@ public final class PlayerStore {
         file.set("stats.distance-flown", Math.round(record.getDistanceFlown() * 10.0) / 10.0);
         file.set("stats.longest-distance", Math.round(record.getLongestDistance() * 10.0) / 10.0);
         file.set("stats.farthest-from-body", Math.round(record.getFarthestFromBody() * 10.0) / 10.0);
-        if (record.getBodyCaught() != null) {
-            file.set("stats.body-caught", record.getBodyCaught());
-        }
+        file.set("stats.body-caught", record.getBodyCaught());
         if (record.getCountedSince() > 0L) {
             file.set("stats.counted-since", record.getCountedSince());
         }

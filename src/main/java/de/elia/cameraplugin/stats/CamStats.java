@@ -308,11 +308,8 @@ public final class CamStats {
                     counted == null ? 0.0 : counted.getFarthestFromBody());
             lines.add(new Line("stats-farthest", "{distance}", blocks(farthest)));
         }
-        // The flight going on has not been caught: it has not ended. A record
-        // from before this was noted does not know.
-        if (record.getBodyCaught() != null) {
-            lines.add(new Line("stats-body-caught", "{count}", String.valueOf(record.getBodyCaught())));
-        }
+        // The flight going on has not been caught: it has not ended.
+        lines.add(new Line("stats-body-caught", "{count}", String.valueOf(record.getBodyCaught())));
         // The first counted flight is the one going on, while the record has
         // none yet; a record from before this was noted does not know.
         long since = record.getSessions() == 0 && counted != null

@@ -474,7 +474,8 @@ cam-list:
 # Trank getroffen wurde, oder weil der Spieler starb - wie alle Zahlen nur Flüge ab min-seconds.
 # "Gezählt seit" ist der Beginn des ersten Flugs, der zählt - nach /cam stats reset der des nächsten. Wer schon vor
 # dieser Version Flüge in der Statistik hatte, bekommt die Zeile erst nach einem Reset: Wann sein erster war, steht
-# nirgends. Dasselbe gilt für "Körper erwischt": Bei Flügen von vorher weiß niemand, wie sie endeten.
+# nirgends. "Körper erwischt" zählt bei ihnen ab dem Update von 0 an: Wie ihre Flüge von vorher endeten, weiß
+# niemand.
 #   /cam stats                 = die eigene
 #   /cam stats reset           = die eigene auf null setzen (der Akku bleibt, wie er ist)
 #   /cam stats player <Name>   = die eines anderen (wer das darf, sagt view-others)

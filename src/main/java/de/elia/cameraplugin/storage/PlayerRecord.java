@@ -33,12 +33,10 @@ public final class PlayerRecord {
     private double farthestFromBody;
     /**
      * How many of his flights ended because something got his body, see
-     * {@link de.elia.cameraplugin.session.EndReason#caughtBody()} - or
-     * {@code null} in a file from before this was noted that has flights in
-     * it: how many of those it was, nobody knows, and so it stays until the
-     * statistics are reset.
+     * {@link de.elia.cameraplugin.session.EndReason#caughtBody()}. A file from
+     * before this was noted starts at 0: its flights are not in it.
      */
-    private Long bodyCaught = 0L;
+    private long bodyCaught;
     /**
      * When the first flight in these numbers began, as
      * {@link System#currentTimeMillis()} counts, or 0 while none has been
@@ -92,7 +90,7 @@ public final class PlayerRecord {
     }
 
     PlayerRecord(String name, long sessions, long totalSeconds, long longestSeconds, double distanceFlown,
-                 double longestDistance, double farthestFromBody, Long bodyCaught, long countedSince,
+                 double longestDistance, double farthestFromBody, long bodyCaught, long countedSince,
                  long lastFlightEnded, Double batteryCharge, long batteryUpdated, Long cooldownStarted) {
         this.name = name;
         this.sessions = sessions;
@@ -130,7 +128,7 @@ public final class PlayerRecord {
         distanceFlown += flown;
         longestDistance = Math.max(longestDistance, flown);
         farthestFromBody = Math.max(farthestFromBody, farthest);
-        if (caught && bodyCaught != null) {
+        if (caught) {
             bodyCaught++;
         }
         lastFlightEnded = System.currentTimeMillis();
@@ -245,8 +243,8 @@ public final class PlayerRecord {
     public double getDistanceFlown() { return distanceFlown; }
     public double getLongestDistance() { return longestDistance; }
     public double getFarthestFromBody() { return farthestFromBody; }
-    /** How many flights ended because something got his body, or {@code null} while that is unknown. */
-    public Long getBodyCaught() { return bodyCaught; }
+    /** How many flights ended because something got his body. */
+    public long getBodyCaught() { return bodyCaught; }
     /** When the first flight in these numbers began, or 0 while that is not known. */
     public long getCountedSince() { return countedSince; }
     /** When his last camera mode ended, or 0 while none has been counted. */
