@@ -52,8 +52,17 @@ public class CameraData {
      * while he has not left the world of his body.
      */
     private Location portalEntry;
-    /** How far the camera has flown so far, in blocks, see {@link SessionTracker}. */
+    /** How far the camera has flown so far, in blocks, every step, for {@code cam-log}, see {@link SessionTracker}. */
     private double distanceFlown;
+    /**
+     * How far the camera has flown for the statistics, in blocks: its own
+     * steps, and on a tour of {@code /cam follow} the way the guide takes it
+     * along - with {@code statistics.count-follow-distance} -, see
+     * {@link de.elia.cameraplugin.tour.CamTour}. Its own steps on the tour
+     * are not counted: they would be that way twice, and through the eyes of
+     * the guide its client sends none.
+     */
+    private double distanceCounted;
     /**
      * The farthest the camera has been from the body so far, in blocks, in
      * the world of the body - however it got there, for {@code cam-log}.
@@ -70,6 +79,19 @@ public class CameraData {
     private double flownFromBody;
     /** The most {@link #flownFromBody} has been so far, for the statistics. */
     private double farthestFlownFromBody;
+    /**
+     * When he last did something - flew, looked round, turned the mouse
+     * wheel, or followed a tour -, as {@link System#currentTimeMillis()}
+     * counts, see {@link de.elia.cameraplugin.afk.CamAfk}. For
+     * {@code statistics.skip-afk-time}.
+     */
+    private long lastActive = startedAt;
+    /**
+     * How long he did nothing in the stretches that are over, in
+     * milliseconds - only what went beyond {@code statistics.afk-seconds}:
+     * up to there, he may be looking at something. See {@link #idleMillis}.
+     */
+    private long idleMillis;
     /**
      * His statistics of moving when camera mode started, put back when it
      * ends, see {@link de.elia.cameraplugin.progress.CamProgressGuard}.
@@ -135,9 +157,12 @@ public class CameraData {
     /** The portal he set out through, or {@code null} when he is still home. */
     public Location getPortalEntry() { return portalEntry; }
     public void setPortalEntry(Location portalEntry) { this.portalEntry = portalEntry; }
-    /** How far the camera has flown so far, for {@code cam-log} and the statistics. */
+    /** How far the camera has flown so far, every step, for {@code cam-log}. */
     public double getDistanceFlown() { return distanceFlown; }
     public void addDistanceFlown(double blocks) { distanceFlown += blocks; }
+    /** How far the camera has flown for the statistics, see {@link #distanceCounted}. */
+    public double getDistanceCounted() { return distanceCounted; }
+    public void addDistanceCounted(double blocks) { distanceCounted += blocks; }
     /** The farthest the camera has been from the body, jumps and all, for {@code cam-log}. */
     public double getFarthestFromBody() { return farthestFromBody; }
     public void noteDistanceFromBody(double blocks) { farthestFromBody = Math.max(farthestFromBody, blocks); }
@@ -154,10 +179,35 @@ public class CameraData {
      * <p>A jump in between adds nothing: far off, only what it flies on from
      * there counts; back close to the body, what it flew out before is
      * gone.</p>
+     *
+     * <p>On a tour of {@code /cam follow} the steps of a guest are those of
+     * the way the guide takes him along, noted by the tour - or none, without
+     * {@code statistics.count-follow-distance}.</p>
      */
     public void noteStep(double before, double after) {
         flownFromBody = Math.min(after, flownFromBody + after - before);
         farthestFlownFromBody = Math.max(farthestFlownFromBody, flownFromBody);
+    }
+
+    /**
+     * Notes that he did something now. A stretch of doing nothing that it
+     * ends is put down as far as it went beyond {@code afterMillis}.
+     *
+     * @param afterMillis after how long without doing anything time no
+     *                    longer counts, {@code statistics.afk-seconds}
+     */
+    public void noteActive(long now, long afterMillis) {
+        idleMillis += Math.max(0L, now - lastActive - afterMillis);
+        lastActive = now;
+    }
+
+    /**
+     * How long he has done nothing so far, beyond {@code afterMillis} each
+     * time, in milliseconds - the stretch going on now as well, so that the
+     * numbers stop growing at once and do not jump back when he moves.
+     */
+    public long idleMillis(long now, long afterMillis) {
+        return idleMillis + Math.max(0L, now - lastActive - afterMillis);
     }
     /** His statistics of moving when camera mode started. */
     public Map<Statistic, Integer> getMovementAtStart() { return movementAtStart; }

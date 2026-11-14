@@ -124,6 +124,10 @@ import java.util.UUID;
  * <p>With {@code follow.invite-all} a guide invites everybody he could invite
  * at once, {@code /cam follow invite all}, see {@link #inviteAll}.</p>
  *
+ * <p>For his statistics, the way the guide takes the camera of a guest along
+ * counts as flown, as long as {@code statistics.count-follow-distance} says
+ * so - with the guide's view and without it alike, see {@link #countWay}.</p>
+ *
  * <p>A jump of his own - {@code /cam back}, a spot, {@code resume} -
  * takes a guest off the tour, as does the end of his camera mode. The end of
  * the guide's camera mode ends the whole tour.</p>
@@ -1816,8 +1820,42 @@ public final class CamTour implements Listener {
         if (state.sent.size() > MAX_LAG) {
             state.sent.removeFirst();
         }
+        countWay(data, at, behind, pace);
+        // He watches what the guide shows him, even while his own keys do
+        // nothing - and through the guide's eyes his client sends no steps:
+        // no time without doing anything, for statistics.skip-afk-time.
+        data.noteActive(now, settings.getStatsAfkMillis());
         updateView(guide, guest, state);
         return null;
+    }
+
+    /**
+     * Counts the way the camera of a guest is taken along this tick for his
+     * statistics, with {@code statistics.count-follow-distance}: the step of
+     * the guide it flies after him, from where it should be, see
+     * {@link #trail}. A jump after the guide is no flight and is not counted,
+     * see {@link #CATCH_UP} - nor is a jump of the guide himself, which
+     * {@link #trail} leaves out of the pace.
+     *
+     * <p>His own steps do not count meanwhile, see
+     * {@link de.elia.cameraplugin.session.SessionTracker}: through the
+     * guide's eyes his client sends none, and looking round freely they would
+     * be this way twice. So it counts the same either way.</p>
+     *
+     * @param at     where the guide is now, in the world of the guest
+     * @param behind where the camera of the guest should be
+     * @param pace   how far it goes on from there this tick
+     */
+    private void countWay(CameraData data, Location at, Vector behind, Vector pace) {
+        if (!settings.isStatsCountFollowDistance()) {
+            return;
+        }
+        data.addDistanceCounted(pace.length());
+        Location body = data.getBody().getLocation();
+        if (body.getWorld() != null && body.getWorld().equals(at.getWorld())) {
+            Vector home = body.toVector();
+            data.noteStep(home.distance(behind), home.distance(behind.clone().add(pace)));
+        }
     }
 
     /**

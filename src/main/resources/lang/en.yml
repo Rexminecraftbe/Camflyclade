@@ -844,13 +844,18 @@ messages:
   stats-average: "&7Average flight: &f{time} &7· &f{distance} blocks"
   stats-battery: "&7Battery: &f{charge} &7of &f{capacity}"
   stats-cooldown: "&7Cam mode again in: &f{time}"
+  # How far the camera flew. On a tour of /cam follow, the way the leader takes a follower along counts as well - unless
+  # statistics.count-follow-distance is false -, here, in stats-average, stats-longest-distance and stats-farthest.
   stats-distance: "&7Distance flown: &f{distance} blocks"
   # How far the camera flew away from the body: only flying counts, a jump does not - to a spot, with /cam resume, after
   # the guide of /cam follow. Only without a fixed border (camera-mode.max-distance-mode: fixed with a border that
-  # holds): at one, nearly everybody gets there once, and the number would be max-distance for all.
+  # holds) and without the signal (max-distance-mode: signal): with either, nearly everybody gets to max-distance once
+  # - on the signal in the open air, and beyond it only for signal.lost-seconds -, and the number would be about the
+  # same for all.
   stats-farthest: "&7Farthest from the body: &f{distance} blocks"
   # While he is in cam mode: how long the flight has been going on ({time}). The numbers under it count it already,
-  # as they will once it ends - in the menu they grow by the second.
+  # as they will once it ends - in the menu they grow by the second. With statistics.skip-afk-time, {time} is all of
+  # it, and the time in the numbers stands still while he does nothing.
   stats-flying: "&aIn cam mode right now: &f{time} &7(counted in)"
   # In its place while the flight is shorter than statistics.min-seconds ({min}): ended now, it would not count, and
   # the numbers under it leave it out.
@@ -874,6 +879,8 @@ messages:
   # the server). Statistics from before this was noted do not say it, and the line is left out until a reset.
   stats-since: "&7Counted since: &f{date}"
   stats-since-date: "yyyy-MM-dd"
+  # How long he has been in cam mode over all flights. With statistics.skip-afk-time, time in which he did nothing is
+  # left out after statistics.afk-seconds - here, in stats-average and in stats-longest.
   stats-total-time: "&7Time in cam mode: &f{time}"
   stats-unknown-player: "&cNobody called {player} has been on this server."
   stats-usage: "&eUse /cam stats, /cam stats reset or /cam stats player <name>."

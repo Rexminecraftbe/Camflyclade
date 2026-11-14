@@ -5569,7 +5569,8 @@ def statistik_checks(env, bot):
     waechst um ihn, die laengste in einem Flug ist mindestens so lang, und
     der Schnitt nach Zeit und Strecke steht in einer Zeile dabei. Den
     weitesten Abstand zum Koerper gibt es mit der festen Grenze von
-    max-distance nicht - da kaeme jeder hin -, ohne sie ist er mindestens so
+    max-distance nicht - da kaeme jeder hin -, mit dem Funksignal von
+    max-distance-mode: signal ebenso wenig, ohne beides ist er mindestens so
     gross wie der Flug. Die Zahlen stehen in der Datei des Bots unter
     playerdata/stats.
     Ein unbekannter Name wird gemeldet, ein unbekanntes Wort nach stats sagt,
@@ -5628,7 +5629,12 @@ def statistik_checks(env, bot):
         z = befehl(bot, "/cam stats")
         FIND.test("max-distance-enabled: false - ohne feste Grenze steht der weiteste Abstand zum Koerper da",
                   zahl(z, r"Farthest from the body: (\d+) blocks") >= 4, zeige(z))
-        set_option(env, "max-distance-enabled", "true", "camera-mode")
+        set_options(env, [("max-distance-enabled", "true", "camera-mode"), ("max-distance-mode", "signal")])
+        z = befehl(bot, "/cam stats")
+        FIND.test("max-distance-mode: signal - mit dem Funksignal auch kein weitester Abstand zum Koerper: in freier "
+                  "Luft kaeme jeder bis max-distance",
+                  gesagt(z, r"Distance flown: ") and not gesagt(z, r"Farthest from the body"), zeige(z))
+        set_option(env, "max-distance-mode", "fixed")
 
         z = befehl(bot, "/cam stats player NiemandHier")
         FIND.test("/cam stats player <Name> - ein unbekannter Name wird gemeldet",
@@ -5743,7 +5749,193 @@ def statistik_checks(env, bot):
     finally:
         console(env, f"op {BOT_NAME}", pause=1.5)
         set_options(env, [("enabled", "true", "statistics"), ("view-others", "admin", "statistics"),
-                          ("min-seconds", "0", "statistics"), ("max-distance-enabled", "true", "camera-mode")])
+                          ("min-seconds", "0", "statistics"), ("max-distance-enabled", "true", "camera-mode"),
+                          ("max-distance-mode", "fixed")])
+
+
+def statistik_folgen_checks(env, bot):
+    """statistics.count-follow-distance: der Weg, den der Leader von
+    /cam follow die Kamera eines Followers mitnimmt.
+
+    Voreingestellt zaehlt er beim Follower als geflogen - nachgesehen in der
+    Datei, die das Plugin mitbringt. Der Bot fuehrt, der Zuschauer folgt ihm,
+    sein Koerper steht zwei Bloecke hinter ihm; der Bot fliegt zwanzig Bloecke
+    weg. Mit dem Blick des Leaders (follow.guide-view) stehen beim Follower
+    danach um die zwanzig Bloecke Strecke und weitester Abstand zum Koerper -
+    beim freien Umsehen ebenso, einmal und nicht doppelt: seine eigenen
+    Schritte zaehlen auf der Fuehrung nicht, die Tour zaehlt den Weg. Das
+    Nachholen beim Annehmen, ein Sprung, zaehlt nicht. Mit
+    count-follow-distance: false zaehlt nur, was er selbst fliegt - auf der
+    Fuehrung nichts -, der Flug selbst und seine Zeit aber schon. Fuer den
+    weitesten Abstand steht max-distance-enabled auf false.
+    """
+    def zahl(zeilen, muster):
+        for z in zeilen:
+            m = re.search(muster, z)
+            if m:
+                return int(m.group(1))
+        return -1
+
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+
+    def runde(frei):
+        """Eine Fuehrung ueber zwanzig Bloecke, danach /cam stats des
+        Followers. Mit frei sieht er sich auf ihr frei um und schaltet danach
+        zurueck auf den Blick des Leaders - das gilt auch fuer die naechste."""
+        cam_off(bot)
+        cam_off(zuschauer)
+        hinstellen(bot, x, y, z)
+        console(env, f"tp {ZUSCHAUER_NAME} {x - 2} {y} {z}", pause=1.0)
+        befehl(zuschauer, "/cam stats reset")
+        if not cam_on(bot):
+            return ["Der Leader kam nicht in den Cam-Modus"]
+        befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
+        if not gesagt(dort, rf"You follow {BOT_NAME} now"):
+            return dort
+        if frei:
+            dort = befehl(zuschauer, "/cam follow view", warten=1.0)
+            if not gesagt(dort, r"When following you look round freely now"):
+                return dort
+        time.sleep(1.0)
+        bot.call("fly", wait=30, dx=20, timeout=15000)
+        time.sleep(2.0)
+        if frei:
+            befehl(zuschauer, "/cam follow view", warten=1.0)
+        befehl(zuschauer, "/cam follow leave")
+        cam_off(zuschauer)
+        cam_off(bot)
+        return befehl(zuschauer, "/cam stats")
+
+    try:
+        FIND.test("Voreingestellt steht statistics.count-follow-distance: true da",
+                  re.search(r"(?m)^statistics:\s*\n(?:\s+.*\n)*?\s*count-follow-distance:\s*true\s*$",
+                            quelle_config(env)) is not None, "")
+        # Vor der ersten Frage, siehe mobtreffer_checks.
+        set_options(env, [("enabled", "false", "cam-safety"), ("max-distance-enabled", "false", "camera-mode")])
+        if not FIND.test("Cam-Modus ist vor dem Test der Statistik beim Folgen aus", cam_off(bot), ""):
+            return
+        console(env, f"fill {_floor(x) - 4} {y} {_floor(z) - 3} {_floor(x) + 26} {y + 4} {_floor(z) + 3} "
+                     f"minecraft:air", pause=0.5)
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Statistik beim Folgen kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        # Wie ein echter Client im Flug: die Geschwindigkeit des Servers, ohne Schwerkraft.
+        zuschauer.call("velocity", on=True)
+
+        z1 = runde(frei=False)
+        weg, weitest = zahl(z1, r"Distance flown: (\d+) blocks"), zahl(z1, r"Farthest from the body: (\d+) blocks")
+        FIND.test("count-follow-distance: true - mit dem Blick des Leaders zaehlt der Weg, den er den Follower "
+                  "mitnimmt: um die zwanzig Bloecke Strecke und weitester Abstand, das Nachholen beim Annehmen nicht",
+                  zahl(z1, r"Flights: (\d+)") == 1 and 16 <= weg <= 25 and 16 <= weitest <= 23, zeige(z1))
+
+        z2 = runde(frei=True)
+        weg, weitest = zahl(z2, r"Distance flown: (\d+) blocks"), zahl(z2, r"Farthest from the body: (\d+) blocks")
+        FIND.test("count-follow-distance: true - beim freien Umsehen ebenso, einmal und nicht doppelt",
+                  zahl(z2, r"Flights: (\d+)") == 1 and 16 <= weg <= 25 and 16 <= weitest <= 23, zeige(z2))
+
+        set_option(env, "count-follow-distance", "false", "statistics")
+        z3 = runde(frei=False)
+        weg, weitest = zahl(z3, r"Distance flown: (\d+) blocks"), zahl(z3, r"Farthest from the body: (\d+) blocks")
+        FIND.test("count-follow-distance: false - der Weg auf der Fuehrung zaehlt nicht, der Flug selbst schon",
+                  zahl(z3, r"Flights: (\d+)") == 1 and 0 <= weg <= 2 and 0 <= weitest <= 2, zeige(z3))
+    finally:
+        befehl(bot, "/cam follow end")
+        cam_off(bot)
+        cam_off(zuschauer)
+        zuschauer.call("velocity", on=False)
+        zuschauer.stop()
+        set_options(env, [("enabled", "true", "cam-safety"), ("max-distance-enabled", "true", "camera-mode"),
+                          ("count-follow-distance", "true", "statistics")])
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
+def statistik_afk_checks(env, bot):
+    """statistics.skip-afk-time: Zeit, in der jemand im Cam-Modus nichts tut,
+    zaehlt nach afk-seconds nicht mehr mit.
+
+    Voreingestellt ist es aus, mit afk-seconds: 60 - nachgesehen in der
+    Datei, die das Plugin mitbringt. Aus zaehlt jede Sekunde: Steht der Bot
+    16 Sekunden still, sind es danach um die 16 in "Time in cam mode". Mit
+    skip-afk-time: true und afk-seconds: 10 steht er gut 20 Sekunden still:
+    Nach 14 und nach 21 Sekunden steht in /cam stats dieselbe Zeit, um die
+    10 Sekunden, waehrend "In cam mode right now" weiterlaeuft. Fliegt er
+    danach ein Stueck, waechst sie wieder. Am Ende zaehlt der Flug ohne das
+    Stillstehen nach den 10 Sekunden, in der Zeit und im laengsten Flug.
+    Weniger als 10 Sekunden afk-seconds werden gemeldet und auf 10 gehoben.
+    """
+    def sekunden(zeilen, muster):
+        for z in zeilen:
+            m = re.search(muster, z)
+            if m:
+                text = m.group(1).strip()
+                kurz = re.fullmatch(r"(\d+) seconds?", text)
+                if kurz:
+                    return int(kurz.group(1))
+                lang = re.fullmatch(r"(\d+)m (\d+)s", text)
+                if lang:
+                    return int(lang.group(1)) * 60 + int(lang.group(2))
+        return -1
+
+    def bis(start, nach):
+        time.sleep(max(0.0, start + nach - time.time()))
+
+    zeit_muster = r"Time in cam mode: (.+)$"
+    try:
+        cam_off(bot)
+        FIND.test("Voreingestellt steht statistics.skip-afk-time: false da, mit afk-seconds: 60",
+                  re.search(r"(?m)^\s*skip-afk-time:\s*false\s*\n(?:\s*#.*\n)*\s*afk-seconds:\s*60\s*$",
+                            quelle_config(env)) is not None, "")
+        befehl(bot, "/cam stats reset")
+        if FIND.test("Cam-Modus fuer die Statistik ohne skip-afk-time gestartet", cam_on(bot), ""):
+            time.sleep(16)
+            cam_off(bot)
+            z = befehl(bot, "/cam stats")
+            zeit = sekunden(z, zeit_muster)
+            FIND.test("skip-afk-time: false - 16 Sekunden Stillstehen zaehlen ganz", 15 <= zeit <= 21, zeige(z))
+
+        set_options(env, [("skip-afk-time", "true", "statistics"), ("afk-seconds", "10", "statistics")])
+        befehl(bot, "/cam stats reset")
+        if FIND.test("Cam-Modus fuer skip-afk-time gestartet", cam_on(bot), ""):
+            start = time.time()
+            bis(start, 14)
+            z1 = befehl(bot, "/cam stats")
+            bis(start, 21)
+            z2 = befehl(bot, "/cam stats")
+            t1, t2 = sekunden(z1, zeit_muster), sekunden(z2, zeit_muster)
+            l1 = sekunden(z1, r"In cam mode right now: (.+?) \(")
+            l2 = sekunden(z2, r"In cam mode right now: (.+?) \(")
+            FIND.test("skip-afk-time: nach afk-seconds ohne etwas zu tun waechst die Zeit nicht mehr - "
+                      "\"In cam mode right now\" laeuft weiter",
+                      9 <= t1 <= 13 and t2 == t1 and l2 >= l1 + 5, f"{zeige(z1)} / {zeige(z2)}")
+            for schritt in range(3):
+                bot.call("fly", wait=30, dy=1, timeout=5000)
+                time.sleep(1.5)
+            z3 = befehl(bot, "/cam stats")
+            t3 = sekunden(z3, zeit_muster)
+            FIND.test("skip-afk-time: wer wieder etwas tut, dessen Zeit zaehlt weiter", t3 >= t2 + 3, zeige(z3))
+            gesamt = time.time() - start
+            cam_off(bot)
+            z = befehl(bot, "/cam stats")
+            zeit, laengste = sekunden(z, zeit_muster), sekunden(z, r"Longest flight: (.+)$")
+            FIND.test("skip-afk-time: am Ende zaehlt der Flug ohne das Stillstehen nach afk-seconds - in der Zeit "
+                      "und im laengsten Flug",
+                      12 <= zeit <= gesamt - 8 and laengste == zeit, f"{gesamt:.0f} s / {zeige(z)}")
+
+        vorher = len(server_log(env))
+        set_option(env, "afk-seconds", "3", "statistics")
+        log = strip_colors(server_log(env)[vorher:])
+        FIND.test("statistics.afk-seconds: weniger als 10 wird gemeldet und auf 10 gehoben",
+                  "statistics.afk-seconds is too small: 3. Using 10" in log, log.strip()[-200:] or "nichts im Log")
+    finally:
+        cam_off(bot)
+        set_options(env, [("skip-afk-time", "false", "statistics"), ("afk-seconds", "60", "statistics")])
 
 
 def alte_absturzdatei_checks(env, bot):
@@ -20757,6 +20949,9 @@ ABSCHNITTE = [
     Abschnitt("akku", akku_checks, "battery timelimit/FlightLimit stats session/SessionListener"),
     Abschnitt("kosten", kosten_checks, "cost"),
     Abschnitt("statistik", statistik_checks, "stats storage session/SessionTracker session/CameraData"),
+    Abschnitt("statistik_folgen", statistik_folgen_checks,
+              "stats tour/CamTour session/SessionTracker session/CameraData"),
+    Abschnitt("statistik_afk", statistik_afk_checks, "stats afk session/CameraData"),
     Abschnitt("alte_absturzdatei", alte_absturzdatei_checks, "crash storage session/SessionListener"),
     Abschnitt("zurueck", zurueck_checks, "back"),
     Abschnitt("endwarnung", endwarnung_checks, "timelimit battery"),

@@ -288,7 +288,7 @@ public final class CameraPlugin extends JavaPlugin {
                 crashGuard,
                 glowMark,
                 locatorBar,
-                new SessionTracker(cameraPlayers),
+                new SessionTracker(cameraPlayers, tour),
                 trail,
                 new ExitKey(this),
                 afk,

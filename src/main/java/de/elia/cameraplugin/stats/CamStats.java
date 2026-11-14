@@ -27,8 +27,15 @@ import java.util.concurrent.TimeUnit;
  * how often a player flew, how long and how far his camera flew altogether,
  * both for one flight on average, the longest flight and the longest way, how
  * far it flew away from his body - flown, not jumped to a spot far off; and
- * only without a fixed border: at one, nearly everybody gets there once, and
- * all would have the same number - and since when all this is counted.
+ * only without a fixed border or the signal of
+ * {@code max-distance-mode: signal}: with either, nearly everybody gets to
+ * max-distance once, and all would have about the same number - and since
+ * when all this is counted.
+ * On a tour of {@code /cam follow}, the way the guide takes a guest along
+ * counts as flown, while {@code statistics.count-follow-distance} says so,
+ * see {@link de.elia.cameraplugin.tour.CamTour}. With
+ * {@code statistics.skip-afk-time}, time in which he does nothing does not
+ * count after {@code statistics.afk-seconds}, see {@link #countedSeconds}.
  *
  * <ul>
  *   <li>{@code /cam stats} - his own</li>
@@ -81,16 +88,35 @@ public final class CamStats {
         long seconds = seconds(data);
         PlayerRecord record = store.get(player.getUniqueId());
         if (counts(seconds)) {
-            record.addSession(player.getName(), data.getStartedAt(), seconds,
-                    data.getDistanceFlown(), data.getFarthestFlownFromBody());
+            record.addSession(player.getName(), data.getStartedAt(), countedSeconds(data),
+                    data.getDistanceCounted(), data.getFarthestFlownFromBody());
         } else {
             record.addUncountedSession(player.getName());
         }
     }
 
-    /** How long a camera mode has been going on, in whole seconds, the way it counts once it ends. */
+    /**
+     * How long a camera mode has been going on, in whole seconds: for
+     * {@code statistics.min-seconds} and {@code stats-flying}, the time it
+     * runs.
+     */
     private static long seconds(CameraData data) {
         return TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - data.getStartedAt());
+    }
+
+    /**
+     * How much of a camera mode counts for the time in the statistics, in
+     * whole seconds: all of it - or, with {@code statistics.skip-afk-time},
+     * all but the time he did nothing beyond {@code statistics.afk-seconds},
+     * see {@link CameraData#idleMillis}.
+     */
+    private long countedSeconds(CameraData data) {
+        long now = System.currentTimeMillis();
+        long millis = now - data.getStartedAt();
+        if (settings.isStatsSkipAfkTime()) {
+            millis -= data.idleMillis(now, settings.getStatsAfkMillis());
+        }
+        return TimeUnit.MILLISECONDS.toSeconds(Math.max(0L, millis));
     }
 
     /** Whether a camera mode of so many seconds is long enough to be counted, {@code statistics.min-seconds}. */
@@ -211,6 +237,11 @@ public final class CamStats {
      * numbers then, and for somebody who has no counted flight yet there are
      * none.</p>
      *
+     * <p>With {@code statistics.skip-afk-time}, the time in the numbers
+     * stands still while he does nothing beyond {@code statistics.afk-seconds},
+     * and {@code stats-flying} goes on: it says how long camera mode has been
+     * running.</p>
+     *
      * <p>The battery and the cooldown say how things stand now, not what has
      * added up over all flights: {@code stats-gap} sets them apart from the
      * numbers above them.</p>
@@ -243,7 +274,7 @@ public final class CamStats {
                         "{min}", CamTimeLimit.formatDuration(settings.getStatsMinSeconds())));
             }
             if (sessions > 0) {
-                addNumbers(lines, record, counted, counted == null ? 0L : now, sessions);
+                addNumbers(lines, record, counted, counted == null ? 0L : countedSeconds(counted), sessions);
             }
         }
         long cooldown = timeLimit.getCooldownRemaining(id);
@@ -269,11 +300,11 @@ public final class CamStats {
      * when.
      *
      * @param counted the flight going on, if it would count now, or {@code null}
-     * @param now     how long that one has been going, in seconds, or 0
+     * @param now     how much of that one counts so far, in seconds, or 0 - see {@link #countedSeconds}
      */
     private void addNumbers(List<Line> lines, PlayerRecord record, CameraData counted, long now, long sessions) {
         long totalSeconds = record.getTotalSeconds() + now;
-        double flownNow = counted == null ? 0.0 : counted.getDistanceFlown();
+        double flownNow = counted == null ? 0.0 : counted.getDistanceCounted();
         double flown = record.getDistanceFlown() + flownNow;
         lines.add(new Line("stats-sessions", "{count}", String.valueOf(sessions)));
         lines.add(new Line("stats-total-time", "{time}", CamTimeLimit.formatDuration(totalSeconds)));
@@ -286,9 +317,11 @@ public final class CamStats {
         lines.add(new Line("stats-longest-distance", "{distance}",
                 blocks(Math.max(record.getLongestDistance(), flownNow))));
         // At a fixed border nearly everybody gets there once, and from then
-        // on the number is the same for all: max-distance. It is still
-        // counted, for when the border goes.
-        if (!settings.limitsDistance()) {
+        // on the number is the same for all: max-distance. On the signal
+        // just the same: in the open air it reaches max-distance, and beyond
+        // it only the few seconds of signal.lost-seconds - all would have
+        // about max-distance. It is still counted, for when the limit goes.
+        if (!settings.limitsDistance() && !settings.usesSignal()) {
             double farthest = Math.max(record.getFarthestFromBody(),
                     counted == null ? 0.0 : counted.getFarthestFlownFromBody());
             lines.add(new Line("stats-farthest", "{distance}", blocks(farthest)));

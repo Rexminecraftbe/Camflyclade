@@ -466,8 +466,10 @@ cam-list:
 
 # Statistik: wie oft jemand im Cam-Modus war, wie lange und wie weit die Kamera insgesamt geflogen ist, beides im
 # Schnitt pro Flug (eine Zeile), der längste Flug und die längste Strecke in einem Flug, wie weit die Kamera höchstens
-# vom Körper weg war und seit wann gezählt wird. Der weiteste Abstand steht nur ohne feste Grenze da
-# (camera-mode.max-distance-mode: fixed): Mit ihr kommt fast jeder einmal hin, und bei allen stünde max-distance.
+# vom Körper weg war und seit wann gezählt wird. Der weiteste Abstand steht nur ohne feste Grenze und ohne Funksignal
+# da (camera-mode.max-distance-mode: fixed oder signal): Mit beiden kommt fast jeder einmal bis max-distance - beim
+# Signal in freier Luft, und weiter nur in den paar Sekunden von signal.lost-seconds -, und bei allen stünde etwa
+# dieselbe Zahl.
 # "Gezählt seit" ist der Beginn des ersten Flugs, der zählt - nach /cam stats reset der des nächsten. Wer schon vor
 # dieser Version Flüge in der Statistik hatte, bekommt die Zeile erst nach einem Reset: Wann sein erster war, steht
 # nirgends.
@@ -491,6 +493,21 @@ statistics:
   # Versehen gestartet, oder der Körper wurde gleich getroffen - zählte sonst als Flug und drückte den Schnitt.
   # Im Flug zählt /cam stats ihn erst mit, wenn er so lange läuft (Text: stats-flying-uncounted).
   min-seconds: 5
+  # Ob bei einem Follower von /cam follow der Weg zählt, den der Leader seine Kamera mitnimmt: in der geflogenen
+  # Strecke, im Schnitt, in der längsten Strecke und im weitesten Abstand zum Körper - mit und ohne follow.guide-view.
+  # Das Nachholen, wenn der Leader springt (zu einem Spot, mit /cam resume), zählt nie - ein Sprung ist kein Flug.
+  # Die Zeit zählt immer: Er ist ja im Cam-Modus. Der Leader selbst fliegt und zählt wie sonst auch.
+  # false = nur, was er selbst fliegt
+  count-follow-distance: true
+  # AFK-Zeit nicht mitzählen: Tut jemand im Cam-Modus afk-seconds lang nichts - fliegt nicht, sieht sich nicht um,
+  # dreht nicht am Mausrad, wie bei afk-end -, zählt die Zeit danach nicht mehr mit, bis er wieder etwas tut: nicht
+  # in der Zeit im Cam-Modus, im Schnitt und im längsten Flug. So zählt eine Kamera, die stundenlang irgendwo
+  # geparkt steht, nicht als langer Flug. Wer bei /cam follow folgt, schaut zu und zählt als aktiv.
+  # Ob ein Flug min-seconds lang lief, zählt weiter mit der ganzen Zeit; "In cam mode right now" auch.
+  # false = jede Sekunde im Cam-Modus zählt
+  skip-afk-time: false
+  # Nach wie vielen Sekunden ohne etwas zu tun die Zeit nicht mehr zählt (mindestens 10)
+  afk-seconds: 60
 
 # Protokoll: Jeder Start und jedes Ende des Cam-Modus kommt in eine Datei, eine pro Tag:
 # plugins/CamFly/logs/<Datum>.log. Darin steht, wer, wann, wo der Körper stand, warum der Cam-Modus

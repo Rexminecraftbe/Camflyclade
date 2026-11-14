@@ -3,6 +3,7 @@ package de.elia.cameraplugin.afk;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import org.bukkit.Location;
@@ -29,6 +30,11 @@ import java.util.UUID;
  * go there. Once {@code warning-percent} of the while has passed, he is
  * warned with the sound and the line of {@code end-warning} - once, and
  * again only after he has done something in between.</p>
+ *
+ * <p>What he does is noted for the statistics as well, whether
+ * {@code afk-end} is on or not: with {@code statistics.skip-afk-time}, time he
+ * does nothing does not count there after {@code statistics.afk-seconds}, see
+ * {@link CameraData#noteActive}.</p>
  */
 public final class CamAfk implements Listener {
 
@@ -121,7 +127,12 @@ public final class CamAfk implements Listener {
     }
 
     private void noteActive(Player player) {
-        lastActive.computeIfPresent(player.getUniqueId(), (id, last) -> System.currentTimeMillis());
+        long now = System.currentTimeMillis();
+        lastActive.computeIfPresent(player.getUniqueId(), (id, last) -> now);
+        CameraData data = plugin.getCameraPlayers().get(player.getUniqueId());
+        if (data != null) {
+            data.noteActive(now, settings.getStatsAfkMillis());
+        }
     }
 
     /** Stops every clock, when the plugin is switched off. */
