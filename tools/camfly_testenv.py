@@ -5746,6 +5746,109 @@ def statistik_checks(env, bot):
                           ("min-seconds", "0", "statistics"), ("max-distance-enabled", "true", "camera-mode")])
 
 
+def statistik_folgen_checks(env, bot):
+    """statistics.count-follow-distance: der Weg, den der Leader von
+    /cam follow die Kamera eines Followers mitnimmt.
+
+    Voreingestellt zaehlt er beim Follower als geflogen - nachgesehen in der
+    Datei, die das Plugin mitbringt. Der Bot fuehrt, der Zuschauer folgt ihm,
+    sein Koerper steht zwei Bloecke hinter ihm; der Bot fliegt zwanzig Bloecke
+    weg. Mit dem Blick des Leaders (follow.guide-view) stehen beim Follower
+    danach um die zwanzig Bloecke Strecke und weitester Abstand zum Koerper -
+    beim freien Umsehen ebenso, einmal und nicht doppelt: seine eigenen
+    Schritte zaehlen auf der Fuehrung nicht, die Tour zaehlt den Weg. Das
+    Nachholen beim Annehmen, ein Sprung, zaehlt nicht. Mit
+    count-follow-distance: false zaehlt nur, was er selbst fliegt - auf der
+    Fuehrung nichts -, der Flug selbst und seine Zeit aber schon. Fuer den
+    weitesten Abstand steht max-distance-enabled auf false.
+    """
+    def zahl(zeilen, muster):
+        for z in zeilen:
+            m = re.search(muster, z)
+            if m:
+                return int(m.group(1))
+        return -1
+
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+
+    def runde(frei):
+        """Eine Fuehrung ueber zwanzig Bloecke, danach /cam stats des
+        Followers. Mit frei sieht er sich auf ihr frei um und schaltet danach
+        zurueck auf den Blick des Leaders - das gilt auch fuer die naechste."""
+        cam_off(bot)
+        cam_off(zuschauer)
+        hinstellen(bot, x, y, z)
+        console(env, f"tp {ZUSCHAUER_NAME} {x - 2} {y} {z}", pause=1.0)
+        befehl(zuschauer, "/cam stats reset")
+        if not cam_on(bot):
+            return ["Der Leader kam nicht in den Cam-Modus"]
+        befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
+        if not gesagt(dort, rf"You follow {BOT_NAME} now"):
+            return dort
+        if frei:
+            dort = befehl(zuschauer, "/cam follow view", warten=1.0)
+            if not gesagt(dort, r"When following you look round freely now"):
+                return dort
+        time.sleep(1.0)
+        bot.call("fly", wait=30, dx=20, timeout=15000)
+        time.sleep(2.0)
+        if frei:
+            befehl(zuschauer, "/cam follow view", warten=1.0)
+        befehl(zuschauer, "/cam follow leave")
+        cam_off(zuschauer)
+        cam_off(bot)
+        return befehl(zuschauer, "/cam stats")
+
+    try:
+        FIND.test("Voreingestellt steht statistics.count-follow-distance: true da",
+                  re.search(r"(?m)^statistics:\s*\n(?:\s+.*\n)*?\s*count-follow-distance:\s*true\s*$",
+                            quelle_config(env)) is not None, "")
+        # Vor der ersten Frage, siehe mobtreffer_checks.
+        set_options(env, [("enabled", "false", "cam-safety"), ("max-distance-enabled", "false", "camera-mode")])
+        if not FIND.test("Cam-Modus ist vor dem Test der Statistik beim Folgen aus", cam_off(bot), ""):
+            return
+        console(env, f"fill {_floor(x) - 4} {y} {_floor(z) - 3} {_floor(x) + 26} {y + 4} {_floor(z) + 3} "
+                     f"minecraft:air", pause=0.5)
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Statistik beim Folgen kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        # Wie ein echter Client im Flug: die Geschwindigkeit des Servers, ohne Schwerkraft.
+        zuschauer.call("velocity", on=True)
+
+        z1 = runde(frei=False)
+        weg, weitest = zahl(z1, r"Distance flown: (\d+) blocks"), zahl(z1, r"Farthest from the body: (\d+) blocks")
+        FIND.test("count-follow-distance: true - mit dem Blick des Leaders zaehlt der Weg, den er den Follower "
+                  "mitnimmt: um die zwanzig Bloecke Strecke und weitester Abstand, das Nachholen beim Annehmen nicht",
+                  zahl(z1, r"Flights: (\d+)") == 1 and 16 <= weg <= 25 and 16 <= weitest <= 23, zeige(z1))
+
+        z2 = runde(frei=True)
+        weg, weitest = zahl(z2, r"Distance flown: (\d+) blocks"), zahl(z2, r"Farthest from the body: (\d+) blocks")
+        FIND.test("count-follow-distance: true - beim freien Umsehen ebenso, einmal und nicht doppelt",
+                  zahl(z2, r"Flights: (\d+)") == 1 and 16 <= weg <= 25 and 16 <= weitest <= 23, zeige(z2))
+
+        set_option(env, "count-follow-distance", "false", "statistics")
+        z3 = runde(frei=False)
+        weg, weitest = zahl(z3, r"Distance flown: (\d+) blocks"), zahl(z3, r"Farthest from the body: (\d+) blocks")
+        FIND.test("count-follow-distance: false - der Weg auf der Fuehrung zaehlt nicht, der Flug selbst schon",
+                  zahl(z3, r"Flights: (\d+)") == 1 and 0 <= weg <= 2 and 0 <= weitest <= 2, zeige(z3))
+    finally:
+        befehl(bot, "/cam follow end")
+        cam_off(bot)
+        cam_off(zuschauer)
+        zuschauer.call("velocity", on=False)
+        zuschauer.stop()
+        set_options(env, [("enabled", "true", "cam-safety"), ("max-distance-enabled", "true", "camera-mode"),
+                          ("count-follow-distance", "true", "statistics")])
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
 def alte_absturzdatei_checks(env, bot):
     """Eine Datei der crash-protection an ihrem alten Platz.
 
@@ -20757,6 +20860,8 @@ ABSCHNITTE = [
     Abschnitt("akku", akku_checks, "battery timelimit/FlightLimit stats session/SessionListener"),
     Abschnitt("kosten", kosten_checks, "cost"),
     Abschnitt("statistik", statistik_checks, "stats storage session/SessionTracker session/CameraData"),
+    Abschnitt("statistik_folgen", statistik_folgen_checks,
+              "stats tour/CamTour session/SessionTracker session/CameraData"),
     Abschnitt("alte_absturzdatei", alte_absturzdatei_checks, "crash storage session/SessionListener"),
     Abschnitt("zurueck", zurueck_checks, "back"),
     Abschnitt("endwarnung", endwarnung_checks, "timelimit battery"),

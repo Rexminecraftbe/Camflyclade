@@ -491,6 +491,12 @@ statistics:
   # Versehen gestartet, oder der Körper wurde gleich getroffen - zählte sonst als Flug und drückte den Schnitt.
   # Im Flug zählt /cam stats ihn erst mit, wenn er so lange läuft (Text: stats-flying-uncounted).
   min-seconds: 5
+  # Ob bei einem Follower von /cam follow der Weg zählt, den der Leader seine Kamera mitnimmt: in der geflogenen
+  # Strecke, im Schnitt, in der längsten Strecke und im weitesten Abstand zum Körper - mit und ohne follow.guide-view.
+  # Das Nachholen, wenn der Leader springt (zu einem Spot, mit /cam resume), zählt nie - ein Sprung ist kein Flug.
+  # Die Zeit zählt immer: Er ist ja im Cam-Modus. Der Leader selbst fliegt und zählt wie sonst auch.
+  # false = nur, was er selbst fliegt
+  count-follow-distance: true
 
 # Protokoll: Jeder Start und jedes Ende des Cam-Modus kommt in eine Datei, eine pro Tag:
 # plugins/CamFly/logs/<Datum>.log. Darin steht, wer, wann, wo der Körper stand, warum der Cam-Modus

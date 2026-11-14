@@ -52,8 +52,17 @@ public class CameraData {
      * while he has not left the world of his body.
      */
     private Location portalEntry;
-    /** How far the camera has flown so far, in blocks, see {@link SessionTracker}. */
+    /** How far the camera has flown so far, in blocks, every step, for {@code cam-log}, see {@link SessionTracker}. */
     private double distanceFlown;
+    /**
+     * How far the camera has flown for the statistics, in blocks: its own
+     * steps, and on a tour of {@code /cam follow} the way the guide takes it
+     * along - with {@code statistics.count-follow-distance} -, see
+     * {@link de.elia.cameraplugin.tour.CamTour}. Its own steps on the tour
+     * are not counted: they would be that way twice, and through the eyes of
+     * the guide its client sends none.
+     */
+    private double distanceCounted;
     /**
      * The farthest the camera has been from the body so far, in blocks, in
      * the world of the body - however it got there, for {@code cam-log}.
@@ -135,9 +144,12 @@ public class CameraData {
     /** The portal he set out through, or {@code null} when he is still home. */
     public Location getPortalEntry() { return portalEntry; }
     public void setPortalEntry(Location portalEntry) { this.portalEntry = portalEntry; }
-    /** How far the camera has flown so far, for {@code cam-log} and the statistics. */
+    /** How far the camera has flown so far, every step, for {@code cam-log}. */
     public double getDistanceFlown() { return distanceFlown; }
     public void addDistanceFlown(double blocks) { distanceFlown += blocks; }
+    /** How far the camera has flown for the statistics, see {@link #distanceCounted}. */
+    public double getDistanceCounted() { return distanceCounted; }
+    public void addDistanceCounted(double blocks) { distanceCounted += blocks; }
     /** The farthest the camera has been from the body, jumps and all, for {@code cam-log}. */
     public double getFarthestFromBody() { return farthestFromBody; }
     public void noteDistanceFromBody(double blocks) { farthestFromBody = Math.max(farthestFromBody, blocks); }
@@ -154,6 +166,10 @@ public class CameraData {
      * <p>A jump in between adds nothing: far off, only what it flies on from
      * there counts; back close to the body, what it flew out before is
      * gone.</p>
+     *
+     * <p>On a tour of {@code /cam follow} the steps of a guest are those of
+     * the way the guide takes him along, noted by the tour - or none, without
+     * {@code statistics.count-follow-distance}.</p>
      */
     public void noteStep(double before, double after) {
         flownFromBody = Math.min(after, flownFromBody + after - before);

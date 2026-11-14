@@ -678,6 +678,11 @@ public final class CamSettings {
     private ListAccess statsViewOthers;
     /** How long a camera mode has to run to be counted, in seconds, {@code statistics.min-seconds}. */
     private int statsMinSeconds;
+    /**
+     * Whether the way a tour takes the camera of a guest along counts for his
+     * statistics, {@code statistics.count-follow-distance}.
+     */
+    private boolean statsCountFollowDistance;
 
     /** Whether start and end of camera mode are written down, the section {@code cam-log}. */
     private boolean camLogEnabled;
@@ -979,6 +984,7 @@ public final class CamSettings {
         statsEnabled = config.getBoolean("statistics.enabled", true);
         statsViewOthers = readAccess(config, "statistics.view-others");
         statsMinSeconds = config.getInt("statistics.min-seconds", 5, 0);
+        statsCountFollowDistance = config.getBoolean("statistics.count-follow-distance", true);
         camLogEnabled = config.getBoolean("cam-log.enabled", false);
         camLogConsole = config.getBoolean("cam-log.console", false);
         camLogKeepDays = config.getInt("cam-log.keep-days", 30, 0);
@@ -2549,6 +2555,15 @@ public final class CamSettings {
     /** How long a camera mode has to run to be counted, in seconds; 0 counts every one. */
     public int getStatsMinSeconds() {
         return statsMinSeconds;
+    }
+
+    /**
+     * Whether the way the tour of {@code /cam follow} takes the camera of a
+     * guest along counts for his statistics: for the way flown and how far
+     * from the body. Otherwise only what he flies himself.
+     */
+    public boolean isStatsCountFollowDistance() {
+        return statsCountFollowDistance;
     }
 
     public boolean isCamLogEnabled() {

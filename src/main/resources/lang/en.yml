@@ -844,6 +844,8 @@ messages:
   stats-average: "&7Average flight: &f{time} &7· &f{distance} blocks"
   stats-battery: "&7Battery: &f{charge} &7of &f{capacity}"
   stats-cooldown: "&7Cam mode again in: &f{time}"
+  # How far the camera flew. On a tour of /cam follow, the way the leader takes a follower along counts as well - unless
+  # statistics.count-follow-distance is false -, here, in stats-average, stats-longest-distance and stats-farthest.
   stats-distance: "&7Distance flown: &f{distance} blocks"
   # How far the camera flew away from the body: only flying counts, a jump does not - to a spot, with /cam resume, after
   # the guide of /cam follow. Only without a fixed border (camera-mode.max-distance-mode: fixed with a border that

@@ -29,6 +29,9 @@ import java.util.concurrent.TimeUnit;
  * far it flew away from his body - flown, not jumped to a spot far off; and
  * only without a fixed border: at one, nearly everybody gets there once, and
  * all would have the same number - and since when all this is counted.
+ * On a tour of {@code /cam follow}, the way the guide takes a guest along
+ * counts as flown, while {@code statistics.count-follow-distance} says so,
+ * see {@link de.elia.cameraplugin.tour.CamTour}.
  *
  * <ul>
  *   <li>{@code /cam stats} - his own</li>
@@ -82,7 +85,7 @@ public final class CamStats {
         PlayerRecord record = store.get(player.getUniqueId());
         if (counts(seconds)) {
             record.addSession(player.getName(), data.getStartedAt(), seconds,
-                    data.getDistanceFlown(), data.getFarthestFlownFromBody());
+                    data.getDistanceCounted(), data.getFarthestFlownFromBody());
         } else {
             record.addUncountedSession(player.getName());
         }
@@ -273,7 +276,7 @@ public final class CamStats {
      */
     private void addNumbers(List<Line> lines, PlayerRecord record, CameraData counted, long now, long sessions) {
         long totalSeconds = record.getTotalSeconds() + now;
-        double flownNow = counted == null ? 0.0 : counted.getDistanceFlown();
+        double flownNow = counted == null ? 0.0 : counted.getDistanceCounted();
         double flown = record.getDistanceFlown() + flownNow;
         lines.add(new Line("stats-sessions", "{count}", String.valueOf(sessions)));
         lines.add(new Line("stats-total-time", "{time}", CamTimeLimit.formatDuration(totalSeconds)));

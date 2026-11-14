@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.session;
 
+import de.elia.cameraplugin.tour.CamTour;
 import org.bukkit.Location;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -20,13 +21,20 @@ import org.bukkit.event.player.PlayerMoveEvent;
  * at all, for the log, and how far flying alone carried it away, for the
  * statistics - a jump to a spot far off is no flight, see
  * {@link CameraData#noteStep}.</p>
+ *
+ * <p>The steps of a guest on a tour of {@code /cam follow} go into the log
+ * only. For the statistics the tour counts the way the guide takes him
+ * along, see {@link CamTour}: through the guide's eyes his client sends no
+ * steps, and looking round freely they would be that way twice.</p>
  */
 public final class SessionTracker implements Listener {
 
     private final CameraPlayers cameraPlayers;
+    private final CamTour tour;
 
-    public SessionTracker(CameraPlayers cameraPlayers) {
+    public SessionTracker(CameraPlayers cameraPlayers, CamTour tour) {
         this.cameraPlayers = cameraPlayers;
+        this.tour = tour;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -36,15 +44,20 @@ public final class SessionTracker implements Listener {
         if (data == null || to == null) {
             return;
         }
+        boolean own = !tour.isFollowing(event.getPlayer());
         Location from = event.getFrom();
         if (from.getWorld() != null && from.getWorld().equals(to.getWorld())) {
-            data.addDistanceFlown(from.distance(to));
+            double step = from.distance(to);
+            data.addDistanceFlown(step);
+            if (own) {
+                data.addDistanceCounted(step);
+            }
         }
         Location home = data.getBody().getLocation();
         if (home.getWorld() != null && home.getWorld().equals(to.getWorld())) {
             double after = home.distance(to);
             data.noteDistanceFromBody(after);
-            if (home.getWorld().equals(from.getWorld())) {
+            if (own && home.getWorld().equals(from.getWorld())) {
                 data.noteStep(home.distance(from), after);
             }
         }
