@@ -2691,6 +2691,16 @@ bot._client.on('window_items', (packet) => {
 bot._client.on('set_slot', (packet) => {
   if (Number(packet.windowId) === 0) lastInventoryResend = Date.now();
 });
+// Welche Plaetze eines offenen Fensters (nicht des eigenen Inventars) der
+// Server einzeln neu schickt (set_slot): Zeichnet das Menue eine Seite neu und
+// ist ein Item dabei nicht mehr dasselbe - ein Kopf mit einem neuen Profil -,
+// kommt es jedes Mal neu, und der Client laedt dessen Skin neu.
+const windowSlotUpdates = [];
+bot._client.on('set_slot', (packet) => {
+  if (Number(packet.windowId) !== 0) {
+    windowSlotUpdates.push({ t: Date.now(), slot: packet.slot, components: componentsText(packet.item || {}) });
+  }
+});
 // Wie der Server den eigenen Arm schwingen laesst (Paket animation mit der
 // eigenen Nummer: 0 die Hand, 3 die zweite Hand) - so schwingt eine Fuehrung
 // ohne Cam-Modus ihn mit dem Arm des Fuehrers.
@@ -3308,6 +3318,13 @@ async function handle(cmd) {
       return { swapped: true };
     case 'window_opens':
       return { count: windowOpens, id: bot.currentWindow ? bot.currentWindow.id : null };
+    case 'window_slot_updates': {
+      // Die Plaetze, die seit dem letzten reset einzeln neu kamen, nur der eine
+      // mit slot.
+      const updates = windowSlotUpdates.filter((u) => cmd.slot === undefined || u.slot === cmd.slot);
+      if (cmd.reset) windowSlotUpdates.length = 0;
+      return { updates };
+    }
     case 'window':
       return { open: !!bot.currentWindow,
                title: bot.currentWindow ? String(bot.currentWindow.title || '') : null };
@@ -10740,7 +10757,8 @@ def menue_checks(env, bot):
     ein, sie tippen ihre Befehle. Ohne Cam-Modus oeffnet /cam menu das Menue
     mit den Knoepfen auf ihren Plaetzen - die Fuehrung auf 9, die Punkte auf
     10, die Nachtsicht auf 17, Platz 13 frei -; der auf Platz 22 - der Kamera-Kopf -
-    startet den Cam-Modus und schliesst das Fenster. Im Cam-Modus oeffnet es trotzdem, wo jedes andere Fenster zu
+    kommt nicht jede Sekunde neu, wenn sich die Seite neu zeichnet (sonst
+    flackert er), und startet den Cam-Modus und schliesst das Fenster. Im Cam-Modus oeffnet es trotzdem, wo jedes andere Fenster zu
     bleibt, und nichts kommt dabei ins Inventar. Die Zeit hat keine eigene
     Seite: drei Linksklicks auf ihren Knopf schalten von der Zeit der Welt
     ueber day und noon zu sunset - der Bot sieht 12000 -, ein Rechtsklick
@@ -10843,6 +10861,15 @@ def menue_checks(env, bot):
                   all(str(i) in f.get("slots", {}) for i in (9, 10, 11, 12, 14, 15, 16, 17, 22))
                   and "13" not in f.get("slots", {}),
                   str(sorted(f.get("slots", {})))[:200])
+        # Die Seite zeichnet sich jede Sekunde neu. Der Kamera-Kopf ist dabei
+        # jedes Mal dasselbe Item - mit einem neuen Profil kaeme er jedes Mal
+        # neu, und der Client zeigte kurz den Kopf ohne Skin: er flackerte.
+        bot.call("window_slot_updates", reset=True)
+        time.sleep(3.5)
+        neu = bot.call("window_slot_updates", slot=22, reset=True).get("updates", [])
+        FIND.test("Der Kamera-Kopf auf Platz 22 kommt nicht jede Sekunde neu (er flackert nicht)",
+                  not neu and fenster().get("open"),
+                  f"{len(neu)} Mal neu: {[u.get('components', '')[:200] for u in neu[:2]]}")
         klick(22, warten=2.0)
         FIND.test("Der Knopf auf Platz 22 startet den Cam-Modus und schliesst das Fenster",
                   spielmodus_ist(bot, "adventure") and not fenster().get("open"), "")

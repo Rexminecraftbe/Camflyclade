@@ -709,7 +709,7 @@ menu:
     # Blick (Enderauge oder Fernglas), die Seite danach und ganz rechts das Leuchtfeuer, das alle auf einmal einlädt
     # (follow.invite-all). Hieß früher tour - ein Abschnitt unter dem alten Namen geht weiter.
     follow:
-      item: lead
+      item: saddle
       slot: 9
     # /cam photo
     photo:
@@ -756,7 +756,7 @@ menu:
       slot: 14
     # Die Flugspuren (cam-trail, camplugin.trail)
     trails:
-      item: lead
+      item: feather
       slot: 16
     # Die Punkte aller Spieler (camplugin.spotadmin, nur mit viewpoints.enabled): die Spieler mit Punkten - auch wer
     # offline ist -, ein Klick zeigt seine Punkte, privat, öffentlich und geteilt. Linksklick nimmt einen öffentlichen

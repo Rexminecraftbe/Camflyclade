@@ -14,7 +14,7 @@ public enum MenuButton implements MenuSlot {
     RESUME("resume", "recovery_compass", 12),
     SPOTS("spots", "filled_map", 10),
     /** {@code /cam follow}, called {@code tour} before. */
-    FOLLOW("follow", "lead", 9, "tour"),
+    FOLLOW("follow", "saddle", 9, "tour"),
     PHOTO("photo", "painting", 14),
     TIME("time", "clock", 15),
     WEATHER("weather", "sunflower", 16),
