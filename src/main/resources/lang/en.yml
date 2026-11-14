@@ -858,8 +858,8 @@ messages:
   # In its place while the flight is shorter than statistics.min-seconds ({min}): ended now, it would not count, and
   # the numbers under it leave it out.
   stats-flying-uncounted: "&aIn cam mode right now: &f{time} &7(counts from {min})"
-  # The empty line between the numbers, which add up over all flights, and stats-battery and stats-cooldown, which
-  # say how things stand now. Switched off, or "", for none.
+  # The empty line between the numbers, which add up over all flights, and stats-spot-views, stats-battery and
+  # stats-cooldown, which say how things stand now. Switched off, or "", for none.
   stats-gap: " "
   stats-header: "&eCam mode statistics of {player}:"
   # When he was last in cam mode: {date} is the day his last flight ended, as stats-since-date writes it. A flight too
@@ -881,6 +881,11 @@ messages:
   # the server). Statistics from before this was noted do not say it, and the line is left out until a reset.
   stats-since: "&7Counted since: &f{date}"
   stats-since-date: "yyyy-MM-dd"
+  # How often his spots of /cam spot were looked at altogether ({views}): the views the menu shows under each of them
+  # (menu-spot-views), added up - every jump there, his own as well, the same player at the same spot once in
+  # viewpoints.views-cooldown-minutes at most. Only while he has a spot. /cam stats reset leaves them; a spot that is
+  # deleted takes its views along.
+  stats-spot-views: "&7Spot views: &f{views}"
   stats-total-time: "&7Time in cam mode: &f{time}"
   stats-unknown-player: "&cNobody called {player} has been on this server."
   stats-usage: "&eUse /cam stats, /cam stats reset or /cam stats player <name>."
@@ -1601,6 +1606,7 @@ message-settings:
   stats-reset: true
   stats-sessions: true
   stats-since: true
+  stats-spot-views: true
   stats-total-time: true
   stats-unknown-player: true
   stats-usage: true

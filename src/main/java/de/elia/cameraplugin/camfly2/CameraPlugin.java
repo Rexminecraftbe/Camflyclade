@@ -145,8 +145,6 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamLocatorBar locatorBar = new CamLocatorBar(this);
     private final CamBattery battery = new CamBattery(this, playerStore);
     private final CamTimeLimit timeLimit = new CamTimeLimit(this, playerStore);
-    private final CamStats stats = new CamStats(settings, messages, playerStore, battery, timeLimit,
-            cameraPlayers);
     private final CamLog camLog = new CamLog(this, settings, log, writer);
     private final StartCost startCost = new StartCost(settings, messages, log);
     private final MobTargeting mobTargeting = new MobTargeting(this, settings, cameraPlayers);
@@ -165,6 +163,8 @@ public final class CameraPlugin extends JavaPlugin {
     private final SpotModeration spotModeration = new SpotModeration(this, new SpotBans(this, log));
     private final JumpCheck jumpCheck = new JumpCheck(this);
     private final CamSpots spots = new CamSpots(this, playerStore, sharedSpots, spotViews, guestbook, jumpCheck);
+    private final CamStats stats = new CamStats(settings, messages, playerStore, battery, timeLimit,
+            cameraPlayers, spots);
     private final CamResume resume = new CamResume(this, playerStore, jumpCheck);
     private final CamTour tour = new CamTour(this);
     private final TourModeration tourModeration = new TourModeration(this, new TourBans(this, log));

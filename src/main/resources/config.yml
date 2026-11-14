@@ -483,8 +483,10 @@ cam-list:
 # plugins/CamFly/playerdata/stats/<UUID>.yml, zusammen mit dem Ladestand des Akkus, der Wartezeit von time-limit, den
 # Aussichtspunkten, den eigenen Einstellungen und dem Ende des letzten Flugs für /cam resume (jeweils bei
 # storage: file).
-# /cam stats zeigt auch den Akku und eine Wartezeit, die noch läuft - durch eine Leerzeile von den Zahlen getrennt,
-# denn sie sagen, wie es gerade steht, und zählen nicht über alle Flüge (Text: stats-gap).
+# /cam stats zeigt auch, wie oft die eigenen Aussichtspunkte aufgerufen wurden (zusammengezählt, was das Menü unter
+# jedem zeigt; nur wer einen hat), den Akku und eine Wartezeit, die noch läuft - durch eine Leerzeile von den Zahlen
+# getrennt, denn sie sagen, wie es gerade steht, und zählen nicht über alle Flüge (Text: stats-gap). /cam stats reset
+# lässt die Aufrufe, wie sie sind; ein gelöschter Punkt nimmt seine mit.
 statistics:
   enabled: true
   # Wer die Statistik anderer mit /cam stats player <Name> sehen darf (die Konsole immer):

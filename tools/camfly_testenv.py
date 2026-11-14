@@ -11252,6 +11252,14 @@ def spotreiter_checks(env, bot):
         treffer = re.search(r"Views: (\d+)", text)
         return int(treffer.group(1)) if treffer else None
 
+    def statistik_aufrufe():
+        """Wie oft die Punkte des Bots zusammen aufgerufen wurden, wie /cam stats es sagt."""
+        for zeile in befehl(bot, "/cam stats"):
+            treffer = re.search(r"Spot views: (\d+)$", zeile)
+            if treffer:
+                return int(treffer.group(1))
+        return None
+
     if not FIND.test("Cam-Modus ist vor dem Test der Reiter aus", cam_off(bot), ""):
         return
     heim = bot.server_pos()
@@ -11460,6 +11468,7 @@ def spotreiter_checks(env, bot):
         FIND.test("Voreingestellt steht viewpoints.views-cooldown-minutes: 10 da",
                   re.search(r"(?m)^\s*views-cooldown-minutes:\s*10\s*$", ausgeliefert(env)) is not None, "")
         hinstellen(bot, x, y, z)
+        stats_vorher = statistik_aufrufe()
         befehl(bot, "/cam spot Beta", warten=2.5)
         befehl(bot, "/cam spot Beta", warten=1.0)
         einmal = aufrufe("Beta")
@@ -11471,6 +11480,10 @@ def spotreiter_checks(env, bot):
         set_option(env, "views-cooldown-minutes", "10", "viewpoints")
         FIND.test("views-cooldown-minutes: 10 - zweimal gleich hintereinander zaehlt einmal; mit 0 zaehlt jeder Sprung",
                   einmal == 1 and jeder == 3, f"{einmal} / {jeder}")
+        stats_nachher = statistik_aufrufe()
+        FIND.test("stats-spot-views: /cam stats zaehlt die Aufrufe aller eigenen Punkte zusammen - die von Beta kommen dazu",
+                  stats_vorher is not None and jeder is not None and stats_nachher == stats_vorher + jeder,
+                  f"{stats_vorher} -> {stats_nachher}, Beta {jeder}")
     finally:
         try:
             for client in (zuschauer, bot):

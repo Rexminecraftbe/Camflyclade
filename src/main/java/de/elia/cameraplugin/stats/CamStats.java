@@ -6,6 +6,8 @@ import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.session.EndReason;
+import de.elia.cameraplugin.spot.CamSpots;
+import de.elia.cameraplugin.spot.Spot;
 import de.elia.cameraplugin.storage.PlayerRecord;
 import de.elia.cameraplugin.storage.PlayerStore;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
@@ -19,6 +21,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -30,7 +33,7 @@ import java.util.concurrent.TimeUnit;
  * far it got from his body - that only without a fixed border: at one, nearly
  * everybody gets there once, and all would have the same number -, how often
  * something got his body, since when all this is counted, and when he was
- * last in camera mode.
+ * last in camera mode. Below them, how often his spots were looked at.
  *
  * <ul>
  *   <li>{@code /cam stats} - his own</li>
@@ -59,15 +62,17 @@ public final class CamStats {
     private final CamBattery battery;
     private final CamTimeLimit timeLimit;
     private final CameraPlayers cameraPlayers;
+    private final CamSpots spots;
 
     public CamStats(CamSettings settings, Messages messages, PlayerStore store, CamBattery battery,
-                    CamTimeLimit timeLimit, CameraPlayers cameraPlayers) {
+                    CamTimeLimit timeLimit, CameraPlayers cameraPlayers, CamSpots spots) {
         this.settings = settings;
         this.messages = messages;
         this.store = store;
         this.battery = battery;
         this.timeLimit = timeLimit;
         this.cameraPlayers = cameraPlayers;
+        this.spots = spots;
     }
 
     /**
@@ -185,9 +190,10 @@ public final class CamStats {
     }
 
     /**
-     * Sends the statistics of one player, his battery while there is one,
-     * and his cooldown while it runs. A line whose text is empty is left
-     * out, as it is under the button of the menu.
+     * Sends the statistics of one player, the views of his spots while he
+     * has any, his battery while there is one, and his cooldown while it
+     * runs. A line whose text is empty is left out, as it is under the button
+     * of the menu.
      */
     private void show(CommandSender sender, UUID id, String name) {
         for (Line line : lines(id, name)) {
@@ -204,8 +210,9 @@ public final class CamStats {
     /**
      * The lines of the statistics of one player, as {@code /cam stats} sends
      * them and the menu shows them under its button: the header, the
-     * numbers, his battery while there is one and his cooldown while it
-     * runs - or {@code stats-off} alone, with nothing to show.
+     * numbers, the views of his spots while he has any, his battery while
+     * there is one and his cooldown while it runs - or {@code stats-off}
+     * alone, with nothing to show.
      *
      * <p>While he is in camera mode, the flight going on is in the numbers
      * already, as {@link #record} would add it if it ended now, and
@@ -220,9 +227,10 @@ public final class CamStats {
      * numbers only while he is not: in it, {@code stats-flying} says it
      * already.</p>
      *
-     * <p>The battery and the cooldown say how things stand now, not what has
-     * added up over all flights: {@code stats-gap} sets them apart from the
-     * numbers above them.</p>
+     * <p>The views of his spots, the battery and the cooldown say how things
+     * stand now, not what has added up over all flights - a reset leaves the
+     * views, a spot deleted takes its own along -: {@code stats-gap} sets them
+     * apart from the numbers above them.</p>
      */
     public List<Line> lines(UUID id, String name) {
         List<Line> lines = new ArrayList<>();
@@ -262,10 +270,20 @@ public final class CamStats {
             }
         }
         long cooldown = timeLimit.getCooldownRemaining(id);
-        if (settings.isStatsEnabled() && (settings.isBatteryEnabled() || cooldown > 0)) {
+        // The spots he has now: one he deleted has taken its views along.
+        Collection<Spot> ownSpots = settings.isStatsEnabled() && spots.isEnabled()
+                ? spots.spotsOf(id).values() : List.of();
+        if (settings.isStatsEnabled() && (!ownSpots.isEmpty() || settings.isBatteryEnabled() || cooldown > 0)) {
             // Only under the numbers: with the statistics switched off, the
             // battery stands under the header alone.
             lines.add(new Line("stats-gap"));
+        }
+        if (!ownSpots.isEmpty()) {
+            long views = 0L;
+            for (Spot spot : ownSpots) {
+                views += spots.views(id, spot);
+            }
+            lines.add(new Line("stats-spot-views", "{views}", String.valueOf(views)));
         }
         if (settings.isBatteryEnabled()) {
             lines.add(new Line("stats-battery",
