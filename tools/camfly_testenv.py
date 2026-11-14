@@ -5593,18 +5593,18 @@ def statistik_checks(env, bot):
     try:
         cam_off(bot)
         z = befehl(bot, "/cam stats")
-        mal, weg = zahl(z, r"Times in cam mode: (\d+)"), zahl(z, r"Distance flown: (\d+) blocks")
+        mal, weg = zahl(z, r"Flights: (\d+)"), zahl(z, r"Distance flown: (\d+) blocks")
         if not FIND.test("Cam-Modus fuer die Statistik gestartet", cam_on(bot), ""):
             return
         bot.call("fly", wait=30, dy=6, timeout=15000)
         time.sleep(1)
         z = befehl(bot, "/cam stats")
         FIND.test("/cam stats im Flug: der Flug, der gerade laeuft, zaehlt schon mit und sagt, wie lange er geht",
-                  zahl(z, r"Times in cam mode: (\d+)") == mal + 1 and gesagt(z, r"In cam mode right now: "),
+                  zahl(z, r"Flights: (\d+)") == mal + 1 and gesagt(z, r"In cam mode right now: "),
                   zeige(z))
         cam_off(bot)
         z = befehl(bot, "/cam stats")
-        FIND.test("/cam stats zaehlt den Flug", zahl(z, r"Times in cam mode: (\d+)") == mal + 1, zeige(z))
+        FIND.test("/cam stats zaehlt den Flug", zahl(z, r"Flights: (\d+)") == mal + 1, zeige(z))
         gesamt = zahl(z, r"Distance flown: (\d+) blocks")
         FIND.test("/cam stats - die Strecke waechst um den Flug", gesamt >= weg + 4, zeige(z))
         schnitt = zahl(z, r"Average flight: \S.* · (\d+) blocks$")
@@ -5674,7 +5674,7 @@ def statistik_checks(env, bot):
             z = befehl(bot, "/cam stats")
             FIND.test("min-seconds: 30 - im Flug sagt /cam stats, ab wann er zaehlt, und zeigt noch keine Zahlen",
                       gesagt(z, r"In cam mode right now: .*\(counts from 30 seconds\)")
-                      and not gesagt(z, r"Times in cam mode|has not been in cam mode"), zeige(z))
+                      and not gesagt(z, r"Flights: |has not been in cam mode"), zeige(z))
             cam_off(bot)
             z = befehl(bot, "/cam stats")
             FIND.test("min-seconds: 30 - ein kuerzerer Flug zaehlt nicht",
@@ -5687,16 +5687,16 @@ def statistik_checks(env, bot):
         if FIND.test("min-seconds: Cam-Modus fuer einen langen Flug gestartet", cam_on(bot), ""):
             z = befehl(bot, "/cam stats")
             FIND.test("min-seconds: 8 - in den ersten Sekunden zaehlt der Flug noch nicht mit",
-                      gesagt(z, r"\(counts from 8 seconds\)") and not gesagt(z, r"Times in cam mode"), zeige(z))
+                      gesagt(z, r"\(counts from 8 seconds\)") and not gesagt(z, r"Flights: "), zeige(z))
             time.sleep(8)
             z = befehl(bot, "/cam stats")
             FIND.test("min-seconds: 8 - danach zaehlt er mit, und gezaehlt wird seit dem Tag, an dem er begann",
-                      gesagt(z, r"\(counted in\)") and zahl(z, r"Times in cam mode: (\d+)") == 1
+                      gesagt(z, r"\(counted in\)") and zahl(z, r"Flights: (\d+)") == 1
                       and gesagt(z, rf"Counted since: {heute}$"), zeige(z))
             cam_off(bot)
             z = befehl(bot, "/cam stats")
             FIND.test("min-seconds: 8 - nach dem Ende ein Flug, und Counted since bleibt",
-                      zahl(z, r"Times in cam mode: (\d+)") == 1 and gesagt(z, rf"Counted since: {heute}$"), zeige(z))
+                      zahl(z, r"Flights: (\d+)") == 1 and gesagt(z, rf"Counted since: {heute}$"), zeige(z))
             datei = spielerdatei(env)
             text = datei.read_text(encoding="utf-8") if datei is not None else ""
             FIND.test("statistics: seit wann gezaehlt wird, steht in der Datei (stats.counted-since)",
@@ -10507,7 +10507,7 @@ def menue_checks(env, bot):
         FIND.test("/cam menu oeffnet das Menue", f.get("open") and "Cam" in (f.get("title") or ""), str(f)[:300])
         knopf = f.get("slots", {})
         FIND.test("Die eigene Statistik steht unter ihrem Knopf auf Platz 21",
-                  "Times in cam mode:" in item_text(knopf.get("21")), item_text(knopf.get("21")))
+                  "Flights:" in item_text(knopf.get("21")), item_text(knopf.get("21")))
         FIND.test("Der Bot mit op hat den Knopf der Admin-Seite auf Platz 23", "23" in knopf, str(sorted(knopf)))
         FIND.test("Vor dem Cam-Modus: Zeit der Welt, Foto-Modus aus, Nachtsicht nur im Dunkeln",
                   "Time of day: the world's" in item_text(knopf.get("15"))
@@ -11105,12 +11105,12 @@ def menue_live_checks(env, bot):
             FIND.test("Erste Seite: die eigene Statistik zaehlt den Flug mit und waechst von selbst",
                       "In cam mode right now" in vorher and "In cam mode right now" in nachher and nachher != vorher,
                       f"{vorher} -> {nachher}")
-            mal = re.search(r"Times in cam mode: (\d+)", nachher)
+            mal = re.search(r"Flights: (\d+)", nachher)
             bot.call("close_window", wait=10)
             cam_off(bot)
             z = befehl(bot, "/cam stats")
             FIND.test("Endet der Flug, springt nichts: /cam stats sagt so viele Fluege, wie eben im Menue standen",
-                      mal is not None and gesagt(z, rf"Times in cam mode: {mal.group(1)}$"), zeige(z))
+                      mal is not None and gesagt(z, rf"Flights: {mal.group(1)}$"), zeige(z))
 
         # --- Ohne live-update
         set_option(env, "live-update", "false", "menu")
