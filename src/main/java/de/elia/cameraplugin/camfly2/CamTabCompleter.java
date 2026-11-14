@@ -65,6 +65,10 @@ public class CamTabCompleter implements TabCompleter {
         if (statsCommand && args.length == 3 && args[1].equalsIgnoreCase("player") && adminCommands) {
             return playerNames(sender, args[2].toLowerCase(Locale.ROOT));
         }
+        if (statsCommand && args.length == 3 && args[1].equalsIgnoreCase("reset") && adminCommands
+                && resetsOthers(sender)) {
+            return onlineNames(args[2].toLowerCase(Locale.ROOT));
+        }
         boolean tpCommand = args.length > 1 && args[0].equalsIgnoreCase("tp") && listTeleport.mayUse(sender)
                 && adminCommands;
         if (tpCommand && args.length == 2) {
@@ -269,7 +273,8 @@ public class CamTabCompleter implements TabCompleter {
         if ((!(sender instanceof Player) || sender.isOp()) && "reload".startsWith(partial)) {
             completions.add("reload");
         }
-        if ((ownCommands || (adminCommands && stats.mayViewOthers(sender))) && stats.showsAnything()
+        if (((ownCommands && stats.showsAnything())
+                || (adminCommands && ((stats.showsAnything() && stats.mayViewOthers(sender)) || resetsOthers(sender))))
                 && "stats".startsWith(partial)) {
             completions.add("stats");
         }
@@ -337,7 +342,8 @@ public class CamTabCompleter implements TabCompleter {
     /**
      * What may follow {@code /cam stats}: {@code player} for whoever may look
      * at somebody else, while there is anything to see, {@code reset} for a
-     * player, while there are statistics to reset.
+     * player and for whoever may reset somebody else, while there are
+     * statistics to reset.
      */
     private List<String> statsWords(CommandSender sender, String partial) {
         List<String> words = new ArrayList<>();
@@ -346,11 +352,21 @@ public class CamTabCompleter implements TabCompleter {
                 && stats.showsAnything() && stats.mayViewOthers(sender) && "player".startsWith(partial)) {
             words.add("player");
         }
-        if (player && plugin.getSettings().getMenuAccess().allowsCommands()
-                && plugin.getSettings().isStatsEnabled() && "reset".startsWith(partial)) {
+        boolean own = player && plugin.getSettings().getMenuAccess().allowsCommands()
+                && plugin.getSettings().isStatsEnabled();
+        boolean others = (!player || plugin.getSettings().getAdminAccess().allowsCommands()) && resetsOthers(sender);
+        if ((own || others) && "reset".startsWith(partial)) {
             words.add("reset");
         }
         return words;
+    }
+
+    /**
+     * Whether {@code /cam stats reset <name>} does anything for him: with
+     * the statistics on and the right to reset those of others.
+     */
+    private boolean resetsOthers(CommandSender sender) {
+        return plugin.getSettings().isStatsEnabled() && stats.mayResetOthers(sender);
     }
 
     /**
@@ -361,6 +377,11 @@ public class CamTabCompleter implements TabCompleter {
         if (!stats.showsAnything() || !stats.mayViewOthers(sender)) {
             return Collections.emptyList();
         }
+        return onlineNames(partial);
+    }
+
+    /** The names of the players online that begin like the partial one, for a command that names one. */
+    private static List<String> onlineNames(String partial) {
         List<String> names = new ArrayList<>();
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getName().toLowerCase(Locale.ROOT).startsWith(partial)) {

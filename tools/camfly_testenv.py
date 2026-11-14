@@ -5587,8 +5587,13 @@ def statistik_checks(env, bot):
     nicht vierzehn. Grosse Zahlen stehen in Dreiergruppen: 1234 Fluege und
     1234567 Bloecke, waehrend er abgemeldet ist in seine Datei geschrieben,
     sind 1,234 und 1,234,567 - mit stats-thousands-separator: "." 1.234.567,
-    mit "" wieder 1234567. Mit statistics.enabled: false sagt /cam stats,
-    dass sie aus ist.
+    mit "" wieder 1234567. /cam stats reset <Name> setzt die eines anderen
+    auf null: von der Konsole, waehrend er abgemeldet ist - nach dem
+    Anmelden ist sie leer -, und waehrend er online ist - dann erfaehrt er,
+    dass "the server" es war. Ein unbekannter Name wird gemeldet; ohne op
+    (camplugin.stats.reset) darf er niemand anderen zuruecksetzen, unter
+    seinem eigenen Namen sich selbst schon. Mit statistics.enabled: false
+    sagt /cam stats, dass sie aus ist.
     """
     def zahl(zeilen, muster):
         for z in zeilen:
@@ -5778,6 +5783,53 @@ def statistik_checks(env, bot):
                       gesagt(z, r"Flights: 1234$") and gesagt(z, r"Distance flown: 1234567 blocks$"), zeige(z))
             set_option(env, "stats-thousands-separator", '","', "messages")
         befehl(bot, "/cam stats reset")
+
+        # --- /cam stats reset <Name>: die eines anderen ---
+        konsole = []
+
+        def zahlen_und_zuruecksetzen():
+            grosse_zahlen()
+            vorher = len(server_log(env))
+            console(env, f"cam stats reset {BOT_NAME}", pause=1.5)
+            konsole.append(strip_colors(server_log(env)[vorher:]))
+
+        ersetzt.clear()
+        if FIND.test("Bot meldet sich neu an, dazwischen bekommt er 1234 Fluege in seine Datei, und die Konsole setzt "
+                     "seine Statistik zurueck", neu_anmelden(bot, zahlen_und_zuruecksetzen) and ersetzt == [1, 1, 1],
+                     str(ersetzt)):
+            z = befehl(bot, "/cam stats")
+            log = konsole[0] if konsole else ""
+            FIND.test("/cam stats reset <Name> von der Konsole, waehrend er abgemeldet ist: danach ist seine "
+                      "Statistik leer",
+                      f"The cam mode statistics of {BOT_NAME} have been reset" in log
+                      and gesagt(z, rf"{BOT_NAME} has not been in cam mode yet"),
+                      f"{log.strip()[-200:] or 'nichts im Log'} / {zeige(z)}")
+        ersetzt.clear()
+        if FIND.test("Bot meldet sich neu an, dazwischen bekommt er wieder 1234 Fluege in seine Datei",
+                     neu_anmelden(bot, grosse_zahlen) and ersetzt == [1, 1, 1], str(ersetzt)):
+            seit = bot.mark()
+            vorher = len(server_log(env))
+            console(env, f"cam stats reset {BOT_NAME}", pause=1.5)
+            log = strip_colors(server_log(env)[vorher:])
+            zeilen = zeilen_seit(bot, seit)
+            z = befehl(bot, "/cam stats")
+            FIND.test("/cam stats reset <Name> von der Konsole, waehrend er online ist: seine Statistik ist leer, und "
+                      "er erfaehrt, wer es war",
+                      f"The cam mode statistics of {BOT_NAME} have been reset" in log
+                      and gesagt(zeilen, r"the server has reset your cam mode statistics")
+                      and gesagt(z, rf"{BOT_NAME} has not been in cam mode yet"),
+                      f"{log.strip()[-200:] or 'nichts im Log'} / {zeige(zeilen)} / {zeige(z)}")
+        z = befehl(bot, "/cam stats reset NiemandHier")
+        FIND.test("/cam stats reset <Name> - ein unbekannter Name wird gemeldet",
+                  gesagt(z, r"Nobody called NiemandHier"), zeige(z))
+        console(env, f"deop {BOT_NAME}", pause=1.5)
+        fremd = befehl(bot, "/cam stats reset NiemandHier")
+        selbst = befehl(bot, f"/cam stats reset {BOT_NAME}")
+        console(env, f"op {BOT_NAME}", pause=1.5)
+        FIND.test("/cam stats reset <Name> - ohne op (camplugin.stats.reset) darf er niemand anderen zuruecksetzen, "
+                  "unter seinem eigenen Namen sich selbst schon",
+                  gesagt(fremd, r"permission") and gesagt(selbst, r"Your cam mode statistics have been reset"),
+                  f"{zeige(fremd)} / {zeige(selbst)}")
 
         set_option(env, "enabled", "false", "statistics")
         z = befehl(bot, "/cam stats")
@@ -7289,8 +7341,10 @@ def vorschlag_checks(env, bot):
     """Was /cam zur Tab-Vervollstaendigung vorschlaegt: nur, was gerade etwas
     tut.
 
-    Voreingestellt stehen stats und list da (der Bot ist op).
-    statistics.enabled: false nimmt stats heraus, und nach /cam stats kommt
+    Voreingestellt stehen stats und list da (der Bot ist op), nach
+    /cam stats reset und player, nach /cam stats reset die Spieler online -
+    ohne op (camplugin.stats.reset) keiner. statistics.enabled: false nimmt
+    stats heraus, und nach /cam stats kommt
     weder reset noch player - mit flight-limit: battery zeigt /cam stats aber
     den Akku und steht wieder da, mit player und ohne reset.
     cam-list.access: false nimmt list heraus, und /cam list ist fuer Spieler
@@ -7303,6 +7357,14 @@ def vorschlag_checks(env, bot):
         cam_off(bot)
         jetzt = tab("/cam ")
         FIND.test("Voreingestellt schlaegt /cam stats und list vor", "stats" in jetzt and "list" in jetzt, str(jetzt))
+        worte = tab("/cam stats ")
+        namen = tab("/cam stats reset ")
+        FIND.test("Nach /cam stats reset und player, nach /cam stats reset die Spieler online",
+                  "reset" in worte and "player" in worte and BOT_NAME in namen, f"{worte} / {namen}")
+        console(env, f"deop {BOT_NAME}", pause=1.5)
+        namen = tab("/cam stats reset ")
+        console(env, f"op {BOT_NAME}", pause=1.5)
+        FIND.test("Ohne op (camplugin.stats.reset) nach /cam stats reset keine Namen", not namen, str(namen))
 
         set_option(env, "enabled", "false", "statistics")
         jetzt = tab("/cam ")
@@ -7329,6 +7391,7 @@ def vorschlag_checks(env, bot):
         FIND.test("cam-list.access: false - die Konsole darf /cam list weiter",
                   "Nobody is in cam mode" in log, log.strip()[-200:] or "nichts im Log")
     finally:
+        console(env, f"op {BOT_NAME}", pause=1.5)
         set_options(env, [("flight-limit", "false"), ("enabled", "true", "statistics"),
                           ("access", "admin", "cam-list")])
 
@@ -11431,7 +11494,9 @@ def spotreiter_checks(env, bot):
 
     Auf der Admin-Seite sortiert der Trichter die Statistik der Spieler nach
     dem Namen oder dem letzten Flug: der zweite Spieler, der gerade geflogen
-    ist, steht dann vorn.
+    ist, steht dann vorn. Unter seinem Kopf steht der Umschalt-Klick zum
+    Zuruecksetzen (der Bot ist op), und der setzt seine Statistik auf null -
+    er erfaehrt, wer es war.
 
     viewpoints.views-cooldown-minutes steht voreingestellt auf 10: springt
     der Bot zweimal gleich hintereinander zu Beta, zaehlt das einmal; mit 0
@@ -11672,6 +11737,18 @@ def spotreiter_checks(env, bot):
         FIND.test("Der Trichter sortiert nach dem letzten Flug: wer gerade geflogen ist, steht vorn",
                   namen(f)[:1] == [ZUSCHAUER_NAME] and "» last flight first" in item_text(f.get("slots", {}).get("53")),
                   f"{namen(f)} / {item_text(f.get('slots', {}).get('53'))}")
+        kopf = item_text(f.get("slots", {}).get("0"))
+        seit_bot, seit_zuschauer = bot.mark(), zuschauer.mark()
+        klick(bot, 0, mode=1)
+        beim_bot, beim_zuschauer = zeilen_seit(bot, seit_bot), zeilen_seit(zuschauer, seit_zuschauer)
+        z = befehl(zuschauer, "/cam stats")
+        FIND.test("Admin-Seite, Statistik: unter dem Kopf steht der Umschalt-Klick zum Zuruecksetzen, er setzt die "
+                  "Statistik des anderen auf null, und der erfaehrt, wer es war",
+                  "Shift-click: reset" in kopf and "Flights:" in kopf
+                  and gesagt(beim_bot, rf"The cam mode statistics of {ZUSCHAUER_NAME} have been reset")
+                  and gesagt(beim_zuschauer, rf"{BOT_NAME} has reset your cam mode statistics")
+                  and gesagt(z, rf"{ZUSCHAUER_NAME} has not been in cam mode yet"),
+                  f"{kopf} / {zeige(beim_bot)} / {zeige(beim_zuschauer)} / {zeige(z)}")
         bot.call("close_window", wait=10)
 
         FIND.test("Voreingestellt steht viewpoints.views-cooldown-minutes: 10 da",

@@ -41,6 +41,8 @@ import java.util.concurrent.TimeUnit;
  * <ul>
  *   <li>{@code /cam stats} - his own</li>
  *   <li>{@code /cam stats reset} - sets his own back to nothing</li>
+ *   <li>{@code /cam stats reset <name>} - those of somebody else, for whoever
+ *       has {@link #PERMISSION_RESET}, see {@link #resetOther}</li>
  *   <li>{@code /cam stats player <name>} - those of somebody else, for whoever
  *       {@code statistics.view-others} lets</li>
  * </ul>
@@ -58,6 +60,12 @@ public final class CamStats {
 
     /** Who may look at the statistics of somebody else on {@code view-others: admin}. Operators have it by default. */
     public static final String PERMISSION_OTHERS = "camplugin.stats.others";
+
+    /**
+     * Who may set the statistics of somebody else back to nothing,
+     * {@code /cam stats reset <name>}. Operators have it by default.
+     */
+    public static final String PERMISSION_RESET = "camplugin.stats.reset";
 
     private final CamSettings settings;
     private final Messages messages;
@@ -152,6 +160,17 @@ public final class CamStats {
     }
 
     /**
+     * Whether a sender may set the statistics of somebody else back to
+     * nothing, {@code /cam stats reset <name>}: with
+     * {@link #PERMISSION_RESET}, whatever {@code statistics.view-others}
+     * says - looking at them is one thing, wiping them out another. The
+     * console always may, it is the server.
+     */
+    public boolean mayResetOthers(CommandSender sender) {
+        return !(sender instanceof Player player) || player.hasPermission(PERMISSION_RESET);
+    }
+
+    /**
      * {@code /cam stats} with what follows it.
      *
      * @param args the words after {@code stats}
@@ -165,6 +184,8 @@ public final class CamStats {
             }
         } else if (args.length == 1 && args[0].equalsIgnoreCase("reset")) {
             reset(sender);
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("reset")) {
+            resetOther(sender, args[1]);
         } else if (args.length == 2 && args[0].equalsIgnoreCase("player")) {
             showOther(sender, args[1]);
         } else {
@@ -189,6 +210,53 @@ public final class CamStats {
             return;
         }
         show(sender, target.getUniqueId(), target.getName() != null ? target.getName() : name);
+    }
+
+    /**
+     * {@code /cam stats reset <name>}: sets the statistics of a player who
+     * has been on the server once back to nothing, online or not - for an
+     * admin, say after a camera parked for hours has counted as a long
+     * flight. Like his own reset it leaves the battery, the cooldown and
+     * when he last flew as they are. A flight he is on still counts when it
+     * ends, as after his own reset; whoever does not want that ends it first
+     * with {@code /cam stop}. Online, he is told who did it,
+     * {@code stats-reset-by}.
+     */
+    private void resetOther(CommandSender sender, String name) {
+        // His own name is nobody else.
+        if (sender instanceof Player self && self.getName().equalsIgnoreCase(name)) {
+            reset(sender);
+            return;
+        }
+        if (!settings.isStatsEnabled()) {
+            messages.sendConfiguredMessage(sender, "stats-off");
+            return;
+        }
+        if (!mayResetOthers(sender)) {
+            messages.sendConfiguredMessage(sender, "no-permission");
+            return;
+        }
+        OfflinePlayer target = find(name);
+        if (target == null) {
+            messages.sendConfiguredMessage(sender, "stats-unknown-player", "{player}", name);
+            return;
+        }
+        UUID id = target.getUniqueId();
+        // Nothing counted, nothing to write: a file is not made for it.
+        store.change(id, record -> {
+            if (record.getSessions() == 0) {
+                return false;
+            }
+            record.resetStats();
+            return true;
+        });
+        String targetName = target.getName() != null ? target.getName() : name;
+        messages.sendConfiguredMessage(sender, "stats-reset-other", "{player}", targetName);
+        Player online = Bukkit.getPlayer(id);
+        if (online != null && !online.equals(sender)) {
+            messages.sendMessage(online, "stats-reset-by", "{player}",
+                    sender instanceof Player player ? player.getName() : messages.getMessage("console-name"));
+        }
     }
 
     /** {@code /cam stats reset}: sets the statistics of the sender back to nothing. */
@@ -379,6 +447,11 @@ public final class CamStats {
     /** {@code /cam stats reset} for a player, from the menu. */
     public void reset(Player player) {
         reset((CommandSender) player);
+    }
+
+    /** {@code /cam stats reset <name>} for an admin, from the menu. */
+    public void reset(Player admin, String name) {
+        resetOther(admin, name);
     }
 
     /**

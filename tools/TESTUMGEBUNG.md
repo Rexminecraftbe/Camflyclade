@@ -1739,7 +1739,10 @@ Abstand zum Körper, die Zahlen stehen in der Datei unter
 Wort nach `stats` sagt, wie es geht, die Konsole darf jeden ansehen ·
 `view-others: admin` lässt ohne op nur den eigenen Namen zu, `all` auch
 andere, `false` auch mit op niemanden · `/cam stats reset` setzt die eigene
-auf null · mit `statistics.enabled: false` sagt `/cam stats`, dass sie aus
+auf null · `/cam stats reset <Name>` setzt die eines anderen auf null, von
+der Konsole auch, während er abgemeldet ist, und online erfährt er, wer es
+war · ein unbekannter Name wird gemeldet, ohne op
+(`camplugin.stats.reset`) darf er nur sich selbst zurücksetzen · mit `statistics.enabled: false` sagt `/cam stats`, dass sie aus
 ist · die Datei der crash-protection liegt unter `playerdata/crash/`, und
 eine, die vor dem Update noch direkt unter `playerdata/` lag, gibt dem
 Spieler beim Betreten trotzdem alles zurück: er steht an der Stelle aus der
@@ -1788,6 +1791,7 @@ Tab-Vervollständigung bietet `1`, `2` und `all` an · `flights: 1` lässt nach
 dem Reload nur den letzten stehen · mit `statistics.enabled: false` schlägt
 `/cam` kein `stats` mehr vor und `/cam stats` weder `reset` noch `player`, mit
 `flight-limit: battery` steht es für den Akku wieder da, ohne `reset` ·
+nach `/cam stats reset` stehen die Spieler online da, ohne op keiner ·
 `cam-list.access: false` nimmt `list` aus den Vorschlägen, und `/cam list` ist
 für Spieler aus, die Konsole darf es weiter ·
 voreingestellt ist `viewpoints` an, mit 10 Punkten und `storage: file` ·
