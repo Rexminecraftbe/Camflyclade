@@ -19,6 +19,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -306,7 +307,7 @@ public final class CamStats {
         long totalSeconds = record.getTotalSeconds() + now;
         double flownNow = counted == null ? 0.0 : counted.getDistanceCounted();
         double flown = record.getDistanceFlown() + flownNow;
-        lines.add(new Line("stats-sessions", "{count}", String.valueOf(sessions)));
+        lines.add(new Line("stats-sessions", "{count}", number(sessions)));
         lines.add(new Line("stats-total-time", "{time}", CamTimeLimit.formatDuration(totalSeconds)));
         lines.add(new Line("stats-distance", "{distance}", blocks(flown)));
         lines.add(new Line("stats-average",
@@ -348,9 +349,19 @@ public final class CamStats {
         }
     }
 
-    /** A distance for {@code {distance}}, in whole blocks. */
-    private static String blocks(double distance) {
-        return String.valueOf(Math.round(distance));
+    /** A distance for {@code {distance}}, in whole blocks, as {@link #number} writes it. */
+    private String blocks(double distance) {
+        return number(Math.round(distance));
+    }
+
+    /**
+     * A whole number for {@code {count}} and {@code {distance}}, its digits
+     * in groups of three with {@code stats-thousands-separator} between them:
+     * 1,234,567 reads better than 1234567. With "" they stand together.
+     */
+    private String number(long value) {
+        return String.format(Locale.ROOT, "%,d", value)
+                .replace(",", messages.getMessage("stats-thousands-separator"));
     }
 
     /** The text of a line, filled in, or {@code null} while it is switched off. */
