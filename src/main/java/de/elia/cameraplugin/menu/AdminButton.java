@@ -9,7 +9,7 @@ public enum AdminButton implements MenuSlot {
     LIST("list", "spyglass", 10),
     PLAYERS("players", "iron_bars", 12),
     STATS("stats", "bookshelf", 14),
-    TRAILS("trails", "lead", 16),
+    TRAILS("trails", "feather", 16),
     SPOTS("spots", "filled_map", 20),
     /** Who may lead and follow, called {@code tours} before. */
     FOLLOW("follow", "saddle", 24, "tours"),
