@@ -5649,7 +5649,7 @@ def statistik_checks(env, bot):
                   gesagt(z, r"Nobody called NiemandHier"), zeige(z))
         z = befehl(bot, "/cam stats quatsch")
         FIND.test("/cam stats mit einem unbekannten Wort sagt, wie es geht",
-                  gesagt(z, r"Use /cam stats, /cam stats reset or /cam stats player"), zeige(z))
+                  gesagt(z, r"Use /cam stats, /cam stats reset \[name\] or /cam stats player"), zeige(z))
         vorher = len(server_log(env))
         console(env, f"cam stats player {BOT_NAME}", pause=1.5)
         log = strip_colors(server_log(env)[vorher:])
