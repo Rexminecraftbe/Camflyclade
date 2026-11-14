@@ -32,7 +32,8 @@ public class CamCommand implements CommandExecutor {
     /**
      * The words after {@code /cam} of the commands for admins, which
      * {@code menu.admin-access} may keep to the menu for players - the
-     * reload aside, and {@code stats player} as well.
+     * reload aside, and {@code stats player} and {@code stats reset <name>}
+     * as well.
      */
     public static final Set<String> ADMIN_WORDS = Set.of("list", "stop", "ban", "unban", "banlist", "trail", "tp");
 
@@ -200,10 +201,15 @@ public class CamCommand implements CommandExecutor {
                 && (args[1].equalsIgnoreCase("accept") || args[1].equalsIgnoreCase("decline"));
     }
 
-    /** Whether the command is one for admins, {@code /cam stats player} among them. */
+    /**
+     * Whether the command is one for admins, {@code /cam stats player} and
+     * {@code /cam stats reset <name>} among them - {@code /cam stats reset}
+     * alone is his own.
+     */
     public static boolean isAdminCommand(String[] args) {
         return args.length > 0 && (ADMIN_WORDS.contains(args[0].toLowerCase(Locale.ROOT))
-                || (args.length > 1 && args[0].equalsIgnoreCase("stats") && args[1].equalsIgnoreCase("player")));
+                || (args.length > 1 && args[0].equalsIgnoreCase("stats") && args[1].equalsIgnoreCase("player"))
+                || (args.length > 2 && args[0].equalsIgnoreCase("stats") && args[1].equalsIgnoreCase("reset")));
     }
 
     /**

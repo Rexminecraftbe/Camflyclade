@@ -1875,7 +1875,8 @@ public final class CamMenu implements Listener {
 
     /**
      * The statistics of the players online, like {@code /cam stats player}:
-     * under each head, and in the chat on a click.
+     * under each head, and in the chat on a click. A shift-click sets them
+     * back to nothing, like {@code /cam stats reset <name>}, for whoever may.
      */
     private void openStatsOf(Player player, int pageNumber) {
         if (!viewsOthers(player)) {
@@ -1885,14 +1886,22 @@ public final class CamMenu implements Listener {
         List<Player> online = onlineSorted(player);
         sortPlayers(player, online, Player::getName, Player::getUniqueId);
         Page page = page(player, LIST, messages.getMessage("menu-admin-stats-title"));
+        boolean resets = settings.isStatsEnabled() && plugin.getStats().mayResetOthers(player);
         List<Row> entries = new ArrayList<>();
         for (Player other : online) {
             entries.add(new Row(other.getUniqueId(), slot -> {
                 String name = other.getName();
                 List<String> lore = statLines(other.getUniqueId(), name);
-                lore.addAll(lines(messages.getMessage("menu-admin-stats-actions")));
+                lore.addAll(lines(messages.getMessage(resets ? "menu-admin-stats-actions-reset"
+                        : "menu-admin-stats-actions")));
                 put(page, slot, head(other, messages.getMessage("menu-admin-player").replace("{player}", name), lore),
-                        click -> act(player, () -> plugin.getStats().command(player, new String[]{"player", name})));
+                        click -> {
+                            if (click.isShiftClick() && resets) {
+                                act(player, () -> plugin.getStats().reset(player, name));
+                            } else {
+                                act(player, () -> plugin.getStats().command(player, new String[]{"player", name}));
+                            }
+                        });
             }));
         }
         Listed listed = list(page, "stats:" + playerSort(player).key, entries, pageNumber);

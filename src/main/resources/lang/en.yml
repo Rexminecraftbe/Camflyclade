@@ -335,6 +335,8 @@ messages:
   menu-admin-spots-title: "&8Spots: players"
   menu-admin-stats: "&bStatistics of others"
   menu-admin-stats-actions: "&eClick: in the chat"
+  # In its place for whoever may reset the statistics of others (camplugin.stats.reset), like /cam stats reset <name>.
+  menu-admin-stats-actions-reset: "&eClick: in the chat\n&cShift-click: reset"
   menu-admin-stats-lore: "&7Of the players online."
   menu-admin-stats-title: "&8Statistics"
   menu-admin-stop: "&cEnd the cam mode"
@@ -871,6 +873,10 @@ messages:
   stats-none: "&e{player} has not been in cam mode yet."
   stats-off: "&cThe statistics are switched off."
   stats-reset: "&aYour cam mode statistics have been reset."
+  # /cam stats reset <name>: stats-reset-other to whoever did it, stats-reset-by to the player, while he is online -
+  # {player} is who did it, console-name for the console.
+  stats-reset-by: "&e{player} has reset your cam mode statistics."
+  stats-reset-other: "&aThe cam mode statistics of {player} have been reset."
   # How many flights count ({count}): only those of statistics.min-seconds at least - one switched on and off again
   # at once is no flight.
   stats-sessions: "&7Flights: &f{count}"
@@ -886,7 +892,7 @@ messages:
   # left out after statistics.afk-seconds - here, in stats-average and in stats-longest.
   stats-total-time: "&7Time in cam mode: &f{time}"
   stats-unknown-player: "&cNobody called {player} has been on this server."
-  stats-usage: "&eUse /cam stats, /cam stats reset or /cam stats player <name>."
+  stats-usage: "&eUse /cam stats, /cam stats reset [name] or /cam stats player <name>."
   stop-all-done: "&aEnded the cam mode of {count} players."
   stop-done: "&aEnded the cam mode of {player}."
   stop-none: "&eNobody is in cam mode."
@@ -1600,6 +1606,8 @@ message-settings:
   stats-none: true
   stats-off: true
   stats-reset: true
+  stats-reset-by: true
+  stats-reset-other: true
   stats-sessions: true
   stats-since: true
   stats-total-time: true

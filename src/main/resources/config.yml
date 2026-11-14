@@ -475,6 +475,12 @@ cam-list:
 # nirgends.
 #   /cam stats                 = die eigene
 #   /cam stats reset           = die eigene auf null setzen (der Akku bleibt, wie er ist)
+#   /cam stats reset <Name>    = die eines anderen auf null setzen, auch wenn er offline ist - für Operatoren und wer
+#                                das Recht camplugin.stats.reset hat (die Konsole immer), egal was view-others sagt.
+#                                Ist er online, erfährt er, wer es war (Text: stats-reset-by). Ein Flug, der gerade
+#                                läuft, zählt noch, wenn er endet - wie beim eigenen Reset; wer das nicht will, beendet
+#                                ihn vorher mit /cam stop. Im Menü: Umschalt-Klick auf einen Kopf in der Statistik
+#                                der anderen.
 #   /cam stats player <Name>   = die eines anderen (wer das darf, sagt view-others)
 # Gezählt wird ein Cam-Modus, wenn er endet und mindestens min-seconds lief. Gespeichert wird in
 # plugins/CamFly/playerdata/stats/<UUID>.yml, zusammen mit dem Ladestand des Akkus, der Wartezeit von time-limit, den
@@ -644,7 +650,8 @@ menu:
   #             an und aus
   # /cam selbst (an und aus) geht immer.
   access: menu
-  # Wie Admins an list, stats player, stop, ban, unban, banlist, trail und tp kommen - dieselben Werte wie bei access.
+  # Wie Admins an list, stats player, stats reset <Name>, stop, ban, unban, banlist, trail und tp kommen - dieselben
+  # Werte wie bei access.
   # Die Rechte dafür (camplugin.list, camplugin.stop ...) brauchen sie so oder so, und was in dieser Datei aus ist
   # (z. B. cam-ban.enabled: false), fehlt auch im Menü. /cam reload geht immer als Befehl, und die Konsole darf alles,
   # sie hat ja kein Menü. Beim Sperren über das Menü fragt der Chat nach dem Grund (abbrechen mit cancel).
@@ -742,7 +749,8 @@ menu:
     players:
       item: iron_bars
       slot: 12
-    # Die Statistik der Spieler online (statistics.view-others)
+    # Die Statistik der Spieler online (statistics.view-others). Ein Klick auf einen Kopf schreibt sie in den Chat,
+    # Umschalt-Klick setzt sie zurück (camplugin.stats.reset)
     stats:
       item: bookshelf
       slot: 14
