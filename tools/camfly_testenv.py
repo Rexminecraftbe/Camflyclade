@@ -5849,6 +5849,88 @@ def statistik_folgen_checks(env, bot):
         hinstellen(bot, heim[0], heim[1], heim[2])
 
 
+def statistik_afk_checks(env, bot):
+    """statistics.skip-afk-time: Zeit, in der jemand im Cam-Modus nichts tut,
+    zaehlt nach afk-seconds nicht mehr mit.
+
+    Voreingestellt ist es aus, mit afk-seconds: 60 - nachgesehen in der
+    Datei, die das Plugin mitbringt. Aus zaehlt jede Sekunde: Steht der Bot
+    16 Sekunden still, sind es danach um die 16 in "Time in cam mode". Mit
+    skip-afk-time: true und afk-seconds: 10 steht er gut 20 Sekunden still:
+    Nach 14 und nach 21 Sekunden steht in /cam stats dieselbe Zeit, um die
+    10 Sekunden, waehrend "In cam mode right now" weiterlaeuft. Fliegt er
+    danach ein Stueck, waechst sie wieder. Am Ende zaehlt der Flug ohne das
+    Stillstehen nach den 10 Sekunden, in der Zeit und im laengsten Flug.
+    Weniger als 10 Sekunden afk-seconds werden gemeldet und auf 10 gehoben.
+    """
+    def sekunden(zeilen, muster):
+        for z in zeilen:
+            m = re.search(muster, z)
+            if m:
+                text = m.group(1).strip()
+                kurz = re.fullmatch(r"(\d+) seconds?", text)
+                if kurz:
+                    return int(kurz.group(1))
+                lang = re.fullmatch(r"(\d+)m (\d+)s", text)
+                if lang:
+                    return int(lang.group(1)) * 60 + int(lang.group(2))
+        return -1
+
+    def bis(start, nach):
+        time.sleep(max(0.0, start + nach - time.time()))
+
+    zeit_muster = r"Time in cam mode: (.+)$"
+    try:
+        cam_off(bot)
+        FIND.test("Voreingestellt steht statistics.skip-afk-time: false da, mit afk-seconds: 60",
+                  re.search(r"(?m)^\s*skip-afk-time:\s*false\s*\n(?:\s*#.*\n)*\s*afk-seconds:\s*60\s*$",
+                            quelle_config(env)) is not None, "")
+        befehl(bot, "/cam stats reset")
+        if FIND.test("Cam-Modus fuer die Statistik ohne skip-afk-time gestartet", cam_on(bot), ""):
+            time.sleep(16)
+            cam_off(bot)
+            z = befehl(bot, "/cam stats")
+            zeit = sekunden(z, zeit_muster)
+            FIND.test("skip-afk-time: false - 16 Sekunden Stillstehen zaehlen ganz", 15 <= zeit <= 21, zeige(z))
+
+        set_options(env, [("skip-afk-time", "true", "statistics"), ("afk-seconds", "10", "statistics")])
+        befehl(bot, "/cam stats reset")
+        if FIND.test("Cam-Modus fuer skip-afk-time gestartet", cam_on(bot), ""):
+            start = time.time()
+            bis(start, 14)
+            z1 = befehl(bot, "/cam stats")
+            bis(start, 21)
+            z2 = befehl(bot, "/cam stats")
+            t1, t2 = sekunden(z1, zeit_muster), sekunden(z2, zeit_muster)
+            l1 = sekunden(z1, r"In cam mode right now: (.+?) \(")
+            l2 = sekunden(z2, r"In cam mode right now: (.+?) \(")
+            FIND.test("skip-afk-time: nach afk-seconds ohne etwas zu tun waechst die Zeit nicht mehr - "
+                      "\"In cam mode right now\" laeuft weiter",
+                      9 <= t1 <= 13 and t2 == t1 and l2 >= l1 + 5, f"{zeige(z1)} / {zeige(z2)}")
+            for schritt in range(3):
+                bot.call("fly", wait=30, dy=1, timeout=5000)
+                time.sleep(1.5)
+            z3 = befehl(bot, "/cam stats")
+            t3 = sekunden(z3, zeit_muster)
+            FIND.test("skip-afk-time: wer wieder etwas tut, dessen Zeit zaehlt weiter", t3 >= t2 + 3, zeige(z3))
+            gesamt = time.time() - start
+            cam_off(bot)
+            z = befehl(bot, "/cam stats")
+            zeit, laengste = sekunden(z, zeit_muster), sekunden(z, r"Longest flight: (.+)$")
+            FIND.test("skip-afk-time: am Ende zaehlt der Flug ohne das Stillstehen nach afk-seconds - in der Zeit "
+                      "und im laengsten Flug",
+                      12 <= zeit <= gesamt - 8 and laengste == zeit, f"{gesamt:.0f} s / {zeige(z)}")
+
+        vorher = len(server_log(env))
+        set_option(env, "afk-seconds", "3", "statistics")
+        log = strip_colors(server_log(env)[vorher:])
+        FIND.test("statistics.afk-seconds: weniger als 10 wird gemeldet und auf 10 gehoben",
+                  "statistics.afk-seconds is too small: 3. Using 10" in log, log.strip()[-200:] or "nichts im Log")
+    finally:
+        cam_off(bot)
+        set_options(env, [("skip-afk-time", "false", "statistics"), ("afk-seconds", "60", "statistics")])
+
+
 def alte_absturzdatei_checks(env, bot):
     """Eine Datei der crash-protection an ihrem alten Platz.
 
@@ -20862,6 +20944,7 @@ ABSCHNITTE = [
     Abschnitt("statistik", statistik_checks, "stats storage session/SessionTracker session/CameraData"),
     Abschnitt("statistik_folgen", statistik_folgen_checks,
               "stats tour/CamTour session/SessionTracker session/CameraData"),
+    Abschnitt("statistik_afk", statistik_afk_checks, "stats afk session/CameraData"),
     Abschnitt("alte_absturzdatei", alte_absturzdatei_checks, "crash storage session/SessionListener"),
     Abschnitt("zurueck", zurueck_checks, "back"),
     Abschnitt("endwarnung", endwarnung_checks, "timelimit battery"),

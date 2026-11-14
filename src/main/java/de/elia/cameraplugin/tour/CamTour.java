@@ -1821,6 +1821,10 @@ public final class CamTour implements Listener {
             state.sent.removeFirst();
         }
         countWay(data, at, behind, pace);
+        // He watches what the guide shows him, even while his own keys do
+        // nothing - and through the guide's eyes his client sends no steps:
+        // no time without doing anything, for statistics.skip-afk-time.
+        data.noteActive(now, settings.getStatsAfkMillis());
         updateView(guide, guest, state);
         return null;
     }

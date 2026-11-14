@@ -80,6 +80,19 @@ public class CameraData {
     /** The most {@link #flownFromBody} has been so far, for the statistics. */
     private double farthestFlownFromBody;
     /**
+     * When he last did something - flew, looked round, turned the mouse
+     * wheel, or followed a tour -, as {@link System#currentTimeMillis()}
+     * counts, see {@link de.elia.cameraplugin.afk.CamAfk}. For
+     * {@code statistics.skip-afk-time}.
+     */
+    private long lastActive = startedAt;
+    /**
+     * How long he did nothing in the stretches that are over, in
+     * milliseconds - only what went beyond {@code statistics.afk-seconds}:
+     * up to there, he may be looking at something. See {@link #idleMillis}.
+     */
+    private long idleMillis;
+    /**
      * His statistics of moving when camera mode started, put back when it
      * ends, see {@link de.elia.cameraplugin.progress.CamProgressGuard}.
      */
@@ -174,6 +187,27 @@ public class CameraData {
     public void noteStep(double before, double after) {
         flownFromBody = Math.min(after, flownFromBody + after - before);
         farthestFlownFromBody = Math.max(farthestFlownFromBody, flownFromBody);
+    }
+
+    /**
+     * Notes that he did something now. A stretch of doing nothing that it
+     * ends is put down as far as it went beyond {@code afterMillis}.
+     *
+     * @param afterMillis after how long without doing anything time no
+     *                    longer counts, {@code statistics.afk-seconds}
+     */
+    public void noteActive(long now, long afterMillis) {
+        idleMillis += Math.max(0L, now - lastActive - afterMillis);
+        lastActive = now;
+    }
+
+    /**
+     * How long he has done nothing so far, beyond {@code afterMillis} each
+     * time, in milliseconds - the stretch going on now as well, so that the
+     * numbers stop growing at once and do not jump back when he moves.
+     */
+    public long idleMillis(long now, long afterMillis) {
+        return idleMillis + Math.max(0L, now - lastActive - afterMillis);
     }
     /** His statistics of moving when camera mode started. */
     public Map<Statistic, Integer> getMovementAtStart() { return movementAtStart; }

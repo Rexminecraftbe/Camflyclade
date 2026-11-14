@@ -683,6 +683,10 @@ public final class CamSettings {
      * statistics, {@code statistics.count-follow-distance}.
      */
     private boolean statsCountFollowDistance;
+    /** Whether time without doing anything is left out of the statistics, {@code statistics.skip-afk-time}. */
+    private boolean statsSkipAfkTime;
+    /** After how many seconds without doing anything it is, {@code statistics.afk-seconds}. */
+    private int statsAfkSeconds;
 
     /** Whether start and end of camera mode are written down, the section {@code cam-log}. */
     private boolean camLogEnabled;
@@ -985,6 +989,8 @@ public final class CamSettings {
         statsViewOthers = readAccess(config, "statistics.view-others");
         statsMinSeconds = config.getInt("statistics.min-seconds", 5, 0);
         statsCountFollowDistance = config.getBoolean("statistics.count-follow-distance", true);
+        statsSkipAfkTime = config.getBoolean("statistics.skip-afk-time", false);
+        statsAfkSeconds = config.getInt("statistics.afk-seconds", 60, MIN_AFK_SECONDS);
         camLogEnabled = config.getBoolean("cam-log.enabled", false);
         camLogConsole = config.getBoolean("cam-log.console", false);
         camLogKeepDays = config.getInt("cam-log.keep-days", 30, 0);
@@ -2564,6 +2570,20 @@ public final class CamSettings {
      */
     public boolean isStatsCountFollowDistance() {
         return statsCountFollowDistance;
+    }
+
+    /**
+     * Whether time in camera mode without doing anything is left out of the
+     * statistics once it has gone on for {@link #getStatsAfkMillis()}:
+     * out of the time, the average and the longest flight.
+     */
+    public boolean isStatsSkipAfkTime() {
+        return statsSkipAfkTime;
+    }
+
+    /** After how long without doing anything time stops counting for the statistics, in milliseconds. */
+    public long getStatsAfkMillis() {
+        return statsAfkSeconds * 1000L;
     }
 
     public boolean isCamLogEnabled() {

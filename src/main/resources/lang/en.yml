@@ -852,7 +852,8 @@ messages:
   # holds): at one, nearly everybody gets there once, and the number would be max-distance for all.
   stats-farthest: "&7Farthest from the body: &f{distance} blocks"
   # While he is in cam mode: how long the flight has been going on ({time}). The numbers under it count it already,
-  # as they will once it ends - in the menu they grow by the second.
+  # as they will once it ends - in the menu they grow by the second. With statistics.skip-afk-time, {time} is all of
+  # it, and the time in the numbers stands still while he does nothing.
   stats-flying: "&aIn cam mode right now: &f{time} &7(counted in)"
   # In its place while the flight is shorter than statistics.min-seconds ({min}): ended now, it would not count, and
   # the numbers under it leave it out.
@@ -876,6 +877,8 @@ messages:
   # the server). Statistics from before this was noted do not say it, and the line is left out until a reset.
   stats-since: "&7Counted since: &f{date}"
   stats-since-date: "yyyy-MM-dd"
+  # How long he has been in cam mode over all flights. With statistics.skip-afk-time, time in which he did nothing is
+  # left out after statistics.afk-seconds - here, in stats-average and in stats-longest.
   stats-total-time: "&7Time in cam mode: &f{time}"
   stats-unknown-player: "&cNobody called {player} has been on this server."
   stats-usage: "&eUse /cam stats, /cam stats reset or /cam stats player <name>."
