@@ -227,12 +227,22 @@ public final class PlayerStore {
         }
         Double charge = file.isSet("battery.charge") ? file.getDouble("battery.charge") : null;
         Long cooldown = file.isSet("cooldown.started") ? file.getLong("cooldown.started") : null;
+        long sessions = Math.max(0L, file.getLong("stats.sessions"));
+        double flown = Math.max(0.0, file.getDouble("stats.distance-flown"));
+        // A file from before the longest way was counted does not say it.
+        // The longest flight is at least as long as the average one - with
+        // a single flight it is that one - so that is where it starts, and
+        // the next flight that goes farther puts the real one in its place.
+        double longestFlown = file.isSet("stats.longest-distance")
+                ? Math.max(0.0, file.getDouble("stats.longest-distance"))
+                : sessions > 0 ? flown / sessions : 0.0;
         PlayerRecord record = new PlayerRecord(
                 file.getString("name"),
-                Math.max(0L, file.getLong("stats.sessions")),
+                sessions,
                 Math.max(0L, file.getLong("stats.total-seconds")),
                 Math.max(0L, file.getLong("stats.longest-seconds")),
-                Math.max(0.0, file.getDouble("stats.distance-flown")),
+                flown,
+                longestFlown,
                 Math.max(0.0, file.getDouble("stats.farthest-from-body")),
                 Math.max(0L, file.getLong("stats.last-flight")),
                 charge == null ? null : Math.max(0.0, charge),
@@ -327,6 +337,7 @@ public final class PlayerStore {
         file.set("stats.total-seconds", record.getTotalSeconds());
         file.set("stats.longest-seconds", record.getLongestSeconds());
         file.set("stats.distance-flown", Math.round(record.getDistanceFlown() * 10.0) / 10.0);
+        file.set("stats.longest-distance", Math.round(record.getLongestDistance() * 10.0) / 10.0);
         file.set("stats.farthest-from-body", Math.round(record.getFarthestFromBody() * 10.0) / 10.0);
         if (record.getLastFlightEnded() > 0L) {
             file.set("stats.last-flight", record.getLastFlightEnded());

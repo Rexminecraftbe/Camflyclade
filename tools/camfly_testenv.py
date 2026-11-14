@@ -5439,6 +5439,11 @@ def akku_checks(env, bot):
                             r"Ready again in 3m \d+s") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
         z = befehl(bot, "/cam stats")
         FIND.test("battery: /cam stats zeigt den Ladestand", gesagt(z, r"Battery: 0 seconds of 5 seconds"), zeige(z))
+        zahlen = [i for i, t in enumerate(z) if re.search(r"Distance flown: |Longest distance in one flight: ", t)]
+        akku = next((i for i, t in enumerate(z) if re.search(r"Battery: \d", t)), None)
+        FIND.test("battery: in /cam stats trennt eine Leerzeile den Akku von den Zahlen ueber alle Fluege",
+                  bool(zahlen) and akku is not None and zahlen[-1] < akku
+                  and any(not z[i].strip() for i in range(zahlen[-1] + 1, akku)), str(z))
         datei = spielerdatei(env)
         FIND.test("battery: der Ladestand steht in der Datei unter playerdata/stats",
                   datei is not None and "charge:" in datei.read_text(encoding="utf-8"), str(datei))
@@ -5555,8 +5560,11 @@ def statistik_checks(env, bot):
     """statistics, /cam stats, /cam stats player und /cam stats reset.
 
     Ein Flug von sechs Bloecken nach oben zaehlt einmal mehr, die Strecke
-    waechst um ihn, und der weiteste Abstand zum Koerper ist mindestens so
-    gross. Die Zahlen stehen in der Datei des Bots unter playerdata/stats.
+    waechst um ihn, die laengste in einem Flug ist mindestens so lang, und
+    der Schnitt nach Zeit und Strecke steht dabei. Den weitesten Abstand zum
+    Koerper gibt es mit der festen Grenze von max-distance nicht - da kaeme
+    jeder hin -, ohne sie ist er mindestens so gross wie der Flug. Die
+    Zahlen stehen in der Datei des Bots unter playerdata/stats.
     Ein unbekannter Name wird gemeldet, ein unbekanntes Wort nach stats sagt,
     wie es geht, die Konsole darf jeden ansehen. view-others: admin laesst
     den Bot ohne op nur sich selbst ansehen - auch unter seinem eigenen
@@ -5586,14 +5594,27 @@ def statistik_checks(env, bot):
         cam_off(bot)
         z = befehl(bot, "/cam stats")
         FIND.test("/cam stats zaehlt den Flug", zahl(z, r"Times in cam mode: (\d+)") == mal + 1, zeige(z))
-        FIND.test("/cam stats - die Strecke waechst um den Flug",
-                  zahl(z, r"Distance flown: (\d+) blocks") >= weg + 4, zeige(z))
-        FIND.test("/cam stats - der weiteste Abstand zum Koerper",
-                  zahl(z, r"Farthest from the body: (\d+) blocks") >= 4, zeige(z))
+        gesamt = zahl(z, r"Distance flown: (\d+) blocks")
+        FIND.test("/cam stats - die Strecke waechst um den Flug", gesamt >= weg + 4, zeige(z))
+        schnitt = zahl(z, r"Average distance per flight: (\d+) blocks")
+        laengste = zahl(z, r"Longest distance in one flight: (\d+) blocks")
+        FIND.test("/cam stats - die laengste Strecke in einem Flug ist mindestens der eben, hoechstens alle",
+                  4 <= laengste <= gesamt, zeige(z))
+        FIND.test("/cam stats - der Schnitt nach Zeit und Strecke, die Strecke nicht ueber der laengsten",
+                  gesagt(z, r"Average flight: ") and gesagt(z, r"Average distance per flight: \d+ blocks")
+                  and schnitt <= laengste, zeige(z))
+        FIND.test("/cam stats - mit der festen Grenze von max-distance kein weitester Abstand zum Koerper",
+                  not gesagt(z, r"Farthest from the body"), zeige(z))
         datei = spielerdatei(env)
+        text = datei.read_text(encoding="utf-8") if datei is not None else ""
         FIND.test("statistics: die Zahlen stehen in der Datei unter playerdata/stats",
-                  datei is not None and re.search(rf"(?m)^\s*sessions: {mal + 1}$",
-                                                  datei.read_text(encoding="utf-8")) is not None, str(datei))
+                  re.search(rf"(?m)^\s*sessions: {mal + 1}$", text) is not None
+                  and re.search(r"(?m)^\s*longest-distance: \d", text) is not None, str(datei))
+        set_option(env, "max-distance-enabled", "false", "camera-mode")
+        z = befehl(bot, "/cam stats")
+        FIND.test("max-distance-enabled: false - ohne feste Grenze steht der weiteste Abstand zum Koerper da",
+                  zahl(z, r"Farthest from the body: (\d+) blocks") >= 4, zeige(z))
+        set_option(env, "max-distance-enabled", "true", "camera-mode")
 
         z = befehl(bot, "/cam stats player NiemandHier")
         FIND.test("/cam stats player <Name> - ein unbekannter Name wird gemeldet",
@@ -5636,7 +5657,8 @@ def statistik_checks(env, bot):
                   gesagt(z, r"statistics are switched off"), zeige(z))
     finally:
         console(env, f"op {BOT_NAME}", pause=1.5)
-        set_options(env, [("enabled", "true", "statistics"), ("view-others", "admin", "statistics")])
+        set_options(env, [("enabled", "true", "statistics"), ("view-others", "admin", "statistics"),
+                          ("max-distance-enabled", "true", "camera-mode")])
 
 
 def alte_absturzdatei_checks(env, bot):

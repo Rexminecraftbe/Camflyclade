@@ -27,6 +27,8 @@ public final class PlayerRecord {
     private long longestSeconds;
     /** How far his camera has flown altogether, in blocks. */
     private double distanceFlown;
+    /** The longest way his camera has flown in one camera mode, in blocks. */
+    private double longestDistance;
     /** The farthest his camera has ever been from his body, in blocks. */
     private double farthestFromBody;
     /**
@@ -73,13 +75,14 @@ public final class PlayerRecord {
     }
 
     PlayerRecord(String name, long sessions, long totalSeconds, long longestSeconds, double distanceFlown,
-                 double farthestFromBody, long lastFlightEnded, Double batteryCharge, long batteryUpdated,
-                 Long cooldownStarted) {
+                 double longestDistance, double farthestFromBody, long lastFlightEnded, Double batteryCharge,
+                 long batteryUpdated, Long cooldownStarted) {
         this.name = name;
         this.sessions = sessions;
         this.totalSeconds = totalSeconds;
         this.longestSeconds = longestSeconds;
         this.distanceFlown = distanceFlown;
+        this.longestDistance = longestDistance;
         this.farthestFromBody = farthestFromBody;
         this.lastFlightEnded = lastFlightEnded;
         this.batteryCharge = batteryCharge;
@@ -100,6 +103,7 @@ public final class PlayerRecord {
         totalSeconds += seconds;
         longestSeconds = Math.max(longestSeconds, seconds);
         distanceFlown += flown;
+        longestDistance = Math.max(longestDistance, flown);
         farthestFromBody = Math.max(farthestFromBody, farthest);
         lastFlightEnded = System.currentTimeMillis();
         dirty = true;
@@ -114,6 +118,7 @@ public final class PlayerRecord {
         totalSeconds = 0;
         longestSeconds = 0;
         distanceFlown = 0.0;
+        longestDistance = 0.0;
         farthestFromBody = 0.0;
         dirty = true;
     }
@@ -197,6 +202,7 @@ public final class PlayerRecord {
     public long getTotalSeconds() { return totalSeconds; }
     public long getLongestSeconds() { return longestSeconds; }
     public double getDistanceFlown() { return distanceFlown; }
+    public double getLongestDistance() { return longestDistance; }
     public double getFarthestFromBody() { return farthestFromBody; }
     /** When his last camera mode ended, or 0 while none has been counted. */
     public long getLastFlightEnded() { return lastFlightEnded; }
