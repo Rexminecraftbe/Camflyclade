@@ -464,16 +464,20 @@ cam-list:
   # sehen dürfen und das Recht camplugin.stop haben (Operatoren haben es).
   stop: true
 
-# Statistik: wie oft jemand im Cam-Modus war, wie lange insgesamt, im Schnitt und am längsten, wie weit die Kamera
-# geflogen ist - insgesamt, im Schnitt und am weitesten in einem Flug - und wie weit sie höchstens vom Körper weg war.
-# Das Letzte steht nur ohne feste Grenze da (camera-mode.max-distance-mode: fixed): Mit ihr kommt fast jeder einmal
-# hin, und bei allen stünde max-distance.
+# Statistik: wie oft jemand im Cam-Modus war, wie lange und wie weit die Kamera insgesamt geflogen ist, beides im
+# Schnitt pro Flug (eine Zeile), der längste Flug und die längste Strecke in einem Flug, wie weit die Kamera höchstens
+# vom Körper weg war und seit wann gezählt wird. Der weiteste Abstand steht nur ohne feste Grenze da
+# (camera-mode.max-distance-mode: fixed): Mit ihr kommt fast jeder einmal hin, und bei allen stünde max-distance.
+# "Gezählt seit" ist der Beginn des ersten Flugs, der zählt - nach /cam stats reset der des nächsten. Wer schon vor
+# dieser Version Flüge in der Statistik hatte, bekommt die Zeile erst nach einem Reset: Wann sein erster war, steht
+# nirgends.
 #   /cam stats                 = die eigene
 #   /cam stats reset           = die eigene auf null setzen (der Akku bleibt, wie er ist)
 #   /cam stats player <Name>   = die eines anderen (wer das darf, sagt view-others)
-# Gezählt wird ein Cam-Modus, wenn er endet. Gespeichert wird in plugins/CamFly/playerdata/stats/<UUID>.yml,
-# zusammen mit dem Ladestand des Akkus, der Wartezeit von time-limit, den Aussichtspunkten, den eigenen Einstellungen
-# und dem Ende des letzten Flugs für /cam resume (jeweils bei storage: file).
+# Gezählt wird ein Cam-Modus, wenn er endet und mindestens min-seconds lief. Gespeichert wird in
+# plugins/CamFly/playerdata/stats/<UUID>.yml, zusammen mit dem Ladestand des Akkus, der Wartezeit von time-limit, den
+# Aussichtspunkten, den eigenen Einstellungen und dem Ende des letzten Flugs für /cam resume (jeweils bei
+# storage: file).
 # /cam stats zeigt auch den Akku und eine Wartezeit, die noch läuft - durch eine Leerzeile von den Zahlen getrennt,
 # denn sie sagen, wie es gerade steht, und zählen nicht über alle Flüge (Text: stats-gap).
 statistics:
@@ -483,6 +487,10 @@ statistics:
   #   all   = jeder, der /cam benutzen darf
   #   false = kein Spieler
   view-others: admin
+  # So viele Sekunden muss ein Cam-Modus mindestens laufen, damit er zählt (0 = jeder zählt). Ein kürzerer - aus
+  # Versehen gestartet, oder der Körper wurde gleich getroffen - zählte sonst als Flug und drückte den Schnitt.
+  # Im Flug zählt /cam stats ihn erst mit, wenn er so lange läuft (Text: stats-flying-uncounted).
+  min-seconds: 10
 
 # Protokoll: Jeder Start und jedes Ende des Cam-Modus kommt in eine Datei, eine pro Tag:
 # plugins/CamFly/logs/<Datum>.log. Darin steht, wer, wann, wo der Körper stand, warum der Cam-Modus

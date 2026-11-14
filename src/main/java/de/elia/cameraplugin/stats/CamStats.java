@@ -13,6 +13,10 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -20,10 +24,11 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * The statistics of camera mode, {@code statistics} and {@code /cam stats}:
- * how often a player flew, how long altogether, on average and at most, how
- * far his camera flew altogether, on average and at most, and how far it got
- * from his body - that last only without a fixed border: at one, nearly
- * everybody gets there once, and all would have the same number.
+ * how often a player flew, how long and how far his camera flew altogether,
+ * both for one flight on average, the longest flight and the longest way, how
+ * far it got from his body - that only without a fixed border: at one, nearly
+ * everybody gets there once, and all would have the same number - and since
+ * when all this is counted.
  *
  * <ul>
  *   <li>{@code /cam stats} - his own</li>
@@ -32,11 +37,14 @@ import java.util.concurrent.TimeUnit;
  *       {@code statistics.view-others} lets</li>
  * </ul>
  *
- * <p>A camera mode counts once it has ended. One that a crash cut short
- * never ended and is not counted. While one is going on, it is shown along
- * with them as it would count if it ended now - one flight more, its time,
- * its way and how far it got -, so that the numbers grow as it goes and do
- * not jump when it ends; see {@link #lines}.</p>
+ * <p>A camera mode counts once it has ended, and only if it ran for
+ * {@code statistics.min-seconds} at least: one switched on by mistake, or
+ * ended by a hit on the body right away, would only add a flight and pull the
+ * average down. One that a crash cut short never ended and is not counted.
+ * While one is going on, it is shown along with them as it would count if it
+ * ended now - one flight more, its time, its way and how far it got, once it
+ * is long enough -, so that the numbers grow as it goes and do not jump when
+ * it ends; see {@link #lines}.</p>
  */
 public final class CamStats {
 
@@ -61,7 +69,8 @@ public final class CamStats {
     }
 
     /**
-     * Adds a camera mode that is ending to the statistics of its player. The
+     * Adds a camera mode that is ending to the statistics of its player - or,
+     * shorter than {@code statistics.min-seconds}, only when it ended. The
      * record is written to its file by whoever ends camera mode, together with
      * the battery.
      */
@@ -69,13 +78,24 @@ public final class CamStats {
         if (!settings.isStatsEnabled()) {
             return;
         }
-        store.get(player.getUniqueId()).addSession(player.getName(), seconds(data),
-                data.getDistanceFlown(), data.getFarthestFromBody());
+        long seconds = seconds(data);
+        PlayerRecord record = store.get(player.getUniqueId());
+        if (counts(seconds)) {
+            record.addSession(player.getName(), data.getStartedAt(), seconds,
+                    data.getDistanceFlown(), data.getFarthestFromBody());
+        } else {
+            record.addUncountedSession(player.getName());
+        }
     }
 
     /** How long a camera mode has been going on, in whole seconds, the way it counts once it ends. */
     private static long seconds(CameraData data) {
         return TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - data.getStartedAt());
+    }
+
+    /** Whether a camera mode of so many seconds is long enough to be counted, {@code statistics.min-seconds}. */
+    private boolean counts(long seconds) {
+        return seconds >= settings.getStatsMinSeconds();
     }
 
     /**
@@ -183,9 +203,13 @@ public final class CamStats {
      * runs - or {@code stats-off} alone, with nothing to show.
      *
      * <p>While he is in camera mode, the flight going on is in the numbers
-     * already, as {@link #record} will add it once it ends, and
+     * already, as {@link #record} would add it if it ended now, and
      * {@code stats-flying} says how long it has been going: the menu, which
-     * draws them anew every second, shows them growing.</p>
+     * draws them anew every second, shows them growing. Until it has run for
+     * {@code statistics.min-seconds} it would not count, and
+     * {@code stats-flying-uncounted} says so instead - it is not in the
+     * numbers then, and for somebody who has no counted flight yet there are
+     * none.</p>
      *
      * <p>The battery and the cooldown say how things stand now, not what has
      * added up over all flights: {@code stats-gap} sets them apart from the
@@ -201,37 +225,25 @@ public final class CamStats {
         PlayerRecord record = store.peek(id);
         CameraData flight = cameraPlayers.get(id);
         long now = flight == null ? 0L : seconds(flight);
-        long sessions = record.getSessions() + (flight == null ? 0L : 1L);
+        // The flight going on as far as it would count if it ended now: not
+        // at all while it is shorter than min-seconds.
+        CameraData counted = flight != null && counts(now) ? flight : null;
+        long sessions = record.getSessions() + (counted == null ? 0L : 1L);
         if (!settings.isStatsEnabled()) {
             // Only the battery is left to show.
             lines.add(new Line("stats-header", "{player}", name));
-        } else if (sessions == 0) {
+        } else if (sessions == 0 && flight == null) {
             lines.add(new Line("stats-none", "{player}", name));
         } else {
-            long totalSeconds = record.getTotalSeconds() + now;
-            double flownNow = flight == null ? 0.0 : flight.getDistanceFlown();
-            double flown = record.getDistanceFlown() + flownNow;
             lines.add(new Line("stats-header", "{player}", name));
-            if (flight != null) {
+            if (counted != null) {
                 lines.add(new Line("stats-flying", "{time}", CamTimeLimit.formatDuration(now)));
+            } else if (flight != null) {
+                lines.add(new Line("stats-flying-uncounted", "{time}", CamTimeLimit.formatDuration(now),
+                        "{min}", CamTimeLimit.formatDuration(settings.getStatsMinSeconds())));
             }
-            lines.add(new Line("stats-sessions", "{count}", String.valueOf(sessions)));
-            lines.add(new Line("stats-total-time", "{time}", CamTimeLimit.formatDuration(totalSeconds)));
-            lines.add(new Line("stats-average-time", "{time}",
-                    CamTimeLimit.formatDuration(Math.round((double) totalSeconds / sessions))));
-            lines.add(new Line("stats-longest", "{time}",
-                    CamTimeLimit.formatDuration(Math.max(record.getLongestSeconds(), now))));
-            lines.add(new Line("stats-distance", "{distance}", blocks(flown)));
-            lines.add(new Line("stats-average-distance", "{distance}", blocks(flown / sessions)));
-            lines.add(new Line("stats-longest-distance", "{distance}",
-                    blocks(Math.max(record.getLongestDistance(), flownNow))));
-            // At a fixed border nearly everybody gets there once, and from
-            // then on the number is the same for all: max-distance. It is
-            // still counted, for when the border goes.
-            if (!settings.limitsDistance()) {
-                double farthest = Math.max(record.getFarthestFromBody(),
-                        flight == null ? 0.0 : flight.getFarthestFromBody());
-                lines.add(new Line("stats-farthest", "{distance}", blocks(farthest)));
+            if (sessions > 0) {
+                addNumbers(lines, record, counted, counted == null ? 0L : now, sessions);
             }
         }
         long cooldown = timeLimit.getCooldownRemaining(id);
@@ -249,6 +261,58 @@ public final class CamStats {
             lines.add(new Line("stats-cooldown", "{time}", CamTimeLimit.formatDuration(cooldown)));
         }
         return lines;
+    }
+
+    /**
+     * The numbers over all flights: altogether, for one flight on average,
+     * the longest flight and the longest way, how far from the body and since
+     * when.
+     *
+     * @param counted the flight going on, if it would count now, or {@code null}
+     * @param now     how long that one has been going, in seconds, or 0
+     */
+    private void addNumbers(List<Line> lines, PlayerRecord record, CameraData counted, long now, long sessions) {
+        long totalSeconds = record.getTotalSeconds() + now;
+        double flownNow = counted == null ? 0.0 : counted.getDistanceFlown();
+        double flown = record.getDistanceFlown() + flownNow;
+        lines.add(new Line("stats-sessions", "{count}", String.valueOf(sessions)));
+        lines.add(new Line("stats-total-time", "{time}", CamTimeLimit.formatDuration(totalSeconds)));
+        lines.add(new Line("stats-distance", "{distance}", blocks(flown)));
+        lines.add(new Line("stats-average",
+                "{time}", CamTimeLimit.formatDuration(Math.round((double) totalSeconds / sessions)),
+                "{distance}", blocks(flown / sessions)));
+        lines.add(new Line("stats-longest", "{time}",
+                CamTimeLimit.formatDuration(Math.max(record.getLongestSeconds(), now))));
+        lines.add(new Line("stats-longest-distance", "{distance}",
+                blocks(Math.max(record.getLongestDistance(), flownNow))));
+        // At a fixed border nearly everybody gets there once, and from then
+        // on the number is the same for all: max-distance. It is still
+        // counted, for when the border goes.
+        if (!settings.limitsDistance()) {
+            double farthest = Math.max(record.getFarthestFromBody(),
+                    counted == null ? 0.0 : counted.getFarthestFromBody());
+            lines.add(new Line("stats-farthest", "{distance}", blocks(farthest)));
+        }
+        // The first counted flight is the one going on, while the record has
+        // none yet; a record from before this was noted does not know.
+        long since = record.getSessions() == 0 && counted != null
+                ? counted.getStartedAt() : record.getCountedSince();
+        if (since > 0L) {
+            lines.add(new Line("stats-since", "{date}", date(since)));
+        }
+    }
+
+    /**
+     * A day as {@code stats-since-date} writes it, in the time zone of the
+     * server. A pattern that is none falls back on year, month and day.
+     */
+    private String date(long millis) {
+        ZonedDateTime when = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault());
+        try {
+            return DateTimeFormatter.ofPattern(messages.getMessage("stats-since-date")).format(when);
+        } catch (IllegalArgumentException ex) {
+            return DateTimeFormatter.ofPattern("yyyy-MM-dd").format(when);
+        }
     }
 
     /** A distance for {@code {distance}}, in whole blocks. */

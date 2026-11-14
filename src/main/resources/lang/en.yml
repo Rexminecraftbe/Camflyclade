@@ -840,8 +840,8 @@ messages:
   startup-skins-failed: "Skins could not be preloaded at startup: {error}"
   startup-skins-loaded: "Skins loaded successfully."
   startup-skins-loading: "Loading skins..."
-  stats-average-distance: "&7Average distance per flight: &f{distance} blocks"
-  stats-average-time: "&7Average flight: &f{time}"
+  # One flight on average: how long ({time}) and how far ({distance}, in blocks).
+  stats-average: "&7Average flight: &f{time} &7· &f{distance} blocks"
   stats-battery: "&7Battery: &f{charge} &7of &f{capacity}"
   stats-cooldown: "&7Cam mode again in: &f{time}"
   stats-distance: "&7Distance flown: &f{distance} blocks"
@@ -851,6 +851,9 @@ messages:
   # While he is in cam mode: how long the flight has been going on ({time}). The numbers under it count it already,
   # as they will once it ends - in the menu they grow by the second.
   stats-flying: "&aIn cam mode right now: &f{time} &7(counted in)"
+  # In its place while the flight is shorter than statistics.min-seconds ({min}): ended now, it would not count, and
+  # the numbers under it leave it out.
+  stats-flying-uncounted: "&aIn cam mode right now: &f{time} &7(counts from {min})"
   # The empty line between the numbers, which add up over all flights, and stats-battery and stats-cooldown, which
   # say how things stand now. Switched off, or "", for none.
   stats-gap: " "
@@ -861,6 +864,11 @@ messages:
   stats-off: "&cThe statistics are switched off."
   stats-reset: "&aYour cam mode statistics have been reset."
   stats-sessions: "&7Times in cam mode: &f{count}"
+  # Since when the numbers count: {date} is the day the first counted flight began - after /cam stats reset the next
+  # one -, as stats-since-date writes it (a pattern of Java's DateTimeFormatter, e.g. dd.MM.yyyy, in the time zone of
+  # the server). Statistics from before this was noted do not say it, and the line is left out until a reset.
+  stats-since: "&7Counted since: &f{date}"
+  stats-since-date: "yyyy-MM-dd"
   stats-total-time: "&7Time in cam mode: &f{time}"
   stats-unknown-player: "&cNobody called {player} has been on this server."
   stats-usage: "&eUse /cam stats, /cam stats reset or /cam stats player <name>."
@@ -1561,13 +1569,13 @@ message-settings:
   startup-skins-failed: true
   startup-skins-loaded: true
   startup-skins-loading: true
-  stats-average-distance: true
-  stats-average-time: true
+  stats-average: true
   stats-battery: true
   stats-cooldown: true
   stats-distance: true
   stats-farthest: true
   stats-flying: true
+  stats-flying-uncounted: true
   stats-gap: true
   stats-header: true
   stats-longest: true
@@ -1576,6 +1584,7 @@ message-settings:
   stats-off: true
   stats-reset: true
   stats-sessions: true
+  stats-since: true
   stats-total-time: true
   stats-unknown-player: true
   stats-usage: true

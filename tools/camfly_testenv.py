@@ -2330,6 +2330,12 @@ def prepare_server_files(env):
     text, n = replace_option(text, "set-in-cam-only", "false", "viewpoints")
     if n != 1:
         Log.warn("viewpoints.set-in-cam-only nicht in der Konfiguration gefunden")
+    # Voreingestellt zaehlt ein Flug erst nach zehn Sekunden. Die Abschnitte
+    # fliegen meist kuerzer und zaehlen trotzdem mit /cam stats und im Menue
+    # nach; nur statistik_checks stellt die Mindestdauer fuer sich ein.
+    text, n = replace_option(text, "min-seconds", "0", "statistics")
+    if n != 1:
+        Log.warn("statistics.min-seconds nicht in der Konfiguration gefunden")
     data_dir = plugins / "CamFly"
     data_dir.mkdir(exist_ok=True)
     (data_dir / "config.yml").write_text(text, encoding="utf-8")
@@ -5561,16 +5567,21 @@ def statistik_checks(env, bot):
 
     Ein Flug von sechs Bloecken nach oben zaehlt einmal mehr, die Strecke
     waechst um ihn, die laengste in einem Flug ist mindestens so lang, und
-    der Schnitt nach Zeit und Strecke steht dabei. Den weitesten Abstand zum
-    Koerper gibt es mit der festen Grenze von max-distance nicht - da kaeme
-    jeder hin -, ohne sie ist er mindestens so gross wie der Flug. Die
-    Zahlen stehen in der Datei des Bots unter playerdata/stats.
+    der Schnitt nach Zeit und Strecke steht in einer Zeile dabei. Den
+    weitesten Abstand zum Koerper gibt es mit der festen Grenze von
+    max-distance nicht - da kaeme jeder hin -, ohne sie ist er mindestens so
+    gross wie der Flug. Die Zahlen stehen in der Datei des Bots unter
+    playerdata/stats.
     Ein unbekannter Name wird gemeldet, ein unbekanntes Wort nach stats sagt,
     wie es geht, die Konsole darf jeden ansehen. view-others: admin laesst
     den Bot ohne op nur sich selbst ansehen - auch unter seinem eigenen
     Namen -, all auch andere, false auch mit op niemanden. /cam stats reset
-    setzt seine eigene auf null. Mit statistics.enabled: false sagt
-    /cam stats, dass sie aus ist.
+    setzt seine eigene auf null. Danach zaehlt ein Flug unter
+    statistics.min-seconds nicht - im Flug sagt /cam stats, ab wann er
+    zaehlt, und nur wann er endete, kommt in die Datei -, einer darueber
+    zaehlt, sobald er so lange laeuft, und "Counted since" nennt den Tag, an
+    dem er begann. Mit statistics.enabled: false sagt /cam stats, dass sie
+    aus ist.
     """
     def zahl(zeilen, muster):
         for z in zeilen:
@@ -5596,12 +5607,12 @@ def statistik_checks(env, bot):
         FIND.test("/cam stats zaehlt den Flug", zahl(z, r"Times in cam mode: (\d+)") == mal + 1, zeige(z))
         gesamt = zahl(z, r"Distance flown: (\d+) blocks")
         FIND.test("/cam stats - die Strecke waechst um den Flug", gesamt >= weg + 4, zeige(z))
-        schnitt = zahl(z, r"Average distance per flight: (\d+) blocks")
+        schnitt = zahl(z, r"Average flight: \S.* · (\d+) blocks$")
         laengste = zahl(z, r"Longest distance in one flight: (\d+) blocks")
         FIND.test("/cam stats - die laengste Strecke in einem Flug ist mindestens der eben, hoechstens alle",
                   4 <= laengste <= gesamt, zeige(z))
-        FIND.test("/cam stats - der Schnitt nach Zeit und Strecke, die Strecke nicht ueber der laengsten",
-                  gesagt(z, r"Average flight: ") and gesagt(z, r"Average distance per flight: \d+ blocks")
+        FIND.test("/cam stats - der Schnitt nach Zeit und Strecke in einer Zeile, nicht ueber der laengsten",
+                  gesagt(z, r"Average flight: \S.* · \d+ blocks$") and not gesagt(z, r"Average distance")
                   and schnitt <= laengste, zeige(z))
         FIND.test("/cam stats - mit der festen Grenze von max-distance kein weitester Abstand zum Koerper",
                   not gesagt(z, r"Farthest from the body"), zeige(z))
@@ -5651,6 +5662,47 @@ def statistik_checks(env, bot):
         FIND.test("/cam stats reset - danach ist sie wirklich auf null",
                   gesagt(z, rf"{BOT_NAME} has not been in cam mode yet"), zeige(z))
 
+        # --- min-seconds und "Counted since" ---
+        def letzter_flug():
+            datei = spielerdatei(env)
+            m = re.search(r"(?m)^\s*last-flight: (\d+)\s*$", datei.read_text(encoding="utf-8")) if datei else None
+            return int(m.group(1)) if m else 0
+
+        set_option(env, "min-seconds", "30", "statistics")
+        vorher = letzter_flug()
+        if FIND.test("min-seconds: Cam-Modus fuer einen kurzen Flug gestartet", cam_on(bot), ""):
+            z = befehl(bot, "/cam stats")
+            FIND.test("min-seconds: 30 - im Flug sagt /cam stats, ab wann er zaehlt, und zeigt noch keine Zahlen",
+                      gesagt(z, r"In cam mode right now: .*\(counts from 30 seconds\)")
+                      and not gesagt(z, r"Times in cam mode|has not been in cam mode"), zeige(z))
+            cam_off(bot)
+            z = befehl(bot, "/cam stats")
+            FIND.test("min-seconds: 30 - ein kuerzerer Flug zaehlt nicht",
+                      gesagt(z, rf"{BOT_NAME} has not been in cam mode yet"), zeige(z))
+            FIND.test("min-seconds: 30 - wann er endete, steht trotzdem in der Datei (stats.last-flight)",
+                      letzter_flug() > vorher, f"vorher {vorher}, nachher {letzter_flug()}")
+
+        set_option(env, "min-seconds", "8", "statistics")
+        heute = time.strftime("%Y-%m-%d")
+        if FIND.test("min-seconds: Cam-Modus fuer einen langen Flug gestartet", cam_on(bot), ""):
+            z = befehl(bot, "/cam stats")
+            FIND.test("min-seconds: 8 - in den ersten Sekunden zaehlt der Flug noch nicht mit",
+                      gesagt(z, r"\(counts from 8 seconds\)") and not gesagt(z, r"Times in cam mode"), zeige(z))
+            time.sleep(8)
+            z = befehl(bot, "/cam stats")
+            FIND.test("min-seconds: 8 - danach zaehlt er mit, und gezaehlt wird seit dem Tag, an dem er begann",
+                      gesagt(z, r"\(counted in\)") and zahl(z, r"Times in cam mode: (\d+)") == 1
+                      and gesagt(z, rf"Counted since: {heute}$"), zeige(z))
+            cam_off(bot)
+            z = befehl(bot, "/cam stats")
+            FIND.test("min-seconds: 8 - nach dem Ende ein Flug, und Counted since bleibt",
+                      zahl(z, r"Times in cam mode: (\d+)") == 1 and gesagt(z, rf"Counted since: {heute}$"), zeige(z))
+            datei = spielerdatei(env)
+            text = datei.read_text(encoding="utf-8") if datei is not None else ""
+            FIND.test("statistics: seit wann gezaehlt wird, steht in der Datei (stats.counted-since)",
+                      re.search(r"(?m)^\s*counted-since: \d+\s*$", text) is not None, str(datei))
+        set_option(env, "min-seconds", "0", "statistics")
+
         set_option(env, "enabled", "false", "statistics")
         z = befehl(bot, "/cam stats")
         FIND.test("statistics.enabled: false - /cam stats sagt, dass sie aus ist",
@@ -5658,7 +5710,7 @@ def statistik_checks(env, bot):
     finally:
         console(env, f"op {BOT_NAME}", pause=1.5)
         set_options(env, [("enabled", "true", "statistics"), ("view-others", "admin", "statistics"),
-                          ("max-distance-enabled", "true", "camera-mode")])
+                          ("min-seconds", "0", "statistics"), ("max-distance-enabled", "true", "camera-mode")])
 
 
 def alte_absturzdatei_checks(env, bot):
