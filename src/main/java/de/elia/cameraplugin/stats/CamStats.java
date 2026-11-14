@@ -26,9 +26,9 @@ import java.util.concurrent.TimeUnit;
  * The statistics of camera mode, {@code statistics} and {@code /cam stats}:
  * how often a player flew, how long and how far his camera flew altogether,
  * both for one flight on average, the longest flight and the longest way, how
- * far it got from his body - that only without a fixed border: at one, nearly
- * everybody gets there once, and all would have the same number - and since
- * when all this is counted.
+ * far it flew away from his body - flown, not jumped to a spot far off; and
+ * only without a fixed border: at one, nearly everybody gets there once, and
+ * all would have the same number - and since when all this is counted.
  *
  * <ul>
  *   <li>{@code /cam stats} - his own</li>
@@ -82,7 +82,7 @@ public final class CamStats {
         PlayerRecord record = store.get(player.getUniqueId());
         if (counts(seconds)) {
             record.addSession(player.getName(), data.getStartedAt(), seconds,
-                    data.getDistanceFlown(), data.getFarthestFromBody());
+                    data.getDistanceFlown(), data.getFarthestFlownFromBody());
         } else {
             record.addUncountedSession(player.getName());
         }
@@ -290,7 +290,7 @@ public final class CamStats {
         // counted, for when the border goes.
         if (!settings.limitsDistance()) {
             double farthest = Math.max(record.getFarthestFromBody(),
-                    counted == null ? 0.0 : counted.getFarthestFromBody());
+                    counted == null ? 0.0 : counted.getFarthestFlownFromBody());
             lines.add(new Line("stats-farthest", "{distance}", blocks(farthest)));
         }
         // The first counted flight is the one going on, while the record has

@@ -29,7 +29,7 @@ public final class PlayerRecord {
     private double distanceFlown;
     /** The longest way his camera has flown in one camera mode, in blocks. */
     private double longestDistance;
-    /** The farthest his camera has ever been from his body, in blocks. */
+    /** The farthest his camera has ever flown away from his body, in blocks - jumps to a spot do not count. */
     private double farthestFromBody;
     /**
      * When the first flight in these numbers began, as
@@ -105,7 +105,7 @@ public final class PlayerRecord {
      * @param startedAt when it began, as {@link System#currentTimeMillis()} counts
      * @param seconds   how long it ran
      * @param flown     how far the camera flew, in blocks
-     * @param farthest  the farthest it got from the body, in blocks
+     * @param farthest  the farthest it flew away from the body, in blocks
      */
     public void addSession(String playerName, long startedAt, long seconds, double flown, double farthest) {
         name = playerName;

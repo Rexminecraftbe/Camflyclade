@@ -845,8 +845,9 @@ messages:
   stats-battery: "&7Battery: &f{charge} &7of &f{capacity}"
   stats-cooldown: "&7Cam mode again in: &f{time}"
   stats-distance: "&7Distance flown: &f{distance} blocks"
-  # Only without a fixed border (camera-mode.max-distance-mode: fixed with a border that holds): at one, nearly
-  # everybody gets there once, and the number would be max-distance for all.
+  # How far the camera flew away from the body: only flying counts, a jump does not - to a spot, with /cam resume, after
+  # the guide of /cam follow. Only without a fixed border (camera-mode.max-distance-mode: fixed with a border that
+  # holds): at one, nearly everybody gets there once, and the number would be max-distance for all.
   stats-farthest: "&7Farthest from the body: &f{distance} blocks"
   # While he is in cam mode: how long the flight has been going on ({time}). The numbers under it count it already,
   # as they will once it ends - in the menu they grow by the second.

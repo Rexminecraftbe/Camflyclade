@@ -15,6 +15,11 @@ import org.bukkit.event.player.PlayerMoveEvent;
  * portal, a command - is an event of its own and never reaches this handler,
  * so it adds nothing to the way flown. A step that something turned away
  * did not happen and is left out as well.</p>
+ *
+ * <p>How far the camera got from the body is noted twice: where it has been
+ * at all, for the log, and how far flying alone carried it away, for the
+ * statistics - a jump to a spot far off is no flight, see
+ * {@link CameraData#noteStep}.</p>
  */
 public final class SessionTracker implements Listener {
 
@@ -37,7 +42,11 @@ public final class SessionTracker implements Listener {
         }
         Location home = data.getBody().getLocation();
         if (home.getWorld() != null && home.getWorld().equals(to.getWorld())) {
-            data.noteDistanceFromBody(home.distance(to));
+            double after = home.distance(to);
+            data.noteDistanceFromBody(after);
+            if (home.getWorld().equals(from.getWorld())) {
+                data.noteStep(home.distance(from), after);
+            }
         }
     }
 }
