@@ -41,7 +41,8 @@ public final class PlayerRecord {
     /**
      * When his last camera mode ended, as {@link System#currentTimeMillis()}
      * counts, or 0 while none has ended - for the admin pages of the menu,
-     * sorted by the last flight. A flight too short for the statistics sets it
+     * sorted by the last flight, and for {@code stats-last} of
+     * {@code /cam stats}. A flight too short for the statistics sets it
      * as well: it is no count.
      */
     private long lastFlightEnded;

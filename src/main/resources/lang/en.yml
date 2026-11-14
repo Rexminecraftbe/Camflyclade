@@ -858,6 +858,10 @@ messages:
   # say how things stand now. Switched off, or "", for none.
   stats-gap: " "
   stats-header: "&eCam mode statistics of {player}:"
+  # When he was last in cam mode: {date} is the day his last flight ended, as stats-since-date writes it. A flight too
+  # short for statistics.min-seconds is the last one as well, and /cam stats reset leaves it. Left out while he is in
+  # cam mode - stats-flying says so then -, and in statistics from before this was noted until his next flight.
+  stats-last: "&7Last in cam mode: &f{date}"
   # The longest flight and the longest way in one flight: the two can be of different flights, which is why they
   # stand on lines of their own - on one, like stats-average, they would read as the same flight.
   stats-longest: "&7Longest flight: &f{time}"
@@ -1584,6 +1588,7 @@ message-settings:
   stats-flying-uncounted: true
   stats-gap: true
   stats-header: true
+  stats-last: true
   stats-longest: true
   stats-longest-distance: true
   stats-none: true

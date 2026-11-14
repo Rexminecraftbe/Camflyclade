@@ -5679,6 +5679,8 @@ def statistik_checks(env, bot):
             z = befehl(bot, "/cam stats")
             FIND.test("min-seconds: 30 - ein kuerzerer Flug zaehlt nicht",
                       gesagt(z, rf"{BOT_NAME} has not been in cam mode yet"), zeige(z))
+            FIND.test("stats-last: ohne gezaehlten Flug steht es nicht unter stats-none",
+                      not gesagt(z, r"Last in cam mode"), zeige(z))
             FIND.test("min-seconds: 30 - wann er endete, steht trotzdem in der Datei (stats.last-flight)",
                       letzter_flug() > vorher, f"vorher {vorher}, nachher {letzter_flug()}")
 
@@ -5693,10 +5695,16 @@ def statistik_checks(env, bot):
             FIND.test("min-seconds: 8 - danach zaehlt er mit, und gezaehlt wird seit dem Tag, an dem er begann",
                       gesagt(z, r"\(counted in\)") and zahl(z, r"Flights: (\d+)") == 1
                       and gesagt(z, rf"Counted since: {heute}$"), zeige(z))
+            FIND.test("stats-last: im Flug steht nicht da, wann er zuletzt im Cam-Modus war - das sagt stats-flying",
+                      gesagt(z, r"In cam mode right now: ") and not gesagt(z, r"Last in cam mode"), zeige(z))
             cam_off(bot)
             z = befehl(bot, "/cam stats")
             FIND.test("min-seconds: 8 - nach dem Ende ein Flug, und Counted since bleibt",
                       zahl(z, r"Flights: (\d+)") == 1 and gesagt(z, rf"Counted since: {heute}$"), zeige(z))
+            seit = next((i for i, zeile in enumerate(z) if re.search(r"Counted since: ", zeile)), None)
+            zuletzt = next((i for i, zeile in enumerate(z) if re.search(rf"Last in cam mode: {heute}$", zeile)), None)
+            FIND.test("stats-last: nach dem Flug steht der Tag da, an dem er endete, unter Counted since",
+                      seit is not None and zuletzt is not None and zuletzt > seit, zeige(z))
             datei = spielerdatei(env)
             text = datei.read_text(encoding="utf-8") if datei is not None else ""
             FIND.test("statistics: seit wann gezaehlt wird, steht in der Datei (stats.counted-since)",

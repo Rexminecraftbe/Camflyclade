@@ -27,8 +27,8 @@ import java.util.concurrent.TimeUnit;
  * how often a player flew, how long and how far his camera flew altogether,
  * both for one flight on average, the longest flight and the longest way, how
  * far it got from his body - that only without a fixed border: at one, nearly
- * everybody gets there once, and all would have the same number - and since
- * when all this is counted.
+ * everybody gets there once, and all would have the same number -, since
+ * when all this is counted, and when he was last in camera mode.
  *
  * <ul>
  *   <li>{@code /cam stats} - his own</li>
@@ -211,6 +211,10 @@ public final class CamStats {
      * numbers then, and for somebody who has no counted flight yet there are
      * none.</p>
      *
+     * <p>When he was last in camera mode, {@code stats-last}, stands under the
+     * numbers only while he is not: in it, {@code stats-flying} says it
+     * already.</p>
+     *
      * <p>The battery and the cooldown say how things stand now, not what has
      * added up over all flights: {@code stats-gap} sets them apart from the
      * numbers above them.</p>
@@ -244,6 +248,12 @@ public final class CamStats {
             }
             if (sessions > 0) {
                 addNumbers(lines, record, counted, counted == null ? 0L : now, sessions);
+                // A flight too short to count is the last one as well, and a
+                // reset leaves it; a record from before this was noted does
+                // not know.
+                if (flight == null && record.getLastFlightEnded() > 0L) {
+                    lines.add(new Line("stats-last", "{date}", date(record.getLastFlightEnded())));
+                }
             }
         }
         long cooldown = timeLimit.getCooldownRemaining(id);
@@ -304,7 +314,8 @@ public final class CamStats {
 
     /**
      * A day as {@code stats-since-date} writes it, in the time zone of the
-     * server. A pattern that is none falls back on year, month and day.
+     * server, for {@code stats-since} and {@code stats-last}. A pattern that
+     * is none falls back on year, month and day.
      */
     private String date(long millis) {
         ZonedDateTime when = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault());
