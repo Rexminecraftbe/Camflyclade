@@ -11,9 +11,7 @@ import de.elia.cameraplugin.storage.PlayerStore;
 import de.elia.cameraplugin.storage.StorageMode;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.ClickEvent;
-import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.TextComponent;
-import net.md_5.bungee.api.chat.hover.content.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
@@ -665,7 +663,12 @@ public final class CamSpots {
         return null;
     }
 
-    /** Tells a player online that a spot is offered to him, with the buttons to accept it and to turn it down. */
+    /**
+     * Tells a player online that a spot is offered to him, with the buttons to
+     * accept it and to turn it down. On Bedrock, with
+     * {@code bedrock.invitation-forms}, a window asks him as well - while
+     * there are buttons at all.
+     */
     private void tellOffered(Player other, Share share) {
         if (!messages.isMessageEnabled("spot-offered-to-you")) {
             return;
@@ -674,15 +677,29 @@ public final class CamSpots {
                 .replace("{owner}", share.getOwnerName())
                 .replace("{spot}", share.getSpot().name());
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
-        line.addAll(commandButton("spot-button-accept", share.label(), "/cam spot accept " + share.label()));
-        line.addAll(commandButton("spot-button-decline", share.label(), "/cam spot decline " + share.label()));
+        line.addAll(commandButton(other, "spot-button-accept", share.label(), "/cam spot accept " + share.label()));
+        line.addAll(commandButton(other, "spot-button-decline", share.label(),
+                "/cam spot decline " + share.label()));
         other.spigot().sendMessage(line.toArray(new BaseComponent[0]));
+        if (plugin.commandOrMenu("/cam spot accept") != null && plugin.getBedrock().invitationForms(other)) {
+            plugin.getBedrock().forms().question(other, messages.getMessage("bedrock-form-spot-offer-title"), text,
+                    messages.getMessage("bedrock-form-spot-offer-accept"),
+                    messages.getMessage("bedrock-form-spot-offer-decline"), yes -> {
+                        if (!settings.isViewpointsSharing()) {
+                            messages.sendConfiguredMessage(other, "spot-share-off");
+                        } else if (yes) {
+                            accept(other, share);
+                        } else {
+                            decline(other, share);
+                        }
+                    }, null);
+        }
     }
 
     /** A button that runs a command - or opens the menu, while only the menu goes - or nothing at all. */
-    private List<BaseComponent> commandButton(String key, String spot, String command) {
+    private List<BaseComponent> commandButton(Player to, String key, String spot, String command) {
         String run = plugin.commandOrMenu(command);
-        return run == null ? List.of() : button(key, spot, new ClickEvent(ClickEvent.Action.RUN_COMMAND, run));
+        return run == null ? List.of() : button(to, key, spot, new ClickEvent(ClickEvent.Action.RUN_COMMAND, run));
     }
 
     /**
@@ -727,9 +744,9 @@ public final class CamSpots {
             String text = fillPlace(messages.getMessage("spot-list-offers-entry"), share.getSpot())
                     .replace("{owner}", share.getOwnerName());
             List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
-            line.addAll(button("spot-button-accept", share.label(),
+            line.addAll(button(player, "spot-button-accept", share.label(),
                     new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam spot accept " + share.label())));
-            line.addAll(button("spot-button-decline", share.label(),
+            line.addAll(button(player, "spot-button-decline", share.label(),
                     new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam spot decline " + share.label())));
             player.spigot().sendMessage(line.toArray(new BaseComponent[0]));
         }
@@ -749,13 +766,13 @@ public final class CamSpots {
                     .replace("{owner}", share.getOwnerName())
                     .replace("{likes}", String.valueOf(share.likes())) + lookSuffix(share.getSpot());
             List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
-            line.addAll(button("spot-button-go", share.label(),
+            line.addAll(button(player, "spot-button-go", share.label(),
                     new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam spot " + share.label())));
             if (likes) {
-                line.addAll(button(share.isLikedBy(player.getUniqueId()) ? "spot-button-unlike" : "spot-button-like",
-                        share.label(), new ClickEvent(ClickEvent.Action.RUN_COMMAND,
+                line.addAll(button(player, share.isLikedBy(player.getUniqueId()) ? "spot-button-unlike"
+                        : "spot-button-like", share.label(), new ClickEvent(ClickEvent.Action.RUN_COMMAND,
                                 "/cam spot like " + share.label())));
-                line.addAll(mapButton(share.label(), share.getSpot()));
+                line.addAll(mapButton(player, share.label(), share.getSpot()));
             }
             player.spigot().sendMessage(line.toArray(new BaseComponent[0]));
         }
@@ -775,16 +792,16 @@ public final class CamSpots {
             text += messages.getMessage("spot-list-offered").replace("{players}", offeredTo(share));
         }
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
-        line.addAll(button("spot-button-go", spot.name(),
+        line.addAll(button(player, "spot-button-go", spot.name(),
                 new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam spot " + spot.name())));
         if (settings.isViewpointsSharing()) {
-            line.addAll(button("spot-button-share", spot.name(),
+            line.addAll(button(player, "spot-button-share", spot.name(),
                     new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/cam spot share " + spot.name() + " ")));
         }
-        line.addAll(button("spot-button-delete", spot.name(),
+        line.addAll(button(player, "spot-button-delete", spot.name(),
                 new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/cam spot delete " + spot.name())));
         if (share != null && share.isEveryone()) {
-            line.addAll(mapButton(spot.name(), spot));
+            line.addAll(mapButton(player, spot.name(), spot));
         }
         return line.toArray(new BaseComponent[0]);
     }
@@ -794,9 +811,9 @@ public final class CamSpots {
      * {@code web-map.link} gives its address - nothing otherwise. Only for a
      * public spot: the others are not on the map.
      */
-    private List<BaseComponent> mapButton(String label, Spot spot) {
+    private List<BaseComponent> mapButton(Player to, String label, Spot spot) {
         String address = plugin.getWebMap().linkTo(spot);
-        return address == null ? List.of() : button("spot-button-map", label,
+        return address == null ? List.of() : button(to, "spot-button-map", label,
                 new ClickEvent(ClickEvent.Action.OPEN_URL, address));
     }
 
@@ -830,10 +847,11 @@ public final class CamSpots {
 
     /**
      * One button behind a line of the list: its text, and on hovering the
-     * text of the same name with {@code -hover} after it. Nothing when the
-     * text is switched off or empty.
+     * text of the same name with {@code -hover} after it - on Bedrock with
+     * the command written out, see {@link de.elia.cameraplugin.bedrock.BedrockPlayers#chatButton}.
+     * Nothing when the text is switched off or empty.
      */
-    private List<BaseComponent> button(String key, String spot, ClickEvent click) {
+    private List<BaseComponent> button(Player to, String key, String spot, ClickEvent click) {
         if (!messages.isMessageEnabled(key)) {
             return List.of();
         }
@@ -841,16 +859,8 @@ public final class CamSpots {
         if (text.isEmpty()) {
             return List.of();
         }
-        HoverEvent hover = new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text(TextComponent.fromLegacyText(
-                messages.getMessage(key + "-hover").replace("{spot}", spot))));
-        List<BaseComponent> parts = new ArrayList<>();
-        parts.add(new TextComponent(" "));
-        for (BaseComponent part : TextComponent.fromLegacyText(text)) {
-            part.setHoverEvent(hover);
-            part.setClickEvent(click);
-            parts.add(part);
-        }
-        return parts;
+        return plugin.getBedrock().chatButton(to, text, messages.getMessage(key + "-hover").replace("{spot}", spot),
+                click);
     }
 
     /**

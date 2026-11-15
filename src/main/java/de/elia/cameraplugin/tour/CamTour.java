@@ -13,9 +13,7 @@ import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.ClickEvent;
-import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.TextComponent;
-import net.md_5.bungee.api.chat.hover.content.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -1088,45 +1086,63 @@ public final class CamTour implements Listener {
 
     /**
      * Tells a player that he is invited, and for how many seconds, with the
-     * buttons to accept and to turn it down.
+     * buttons to accept and to turn it down. On Bedrock, with
+     * {@code bedrock.invitation-forms}, a window asks him as well - while
+     * there are buttons at all.
      */
     private void tellInvited(Player other, Player guide, int seconds) {
         if (!messages.isMessageEnabled("tour-invitation")) {
             return;
         }
-        String text = messages.getMessage("tour-invitation").replace("{player}", guide.getName())
+        String name = guide.getName();
+        String text = messages.getMessage("tour-invitation").replace("{player}", name)
                 .replace("{seconds}", String.valueOf(seconds)).replace("{time}", CamTimeLimit.formatSeconds(seconds));
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
-        line.addAll(button("tour-button-accept", guide.getName(), "/cam follow accept " + guide.getName()));
-        line.addAll(button("tour-button-decline", guide.getName(), "/cam follow decline " + guide.getName()));
+        line.addAll(button(other, "tour-button-accept", name, "/cam follow accept " + name));
+        line.addAll(button(other, "tour-button-decline", name, "/cam follow decline " + name));
         other.spigot().sendMessage(line.toArray(new BaseComponent[0]));
+        if (answerable() && plugin.getBedrock().invitationForms(other)) {
+            UUID guideId = guide.getUniqueId();
+            plugin.getBedrock().forms().question(other, messages.getMessage("bedrock-form-follow-title"), text,
+                    messages.getMessage("bedrock-form-follow-accept"),
+                    messages.getMessage("bedrock-form-follow-decline"), yes -> {
+                        // Whoever is still online by then: one who left has no invitation open.
+                        Player now = Bukkit.getPlayer(guideId);
+                        if (yes) {
+                            accept(other, now, name);
+                        } else {
+                            decline(other, now, name);
+                        }
+                    }, null);
+        }
+    }
+
+    /**
+     * Whether an invitation can be answered: through the commands or the
+     * menu. The buttons run the command either way, as an answer to the
+     * invitation needs no menu.
+     */
+    private boolean answerable() {
+        return settings.getMenuAccess().allowsMenu() || settings.getMenuAccess().allowsCommands();
     }
 
     /**
      * One button behind the invitation, running its command - also while
      * only the menu goes, as an answer to the invitation needs no menu -,
-     * with the text of the same name with {@code -hover} after it on hovering.
+     * with the text of the same name with {@code -hover} after it on hovering,
+     * and on Bedrock the command written out, see
+     * {@link de.elia.cameraplugin.bedrock.BedrockPlayers#chatButton}.
      */
-    private List<BaseComponent> button(String key, String guide, String command) {
-        if (!settings.getMenuAccess().allowsMenu() && !settings.getMenuAccess().allowsCommands()
-                || !messages.isMessageEnabled(key)) {
+    private List<BaseComponent> button(Player to, String key, String guide, String command) {
+        if (!answerable() || !messages.isMessageEnabled(key)) {
             return List.of();
         }
         String text = messages.getMessage(key).replace("{player}", guide);
         if (text.isEmpty()) {
             return List.of();
         }
-        HoverEvent hover = new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text(TextComponent.fromLegacyText(
-                messages.getMessage(key + "-hover").replace("{player}", guide))));
-        ClickEvent click = new ClickEvent(ClickEvent.Action.RUN_COMMAND, command);
-        List<BaseComponent> parts = new ArrayList<>();
-        parts.add(new TextComponent(" "));
-        for (BaseComponent part : TextComponent.fromLegacyText(text)) {
-            part.setHoverEvent(hover);
-            part.setClickEvent(click);
-            parts.add(part);
-        }
-        return parts;
+        return plugin.getBedrock().chatButton(to, text, messages.getMessage(key + "-hover").replace("{player}", guide),
+                new ClickEvent(ClickEvent.Action.RUN_COMMAND, command));
     }
 
     /**

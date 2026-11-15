@@ -11,9 +11,11 @@ messages:
   actionbar-off: "&cCam mode ended"
   # {hint} is replaced by actionbar-hint while exit-key is on, and {key} there by the key that swaps
   # the hands - the one the player has bound it to, F unless changed. While exit-key is off it is
-  # replaced by actionbar-hint-command.
+  # replaced by actionbar-hint-command. Players on Bedrock, who have no such key (see bedrock in config.yml), get
+  # actionbar-hint-bedrock in place of actionbar-hint.
   actionbar-hint: " &7- &f{key} &7or type &f/cam &7to leave"
   actionbar-hint-command: " &7- type &f/cam &7to leave"
+  actionbar-hint-bedrock: " &7- type &f/cam &7to leave"
   actionbar-on: "&aCam mode activated{hint}"
   # With camera-mode.max-distance-mode: signal behind actionbar-distance. {icon} is the ping icon of the game, as the
   # tab list shows a connection: one bar to five, or a red cross once the signal is gone - on Spigot, which cannot show
@@ -79,6 +81,19 @@ messages:
   battery-bossbar-charging: "Battery charging: {charge}, full in {time}"
   battery-empty: "&cCam mode ended: the battery is empty."
   battery-low: "&cThe battery holds {charge} of flight, a start needs {needed}. Ready again in {time}."
+  # What players on Bedrock get in place of what Bedrock cannot do, see bedrock in config.yml. bedrock-chat-command
+  # stands behind every button in the chat (bedrock.chat-commands): the chat of Bedrock cannot be clicked, so it
+  # says the command to type, {command}; one that needs more after it, such as a name, ends in ... The
+  # bedrock-form-... texts are the windows that ask about a spot offered to them and about an invitation to follow
+  # (bedrock.invitation-forms): their title and their two buttons; the text in them is spot-offered-to-you or
+  # tour-invitation.
+  bedrock-chat-command: " &8(&7{command}&8)"
+  bedrock-form-follow-accept: "Follow"
+  bedrock-form-follow-decline: "Decline"
+  bedrock-form-follow-title: "Invitation to follow"
+  bedrock-form-spot-offer-accept: "Accept"
+  bedrock-form-spot-offer-decline: "Decline"
+  bedrock-form-spot-offer-title: "Spot offered"
   # {mob} as mob-names has it, {player} the player's name, {distance} how far from the body in blocks.
   body-alarm-mob: "&cWatch out: {mob} is after your body!"
   body-alarm-player: "&cWatch out: {player} is close to your body!"
@@ -232,6 +247,13 @@ messages:
   # the ban will be ({ban}: {time} with ban-reason), and menu-admin-banned how a ban stands; {step} in
   # menu-admin-ban-time-actions is menu.ban-shift-step. The -change ones are there instead while the player is banned
   # already: then the page changes his ban, and menu-admin-unban ({player} in its -lore) lifts it.
+  # On Bedrock (see bedrock in config.yml) there is but one click, a tap: a button that does something else on a
+  # right-click or with shift offers what it does on a page of its own, menu-pick-title ({button} its name), each
+  # as menu-pick with one of the menu-pick-... texts for {pick} - a button that steps through choices offers every
+  # choice, the one that holds now as menu-pick-current -, and menu-pick-back leads back. The texts with -bedrock
+  # after their key stand in place of the ones without it there, saying a tap instead of the clicks. With
+  # bedrock.menu: forms the menu comes as windows of Bedrock instead of a chest, and the questions come in one: the
+  # text with -form after its key stands over the line to type into, menu-form-placeholder in it.
   menu-admin: "&cAdmin"
   menu-admin-ban: "&cBan"
   menu-admin-ban-change: "&cChange the ban"
@@ -248,8 +270,11 @@ messages:
   menu-admin-ban-no-reason: "&7none"
   menu-admin-ban-reason: "&fReason"
   menu-admin-ban-reason-actions: "&eLeft-click: write one in the chat\n&eRight-click: none"
+  menu-admin-ban-reason-actions-bedrock: "&eTap: write one or none"
   menu-admin-ban-reason-question: "&eType in the chat why {player} is banned, or {cancel}."
+  menu-admin-ban-reason-question-form: "Why is {player} banned?"
   menu-admin-ban-time-actions: "&eLeft-click: +1\n&eRight-click: -1\n&eWith shift: {step} at once"
+  menu-admin-ban-time-actions-bedrock: "&eTap: +1, -1 or {step} at once"
   menu-admin-ban-time-lore: "&7Altogether: &f{time}"
   menu-admin-ban-title: "&8Ban {player}"
   menu-admin-banned: "&cBanned {ban}"
@@ -263,6 +288,7 @@ messages:
   # {to} where the camera was last, both as trail-place has them.
   menu-admin-flight: "&f#{number} &7- &f{date}"
   menu-admin-flight-actions: "&eLeft-click: show it\n&eRight-click: show it and go to its start"
+  menu-admin-flight-actions-bedrock: "&eTap: show it, or show it\n&eand go to its start"
   menu-admin-flight-date: "yyyy-MM-dd HH:mm"
   menu-admin-flight-flying: "&aStill in cam mode"
   menu-admin-flight-lore: "&7Started: &f{date}\n&7Duration: &f{time}\n&7Distance: &f{distance} blocks\n&7From: &f{from}\n&7To: &f{to}"
@@ -270,6 +296,7 @@ messages:
   menu-admin-flights-title: "&8Flights of {player}"
   menu-admin-list: "&bWho is in cam mode"
   menu-admin-list-actions: "&eLeft-click: teleport to the camera\n&eRight-click: teleport to the body"
+  menu-admin-list-actions-bedrock: "&eTap: teleport to the camera\n&eor to the body"
   menu-admin-list-empty: "&7Nobody is in cam mode."
   menu-admin-list-lore: "&7See who is flying right now\n&7and teleport to them."
   menu-admin-list-title: "&8Who is in cam mode"
@@ -291,6 +318,7 @@ messages:
   menu-admin-restrict-stage: "&8- {stage}"
   menu-admin-restrict-stage-now: "&a» {stage}"
   menu-admin-restrict-steps: "&eLeft-click: next step\n&eRight-click: step back"
+  menu-admin-restrict-steps-bedrock: "&eTap: pick a step"
   menu-admin-restrict-switch: "&eClick: switch"
   menu-admin-restricted: "&cRestricted: {ban}"
   # The admin page of the spots (camplugin.spotadmin): menu-admin-spots-... is the list of the players who have spots
@@ -298,7 +326,9 @@ messages:
   # menu-admin-spot-... the page of one player's spots and the page that restricts them, with a button for each kind
   # of spots (-private, -public, -shared).
   menu-admin-spot-actions: "&bRight-click: go there\n&cShift-click: delete"
+  menu-admin-spot-actions-bedrock: "&eTap: go there or delete"
   menu-admin-spot-actions-shared: "&eLeft-click: take it down -\n&eprivate again\n&bRight-click: go there\n&cShift-click: delete"
+  menu-admin-spot-actions-shared-bedrock: "&eTap: take it down - private\n&eagain -, go there or delete"
   menu-admin-spot-private: "&7Private"
   menu-admin-spot-restrict: "&cRestrict"
   menu-admin-spot-restrict-change: "&cChange the restriction"
@@ -315,6 +345,7 @@ messages:
   menu-admin-spot-restrict-public: "&ePublic spots"
   menu-admin-spot-restrict-public-lore: "&7Making his spots public, and\n&7jumping to the public ones"
   menu-admin-spot-restrict-reason-question: "&eType in the chat why the spots of {player} are restricted, or {cancel}."
+  menu-admin-spot-restrict-reason-question-form: "Why are the spots of {player} restricted?"
   menu-admin-spot-restrict-shared: "&bShared spots"
   menu-admin-spot-restrict-shared-lore: "&7Sharing his spots by name, and\n&7jumping to those shared\n&7with him"
   menu-admin-spot-restrict-title: "&8Restrict the spots of {player}"
@@ -337,6 +368,7 @@ messages:
   menu-admin-stats-actions: "&eClick: in the chat"
   # In its place for whoever may reset the statistics of others (camplugin.stats.reset), like /cam stats reset <name>.
   menu-admin-stats-actions-reset: "&eClick: in the chat\n&cShift-click: reset"
+  menu-admin-stats-actions-reset-bedrock: "&eTap: in the chat or reset"
   menu-admin-stats-lore: "&7Of the players online."
   menu-admin-stats-title: "&8Statistics"
   menu-admin-stop: "&cEnd the cam mode"
@@ -359,6 +391,7 @@ messages:
   menu-admin-tour-off-nothing: "&7Nothing to switch off"
   menu-admin-tour-off-nothing-lore: "&7Switch following off above first."
   menu-admin-tour-off-reason-question: "&eType in the chat why following is switched off, or {cancel}."
+  menu-admin-tour-off-reason-question-form: "Why is following switched off?"
   menu-admin-tour-off-title: "&8Switch following off for everybody"
   menu-admin-tour-on: "&aSwitch following on again"
   menu-admin-tour-on-everybody-lore: "&7Everybody may lead and\n&7follow again."
@@ -373,6 +406,7 @@ messages:
   menu-admin-tour-restrict-nothing: "&7Nothing picked"
   menu-admin-tour-restrict-nothing-lore: "&7Pick at least one thing\n&7he may not do."
   menu-admin-tour-restrict-reason-question: "&eType in the chat why {player} may not lead or follow, or {cancel}."
+  menu-admin-tour-restrict-reason-question-form: "Why may {player} not lead or follow?"
   menu-admin-tour-restrict-title: "&8Restrict the following of {player}"
   menu-admin-tour-switch: "&6Following for everybody"
   menu-admin-tour-switch-lore: "&7Leading and following,\n&7for every player but those\n&7with camplugin.followadmin.bypass"
@@ -403,6 +437,7 @@ messages:
   menu-back: "&bBack to your body"
   menu-back-lore: "&7The camera goes back to your body,\n&7cam mode goes on."
   menu-choice-action: "&eLeft-click: the next one\n&eRight-click: the one before"
+  menu-choice-action-bedrock: "&eTap: pick one"
   menu-choice-option: "&7   {choice}"
   menu-choice-option-current: "&a» {choice}"
   menu-end: "&cEnd cam mode"
@@ -412,10 +447,12 @@ messages:
   # who left, a spot that was deleted -, so that nothing moves under the mouse: {name} is what the entry was called.
   # It goes once a click of his changes the page, or when the list is opened again. menu-gone-lore alone names one
   # that was never shown.
+  menu-form-placeholder: "Type here"
   menu-gone: "&8{name}"
   menu-gone-lore: "&7No longer here"
   menu-guestbook: "&6Guestbook: &f{mode}"
   menu-guestbook-action: "&eLeft-click: the next one\n&eRight-click: the one before"
+  menu-guestbook-action-bedrock: "&eTap: pick one"
   menu-guestbook-interval: "&8On: updates every {minutes} min\n&8while you play"
   menu-guestbook-locked: "&cClosed while you may not look\n&cat public or shared spots."
   menu-guestbook-login: "only at login"
@@ -431,7 +468,9 @@ messages:
   # Under the button of a new spot while viewpoints.set-in-cam-only is on.
   menu-new-spot-cam-only: "&eOnly in cam mode"
   menu-new-spot-lore: "&7Where you are, looking the way you look.\n&7Then type its name in the chat."
+  menu-new-spot-lore-bedrock: "&7Where you are, looking the way you look.\n&7Then type its name."
   menu-new-spot-lore-public: "&7Where you are, looking the way you look.\n&7Then type its name in the chat.\n&fLeft-click: private\n&eRight-click: public - it is one of\n&eyour spots all the same"
+  menu-new-spot-lore-public-bedrock: "&7Where you are, looking the way you look.\n&7Then type its name.\n&eTap: private or public - a public\n&eone is one of your spots all the same"
   menu-next: "&7Next page »"
   menu-nightvision: "&eNight vision: &f{mode}"
   menu-nightvision-dark: "only in the dark"
@@ -445,14 +484,48 @@ messages:
   menu-off: "&c/cam menu is switched off."
   menu-offer: "&e{owner}:{spot}"
   menu-offer-actions: "&eOffered to you\n&aLeft-click: accept\n&cRight-click: turn down"
+  menu-offer-actions-bedrock: "&eOffered to you\n&eTap: accept or turn down"
   menu-only: "&eThat goes through /cam menu on this server."
   menu-photo: "&dPhoto mode"
   menu-photo-lore: "&7The other players, the bodies, mobs\n&7and items out of the picture, on and off."
+  menu-pick: "&f{pick}"
+  menu-pick-accept: "&aAccept"
+  menu-pick-back: "&7« Back"
+  menu-pick-ban-less: "&c-1"
+  menu-pick-ban-less-step: "&c-{step}"
+  menu-pick-ban-more: "&a+1"
+  menu-pick-ban-more-step: "&a+{step}"
+  menu-pick-current: "&a» {pick}"
+  menu-pick-decline: "&cTurn down"
+  menu-pick-flight-go: "&bShow it and go to its start"
+  menu-pick-flight-show: "&eShow it"
+  menu-pick-follow: "&aFollow"
+  menu-pick-reason-none: "&7None"
+  menu-pick-reason-write: "&eWrite one"
+  menu-pick-spot-delete: "&cDelete"
+  menu-pick-spot-go: "&bGo there"
+  menu-pick-spot-jump: "&eJump there"
+  menu-pick-spot-like: "&dLike"
+  menu-pick-spot-offline: "&7Take it offline"
+  menu-pick-spot-private: "&fSave a private spot"
+  menu-pick-spot-public: "&eSave a public spot"
+  menu-pick-spot-remove: "&cTake it off your list"
+  menu-pick-spot-share: "&aShare or make public"
+  menu-pick-spot-take-down: "&eTake it down - private again"
+  menu-pick-spot-unlike: "&7No longer like"
+  menu-pick-stats-reset: "&cReset"
+  menu-pick-stats-show: "&eShow in the chat"
+  menu-pick-title: "&8{button}"
+  menu-pick-tp-body: "&bTeleport to the body"
+  menu-pick-tp-camera: "&bTeleport to the camera"
   menu-previous: "&7« Previous page"
   menu-public-own: "&f{spot} &7(yours)"
   menu-public-own-actions: "&eLeft-click: jump there\n&7Right-click: take it offline -\n&7it stays among your spots"
+  menu-public-own-actions-bedrock: "&eTap: jump there or take it offline -\n&7it stays among your spots"
   menu-public-spot-actions: "&eLeft-click: jump there\n&dRight-click: like"
+  menu-public-spot-actions-bedrock: "&eTap: jump there or like"
   menu-public-spot-actions-unlike: "&eLeft-click: jump there\n&7Right-click: no longer like"
+  menu-public-spot-actions-unlike-bedrock: "&eTap: jump there or no longer like"
   menu-resume: "&bResume the last flight"
   menu-resume-lore: "&7The camera goes on where\n&7your last flight ended."
   menu-share-everybody: "&ePublic"
@@ -467,11 +540,13 @@ messages:
   menu-share-title: "&8Share {spot}"
   menu-shared-spot: "&b{owner}:{spot}"
   menu-shared-spot-actions: "&eLeft-click: jump there\n&cRight-click: take it off your list"
+  menu-shared-spot-actions-bedrock: "&eTap: jump there or take it\n&eoff your list"
   menu-sort: "&eOrder: &f{sort}"
   menu-sort-date: "newest first"
   menu-sort-last-flight: "last flight first"
   menu-sort-likes: "most likes first"
   menu-sort-lore: "&eLeft-click: the next order\n&eRight-click: the one before"
+  menu-sort-lore-bedrock: "&eTap: pick an order"
   menu-sort-name: "by name"
   menu-sort-near: "nearest first"
   menu-sort-option: "&7   {sort}"
@@ -480,7 +555,9 @@ messages:
   menu-sort-views: "most views first"
   menu-spot: "&f{spot}"
   menu-spot-actions: "&eLeft-click: jump there\n&cShift-click: delete"
+  menu-spot-actions-bedrock: "&eTap: jump there or delete"
   menu-spot-actions-share: "&eLeft-click: jump there\n&aRight-click: share or make public\n&cShift-click: delete"
+  menu-spot-actions-share-bedrock: "&eTap: jump there, share or delete"
   menu-spot-created: "&7Saved: &f{date}"
   menu-spot-liked: "&dYou like it"
   menu-spot-likes: "&d{likes} likes"
@@ -488,7 +565,9 @@ messages:
   menu-spot-look: "&bShows: &f{look}"
   menu-spot-lore: "&7{x} {y} {z} ({world})"
   menu-spot-name: "&eType the name of the new spot in the chat, or {cancel}."
+  menu-spot-name-form: "Name of the new spot"
   menu-spot-name-public: "&eType the name of the new public spot in the chat, or {cancel}."
+  menu-spot-name-public-form: "Name of the new public spot"
   menu-spot-offered-lore: "&7Offered to: {players}"
   menu-spot-public-lore: "&ePublic, {likes} likes"
   # {start} = viewpoints.start-distance; the second while it is 0.
@@ -504,6 +583,7 @@ messages:
   menu-spots-empty-private-lore: "&7Save one with the book\n&7on the right."
   menu-spots-empty-public: "&7No public spots yet"
   menu-spots-empty-public-lore: "&7Right-click the book on the right\n&7to save a public one."
+  menu-spots-empty-public-lore-bedrock: "&7Tap the book on the right\n&7and pick public to save one."
   menu-spots-empty-shared: "&7Nothing shared with you"
   menu-spots-empty-shared-lore: "&7What others offer you\n&7shows up here."
   # In place of the spots of a tab a restriction keeps him from looking at ({time} and {reason} as with /cam ban);
@@ -534,6 +614,7 @@ messages:
   menu-stats: "&bStatistics"
   menu-stats-actions: "&eClick: in the chat"
   menu-stats-actions-reset: "&eClick: in the chat\n&cShift-click: reset"
+  menu-stats-actions-reset-bedrock: "&eTap: in the chat or reset"
   menu-time: "&eTime of day: &f{time}"
   menu-time-day: "day"
   menu-time-lore: "&7A time of your own, only you see it."
@@ -582,6 +663,7 @@ messages:
   menu-tour-guiding-max: "&aFollowers: {count}/{max}"
   menu-tour-invitation: "&e{player}"
   menu-tour-invitation-lore: "&7Invites you to follow them.\n&aLeft-click: follow\n&cRight-click: turn down"
+  menu-tour-invitation-lore-bedrock: "&7Invites you to follow them.\n&eTap: follow or turn down"
   menu-tour-invitations: "&eInvitations for you: {count}"
   # The beacon that invites everybody to invite at once (follow.invite-all); {count} is how many it invites - not
   # those invited already, those invited a moment ago or those kept from following -, {start} follow.start-distance
@@ -1355,6 +1437,7 @@ message-settings:
   actionbar-distance-portal: true
   actionbar-hint: true
   actionbar-hint-command: true
+  actionbar-hint-bedrock: true
   actionbar-off: true
   actionbar-on: true
   actionbar-signal: true
@@ -1400,6 +1483,7 @@ message-settings:
   battery-bossbar-charging: true
   battery-empty: true
   battery-low: true
+  bedrock-chat-command: true
   bossbar-text: true
   cam-area-limit: true
   cam-area-start: true

@@ -5,6 +5,8 @@ import de.elia.cameraplugin.back.CamBack;
 import de.elia.cameraplugin.ban.BanList;
 import de.elia.cameraplugin.ban.CamBan;
 import de.elia.cameraplugin.battery.CamBattery;
+import de.elia.cameraplugin.bedrock.BedrockGlow;
+import de.elia.cameraplugin.bedrock.BedrockPlayers;
 import de.elia.cameraplugin.body.BodyAlarm;
 import de.elia.cameraplugin.body.BodySpawner;
 import de.elia.cameraplugin.body.BodyWatch;
@@ -120,6 +122,9 @@ public final class CameraPlugin extends JavaPlugin {
     private final ConfigFile configFile = new ConfigFile(this, log, messages);
     private final CamSettings settings = new CamSettings(this, messages);
     private final CameraPlayers cameraPlayers = new CameraPlayers();
+    /** Who plays on Bedrock, and what is offered them in place of what Bedrock cannot do. */
+    private final BedrockPlayers bedrock = new BedrockPlayers(this);
+    private final BedrockGlow bedrockGlow = new BedrockGlow(this);
 
     private final NoCollisionTeam noCollisionTeam = new NoCollisionTeam(settings, cameraPlayers);
     private final GuideTeam guideTeam = new GuideTeam();
@@ -136,7 +141,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final CamPreferences preferences = new CamPreferences(settings, playerStore);
     private final CamNightVision nightVision = new CamNightVision(this, settings, messages, cameraPlayers,
             preferences);
-    private final CamList camList = new CamList(settings, messages, cameraPlayers);
+    private final CamList camList = new CamList(settings, messages, cameraPlayers, bedrock);
     private final CamListTeleport listTeleport = new CamListTeleport(this);
     private final CamStop stop = new CamStop(this);
     private final CamBan ban = new CamBan(this, new BanList(this, log));
@@ -221,6 +226,8 @@ public final class CameraPlugin extends JavaPlugin {
         camSulfurCubeGuard = new CamSulfurCubeGuard(this);
         camInventoryGuard = new CamInventoryGuard(this, this::isInCameraMode);
         configFile.reportConfigWarnings(loadConfigValues(), null);
+        // Geyser and Floodgate are started by now: both come before, see softdepend.
+        bedrock.reload();
         oreHider.reload();
         ban.reload();
         sharedSpots.load();
@@ -299,6 +306,7 @@ public final class CameraPlugin extends JavaPlugin {
                 guestbook,
                 webMap,
                 oreHider,
+                bedrock,
                 new CamCommandFilter(this),
                 new CamSuggestionFilter(this));
         for (Listener listener : listeners) {
@@ -317,6 +325,7 @@ public final class CameraPlugin extends JavaPlugin {
         mobGaze.start();
         orbGuard.start();
         menu.start();
+        bedrockGlow.start();
         movementGuard.startHoldingFlight();
     }
 
@@ -402,6 +411,7 @@ public final class CameraPlugin extends JavaPlugin {
         mobGaze.onDisable();
         orbGuard.onDisable();
         menu.onDisable();
+        bedrockGlow.onDisable();
         particles.onDisable();
         sightGlow.onDisable();
         nameTag.onDisable();
@@ -497,6 +507,7 @@ public final class CameraPlugin extends JavaPlugin {
         // What the start asks for may change with the file.
         startDelay.callOffAll("start-delay-cancelled");
         configFile.reportConfigWarnings(loadConfigValues(), initiator);
+        bedrock.reload();
         oreHider.reload();
         ban.reload();
         noCollisionTeam.refreshNoCollisionTeam();
@@ -603,6 +614,10 @@ public final class CameraPlugin extends JavaPlugin {
 
     public Messages getMessages() {
         return messages;
+    }
+
+    public BedrockPlayers getBedrock() {
+        return bedrock;
     }
 
     public CameraPlayers getCameraPlayers() {

@@ -20443,6 +20443,249 @@ def umgebung_checks(env, bot):
         hinstellen(bot, heim[0], heim[1], heim[2])
 
 
+# Ein Spieler, den bedrock.name-prefix als Bedrock-Spieler erkennt: Sein Name
+# beginnt mit dem Punkt, den Floodgate voreingestellt vor die Namen setzt.
+# Paper laesst den Punkt im Namen zu, gerade fuer Floodgate.
+BEDROCK_NAME = ".CamFlyBedrock"
+
+
+def bedrock_checks(env, bot):
+    """bedrock: Was Bedrock-Spieler bekommen, wo Bedrock etwas nicht kann.
+
+    Voreingestellt steht apply-to: bedrock, name-prefix ".", menu: forms,
+    invitation-forms, chat-commands und glow-particle: end_rod da -
+    nachgesehen in der Datei, die das Plugin mitbringt. Fenster von Bedrock
+    gibt es nur mit Geyser oder Floodgate; die hat der Testserver nicht, und
+    der Bot spielt auf Java. Geprueft wird deshalb mit apply-to: all, unter
+    dem die Anpassungen auch fuer ihn gelten - das Menue ist dann die Truhe
+    mit der Auswahl, wie auf Bedrock ohne Fenster.
+
+    Mit apply-to: bedrock merkt der Java-Bot nichts: Die Action-Bar nennt
+    die Taste ("or type /cam"), hinter den Knoepfen von /cam spot list steht
+    kein Befehl, unter einem Punkt im Menue stehen die Klicks. Mit all sagt
+    die Action-Bar nur "type /cam to leave"; hinter den Knoepfen von
+    /cam spot list und /cam list steht der Befehl in Klammern - einer, der
+    noch einen Namen braucht, mit "..." am Ende. Im Menue oeffnet der Knopf
+    der Zeit eine Seite mit allen Zeiten, die der Welt markiert; noon
+    gewaehlt, sieht der Bot 6000, und das Menue ist wieder da. Unter einem
+    eigenen Punkt steht "Tap: jump there, share or delete", ein Klick darauf
+    bietet Springen, Teilen und Loeschen an, und Loeschen loescht ihn und
+    zeigt wieder die Punkte.
+
+    Ein zweiter Spieler im Cam-Modus leuchtet (glowing-outline: true): Unter
+    all bekommt der Bot im Cam-Modus Partikel an den vier Kanten seines
+    Koerpers, unter bedrock keine. Laedt der Bot ihn unter all zum Folgen ein,
+    steht hinter dem Knopf /cam follow accept mit dem Namen des Bots.
+
+    Ein Spieler, dessen Name mit dem Punkt beginnt, ist unter apply-to:
+    bedrock ein Bedrock-Spieler: Seine Action-Bar sagt nur "type /cam to
+    leave". Mit name-prefix: "" ist er keiner mehr.
+    """
+    def fenster():
+        return bot.call("window_slots", wait=10)
+
+    def klick(slot, button=0, mode=0, warten=1.5):
+        bot.call("click_window", wait=15, slot=int(slot), button=button, mode=mode)
+        time.sleep(warten)
+
+    def menue():
+        befehl(bot, "/cam menu", warten=1.0)
+        return fenster()
+
+    def platz_mit(f, text):
+        """Der Platz im offenen Fenster, dessen Item so heisst - nur der
+        Name zaehlt: unter dem Knopf oben auf der Seite der Auswahl stehen
+        alle Moeglichkeiten noch einmal."""
+        for platz, item in (f.get("slots") or {}).items():
+            if text in item_text(item).split("\n")[0]:
+                return platz
+        return None
+
+    def titel(f):
+        """Der Titel des Fensters als Text: er kommt als Textbaustein."""
+        roh = f.get("title") or ""
+        try:
+            return strip_colors(item_text({"custom": roh}).strip())
+        except (TypeError, ValueError):
+            return strip_colors(roh)
+
+    def start_zeilen(client):
+        """Was beim Start des Cam-Modus in Chat und Action-Bar kommt."""
+        cam_off(client)
+        seit = client.mark()
+        an = cam_on(client)
+        time.sleep(1.0)
+        return an, zeilen_seit(client, seit)
+
+    if not FIND.test("Cam-Modus ist vor dem Test fuer Bedrock aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    console(env, f"fill {_floor(x) - 3} {y} {_floor(z) - 3} {_floor(x) + 8} {y + 5} {_floor(z) + 3} minecraft:air",
+            pause=0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    punkt = BotClient(env, name=BEDROCK_NAME)
+    try:
+        FIND.test("Voreingestellt steht bedrock mit apply-to: bedrock, name-prefix \".\", menu: forms, "
+                  "invitation-forms, chat-commands und glow-particle: end_rod da",
+                  re.search(r"(?m)^bedrock:\s*\n(?:\s*#.*\n)*\s*apply-to:\s*bedrock\s*\n"
+                            r"(?:\s*#.*\n)*\s*name-prefix:\s*\"\.\"\s*\n"
+                            r"(?:\s*#.*\n)*\s*menu:\s*forms\s*\n"
+                            r"(?:\s*#.*\n)*\s*invitation-forms:\s*true\s*\n"
+                            r"(?:\s*#.*\n)*\s*chat-commands:\s*true\s*\n"
+                            r"(?:\s*#.*\n)*\s*glow-particle:\s*end_rod\s*$", quelle_config(env)) is not None, "")
+        spots_loeschen(bot, "Grundstein")
+        hinstellen(bot, x, y, z)
+
+        # --- apply-to: bedrock - der Java-Bot merkt nichts ---
+        an, zeilen = start_zeilen(bot)
+        FIND.test("apply-to: bedrock - die Action-Bar des Java-Bots nennt die Taste",
+                  an and gesagt(zeilen, r"or type /cam to leave"), zeige(zeilen[-3:]))
+        befehl(bot, "/cam spot set Grundstein")
+        zeilen = befehl(bot, "/cam spot list")
+        FIND.test("apply-to: bedrock - hinter den Knoepfen von /cam spot list steht kein Befehl",
+                  gesagt(zeilen, r"Grundstein") and not gesagt(zeilen, r"\(/cam spot"), zeige(zeilen))
+        menue()
+        klick(10)
+        f = fenster()
+        unter = item_text((f.get("slots") or {}).get("0"))
+        FIND.test("apply-to: bedrock - unter dem Punkt im Menue stehen die Klicks",
+                  "Grundstein" in unter and "Left-click: jump there" in unter and "Tap:" not in unter, unter)
+        bot.call("close_window", wait=10)
+        cam_off(bot)
+
+        # --- apply-to: all - der Java-Bot bekommt, was Bedrock-Spieler bekommen ---
+        set_option(env, "apply-to", "all", "bedrock")
+        an, zeilen = start_zeilen(bot)
+        FIND.test("apply-to: all - die Action-Bar sagt nur \"type /cam to leave\", ohne Taste",
+                  an and gesagt(zeilen, r"[Cc]am mode activated - type /cam to leave")
+                  and not gesagt(zeilen, r"or type /cam"), zeige(zeilen[-3:]))
+        zeilen = befehl(bot, "/cam spot list")
+        FIND.test("apply-to: all - hinter den Knoepfen von /cam spot list steht der Befehl",
+                  gesagt(zeilen, r"\[Go\] \(/cam spot Grundstein\)")
+                  and gesagt(zeilen, r"\[Share\] \(/cam spot share Grundstein \.\.\.\)")
+                  and gesagt(zeilen, r"\[Delete\] \(/cam spot delete Grundstein\)"), zeige(zeilen))
+        zeilen = befehl(bot, "/cam list")
+        FIND.test("apply-to: all - hinter den Knoepfen von /cam list steht der Befehl",
+                  gesagt(zeilen, rf"\(/cam tp {BOT_NAME} camera\)") and gesagt(zeilen, rf"\(/cam tp {BOT_NAME} body\)"),
+                  zeige(zeilen))
+
+        menue()
+        klick(15)
+        f = fenster()
+        jetzt = platz_mit(f, "» the world's")
+        mittag = platz_mit(f, "noon")
+        FIND.test("apply-to: all - der Knopf der Zeit oeffnet eine Seite mit allen Zeiten, die der Welt markiert",
+                  "Time of day" in titel(f) and jetzt is not None and mittag is not None
+                  and platz_mit(f, "midnight") is not None and "4" in (f.get("slots") or {}),
+                  f"{titel(f)} / {[item_text(i).split(chr(10))[0] for i in (f.get('slots') or {}).values()]}")
+        if mittag is not None:
+            klick(mittag, warten=2.0)
+            f = fenster()
+            FIND.test("noon gewaehlt: der Bot sieht 6000, und das Menue ist wieder da",
+                      bot.call("sky").get("timeOfDay") == 6000 and titel(f) == "Cam",
+                      f"{bot.call('sky').get('timeOfDay')} / {titel(f)}")
+        bot.call("close_window", wait=10)
+        befehl(bot, "/cam time reset")
+
+        menue()
+        klick(10)
+        f = fenster()
+        unter = item_text((f.get("slots") or {}).get("0"))
+        FIND.test("apply-to: all - unter dem eigenen Punkt steht, was ein Tippen kann",
+                  "Grundstein" in unter and "Tap: jump there, share or delete" in unter
+                  and "Left-click" not in unter, unter)
+        klick(0)
+        f = fenster()
+        loeschen = platz_mit(f, "Delete")
+        FIND.test("Ein Klick auf den Punkt bietet Springen, Teilen und Loeschen an",
+                  "Grundstein" in titel(f) and platz_mit(f, "Jump there") is not None
+                  and platz_mit(f, "Share or make public") is not None and loeschen is not None,
+                  f"{titel(f)} / {[item_text(i)[:30] for i in (f.get('slots') or {}).values()]}")
+        if loeschen is not None:
+            seit = bot.mark()
+            klick(loeschen, warten=2.0)
+            zeilen = zeilen_seit(bot, seit)
+            f = fenster()
+            FIND.test("Loeschen gewaehlt: der Punkt ist geloescht, und die Seite der Punkte ist wieder da",
+                      gesagt(zeilen, r"Spot Grundstein deleted") and "Spots" in titel(f),
+                      f"{zeige(zeilen)} / {titel(f)}")
+        bot.call("close_window", wait=10)
+
+        # --- Ein zweiter Spieler: sein Umriss als Partikel, eine Einladung ---
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer den Test fuer Bedrock kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 4} {y} {z}", pause=1.5)
+
+        def ecken():
+            """Die Partikel der letzten zwei Sekunden an den Kanten des zweiten Spielers."""
+            da = bot.call("server_pos", selector=ZUSCHAUER_NAME).get("pos")
+            marke = partikel_marke(bot)
+            time.sleep(2.0)
+            if da is None:
+                return []
+            return [p["pos"] for p in partikel_seit(bot, marke)
+                    if abs(abs(p["pos"][0] - da[0]) - 0.3) < 0.05 and abs(abs(p["pos"][2] - da[2]) - 0.3) < 0.05
+                    and da[1] - 0.05 <= p["pos"][1] <= da[1] + 1.9]
+
+        FIND.test("Der zweite Spieler startet den Cam-Modus", cam_on(zuschauer), "")
+        hinstellen(bot, x, y, z)
+        cam_on(bot)
+        gefunden = ecken()
+        FIND.test("apply-to: all - der Bot sieht den Umriss der leuchtenden Kamera als Partikel an ihren Kanten",
+                  len(gefunden) >= 8, f"{len(gefunden)} Partikel an den Kanten")
+        seit = zuschauer.mark()
+        befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        dort = zeilen_seit(zuschauer, seit)
+        FIND.test("apply-to: all - hinter den Knoepfen der Einladung steht /cam follow accept",
+                  gesagt(dort, rf"\[Follow\] \(/cam follow accept {BOT_NAME}\)")
+                  and gesagt(dort, rf"\(/cam follow decline {BOT_NAME}\)"), zeige(dort))
+        befehl(zuschauer, f"/cam follow decline {BOT_NAME}")
+
+        set_option(env, "apply-to", "bedrock", "bedrock")
+        cam_on(zuschauer)
+        hinstellen(bot, x, y, z)
+        cam_on(bot)
+        gefunden = ecken()
+        FIND.test("apply-to: bedrock - der Java-Bot bekommt keine Partikel an den Kanten",
+                  not gefunden, f"{len(gefunden)} Partikel an den Kanten")
+        cam_off(bot)
+        cam_off(zuschauer)
+
+        # --- Ein Name mit dem Punkt vorn ---
+        punkt.start()
+        if not punkt.call("wait_spawn", wait=90, timeout=75000).get("spawned"):
+            FIND.problem(f"{BEDROCK_NAME} kam nicht herein - laesst der Server den Punkt im Namen nicht zu?")
+            return
+        time.sleep(1.5)
+        an, zeilen = start_zeilen(punkt)
+        FIND.test(f"name-prefix: \".\" - {BEDROCK_NAME} ist ein Bedrock-Spieler: \"type /cam to leave\" ohne Taste",
+                  an and gesagt(zeilen, r"[Cc]am mode activated - type /cam to leave")
+                  and not gesagt(zeilen, r"or type /cam"), zeige(zeilen[-3:]))
+        cam_off(punkt)
+        set_option(env, "name-prefix", '""', "bedrock")
+        an, zeilen = start_zeilen(punkt)
+        FIND.test(f"name-prefix: \"\" - {BEDROCK_NAME} ist keiner mehr: die Action-Bar nennt die Taste",
+                  an and gesagt(zeilen, r"or type /cam to leave"), zeige(zeilen[-3:]))
+        cam_off(punkt)
+    finally:
+        try:
+            bot.call("close_window", wait=10)
+        except Exception:
+            pass
+        set_options(env, [("apply-to", "bedrock", "bedrock"), ("name-prefix", '"."', "bedrock")])
+        cam_off(bot)
+        spots_loeschen(bot, "Grundstein")
+        zuschauer.stop()
+        punkt.stop()
+
+
 class Abschnitt:
     """Ein Abschnitt der Tests: sein Name, die Funktion, die ihn faehrt, und
     die Bereiche des Plugins, die er prueft.
@@ -21129,6 +21372,8 @@ ABSCHNITTE = [
     Abschnitt("ausspaehen", ausspaeh_checks, "scout"),
     Abschnitt("menue", menue_checks, "menu"),
     Abschnitt("menue_live", menue_live_checks, "menu tour/CamTour config/CamSettings stats"),
+    Abschnitt("bedrock", bedrock_checks,
+              "bedrock menu/CamMenu display/CamActionBar spot/CamSpots tour/CamTour list/CamList trail/CamTrail"),
     Abschnitt("spotreiter", spotreiter_checks, "menu spot"),
     Abschnitt("spotmoderation", spotmoderation_checks, "menu spot/SpotModeration spot/SpotBans spot/CamSpots"),
     Abschnitt("tourmoderation", tourmoderation_checks, "menu tour/TourModeration tour/TourBans tour/CamTour"),
@@ -21559,7 +21804,7 @@ DAUER_VORGABE = {
     "zeit_wetter": 46, "nachtsicht_wahl": 66, "naehe": 60, "einstellungen": 89, "teilen": 92,
     "fuehrung": 199, "fuehrung_ohne_cam": 148, "herzen_folgen": 60, "gaestebuch": 178, "weiter": 34,
     "weiter_himmel": 45, "alle_einladen": 70, "fuehrung_himmel": 80, "ausspaehen": 50,
-    "menue": 163, "menue_live": 95, "spotreiter": 112, "spotmoderation": 130, "tourmoderation": 99,
+    "menue": 163, "menue_live": 95, "bedrock": 90, "spotreiter": 112, "spotmoderation": 130, "tourmoderation": 99,
     "spot_nur_im_cam": 28, "spot_ansicht": 91, "webkarte": 75, "erze": 69, "anstupsen": 81,
     "funk": 77, "traenke": 58, "treffergrund": 77, "anfassen": 79, "sulfur_cube": 59,
     "ruestung": 10, "rueckstoss": 560, "rueckstoss_mob": 183, "schieben": 45, "waerter_ziel": 80,
