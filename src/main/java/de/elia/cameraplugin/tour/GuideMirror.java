@@ -128,6 +128,10 @@ final class GuideMirror {
     private final NamespacedKey mark;
     /** The guests who are not shown the guide's items in their hands, see the constructor. */
     private final Predicate<Player> handless;
+    /** Puts the guide's items into the hotbar of a guest on Bedrock as well, see {@link GuideSlots}. */
+    private final GuideSlots slots;
+    /** The guests on Bedrock, see {@link de.elia.cameraplugin.bedrock.BedrockPlayers#adapts}. */
+    private final Predicate<Player> bedrock;
     /** Shows a guest the guide's frost as his own. */
     private final GuideFrost frost;
     /** Changes the server's packets with the guide's hands on their way to a guest. */
@@ -206,21 +210,22 @@ final class GuideMirror {
     /**
      * @param handless the guests who are not shown the guide's items in
      *                 their hands, and are sent the guide's own hands empty:
-     *                 players on Bedrock, see
-     *                 {@link de.elia.cameraplugin.bedrock.BedrockPlayers#adapts}.
-     *                 Geyser shows them the guide's view through a camera of
-     *                 their own, which draws no hands - an item sent there
-     *                 would only stand in their hotbar -, and the guide's
-     *                 items would hang in front of it, see {@link #shownTo}.
+     *                 players on Bedrock who see through the guide's eyes
+     *                 with Geyser's camera, {@code bedrock.follow-view:
+     *                 camera}. It draws no hands - an item sent there would
+     *                 only stand in their hotbar -, and the guide's items
+     *                 would hang in front of it, see {@link #shownTo}.
      */
     GuideMirror(CamSettings settings, GuideFrost frost, GuideHands hands, QuietHearts quietHearts,
-                NamespacedKey mark, Predicate<Player> handless) {
+                NamespacedKey mark, Predicate<Player> handless, GuideSlots slots, Predicate<Player> bedrock) {
         this.settings = settings;
         this.frost = frost;
         this.hands = hands;
         this.quietHearts = quietHearts;
         this.mark = mark;
         this.handless = handless;
+        this.slots = slots;
+        this.bedrock = bedrock;
     }
 
     /**
@@ -308,15 +313,31 @@ final class GuideMirror {
                              ItemStack before, boolean marked, boolean refresh) {
         if (!on) {
             if (before != null) {
-                guest.sendEquipmentChange(guest, slot, own == null ? new ItemStack(Material.AIR) : own);
+                ItemStack back = own == null ? new ItemStack(Material.AIR) : own;
+                guest.sendEquipmentChange(guest, slot, back);
+                inHotbar(guest, slot, back);
             }
             return null;
         }
         ItemStack now = item == null ? new ItemStack(Material.AIR) : item;
         if (refresh || before == null || !now.equals(before)) {
-            guest.sendEquipmentChange(guest, slot, shown(now, marked));
+            ItemStack shown = shown(now, marked);
+            guest.sendEquipmentChange(guest, slot, shown);
+            inHotbar(guest, slot, shown);
         }
         return now.clone();
+    }
+
+    /**
+     * On Bedrock, an item for a hand of the guest goes into the slot of his
+     * hotbar he holds - or his off hand - as well: Geyser shows it in his hand
+     * only, where a client on Java shows it in the hotbar too, see
+     * {@link GuideSlots}.
+     */
+    private void inHotbar(Player guest, EquipmentSlot slot, ItemStack item) {
+        if ((slot == EquipmentSlot.HAND || slot == EquipmentSlot.OFF_HAND) && bedrock.test(guest)) {
+            slots.show(guest, slot == EquipmentSlot.OFF_HAND, item);
+        }
     }
 
     /**

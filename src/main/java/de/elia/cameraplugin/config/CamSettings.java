@@ -657,6 +657,12 @@ public final class CamSettings {
     /** Whether the buttons in the chat say the command they run, {@code bedrock.chat-commands}. */
     private boolean bedrockChatCommands;
     /**
+     * Whether a guest on Bedrock who sees through the eyes of his guide is
+     * turned along with him rather than shown Geyser's camera,
+     * {@code bedrock.follow-view: turn}.
+     */
+    private boolean bedrockFollowTurn;
+    /**
      * The particle of the outline Bedrock players see of a camera player in
      * place of the glowing one, {@code bedrock.glow-particle}; {@code null}
      * for none.
@@ -1489,6 +1495,8 @@ public final class CamSettings {
                 : menu.equalsIgnoreCase("chest") ? BedrockMenu.CHEST : BedrockMenu.MIXED;
         bedrockInvitationForms = config.getBoolean("bedrock.invitation-forms", true);
         bedrockChatCommands = config.getBoolean("bedrock.chat-commands", true);
+        bedrockFollowTurn = config.getChoice("bedrock.follow-view", "turn", "turn", "camera")
+                .equalsIgnoreCase("turn");
         String glow = config.getString("bedrock.glow-particle", "end_rod");
         bedrockGlowParticle = glow.trim().equalsIgnoreCase("false") ? null
                 : resolveParticle(config, "bedrock.glow-particle", Particle.END_ROD);
@@ -2541,6 +2549,10 @@ public final class CamSettings {
 
     public boolean isBedrockChatCommands() {
         return bedrockChatCommands;
+    }
+
+    public boolean isBedrockFollowTurn() {
+        return bedrockFollowTurn;
     }
 
     /** The particle of the outline for Bedrock players, or {@code null} for none. */

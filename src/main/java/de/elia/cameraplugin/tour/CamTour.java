@@ -231,6 +231,8 @@ public final class CamTour implements Listener {
     private final FineHold fineHold = new FineHold(sender);
     /** The internals that show a guest the frost of his guide as his own. */
     private final GuideFrost frost = new GuideFrost(sender);
+    /** The internals that put the guide's items into the hotbar of a guest on Bedrock, see {@link GuideMirror}. */
+    private final GuideSlots slots = new GuideSlots(sender);
     /** The internals that change the guide's hands on their way to a guest, see {@link GuideMirror}. */
     private final GuideHands hands = new GuideHands(sender);
     /** The internals that show a guest hearts without a hit, see {@link GuideMirror}. */
@@ -274,6 +276,12 @@ public final class CamTour implements Listener {
         boolean viewing;
         /** Ticks since the guide's view was last sent. */
         int sinceView;
+        /**
+         * Whether he sees through the guide's eyes by being turned along with
+         * him, on Bedrock, rather than through the guide's camera, see
+         * {@link #turnsAlong}.
+         */
+        boolean turning;
         /** Where he is held turned while he sees through the guide's eyes, see {@link #holdTurned}. */
         float yaw;
         float pitch;
@@ -291,7 +299,8 @@ public final class CamTour implements Listener {
         this.messages = plugin.getMessages();
         this.cameraPlayers = plugin.getCameraPlayers();
         this.mirror = new GuideMirror(settings, frost, hands, quietHearts,
-                new NamespacedKey(plugin, GuideMirror.MARK), guest -> plugin.getBedrock().adapts(guest));
+                new NamespacedKey(plugin, GuideMirror.MARK), this::geyserCamera, slots,
+                guest -> plugin.getBedrock().adapts(guest));
     }
 
     /** Whether {@code /cam follow} is there at all. */
@@ -310,6 +319,8 @@ public final class CamTour implements Listener {
         fineHold.load(settings.isTourEnabled() && settings.isTourGuideView() && settings.isTourFineHold() ? log : null);
         frost.load(settings.isTourEnabled() && settings.isTourMirrorFrost() ? log : null);
         quietHearts.load(settings.isTourEnabled() && settings.isTourMirrorHealth() ? log : null);
+        slots.load(settings.isTourEnabled() && (settings.isTourMirrorMainHand() || settings.isTourMirrorOffHand())
+                ? log : null);
         boolean hides = !settings.isTourMirrorCount() || !settings.isTourMirrorEnchantments()
                 || !settings.isTourMirrorDurability();
         hands.load(settings.isTourEnabled() && hides ? log : null);
@@ -349,6 +360,28 @@ public final class CamTour implements Listener {
     /** Whether he sees through the eyes of his guide on tours, rather than looking round freely. */
     public boolean seesThroughGuide(Player guest) {
         return viewWorks() && !freeLook.contains(guest.getUniqueId());
+    }
+
+    /**
+     * Whether a guest on Bedrock sees through the eyes of his guide by
+     * looking himself where the guide looks, every tick, from his own camera
+     * right behind him, {@code bedrock.follow-view: turn}: the guide's items
+     * are then in his own hands, see {@link GuideMirror}, and turn with his
+     * view. Geyser's camera, which shows the guide's view otherwise, draws no
+     * hands.
+     */
+    private boolean turnsAlong(Player guest) {
+        return seesThroughGuide(guest) && plugin.getBedrock().adapts(guest) && settings.isBedrockFollowTurn();
+    }
+
+    /**
+     * Whether a guest on Bedrock sees through the eyes of his guide with
+     * Geyser's camera, {@code bedrock.follow-view: camera}: it follows the
+     * guide's view smoothly, but draws no hands - he is shown none of the
+     * guide's items, see {@link GuideMirror}, and nothing swings.
+     */
+    private boolean geyserCamera(Player guest) {
+        return seesThroughGuide(guest) && plugin.getBedrock().adapts(guest) && !settings.isBedrockFollowTurn();
     }
 
     /**
@@ -396,8 +429,10 @@ public final class CamTour implements Listener {
      * who sees through the guide's eyes.
      */
     private boolean keepsApart(Player viewer, Player other) {
+        // A guest turned along with his guide sees from right behind him: the
+        // guide would stand in his view, so he is kept from him as well.
         return hidesCamera(viewer, other) && !(other.getUniqueId().equals(guideOf.get(viewer.getUniqueId()))
-                && seesThroughGuide(viewer));
+                && seesThroughGuide(viewer) && !turnsAlong(viewer));
     }
 
     /**
@@ -1489,7 +1524,7 @@ public final class CamTour implements Listener {
         boolean swings = settings.isTourMirrorSwing() && swing.serverSwingsOnUse();
         for (Player guest : shownGuests(guide)) {
             mirror.placed(guest.getUniqueId(), offHand);
-            if (swings && !plugin.getBedrock().adapts(guest)) {
+            if (swings && !geyserCamera(guest)) {
                 swing.swing(guest, guide, offHand, true);
             }
         }
@@ -1502,8 +1537,8 @@ public final class CamTour implements Listener {
     private void swingGuests(Player guide, boolean offHand, boolean use) {
         if (settings.isTourMirrorSwing()) {
             for (Player guest : shownGuests(guide)) {
-                // On Bedrock his hands are not drawn, see GuideMirror: nothing to swing.
-                if (!plugin.getBedrock().adapts(guest)) {
+                // Geyser's camera on Bedrock draws no hands, see GuideMirror: nothing to swing.
+                if (!geyserCamera(guest)) {
                     swing.swing(guest, guide, offHand, use);
                 }
             }
@@ -1654,8 +1689,8 @@ public final class CamTour implements Listener {
                     continue;
                 }
                 takeLook(guide, guest);
-                // A guest on Bedrock is sent the guide's hands empty in any case, see GuideMirror.
-                if (mirrored || guideOut && plugin.getBedrock().adapts(guest)) {
+                // A guest with Geyser's camera is sent the guide's hands empty in any case, see GuideMirror.
+                if (mirrored || guideOut && geyserCamera(guest)) {
                     mirror.update(guide, guest);
                 } else {
                     // Nothing to see of him: a guide who started camera mode
@@ -1916,6 +1951,23 @@ public final class CamTour implements Listener {
             unview(guest, state);
             return;
         }
+        if (turnsAlong(guest)) {
+            if (state.viewing && !state.turning) {
+                // From the guide's camera to turning along: his own camera back first.
+                view.show(guest, guest);
+            }
+            state.viewing = true;
+            state.turning = true;
+            Location look = guide.getLocation();
+            guest.setRotation(look.getYaw(), look.getPitch());
+            return;
+        }
+        if (state.turning) {
+            // From turning along to the guide's camera: it goes out below.
+            state.turning = false;
+            state.viewing = false;
+            state.centered = 0;
+        }
         if (!state.viewing) {
             // Centred first, while he still looks through his own eyes, see
             // CENTER_TICKS - then through the guide's.
@@ -1972,10 +2024,11 @@ public final class CamTour implements Listener {
     private void unview(Player guest, Guest state) {
         fineHold.release(guest);
         state.centered = 0;
-        if (state.viewing) {
+        if (state.viewing && !state.turning) {
             view.show(guest, guest);
-            state.viewing = false;
         }
+        state.viewing = false;
+        state.turning = false;
     }
 
     /**

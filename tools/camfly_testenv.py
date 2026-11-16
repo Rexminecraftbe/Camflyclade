@@ -2691,6 +2691,16 @@ bot._client.on('window_items', (packet) => {
 bot._client.on('set_slot', (packet) => {
   if (Number(packet.windowId) === 0) lastInventoryResend = Date.now();
 });
+// Die einzelnen Plaetze des eigenen Inventars, die der Server schickt (set_slot
+// von Fenster 0), mit der Zahl darin: Einem Gast auf Bedrock legt eine
+// Fuehrung so die Items des Fuehrers in die Hotbar (36 bis 44, 45 die zweite Hand).
+const ownSlots = [];
+bot._client.on('set_slot', (packet) => {
+  if (Number(packet.windowId) !== 0) return;
+  const item = packet.item || {};
+  const count = item.itemCount !== undefined ? item.itemCount : (item.present ? (item.count || 1) : 0);
+  ownSlots.push({ t: Date.now(), slot: packet.slot, count });
+});
 // Welche Plaetze eines offenen Fensters (nicht des eigenen Inventars) der
 // Server einzeln neu schickt (set_slot): Zeichnet das Menue eine Seite neu und
 // ist ein Item dabei nicht mehr dasselbe - ein Kopf mit einem neuen Profil -,
@@ -3427,6 +3437,8 @@ async function handle(cmd) {
     case 'own_equipment':
       return { packets: ownEquipment.slice(cmd.since || 0), count: ownEquipment.length,
                resends: inventoryResends, last_resend: lastInventoryResend };
+    case 'own_slots':
+      return { packets: ownSlots.slice(cmd.since || 0), count: ownSlots.length };
     case 'other_equipment':
       // Nur die fuer die Entitaet mit dieser Nummer; count zaehlt alle.
       return { packets: otherEquipment.slice(cmd.since || 0).filter((p) => p.entityId === cmd.entity),
@@ -20455,7 +20467,8 @@ def bedrock_checks(env, bot):
     """bedrock: Was Bedrock-Spieler bekommen, wo Bedrock etwas nicht kann.
 
     Voreingestellt steht apply-to: bedrock, name-prefix ".", menu: mixed,
-    invitation-forms, chat-commands und glow-particle: end_rod da -
+    invitation-forms, chat-commands, glow-particle: end_rod und follow-view:
+    turn da -
     nachgesehen in der Datei, die das Plugin mitbringt. Fenster von Bedrock
     gibt es nur mit Geyser oder Floodgate; die hat der Testserver nicht, und
     der Bot spielt auf Java. Geprueft wird deshalb mit apply-to: all, unter
@@ -20487,8 +20500,11 @@ def bedrock_checks(env, bot):
     all bekommt der Bot im Cam-Modus Partikel an den vier Kanten seines
     Koerpers, unter bedrock keine. Laedt der Bot ihn unter all zum Folgen ein,
     steht hinter dem Knopf /cam follow accept mit dem Namen des Bots. Folgt
-    er dem Bot, der ohne Cam-Modus ein Schwert haelt, bekommt er dessen Hand
-    leer geschickt und nichts in die eigene.
+    er dem Bot, der ohne Cam-Modus ein Schwert haelt, hat er es mit
+    follow-view: turn (voreingestellt) in der eigenen Hand und in seiner
+    Hotbar, bekommt keine Kamera des Bots und schaut, wohin der Bot schaut;
+    mit camera bekommt er
+    die Hand des Bots leer und nichts in die eigene.
 
     Ein Spieler, dessen Name mit dem Punkt beginnt, ist unter apply-to:
     bedrock ein Bedrock-Spieler: Seine Action-Bar sagt nur "type /cam to
@@ -20542,13 +20558,14 @@ def bedrock_checks(env, bot):
     punkt = BotClient(env, name=BEDROCK_NAME)
     try:
         FIND.test("Voreingestellt steht bedrock mit apply-to: bedrock, name-prefix \".\", menu: mixed, "
-                  "invitation-forms, chat-commands und glow-particle: end_rod da",
+                  "invitation-forms, chat-commands, glow-particle: end_rod und follow-view: turn da",
                   re.search(r"(?m)^bedrock:\s*\n(?:\s*#.*\n)*\s*apply-to:\s*bedrock\s*\n"
                             r"(?:\s*#.*\n)*\s*name-prefix:\s*\"\.\"\s*\n"
                             r"(?:\s*#.*\n)*\s*menu:\s*mixed\s*\n"
                             r"(?:\s*#.*\n)*\s*invitation-forms:\s*true\s*\n"
                             r"(?:\s*#.*\n)*\s*chat-commands:\s*true\s*\n"
-                            r"(?:\s*#.*\n)*\s*glow-particle:\s*end_rod\s*$", quelle_config(env)) is not None, "")
+                            r"(?:\s*#.*\n)*\s*glow-particle:\s*end_rod\s*\n"
+                            r"(?:\s*#.*\n)*\s*follow-view:\s*turn\s*$", quelle_config(env)) is not None, "")
         spots_loeschen(bot, "Grundstein")
         hinstellen(bot, x, y, z)
 
@@ -20723,29 +20740,65 @@ def bedrock_checks(env, bot):
                   and gesagt(dort, rf"\(/cam follow decline {BOT_NAME}\)"), zeige(dort))
         befehl(zuschauer, f"/cam follow decline {BOT_NAME}")
 
-        # Folgen ohne Cam-Modus des Fuehrers: Ein Gast auf Bedrock bekommt
-        # die Haende des Fuehrers leer - Bedrock zoege dessen Schwert vor
-        # seine Kamera - und nichts davon in die eigene Hand.
-        cam_off(bot)
-        cam_off(zuschauer)
-        hinstellen(bot, x, y, z)
-        console(env, f"tp {ZUSCHAUER_NAME} {x + 4} {y} {z}", pause=0.5)
-        console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:diamond_sword", pause=0.5)
+        # Folgen ohne Cam-Modus des Fuehrers, mit einem Schwert in der Hand.
         bot_nummer = bot.call("effects").get("self")
-        fremd = zuschauer.call("other_equipment").get("count", 0)
-        eigen = zuschauer.call("own_equipment").get("count", 0)
-        befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
-        dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
-        hand = [p.get("count") for p in zuschauer.call("other_equipment", since=fremd, entity=bot_nummer)
-                .get("packets", []) if p.get("slot") == 0]
-        selbst = [p.get("count") for p in zuschauer.call("own_equipment", since=eigen).get("packets", [])
-                  if p.get("slot") == 0]
-        FIND.test("apply-to: all - folgt er, bekommt der Gast die Hand des Fuehrers leer und kein Schwert in die "
-                  "eigene", gesagt(dort, rf"You follow {BOT_NAME} now") and bool(hand) and all(c == 0 for c in hand)
+
+        def folgen():
+            """Der zweite Spieler nimmt die Einladung an; was er danach an
+            Haenden des Fuehrers, eigenen Haenden und Kamera-Paketen bekam."""
+            cam_off(bot)
+            cam_off(zuschauer)
+            hinstellen(bot, x, y, z)
+            console(env, f"tp {ZUSCHAUER_NAME} {x + 4} {y} {z}", pause=0.5)
+            console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:diamond_sword", pause=0.5)
+            fremd = zuschauer.call("other_equipment").get("count", 0)
+            eigen = zuschauer.call("own_equipment").get("count", 0)
+            plaetze = zuschauer.call("own_slots").get("count", 0)
+            kameras = zuschauer.call("cameras").get("count", 0)
+            befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+            dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
+            hand = [p.get("count") for p in zuschauer.call("other_equipment", since=fremd, entity=bot_nummer)
+                    .get("packets", []) if p.get("slot") == 0]
+            selbst = [p.get("count") for p in zuschauer.call("own_equipment", since=eigen).get("packets", [])
+                      if p.get("slot") == 0]
+            durch = [p.get("id") for p in zuschauer.call("cameras", since=kameras).get("packets", [])]
+            hotbar = [p.get("count") for p in zuschauer.call("own_slots", since=plaetze).get("packets", [])
+                      if 36 <= (p.get("slot") or 0) <= 44]
+            return dort, hand, selbst, durch, hotbar
+
+        def aufhoeren():
+            befehl(bot, "/cam follow end")
+            console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:air", pause=0.5)
+            cam_off(zuschauer)
+
+        # follow-view: turn (voreingestellt) - er wird mitgedreht und hat das Schwert in der eigenen Hand.
+        dort, hand, selbst, durch, hotbar = folgen()
+        FIND.test("follow-view: turn - der Gast hat das Schwert des Fuehrers in der eigenen Hand, ohne die "
+                  "Kamera des Fuehrers", gesagt(dort, rf"You follow {BOT_NAME} now") and any(selbst)
+                  and bot_nummer not in durch, f"{zeige(dort)} / eigene {selbst} / Kameras {durch}")
+        FIND.test("Auf Bedrock steht es auch in der Hotbar: der Platz, den er haelt, kommt mit dem Schwert",
+                  any(hotbar), str(hotbar))
+        console(env, f"tp {BOT_NAME} {x} {y} {z} 90 20", pause=1.5)
+        # Gelesen ueber die Konsole: der zweite Spieler hat kein op fuer /data.
+        stand = log_stand(env)
+        console(env, f"data get entity {ZUSCHAUER_NAME} Rotation", pause=1.0)
+        neu = re.sub(r"\x1b\[[0-9;]*m", "", log_seit(env, stand))
+        treffer = re.search(r"entity data: \[(-?[\d.]+)f, (-?[\d.]+)f\]", neu)
+        blick = [float(treffer.group(1)), float(treffer.group(2))] if treffer else None
+        FIND.test("follow-view: turn - der Gast schaut, wohin der Fuehrer schaut (90 / 20)",
+                  blick is not None and abs(((blick[0] - 90 + 180) % 360) - 180) < 2 and abs(blick[1] - 20) < 2,
+                  str(blick))
+        aufhoeren()
+
+        # follow-view: camera - die Kamera von Geyser zeichnet keine Haende:
+        # die Hand des Fuehrers kommt leer, nichts in die eigene.
+        set_option(env, "follow-view", "camera", "bedrock")
+        dort, hand, selbst, durch, hotbar = folgen()
+        FIND.test("follow-view: camera - der Gast bekommt die Hand des Fuehrers leer und kein Schwert in die eigene",
+                  gesagt(dort, rf"You follow {BOT_NAME} now") and bool(hand) and all(c == 0 for c in hand)
                   and not any(selbst), f"{zeige(dort)} / am Fuehrer {hand} / eigene {selbst}")
-        befehl(bot, "/cam follow end")
-        console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:air", pause=0.5)
-        cam_off(zuschauer)
+        aufhoeren()
+        set_option(env, "follow-view", "turn", "bedrock")
         console(env, f"tp {ZUSCHAUER_NAME} {x + 4} {y} {z}", pause=0.5)
 
         set_option(env, "apply-to", "bedrock", "bedrock")
