@@ -20452,7 +20452,7 @@ BEDROCK_NAME = ".CamFlyBedrock"
 def bedrock_checks(env, bot):
     """bedrock: Was Bedrock-Spieler bekommen, wo Bedrock etwas nicht kann.
 
-    Voreingestellt steht apply-to: bedrock, name-prefix ".", menu: forms,
+    Voreingestellt steht apply-to: bedrock, name-prefix ".", menu: mixed,
     invitation-forms, chat-commands und glow-particle: end_rod da -
     nachgesehen in der Datei, die das Plugin mitbringt. Fenster von Bedrock
     gibt es nur mit Geyser oder Floodgate; die hat der Testserver nicht, und
@@ -20528,11 +20528,11 @@ def bedrock_checks(env, bot):
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
     punkt = BotClient(env, name=BEDROCK_NAME)
     try:
-        FIND.test("Voreingestellt steht bedrock mit apply-to: bedrock, name-prefix \".\", menu: forms, "
+        FIND.test("Voreingestellt steht bedrock mit apply-to: bedrock, name-prefix \".\", menu: mixed, "
                   "invitation-forms, chat-commands und glow-particle: end_rod da",
                   re.search(r"(?m)^bedrock:\s*\n(?:\s*#.*\n)*\s*apply-to:\s*bedrock\s*\n"
                             r"(?:\s*#.*\n)*\s*name-prefix:\s*\"\.\"\s*\n"
-                            r"(?:\s*#.*\n)*\s*menu:\s*forms\s*\n"
+                            r"(?:\s*#.*\n)*\s*menu:\s*mixed\s*\n"
                             r"(?:\s*#.*\n)*\s*invitation-forms:\s*true\s*\n"
                             r"(?:\s*#.*\n)*\s*chat-commands:\s*true\s*\n"
                             r"(?:\s*#.*\n)*\s*glow-particle:\s*end_rod\s*$", quelle_config(env)) is not None, "")

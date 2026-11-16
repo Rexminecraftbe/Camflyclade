@@ -115,9 +115,22 @@ public final class BedrockPlayers implements Listener {
         return adapts(player) && forms.knows(player);
     }
 
-    /** Whether {@code /cam menu} comes to him as windows of Bedrock, {@code bedrock.menu: forms}. */
+    /**
+     * Whether every page of {@code /cam menu} comes to him as a window of
+     * Bedrock, {@code bedrock.menu: forms}.
+     */
     public boolean menuAsForms(Player player) {
-        return settings.isBedrockMenuForms() && formsReach(player);
+        return settings.getBedrockMenu() == BedrockMenu.FORMS && formsReach(player);
+    }
+
+    /**
+     * Whether what a button of the menu does besides a plain click, and what
+     * the menu asks him to type, comes to him as a window of Bedrock: under
+     * {@code bedrock.menu: forms}, and under {@code mixed}, where the pages
+     * themselves stay the chest.
+     */
+    public boolean menuChoicesAsForms(Player player) {
+        return settings.getBedrockMenu() != BedrockMenu.CHEST && formsReach(player);
     }
 
     /** Whether an invitation comes to him as a window as well, {@code bedrock.invitation-forms}. */

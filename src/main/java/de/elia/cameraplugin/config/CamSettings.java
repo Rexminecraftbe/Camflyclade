@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.config;
 
 import de.elia.cameraplugin.area.CamAreaRules;
+import de.elia.cameraplugin.bedrock.BedrockMenu;
 import de.elia.cameraplugin.bedrock.BedrockScope;
 import de.elia.cameraplugin.body.BodyType;
 import de.elia.cameraplugin.command.CamCommandFilter;
@@ -649,8 +650,8 @@ public final class CamSettings {
     private BedrockScope bedrockScope;
     /** The start of a name that marks a player on Bedrock, {@code bedrock.name-prefix}; empty for none. */
     private String bedrockNamePrefix;
-    /** Whether {@code /cam menu} comes to Bedrock players as windows of Bedrock, {@code bedrock.menu: forms}. */
-    private boolean bedrockMenuForms;
+    /** How {@code /cam menu} comes to Bedrock players, {@code bedrock.menu}. */
+    private BedrockMenu bedrockMenu;
     /** Whether an invitation comes to them as a window as well, {@code bedrock.invitation-forms}. */
     private boolean bedrockInvitationForms;
     /** Whether the buttons in the chat say the command they run, {@code bedrock.chat-commands}. */
@@ -1483,7 +1484,9 @@ public final class CamSettings {
         bedrockScope = scope.equalsIgnoreCase("all") ? BedrockScope.ALL
                 : scope.equalsIgnoreCase("false") ? BedrockScope.OFF : BedrockScope.BEDROCK;
         bedrockNamePrefix = config.getString("bedrock.name-prefix", ".").trim();
-        bedrockMenuForms = config.getChoice("bedrock.menu", "forms", "forms", "chest").equalsIgnoreCase("forms");
+        String menu = config.getChoice("bedrock.menu", "mixed", "forms", "mixed", "chest");
+        bedrockMenu = menu.equalsIgnoreCase("forms") ? BedrockMenu.FORMS
+                : menu.equalsIgnoreCase("chest") ? BedrockMenu.CHEST : BedrockMenu.MIXED;
         bedrockInvitationForms = config.getBoolean("bedrock.invitation-forms", true);
         bedrockChatCommands = config.getBoolean("bedrock.chat-commands", true);
         String glow = config.getString("bedrock.glow-particle", "end_rod");
@@ -2528,8 +2531,8 @@ public final class CamSettings {
         return bedrockNamePrefix;
     }
 
-    public boolean isBedrockMenuForms() {
-        return bedrockMenuForms;
+    public BedrockMenu getBedrockMenu() {
+        return bedrockMenu;
     }
 
     public boolean isBedrockInvitationForms() {

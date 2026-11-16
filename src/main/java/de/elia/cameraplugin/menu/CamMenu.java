@@ -173,6 +173,12 @@ public final class CamMenu implements Listener {
     private static final long AFTERWARDS_TICKS = 3L;
     /** How long a line under a button of a window of Bedrock may be, in letters, before it is cut. */
     private static final int FORM_LINE = 40;
+    /**
+     * How long a window of Bedrock waits after the chest of the menu was
+     * closed for it, in ticks, see {@link #whenChestShut}: Bedrock is to have
+     * the chest off the screen before the window comes.
+     */
+    private static final long WINDOW_AFTER_CHEST_TICKS = 5L;
 
     /** How long the menu waits for an answer in the chat, in milliseconds. */
     private static final long ANSWER_WAIT = 60_000L;
@@ -3138,15 +3144,27 @@ public final class CamMenu implements Listener {
     /**
      * Asks something in the chat: the next line he writes is the answer, or
      * {@code cancel}, which calls it off with {@code menu-answer-cancelled}.
+     * On Bedrock, under {@code bedrock.menu: forms} and {@code mixed}, in a
+     * window instead, see {@link #askInForm}, where that goes.
      *
      * @param key    the question, with {@code {cancel}} for the word that calls it off
      * @param answer what the answer does, on the main thread
      */
     private void ask(Player player, String key, Consumer<String> answer, String... fills) {
         shown(player);
-        if (plugin.getBedrock().menuAsForms(player) && askInForm(player, key, answer, fills)) {
+        if (plugin.getBedrock().menuChoicesAsForms(player)) {
+            whenChestShut(player, () -> {
+                if (!askInForm(player, key, answer, fills)) {
+                    askInChat(player, key, answer, fills);
+                }
+            });
             return;
         }
+        askInChat(player, key, answer, fills);
+    }
+
+    /** {@link #ask} in the chat: the next line he writes is the answer, or {@code cancel}. */
+    private void askInChat(Player player, String key, Consumer<String> answer, String... fills) {
         questions.put(player.getUniqueId(), new Question(System.currentTimeMillis() + ANSWER_WAIT, answer));
         String[] all = Arrays.copyOf(fills, fills.length + 2);
         all[fills.length] = "{cancel}";
@@ -3328,12 +3346,12 @@ public final class CamMenu implements Listener {
 
     /**
      * What a button does, to pick one, for a player on Bedrock: a click on it
-     * leads here. As a window of Bedrock where that goes, its lines in the
-     * text over the choices; otherwise as a page of its own, the button on
-     * top - its lines show when it is held -, the choices in the middle, the
-     * one that holds now shining, and the way back below. Picking one does
-     * what its click does; when that shows nothing else, the page comes
-     * back, as it stands then, see {@link #afterwards}.
+     * leads here. As a window of Bedrock where that goes - under
+     * {@code bedrock.menu: mixed} the chest is closed for it, see
+     * {@link #whenChestShut} -, otherwise as a page of its own, see
+     * {@link #picksChest}. Picking one does what its click does; when that
+     * shows nothing else, the page comes back, as it stands then, see
+     * {@link #afterwards}.
      */
     private void openPicks(Player player, Page from, int slot) {
         List<Pick> picks = from.picks.get(slot);
@@ -3342,25 +3360,49 @@ public final class CamMenu implements Listener {
             return;
         }
         shown(player);
-        String name = ChatColor.stripColor(displayName(button));
-        if (plugin.getBedrock().menuAsForms(player)) {
-            List<String> labels = new ArrayList<>();
-            for (Pick pick : picks) {
-                labels.add(ChatColor.stripColor(pick.current()
-                        ? messages.getMessage("menu-pick-current").replace("{pick}", pick.label()) : pick.label()));
-            }
-            labels.add(ChatColor.stripColor(messages.getMessage("menu-pick-back")));
-            boolean sent = plugin.getBedrock().forms().list(player, name, itemText(button), labels, index -> {
-                if (index < picks.size()) {
-                    picked(player, from, picks.get(index));
-                } else {
-                    reshow(player, from);
+        if (plugin.getBedrock().menuChoicesAsForms(player)) {
+            whenChestShut(player, () -> {
+                if (!picksWindow(player, from, button, picks)) {
+                    picksChest(player, from, button, picks);
                 }
-            }, null);
-            if (sent) {
-                return;
-            }
+            });
+            return;
         }
+        picksChest(player, from, button, picks);
+    }
+
+    /**
+     * The choices of a button as a window of Bedrock: the name and the lines
+     * of the button in the text over them, the one that holds now marked,
+     * the way back last. Closing the window leads back as well: it called off
+     * the choice, not the menu.
+     *
+     * @return whether the window went out
+     */
+    private boolean picksWindow(Player player, Page from, ItemStack button, List<Pick> picks) {
+        List<String> labels = new ArrayList<>();
+        for (Pick pick : picks) {
+            labels.add(ChatColor.stripColor(pick.current()
+                    ? messages.getMessage("menu-pick-current").replace("{pick}", pick.label()) : pick.label()));
+        }
+        labels.add(ChatColor.stripColor(messages.getMessage("menu-pick-back")));
+        return plugin.getBedrock().forms().list(player, ChatColor.stripColor(displayName(button)), itemText(button),
+                labels, index -> {
+                    if (index < picks.size()) {
+                        picked(player, from, picks.get(index));
+                    } else {
+                        reshow(player, from);
+                    }
+                }, () -> reshow(player, from));
+    }
+
+    /**
+     * The choices of a button as a page of the chest: the button on top -
+     * its lines show when it is held -, the choices in the middle, the one
+     * that holds now shining, and the way back below.
+     */
+    private void picksChest(Player player, Page from, ItemStack button, List<Pick> picks) {
+        String name = ChatColor.stripColor(displayName(button));
         // A page of its own, never the one he has open drawn anew in place:
         // that one is where the way back leads.
         Page page = new Page();
@@ -3382,6 +3424,28 @@ public final class CamMenu implements Listener {
         put(page, SLOT_PICK_BACK, Material.ARROW, messages.getMessage("menu-pick-back"), List.of(),
                 click -> later(() -> reshow(player, from)));
         show(player, page);
+    }
+
+    /**
+     * Runs what comes as a window of Bedrock: right away while the menu is
+     * windows itself ({@code bedrock.menu: forms}); out of the chest
+     * ({@code mixed}) once the chest is closed and Bedrock had a moment to
+     * take it off the screen, {@link #WINDOW_AFTER_CHEST_TICKS}.
+     */
+    private void whenChestShut(Player player, Runnable window) {
+        boolean chest = openPage(player) != null;
+        if (!chest && plugin.getBedrock().menuAsForms(player)) {
+            window.run();
+            return;
+        }
+        if (chest) {
+            player.closeInventory();
+        }
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline()) {
+                window.run();
+            }
+        }, WINDOW_AFTER_CHEST_TICKS);
     }
 
     /** Does what was picked; when that shows nothing else, the page it came from comes back. */

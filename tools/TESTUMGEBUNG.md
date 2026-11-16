@@ -1414,9 +1414,10 @@ einzutragen.
   hat weder Geyser noch Floodgate, und mineflayer spielt auf Java. Mit
   `bedrock.apply-to: all` gelten die Anpassungen auch für ihn - das Menü ist
   dann die Truhe mit der Auswahl, wie auf Bedrock ohne Fenster. Die Fenster
-  von Bedrock selbst (`bedrock.menu: forms`, `invitation-forms`) bekommt nur,
-  wen Geyser oder Floodgate kennt; sie prüft der Lauf nicht. Den Punkt vorn im
-  Namen (`.CamFlyBedrock`) lässt Paper zu, gerade für Floodgate.
+  von Bedrock selbst (Auswahl und Eingabe unter `bedrock.menu: mixed`, das
+  ganze Menü unter `forms`, `invitation-forms`) bekommt nur, wen Geyser oder
+  Floodgate kennt; sie prüft der Lauf nicht. Den Punkt vorn im Namen
+  (`.CamFlyBedrock`) lässt Paper zu, gerade für Floodgate.
 * **Im Menü klickt der Bot nach Plätzen, nicht nach Items.** mineflayer kennt
   die Arten nur aus den Daten von 26.1. Name und Zeilen eines Items liest er
   dagegen richtig, als NBT-Textbausteine; `item_text` sammelt den Text daraus. Der Server weist jeden Klick ins Menü
