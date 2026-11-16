@@ -117,7 +117,8 @@ public final class CamMenu implements Listener {
     private static final int LIST = 54;
     /**
      * The size of the pages of a restriction: four rows, for what it keeps
-     * him from as well - on Bedrock six, see {@link #medium}.
+     * him from as well - on Bedrock six, like every page there, see
+     * {@link #page}: a chest of four Bedrock does not have.
      */
     private static final int MEDIUM = 36;
     /** Where the page of a restriction has the buttons of his own spots, the public ones and the shared ones. */
@@ -461,7 +462,11 @@ public final class CamMenu implements Listener {
          */
         private boolean bedrock;
         private Inventory inventory;
-        /** Its title, which a page drawn anew in place keeps. */
+        /**
+         * Its title, which a page drawn anew in place keeps. On Bedrock the
+         * name of the page only: the window keeps the title of the menu, see
+         * {@link CamMenu#page}.
+         */
         private String title;
         /** What draws it anew as it stands then, by itself; {@code null} for a page that is not. */
         private Runnable again;
@@ -607,11 +612,19 @@ public final class CamMenu implements Listener {
     private Page page(Player player, int size, String title) {
         Page open = openPage(player);
         Listing earlier = open == null ? null : open.listing;
+        // On Bedrock every page of the menu goes into one window of six rows,
+        // drawn anew in place from page to page: Geyser shows a chest there
+        // as one of its own put down for it, and one window opened in the
+        // place of another now and then closes again at once, or never opens.
+        // Bedrock cannot rename a window that is open, so it keeps the title
+        // of the menu.
+        boolean bedrock = bedrock(player);
+        int rows = bedrock ? LIST : size;
         Page page;
-        if (open != null && open.inventory.getSize() == size && open.title.equals(title)) {
+        if (open != null && open.inventory.getSize() == rows && (bedrock || open.title.equals(title))) {
             page = open;
-            page.before = new String[size];
-            for (int slot = 0; slot < size; slot++) {
+            page.before = new String[rows];
+            for (int slot = 0; slot < rows; slot++) {
                 page.before[slot] = identity(page.inventory.getItem(slot));
             }
             page.inventory.clear();
@@ -620,9 +633,9 @@ public final class CamMenu implements Listener {
             page.windows.clear();
         } else {
             page = new Page();
-            page.inventory = Bukkit.createInventory(page, size, title);
-            page.title = title;
+            page.inventory = Bukkit.createInventory(page, rows, bedrock ? messages.getMessage("menu-title") : title);
         }
+        page.title = title;
         page.earlier = earlier;
         page.listing = null;
         page.again = null;
@@ -2350,10 +2363,6 @@ public final class CamMenu implements Listener {
         return unit == DAY ? minutes / DAY : unit == HOUR ? minutes % DAY / HOUR : minutes % HOUR;
     }
 
-    /** The size of the pages of a restriction for him: six rows on Bedrock, which has no chest of four. */
-    private int medium(Player player) {
-        return bedrock(player) ? LIST : MEDIUM;
-    }
 
     /** How long a ban of so many minutes lasts, the way the texts put it: "for 2h 0m 0s", or "for good" for 0. */
     private String banTime(long minutes) {
@@ -2637,7 +2646,7 @@ public final class CamMenu implements Listener {
                 openSpotsOf(player, draft.id, draft.name, 0);
             }
         };
-        Page page = page(player, medium(player), messages.getMessage(draft.change
+        Page page = page(player, MEDIUM, messages.getMessage(draft.change
                 ? "menu-admin-spot-restrict-change-title" : "menu-admin-spot-restrict-title")
                 .replace("{player}", draft.name));
         String now = draft.everybody() ? moderation.everybodyText() : moderation.banText(draft.id);
@@ -2929,7 +2938,7 @@ public final class CamMenu implements Listener {
             tourDrafts.remove(player.getUniqueId());
             openTourPlayers(player, 0);
         };
-        Page page = page(player, medium(player), messages.getMessage(draft.change
+        Page page = page(player, MEDIUM, messages.getMessage(draft.change
                 ? "menu-admin-tour-restrict-change-title" : "menu-admin-tour-restrict-title")
                 .replace("{player}", draft.name));
         put(page, 4, restrictTarget(draft, restrictionLines(moderation.banText(draft.id))), NOTHING);
@@ -2967,7 +2976,7 @@ public final class CamMenu implements Listener {
             tourDrafts.remove(player.getUniqueId());
             openTourPlayers(player, 0);
         };
-        Page page = page(player, medium(player), messages.getMessage(draft.change
+        Page page = page(player, MEDIUM, messages.getMessage(draft.change
                 ? "menu-admin-tour-off-change-title" : "menu-admin-tour-off-title"));
         put(page, 4, everybodyItem(switchLines(moderation.offText()), draft.change), NOTHING);
         boolean off = draft.any();

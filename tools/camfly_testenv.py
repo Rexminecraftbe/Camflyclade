@@ -3381,7 +3381,7 @@ async function handle(cmd) {
         } catch (e) { /* egal */ }
         slots[i] = { name: it.name, count: it.count, custom, lore, glint };
       }
-      return { open: true, title: title || '', slots, size };
+      return { open: true, title: title || '', slots, size, id: w.id };
     }
     case 'inventory': {
       const items = bot.inventory ? bot.inventory.items() : [];
@@ -20476,15 +20476,19 @@ def bedrock_checks(env, bot):
     Ein Klick auf den Punkt bietet Springen, Teilen und Loeschen an:
     Springen bringt die Kamera hin und laesst das Menue zu, Loeschen loescht
     ihn und zeigt wieder die Punkte. Die Seite der Fuehrung oeffnet, die
-    Admin-Seite und von dort die Seite, wer im Cam-Modus ist, auch - jedes
-    Fenster wird dabei erst geschlossen und dann geoeffnet, wie fuer
-    Bedrock. Die Seite, die Fuehrungen fuer alle abschaltet, hat sechs
-    Reihen statt vier: Eine Truhe mit vier kennt Bedrock nicht.
+    Admin-Seite und von dort die Seite, wer im Cam-Modus ist, auch. Jede
+    Seite steht dabei im selben Fenster, mit sechs Reihen und dem Titel des
+    Menues, wie fuer Bedrock: Geyser baut dort fuer jedes Fenster eine Truhe
+    auf, und ein Wechsel ging manchmal schief. Die Seite, die Fuehrungen fuer
+    alle abschaltet, hat ebenso sechs Reihen statt vier: Eine Truhe mit vier
+    kennt Bedrock nicht.
 
     Ein zweiter Spieler im Cam-Modus leuchtet (glowing-outline: true): Unter
     all bekommt der Bot im Cam-Modus Partikel an den vier Kanten seines
     Koerpers, unter bedrock keine. Laedt der Bot ihn unter all zum Folgen ein,
-    steht hinter dem Knopf /cam follow accept mit dem Namen des Bots.
+    steht hinter dem Knopf /cam follow accept mit dem Namen des Bots. Folgt
+    er dem Bot, der ohne Cam-Modus ein Schwert haelt, bekommt er dessen Hand
+    leer geschickt und nichts in die eigene.
 
     Ein Spieler, dessen Name mit dem Punkt beginnt, ist unter apply-to:
     bedrock ein Bedrock-Spieler: Seine Action-Bar sagt nur "type /cam to
@@ -20613,10 +20617,14 @@ def bedrock_checks(env, bot):
         karte = ((f.get("slots") or {}).get("0") or {}).get("name")
         FIND.test("apply-to: all - der Punkt ist keine gefuellte Karte, die Bedrock \"Unknown Map\" nennt",
                   karte is not None and java_karte is not None and karte != java_karte, f"{java_karte} / {karte}")
+        punkte_fenster = f.get("id")
         klick(45, warten=2.0)
         f = fenster()
-        FIND.test("apply-to: all - zurueck von den Punkten: das Menue ist wieder da",
-                  f.get("open") and titel(f) == "Cam", titel(f))
+        FIND.test("apply-to: all - zurueck von den Punkten: das Menue ist wieder da, im selben Fenster",
+                  f.get("open") and platz_mit(f, "Statistics") is not None and f.get("id") == punkte_fenster,
+                  f"{titel(f)} / Fenster {punkte_fenster} -> {f.get('id')}")
+        FIND.test("apply-to: all - jede Seite hat sechs Reihen und den Titel des Menues",
+                  f.get("size") == 54 and titel(f) == "Cam", f"{f.get('size')} / {titel(f)}")
         bot.call("close_window", wait=10)
 
         bot.call("fly", wait=30, dx=-3, timeout=15000)
@@ -20639,16 +20647,18 @@ def bedrock_checks(env, bot):
         klick(9, warten=2.0)
         f = fenster()
         FIND.test("apply-to: all - der Knopf der Fuehrung oeffnet ihre Seite",
-                  f.get("open") and titel(f) == "Follow", titel(f))
+                  f.get("open") and platz_mit(f, "View when following") is not None,
+                  str([item_text(i).split(chr(10))[0] for i in (f.get("slots") or {}).values()]))
         bot.call("close_window", wait=10)
         menue()
         klick(23, warten=2.0)
         f = fenster()
-        admin = f.get("open") and titel(f) == "Cam admin"
+        admin = f.get("open") and platz_mit(f, "Who is in cam mode") is not None
         klick(10, warten=2.0)
         f = fenster()
         FIND.test("apply-to: all - die Admin-Seite oeffnet und von dort, wer im Cam-Modus ist",
-                  admin and f.get("open") and "Who is in cam mode" in titel(f), titel(f))
+                  admin and f.get("open") and "In cam mode for" in item_text((f.get("slots") or {}).get("0")),
+                  item_text((f.get("slots") or {}).get("0")))
         bot.call("close_window", wait=10)
         # Eine Seite mit vier Reihen hat Bedrock nicht; Geyser fuellte den Rest mit Barrieren.
         menue()
@@ -20675,7 +20685,7 @@ def bedrock_checks(env, bot):
             zeilen = zeilen_seit(bot, seit)
             f = fenster()
             FIND.test("Loeschen gewaehlt: der Punkt ist geloescht, und die Seite der Punkte ist wieder da",
-                      gesagt(zeilen, r"Spot Grundstein deleted") and "Spots" in titel(f),
+                      gesagt(zeilen, r"Spot Grundstein deleted") and platz_mit(f, "Your spots") is not None,
                       f"{zeige(zeilen)} / {titel(f)}")
         bot.call("close_window", wait=10)
 
@@ -20712,6 +20722,31 @@ def bedrock_checks(env, bot):
                   gesagt(dort, rf"\[Follow\] \(/cam follow accept {BOT_NAME}\)")
                   and gesagt(dort, rf"\(/cam follow decline {BOT_NAME}\)"), zeige(dort))
         befehl(zuschauer, f"/cam follow decline {BOT_NAME}")
+
+        # Folgen ohne Cam-Modus des Fuehrers: Ein Gast auf Bedrock bekommt
+        # die Haende des Fuehrers leer - Bedrock zoege dessen Schwert vor
+        # seine Kamera - und nichts davon in die eigene Hand.
+        cam_off(bot)
+        cam_off(zuschauer)
+        hinstellen(bot, x, y, z)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 4} {y} {z}", pause=0.5)
+        console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:diamond_sword", pause=0.5)
+        bot_nummer = bot.call("effects").get("self")
+        fremd = zuschauer.call("other_equipment").get("count", 0)
+        eigen = zuschauer.call("own_equipment").get("count", 0)
+        befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
+        hand = [p.get("count") for p in zuschauer.call("other_equipment", since=fremd, entity=bot_nummer)
+                .get("packets", []) if p.get("slot") == 0]
+        selbst = [p.get("count") for p in zuschauer.call("own_equipment", since=eigen).get("packets", [])
+                  if p.get("slot") == 0]
+        FIND.test("apply-to: all - folgt er, bekommt der Gast die Hand des Fuehrers leer und kein Schwert in die "
+                  "eigene", gesagt(dort, rf"You follow {BOT_NAME} now") and bool(hand) and all(c == 0 for c in hand)
+                  and not any(selbst), f"{zeige(dort)} / am Fuehrer {hand} / eigene {selbst}")
+        befehl(bot, "/cam follow end")
+        console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:air", pause=0.5)
+        cam_off(zuschauer)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 4} {y} {z}", pause=0.5)
 
         set_option(env, "apply-to", "bedrock", "bedrock")
         cam_on(zuschauer)

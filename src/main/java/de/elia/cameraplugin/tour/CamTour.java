@@ -1626,7 +1626,8 @@ public final class CamTour implements Listener {
                 endTour(guideId, guide == null ? "" : guide.getName());
                 continue;
             }
-            boolean mirrored = !cameraPlayers.contains(guideId) && mirror.isOn();
+            boolean guideOut = !cameraPlayers.contains(guideId);
+            boolean mirrored = guideOut && mirror.isOn();
             Location at = guide.getLocation();
             boolean along = tour.last != null && tour.last.getWorld().equals(at.getWorld());
             Vector step = along ? at.toVector().subtract(tour.last.toVector()) : new Vector();
@@ -1653,7 +1654,8 @@ public final class CamTour implements Listener {
                     continue;
                 }
                 takeLook(guide, guest);
-                if (mirrored) {
+                // A guest on Bedrock is sent the guide's hands empty in any case, see GuideMirror.
+                if (mirrored || guideOut && plugin.getBedrock().adapts(guest)) {
                     mirror.update(guide, guest);
                 } else {
                     // Nothing to see of him: a guide who started camera mode
