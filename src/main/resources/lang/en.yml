@@ -566,9 +566,9 @@ messages:
   menu-spot-look: "&bShows: &f{look}"
   menu-spot-lore: "&7{x} {y} {z} ({world})"
   menu-spot-name: "&eType the name of the new spot in the chat, or {cancel}."
-  menu-spot-name-form: "Name of the new spot"
+  menu-spot-name-form: "Name of the new spot\n&71 to 16 of: letters A-Z, digits, - and _\n&7No spaces and no other characters."
   menu-spot-name-public: "&eType the name of the new public spot in the chat, or {cancel}."
-  menu-spot-name-public-form: "Name of the new public spot"
+  menu-spot-name-public-form: "Name of the new public spot\n&71 to 16 of: letters A-Z, digits, - and _\n&7No spaces and no other characters."
   menu-spot-offered-lore: "&7Offered to: {players}"
   menu-spot-public-lore: "&ePublic, {likes} likes"
   # {start} = viewpoints.start-distance; the second while it is 0.

@@ -20467,10 +20467,16 @@ def bedrock_checks(env, bot):
     /cam spot list und /cam list steht der Befehl in Klammern - einer, der
     noch einen Namen braucht, mit "..." am Ende. Im Menue oeffnet der Knopf
     der Zeit eine Seite mit allen Zeiten, die der Welt markiert; noon
-    gewaehlt, sieht der Bot 6000, und das Menue ist wieder da. Unter einem
-    eigenen Punkt steht "Tap: jump there, share or delete", ein Klick darauf
-    bietet Springen, Teilen und Loeschen an, und Loeschen loescht ihn und
-    zeigt wieder die Punkte.
+    gewaehlt, sieht der Bot 6000, und das Menue ist zu und bleibt es. Unter
+    einem eigenen Punkt steht "Tap: jump there, share or delete", und er ist
+    ein anderes Item als unter bedrock - keine gefuellte Karte, die Bedrock
+    "Unknown Map" nennt. Zurueck fuehrt von den Punkten wieder ins Menue.
+    Ein Klick auf den Punkt bietet Springen, Teilen und Loeschen an:
+    Springen bringt die Kamera hin und laesst das Menue zu, Loeschen loescht
+    ihn und zeigt wieder die Punkte. Die Seite der Fuehrung oeffnet, die
+    Admin-Seite und von dort die Seite, wer im Cam-Modus ist, auch - jedes
+    Fenster wird dabei erst geschlossen und dann geoeffnet, wie fuer
+    Bedrock.
 
     Ein zweiter Spieler im Cam-Modus leuchtet (glowing-outline: true): Unter
     all bekommt der Bot im Cam-Modus Partikel an den vier Kanten seines
@@ -20553,6 +20559,9 @@ def bedrock_checks(env, bot):
         unter = item_text((f.get("slots") or {}).get("0"))
         FIND.test("apply-to: bedrock - unter dem Punkt im Menue stehen die Klicks",
                   "Grundstein" in unter and "Left-click: jump there" in unter and "Tap:" not in unter, unter)
+        # Welches Item der Punkt ist, sagt mineflayer nur mit den Namen von
+        # 26.1 - verglichen wird deshalb nur, ob es unter all ein anderes ist.
+        java_karte = ((f.get("slots") or {}).get("0") or {}).get("name")
         bot.call("close_window", wait=10)
         cam_off(bot)
 
@@ -20583,10 +20592,11 @@ def bedrock_checks(env, bot):
                   f"{titel(f)} / {[item_text(i).split(chr(10))[0] for i in (f.get('slots') or {}).values()]}")
         if mittag is not None:
             klick(mittag, warten=2.0)
-            f = fenster()
-            FIND.test("noon gewaehlt: der Bot sieht 6000, und das Menue ist wieder da",
-                      bot.call("sky").get("timeOfDay") == 6000 and titel(f) == "Cam",
-                      f"{bot.call('sky').get('timeOfDay')} / {titel(f)}")
+            zu = not fenster().get("open")
+            time.sleep(1.0)
+            FIND.test("noon gewaehlt: der Bot sieht 6000, und das Menue ist zu - und bleibt es",
+                      bot.call("sky").get("timeOfDay") == 6000 and zu and not fenster().get("open"),
+                      f"{bot.call('sky').get('timeOfDay')} / zu: {zu}, danach: {titel(fenster())}")
         bot.call("close_window", wait=10)
         befehl(bot, "/cam time reset")
 
@@ -20597,6 +20607,49 @@ def bedrock_checks(env, bot):
         FIND.test("apply-to: all - unter dem eigenen Punkt steht, was ein Tippen kann",
                   "Grundstein" in unter and "Tap: jump there, share or delete" in unter
                   and "Left-click" not in unter, unter)
+        karte = ((f.get("slots") or {}).get("0") or {}).get("name")
+        FIND.test("apply-to: all - der Punkt ist keine gefuellte Karte, die Bedrock \"Unknown Map\" nennt",
+                  karte is not None and java_karte is not None and karte != java_karte, f"{java_karte} / {karte}")
+        klick(45, warten=2.0)
+        f = fenster()
+        FIND.test("apply-to: all - zurueck von den Punkten: das Menue ist wieder da",
+                  f.get("open") and titel(f) == "Cam", titel(f))
+        bot.call("close_window", wait=10)
+
+        bot.call("fly", wait=30, dx=-3, timeout=15000)
+        time.sleep(1.0)
+        menue()
+        klick(10)
+        klick(0)
+        springen = platz_mit(fenster(), "Jump there")
+        if springen is not None:
+            klick(springen, warten=2.5)
+            zu = not fenster().get("open")
+            da = bot.server_pos()
+            time.sleep(1.0)
+            FIND.test("Springen gewaehlt: die Kamera ist am Punkt, und das Menue ist zu - und bleibt es",
+                      zu and not fenster().get("open") and da is not None and math.dist(da, (x, y, z)) < 1.0,
+                      f"zu: {zu}, danach: {titel(fenster())}, {da}")
+        bot.call("close_window", wait=10)
+
+        menue()
+        klick(9, warten=2.0)
+        f = fenster()
+        FIND.test("apply-to: all - der Knopf der Fuehrung oeffnet ihre Seite",
+                  f.get("open") and titel(f) == "Follow", titel(f))
+        bot.call("close_window", wait=10)
+        menue()
+        klick(23, warten=2.0)
+        f = fenster()
+        admin = f.get("open") and titel(f) == "Cam admin"
+        klick(10, warten=2.0)
+        f = fenster()
+        FIND.test("apply-to: all - die Admin-Seite oeffnet und von dort, wer im Cam-Modus ist",
+                  admin and f.get("open") and "Who is in cam mode" in titel(f), titel(f))
+        bot.call("close_window", wait=10)
+
+        menue()
+        klick(10)
         klick(0)
         f = fenster()
         loeschen = platz_mit(f, "Delete")

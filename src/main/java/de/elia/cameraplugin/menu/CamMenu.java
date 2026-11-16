@@ -254,6 +254,8 @@ public final class CamMenu implements Listener {
      * button does, see {@link #afterwards}.
      */
     private final Map<UUID, Integer> shownCount = new HashMap<>();
+    /** The page to be opened a moment from now on Bedrock, by player, see {@link #openWindow}. */
+    private final Map<UUID, Page> opening = new HashMap<>();
 
     /** What draws the open pages anew by themselves, see {@link #start}. */
     private BukkitTask live;
@@ -442,6 +444,11 @@ public final class CamMenu implements Listener {
          * such a player, and only for a button that does more than one thing.
          */
         private final Map<Integer, List<Pick>> picks = new HashMap<>();
+        /**
+         * Whether it is made for a player on Bedrock, which draws some items
+         * otherwise than Java does, see {@link CamMenu#forBedrock}.
+         */
+        private boolean bedrock;
         private Inventory inventory;
         /** Its title, which a page drawn anew in place keeps. */
         private String title;
@@ -607,6 +614,7 @@ public final class CamMenu implements Listener {
         page.earlier = earlier;
         page.listing = null;
         page.again = null;
+        page.bedrock = bedrock(player);
         return page;
     }
 
@@ -645,7 +653,7 @@ public final class CamMenu implements Listener {
             return;
         }
         if (before == null) {
-            player.openInventory(page.inventory);
+            openWindow(player, page);
         }
         if (!refreshing) {
             return;
@@ -1033,7 +1041,8 @@ public final class CamMenu implements Listener {
      * are his own, which hold again after the tour, and the button says so.</p>
      *
      * <p>On Bedrock every choice is offered to be picked straight away, see
-     * {@link #openPicks}, the one that holds now marked.</p>
+     * {@link #openPicks}, the one that holds now marked; once picked, the
+     * menu closes.</p>
      *
      * @param fill    the placeholder in the name that the choice of now takes
      * @param fresh   the choices as they stand when asked: drawn now, and asked
@@ -1071,7 +1080,9 @@ public final class CamMenu implements Listener {
             Choice choice = choices.all().get(i);
             // A time of his own without a name only ever stands for the one he has.
             if (choice.word() != null) {
-                picks.add(new Pick(choice.name(), i == choices.now(), () -> later(() -> choose.accept(choice.word()))));
+                // Picked from a list, the choice is made: the menu closes, as after a jump.
+                picks.add(new Pick(choice.name(), i == choices.now(), () -> act(player,
+                        () -> choose.accept(choice.word()))));
             }
         }
         picks(player, page, slot, picks);
@@ -3229,6 +3240,7 @@ public final class CamMenu implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         questions.remove(event.getPlayer().getUniqueId());
         shownCount.remove(event.getPlayer().getUniqueId());
+        opening.remove(event.getPlayer().getUniqueId());
         drafts.remove(event.getPlayer().getUniqueId());
         spotDrafts.remove(event.getPlayer().getUniqueId());
         tourDrafts.remove(event.getPlayer().getUniqueId());
@@ -3408,6 +3420,7 @@ public final class CamMenu implements Listener {
         Page page = new Page();
         page.title = messages.getMessage("menu-pick-title").replace("{button}", name);
         page.inventory = Bukkit.createInventory(page, SMALL, page.title);
+        page.bedrock = true;
         put(page, SLOT_PICK_BUTTON, button.clone(), NOTHING);
         for (int i = 0; i < picks.size() && i < PICK_SLOTS.length; i++) {
             Pick pick = picks.get(i);
@@ -3450,8 +3463,9 @@ public final class CamMenu implements Listener {
 
     /** Does what was picked; when that shows nothing else, the page it came from comes back. */
     private void picked(Player player, Page from, Pick pick) {
+        int before = shownCount(player);
         pick.action().run();
-        afterwards(player, () -> reshow(player, from));
+        afterwards(player, before, () -> reshow(player, from));
     }
 
     /**
@@ -3468,23 +3482,56 @@ public final class CamMenu implements Listener {
         }
         shown(player);
         if (!plugin.getBedrock().menuAsForms(player) || !sendForm(player, page)) {
-            player.openInventory(page.inventory);
+            openWindow(player, page);
         }
+    }
+
+    /**
+     * Opens the window of a page. On Bedrock, while another window of the
+     * menu is open, that one is closed first and this one opened a moment
+     * later, {@link #WINDOW_AFTER_CHEST_TICKS}: Geyser shows a chest on
+     * Bedrock as a chest of its own put down for it, and one opened in the
+     * place of another before the first is gone from the screen may close
+     * again at once. Opened in between, by a click or by himself, another
+     * one takes its place.
+     */
+    private void openWindow(Player player, Page page) {
+        UUID id = player.getUniqueId();
+        if (!bedrock(player) || openPage(player) == null) {
+            opening.remove(id);
+            player.openInventory(page.inventory);
+            return;
+        }
+        player.closeInventory();
+        opening.put(id, page);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (opening.remove(id, page) && player.isOnline()) {
+                player.openInventory(page.inventory);
+            }
+        }, WINDOW_AFTER_CHEST_TICKS);
     }
 
     /**
      * Shows something again once a button had its say, unless it showed
      * something itself - a page, a question - or closed the menu for what it
-     * does. A button acts a tick after the click; what it opens comes out of
-     * that, so it is looked a few ticks later.
+     * does. A button acts a tick after the click, or closes the menu right
+     * away; what it opens comes out of that, so it is looked a few ticks
+     * later.
+     *
+     * @param before {@link #shownCount} from before the button acted, which
+     *               may close the menu at once
      */
-    private void afterwards(Player player, Runnable again) {
-        int before = shownCount.getOrDefault(player.getUniqueId(), 0);
+    private void afterwards(Player player, int before, Runnable again) {
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (player.isOnline() && shownCount.getOrDefault(player.getUniqueId(), 0) == before) {
+            if (player.isOnline() && shownCount(player) == before) {
                 again.run();
             }
         }, AFTERWARDS_TICKS);
+    }
+
+    /** How often the menu has shown him something so far, see {@link #shown}. */
+    private int shownCount(Player player) {
+        return shownCount.getOrDefault(player.getUniqueId(), 0);
     }
 
     /** Notes that the menu showed him something, or closed for what a button does, see {@link #afterwards}. */
@@ -3532,8 +3579,9 @@ public final class CamMenu implements Listener {
                     }
                     Consumer<ClickType> action = page.buttons.get(slot);
                     if (action != null) {
+                        int before = shownCount(player);
                         action.accept(ClickType.LEFT);
-                        afterwards(player, () -> reshow(player, page));
+                        afterwards(player, before, () -> reshow(player, page));
                     }
                 }, null);
     }
@@ -3585,8 +3633,27 @@ public final class CamMenu implements Listener {
     }
 
     private static void put(Page page, int slot, ItemStack item, Consumer<ClickType> action) {
-        page.inventory.setItem(slot, item);
+        page.inventory.setItem(slot, page.bedrock ? forBedrock(item) : item);
         page.buttons.put(slot, action);
+    }
+
+    /**
+     * An item as a page for Bedrock shows it: a filled map as an empty one.
+     * Bedrock names a filled map by the map it shows - "Unknown Map" for one
+     * without, which every map of the menu is -, and never by the name the
+     * menu gave it; an empty map keeps its name. Its name, its lines and its
+     * shine go along.
+     */
+    private static ItemStack forBedrock(ItemStack item) {
+        if (item == null || item.getType() != Material.FILLED_MAP) {
+            return item;
+        }
+        ItemStack map = new ItemStack(Material.MAP, item.getAmount());
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            map.setItemMeta(Bukkit.getItemFactory().asMetaFor(meta, Material.MAP));
+        }
+        return map;
     }
 
     /** The buttons to the page before and after, where there is one. */
