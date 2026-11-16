@@ -3359,6 +3359,8 @@ async function handle(cmd) {
       const title = typeof w.title === 'string' ? w.title : JSON.stringify(w.title);
       const slots = {};
       const end = w.inventoryStart !== undefined ? w.inventoryStart : w.slots.length;
+      // Wie viele Plaetze das Fenster selbst hat, ohne das Inventar darunter.
+      const size = end;
       for (let i = 0; i < end; i++) {
         const it = w.slots[i];
         if (!it) continue;
@@ -3379,7 +3381,7 @@ async function handle(cmd) {
         } catch (e) { /* egal */ }
         slots[i] = { name: it.name, count: it.count, custom, lore, glint };
       }
-      return { open: true, title: title || '', slots };
+      return { open: true, title: title || '', slots, size };
     }
     case 'inventory': {
       const items = bot.inventory ? bot.inventory.items() : [];
@@ -20476,7 +20478,8 @@ def bedrock_checks(env, bot):
     ihn und zeigt wieder die Punkte. Die Seite der Fuehrung oeffnet, die
     Admin-Seite und von dort die Seite, wer im Cam-Modus ist, auch - jedes
     Fenster wird dabei erst geschlossen und dann geoeffnet, wie fuer
-    Bedrock.
+    Bedrock. Die Seite, die Fuehrungen fuer alle abschaltet, hat sechs
+    Reihen statt vier: Eine Truhe mit vier kennt Bedrock nicht.
 
     Ein zweiter Spieler im Cam-Modus leuchtet (glowing-outline: true): Unter
     all bekommt der Bot im Cam-Modus Partikel an den vier Kanten seines
@@ -20646,6 +20649,15 @@ def bedrock_checks(env, bot):
         f = fenster()
         FIND.test("apply-to: all - die Admin-Seite oeffnet und von dort, wer im Cam-Modus ist",
                   admin and f.get("open") and "Who is in cam mode" in titel(f), titel(f))
+        bot.call("close_window", wait=10)
+        # Eine Seite mit vier Reihen hat Bedrock nicht; Geyser fuellte den Rest mit Barrieren.
+        menue()
+        klick(23, warten=2.0)
+        klick(24, warten=2.0)
+        klick(0, warten=2.0)
+        f = fenster()
+        FIND.test("apply-to: all - die Seite, die Fuehrungen fuer alle abschaltet, hat sechs Reihen statt vier",
+                  f.get("open") and f.get("size") == 54, f"{titel(f)} / {f.get('size')}")
         bot.call("close_window", wait=10)
 
         menue()

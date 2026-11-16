@@ -63,9 +63,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.LongConsumer;
+import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 import java.util.function.ToLongFunction;
@@ -113,7 +115,10 @@ public final class CamMenu implements Listener {
     /** The sizes of the windows: three rows for the main page and the small ones, six for the lists. */
     private static final int SMALL = 27;
     private static final int LIST = 54;
-    /** The size of the page of a restriction of the spots: four rows, for what it keeps him from as well. */
+    /**
+     * The size of the pages of a restriction: four rows, for what it keeps
+     * him from as well - on Bedrock six, see {@link #medium}.
+     */
     private static final int MEDIUM = 36;
     /** Where the page of a restriction has the buttons of his own spots, the public ones and the shared ones. */
     private static final int[] RESTRICT_SLOTS = {11, 13, 15};
@@ -445,6 +450,12 @@ public final class CamMenu implements Listener {
          */
         private final Map<Integer, List<Pick>> picks = new HashMap<>();
         /**
+         * A window of Bedrock of its own for a button with {@link #picks},
+         * in place of the list of them, see {@link CamMenu#openPicks}: it
+         * sends it and says whether it went out.
+         */
+        private final Map<Integer, BooleanSupplier> windows = new HashMap<>();
+        /**
          * Whether it is made for a player on Bedrock, which draws some items
          * otherwise than Java does, see {@link CamMenu#forBedrock}.
          */
@@ -606,6 +617,7 @@ public final class CamMenu implements Listener {
             page.inventory.clear();
             page.buttons.clear();
             page.picks.clear();
+            page.windows.clear();
         } else {
             page = new Page();
             page.inventory = Bukkit.createInventory(page, size, title);
@@ -2195,12 +2207,10 @@ public final class CamMenu implements Listener {
         String time = banTime(draft.minutes);
         LongConsumer set = minutes -> draft.minutes = minutes;
         Runnable reopen = () -> openBan(player);
-        banUnit(player, page, 12, "menu-admin-ban-days", draft.minutes, set, reopen, DAY, draft.minutes / DAY,
-                time);
-        banUnit(player, page, 13, "menu-admin-ban-hours", draft.minutes, set, reopen, HOUR,
-                draft.minutes % DAY / HOUR, time);
-        banUnit(player, page, 14, "menu-admin-ban-minutes", draft.minutes, set, reopen, 1L, draft.minutes % HOUR,
-                time);
+        LongSupplier current = () -> draft.minutes;
+        banUnit(player, page, 12, "menu-admin-ban-days", current, set, reopen, DAY, time);
+        banUnit(player, page, 13, "menu-admin-ban-hours", current, set, reopen, HOUR, time);
+        banUnit(player, page, 14, "menu-admin-ban-minutes", current, set, reopen, 1L, time);
         if (draft.change) {
             put(page, 16, Material.MILK_BUCKET, messages.getMessage("menu-admin-unban"),
                     lines(messages.getMessage("menu-admin-unban-lore").replace("{player}", target.name())),
@@ -2254,17 +2264,19 @@ public final class CamMenu implements Listener {
      * minutes it has, and what that makes altogether. A click adds one, a
      * right-click takes one away, with shift {@code menu.ban-shift-step} of
      * them. Taking away stops short of nothing - nothing would be for good -,
-     * adding at the longest ban the buttons give.
+     * adding at the longest ban the buttons give. On Bedrock, with its
+     * windows, a window of its own that stays open, see {@link #banUnitWindow}.
      *
-     * @param minutes how long the ban lasts now, in minutes, 0 for good
+     * @param current how long the ban lasts now, in minutes, 0 for good
      * @param set     what takes a new length
      * @param reopen  what shows the page anew afterwards
      * @param unit    what one of them is, in minutes
-     * @param amount  how many of them the ban has now
      * @param time    how long it lasts altogether, as {@link #banTime} has it
      */
-    private void banUnit(Player player, Page page, int slot, String key, long minutes, LongConsumer set,
-                         Runnable reopen, long unit, long amount, String time) {
+    private void banUnit(Player player, Page page, int slot, String key, LongSupplier current, LongConsumer set,
+                         Runnable reopen, long unit, String time) {
+        long minutes = current.getAsLong();
+        long amount = amount(minutes, unit);
         int shiftStep = settings.getBanShiftStep();
         List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-ban-time-lore")
                 .replace("{time}", time)));
@@ -2287,6 +2299,60 @@ public final class CamMenu implements Listener {
                         () -> action.accept(ClickType.SHIFT_LEFT)),
                 new Pick(messages.getMessage("menu-pick-ban-less-step").replace("{step}", step), false,
                         () -> action.accept(ClickType.SHIFT_RIGHT))));
+        page.windows.put(slot, () -> banUnitWindow(player, key, unit, current, set, reopen));
+    }
+
+    /**
+     * One of the buttons of the time of a ban as a window of Bedrock: how
+     * many days, hours or minutes, and what that makes altogether, with
+     * {@code +1}, {@code -1} and as many at once as {@code menu.ban-shift-step}
+     * says. It stays open after each - sent anew as it stands then - until
+     * the way back, or closing it, leads back to the page. Taking away stops
+     * at a minute, rather than doing nothing where it would reach nought - a
+     * ban of nought is one for good -; a ban for good stays one, adding sets
+     * the time.
+     *
+     * @param current how long the ban lasts now, in minutes, 0 for good
+     * @param back    what shows the page anew
+     * @return whether the window went out
+     */
+    private boolean banUnitWindow(Player player, String key, long unit, LongSupplier current, LongConsumer set,
+                                  Runnable back) {
+        long minutes = current.getAsLong();
+        String step = String.valueOf(settings.getBanShiftStep());
+        long many = unit * settings.getBanShiftStep();
+        long[] changes = {unit, -unit, many, -many};
+        List<String> labels = List.of(ChatColor.stripColor(messages.getMessage("menu-pick-ban-more")),
+                ChatColor.stripColor(messages.getMessage("menu-pick-ban-less")),
+                ChatColor.stripColor(messages.getMessage("menu-pick-ban-more-step").replace("{step}", step)),
+                ChatColor.stripColor(messages.getMessage("menu-pick-ban-less-step").replace("{step}", step)),
+                ChatColor.stripColor(messages.getMessage("menu-pick-back")));
+        String title = ChatColor.stripColor(messages.getMessage(key)
+                .replace("{amount}", String.valueOf(amount(minutes, unit))));
+        String content = messages.getMessage("menu-admin-ban-time-lore").replace("{time}", banTime(minutes));
+        return plugin.getBedrock().forms().list(player, title, content, labels, index -> {
+            if (index >= changes.length) {
+                back.run();
+                return;
+            }
+            long now = current.getAsLong();
+            long change = changes[index];
+            set.accept(change > 0 ? Math.min(MAX_BAN_MINUTES, now + change)
+                    : now == 0L ? 0L : Math.max(1L, now + change));
+            if (!banUnitWindow(player, key, unit, current, set, back)) {
+                back.run();
+            }
+        }, back);
+    }
+
+    /** How many days, hours or minutes a ban of so many minutes has: of {@code unit}, in minutes. */
+    private static long amount(long minutes, long unit) {
+        return unit == DAY ? minutes / DAY : unit == HOUR ? minutes % DAY / HOUR : minutes % HOUR;
+    }
+
+    /** The size of the pages of a restriction for him: six rows on Bedrock, which has no chest of four. */
+    private int medium(Player player) {
+        return bedrock(player) ? LIST : MEDIUM;
     }
 
     /** How long a ban of so many minutes lasts, the way the texts put it: "for 2h 0m 0s", or "for good" for 0. */
@@ -2571,7 +2637,7 @@ public final class CamMenu implements Listener {
                 openSpotsOf(player, draft.id, draft.name, 0);
             }
         };
-        Page page = page(player, MEDIUM, messages.getMessage(draft.change
+        Page page = page(player, medium(player), messages.getMessage(draft.change
                 ? "menu-admin-spot-restrict-change-title" : "menu-admin-spot-restrict-title")
                 .replace("{player}", draft.name));
         String now = draft.everybody() ? moderation.everybodyText() : moderation.banText(draft.id);
@@ -2632,12 +2698,10 @@ public final class CamMenu implements Listener {
                 }));
         String time = banTime(draft.minutes);
         LongConsumer set = minutes -> draft.minutes = minutes;
-        banUnit(player, page, 21, "menu-admin-ban-days", draft.minutes, set, reopen, DAY, draft.minutes / DAY,
-                time);
-        banUnit(player, page, 22, "menu-admin-ban-hours", draft.minutes, set, reopen, HOUR,
-                draft.minutes % DAY / HOUR, time);
-        banUnit(player, page, 23, "menu-admin-ban-minutes", draft.minutes, set, reopen, 1L, draft.minutes % HOUR,
-                time);
+        LongSupplier current = () -> draft.minutes;
+        banUnit(player, page, 21, "menu-admin-ban-days", current, set, reopen, DAY, time);
+        banUnit(player, page, 22, "menu-admin-ban-hours", current, set, reopen, HOUR, time);
+        banUnit(player, page, 23, "menu-admin-ban-minutes", current, set, reopen, 1L, time);
         String reason = draft.reason.isEmpty() ? messages.getMessage("menu-admin-ban-no-reason") : draft.reason;
         List<String> reasonLore = new ArrayList<>(lines(messages.getMessage("menu-state").replace("{state}", reason)));
         reasonLore.addAll(lines(text(player, "menu-admin-ban-reason-actions")));
@@ -2865,7 +2929,7 @@ public final class CamMenu implements Listener {
             tourDrafts.remove(player.getUniqueId());
             openTourPlayers(player, 0);
         };
-        Page page = page(player, MEDIUM, messages.getMessage(draft.change
+        Page page = page(player, medium(player), messages.getMessage(draft.change
                 ? "menu-admin-tour-restrict-change-title" : "menu-admin-tour-restrict-title")
                 .replace("{player}", draft.name));
         put(page, 4, restrictTarget(draft, restrictionLines(moderation.banText(draft.id))), NOTHING);
@@ -2903,7 +2967,7 @@ public final class CamMenu implements Listener {
             tourDrafts.remove(player.getUniqueId());
             openTourPlayers(player, 0);
         };
-        Page page = page(player, MEDIUM, messages.getMessage(draft.change
+        Page page = page(player, medium(player), messages.getMessage(draft.change
                 ? "menu-admin-tour-off-change-title" : "menu-admin-tour-off-title"));
         put(page, 4, everybodyItem(switchLines(moderation.offText()), draft.change), NOTHING);
         boolean off = draft.any();
@@ -3373,8 +3437,10 @@ public final class CamMenu implements Listener {
         }
         shown(player);
         if (plugin.getBedrock().menuChoicesAsForms(player)) {
+            BooleanSupplier own = from.windows.get(slot);
             whenChestShut(player, () -> {
-                if (!picksWindow(player, from, button, picks)) {
+                boolean sent = own != null ? own.getAsBoolean() : picksWindow(player, from, button, picks);
+                if (!sent) {
                     picksChest(player, from, button, picks);
                 }
             });

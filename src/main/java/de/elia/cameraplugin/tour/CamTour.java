@@ -291,7 +291,7 @@ public final class CamTour implements Listener {
         this.messages = plugin.getMessages();
         this.cameraPlayers = plugin.getCameraPlayers();
         this.mirror = new GuideMirror(settings, frost, hands, quietHearts,
-                new NamespacedKey(plugin, GuideMirror.MARK));
+                new NamespacedKey(plugin, GuideMirror.MARK), guest -> plugin.getBedrock().adapts(guest));
     }
 
     /** Whether {@code /cam follow} is there at all. */
@@ -1489,7 +1489,7 @@ public final class CamTour implements Listener {
         boolean swings = settings.isTourMirrorSwing() && swing.serverSwingsOnUse();
         for (Player guest : shownGuests(guide)) {
             mirror.placed(guest.getUniqueId(), offHand);
-            if (swings) {
+            if (swings && !plugin.getBedrock().adapts(guest)) {
                 swing.swing(guest, guide, offHand, true);
             }
         }
@@ -1502,7 +1502,10 @@ public final class CamTour implements Listener {
     private void swingGuests(Player guide, boolean offHand, boolean use) {
         if (settings.isTourMirrorSwing()) {
             for (Player guest : shownGuests(guide)) {
-                swing.swing(guest, guide, offHand, use);
+                // On Bedrock his hands are not drawn, see GuideMirror: nothing to swing.
+                if (!plugin.getBedrock().adapts(guest)) {
+                    swing.swing(guest, guide, offHand, use);
+                }
             }
         }
     }
@@ -1946,9 +1949,17 @@ public final class CamTour implements Listener {
      * it lets them sway by every turn without ever bringing them back: they
      * would hang askew in the guide's view. Turned back every tick, they still
      * tremble while he moves the mouse - less so held between the ticks too,
-     * see {@link FineHold}.
+     * see {@link FineHold}. Not on Bedrock, which is shown no hands there.
      */
     private void holdTurned(Player guest, Guest state) {
+        if (plugin.getBedrock().adapts(guest)) {
+            // On Bedrock, Geyser shows the guide's view through a camera of
+            // its own, which neither draws his hands nor turns with him: a
+            // turn back would only reach his client as a jump of his player,
+            // every tick, and make the view stutter.
+            fineHold.release(guest);
+            return;
+        }
         guest.setRotation(state.yaw, state.pitch);
         if (state.viewing && settings.isTourFineHold()) {
             fineHold.hold(guest, state.yaw, state.pitch);

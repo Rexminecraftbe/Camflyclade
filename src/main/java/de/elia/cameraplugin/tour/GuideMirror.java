@@ -25,6 +25,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 
 /**
@@ -125,6 +126,8 @@ final class GuideMirror {
     private final CamSettings settings;
     /** The mark itself, in the custom data of an item. */
     private final NamespacedKey mark;
+    /** The guests who are not shown the guide's items in their hands, see the constructor. */
+    private final Predicate<Player> handless;
     /** Shows a guest the guide's frost as his own. */
     private final GuideFrost frost;
     /** Changes the server's packets with the guide's hands on their way to a guest. */
@@ -198,13 +201,22 @@ final class GuideMirror {
         int sinceFrost;
     }
 
+    /**
+     * @param handless the guests who are not shown the guide's items in
+     *                 their hands: players on Bedrock, see
+     *                 {@link de.elia.cameraplugin.bedrock.BedrockPlayers#adapts}.
+     *                 Geyser shows them the guide's view through a camera of
+     *                 their own, which draws no hands at all - an item sent
+     *                 there would only stand in their hotbar.
+     */
     GuideMirror(CamSettings settings, GuideFrost frost, GuideHands hands, QuietHearts quietHearts,
-                NamespacedKey mark) {
+                NamespacedKey mark, Predicate<Player> handless) {
         this.settings = settings;
         this.frost = frost;
         this.hands = hands;
         this.quietHearts = quietHearts;
         this.mark = mark;
+        this.handless = handless;
     }
 
     /**
@@ -245,9 +257,10 @@ final class GuideMirror {
         state.offHandMarked = offHandMarked;
         state.mainHandUsed = false;
         state.offHandUsed = false;
-        state.mainHand = mirror(guest, EquipmentSlot.HAND, settings.isTourMirrorMainHand(), mainHand,
+        boolean withHands = !handless.test(guest);
+        state.mainHand = mirror(guest, EquipmentSlot.HAND, settings.isTourMirrorMainHand() && withHands, mainHand,
                 guest.getInventory().getItemInMainHand(), state.mainHand, mainHandMarked, refresh || mainHandAgain);
-        state.offHand = mirror(guest, EquipmentSlot.OFF_HAND, settings.isTourMirrorOffHand(), offHand,
+        state.offHand = mirror(guest, EquipmentSlot.OFF_HAND, settings.isTourMirrorOffHand() && withHands, offHand,
                 guest.getInventory().getItemInOffHand(), state.offHand, offHandMarked, refresh || offHandAgain);
         state.head = mirror(guest, EquipmentSlot.HEAD, settings.isTourMirrorHead(),
                 guide.getInventory().getHelmet(), guest.getInventory().getHelmet(), state.head, false, refresh);
