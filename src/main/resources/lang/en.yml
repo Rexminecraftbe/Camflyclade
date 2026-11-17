@@ -887,7 +887,7 @@ messages:
   spot-look-weather: "{weather}"
   spot-look-weather-clear: "clear sky"
   spot-look-weather-rain: "rain"
-  spot-moved: "&aSpot {spot} moved here."
+  spot-moved: "&aSpot &f{spot}&a moved here."
   spot-no-signal: "&cNo signal at spot {spot}."
   spot-not-shared: "&eSpot {spot} is not shared with {player}."
   spot-not-shared-all: "&eSpot {spot} is not public."
@@ -917,7 +917,7 @@ messages:
   spot-restriction-separator: ", "
   spot-restriction-shared-no-look: "nothing shared at all"
   spot-restriction-shared-no-new: "no sharing"
-  spot-saved: "&aSpot {spot} saved."
+  spot-saved: "&aSpot &f{spot}&a saved."
   # After spot-saved or spot-moved, while the spot takes along a look of its own ({look}, see spot-look-...).
   spot-saved-look: "&7Saved with: &b{look}"
   spot-share-everybody: "everybody"
