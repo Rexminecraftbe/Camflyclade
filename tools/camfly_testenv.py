@@ -12166,7 +12166,7 @@ def spotmoderation_checks(env, bot):
         bot.call("close_window", wait=10)
         text = datei.read_text(encoding="utf-8") if datei.exists() else ""
         FIND.test("Offline loescht der Umschalt-Klick seine Punkte aus seiner Datei",
-                  gesagt(hier, rf"Spot ModD of {ZUSCHAUER_NAME} deleted") and "ModD" not in text
+                  gesagt(hier, rf"Deleted {ZUSCHAUER_NAME}'s spot ModD") and "ModD" not in text
                   and "ModB" not in text, f"{zeige(hier)} / {text[-300:]}")
         # Die Koepfe der Spieler ohne Skin - auf diesem Server alle - fragt
         # der Server nicht bei Mojang nach: das ginge nur ins Leere.
