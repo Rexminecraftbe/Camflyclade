@@ -86,11 +86,15 @@ public final class ConfigReader {
     }
 
     /**
-     * Checks that every value of a section is a truth value. Used for sections
-     * that are read entry by entry while the server runs, where a note would
-     * otherwise appear over and over again.
+     * Checks that every value of a section of switches is a truth value or
+     * the word {@code word} - the switches of the messages, where
+     * {@code actionbar} sends one above the hotbar. Used for sections that are
+     * read entry by entry while the server runs, where a note would otherwise
+     * appear over and over again.
+     *
+     * @param booleanOnly the keys that take a truth value alone
      */
-    public void checkBooleanSection(String path) {
+    public void checkSwitchSection(String path, String word, Set<String> booleanOnly) {
         ConfigurationSection section = config.getConfigurationSection(path);
         if (section == null) {
             return;
@@ -100,7 +104,11 @@ public final class ConfigReader {
             if (raw == null || raw instanceof Boolean || section.isConfigurationSection(key)) {
                 continue;
             }
-            warnWrongType(path + "." + key, raw, EXPECTED_BOOLEAN, "true");
+            if (booleanOnly.contains(key)) {
+                warnWrongType(path + "." + key, raw, EXPECTED_BOOLEAN, "true");
+            } else if (!(raw instanceof String text && text.equalsIgnoreCase(word))) {
+                warnUnknownValue(path + "." + key, raw, "true, false, " + word, "true");
+            }
         }
     }
 

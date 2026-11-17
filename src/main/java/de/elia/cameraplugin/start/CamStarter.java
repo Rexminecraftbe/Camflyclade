@@ -5,7 +5,6 @@ import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraMode;
 import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
-import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 
 /**
@@ -119,9 +118,7 @@ public final class CamStarter {
         // put it away again. Said the way cam-safety says it, which counts
         // that hit as soon as it lands.
         if (plugin.getDamageMirror() != null && plugin.getDamageMirror().isHitPending(player.getUniqueId())) {
-            if (messages.isMessageEnabled("cam-safety")) {
-                player.sendMessage(ChatColor.RED + messages.getMessage("cam-safety").replace("%seconds%", "1"));
-            }
+            checks.sendCamSafety(player, 1);
             return false;
         }
         // Before the cooldown: "wait ten more seconds" tells a spectator
@@ -132,10 +129,9 @@ public final class CamStarter {
         CamTimeLimit timeLimit = plugin.getTimeLimit();
         if (timeLimit.isCooldownActive(player)) {
             long remaining = timeLimit.getCooldownRemaining(player);
-            if (messages.isMessageEnabled("cooldown-text")) {
-                String msg = messages.getMessage("cooldown-text").replace("%time%", CamTimeLimit.formatDuration(remaining));
-                player.sendMessage(ChatColor.RED + msg);
-            }
+            // %time% as a language file from before has it.
+            String time = CamTimeLimit.formatDuration(remaining);
+            messages.sendConfiguredMessage(player, "cooldown-text", "{time}", time, "%time%", time);
             return false;
         }
         if (!plugin.getBattery().checkStart(player)) {

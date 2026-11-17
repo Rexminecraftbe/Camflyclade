@@ -677,7 +677,11 @@ public final class CamSpots {
 
     /**
      * Tells a player online that a spot is offered to him, with the buttons to
-     * accept it and to turn it down. On Bedrock, with
+     * accept it and to turn it down. They run their command while only the
+     * menu goes as well - {@link de.elia.cameraplugin.camfly2.CamCommand}
+     * lets it through -, so a click answers right away; on Bedrock, where
+     * nothing in the chat can be clicked, the line says then that he answers
+     * in the menu. On Bedrock, with
      * {@code bedrock.invitation-forms}, a window asks him as well - while
      * there are buttons at all.
      */
@@ -689,11 +693,18 @@ public final class CamSpots {
                 .replace("{owner}", share.getOwnerName())
                 .replace("{spot}", share.getSpot().name());
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
-        line.addAll(commandButton(other, "spot-button-accept", share.label(), "/cam spot accept " + share.label()));
-        line.addAll(commandButton(other, "spot-button-decline", share.label(),
-                "/cam spot decline " + share.label()));
+        boolean answerable = settings.getMenuAccess().allowsMenu() || settings.getMenuAccess().allowsCommands();
+        if (answerable && plugin.getBedrock().answersInMenu(other)) {
+            // He cannot click them, and typing is not what the menu is for.
+            line.addAll(plugin.getBedrock().menuHint());
+        } else if (answerable) {
+            line.addAll(button(other, "spot-button-accept", share.label(),
+                    new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam spot accept " + share.label())));
+            line.addAll(button(other, "spot-button-decline", share.label(),
+                    new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam spot decline " + share.label())));
+        }
         other.spigot().sendMessage(line.toArray(new BaseComponent[0]));
-        if (plugin.commandOrMenu("/cam spot accept") != null && plugin.getBedrock().invitationForms(other)) {
+        if (answerable && plugin.getBedrock().invitationForms(other)) {
             plugin.getBedrock().forms().question(other, messages.getMessage("bedrock-form-spot-offer-title"), text,
                     messages.getMessage("bedrock-form-spot-offer-accept"),
                     messages.getMessage("bedrock-form-spot-offer-decline"), yes -> {
@@ -706,12 +717,6 @@ public final class CamSpots {
                         }
                     }, null);
         }
-    }
-
-    /** A button that runs a command - or opens the menu, while only the menu goes - or nothing at all. */
-    private List<BaseComponent> commandButton(Player to, String key, String spot, String command) {
-        String run = plugin.commandOrMenu(command);
-        return run == null ? List.of() : button(to, key, spot, new ClickEvent(ClickEvent.Action.RUN_COMMAND, run));
     }
 
     /**

@@ -3,6 +3,7 @@ package de.elia.cameraplugin.bedrock;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
+import de.elia.cameraplugin.menu.MenuAccess;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.HoverEvent;
@@ -16,6 +17,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -141,6 +143,26 @@ public final class BedrockPlayers implements Listener {
     /** Whether the buttons in the chat say the command they run, {@code bedrock.chat-commands}. */
     public boolean writesCommands(CommandSender sender) {
         return settings.isBedrockChatCommands() && adapts(sender);
+    }
+
+    /**
+     * Whether he answers an invitation to follow or a spot offered to him in
+     * the menu: he cannot click in the chat, see {@link #writesCommands}, and
+     * {@code menu.access} lets only the menu through. Written out, the
+     * commands of the buttons would send him to the chat for what the menu
+     * is there for; the line says {@link #menuHint} in their place.
+     */
+    public boolean answersInMenu(CommandSender to) {
+        MenuAccess access = settings.getMenuAccess();
+        return writesCommands(to) && access.allowsMenu() && !access.allowsCommands();
+    }
+
+    /** {@code bedrock-chat-menu} behind a line in place of its buttons, or nothing while it is switched off. */
+    public List<BaseComponent> menuHint() {
+        if (!messages.isMessageEnabled("bedrock-chat-menu")) {
+            return List.of();
+        }
+        return Arrays.asList(TextComponent.fromLegacyText(messages.getMessage("bedrock-chat-menu")));
     }
 
     /**

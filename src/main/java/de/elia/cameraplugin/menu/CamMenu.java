@@ -1586,7 +1586,7 @@ public final class CamMenu implements Listener {
                 ItemStack head = item(Material.PLAYER_HEAD,
                         messages.getMessage(with || offered ? "menu-share-player-" + state : "menu-share-player")
                                 .replace("{player}", entry.getValue()),
-                        lines(messages.getMessage("menu-share-" + state + "-lore")));
+                        lines(text(player, "menu-share-" + state + "-lore")));
                 Player other = Bukkit.getPlayer(entry.getKey());
                 if (other != null && head.getItemMeta() instanceof SkullMeta skull) {
                     // Only of a player online: one offline might have to be
@@ -1610,7 +1610,7 @@ public final class CamMenu implements Listener {
         shown[0] = number;
         boolean everybody = share != null && share.isEveryone();
         put(page, SLOT_EVERYBODY, shine(item(Material.BEACON, messages.getMessage("menu-share-everybody"),
-                lines(messages.getMessage(everybody ? "menu-share-public-lore" : "menu-share-private-lore"))),
+                lines(text(player, everybody ? "menu-share-public-lore" : "menu-share-private-lore"))),
                 everybody), click -> later(() -> {
                     spots.makePublic(player, target, !everybody);
                     openShare(player, key, number);
@@ -1774,7 +1774,7 @@ public final class CamMenu implements Listener {
             String name = guest.getName();
             entries.add(new Row(guest.getUniqueId(), slot -> put(page, slot, head(guest,
                     messages.getMessage("menu-tour-guest").replace("{player}", name),
-                    lines(messages.getMessage("menu-tour-guest-lore"))), click -> later(() -> {
+                    lines(text(player, "menu-tour-guest-lore"))), click -> later(() -> {
                         tour.kick(player, guest, name);
                         openTour(player, 0);
                     }))));
@@ -1796,7 +1796,7 @@ public final class CamMenu implements Listener {
                         : plugin.isInCameraMode(other) ? "menu-tour-candidate-lore"
                         : "menu-tour-candidate-outside-lore";
                 long blocks = Math.round(player.getLocation().distance(other.getLocation()));
-                String lore = messages.getMessage(key).replace("{blocks}", String.valueOf(blocks))
+                String lore = text(player, key).replace("{blocks}", String.valueOf(blocks))
                         .replace("{max}", String.valueOf(settings.getTourMaxGuests()))
                         .replace("{expires}", String.valueOf(holds)).replace("{seconds}", String.valueOf(wait));
                 entries.add(new Row(other.getUniqueId(), slot -> put(page, slot, head(other,
@@ -1853,7 +1853,7 @@ public final class CamMenu implements Listener {
             return;
         }
         double start = settings.getTourStartDistance();
-        String lore = messages.getMessage(start > 0.0 ? "menu-tour-invite-all-lore"
+        String lore = text(player, start > 0.0 ? "menu-tour-invite-all-lore"
                         : "menu-tour-invite-all-lore-cam-only")
                 .replace("{count}", String.valueOf(count))
                 .replace("{start}", String.valueOf(Math.round(start)))
@@ -2156,7 +2156,7 @@ public final class CamMenu implements Listener {
         for (Target target : targets) {
             entries.add(new Row(target.everybody() ? "everybody" : target.id(), slot -> {
                 List<String> lore = new ArrayList<>(targetLines(player, target));
-                lore.addAll(lines(messages.getMessage("menu-admin-players-actions")));
+                lore.addAll(lines(text(player, "menu-admin-players-actions")));
                 put(page, slot, targetItem(target, lore), click -> later(() -> openTarget(player, target)));
             }));
         }
@@ -2443,10 +2443,13 @@ public final class CamMenu implements Listener {
         List<Row> entries = new ArrayList<>();
         entries.add(new Row("everybody", slot -> {
             String everybody = messages.getMessage("menu-admin-everybody-name");
+            boolean restricted = moderation.everybodyBan() != null;
             List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-spots-everybody-lore")));
             lore.addAll(restrictionLines(moderation.everybodyText()));
-            lore.addAll(lines(messages.getMessage("menu-admin-spots-everybody-actions")));
-            put(page, slot, everybodyItem(lore, moderation.everybodyBan() != null), click -> later(() -> {
+            // A click opens the page that changes or lifts a restriction that holds already.
+            lore.addAll(lines(text(player, restricted ? "menu-admin-spots-everybody-actions-change"
+                    : "menu-admin-spots-everybody-actions")));
+            put(page, slot, everybodyItem(lore, restricted), click -> later(() -> {
                 spotDrafts.put(player.getUniqueId(), spotDraft(null, everybody));
                 openSpotBan(player);
             }));
@@ -2456,7 +2459,7 @@ public final class CamMenu implements Listener {
             String name = entry.getValue();
             entries.add(new Row(id, slot -> {
                 List<String> lore = spotOwnerLines(id, counts.getOrDefault(id, 0));
-                lore.addAll(lines(messages.getMessage("menu-admin-spots-actions")));
+                lore.addAll(lines(text(player, "menu-admin-spots-actions")));
                 put(page, slot, playerItem(id, name, lore, moderation.banOf(id) != null),
                         click -> later(() -> openSpotsOf(player, id, name, 0)));
             }));
@@ -2887,8 +2890,11 @@ public final class CamMenu implements Listener {
                         ? lines(messages.getMessage("menu-admin-tours-everybody-lore")) : tourLines(id));
                 lore.addAll(id == null ? switchLines(moderation.offText())
                         : restrictionLines(moderation.banText(id)));
-                lore.addAll(lines(messages.getMessage(id == null ? "menu-admin-tours-everybody-actions"
-                        : "menu-admin-tours-actions")));
+                // A click opens the page that changes or lifts what holds already.
+                boolean kept = id == null ? moderation.everybodyBan() != null : moderation.banOf(id) != null;
+                lore.addAll(lines(text(player, id == null
+                        ? kept ? "menu-admin-tours-everybody-actions-off" : "menu-admin-tours-everybody-actions"
+                        : kept ? "menu-admin-tours-actions-change" : "menu-admin-tours-actions")));
                 ItemStack item = id == null ? everybodyItem(lore, moderation.everybodyBan() != null)
                         : playerItem(id, name, lore, moderation.banOf(id) != null);
                 put(page, slot, item, click -> later(() -> {
@@ -3018,7 +3024,7 @@ public final class CamMenu implements Listener {
         List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-tour-switch-lore")));
         lore.addAll(stateLine(messages.getMessage("menu-admin-tour-switch-on"), !off));
         lore.addAll(stateLine(messages.getMessage("menu-admin-tour-switch-off"), off));
-        lore.addAll(lines(messages.getMessage("menu-admin-restrict-switch")));
+        lore.addAll(lines(text(player, "menu-admin-restrict-switch")));
         put(page, 13, shine(item(Material.SADDLE, messages.getMessage("menu-admin-tour-switch"), lore), off),
                 click -> later(() -> {
                     if (off) {
@@ -3051,7 +3057,7 @@ public final class CamMenu implements Listener {
         List<String> lore = new ArrayList<>(lines(messages.getMessage(key + "-lore")));
         lore.addAll(stateLine(messages.getMessage("menu-admin-restrict-allowed"), !kept));
         lore.addAll(stateLine(messages.getMessage("tour-restriction-" + what.key), kept));
-        lore.addAll(lines(messages.getMessage("menu-admin-restrict-switch")));
+        lore.addAll(lines(text(player, "menu-admin-restrict-switch")));
         put(page, slot, shine(item(icon, messages.getMessage(key), lore), kept), click -> later(() -> {
             if (!draft.kept.remove(what)) {
                 draft.kept.add(what);
@@ -3127,7 +3133,7 @@ public final class CamMenu implements Listener {
                             .replace("{count}", String.valueOf(flights.size()))
                             .replace("{date}", date(flights.get(0).startedAt()))));
                 }
-                lore.addAll(lines(messages.getMessage("menu-admin-trails-actions")));
+                lore.addAll(lines(text(player, "menu-admin-trails-actions")));
                 put(page, slot, online != null ? head(online, label, lore) : item(Material.LEAD, label, lore),
                         click -> later(() -> openFlights(player, name, 0)));
             }));

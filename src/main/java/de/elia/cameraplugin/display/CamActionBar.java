@@ -277,6 +277,10 @@ public final class CamActionBar {
 
     private void show(Player player, String text, long millis) {
         if (text.isEmpty()) return;
+        // Newer than an actionbar-off still to come, which would cover it on
+        // the next tick: a teleport out of camera mode says where it went.
+        BukkitRunnable off = offMessageTasks.remove(player.getUniqueId());
+        if (off != null) off.cancel();
         flashUntil.put(player.getUniqueId(), System.currentTimeMillis() + millis);
         player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(text));
     }

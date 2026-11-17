@@ -37,7 +37,6 @@ import de.elia.cameraplugin.locator.CamLocatorBar;
 import de.elia.cameraplugin.log.CamLog;
 import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.menu.CamMenu;
-import de.elia.cameraplugin.menu.MenuAccess;
 import de.elia.cameraplugin.mirrordamage.DamageMirror;
 import de.elia.cameraplugin.mirrordamage.SwingStrength;
 import de.elia.cameraplugin.mob.MobGaze;
@@ -203,6 +202,9 @@ public final class CameraPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         shuttingDown = false;
+        // A message whose switch says actionbar stands there as long as the
+        // client shows a line, and the distance of the action bar waits for it.
+        messages.useActionBar(actionBar::warn);
         saveDefaultConfig();
         configFile.saveDefaultLanguage();
         // Read before anything is set up, and not left to the first getConfig():
@@ -805,18 +807,6 @@ public final class CameraPlugin extends JavaPlugin {
         return preferences;
     }
 
-    /**
-     * The command a button in the chat runs: itself while
-     * {@code menu.access} lets the commands through, {@code /cam menu} while
-     * only the menu goes, and {@code null} for no button at all.
-     */
-    public String commandOrMenu(String command) {
-        MenuAccess access = settings.getMenuAccess();
-        if (access.allowsCommands()) {
-            return command;
-        }
-        return access.allowsMenu() ? "/cam menu" : null;
-    }
 
     public CamPhotoMode getPhotoMode() {
         return photoMode;

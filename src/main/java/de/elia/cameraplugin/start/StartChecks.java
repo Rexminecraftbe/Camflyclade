@@ -4,7 +4,7 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.movement.FlightMedium;
 import de.elia.cameraplugin.session.CameraPlayers;
-import org.bukkit.ChatColor;
+import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import org.bukkit.FluidCollisionMode;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -156,12 +156,20 @@ public final class StartChecks implements Listener {
         long elapsed = System.currentTimeMillis() - last;
         long delayMillis = settings.getCamSafetyDelay() * 1000L;
         if (elapsed >= delayMillis) return true;
-        long remaining = (delayMillis - elapsed + 999) / 1000;
-        String msg = messages.getMessage("cam-safety").replace("%seconds%", String.valueOf(remaining));
-        if (messages.isMessageEnabled("cam-safety")) {
-            player.sendMessage(ChatColor.RED + msg);
-        }
+        sendCamSafety(player, (delayMillis - elapsed + 999) / 1000);
         return false;
+    }
+
+    /**
+     * {@code cam-safety}: how long he still has to wait after damage,
+     * {@code {time}} with the word ("1 second") and {@code {seconds}} the
+     * number alone - and {@code %seconds%}, as a language file from before
+     * has it.
+     */
+    public void sendCamSafety(Player player, long seconds) {
+        String number = String.valueOf(seconds);
+        messages.sendConfiguredMessage(player, "cam-safety", "{time}", CamTimeLimit.formatSeconds(seconds),
+                "{seconds}", number, "%seconds%", number);
     }
 
     /**

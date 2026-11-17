@@ -13,9 +13,9 @@ messages:
   # the hands - the one the player has bound it to, F unless changed. While exit-key is off it is
   # replaced by actionbar-hint-command. Players on Bedrock, who have no such key (see bedrock in config.yml), get
   # actionbar-hint-bedrock in place of actionbar-hint.
-  actionbar-hint: " &7- &f{key} &7or type &f/cam &7to leave"
-  actionbar-hint-command: " &7- type &f/cam &7to leave"
-  actionbar-hint-bedrock: " &7- type &f/cam &7to leave"
+  actionbar-hint: " &7- &f{key} &7or &f/cam &7to leave"
+  actionbar-hint-command: " &7- &f/cam &7to leave"
+  actionbar-hint-bedrock: " &7- &f/cam &7to leave"
   actionbar-on: "&aCam mode activated{hint}"
   # With camera-mode.max-distance-mode: signal behind actionbar-distance. {icon} is the ping icon of the game, as the
   # tab list shows a connection: one bar to five, or a red cross once the signal is gone - on Spigot, which cannot show
@@ -23,7 +23,7 @@ messages:
   # {bars} are four bars, as many of them lit as the signal is strong, {percent} how strong it is.
   actionbar-signal: " &7| {icon} &7Signal: {quality}"
   # {time} is afk-end.seconds.
-  afk-ended: "&cCam mode ended: you did not move for {time}."
+  afk-ended: "&cCam mode ended: inactive for {time}."
   # How {area} names a world of cam-area.forbidden-worlds, {world} being its name.
   area-world: "the world {world}"
   # The hearts over or under the name of the body with body.health-visible: true, on Spigot only - Paper shows the
@@ -36,7 +36,7 @@ messages:
   armorstand.health-full: "&c❤"
   armorstand.health-half: "&c❥"
   armorstand.name-format: "{player}'s Body"
-  back-not-in-cam: "&cYou are not in cam mode."
+  back-not-in-cam: "&cOnly in cam mode."
   back-off: "&c/cam back is switched off."
   back-to-body: "&aBack at your body"
   # /cam ban: {time} is ban-for or ban-for-good, {reason} is ban-reason (in /cam banlist banlist-reason) or nothing
@@ -50,44 +50,46 @@ messages:
   ban-changed: "&a{player} is now banned from cam mode {time}{reason}."
   ban-date: "yyyy-MM-dd HH:mm"
   ban-done: "&a{player} is banned from cam mode {time}{reason}."
-  ban-everybody-changed: "&aCam mode is now locked for everybody {time}{reason}."
-  ban-everybody-done: "&aCam mode is locked for everybody {time}{reason}."
+  ban-everybody-changed: "&aEverybody is now banned from cam mode {time}{reason}."
+  ban-everybody-done: "&aEverybody is banned from cam mode {time}{reason}."
   ban-for: "for {time}"
-  ban-for-good: "for good"
+  ban-for-good: "permanently"
   ban-off: "&c/cam ban is switched off."
   ban-reason: " because: {reason}"
-  ban-unknown-player: "&cNobody called {player} has been on this server."
-  ban-usage: "&eUse /cam ban <player|all> [time] [reason], /cam unban <player|all> or /cam banlist. A time is e.g. 30m, 2h or 7d."
-  banlist-empty: "&eNobody is banned from cam mode."
+  ban-unknown-player: "&cUnknown player: {player}"
+  ban-usage: "&eUse /cam ban <player|all> [time] [reason], /cam unban <player|all> or /cam banlist. Time e.g. 30m, 2h, 7d."
+  banlist-empty: "&eNobody is banned."
   banlist-entry: "&7- &f{player}&7: {time}, by {by}{reason}"
   banlist-everybody: "&7- &fEverybody&7: {time}, by {by}{reason}"
-  banlist-header: "&eBanned from cam mode ({count}):"
+  banlist-header: "&eBanned ({count}):"
   banlist-reason: " ({reason})"
   banned: "&cYou are banned from cam mode {time}{reason}."
-  banned-changed-forever: "&c{player} changed your cam mode ban: it is permanent now."
-  banned-changed-longer: "&c{player} changed your cam mode ban: it now lasts {time}, until {date}. You have to wait {diff} longer."
-  banned-changed-now: "&c{player} changed your ban: you are banned from cam mode {time}{reason}."
-  banned-changed-shorter: "&a{player} changed your cam mode ban: it now lasts {time}, until {date}. You have to wait {diff} less."
-  banned-changed-until: "&a{player} changed your cam mode ban: it is not permanent any more and ends on {date}."
-  banned-everybody: "&cCam mode is locked for everybody {time}{reason}."
-  banned-everybody-changed-forever: "&c{player} changed the lock of cam mode for everybody: it is permanent now."
-  banned-everybody-changed-longer: "&c{player} changed the lock of cam mode for everybody: it now lasts {time}, until {date}. You have to wait {diff} longer."
-  banned-everybody-changed-now: "&c{player} changed the lock: cam mode is locked for everybody {time}{reason}."
-  banned-everybody-changed-shorter: "&a{player} changed the lock of cam mode for everybody: it now lasts {time}, until {date}. You have to wait {diff} less."
-  banned-everybody-changed-until: "&a{player} changed the lock of cam mode for everybody: it is not permanent any more and ends on {date}."
-  banned-everybody-now: "&c{player} locked cam mode for everybody {time}{reason}."
+  banned-changed-forever: "&c{player} made your cam mode ban permanent."
+  banned-changed-longer: "&c{player} extended your cam mode ban by {diff}: now {time}, until {date}."
+  banned-changed-now: "&c{player} changed your ban: banned from cam mode {time}{reason}."
+  banned-changed-shorter: "&a{player} shortened your cam mode ban by {diff}: now {time}, until {date}."
+  banned-changed-until: "&a{player} made your cam mode ban temporary: it ends on {date}."
+  banned-everybody: "&cEverybody is banned from cam mode {time}{reason}."
+  banned-everybody-changed-forever: "&c{player} made the cam mode ban for everybody permanent."
+  banned-everybody-changed-longer: "&c{player} extended the cam mode ban for everybody by {diff}: now {time}, until {date}."
+  banned-everybody-changed-now: "&c{player} changed the ban for everybody: banned from cam mode {time}{reason}."
+  banned-everybody-changed-shorter: "&a{player} shortened the cam mode ban for everybody by {diff}: now {time}, until {date}."
+  banned-everybody-changed-until: "&a{player} made the cam mode ban for everybody temporary: it ends on {date}."
+  banned-everybody-now: "&c{player} banned everybody from cam mode {time}{reason}."
   banned-now: "&c{player} banned you from cam mode {time}{reason}."
   battery-bossbar: "Battery: {time}"
   battery-bossbar-charging: "Battery charging: {charge}, full in {time}"
-  battery-empty: "&cCam mode ended: the battery is empty."
-  battery-low: "&cThe battery holds {charge} of flight, a start needs {needed}. Ready again in {time}."
+  battery-empty: "&cCam mode ended: battery empty."
+  battery-low: "&cBattery too low: {charge}, a start needs {needed}. Ready in {time}."
   # What players on Bedrock get in place of what Bedrock cannot do, see bedrock in config.yml. bedrock-chat-command
   # stands behind every button in the chat (bedrock.chat-commands): the chat of Bedrock cannot be clicked, so it
   # says the command to type, {command}; one that needs more after it, such as a name, ends in ... The
   # bedrock-form-... texts are the windows that ask about a spot offered to them and about an invitation to follow
   # (bedrock.invitation-forms): their title and their two buttons; the text in them is spot-offered-to-you or
-  # tour-invitation.
+  # tour-invitation. While menu.access lets only the menu through, those two have bedrock-chat-menu behind them in
+  # place of their buttons: the answer goes through the menu.
   bedrock-chat-command: " &8(&7{command}&8)"
+  bedrock-chat-menu: " &8(&7answer in /cam menu&8)"
   bedrock-form-follow-accept: "Follow"
   bedrock-form-follow-decline: "Decline"
   bedrock-form-follow-title: "Invitation to follow"
@@ -97,57 +99,59 @@ messages:
   # {mob} as mob-names has it, {player} the player's name, {distance} how far from the body in blocks.
   body-alarm-mob: "&cWatch out: {mob} is after your body!"
   body-alarm-player: "&cWatch out: {player} is close to your body!"
-  body-attacked: "&cYour body was attacked by {damager}! Camera mode ended."
-  body-drowning: "&cYour body is drowning! Camera mode ended."
-  body-env-damage: "&cYour body was damaged by {cause}! Camera mode ended."
-  body-got-effect: "&cYour body was hit by the effect {effect}! Camera mode ended."
+  body-attacked: "&cCam mode ended: your body was attacked by {damager}."
+  body-drowning: "&cCam mode ended: your body is drowning."
+  body-env-damage: "&cCam mode ended: your body was hurt by {cause}."
+  body-got-effect: "&cCam mode ended: your body got {effect}."
   # The body is no longer there: another plugin took it away, or /kill.
-  body-gone: "&cYour body is gone! Camera mode ended."
-  body-moved: "&cYour body was moved! Camera mode ended."
-  body-suffocating: "&cYour body is stuck and suffocating! Camera mode ended."
-  bossbar-text: "Cam mode ends in: %time%"
-  cam-area-limit: "&cYou cannot go any further, cam mode is not allowed in {area}."
-  cam-area-start: "&cYou cannot start cam mode in {area}."
-  cam-body-blocked: "&cYour body cannot be put down here - another plugin keeps it from spawning. Cam mode stays off."
+  body-gone: "&cCam mode ended: your body is gone."
+  body-moved: "&cCam mode ended: your body was moved."
+  body-suffocating: "&cCam mode ended: your body is suffocating."
+  # The bossbar of time-limit.show-bossbar, {time} is the time left.
+  bossbar-text: "Cam mode ends in {time}"
+  cam-area-limit: "&cCam mode is not allowed in {area}."
+  cam-area-start: "&cYou can't start cam mode in {area}."
+  cam-body-blocked: "&cCam mode can't start here: your body can't be placed."
   # cam-commands: {command} is the command as he typed it, without the /.
   cam-command-blocked: "&cYou can't use /{command} in cam mode."
-  cam-effect-start: "&cYou cannot start cam mode with {effect} on you."
-  cam-falling-start: "&cYou cannot start cam mode while falling."
+  cam-effect-start: "&cYou can't start cam mode with {effect}."
+  cam-falling-start: "&cYou can't start cam mode while falling."
   # The buttons behind each line of /cam list, see cam-list.teleport and cam-list.stop, and what hovering over them says.
   cam-list-body: "&a[Body]"
-  cam-list-body-hover: "&7Teleport next to the body of {player}"
+  cam-list-body-hover: "&7Teleport to {player}'s body"
   cam-list-camera: "&b[Camera]"
-  cam-list-camera-hover: "&7Teleport to the camera of {player}"
+  cam-list-camera-hover: "&7Teleport to {player}'s camera"
   cam-list-empty: "&eNobody is in cam mode."
-  cam-list-entry: "&7- &f{player}&7: for {time}, {distance} blocks from the body"
-  cam-list-entry-away: "&7- &f{player}&7: for {time}, in another world than the body"
+  cam-list-entry: "&7- &f{player}&7: {time}, {distance} blocks from the body"
+  cam-list-entry-away: "&7- &f{player}&7: {time}, in another world"
   cam-list-header: "&eIn cam mode ({count}):"
   cam-list-stop: "&c[Stop]"
-  cam-list-stop-hover: "&7End the cam mode of {player}"
-  cam-lava-start: "&cYou cannot start cam mode in lava."
+  cam-list-stop-hover: "&7End {player}'s cam mode"
+  cam-lava-start: "&cYou can't start cam mode in lava."
   # cam-safety.nearby-players: {player} is the nearest other player, {radius} cam-safety.nearby-radius - how far
   # away from him cam mode starts -, {more} how many blocks further that is, {distance} how far away he is now.
-  cam-nearby-player: "&cYou are too close to {player} to start cam mode. Get at least {radius} blocks away ({more} more)."
-  cam-powder-snow-start: "&cYou cannot start cam mode in powder snow."
-  cam-safety: "§cYou cannot start cam mode! You must remain safe for %seconds% more seconds."
-  cam-sleeping-start: "&cYou cannot start cam mode while lying in a bed. Get up first."
-  cam-spectator-start: "&cYou cannot start cam mode in spectator mode."
-  cam-tp-body: "&aTeleported next to the body of {player}."
-  cam-tp-camera: "&aTeleported to the camera of {player}."
-  cam-tp-cannot-fly: "&cYou can only go to a camera while you can fly."
+  cam-nearby-player: "&cToo close to {player}: move {more} more blocks away."
+  cam-powder-snow-start: "&cYou can't start cam mode in powder snow."
+  # cam-safety: {time} is how long he still has to wait, with the word ("5 seconds"), {seconds} the number alone.
+  cam-safety: "&cToo soon after damage: wait {time}."
+  cam-sleeping-start: "&cYou can't start cam mode in bed."
+  cam-spectator-start: "&cYou can't start cam mode in spectator mode."
+  cam-tp-body: "&aTeleported to {player}'s body."
+  cam-tp-camera: "&aTeleported to {player}'s camera."
+  cam-tp-cannot-fly: "&cYou can only go to a camera if you can fly."
   cam-tp-not-in-cam: "&c{player} is not in cam mode."
-  cam-tp-self: "&cThat is your own camera. Use /cam back to go back to your body."
-  cam-tp-usage: "&eUse /cam tp <player> camera or /cam tp <player> body."
+  cam-tp-self: "&cThat is your own camera."
+  cam-tp-usage: "&eUse /cam tp <player> camera|body."
   # {command} is the word after /cam that is no command of cam mode.
-  cam-unknown-command: "&c/cam {command} is no command of cam mode. /cam alone starts and ends it, Tab after /cam shows the rest."
-  cam-vehicle-start: "&cYou cannot start cam mode while riding. Get off first."
-  cam-water-start: "&cYou cannot start cam mode in water."
-  camera-off: "&aCamera mode ended."
-  camera-on: "&aCamera mode activated! Use /cam again to exit."
-  cant-attack-other-body: "&cYou cannot attack other bodies in camera mode."
-  cant-fly-in-lava: "&cYou cannot fly into lava in camera mode."
-  cant-fly-in-powder-snow: "&cYou cannot fly into powder snow in camera mode."
-  cant-fly-in-water: "&cYou cannot fly into water in camera mode."
+  cam-unknown-command: "&cUnknown command: /cam {command}"
+  cam-vehicle-start: "&cYou can't start cam mode while riding."
+  cam-water-start: "&cYou can't start cam mode in water."
+  camera-off: "&aCam mode ended."
+  camera-on: "&aCam mode activated. /cam again to leave."
+  cant-attack-other-body: "&cYou can't attack bodies in cam mode."
+  cant-fly-in-lava: "&cYou can't fly into lava."
+  cant-fly-in-powder-snow: "&cYou can't fly into powder snow."
+  cant-fly-in-water: "&cYou can't fly into water."
   config-allowed-blocks: "any block, e.g. barrier or glass"
   config-allowed-height: "a height, e.g. 15 or -32, or off"
   config-allowed-menu-items: "any item, e.g. clock or ender_pearl, or camera_head or night_vision_potion"
@@ -187,22 +191,23 @@ messages:
   console-name: "the server"
   cooldown-available: "&aCam mode available again"
   # The bossbar of time-limit.show-bossbar-cooldown, {time} is the time left.
-  cooldown-bossbar: "Cam mode again in: {time}"
-  crash-restored: "&eThe server went down while you were in cam mode. You got your things back and are at your body again."
-  cooldown-text: "You can start cam mode again in %time%."
+  cooldown-bossbar: "Cam mode again in {time}"
+  crash-restored: "&eThe server crashed during your cam mode: you are back at your body with all your things."
+  # time-limit.cooldowns-enabled: {time} is how long he still has to wait.
+  cooldown-text: "&cCam mode again in {time}."
   # The parts of start-cost that cost-missing and cost-paid list, one after the other.
   cost-item: "{amount}x {item}"
   cost-level: "1 XP level"
   cost-levels: "{amount} XP levels"
   cost-point: "1 XP point"
   cost-points: "{amount} XP points"
-  cost-missing: "&cStarting cam mode costs {cost}. You are missing {missing}."
-  cost-paid: "&7Cam mode cost you {cost}."
+  cost-missing: "&cCam mode costs {cost}, you are missing {missing}."
+  cost-paid: "&7Paid {cost}."
   distance-from-body: "your body"
-  distance-from-portal: "the portal you came out of"
-  distance-limit: "&cYou cannot move further than {distance} blocks from {from}!"
+  distance-from-portal: "the portal"
+  distance-limit: "&cYou can't go further than {distance} blocks from {from}."
   # {time} is the time left; end-warning-afk comes at afk-end.warning-percent.
-  end-warning-afk: "&eYou are not moving: cam mode ends in {time}"
+  end-warning-afk: "&eInactive: cam mode ends in {time}"
   end-warning-battery: "&eBattery almost empty: {time} left"
   end-warning-time-limit: "&eCam mode ends in {time}"
   flight-speed: "&bFlight speed: &f{speed}x"
@@ -214,8 +219,8 @@ messages:
   # own is public ({likes}).
   # menu-spot-reach-lore stands under every spot that can be jumped to: how close one has to be to jump there.
   # menu-spot-views: how often the spot was looked at ({views}): every jump, by anybody, the same
-  # player at the same spot once in viewpoints.views-cooldown-minutes at most, which menu-spot-views-hint says under
-  # it ({minutes}; not at 0, when every jump counts). menu-guestbook is the bell on the pages of the spots that sets
+  # player at the same spot once in viewpoints.views-cooldown-minutes at most, which menu-spot-views-hint can say under
+  # it ({minutes}; empty, as it is here, for nothing, and never at 0, when every jump counts). menu-guestbook is the bell on the pages of the spots that sets
   # how the guestbook (viewpoints.guestbook) tells him of his spots, {mode} being menu-guestbook-on, -login or -off;
   # under it every way, the one he set as menu-guestbook-option-current, the others as menu-guestbook-option, then
   # menu-guestbook-interval - how often "on" tells him while he plays ({minutes},
@@ -238,7 +243,8 @@ messages:
   # menu-tour-candidate-restricted- and -disabled-lore under a player he cannot invite for that;
   # menu-tour-candidate-invited-lore under one whose invitation still holds ({expires}, the seconds it still does),
   # -wait-lore under one he may not invite again yet (follow.invite-cooldown-seconds, {seconds} left).
-  # menu-only is what the commands say under menu.access or menu.admin-access: menu, menu-features-off under false. menu-spot-name asks for the name of a new spot in the chat,
+  # menu-only is what the commands say under menu.access or menu.admin-access: menu, menu-features-off under false and
+  # when what the command is for is switched off in config.yml. menu-spot-name asks for the name of a new spot in the chat,
   # menu-admin-ban-reason-question why a player is banned ({player}), {cancel} being the word that calls either off,
   # with menu-answer-cancelled. Under menu-stats and the heads of menu-admin-stats stand the lines of /cam stats;
   # menu-admin-cam-lore and -away stand under the heads of who is in cam mode, like cam-list-entry. On the page of a
@@ -258,58 +264,59 @@ messages:
   # into stands the text with -form after the key of the question, menu-form-placeholder in it.
   menu-admin: "&cAdmin"
   menu-admin-ban: "&cBan"
-  menu-admin-ban-change: "&cChange the ban"
-  menu-admin-ban-change-confirm: "&4Change the ban"
-  menu-admin-ban-change-lore: "&7Banned now: change\n&7how long and why."
-  menu-admin-ban-change-title: "&8Change the ban of {player}"
+  menu-admin-ban-change: "&cChange ban"
+  menu-admin-ban-change-confirm: "&4Change ban"
+  menu-admin-ban-change-lore: "&7Change duration or reason."
+  menu-admin-ban-change-title: "&8Change ban: {player}"
   menu-admin-ban-confirm: "&4Ban"
   menu-admin-ban-confirm-lore: "&7{player}, {ban}"
   menu-admin-ban-days: "&eDays: &f{amount}"
-  menu-admin-ban-forever: "&cFor good"
+  menu-admin-ban-forever: "&cPermanent"
   menu-admin-ban-hours: "&eHours: &f{amount}"
-  menu-admin-ban-lore: "&7Pick how long and why."
+  menu-admin-ban-lore: "&7Set duration and reason."
   menu-admin-ban-minutes: "&eMinutes: &f{amount}"
   menu-admin-ban-no-reason: "&7none"
   menu-admin-ban-reason: "&fReason"
-  menu-admin-ban-reason-actions: "&eLeft-click: write one in the chat\n&eRight-click: none"
-  menu-admin-ban-reason-actions-bedrock: "&eTap: write one or none"
-  menu-admin-ban-reason-question: "&eType in the chat why {player} is banned, or {cancel}."
-  menu-admin-ban-reason-question-form: "Why is {player} banned?"
-  menu-admin-ban-time-actions: "&eLeft-click: +1\n&eRight-click: -1\n&eWith shift: {step} at once"
-  menu-admin-ban-time-actions-bedrock: "&eTap: +1, -1 or {step} at once"
-  menu-admin-ban-time-lore: "&7Altogether: &f{time}"
+  menu-admin-ban-reason-actions: "&eLeft-click: write in chat\n&eRight-click: none"
+  menu-admin-ban-reason-actions-bedrock: "&eTap: write or none"
+  menu-admin-ban-reason-question: "&eType the ban reason for {player} in chat (&f{cancel}&e to abort)."
+  menu-admin-ban-reason-question-form: "Ban reason for {player}"
+  menu-admin-ban-time-actions: "&eLeft-click: +1\n&eRight-click: -1\n&eShift: ±{step}"
+  menu-admin-ban-time-actions-bedrock: "&eTap: ±1 or ±{step}"
+  menu-admin-ban-time-lore: "&7Total: &f{time}"
   menu-admin-ban-title: "&8Ban {player}"
   menu-admin-banned: "&cBanned {ban}"
-  menu-admin-cam-lore: "&7In cam mode for {time},\n&7{distance} blocks from the body"
-  menu-admin-cam-lore-away: "&7In cam mode for {time},\n&7in another world than the body"
+  menu-admin-cam-lore: "&7In cam mode: {time}\n&7{distance} blocks from the body"
+  menu-admin-cam-lore-away: "&7In cam mode: {time}\n&7In another world"
   menu-admin-everybody-cam: "&7{count} in cam mode"
   menu-admin-everybody-name: "Everybody"
   # The flights of a player on the admin page: menu-admin-flight with {number} (1 the newest) and {date}, when it
   # began as menu-admin-flight-date writes it (a pattern of Java's DateTimeFormatter, e.g. dd.MM.yyyy HH:mm), and
   # under it menu-admin-flight-lore with {time} how long it took, {distance} in blocks, {from} where the body stood and
-  # {to} where the camera was last, both as trail-place has them.
+  # {to} where the camera was last, both as trail-place has them ({date} there too).
   menu-admin-flight: "&f#{number} &7- &f{date}"
-  menu-admin-flight-actions: "&eLeft-click: show it\n&eRight-click: show it and go to its start"
-  menu-admin-flight-actions-bedrock: "&eTap: show it, or show it\n&eand go to its start"
+  menu-admin-flight-actions: "&eLeft-click: show\n&eRight-click: show and go to start"
+  menu-admin-flight-actions-bedrock: "&eTap: show, or show and go to start"
   menu-admin-flight-date: "yyyy-MM-dd HH:mm"
   menu-admin-flight-flying: "&aStill in cam mode"
-  menu-admin-flight-lore: "&7Started: &f{date}\n&7Duration: &f{time}\n&7Distance: &f{distance} blocks\n&7From: &f{from}\n&7To: &f{to}"
+  menu-admin-flight-lore: "&7Duration: &f{time}\n&7Distance: &f{distance} blocks\n&7From: &f{from}\n&7To: &f{to}"
   menu-admin-flights-all: "&eShow all flights"
-  menu-admin-flights-title: "&8Flights of {player}"
-  menu-admin-list: "&bWho is in cam mode"
-  menu-admin-list-actions: "&eLeft-click: teleport to the camera\n&eRight-click: teleport to the body"
-  menu-admin-list-actions-bedrock: "&eTap: teleport to the camera\n&eor to the body"
+  menu-admin-flights-title: "&8Flights: {player}"
+  menu-admin-list: "&bIn cam mode"
+  menu-admin-list-actions: "&eLeft-click: go to camera\n&eRight-click: go to body"
+  menu-admin-list-actions-bedrock: "&eTap: go to camera or body"
   menu-admin-list-empty: "&7Nobody is in cam mode."
-  menu-admin-list-lore: "&7See who is flying right now\n&7and teleport to them."
-  menu-admin-list-title: "&8Who is in cam mode"
-  menu-admin-lore: "&7Who is in cam mode, players to\n&7stop and ban, statistics and flights."
+  menu-admin-list-lore: "&7Who is flying, teleport to them."
+  menu-admin-list-title: "&8In cam mode"
+  menu-admin-lore: "&7Players, bans, spots,\n&7following and flights."
   menu-admin-not-banned: "&7Not banned"
   menu-admin-not-in-cam: "&7Not in cam mode"
   menu-admin-offline: "&7Not online"
   menu-admin-player: "&f{player}"
-  menu-admin-players: "&cPlayers: stop and ban"
+  menu-admin-players: "&cStop and ban"
   menu-admin-players-actions: "&eClick: stop or ban"
-  menu-admin-players-lore: "&7End the cam mode of a player,\n&7ban him, change or lift his ban."
+  menu-admin-players-actions-bedrock: "&eTap: stop or ban"
+  menu-admin-players-lore: "&7End a player's cam mode,\n&7ban or unban them."
   menu-admin-players-title: "&8Players"
   # The pages that restrict the spots or the following of a player, or of everybody: menu-admin-restricted what keeps him
   # ({ban}: {what} as spot-restriction-... or tour-restriction-..., the time as ban-for or ban-for-good, the reason as
@@ -319,66 +326,72 @@ messages:
   menu-admin-restrict-free: "&7No restrictions"
   menu-admin-restrict-stage: "&8- {stage}"
   menu-admin-restrict-stage-now: "&a» {stage}"
-  menu-admin-restrict-steps: "&eLeft-click: next step\n&eRight-click: step back"
-  menu-admin-restrict-steps-bedrock: "&eTap: pick a step"
+  menu-admin-restrict-steps: "&eLeft-click: next\n&eRight-click: previous"
+  menu-admin-restrict-steps-bedrock: "&eTap: pick one"
   menu-admin-restrict-switch: "&eClick: switch"
+  menu-admin-restrict-switch-bedrock: "&eTap: switch"
   menu-admin-restricted: "&cRestricted: {ban}"
   # The admin page of the spots (camplugin.spotadmin): menu-admin-spots-... is the list of the players who have spots
-  # ({count} spots, {public} of them public, {shared} shared by name), everybody first (-everybody-...);
-  # menu-admin-spot-... the page of one player's spots and the page that restricts them, with a button for each kind
-  # of spots (-private, -public, -shared).
+  # ({count} spots, {public} of them public, {shared} shared by name), everybody first (-everybody-..., with
+  # -actions-change in place of -actions while a restriction holds); menu-admin-spot-... the page of one player's
+  # spots and the page that restricts them, with a button for each kind of spots (-private, -public, -shared).
   menu-admin-spot-actions: "&bRight-click: go there\n&cShift-click: delete"
   menu-admin-spot-actions-bedrock: "&eTap: go there or delete"
-  menu-admin-spot-actions-shared: "&eLeft-click: take it down -\n&eprivate again\n&bRight-click: go there\n&cShift-click: delete"
-  menu-admin-spot-actions-shared-bedrock: "&eTap: take it down - private\n&eagain -, go there or delete"
+  menu-admin-spot-actions-shared: "&eLeft-click: make private\n&bRight-click: go there\n&cShift-click: delete"
+  menu-admin-spot-actions-shared-bedrock: "&eTap: make private, go there\n&eor delete"
   menu-admin-spot-private: "&7Private"
   menu-admin-spot-restrict: "&cRestrict"
-  menu-admin-spot-restrict-change: "&cChange the restriction"
-  menu-admin-spot-restrict-change-confirm: "&4Change the restriction"
-  menu-admin-spot-restrict-change-lore: "&7Restricted now: change what,\n&7how long and why, or lift it."
-  menu-admin-spot-restrict-change-title: "&8Change the restriction of {player}"
+  menu-admin-spot-restrict-change: "&cChange restriction"
+  menu-admin-spot-restrict-change-confirm: "&4Change restriction"
+  menu-admin-spot-restrict-change-lore: "&7Change or lift it."
+  menu-admin-spot-restrict-change-title: "&8Change restriction: {player}"
   menu-admin-spot-restrict-confirm: "&4Restrict"
   menu-admin-spot-restrict-confirm-lore: "&7{player}: {ban}"
-  menu-admin-spot-restrict-lore: "&7Keep him from saving spots, making\n&7them public, sharing them or\n&7looking at spots."
+  menu-admin-spot-restrict-lore: "&7Limit saving, sharing\n&7or visiting spots."
   menu-admin-spot-restrict-nothing: "&7Nothing picked"
-  menu-admin-spot-restrict-nothing-lore: "&7Pick at least one thing\n&7he may not do."
-  menu-admin-spot-restrict-private: "&fHis own spots"
-  menu-admin-spot-restrict-private-lore: "&7Saving spots, and jumping\n&7to his own"
+  menu-admin-spot-restrict-nothing-lore: "&7Pick at least one."
+  menu-admin-spot-restrict-private: "&fOwn spots"
+  menu-admin-spot-restrict-private-lore: "&7Saving spots and jumping\n&7to their own"
   menu-admin-spot-restrict-public: "&ePublic spots"
-  menu-admin-spot-restrict-public-lore: "&7Making his spots public, and\n&7jumping to the public ones"
-  menu-admin-spot-restrict-reason-question: "&eType in the chat why the spots of {player} are restricted, or {cancel}."
-  menu-admin-spot-restrict-reason-question-form: "Why are the spots of {player} restricted?"
+  menu-admin-spot-restrict-public-lore: "&7Making spots public and\n&7jumping to public ones"
+  menu-admin-spot-restrict-reason-question: "&eType the reason for restricting {player} in chat (&f{cancel}&e to abort)."
+  menu-admin-spot-restrict-reason-question-form: "Reason for restricting {player}"
   menu-admin-spot-restrict-shared: "&bShared spots"
-  menu-admin-spot-restrict-shared-lore: "&7Sharing his spots by name, and\n&7jumping to those shared\n&7with him"
-  menu-admin-spot-restrict-title: "&8Restrict the spots of {player}"
+  menu-admin-spot-restrict-shared-lore: "&7Sharing spots with players\n&7and jumping to shared ones"
+  menu-admin-spot-restrict-title: "&8Restrict spots: {player}"
   menu-admin-spot-unrestrict: "&aLift the restriction"
-  menu-admin-spot-unrestrict-everybody-lore: "&7Everybody may do everything\n&7with spots again."
-  menu-admin-spot-unrestrict-lore: "&7{player} may do everything\n&7with spots again."
-  menu-admin-spots: "&aSpots of everybody"
-  menu-admin-spots-actions: "&eClick: his spots"
+  menu-admin-spot-unrestrict-everybody-lore: "&7Lifts it for everybody."
+  menu-admin-spot-unrestrict-lore: "&7Lifts it for {player}."
+  menu-admin-spots: "&aAll spots"
+  menu-admin-spots-actions: "&eClick: their spots"
+  menu-admin-spots-actions-bedrock: "&eTap: their spots"
   menu-admin-spots-count: "&7Spots: &f{count}&7, public: &f{public}&7, shared: &f{shared}"
   menu-admin-spots-empty: "&7Nobody has spots"
-  menu-admin-spots-empty-lore: "&7Players show up here once\n&7they save a spot."
+  menu-admin-spots-empty-lore: "&7Players appear here once\n&7they save a spot."
   menu-admin-spots-everybody-actions: "&eClick: restrict"
-  menu-admin-spots-everybody-lore: "&7Restrict spots for every player\n&7at once, but those with\n&7camplugin.spotadmin.bypass"
-  menu-admin-spots-lore: "&7Look at the spots of a player,\n&7take them down or delete them,\n&7and restrict what he may do."
+  menu-admin-spots-everybody-actions-bedrock: "&eTap: restrict"
+  menu-admin-spots-everybody-actions-change: "&eClick: change or lift"
+  menu-admin-spots-everybody-actions-change-bedrock: "&eTap: change or lift"
+  menu-admin-spots-everybody-lore: "&8Except players with bypass permission"
+  menu-admin-spots-lore: "&7View, take down or delete the\n&7spots of players, restrict them."
   menu-admin-spots-none: "&7No spots"
-  menu-admin-spots-none-lore: "&7He has no spots (any more)."
-  menu-admin-spots-of-title: "&8Spots of {player}"
+  menu-admin-spots-none-lore: ""
+  menu-admin-spots-of-title: "&8Spots: {player}"
   menu-admin-spots-title: "&8Spots: players"
-  menu-admin-stats: "&bStatistics of others"
-  menu-admin-stats-actions: "&eClick: in the chat"
+  menu-admin-stats: "&bPlayer statistics"
+  menu-admin-stats-actions: "&eClick: show in chat"
+  menu-admin-stats-actions-bedrock: "&eTap: show in chat"
   # In its place for whoever may reset the statistics of others (camplugin.stats.reset), like /cam stats reset <name>.
-  menu-admin-stats-actions-reset: "&eClick: in the chat\n&cShift-click: reset"
-  menu-admin-stats-actions-reset-bedrock: "&eTap: in the chat or reset"
-  menu-admin-stats-lore: "&7Of the players online."
+  menu-admin-stats-actions-reset: "&eClick: show in chat\n&cShift-click: reset"
+  menu-admin-stats-actions-reset-bedrock: "&eTap: show in chat or reset"
+  menu-admin-stats-lore: "&7Of players online."
   menu-admin-stats-title: "&8Statistics"
-  menu-admin-stop: "&cEnd the cam mode"
+  menu-admin-stop: "&cEnd cam mode"
   menu-admin-stop-all: "&cEnd everybody's cam mode"
-  menu-admin-stop-all-lore: "&7Everybody back to the body, at once."
-  menu-admin-stop-lore: "&7Back to the body, at once."
+  menu-admin-stop-all-lore: "&7Everybody back to their body."
+  menu-admin-stop-lore: "&7Back to their body."
   menu-admin-stop-none: "&7Not in cam mode"
-  menu-admin-stop-none-lore: "&7There is no cam mode to end."
+  menu-admin-stop-none-lore: ""
   menu-admin-target-title: "&8{player}"
   menu-admin-title: "&8Cam admin"
   # The admin page of /cam follow (camplugin.followadmin): menu-admin-tours-... the list of the players, everybody first
@@ -386,65 +399,74 @@ messages:
   # followers) or follows somebody ({player} is the leader). menu-admin-tour-off-... is the page that switches following
   # off for everybody, with the button -switch (-switch-on or -switch-off) and menu-admin-tour-on, which switches it
   # on again; menu-admin-tour-restrict-... the page that restricts one player, with the buttons -lead and -join.
-  menu-admin-tour-off-change-confirm: "&4Save the change"
-  menu-admin-tour-off-change-title: "&8Following is off for everybody"
+  # While something holds already, menu-admin-tours-actions-change (a player) and -everybody-actions-off (everybody)
+  # stand under it in place of -actions and -everybody-actions.
+  menu-admin-tour-off-change-confirm: "&4Save"
+  menu-admin-tour-off-change-title: "&8Following: off for all"
   menu-admin-tour-off-confirm: "&4Switch following off"
   menu-admin-tour-off-confirm-lore: "&7Following: {ban}"
   menu-admin-tour-off-nothing: "&7Nothing to switch off"
   menu-admin-tour-off-nothing-lore: "&7Switch following off above first."
-  menu-admin-tour-off-reason-question: "&eType in the chat why following is switched off, or {cancel}."
-  menu-admin-tour-off-reason-question-form: "Why is following switched off?"
-  menu-admin-tour-off-title: "&8Switch following off for everybody"
-  menu-admin-tour-on: "&aSwitch following on again"
-  menu-admin-tour-on-everybody-lore: "&7Everybody may lead and\n&7follow again."
-  menu-admin-tour-restrict-change-confirm: "&4Change the restriction"
-  menu-admin-tour-restrict-change-title: "&8Change the follow restriction of {player}"
+  menu-admin-tour-off-reason-question: "&eType the reason for switching following off in chat (&f{cancel}&e to abort)."
+  menu-admin-tour-off-reason-question-form: "Reason for switching following off"
+  menu-admin-tour-off-title: "&8Following off for all"
+  menu-admin-tour-on: "&aSwitch following on"
+  menu-admin-tour-on-everybody-lore: "&7Everybody can lead\n&7and follow again."
+  menu-admin-tour-restrict-change-confirm: "&4Change restriction"
+  menu-admin-tour-restrict-change-title: "&8Change restriction: {player}"
   menu-admin-tour-restrict-confirm: "&4Restrict"
   menu-admin-tour-restrict-confirm-lore: "&7{player}: {ban}"
   menu-admin-tour-restrict-join: "&bFollowing"
-  menu-admin-tour-restrict-join-lore: "&7Accepting invitations,\n&7following a leader"
+  menu-admin-tour-restrict-join-lore: "&7Accepting invitations"
   menu-admin-tour-restrict-lead: "&6Leading"
-  menu-admin-tour-restrict-lead-lore: "&7Inviting players to follow him,\n&7which makes him a leader"
+  menu-admin-tour-restrict-lead-lore: "&7Inviting players to follow"
   menu-admin-tour-restrict-nothing: "&7Nothing picked"
-  menu-admin-tour-restrict-nothing-lore: "&7Pick at least one thing\n&7he may not do."
-  menu-admin-tour-restrict-reason-question: "&eType in the chat why {player} may not lead or follow, or {cancel}."
-  menu-admin-tour-restrict-reason-question-form: "Why may {player} not lead or follow?"
-  menu-admin-tour-restrict-title: "&8Restrict the following of {player}"
-  menu-admin-tour-switch: "&6Following for everybody"
-  menu-admin-tour-switch-lore: "&7Leading and following,\n&7for every player but those\n&7with camplugin.followadmin.bypass"
-  menu-admin-tour-switch-off: "switched off"
+  menu-admin-tour-restrict-nothing-lore: "&7Pick at least one."
+  menu-admin-tour-restrict-reason-question: "&eType the reason for restricting {player} in chat (&f{cancel}&e to abort)."
+  menu-admin-tour-restrict-reason-question-form: "Reason for restricting {player}"
+  menu-admin-tour-restrict-title: "&8Restrict following: {player}"
+  menu-admin-tour-switch: "&6Following for all"
+  menu-admin-tour-switch-lore: "&8Except players with bypass permission"
+  menu-admin-tour-switch-off: "off"
   menu-admin-tour-switch-on: "on"
   menu-admin-tour-unrestrict: "&aLift the restriction"
-  menu-admin-tour-unrestrict-lore: "&7{player} may lead and\n&7follow again."
+  menu-admin-tour-unrestrict-lore: "&7Lifts it for {player}."
   menu-admin-tours: "&6Follow"
   menu-admin-tours-actions: "&eClick: restrict"
-  menu-admin-tours-everybody-actions: "&eClick: switch on or off"
-  menu-admin-tours-everybody-lore: "&7Switch following off for every\n&7player at once, but those with\n&7camplugin.followadmin.bypass"
+  menu-admin-tours-actions-bedrock: "&eTap: restrict"
+  menu-admin-tours-actions-change: "&eClick: change or lift"
+  menu-admin-tours-actions-change-bedrock: "&eTap: change or lift"
+  menu-admin-tours-everybody-actions: "&eClick: switch off"
+  menu-admin-tours-everybody-actions-bedrock: "&eTap: switch off"
+  menu-admin-tours-everybody-actions-off: "&eClick: change or switch on"
+  menu-admin-tours-everybody-actions-off-bedrock: "&eTap: change or switch on"
+  menu-admin-tours-everybody-lore: "&8Except players with bypass permission"
   menu-admin-tours-following: "&7Follows {player}"
   menu-admin-tours-guiding: "&7Leads {count}"
-  menu-admin-tours-lore: "&7Keep players, or everybody,\n&7from leading or following."
+  menu-admin-tours-lore: "&7Keep players from leading\n&7or following."
   menu-admin-tours-none: "&7Neither leads nor follows"
   menu-admin-tours-off: "&cFollowing is off {ban}"
   menu-admin-tours-on: "&aFollowing is on"
   menu-admin-tours-title: "&8Follow: players"
   menu-admin-trails: "&aFlights"
-  menu-admin-trails-actions: "&eClick: his flights"
-  menu-admin-trails-count: "&7{count} flights kept, the last at {date}"
+  menu-admin-trails-actions: "&eClick: their flights"
+  menu-admin-trails-actions-bedrock: "&eTap: their flights"
+  menu-admin-trails-count: "&7{count} flights, last: {date}"
   menu-admin-trails-hide: "&7Hide the line"
   menu-admin-trails-lore: "&7Where the cameras flew."
   menu-admin-trails-title: "&8Flights"
-  menu-admin-unban: "&aLift the ban"
-  menu-admin-unban-lore: "&7Unlock {player} again, so they\n&7can use cam mode again."
+  menu-admin-unban: "&aUnban"
+  menu-admin-unban-lore: "&7{player} can use cam mode again."
   menu-answer-cancelled: "&7Cancelled."
   menu-back: "&bBack to your body"
-  menu-back-lore: "&7The camera goes back to your body,\n&7cam mode goes on."
-  menu-choice-action: "&eLeft-click: the next one\n&eRight-click: the one before"
+  menu-back-lore: "&7Cam mode stays on."
+  menu-choice-action: "&eLeft-click: next\n&eRight-click: previous"
   menu-choice-action-bedrock: "&eTap: pick one"
   menu-choice-option: "&7   {choice}"
   menu-choice-option-current: "&a» {choice}"
   menu-end: "&cEnd cam mode"
   menu-end-lore: "&7Back to your body."
-  menu-features-off: "&cThat is switched off on this server."
+  menu-features-off: "&cThat is switched off."
   # What keeps the place of an entry that is no longer on a list while the page is open (menu.live-update) - a player
   # who left, a spot that was deleted -, so that nothing moves under the mouse: {name} is what the entry was called.
   # It goes once a click of his changes the page, or when the list is opened again. menu-gone-lore alone names one
@@ -453,43 +475,42 @@ messages:
   menu-gone: "&8{name}"
   menu-gone-lore: "&7No longer here"
   menu-guestbook: "&6Guestbook: &f{mode}"
-  menu-guestbook-action: "&eLeft-click: the next one\n&eRight-click: the one before"
+  menu-guestbook-action: "&eLeft-click: next\n&eRight-click: previous"
   menu-guestbook-action-bedrock: "&eTap: pick one"
-  menu-guestbook-interval: "&8On: updates every {minutes} min\n&8while you play"
-  menu-guestbook-locked: "&cClosed while you may not look\n&cat public or shared spots."
+  menu-guestbook-interval: "&8On: every {minutes} min while online"
+  menu-guestbook-locked: "&cUnavailable: you can't view\n&cpublic or shared spots."
   menu-guestbook-login: "only at login"
-  menu-guestbook-lore: "&7Hear how often your spots\n&7are looked at and liked."
+  menu-guestbook-lore: "&7Views and likes of your spots."
   menu-guestbook-off: "off"
   menu-guestbook-on: "on"
   menu-guestbook-option: "&7   {mode}"
   menu-guestbook-option-current: "&a» {mode}"
   menu-new-spot: "&aSave a spot here"
-  menu-new-spot-count: "&7Your spots: &f{count} of {max} &7- &a{left} more &7possible"
-  menu-new-spot-count-full: "&cYour spots: {count} of {max} - delete one first"
+  menu-new-spot-count: "&7Your spots: &f{count}/{max}"
+  menu-new-spot-count-full: "&cYour spots: {count}/{max} - delete one first"
   menu-new-spot-count-unlimited: "&7Your spots: &f{count}"
   # Under the button of a new spot while viewpoints.set-in-cam-only is on.
   menu-new-spot-cam-only: "&eOnly in cam mode"
-  menu-new-spot-lore: "&7Where you are, looking the way you look.\n&7Then type its name in the chat."
-  menu-new-spot-lore-bedrock: "&7Where you are, looking the way you look.\n&7Then type its name."
-  menu-new-spot-lore-public: "&7Where you are, looking the way you look.\n&7Then type its name in the chat.\n&fLeft-click: private\n&eRight-click: public - it is one of\n&eyour spots all the same"
-  menu-new-spot-lore-public-bedrock: "&7Where you are, looking the way you look.\n&7Then type its name.\n&eTap: private or public - a public\n&eone is one of your spots all the same"
+  menu-new-spot-lore: "&7Saves your position and view."
+  menu-new-spot-lore-public: "&7Saves your position and view.\n&fLeft-click: private\n&eRight-click: public"
+  menu-new-spot-lore-public-bedrock: "&7Saves your position and view.\n&eTap: private or public"
   menu-next: "&7Next page »"
   menu-nightvision: "&eNight vision: &f{mode}"
-  menu-nightvision-dark: "only in the dark"
-  menu-nightvision-lore: "&7When you see in the dark in cam mode."
+  menu-nightvision-dark: "in the dark"
+  menu-nightvision-lore: "&7When you get it in cam mode."
   menu-nightvision-off: "never"
   menu-nightvision-on: "always"
-  menu-nightvision-reset: "as the server has it ({mode})"
+  menu-nightvision-reset: "server default ({mode})"
   # Under the buttons of the time, the weather and the night vision while the leader one follows shows his in their
   # place (follow.guide-time, -weather, -night-vision): what one picks there holds once one stops following.
-  menu-own-later: "&6While you follow, you see the leader's.\n&6What you pick here holds\n&6once you stop following."
+  menu-own-later: "&6Following: you see the leader's.\n&6Yours applies afterwards."
   menu-off: "&c/cam menu is switched off."
   menu-offer: "&e{owner}:{spot}"
-  menu-offer-actions: "&eOffered to you\n&aLeft-click: accept\n&cRight-click: turn down"
-  menu-offer-actions-bedrock: "&eOffered to you\n&eTap: accept or turn down"
-  menu-only: "&eThat goes through /cam menu on this server."
+  menu-offer-actions: "&eOffered to you\n&aLeft-click: accept\n&cRight-click: decline"
+  menu-offer-actions-bedrock: "&eOffered to you\n&eTap: accept or decline"
+  menu-only: "&eUse /cam menu for that."
   menu-photo: "&dPhoto mode"
-  menu-photo-lore: "&7The other players, the bodies, mobs\n&7and items out of the picture, on and off."
+  menu-photo-lore: "&7Hides players, bodies,\n&7mobs and items."
   menu-pick: "&f{pick}"
   menu-pick-accept: "&aAccept"
   menu-pick-back: "&7« Back"
@@ -498,9 +519,9 @@ messages:
   menu-pick-ban-more: "&a+1"
   menu-pick-ban-more-step: "&a+{step}"
   menu-pick-current: "&a» {pick}"
-  menu-pick-decline: "&cTurn down"
-  menu-pick-flight-go: "&bShow it and go to its start"
-  menu-pick-flight-show: "&eShow it"
+  menu-pick-decline: "&cDecline"
+  menu-pick-flight-go: "&bShow and go to start"
+  menu-pick-flight-show: "&eShow"
   menu-pick-follow: "&aFollow"
   menu-pick-reason-none: "&7None"
   menu-pick-reason-write: "&eWrite one"
@@ -508,47 +529,52 @@ messages:
   menu-pick-spot-go: "&bGo there"
   menu-pick-spot-jump: "&eJump there"
   menu-pick-spot-like: "&dLike"
-  menu-pick-spot-offline: "&7Take it offline"
-  menu-pick-spot-private: "&fSave a private spot"
-  menu-pick-spot-public: "&eSave a public spot"
-  menu-pick-spot-remove: "&cTake it off your list"
+  menu-pick-spot-offline: "&7Make private"
+  menu-pick-spot-private: "&fPrivate"
+  menu-pick-spot-public: "&ePublic"
+  menu-pick-spot-remove: "&cRemove from list"
   menu-pick-spot-share: "&aShare or make public"
-  menu-pick-spot-take-down: "&eTake it down - private again"
-  menu-pick-spot-unlike: "&7No longer like"
+  menu-pick-spot-take-down: "&eMake private"
+  menu-pick-spot-unlike: "&7Unlike"
   menu-pick-stats-reset: "&cReset"
-  menu-pick-stats-show: "&eShow in the chat"
+  menu-pick-stats-show: "&eShow in chat"
   menu-pick-title: "&8{button}"
-  menu-pick-tp-body: "&bTeleport to the body"
-  menu-pick-tp-camera: "&bTeleport to the camera"
+  menu-pick-tp-body: "&bGo to body"
+  menu-pick-tp-camera: "&bGo to camera"
   menu-previous: "&7« Previous page"
   menu-public-own: "&f{spot} &7(yours)"
-  menu-public-own-actions: "&eLeft-click: jump there\n&7Right-click: take it offline -\n&7it stays among your spots"
-  menu-public-own-actions-bedrock: "&eTap: jump there or take it offline -\n&7it stays among your spots"
+  menu-public-own-actions: "&eLeft-click: jump there\n&7Right-click: make private"
+  menu-public-own-actions-bedrock: "&eTap: jump there or make private"
   menu-public-spot-actions: "&eLeft-click: jump there\n&dRight-click: like"
   menu-public-spot-actions-bedrock: "&eTap: jump there or like"
-  menu-public-spot-actions-unlike: "&eLeft-click: jump there\n&7Right-click: no longer like"
-  menu-public-spot-actions-unlike-bedrock: "&eTap: jump there or no longer like"
+  menu-public-spot-actions-unlike: "&eLeft-click: jump there\n&7Right-click: unlike"
+  menu-public-spot-actions-unlike-bedrock: "&eTap: jump there or unlike"
   menu-resume: "&bResume the last flight"
-  menu-resume-lore: "&7The camera goes on where\n&7your last flight ended."
+  menu-resume-lore: "&7Continue where your last\n&7flight ended."
   menu-share-everybody: "&ePublic"
-  menu-share-off-lore: "&7Not shared - click to offer it."
-  menu-share-offered-lore: "&eOffered, not accepted yet -\n&eclick to take it back."
-  menu-share-on-lore: "&aShared - click to take it back."
+  menu-share-off-lore: "&7Not shared\n&eClick: offer"
+  menu-share-off-lore-bedrock: "&7Not shared\n&eTap: offer"
+  menu-share-offered-lore: "&eOffered, not accepted yet\n&eClick: take back"
+  menu-share-offered-lore-bedrock: "&eOffered, not accepted yet\n&eTap: take back"
+  menu-share-on-lore: "&aShared\n&eClick: take back"
+  menu-share-on-lore-bedrock: "&aShared\n&eTap: take back"
   menu-share-player: "&f{player}"
   menu-share-player-offered: "&e{player}"
   menu-share-player-on: "&a{player}"
-  menu-share-private-lore: "&7Private - click to make it public."
-  menu-share-public-lore: "&aPublic - click to make it private."
+  menu-share-private-lore: "&7Private\n&eClick: make public"
+  menu-share-private-lore-bedrock: "&7Private\n&eTap: make public"
+  menu-share-public-lore: "&aPublic\n&eClick: make private"
+  menu-share-public-lore-bedrock: "&aPublic\n&eTap: make private"
   menu-share-title: "&8Share {spot}"
   menu-shared-spot: "&b{owner}:{spot}"
-  menu-shared-spot-actions: "&eLeft-click: jump there\n&cRight-click: take it off your list"
-  menu-shared-spot-actions-bedrock: "&eTap: jump there or take it\n&eoff your list"
+  menu-shared-spot-actions: "&eLeft-click: jump there\n&cRight-click: remove from list"
+  menu-shared-spot-actions-bedrock: "&eTap: jump there or remove"
   menu-sort: "&eOrder: &f{sort}"
   menu-sort-date: "newest first"
   menu-sort-last-flight: "last flight first"
   menu-sort-likes: "most likes first"
-  menu-sort-lore: "&eLeft-click: the next order\n&eRight-click: the one before"
-  menu-sort-lore-bedrock: "&eTap: pick an order"
+  menu-sort-lore: "&eLeft-click: next\n&eRight-click: previous"
+  menu-sort-lore-bedrock: "&eTap: pick one"
   menu-sort-name: "by name"
   menu-sort-near: "nearest first"
   menu-sort-option: "&7   {sort}"
@@ -566,21 +592,21 @@ messages:
   # What a spot shows of its own, see spot-look-... below: {look}.
   menu-spot-look: "&bShows: &f{look}"
   menu-spot-lore: "&7{x} {y} {z} ({world})"
-  menu-spot-name: "&eType the name of the new spot in the chat, or {cancel}."
-  menu-spot-name-form: "Name of the new spot\n&71 to 16 characters - spaces and any signs allowed"
-  menu-spot-name-public: "&eType the name of the new public spot in the chat, or {cancel}."
-  menu-spot-name-public-form: "Name of the new public spot\n&71 to 16 characters - spaces and any signs allowed"
+  menu-spot-name: "&eType the spot name in chat, max. 16 characters (&f{cancel}&e to abort)."
+  menu-spot-name-form: "Name of the new spot (max. 16 characters)"
+  menu-spot-name-public: "&eType the public spot's name in chat, max. 16 characters (&f{cancel}&e to abort)."
+  menu-spot-name-public-form: "Name of the new public spot (max. 16 characters)"
   menu-spot-offered-lore: "&7Offered to: {players}"
   menu-spot-public-lore: "&ePublic, {likes} likes"
   # {start} = viewpoints.start-distance; the second while it is 0.
-  menu-spot-reach-lore: "&7To jump there: within {start} blocks\n&7of it, or in cam mode within\n&7reach of your camera"
-  menu-spot-reach-lore-cam-only: "&7To jump there: in cam mode,\n&7within reach of your camera"
+  menu-spot-reach-lore: "&7Jump possible within {start} blocks,\n&7or in cam mode within range"
+  menu-spot-reach-lore-cam-only: "&7Jump possible in cam mode\n&7within range"
   menu-spot-shared-lore: "&7Shared with: {players}"
   menu-spot-views: "&7Views: &f{views}"
-  menu-spot-views-hint: "&8One view per player every {minutes} min"
+  menu-spot-views-hint: ""
   menu-spots: "&aSpots"
-  menu-spots-disabled: "&7Looking at these is switched off"
-  menu-spots-disabled-lore: "&7It is off for everybody\n&7{time}{reason}."
+  menu-spots-disabled: "&7Not available"
+  menu-spots-disabled-lore: "&7Off for everybody {time}{reason}."
   menu-spots-empty-private: "&7No spots yet"
   menu-spots-empty-private-lore: "&7Save one with the book\n&7on the right."
   menu-spots-empty-public: "&7No public spots yet"
@@ -590,16 +616,16 @@ messages:
   menu-spots-empty-shared-lore: "&7What others offer you\n&7shows up here."
   # In place of the spots of a tab a restriction keeps him from looking at ({time} and {reason} as with /cam ban);
   # menu-spots-disabled when it is the one of everybody.
-  menu-spots-lore: "&7Your own spots, the public ones\n&7and those shared with you."
-  menu-spots-offers: "&eNew, offered to you: {count}"
-  menu-spots-restricted: "&7Sorry, you can't look at these"
-  menu-spots-restricted-lore: "&7You are restricted\n&7{time}{reason}."
+  menu-spots-lore: "&7Yours, public and shared."
+  menu-spots-offers: "&eNew offers: {count}"
+  menu-spots-restricted: "&7Not available"
+  menu-spots-restricted-lore: "&7Restricted for you {time}{reason}."
   menu-spots-tab-private: "&fYour spots"
-  menu-spots-tab-private-lore: "&7All your own spots,\n&7the public ones among them."
+  menu-spots-tab-private-lore: "&7Including your public ones."
   menu-spots-tab-public: "&ePublic"
-  menu-spots-tab-public-lore: "&7The public spots of everybody,\n&7yours among them."
+  menu-spots-tab-public-lore: "&7Everybody's public spots."
   menu-spots-tab-shared: "&bShared with you"
-  menu-spots-tab-shared-lore: "&7What others share with you,\n&7and what they offer you."
+  menu-spots-tab-shared-lore: "&7Shared with and offered to you."
   menu-spots-title: "&8Spots"
   menu-spots-title-private: "&8Spots: yours"
   menu-spots-title-public: "&8Spots: public"
@@ -614,12 +640,13 @@ messages:
   menu-start: "&aStart cam mode"
   menu-start-lore: "&7Fly as a camera, your body stays here."
   menu-stats: "&bStatistics"
-  menu-stats-actions: "&eClick: in the chat"
-  menu-stats-actions-reset: "&eClick: in the chat\n&cShift-click: reset"
-  menu-stats-actions-reset-bedrock: "&eTap: in the chat or reset"
+  menu-stats-actions: "&eClick: show in chat"
+  menu-stats-actions-bedrock: "&eTap: show in chat"
+  menu-stats-actions-reset: "&eClick: show in chat\n&cShift-click: reset"
+  menu-stats-actions-reset-bedrock: "&eTap: show in chat or reset"
   menu-time: "&eTime of day: &f{time}"
   menu-time-day: "day"
-  menu-time-lore: "&7A time of your own, only you see it."
+  menu-time-lore: "&7Only you see it."
   menu-time-midnight: "midnight"
   menu-time-night: "night"
   menu-time-noon: "noon"
@@ -636,86 +663,91 @@ messages:
   menu-to-tour-players: "&7« Back"
   menu-to-trails: "&7« Back"
   menu-to-main: "&7« Back"
-  menu-to-spots: "&7« Back to the spots"
+  menu-to-spots: "&7« Back"
   menu-tour: "&aFollow"
   menu-tour-candidate: "&f{player}"
-  menu-tour-candidate-disabled-lore: "&cYou can't invite him:\n&cfollowing is switched off"
-  menu-tour-candidate-full-lore: "&cYou have as many followers\n&cas there may be: {max}"
-  menu-tour-candidate-invited-lore: "&eInvited, no answer yet.\n&7The invitation runs out\n&7in {expires} s."
-  menu-tour-candidate-lore: "&7In cam mode, {blocks} blocks away.\n&eClick: invite"
-  menu-tour-candidate-outside-lore: "&7Not in cam mode, {blocks} blocks away.\n&7Cam mode starts where they stand\n&7once they accept.\n&eClick: invite"
-  menu-tour-candidate-restricted-lore: "&cYou can't invite him:\n&che may not follow anybody"
-  menu-tour-candidate-wait-lore: "&7Invited a moment ago.\n&7You can invite them again\n&7in {seconds} s."
+  menu-tour-candidate-disabled-lore: "&cFollowing is switched off"
+  menu-tour-candidate-full-lore: "&cFollower limit reached ({max})"
+  menu-tour-candidate-invited-lore: "&eInvited, no answer yet\n&7Expires in {expires} s"
+  menu-tour-candidate-lore: "&7In cam mode, {blocks} blocks away\n&eClick: invite"
+  menu-tour-candidate-lore-bedrock: "&7In cam mode, {blocks} blocks away\n&eTap: invite"
+  menu-tour-candidate-outside-lore: "&7Not in cam mode, {blocks} blocks away\n&eClick: invite"
+  menu-tour-candidate-outside-lore-bedrock: "&7Not in cam mode, {blocks} blocks away\n&eTap: invite"
+  menu-tour-candidate-restricted-lore: "&cNot allowed to follow"
+  menu-tour-candidate-wait-lore: "&7Invited recently\n&7Again in {seconds} s"
   menu-tour-disabled: "&7Following is switched off"
-  menu-tour-disabled-lore: "&7It is off for everybody\n&7{time}{reason}."
+  menu-tour-disabled-lore: "&7For everybody {time}{reason}."
   menu-tour-empty: "&7Nobody to invite"
   # {start} = follow.start-distance, {radius} = follow.radius.
-  menu-tour-empty-lore: "&7Players free to follow show up\n&7here when they are close to you:\n&7- without cam mode: within {start} blocks\n&7- in cam mode: within {radius} blocks"
+  menu-tour-empty-lore: "&7Players appear here within\n&7{start} blocks (in cam mode: {radius})"
   # The same while follow.start-distance is 0: only who is in cam mode can follow.
-  menu-tour-empty-lore-cam-only: "&7Players free to follow show up\n&7here when they are in cam mode and\n&7their camera is within {radius} blocks of you."
+  menu-tour-empty-lore-cam-only: "&7Players in cam mode appear\n&7here within {radius} blocks"
   menu-tour-end: "&cLet everybody go"
-  menu-tour-end-lore: "&7Every follower goes their own way."
+  menu-tour-end-lore: "&7All followers stop following."
   menu-tour-following: "&aYou follow {player}"
   menu-tour-guest: "&a{player}"
-  menu-tour-guest-lore: "&7Follows you.\n&cClick: send away"
+  menu-tour-guest-lore: "&7Follows you\n&cClick: send away"
+  menu-tour-guest-lore-bedrock: "&7Follows you\n&cTap: send away"
   menu-tour-guide: "&a{player}"
   menu-tour-guide-lore: "&7Your camera follows theirs."
   menu-tour-guiding: "&aFollowers: {count}"
   # The same while follow.max-guests is set.
   menu-tour-guiding-max: "&aFollowers: {count}/{max}"
   menu-tour-invitation: "&e{player}"
-  menu-tour-invitation-lore: "&7Invites you to follow them.\n&aLeft-click: follow\n&cRight-click: turn down"
-  menu-tour-invitation-lore-bedrock: "&7Invites you to follow them.\n&eTap: follow or turn down"
-  menu-tour-invitations: "&eInvitations for you: {count}"
+  menu-tour-invitation-lore: "&7Invites you to follow\n&aLeft-click: follow\n&cRight-click: decline"
+  menu-tour-invitation-lore-bedrock: "&7Invites you to follow\n&eTap: follow or decline"
+  menu-tour-invitations: "&eInvitations: {count}"
   # The beacon that invites everybody to invite at once (follow.invite-all); {count} is how many it invites - not
   # those invited already, those invited a moment ago or those kept from following -, {start} follow.start-distance
   # and {radius} follow.radius: how close they have to be. -cam-only while follow.start-distance is 0.
   menu-tour-invite-all: "&aInvite everybody"
-  menu-tour-invite-all-lore: "&7Invites everybody close enough\n&7at once - {count} players now:\n&7- without cam mode: within {start} blocks\n&7- in cam mode: within {radius} blocks\n&eClick: invite all"
-  menu-tour-invite-all-lore-cam-only: "&7Invites everybody in cam mode\n&7whose camera is within {radius} blocks\n&7of you at once - {count} players now.\n&eClick: invite all"
-  menu-tour-join-restricted: "&7Sorry, you may not follow anybody"
-  menu-tour-join-restricted-lore: "&7You are restricted\n&7{time}{reason}."
-  menu-tour-lead-restricted: "&7Sorry, you may not lead"
-  menu-tour-lead-restricted-lore: "&7You are restricted\n&7{time}{reason}."
+  menu-tour-invite-all-lore: "&7{count} players within {start} blocks\n&7(in cam mode: {radius})\n&eClick: invite all"
+  menu-tour-invite-all-lore-bedrock: "&7{count} players within {start} blocks\n&7(in cam mode: {radius})\n&eTap: invite all"
+  menu-tour-invite-all-lore-cam-only: "&7{count} players in cam mode\n&7within {radius} blocks\n&eClick: invite all"
+  menu-tour-invite-all-lore-cam-only-bedrock: "&7{count} players in cam mode\n&7within {radius} blocks\n&eTap: invite all"
+  menu-tour-join-restricted: "&7You may not follow"
+  menu-tour-join-restricted-lore: "&7Restricted {time}{reason}."
+  menu-tour-lead-restricted: "&7You may not lead"
+  menu-tour-lead-restricted-lore: "&7Restricted {time}{reason}."
   menu-tour-leave: "&cStop following"
-  menu-tour-leave-lore: "&7Your camera stays where it is,\n&7your keys move it again."
-  menu-tour-lore: "&7Let others follow you,\n&7or follow someone."
+  menu-tour-leave-lore: "&7You control your camera again."
+  menu-tour-lore: "&7Lead or follow others."
   menu-tour-not-in-cam: "&7Not in cam mode"
-  menu-tour-not-in-cam-lore: "&7Start cam mode to let\n&7others follow you."
+  menu-tour-not-in-cam-lore: "&7Start cam mode to lead."
   menu-tour-title: "&8Follow"
-  menu-tour-view: "&bView when following"
+  menu-tour-view: "&bView while following"
   menu-tour-view-free: "&efree"
   menu-tour-view-guide: "&athe leader's"
-  menu-tour-view-lore: "&7Through the eyes of the leader,\n&7or look round freely."
+  menu-tour-view-lore: "&7The leader's view, or\n&7look around freely."
   menu-weather: "&bWeather: &f{weather}"
   menu-weather-clear: "clear"
-  menu-weather-lore: "&7A weather of your own, only you see it."
+  menu-weather-lore: "&7Only you see it."
   menu-weather-rain: "rain"
   menu-weather-reset: "the world's"
   # /cam nightvision (night-vision.player-choice): {mode} in nightvision-set and nightvision-reset is
   # nightvision-always, nightvision-never or nightvision-dark. nightvision-set with player-settings.storage: file,
   # nightvision-set-memory with memory.
   nightvision-always: "always"
-  nightvision-dark: "only in the dark"
+  nightvision-dark: "in the dark"
   nightvision-never: "never"
   nightvision-off: "&c/cam nightvision is switched off."
-  nightvision-reset: "&aNight vision in cam mode: {mode}, as the server has it."
-  nightvision-set: "&aNight vision in cam mode: {mode}. Kept for your next flights."
-  nightvision-set-memory: "&aNight vision in cam mode: {mode}. Holds until you leave the server."
+  nightvision-reset: "&aNight vision in cam mode: server default ({mode})."
+  nightvision-set: "&aNight vision in cam mode: {mode}."
+  nightvision-set-memory: "&aNight vision in cam mode: {mode} (until you leave)."
   nightvision-usage: "&eUse /cam nightvision on, off, dark or reset."
-  no-permission: "&cYou don't have permission to use this command."
-  no-player: "&cThis command can only be used by players."
-  no-projectiles: "&cYou cannot shoot projectiles in camera mode."
+  no-permission: "&cYou don't have permission."
+  no-player: "&cOnly players can use this."
+  no-projectiles: "&cYou can't shoot in cam mode."
   # What /cam photo and the jump of /cam spot say outside cam mode.
-  not-in-cam: "&cThat only works in cam mode."
+  not-in-cam: "&cOnly in cam mode."
   # nudge: nudge-received in the action bar of the player in cam mode, {player} being who clicked his body, and
   # nudge-sent in the action bar of that one, {player} being whose body it is.
   nudge-received: "&e{player} nudged your body!"
-  nudge-sent: "&7You nudged {player}, who is in cam mode."
+  nudge-sent: "&7You nudged {player}."
   # /cam photo (photo-mode).
-  photo-ended: "&aPhoto mode off: you see everything again."
+  photo-ended: "&aPhoto mode off."
   photo-off: "&c/cam photo is switched off."
-  photo-started: "&aPhoto mode on: the other players, the bodies, mobs and items are out of the picture for you. F1 hides the rest, photo mode once more ends it."
+  photo-started: "&aPhoto mode on: players, bodies, mobs and items hidden."
   player.name-format: "{player}'s Cam"
   # While others follow a leader (/cam follow), their names stand over his camera, stacked over his: {name} = what
   # player.name-format says (without its colour), {player} = the player's name. The follower lines take the colour of
@@ -726,22 +758,22 @@ messages:
   player.tour-builder-format: "&6{player} &7(Leader)"
   player.tour-follower-format: "{name} &7(Follower)"
   player.tour-guide-format: "&6{name} &7(Leader)"
-  portal-blocked: "&cYou cannot go through {portal} portals in camera mode."
-  portal-return-area: "&cCam mode is not allowed in {area}, you were brought back."
-  portal-return-distance: "&cYou ended up more than {distance} blocks away from {from} and were brought back."
-  reload-exit: "&cCamera mode ended due to plugin restart."
+  portal-blocked: "&cYou can't use {portal} portals in cam mode."
+  portal-return-area: "&cCam mode is not allowed in {area}: brought back."
+  portal-return-distance: "&cMore than {distance} blocks from {from}: brought back."
+  reload-exit: "&cCam mode ended: plugin reload."
   # /cam resume (resume-command): resume-jumped comes in the action bar; {distance} is camera-mode.max-distance, {area}
   # as in cam-area-limit.
-  resume-area: "&cWhere your last flight ended lies in {area}, cam mode is not allowed there."
-  resume-blocked: "&cSomething has been built where your last flight ended, the camera cannot go there."
+  resume-area: "&cYour last flight ended in {area}, where cam mode is not allowed."
+  resume-blocked: "&cSomething was built where your last flight ended."
   resume-jumped: "&aBack where your last flight ended"
-  resume-no-signal: "&cThe signal does not reach where your last flight ended."
-  resume-none: "&eYou have no flight to resume yet."
+  resume-no-signal: "&cNo signal where your last flight ended."
+  resume-none: "&eNo flight to resume yet."
   resume-off: "&c/cam resume is switched off."
-  resume-other-world: "&cYour last flight did not end in the world you are in."
+  resume-other-world: "&cYour last flight ended in another world."
   resume-too-far: "&cYour last flight ended more than {distance} blocks from here."
-  reload-start: "&ePlugin is restarting..."
-  reload-success: "&aPlugin reload successful."
+  reload-start: "&eReloading CamFly..."
+  reload-success: "&aCamFly reloaded."
   # The signal of camera-mode.max-distance-mode: signal is gone: signal-lost counts down in the action bar, {time} being
   # the time left to fly back into it. Then the camera is back at the body with signal-back-to-body, or cam mode ends
   # with signal-ended.
@@ -774,7 +806,7 @@ messages:
   # told: a spot-guestbook-entry for each spot that got any ({views}, {likes}), under spot-guestbook-update every
   # viewpoints.guestbook-interval-minutes while he plays ({minutes}), or under spot-guestbook-header once he joins.
   # spot-guestbook-on ({minutes}), -login and -off answer the bell in the menu.
-  spot-accepted: "&aYou accepted {spot}: you find it among the spots shared with you."
+  spot-accepted: "&aAccepted {spot}: find it under 'Shared with you'."
   spot-accepted-owner: "&a{player} accepted your spot {spot}."
   # The moderation of the spots on the admin page: spot-admin-... and spot-restrict-... / spot-unrestrict-... tell the
   # admin ({player} is the owner; spot-admin-teleported: he went there with a right-click, spot-admin-tp-no-world: its
@@ -786,54 +818,54 @@ messages:
   # -no-look of each kind, joined by spot-restriction-separator. The restriction of everybody: spot-disabled-<kind>-...
   # in place of spot-restricted-<kind>-..., spot-disabled-now, -changed and spot-enabled-now to every player but those
   # with camplugin.spotadmin.bypass.
-  spot-admin-deleted: "&aSpot {spot} of {player} deleted."
-  spot-admin-teleported: "&aYou are at spot {spot} of {player}."
-  spot-admin-took-down: "&aSpot {spot} of {player} is private now."
-  spot-admin-tp-no-world: "&cSpot {spot} lies in {world}, which is not loaded."
-  spot-area: "&cSpot {spot} lies in {area}, cam mode is not allowed there."
+  spot-admin-deleted: "&aDeleted {player}'s spot {spot}."
+  spot-admin-teleported: "&aAt {player}'s spot {spot}."
+  spot-admin-took-down: "&a{player}'s spot {spot} is private now."
+  spot-admin-tp-no-world: "&cSpot {spot} is in {world}, which is not loaded."
+  spot-area: "&cSpot {spot} is in {area}, where cam mode is not allowed."
   spot-bad-name: "&cA spot name has 1 to 16 characters."
-  spot-blocked: "&cSomething has been built at spot {spot} since, the camera cannot go there."
+  spot-blocked: "&cSomething was built at spot {spot} since."
   spot-button-accept: "&a[Accept]"
-  spot-button-accept-hover: "&7Take {spot}: it lands among the spots shared with you"
+  spot-button-accept-hover: "&7Accept {spot}"
   spot-button-decline: "&c[Decline]"
-  spot-button-decline-hover: "&7Turn {spot} down, or take it off your list"
+  spot-button-decline-hover: "&7Decline {spot}"
   spot-button-delete: "&c[Delete]"
-  spot-button-delete-hover: "&7Delete {spot}: click, then press Enter"
+  spot-button-delete-hover: "&7Delete {spot} (click, then Enter)"
   spot-button-go: "&b[Go]"
-  spot-button-go-hover: "&7Jump to {spot}, in cam mode"
+  spot-button-go-hover: "&7Jump to {spot}"
   spot-button-like: "&d[Like]"
   spot-button-like-hover: "&7Like {spot}"
   # Behind a public spot while web-map.link gives the address of the web map: it opens the map there.
   spot-button-map: "&3[Map]"
   spot-button-map-hover: "&7Show {spot} on the web map"
   spot-button-share: "&a[Share]"
-  spot-button-share-hover: "&7Share {spot}: click, add a name or all, then press Enter"
+  spot-button-share-hover: "&7Share {spot} (click, add a name or all, then Enter)"
   spot-button-unlike: "&7[Unlike]"
-  spot-button-unlike-hover: "&7No longer like {spot}"
-  spot-declined: "&eYou turned down {spot}."
-  spot-declined-owner: "&e{player} turned down your spot {spot}."
+  spot-button-unlike-hover: "&7Unlike {spot}"
+  spot-declined: "&eDeclined {spot}."
+  spot-declined-owner: "&e{player} declined your spot {spot}."
   spot-deleted: "&aSpot {spot} deleted."
   spot-deleted-by-admin: "&c{player} deleted your spot {spot}."
-  spot-disabled-changed: "&e{player} changed what is switched off of spots for everybody: {what} {time}{reason}."
-  spot-disabled-now: "&c{player} switched spots off for everybody: {what} {time}{reason}."
+  spot-disabled-changed: "&e{player} changed the spot restriction for everybody: {what} {time}{reason}."
+  spot-disabled-now: "&c{player} restricted spots for everybody: {what} {time}{reason}."
   spot-disabled-private-look: "&cJumping to your own spots is switched off {time}{reason}."
   spot-disabled-private-new: "&cSaving new spots is switched off {time}{reason}."
-  spot-disabled-public-look: "&cLooking at public spots is switched off {time}{reason}."
+  spot-disabled-public-look: "&cPublic spots are switched off {time}{reason}."
   spot-disabled-public-new: "&cMaking spots public is switched off {time}{reason}."
-  spot-disabled-shared-look: "&cLooking at shared spots is switched off {time}{reason}."
+  spot-disabled-shared-look: "&cShared spots are switched off {time}{reason}."
   spot-disabled-shared-new: "&cSharing spots is switched off {time}{reason}."
-  spot-enabled-now: "&a{player} switched spots on again for everybody."
-  spot-full: "&cYou have {max} spots already, the most there may be. Delete one first."
+  spot-enabled-now: "&a{player} lifted the spot restriction for everybody."
+  spot-full: "&cSpot limit reached ({max}). Delete one first."
   spot-guestbook-entry: "&7- &f{spot}&7: &e{views} &7views, &d{likes} &7likes"
-  spot-guestbook-header: "&6Guestbook: &7what your spots got since you were last here"
-  spot-guestbook-login: "&aGuestbook only at login: you hear what your spots got when you join."
-  spot-guestbook-off: "&eGuestbook off: you no longer hear how often your spots are looked at."
-  spot-guestbook-on: "&aGuestbook on: you hear every {minutes} minutes what your spots got, and when you join."
-  spot-guestbook-update: "&6Guestbook: &7what your spots got in the last {minutes} minutes"
+  spot-guestbook-header: "&6Guestbook: &7since your last visit"
+  spot-guestbook-login: "&aGuestbook: only at login."
+  spot-guestbook-off: "&eGuestbook off."
+  spot-guestbook-on: "&aGuestbook on: every {minutes} minutes and at login."
+  spot-guestbook-update: "&6Guestbook: &7last {minutes} minutes"
   spot-jumped: "&aAt spot {spot}"
   spot-like-own: "&cYou cannot like your own spot."
-  spot-liked: "&dYou like {spot} now. It has {likes} likes."
-  spot-list-empty: "&eYou have no spots yet. /cam spot set <name> saves one where you are."
+  spot-liked: "&dLiked {spot} ({likes} likes)."
+  spot-list-empty: "&eNo spots yet. Save one with /cam spot set <name>."
   spot-list-entry: "&7- &f{spot}&7: {x} {y} {z} ({world})"
   spot-list-header: "&eYour spots ({count} of {max}):"
   spot-list-header-unlimited: "&eYour spots ({count}):"
@@ -865,28 +897,28 @@ messages:
   spot-look-weather: "{weather}"
   spot-look-weather-clear: "clear sky"
   spot-look-weather-rain: "rain"
-  spot-moved: "&aSpot {spot} moved here, looking the way you look now."
-  spot-no-signal: "&cThe signal does not reach spot {spot}."
+  spot-moved: "&aSpot &f{spot}&a moved here."
+  spot-no-signal: "&cNo signal at spot {spot}."
   spot-not-shared: "&eSpot {spot} is not shared with {player}."
   spot-not-shared-all: "&eSpot {spot} is not public."
   spot-off: "&c/cam spot is switched off."
-  spot-offer-unknown: "&cNobody offers you a spot called {spot}."
-  spot-offered: "&aSpot {spot} is offered to {player} now: it is theirs once they accept it."
-  spot-offered-to-you: "&e{owner} wants to share the spot {spot} with you."
-  spot-other-world: "&cSpot {spot} is not in the world of your body."
+  spot-offer-unknown: "&cNo spot {spot} is offered to you."
+  spot-offered: "&aOffered {spot} to {player}."
+  spot-offered-to-you: "&e{owner} offers you the spot {spot}."
+  spot-other-world: "&cSpot {spot} is in another world."
   spot-public-unknown: "&cThere is no public spot called {spot}."
-  spot-removed: "&eSpot {spot} is no longer among the spots shared with you."
-  spot-restrict-changed: "&aThe restriction of {player} is changed: {what} {time}{reason}."
+  spot-removed: "&eRemoved {spot} from your list."
+  spot-restrict-changed: "&aChanged {player}'s restriction: {what} {time}{reason}."
   spot-restrict-done: "&a{player} is restricted: {what} {time}{reason}."
-  spot-restrict-everybody-changed: "&aThe restriction of everybody is changed: {what} {time}{reason}."
+  spot-restrict-everybody-changed: "&aChanged the restriction for everybody: {what} {time}{reason}."
   spot-restrict-everybody-done: "&aSpots are restricted for everybody: {what} {time}{reason}."
-  spot-restricted-changed: "&e{player} changed the restriction of your spots: {what} {time}{reason}."
+  spot-restricted-changed: "&e{player} changed your spot restriction: {what} {time}{reason}."
   spot-restricted-now: "&c{player} restricted your spots: {what} {time}{reason}."
-  spot-restricted-private-look: "&cYou may not look at your own spots {time}{reason}."
+  spot-restricted-private-look: "&cYou may not jump to your own spots {time}{reason}."
   spot-restricted-private-new: "&cYou may not save new spots {time}{reason}."
-  spot-restricted-public-look: "&cYou may not look at public spots {time}{reason}."
+  spot-restricted-public-look: "&cYou may not jump to public spots {time}{reason}."
   spot-restricted-public-new: "&cYou may not make spots public {time}{reason}."
-  spot-restricted-shared-look: "&cYou may not look at spots shared with you {time}{reason}."
+  spot-restricted-shared-look: "&cYou may not jump to shared spots {time}{reason}."
   spot-restricted-shared-new: "&cYou may not share spots {time}{reason}."
   spot-restriction-private-no-look: "no own spots at all"
   spot-restriction-private-no-new: "no new spots"
@@ -895,29 +927,29 @@ messages:
   spot-restriction-separator: ", "
   spot-restriction-shared-no-look: "nothing shared at all"
   spot-restriction-shared-no-new: "no sharing"
-  spot-saved: "&aSpot {spot} saved here, looking the way you look now."
+  spot-saved: "&aSpot &f{spot}&a saved."
   # After spot-saved or spot-moved, while the spot takes along a look of its own ({look}, see spot-look-...).
-  spot-saved-look: "&7Whoever jumps there sees it with: &b{look}"
+  spot-saved-look: "&7Saved with: &b{look}"
   spot-share-everybody: "everybody"
   # viewpoints.set-in-cam-only: a spot is saved only in cam mode.
-  spot-set-cam-only: "&cSpots are saved in cam mode only: start it with /cam, fly to the spot, then save it."
+  spot-set-cam-only: "&cSpots can only be saved in cam mode."
   spot-share-off: "&cSharing spots is switched off."
-  spot-share-self: "&cYour own spots are yours already."
-  spot-share-unknown-player: "&cNobody called {player} has been on this server."
-  spot-shared-all: "&aSpot {spot} is public now: everybody finds it among the public spots."
-  spot-shared-already: "&e{player} has spot {spot} already."
+  spot-share-self: "&cYou can't share with yourself."
+  spot-share-unknown-player: "&cUnknown player: {player}"
+  spot-shared-all: "&aSpot {spot} is public now."
+  spot-shared-already: "&e{player} already has spot {spot}."
   spot-shared-unknown: "&cNobody shares a spot called {spot} with you."
-  spot-start-too-far: "&cYou are {blocks} blocks too far away."
-  spot-taken-down: "&c{player} took your spot {spot} down: it is private now."
-  spot-too-far: "&cYou are too far away."
+  spot-start-too-far: "&cYou are {blocks} blocks too far from the spot."
+  spot-taken-down: "&c{player} made your spot {spot} private."
+  spot-too-far: "&cThe spot is out of your camera's range."
   spot-unknown: "&cYou have no spot called {spot}."
-  spot-unliked: "&7You no longer like {spot}. It has {likes} likes."
-  spot-unrestrict-done: "&a{player} may do everything with spots again."
-  spot-unrestrict-everybody-done: "&aEverybody may do everything with spots again."
-  spot-unrestricted-now: "&a{player} lifted the restriction of your spots."
+  spot-unliked: "&7Unliked {spot} ({likes} likes)."
+  spot-unrestrict-done: "&aLifted {player}'s spot restriction."
+  spot-unrestrict-everybody-done: "&aLifted the spot restriction for everybody."
+  spot-unrestricted-now: "&a{player} lifted your spot restriction."
   spot-unshared: "&aSpot {spot} is no longer shared with {player}."
   spot-unshared-all: "&aSpot {spot} is private again."
-  spot-usage: "&eUse /cam spot set <name>, /cam spot <name>, /cam spot delete <name>, /cam spot share <name> <player|all>, /cam spot unshare <name> <player|all>, /cam spot accept|decline|like <player>:<spot> or /cam spot list."
+  spot-usage: "&eUse /cam spot set|delete <name>, /cam spot <name>, /cam spot share|unshare <name> <player|all>, /cam spot accept|decline|like <player>:<spot> or /cam spot list."
   # start-delay: the countdown in the action bar, {time} being the time left, and why the start was called off.
   start-delay-cancelled: "&eCam mode start cancelled."
   start-delay-countdown: "&eCam mode in {time} &7- stand still"
@@ -942,25 +974,25 @@ messages:
   # While he is in cam mode: how long the flight has been going on ({time}). The numbers under it count it already,
   # as they will once it ends - in the menu they grow by the second. With statistics.skip-afk-time, {time} is all of
   # it, and the time in the numbers stands still while he does nothing.
-  stats-flying: "&aIn cam mode right now: &f{time} &7(counted in)"
+  stats-flying: "&aIn cam mode now: &f{time}"
   # In its place while the flight is shorter than statistics.min-seconds ({min}): ended now, it would not count, and
   # the numbers under it leave it out.
-  stats-flying-uncounted: "&aIn cam mode right now: &f{time} &7(counts from {min})"
+  stats-flying-uncounted: "&aIn cam mode now: &f{time} &7(counts from {min})"
   # The empty line between the numbers, which add up over all flights, and stats-battery and stats-cooldown, which
   # say how things stand now. Switched off, or "", for none.
   stats-gap: " "
-  stats-header: "&eCam mode statistics of {player}:"
+  stats-header: "&eStatistics of {player}:"
   # The longest flight and the longest way in one flight: the two can be of different flights, which is why they
   # stand on lines of their own - on one, like stats-average, they would read as the same flight.
   stats-longest: "&7Longest flight: &f{time}"
   stats-longest-distance: "&7Longest distance in one flight: &f{distance} blocks"
   stats-none: "&e{player} has not been in cam mode yet."
-  stats-off: "&cThe statistics are switched off."
-  stats-reset: "&aYour cam mode statistics have been reset."
+  stats-off: "&cStatistics are switched off."
+  stats-reset: "&aYour statistics were reset."
   # /cam stats reset <name>: stats-reset-other to whoever did it, stats-reset-by to the player, while he is online -
   # {player} is who did it, console-name for the console.
-  stats-reset-by: "&e{player} has reset your cam mode statistics."
-  stats-reset-other: "&aThe cam mode statistics of {player} have been reset."
+  stats-reset-by: "&e{player} reset your statistics."
+  stats-reset-other: "&aReset {player}'s statistics."
   # How many flights count ({count}): only those of statistics.min-seconds at least - one switched on and off again
   # at once is no flight.
   stats-sessions: "&7Flights: &f{count}"
@@ -975,26 +1007,26 @@ messages:
   # How long he has been in cam mode over all flights. With statistics.skip-afk-time, time in which he did nothing is
   # left out after statistics.afk-seconds - here, in stats-average and in stats-longest.
   stats-total-time: "&7Time in cam mode: &f{time}"
-  stats-unknown-player: "&cNobody called {player} has been on this server."
+  stats-unknown-player: "&cUnknown player: {player}"
   stats-usage: "&eUse /cam stats, /cam stats reset [name] or /cam stats player <name>."
-  stop-all-done: "&aEnded the cam mode of {count} players."
-  stop-done: "&aEnded the cam mode of {player}."
+  stop-all-done: "&aEnded cam mode for {count} players."
+  stop-done: "&aEnded {player}'s cam mode."
   stop-none: "&eNobody is in cam mode."
   stop-not-in-cam: "&c{player} is not in cam mode."
   stop-off: "&c/cam stop is switched off."
   stop-usage: "&eUse /cam stop <player> or /cam stop all."
-  stopped-by: "&cYour cam mode was ended by {player}."
-  teleport-arrival-ended: "&c{player} was teleported to you. Camera mode ended."
-  teleport-ended: "&cYou were teleported. Camera mode ended."
-  time-limit-expired: "&cCam mode ended: Time limit expired."
+  stopped-by: "&c{player} ended your cam mode."
+  teleport-arrival-ended: "&cCam mode ended: {player} was teleported to you."
+  teleport-ended: "&cCam mode ended: you were teleported."
+  time-limit-expired: "&cCam mode ended: time is up."
   # /cam time (cam-time) and /cam weather (cam-weather), in cam mode and before it, for the next flights: {time} and
   # {weather} as the player typed them. time-set and weather-set with player-settings.storage: file, time-set-memory
   # and weather-set-memory with memory.
   time-off: "&c/cam time is switched off."
-  time-reset: "&aIn cam mode you see the time of the world again."
-  time-set: "&aYour own time in cam mode: {time}. Only you see it. Kept for your next flights."
-  time-set-memory: "&aYour own time in cam mode: {time}. Only you see it. Holds until you leave the server."
-  time-usage: "&eUse /cam time day, noon, sunset, night, midnight, sunrise or a time in ticks from 0 to 23999, or /cam time reset."
+  time-reset: "&aCam time: the world's again."
+  time-set: "&aCam time: {time} (only you see it)."
+  time-set-memory: "&aCam time: {time} (only you see it, until you leave)."
+  time-usage: "&eUse /cam time day, noon, sunset, night, midnight, sunrise, 0 to 23999 (ticks) or reset."
   # /cam follow (follow; the keys keep the name it had before, tour): {player} is the other one - the leader, a follower
   # or whom he invites -, {blocks} by how much he stands further than follow.start-distance from the leader out of cam
   # mode (tour-start-too-far; tour-too-far-guest is the same in cam mode, further than follow.radius), {players} the
@@ -1015,6 +1047,8 @@ messages:
   # spectator mode; tour-guide-cannot-lead: the leader can't lead any more when he is accepted (tour-guide-gone while
   # only who is in cam mode may lead). tour-full and tour-full-guide: the leader has follow.max-guests ({max})
   # followers already. tour-body-locked: a follower clicked or hit his own body, which he cannot use while he follows.
+  # tour-joined says how to stop following: with the command, or tour-joined-menu while menu.access lets only the menu
+  # through.
   # The moderation on the admin page (camplugin.followadmin): tour-restrict-... / tour-unrestrict-... tell the admin
   # ({player} is the player), tour-restricted-now, -changed and tour-unrestricted-now the player ({player} is the
   # admin). tour-restricted-lead and -join answer him when a restriction keeps him from inviting or accepting ({time}
@@ -1023,77 +1057,78 @@ messages:
   # tour-off-done, -changed and tour-on-done tell the admin; tour-disabled-now, -changed and tour-enabled-now every
   # player but those with camplugin.followadmin.bypass; tour-disabled and tour-disabled-guest in place of
   # tour-restricted-....
-  tour-already-guest: "&e{player} follows you already."
-  tour-body-locked: "&cYou follow {player}: stop that first to use your body."
-  tour-busy: "&cYou lead or follow already."
-  tour-busy-following: "&cYou follow somebody yourself. Stop that first."
+  tour-already-guest: "&e{player} already follows you."
+  tour-body-locked: "&cStop following {player} first."
+  tour-busy: "&cYou already lead or follow."
+  tour-busy-following: "&cStop following first."
   tour-button-accept: "&a[Follow]"
-  tour-button-accept-hover: "&7Your camera follows {player}"
+  tour-button-accept-hover: "&7Follow {player}"
   tour-button-decline: "&c[Decline]"
-  tour-button-decline-hover: "&7Turn {player} down"
-  tour-declined: "&eYou turned {player} down."
-  tour-declined-guide: "&e{player} does not want to follow you."
+  tour-button-decline-hover: "&7Decline"
+  tour-declined: "&eDeclined {player}'s invitation."
+  tour-declined-guide: "&e{player} declined."
   tour-disabled: "&cFollowing is switched off {time}{reason}."
   tour-disabled-changed: "&e{player} changed it: following is switched off for everybody {time}{reason}."
   tour-disabled-guest: "&cYou can't invite {player}: following is switched off."
   tour-disabled-now: "&c{player} switched following off for everybody {time}{reason}."
-  tour-enabled-now: "&a{player} switched following on again for everybody."
-  tour-ended: "&e{player} let everybody go: you no longer follow them."
+  tour-enabled-now: "&a{player} switched following back on."
+  tour-ended: "&e{player} ended following."
   tour-ended-guide: "&eNobody follows you any more."
-  tour-full: "&cNobody else can follow {player} right now."
-  tour-full-guide: "&cYou have as many followers as there may be: {max}."
+  tour-full: "&c{player} has no room for more followers."
+  tour-full-guide: "&cFollower limit reached ({max})."
   tour-guide-cannot-lead: "&c{player} can't lead anybody right now."
   tour-guide-gone: "&c{player} is no longer in cam mode."
-  tour-guide-out-of-reach: "&c{player} is out of the reach of your camera."
-  tour-guide-spectator: "&cNot in spectator mode: it flies through walls."
-  tour-invitation: "&e{player} invites you to follow them with your camera - it runs out in {time}."
-  tour-invite-all-none: "&eNobody to invite right now: without cam mode they have to be within {start} blocks of you, in cam mode within {radius} blocks."
-  tour-invite-all-none-cam-only: "&eNobody to invite right now: they have to be in cam mode, within {radius} blocks of you."
-  tour-invite-all-off: "&cInviting everybody at once is switched off."
-  tour-invite-wait: "&cYou invited {player} a moment ago: you can invite them again in {time}."
-  tour-invited: "&aYou invited {player} to follow you. The invitation runs out in {time}."
-  tour-invited-all: "&aYou invited {count} players to follow you: {players}. The invitations run out in {time}."
-  tour-joined: "&aYou follow {player} now. Stop with /cam follow leave, /cam back or the menu."
+  tour-guide-out-of-reach: "&c{player} is out of your camera's range."
+  tour-guide-spectator: "&cYou can't lead in spectator mode."
+  tour-invitation: "&e{player} invites you to follow (expires in {time})."
+  tour-invite-all-none: "&eNobody to invite: players must be within {start} blocks (in cam mode: {radius})."
+  tour-invite-all-none-cam-only: "&eNobody to invite: players must be in cam mode within {radius} blocks."
+  tour-invite-all-off: "&cInviting everybody is switched off."
+  tour-invite-wait: "&cYou can invite {player} again in {time}."
+  tour-invited: "&aInvited {player} (expires in {time})."
+  tour-invited-all: "&aInvited {count} players: {players} (expires in {time})."
+  tour-joined: "&aYou follow {player} now. Stop with /cam follow leave."
+  tour-joined-menu: "&aYou follow {player} now. Stop in /cam menu."
   tour-joined-guide: "&a{player} follows you now."
-  tour-kicked: "&e{player} sent you away: you no longer follow them."
+  tour-kicked: "&e{player} removed you as a follower."
   tour-kicked-guide: "&e{player} no longer follows you."
   tour-left: "&eYou no longer follow {player}."
   tour-left-guide: "&e{player} stopped following you."
-  tour-no-invitation: "&c{player} has not invited you, or the invitation ran out."
-  tour-not-following: "&cYou follow nobody."
+  tour-no-invitation: "&cNo valid invitation from {player}."
+  tour-not-following: "&cYou are not following anybody."
   tour-not-guest: "&c{player} does not follow you."
   tour-not-guiding: "&cNobody follows you."
-  tour-not-in-cam: "&cOnly in cam mode: start it first."
+  tour-not-in-cam: "&cOnly in cam mode."
   tour-off: "&c/cam follow is switched off."
   tour-off-changed: "&aFollowing stays switched off for everybody, now {time}{reason}."
   tour-off-done: "&aFollowing is switched off for everybody {time}{reason}."
-  tour-on-done: "&aFollowing is switched on again for everybody."
-  tour-other-busy: "&c{player} leads or follows already."
-  tour-other-not-in-cam: "&c{player} is not in cam mode. Only who flies as a camera already can follow."
+  tour-on-done: "&aFollowing is on again for everybody."
+  tour-other-busy: "&c{player} already leads or follows."
+  tour-other-not-in-cam: "&c{player} is not in cam mode."
   # After /cam time, /cam weather or /cam nightvision while the leader one follows shows his in its place: the choice
   # is kept and holds once one stops following.
-  tour-own-later: "&7While you follow, you see the leader's - yours holds again once you stop following."
-  tour-out-of-reach: "&c{player} could not follow you from there: you are out of the reach of their camera."
-  tour-reach-lost: "&c{player} was out of your reach for too long: you no longer follow them."
-  tour-reach-lost-guide: "&c{player} could not follow you for too long and no longer does."
-  tour-reach-warning: "&c{player} is out of your reach: following ends in {time}"
-  tour-reach-warning-guide: "&c{players} cannot follow: it ends for them in {time}"
-  tour-restrict-changed: "&aThe follow restriction of {player} is changed: {what} {time}{reason}."
+  tour-own-later: "&7Saved: you see the leader's until you stop following."
+  tour-out-of-reach: "&cYou are out of {player}'s camera range."
+  tour-reach-lost: "&c{player} was out of range too long: following ended."
+  tour-reach-lost-guide: "&c{player} was out of range too long and stopped following."
+  tour-reach-warning: "&c{player} out of range: following ends in {time}"
+  tour-reach-warning-guide: "&c{players} out of range: ends in {time}"
+  tour-restrict-changed: "&aChanged {player}'s follow restriction: {what} {time}{reason}."
   tour-restrict-done: "&a{player} is restricted: {what} {time}{reason}."
   tour-restricted-changed: "&e{player} changed your follow restriction: {what} {time}{reason}."
-  tour-restricted-guest: "&cYou can't invite {player}: he may not follow anybody."
-  tour-restricted-join: "&cYou may not follow anybody {time}{reason}."
+  tour-restricted-guest: "&cYou can't invite {player}: they may not follow."
+  tour-restricted-join: "&cYou may not follow {time}{reason}."
   tour-restricted-lead: "&cYou may not lead {time}{reason}."
   tour-restricted-now: "&c{player} restricted your following: {what} {time}{reason}."
   tour-restriction-join: "no following"
   tour-restriction-lead: "no leading"
   tour-restriction-separator: ", "
   tour-self: "&cYou cannot invite yourself."
-  tour-start-too-far: "&cYou are {blocks} blocks too far away."
+  tour-start-too-far: "&cYou are {blocks} blocks too far from {player}."
   tour-too-far: "&c{player} is too far away."
-  tour-too-far-guest: "&cYou are too far away."
-  tour-unknown-player: "&cNobody called {player} is online."
-  tour-unrestrict-done: "&a{player} may lead and follow again."
+  tour-too-far-guest: "&cYou are too far from {player}."
+  tour-unknown-player: "&c{player} is not online."
+  tour-unrestrict-done: "&aLifted {player}'s follow restriction."
   tour-unrestricted-now: "&a{player} lifted your follow restriction."
   tour-usage: "&eUse /cam follow invite|accept|decline|kick <player>, /cam follow invite all, /cam follow leave, /cam follow end or /cam follow view."
   # /cam trail: {number} which of the kept flights (1 the newest), {distance} in blocks, {time} how long the flight
@@ -1101,51 +1136,55 @@ messages:
   # the worlds of the flight in trail-elsewhere. trail-flights is followed by a button for each kept flight,
   # trail-button, and one for all of them, trail-button-all; hovering over them shows the -hover texts. From the menu,
   # trail-at-start says that he was taken to where the flight began, trail-gone that it is no longer kept.
-  tour-view-free: "&aWhen following you look round freely now."
-  tour-view-guide: "&aWhen following you see through the eyes of the leader."
-  tour-view-unavailable: "&cThe leader's view does not work on this server: when following you look round freely."
+  tour-view-free: "&aView while following: free."
+  tour-view-guide: "&aView while following: the leader's."
+  tour-view-unavailable: "&cThe leader's view is not available on this server."
   trail-ago: "ended {time} ago"
   trail-all-entry: "&7#{number}: &f{distance} blocks in {time}, {when}, camera last at {place}"
-  trail-all-header: "&eThe last {count} cam flights of {player}:"
+  trail-all-header: "&eLast {count} flights of {player}:"
   trail-button: "&b[{number}]"
   trail-button-all: "&b[all]"
-  trail-button-all-hover: "&7Show all kept cam flights of {player} at once"
-  trail-button-hover: "&7Show cam flight #{number} of {player}"
-  trail-elsewhere: "&eNone of the flight is in your world, it is in {world}."
-  trail-flights: "&7Kept flights:"
+  trail-button-all-hover: "&7Show all flights of {player}"
+  trail-button-hover: "&7Show flight #{number} of {player}"
+  trail-elsewhere: "&eThe flight is in {world}, not in your world."
+  trail-flights: "&7Flights:"
   trail-flying: "still in cam mode"
-  trail-at-start: "&aAt the start of cam flight #{number} of {player}"
+  trail-at-start: "&aAt the start of {player}'s flight #{number}"
   trail-from: "&7From the body at &f{place}"
-  trail-gone: "&e{player} has no such cam flight any more."
-  trail-header: "&eCam flight #{number} of {player}: {distance} blocks in {time}, {when}"
-  trail-hidden: "&aThe flight is hidden again."
-  trail-no-such: "&e{player} has no cam flight #{number}, only {count} kept."
-  trail-none: "&e{player} has no recorded cam flight."
+  trail-gone: "&eThat flight of {player} is no longer kept."
+  trail-header: "&eFlight #{number} of {player}: {distance} blocks in {time}, {when}"
+  trail-hidden: "&aFlight hidden."
+  trail-no-such: "&eNo flight #{number}: {player} has only {count}."
+  trail-none: "&e{player} has no recorded flights."
   trail-off: "&c/cam trail is switched off."
   trail-place: "{x} {y} {z} ({world})"
-  trail-shown: "&aShown for {time}, from green at the body to red at the camera. /cam trail hides it."
+  trail-shown: "&aShown for {time}: green at the body, red at the camera."
   trail-to: "&7Camera last at &f{place}"
-  trail-usage: "&eUse /cam trail <player> [number|all] to show cam flights of a player, /cam trail to hide them."
+  trail-usage: "&eUse /cam trail <player> [number|all] to show flights, /cam trail to hide them."
   # unbanned-now and unbanned-everybody-now: {player} is who lifted it.
-  unban-done: "&a{player} is unlocked and may use cam mode again."
-  unban-everybody-done: "&aCam mode is unlocked: everybody may use it again."
-  unban-everybody-none: "&eCam mode is not locked for everybody."
+  unban-done: "&a{player} is unbanned."
+  unban-everybody-done: "&aThe ban for everybody is lifted."
+  unban-everybody-none: "&eThere is no ban for everybody."
   unban-not-banned: "&e{player} is not banned from cam mode."
-  unbanned-everybody-now: "&a{player} unlocked cam mode: everybody may use it again."
-  unbanned-now: "&a{player} unlocked you: you may use cam mode again."
+  unbanned-everybody-now: "&a{player} lifted the cam mode ban for everybody."
+  unbanned-now: "&a{player} unbanned you from cam mode."
   weather-off: "&c/cam weather is switched off."
-  weather-reset: "&aIn cam mode you see the weather of the world again."
-  weather-set: "&aYour own weather in cam mode: {weather}. Only you see it. Kept for your next flights."
-  weather-set-memory: "&aYour own weather in cam mode: {weather}. Only you see it. Holds until you leave the server."
+  weather-reset: "&aCam weather: the world's again."
+  weather-set: "&aCam weather: {weather} (only you see it)."
+  weather-set-memory: "&aCam weather: {weather} (only you see it, until you leave)."
   weather-usage: "&eUse /cam weather clear, rain or reset."
   # The public spots on the web map (web-map): web-map-layer names the layer of the spots on the page of the map,
   # web-map-label the pin of a spot, plain text. A click on a pin shows web-map-detail, as HTML: {spot}, {owner},
-  # {likes}, {views}, {x} {y} {z}, {world} and {command} - the command that jumps there -, with {look} being
-  # web-map-detail-look while the spot shows a look of its own ({look} as in spot-saved-look). An & is a colour code
+  # {likes}, {views}, {x} {y} {z} and {world} - where the pin stands, so left out here -, with {look} being
+  # web-map-detail-look while the spot shows a look of its own ({look} as in spot-saved-look), and {jump} how to get
+  # there in the game: web-map-jump-command with {command}, the command that jumps there, while menu.access lets the
+  # commands through, web-map-jump-menu while only the menu goes, nothing while neither does. An & is a colour code
   # here as everywhere and is left out, so write no HTML entities like &amp; - the names in it are written safe for
   # HTML by the plugin.
-  web-map-detail: "<b>{spot}</b> by {owner}<br>{likes} likes, {views} views{look}<br>{x} {y} {z} ({world}): <code>{command}</code>"
+  web-map-detail: "<b>{spot}</b> by {owner}<br>{likes} likes, {views} views{look}{jump}"
   web-map-detail-look: "<br>Shows: {look}"
+  web-map-jump-command: "<br>In game: <code>{command}</code>"
+  web-map-jump-menu: "<br>In game: /cam menu → Spots → Public"
   web-map-label: "{spot} ({owner})"
   web-map-layer: "Spots"
 
@@ -1433,7 +1472,14 @@ portal-names:
 #   item-names:
 #     ender_eye: "eye of ender"
 
-# Switch single messages on and off
+# Switch single messages on and off, and where they go:
+#   true      = in the chat
+#   actionbar = above the hotbar, for about three seconds - for what is short and only matters right then: a warning
+#               at the border while flying, why cam mode does not start, a jump that does not work, what a button of
+#               the menu just switched. The line of the action bar in cam mode (action-bar in config.yml) waits that
+#               long. Lines with buttons (spot list, invitations, offered spots) always go into the chat.
+#   false     = not at all
+# enabled switches all of them off at once: true or false.
 message-settings:
   actionbar-distance: true
   actionbar-distance-portal: true
@@ -1484,16 +1530,17 @@ message-settings:
   battery-bossbar: true
   battery-bossbar-charging: true
   battery-empty: true
-  battery-low: true
+  battery-low: actionbar
   bedrock-chat-command: true
+  bedrock-chat-menu: true
   bossbar-text: true
-  cam-area-limit: true
-  cam-area-start: true
-  cam-body-blocked: true
+  cam-area-limit: actionbar
+  cam-area-start: actionbar
+  cam-body-blocked: actionbar
   cam-command-blocked: true
-  cam-effect-start: true
-  cam-falling-start: true
-  cam-lava-start: true
+  cam-effect-start: actionbar
+  cam-falling-start: actionbar
+  cam-lava-start: actionbar
   cam-list-body: true
   cam-list-camera: true
   cam-list-empty: true
@@ -1501,34 +1548,34 @@ message-settings:
   cam-list-entry-away: true
   cam-list-header: true
   cam-list-stop: true
-  cam-nearby-player: true
-  cam-powder-snow-start: true
-  cam-safety: true
-  cam-sleeping-start: true
-  cam-spectator-start: true
-  cam-tp-body: true
-  cam-tp-camera: true
+  cam-nearby-player: actionbar
+  cam-powder-snow-start: actionbar
+  cam-safety: actionbar
+  cam-sleeping-start: actionbar
+  cam-spectator-start: actionbar
+  cam-tp-body: actionbar
+  cam-tp-camera: actionbar
   cam-tp-cannot-fly: true
   cam-tp-not-in-cam: true
   cam-tp-self: true
   cam-tp-usage: true
   cam-unknown-command: true
-  cam-vehicle-start: true
-  cam-water-start: true
+  cam-vehicle-start: actionbar
+  cam-water-start: actionbar
   camera-off: false
   camera-on: false
-  cant-attack-other-body: true
-  cant-fly-in-lava: true
-  cant-fly-in-powder-snow: true
-  cant-fly-in-water: true
+  cant-attack-other-body: actionbar
+  cant-fly-in-lava: actionbar
+  cant-fly-in-powder-snow: actionbar
+  cant-fly-in-water: actionbar
   config-errors: true
-  cooldown-available: true
+  cooldown-available: actionbar
   cooldown-bossbar: true
   crash-restored: true
-  cooldown-text: true
-  cost-missing: true
+  cooldown-text: actionbar
+  cost-missing: actionbar
   cost-paid: true
-  distance-limit: true
+  distance-limit: actionbar
   end-warning-afk: true
   end-warning-battery: true
   end-warning-time-limit: true
@@ -1545,44 +1592,44 @@ message-settings:
   menu-spot-name: true
   menu-spot-name-public: true
   nightvision-off: true
-  nightvision-reset: true
-  nightvision-set: true
-  nightvision-set-memory: true
+  nightvision-reset: actionbar
+  nightvision-set: actionbar
+  nightvision-set-memory: actionbar
   nightvision-usage: true
   no-permission: true
-  no-projectiles: true
+  no-projectiles: actionbar
   not-in-cam: true
   nudge-received: true
   nudge-sent: true
-  photo-ended: true
+  photo-ended: actionbar
   photo-off: true
-  photo-started: true
-  portal-blocked: true
+  photo-started: actionbar
+  portal-blocked: actionbar
   portal-return-area: true
   portal-return-distance: true
   reload-exit: true
   reload-start: true
   reload-success: true
-  resume-area: true
-  resume-blocked: true
+  resume-area: actionbar
+  resume-blocked: actionbar
   resume-jumped: true
-  resume-no-signal: true
-  resume-none: true
+  resume-no-signal: actionbar
+  resume-none: actionbar
   resume-off: true
-  resume-other-world: true
-  resume-too-far: true
+  resume-other-world: actionbar
+  resume-too-far: actionbar
   signal-back-to-body: true
   signal-ended: true
   signal-lost: true
   spot-accepted: true
   spot-accepted-owner: true
   spot-admin-deleted: true
-  spot-admin-teleported: true
+  spot-admin-teleported: actionbar
   spot-admin-took-down: true
   spot-admin-tp-no-world: true
-  spot-area: true
+  spot-area: actionbar
   spot-bad-name: true
-  spot-blocked: true
+  spot-blocked: actionbar
   spot-button-accept: true
   spot-button-decline: true
   spot-button-delete: true
@@ -1607,13 +1654,13 @@ message-settings:
   spot-full: true
   spot-guestbook-entry: true
   spot-guestbook-header: true
-  spot-guestbook-login: true
-  spot-guestbook-off: true
-  spot-guestbook-on: true
+  spot-guestbook-login: actionbar
+  spot-guestbook-off: actionbar
+  spot-guestbook-on: actionbar
   spot-guestbook-update: true
   spot-jumped: true
   spot-like-own: true
-  spot-liked: true
+  spot-liked: actionbar
   spot-list-empty: true
   spot-list-entry: true
   spot-list-header: true
@@ -1629,14 +1676,14 @@ message-settings:
   spot-list-shared-entry: true
   spot-list-shared-header: true
   spot-moved: true
-  spot-no-signal: true
+  spot-no-signal: actionbar
   spot-not-shared: true
   spot-not-shared-all: true
   spot-off: true
   spot-offer-unknown: true
   spot-offered: true
   spot-offered-to-you: true
-  spot-other-world: true
+  spot-other-world: actionbar
   spot-public-unknown: true
   spot-removed: true
   spot-restrict-changed: true
@@ -1660,21 +1707,21 @@ message-settings:
   spot-shared-all: true
   spot-shared-already: true
   spot-shared-unknown: true
-  spot-start-too-far: true
+  spot-start-too-far: actionbar
   spot-taken-down: true
-  spot-too-far: true
+  spot-too-far: actionbar
   spot-unknown: true
-  spot-unliked: true
+  spot-unliked: actionbar
   spot-unrestrict-done: true
   spot-unrestrict-everybody-done: true
   spot-unrestricted-now: true
   spot-unshared: true
   spot-unshared-all: true
   spot-usage: true
-  start-delay-cancelled: true
+  start-delay-cancelled: actionbar
   start-delay-countdown: true
-  start-delay-damaged: true
-  start-delay-moved: true
+  start-delay-damaged: actionbar
+  start-delay-moved: actionbar
   startup-skins-failed: true
   startup-skins-loaded: true
   startup-skins-loading: true
@@ -1710,12 +1757,12 @@ message-settings:
   teleport-ended: true
   time-limit-expired: true
   time-off: true
-  time-reset: true
-  time-set: true
-  time-set-memory: true
+  time-reset: actionbar
+  time-set: actionbar
+  time-set-memory: actionbar
   time-usage: true
   tour-already-guest: true
-  tour-body-locked: true
+  tour-body-locked: actionbar
   tour-busy: true
   tour-busy-following: true
   tour-button-accept: true
@@ -1743,6 +1790,7 @@ message-settings:
   tour-invited: true
   tour-invited-all: true
   tour-joined: true
+  tour-joined-menu: true
   tour-joined-guide: true
   tour-kicked: true
   tour-kicked-guide: true
@@ -1761,8 +1809,8 @@ message-settings:
   tour-other-not-in-cam: true
   tour-own-later: true
   tour-out-of-reach: true
-  tour-reach-lost: true
-  tour-reach-lost-guide: true
+  tour-reach-lost: actionbar
+  tour-reach-lost-guide: actionbar
   tour-reach-warning: true
   tour-reach-warning-guide: true
   tour-restrict-changed: true
@@ -1780,12 +1828,12 @@ message-settings:
   tour-unrestrict-done: true
   tour-unrestricted-now: true
   tour-usage: true
-  tour-view-free: true
-  tour-view-guide: true
+  tour-view-free: actionbar
+  tour-view-guide: actionbar
   tour-view-unavailable: true
   trail-all-entry: true
   trail-all-header: true
-  trail-at-start: true
+  trail-at-start: actionbar
   trail-button: true
   trail-button-all: true
   trail-elsewhere: true
@@ -1793,7 +1841,7 @@ message-settings:
   trail-from: true
   trail-gone: true
   trail-header: true
-  trail-hidden: true
+  trail-hidden: actionbar
   trail-no-such: true
   trail-none: true
   trail-off: true
@@ -1807,7 +1855,7 @@ message-settings:
   unbanned-everybody-now: true
   unbanned-now: true
   weather-off: true
-  weather-reset: true
-  weather-set: true
-  weather-set-memory: true
+  weather-reset: actionbar
+  weather-set: actionbar
+  weather-set-memory: actionbar
   weather-usage: true
