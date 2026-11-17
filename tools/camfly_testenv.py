@@ -4488,12 +4488,12 @@ def liste_checks(env, bot):
             z = liste()
             FIND.test("/cam list nennt den Spieler im Cam-Modus, seit wann und wie weit vom Koerper",
                       gesagt(z, r"In cam mode \(1\)")
-                      and gesagt(z, rf"{BOT_NAME}: for .+, \d+ blocks from the body"), zeige(z))
+                      and gesagt(z, rf"{BOT_NAME}: .+, \d+ blocks from the body"), zeige(z))
             vorher = len(server_log(env))
             console(env, "cam list", pause=1.5)
             # Die Konsole schreibt Farben womoeglich als ANSI-Folgen ins Log.
             log = re.sub(r"\x1b\[[0-9;]*m", "", strip_colors(server_log(env)[vorher:]))
-            FIND.test("/cam list geht auch von der Konsole", f"{BOT_NAME}: for" in log,
+            FIND.test("/cam list geht auch von der Konsole", re.search(rf"{BOT_NAME}: .+ blocks from the body", log) is not None,
                       log.strip()[-200:] or "nichts im Log")
             cam_off(bot)
 
@@ -7148,7 +7148,7 @@ def startverzoegerung_checks(env, bot):
         an = bot.expect(r"[Cc]am mode activated", since, 6000)
         z = zeilen_seit(bot, since)
         FIND.test("start-delay mit start-cost: bezahlt wird erst beim Start",
-                  not gesagt(vorher, r"cost you") and bool(an) and gesagt(z, r"cost you 3x diamond"), zeige(z))
+                  not gesagt(vorher, r"Paid ") and bool(an) and gesagt(z, r"Paid 3x diamond"), zeige(z))
         cam_off(bot)
 
         vorher = len(server_log(env))
@@ -9199,7 +9199,7 @@ def fuehrung_checks(env, bot):
         frost = bot.call("frosts").get("count", 0)
         cam_off(bot)
         dort = zeilen_seit(zuschauer, seit)
-        FIND.test("Endet der Cam-Modus des Fuehrers, endet die Fuehrung", gesagt(dort, rf"{BOT_NAME} let everybody go"),
+        FIND.test("Endet der Cam-Modus des Fuehrers, endet die Fuehrung", gesagt(dort, rf"{BOT_NAME} ended following"),
                   zeige(dort))
         FIND.test("Am Ende des Cam-Modus bekommt der Client seinen Frost geschickt, auch wenn er gleich bleibt (0)",
                   0 in bot.call("frosts", since=frost).get("values", []),
@@ -9897,12 +9897,12 @@ def fuehrung_ohne_cam_checks(env, bot):
         bildschirm, _ = gast_herzen()
         FIND.test("Startet der Bot den Cam-Modus, geht die Fuehrung weiter - der Gast sieht seine eigenen Herzen, "
                   "und der Bot ist aus dem Team",
-                  not gesagt(dort, r"let everybody go") and bildschirm is not None and abs(bildschirm - 20.0) < 0.01
+                  not gesagt(dort, r"ended following") and bildschirm is not None and abs(bildschirm - 20.0) < 0.01
                   and not im_team(), f"{zeige(dort)} / {bildschirm}")
         seit = zuschauer.mark()
         cam_off(bot)
         dort = zeilen_seit(zuschauer, seit)
-        FIND.test("Endet der Cam-Modus des Bots, endet die Fuehrung", gesagt(dort, rf"{BOT_NAME} let everybody go"),
+        FIND.test("Endet der Cam-Modus des Bots, endet die Fuehrung", gesagt(dort, rf"{BOT_NAME} ended following"),
                   zeige(dort))
 
         cam_off(zuschauer)
@@ -9918,7 +9918,7 @@ def fuehrung_ohne_cam_checks(env, bot):
         console(env, f"gamemode spectator {BOT_NAME}", pause=1.5)
         dort = zeilen_seit(zuschauer, seit)
         FIND.test("Wechselt der Fuehrer in den Zuschauermodus, endet die Fuehrung",
-                  gesagt(dort, rf"{BOT_NAME} let everybody go"), zeige(dort))
+                  gesagt(dort, rf"{BOT_NAME} ended following"), zeige(dort))
         console(env, f"gamemode {spielmodus} {BOT_NAME}", pause=1.0)
 
         # Jeder Reload beendet den Cam-Modus des Gastes: danach von vorn.
@@ -10538,7 +10538,7 @@ def weiter_checks(env, bot):
                   gesagt(zeilen, r"/cam resume is switched off") and "resume" not in tab("/cam "), zeige(zeilen))
         set_options(env, [("enabled", "true", "resume-command"), ("storage", "memory", "resume-command")])
         zeilen = befehl(bot, "/cam resume")
-        FIND.test("storage: memory - nach /cam reload ist kein Flug da", gesagt(zeilen, r"no flight to resume"),
+        FIND.test("storage: memory - nach /cam reload ist kein Flug da", gesagt(zeilen, r"No flight to resume yet"),
                   zeige(zeilen))
     finally:
         try:
