@@ -5,8 +5,9 @@ api-version: 26.2
 author: Rexminecraft343
 description: A plugin for a camera mode with an armour stand or mannequin body
 # Vault only for start-cost.money, the maps only for web-map: each is found when it is there. Loaded first, so that
-# the public spots get onto a map as soon as the server is up.
-softdepend: [Vault, BlueMap, dynmap, squaremap]
+# the public spots get onto a map as soon as the server is up. Geyser and Floodgate for the windows of Bedrock, see
+# bedrock in the config file.
+softdepend: [Vault, BlueMap, dynmap, squaremap, Geyser-Spigot, floodgate]
 
 commands:
   cam:

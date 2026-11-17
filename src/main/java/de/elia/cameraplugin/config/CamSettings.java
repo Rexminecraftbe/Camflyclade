@@ -1,6 +1,8 @@
 package de.elia.cameraplugin.config;
 
 import de.elia.cameraplugin.area.CamAreaRules;
+import de.elia.cameraplugin.bedrock.BedrockMenu;
+import de.elia.cameraplugin.bedrock.BedrockScope;
 import de.elia.cameraplugin.body.BodyType;
 import de.elia.cameraplugin.command.CamCommandFilter;
 import de.elia.cameraplugin.command.CommandMode;
@@ -644,6 +646,29 @@ public final class CamSettings {
     /** Whether the key that swaps the hands ends camera mode, {@code exit-key.enabled}. */
     private boolean exitKeyEnabled;
 
+    /** For whom the adjustments for Bedrock hold, {@code bedrock.apply-to}. */
+    private BedrockScope bedrockScope;
+    /** The start of a name that marks a player on Bedrock, {@code bedrock.name-prefix}; empty for none. */
+    private String bedrockNamePrefix;
+    /** How {@code /cam menu} comes to Bedrock players, {@code bedrock.menu}. */
+    private BedrockMenu bedrockMenu;
+    /** Whether an invitation comes to them as a window as well, {@code bedrock.invitation-forms}. */
+    private boolean bedrockInvitationForms;
+    /** Whether the buttons in the chat say the command they run, {@code bedrock.chat-commands}. */
+    private boolean bedrockChatCommands;
+    /**
+     * Whether a guest on Bedrock who sees through the eyes of his guide is
+     * turned along with him rather than shown Geyser's camera,
+     * {@code bedrock.follow-view: turn}.
+     */
+    private boolean bedrockFollowTurn;
+    /**
+     * The particle of the outline Bedrock players see of a camera player in
+     * place of the glowing one, {@code bedrock.glow-particle}; {@code null}
+     * for none.
+     */
+    private Particle bedrockGlowParticle;
+
     /** A full battery, in seconds of flight. */
     private int batteryCapacity;
     /** Seconds of flight that come back for every second outside camera mode. */
@@ -983,6 +1008,7 @@ public final class CamSettings {
         camSafetyNearbyRadius = config.getDouble("cam-safety.nearby-radius", 16.0, 0.0,
                 MobTargeting.MAX_MOB_TARGET_RANGE);
         exitKeyEnabled = config.getBoolean("exit-key.enabled", true);
+        readBedrock(config);
         readBattery(config);
         readStartCost(config);
         statsEnabled = config.getBoolean("statistics.enabled", true);
@@ -1451,6 +1477,29 @@ public final class CamSettings {
             }
         }
         return block;
+    }
+
+    /**
+     * Reads {@code bedrock}: for whom its adjustments hold, how a Bedrock
+     * player is told apart by his name, and each adjustment that can be
+     * switched off. {@code glow-particle: false} is no outline at all, any
+     * other value a particle as {@code camera-particles.particle} takes it.
+     */
+    private void readBedrock(ConfigReader config) {
+        String scope = config.getChoice("bedrock.apply-to", "bedrock", "bedrock", "all", "false");
+        bedrockScope = scope.equalsIgnoreCase("all") ? BedrockScope.ALL
+                : scope.equalsIgnoreCase("false") ? BedrockScope.OFF : BedrockScope.BEDROCK;
+        bedrockNamePrefix = config.getString("bedrock.name-prefix", ".").trim();
+        String menu = config.getChoice("bedrock.menu", "mixed", "forms", "mixed", "chest");
+        bedrockMenu = menu.equalsIgnoreCase("forms") ? BedrockMenu.FORMS
+                : menu.equalsIgnoreCase("chest") ? BedrockMenu.CHEST : BedrockMenu.MIXED;
+        bedrockInvitationForms = config.getBoolean("bedrock.invitation-forms", true);
+        bedrockChatCommands = config.getBoolean("bedrock.chat-commands", true);
+        bedrockFollowTurn = config.getChoice("bedrock.follow-view", "camera", "camera", "turn")
+                .equalsIgnoreCase("turn");
+        String glow = config.getString("bedrock.glow-particle", "end_rod");
+        bedrockGlowParticle = glow.trim().equalsIgnoreCase("false") ? null
+                : resolveParticle(config, "bedrock.glow-particle", Particle.END_ROD);
     }
 
     /**
@@ -2478,6 +2527,37 @@ public final class CamSettings {
 
     public boolean isExitKeyEnabled() {
         return exitKeyEnabled;
+    }
+
+    // ---------------------------------------------------------------- bedrock
+
+    public BedrockScope getBedrockScope() {
+        return bedrockScope;
+    }
+
+    public String getBedrockNamePrefix() {
+        return bedrockNamePrefix;
+    }
+
+    public BedrockMenu getBedrockMenu() {
+        return bedrockMenu;
+    }
+
+    public boolean isBedrockInvitationForms() {
+        return bedrockInvitationForms;
+    }
+
+    public boolean isBedrockChatCommands() {
+        return bedrockChatCommands;
+    }
+
+    public boolean isBedrockFollowTurn() {
+        return bedrockFollowTurn;
+    }
+
+    /** The particle of the outline for Bedrock players, or {@code null} for none. */
+    public Particle getBedrockGlowParticle() {
+        return bedrockGlowParticle;
     }
 
     // ---------------------------------------------------------------- battery

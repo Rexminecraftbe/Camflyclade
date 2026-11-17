@@ -63,9 +63,12 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.LongConsumer;
+import java.util.function.LongSupplier;
+import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 import java.util.function.ToLongFunction;
 import java.util.logging.Level;
@@ -109,10 +112,19 @@ import java.util.logging.Level;
  */
 public final class CamMenu implements Listener {
 
-    /** The sizes of the windows: three rows for the main page and the small ones, six for the lists. */
+    /**
+     * The sizes of the windows: three rows for the main page and the small
+     * ones, six for the lists - on Bedrock six for every page, see
+     * {@link #page}, a small one spread over them, {@link #SMALL_ON_LARGE}.
+     */
     private static final int SMALL = 27;
     private static final int LIST = 54;
-    /** The size of the page of a restriction of the spots: four rows, for what it keeps him from as well. */
+    /**
+     * The size of the pages of a restriction: four rows, for what it keeps
+     * him from as well - on Bedrock six, like every page there, see
+     * {@link #page}: a chest of four Bedrock does not have. Its rows are
+     * spread over them, {@link #MEDIUM_ON_LARGE}.
+     */
     private static final int MEDIUM = 36;
     /** Where the page of a restriction has the buttons of his own spots, the public ones and the shared ones. */
     private static final int[] RESTRICT_SLOTS = {11, 13, 15};
@@ -150,6 +162,45 @@ public final class CamMenu implements Listener {
     private static final int SLOT_TOUR_VIEW = 49;
     /** The button on the page of the tour that ends it, or what keeps him from leading or following. */
     private static final int SLOT_TOUR_END = 47;
+
+    /** What a button that only shows something does on a click: nothing. */
+    private static final Consumer<ClickType> NOTHING = click -> { };
+
+    /**
+     * Where the choices of a button stand on the page that offers them on
+     * Bedrock, see {@link #openPicks}, a page of six rows like every page
+     * there: the two rows in the middle first, then the rows above and below
+     * them - the button itself stands on top, the way back at the bottom.
+     */
+    private static final int[] PICK_SLOTS = {18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+            9, 10, 11, 12, 13, 14, 15, 16, 17, 36, 37, 38, 39, 40, 41, 42, 43, 44};
+    /** On the page of the choices: the button they belong to, and the way back. */
+    private static final int SLOT_PICK_BUTTON = 4;
+    private static final int SLOT_PICK_BACK = 49;
+    /**
+     * Where the rows of a page of three rows - the main page and the small
+     * ones - go in the window of six rows every page has on Bedrock, see
+     * {@link #page}: the first stays on top, the second comes into the
+     * third, and the last, with the way back and what the page does, goes
+     * to the bottom, where the lists have their buttons to go on.
+     */
+    private static final int[] SMALL_ON_LARGE = {0, 2, 5};
+    /** The same for a page of four rows, a restriction: the two in the middle into the middle. */
+    private static final int[] MEDIUM_ON_LARGE = {0, 2, 3, 5};
+    /**
+     * How long after a click on Bedrock it is looked whether the menu showed
+     * anything, in ticks, see {@link #afterwards}: a button acts a tick after
+     * the click, and the page it opens comes out of that.
+     */
+    private static final long AFTERWARDS_TICKS = 3L;
+    /** How long a line under a button of a window of Bedrock may be, in letters, before it is cut. */
+    private static final int FORM_LINE = 40;
+    /**
+     * How long a window of Bedrock waits after the chest of the menu was
+     * closed for it, in ticks, see {@link #whenChestShut}: Bedrock is to have
+     * the chest off the screen before the window comes.
+     */
+    private static final long WINDOW_AFTER_CHEST_TICKS = 5L;
 
     /** How long the menu waits for an answer in the chat, in milliseconds. */
     private static final long ANSWER_WAIT = 60_000L;
@@ -218,6 +269,15 @@ public final class CamMenu implements Listener {
 
     /** How each admin has the spots of a player sorted on the admin page, while he is online. */
     private final Map<UUID, SpotSort> adminSpotSorts = new HashMap<>();
+
+    /**
+     * How often the menu has shown each player something since he joined - a
+     * page, a question, a window of Bedrock - or closed for something a
+     * button does, see {@link #afterwards}.
+     */
+    private final Map<UUID, Integer> shownCount = new HashMap<>();
+    /** The page to be opened a moment from now on Bedrock, by player, see {@link #openWindow}. */
+    private final Map<UUID, Page> opening = new HashMap<>();
 
     /** What draws the open pages anew by themselves, see {@link #start}. */
     private BukkitTask live;
@@ -399,8 +459,30 @@ public final class CamMenu implements Listener {
      */
     public static final class Page implements InventoryHolder {
         private final Map<Integer, Consumer<ClickType>> buttons = new HashMap<>();
+        /**
+         * What a button does besides a plain click - a right-click, a click
+         * with shift -, or the choices it steps through, for whoever cannot
+         * click that way: on Bedrock, see {@link CamMenu#openPicks}. Only for
+         * such a player, and only for a button that does more than one thing.
+         */
+        private final Map<Integer, List<Pick>> picks = new HashMap<>();
+        /**
+         * A window of Bedrock of its own for a button with {@link #picks},
+         * in place of the list of them, see {@link CamMenu#openPicks}: it
+         * sends it and says whether it went out.
+         */
+        private final Map<Integer, BooleanSupplier> windows = new HashMap<>();
+        /**
+         * Whether it is made for a player on Bedrock, which draws some items
+         * otherwise than Java does, see {@link CamMenu#forBedrock}.
+         */
+        private boolean bedrock;
         private Inventory inventory;
-        /** Its title, which a page drawn anew in place keeps. */
+        /**
+         * Its title, which a page drawn anew in place keeps. On Bedrock the
+         * name of the page only: the window keeps the title of the menu, see
+         * {@link CamMenu#page}.
+         */
         private String title;
         /** What draws it anew as it stands then, by itself; {@code null} for a page that is not. */
         private Runnable again;
@@ -416,6 +498,18 @@ public final class CamMenu implements Listener {
         private String[] before;
         /** Until when a click on a slot is turned away, by slot: something else came there by itself. */
         private final Map<Integer, Long> guarded = new HashMap<>();
+        /**
+         * Where each row of the page as it is laid out goes in its window, by
+         * row: for a page of three or four rows in the window of six every
+         * page has on Bedrock, see {@link CamMenu#SMALL_ON_LARGE}; {@code null}
+         * where every slot stays where it is.
+         */
+        private int[] rows;
+
+        /** The slot of its window for a slot of the page as it is laid out, see {@link #rows}. */
+        private int at(int slot) {
+            return rows == null ? slot : rows[slot / 9] * 9 + slot % 9;
+        }
 
         @Override
         public Inventory getInventory() {
@@ -443,6 +537,18 @@ public final class CamMenu implements Listener {
 
     /** Where a list stands once its entries are in: on which of how many pages, and whether it has none at all. */
     private record Listed(int number, int pages, boolean empty) {
+    }
+
+    /**
+     * One of the things a button does, for a player on Bedrock who picks it
+     * from a list instead of clicking a certain way, see {@link #openPicks}.
+     *
+     * @param label   what it is called, with colour codes
+     * @param current whether it is the choice that holds now, of a button
+     *                that steps through choices
+     * @param action  what picking it does: what the click it stands for does
+     */
+    private record Pick(String label, boolean current, Runnable action) {
     }
 
     public CamMenu(CameraPlugin plugin) {
@@ -534,23 +640,41 @@ public final class CamMenu implements Listener {
     private Page page(Player player, int size, String title) {
         Page open = openPage(player);
         Listing earlier = open == null ? null : open.listing;
+        // On Bedrock every page of the menu goes into one window of six rows,
+        // drawn anew in place from page to page: Geyser shows a chest there
+        // as one of its own put down for it, and one window opened in the
+        // place of another now and then closes again at once, or never opens
+        // - a small chest after a large one and back, too. Bedrock cannot
+        // rename a window that is open, so it keeps the title of the menu. A
+        // page of three or four rows is spread over the six, see
+        // SMALL_ON_LARGE.
+        boolean bedrock = bedrock(player);
+        int rows = bedrock ? LIST : size;
         Page page;
-        if (open != null && open.inventory.getSize() == size && open.title.equals(title)) {
+        if (open != null && open.inventory.getSize() == rows && (bedrock || open.title.equals(title))) {
             page = open;
-            page.before = new String[size];
-            for (int slot = 0; slot < size; slot++) {
+            page.before = new String[rows];
+            for (int slot = 0; slot < rows; slot++) {
                 page.before[slot] = identity(page.inventory.getItem(slot));
             }
             page.inventory.clear();
             page.buttons.clear();
+            page.picks.clear();
+            page.windows.clear();
         } else {
             page = new Page();
-            page.inventory = Bukkit.createInventory(page, size, title);
-            page.title = title;
+            page.inventory = Bukkit.createInventory(page, rows, bedrock ? messages.getMessage("menu-title") : title);
         }
+        page.title = title;
         page.earlier = earlier;
         page.listing = null;
         page.again = null;
+        page.bedrock = bedrock;
+        page.rows = !bedrock ? null : switch (size) {
+            case SMALL -> SMALL_ON_LARGE;
+            case MEDIUM -> MEDIUM_ON_LARGE;
+            default -> null;
+        };
         return page;
     }
 
@@ -580,8 +704,16 @@ public final class CamMenu implements Listener {
         page.earlier = null;
         String[] before = page.before;
         page.before = null;
+        if (!refreshing) {
+            shown(player);
+        }
+        // On Bedrock as a window of its own, where that goes: it is drawn
+        // anew only after a click, a window cannot be changed while it is open.
+        if (before == null && plugin.getBedrock().menuAsForms(player) && sendForm(player, page)) {
+            return;
+        }
         if (before == null) {
-            player.openInventory(page.inventory);
+            openWindow(player, page);
         }
         if (!refreshing) {
             return;
@@ -629,7 +761,7 @@ public final class CamMenu implements Listener {
                     ordered.add(row);
                 } else if (refreshing) {
                     String name = earlier.names().get(key);
-                    ordered.add(new Row(key, slot -> put(page, slot, gone(name), click -> { })));
+                    ordered.add(new Row(key, slot -> put(page, slot, gone(name), NOTHING)));
                     // What it was called, not what stands in its place.
                     names.put(key, name == null ? "" : name);
                 }
@@ -732,17 +864,22 @@ public final class CamMenu implements Listener {
         CamStats stats = plugin.getStats();
         if (stats.showsAnything()) {
             List<String> lore = statLines(player.getUniqueId(), player.getName());
-            lore.addAll(lines(messages.getMessage(settings.isStatsEnabled() ? "menu-stats-actions-reset"
+            lore.addAll(lines(text(player, settings.isStatsEnabled() ? "menu-stats-actions-reset"
                     : "menu-stats-actions")));
-            put(page, settings.getMenuSlot(MenuButton.STATS), labelled(
-                    settings.getMenuIcon(MenuButton.STATS).create(plugin.getLogger()),
-                    messages.getMessage("menu-stats"), lore), click -> {
-                        if (click.isShiftClick() && settings.isStatsEnabled()) {
-                            act(player, () -> stats.reset(player));
-                        } else {
-                            act(player, () -> stats.command(player, new String[0]));
-                        }
-                    });
+            int slot = settings.getMenuSlot(MenuButton.STATS);
+            Consumer<ClickType> action = click -> {
+                if (click.isShiftClick() && settings.isStatsEnabled()) {
+                    act(player, () -> stats.reset(player));
+                } else {
+                    act(player, () -> stats.command(player, new String[0]));
+                }
+            };
+            put(page, slot, labelled(settings.getMenuIcon(MenuButton.STATS).create(plugin.getLogger()),
+                    messages.getMessage("menu-stats"), lore), action);
+            if (settings.isStatsEnabled()) {
+                picks(player, page, slot, List.of(pick("menu-pick-stats-show", action, ClickType.LEFT),
+                        pick("menu-pick-stats-reset", action, ClickType.SHIFT_LEFT)));
+            }
         }
         if (settings.getAdminAccess().allowsMenu() && hasAdminPage(player)) {
             button(page, MenuButton.ADMIN, "menu-admin", null, false, click -> later(() -> openAdmin(player)));
@@ -921,9 +1058,8 @@ public final class CamMenu implements Listener {
 
     /** The button of the night vision on the main page; a click picks the next mode, a right-click the one before. */
     private void nightVisionButton(Player player, Page page) {
-        choicesButton(player, page, MenuButton.NIGHT_VISION, "menu-nightvision", "{mode}", nightVisionChoices(player),
-                plugin.getNightVision().guideStandsIn(player), back -> {
-                    String word = nightVisionChoices(player).step(back).word();
+        choicesButton(player, page, MenuButton.NIGHT_VISION, "menu-nightvision", "{mode}",
+                () -> nightVisionChoices(player), plugin.getNightVision().guideStandsIn(player), word -> {
                     plugin.getNightVision().command(player, new String[]{word});
                     nightVisionButton(player, page);
                 });
@@ -931,18 +1067,18 @@ public final class CamMenu implements Listener {
 
     /** The button of the time of day on the main page; a click picks the next time, a right-click the one before. */
     private void timeButton(Player player, Page page) {
-        choicesButton(player, page, MenuButton.TIME, "menu-time", "{time}", timeChoices(player),
-                plugin.getSky().guideStandsIn(player, true), back -> {
-            plugin.getSky().timeCommand(player, new String[]{timeChoices(player).step(back).word()});
+        choicesButton(player, page, MenuButton.TIME, "menu-time", "{time}", () -> timeChoices(player),
+                plugin.getSky().guideStandsIn(player, true), word -> {
+            plugin.getSky().timeCommand(player, new String[]{word});
             timeButton(player, page);
         });
     }
 
     /** The button of the weather on the main page; a click picks the next weather, a right-click the one before. */
     private void weatherButton(Player player, Page page) {
-        choicesButton(player, page, MenuButton.WEATHER, "menu-weather", "{weather}", weatherChoices(player),
-                plugin.getSky().guideStandsIn(player, false), back -> {
-            plugin.getSky().weatherCommand(player, new String[]{weatherChoices(player).step(back).word()});
+        choicesButton(player, page, MenuButton.WEATHER, "menu-weather", "{weather}", () -> weatherChoices(player),
+                plugin.getSky().guideStandsIn(player, false), word -> {
+            plugin.getSky().weatherCommand(player, new String[]{word});
             weatherButton(player, page);
         });
     }
@@ -964,12 +1100,19 @@ public final class CamMenu implements Listener {
      * <p>While the guide he follows shows him his in its place, the choices
      * are his own, which hold again after the tour, and the button says so.</p>
      *
-     * @param fill   the placeholder in the name that the choice of now takes
-     * @param guide  whether the guide he follows shows him his in place of the choice
-     * @param step   takes a step, a tick after the click: back to the one before for {@code true}
+     * <p>On Bedrock every choice is offered to be picked straight away, see
+     * {@link #openPicks}, the one that holds now marked; once picked, the
+     * menu closes.</p>
+     *
+     * @param fill    the placeholder in the name that the choice of now takes
+     * @param fresh   the choices as they stand when asked: drawn now, and asked
+     *                again for a step, a tick after the click
+     * @param guide   whether the guide he follows shows him his in place of the choice
+     * @param choose  takes a choice by the word of its command, a tick after the click
      */
-    private void choicesButton(Player player, Page page, MenuButton which, String key, String fill, Choices choices,
-                               boolean guide, Consumer<Boolean> step) {
+    private void choicesButton(Player player, Page page, MenuButton which, String key, String fill,
+                               Supplier<Choices> fresh, boolean guide, Consumer<String> choose) {
+        Choices choices = fresh.get();
         List<String> lore = new ArrayList<>(lines(messages.getMessage(key + "-lore")));
         if (guide) {
             lore.addAll(lines(messages.getMessage("menu-own-later")));
@@ -978,19 +1121,31 @@ public final class CamMenu implements Listener {
             lore.addAll(lines(messages.getMessage(i == choices.now() ? "menu-choice-option-current"
                     : "menu-choice-option").replace("{choice}", choices.all().get(i).name())));
         }
-        lore.addAll(lines(messages.getMessage("menu-choice-action")));
+        lore.addAll(lines(text(player, "menu-choice-action")));
         String name = messages.getMessage(key).replace(fill, choices.all().get(choices.now()).name());
         ItemStack item = labelled(settings.getMenuIcon(which).create(plugin.getLogger()), name, lore);
-        put(page, settings.getMenuSlot(which), shine(item, choices.now() != 0), click -> {
+        int slot = settings.getMenuSlot(which);
+        put(page, slot, shine(item, choices.now() != 0), click -> {
             boolean back = click.isRightClick();
             if (back || (click.isLeftClick() && click != ClickType.DOUBLE_CLICK)) {
                 later(() -> {
                     if (player.isOnline()) {
-                        step.accept(back);
+                        choose.accept(fresh.get().step(back).word());
                     }
                 });
             }
         });
+        List<Pick> picks = new ArrayList<>();
+        for (int i = 0; i < choices.all().size(); i++) {
+            Choice choice = choices.all().get(i);
+            // A time of his own without a name only ever stands for the one he has.
+            if (choice.word() != null) {
+                // Picked from a list, the choice is made: the menu closes, as after a jump.
+                picks.add(new Pick(choice.name(), i == choices.now(), () -> act(player,
+                        () -> choose.accept(choice.word()))));
+            }
+        }
+        picks(player, page, slot, picks);
     }
 
     /**
@@ -1044,9 +1199,10 @@ public final class CamMenu implements Listener {
         if (kept != null) {
             String key = kept.everybody() ? "menu-spots-disabled" : "menu-spots-restricted";
             put(page, 22, Material.GRAY_DYE, messages.getMessage(key),
-                    lines(plugin.getSpotModeration().fill(messages.getMessage(key + "-lore"), kept)), click -> { });
+                    lines(plugin.getSpotModeration().fill(messages.getMessage(key + "-lore"), kept)), NOTHING);
         } else if (listed.empty()) {
-            put(page, 22, Material.GRAY_DYE, "menu-spots-empty-" + tab.key, click -> { });
+            String empty = "menu-spots-empty-" + tab.key;
+            put(page, 22, Material.GRAY_DYE, messages.getMessage(empty), lines(text(player, empty + "-lore")), NOTHING);
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
         if (sharing) {
@@ -1054,7 +1210,7 @@ public final class CamMenu implements Listener {
                 putTab(player, page, tab, other);
             }
         }
-        putSort(page, SLOT_SPOT_SORT, sort.key, tab.sorts, current -> {
+        putSort(player, page, SLOT_SPOT_SORT, sort.key, tab.sorts, current -> {
             spotSorts.computeIfAbsent(player.getUniqueId(), id -> new EnumMap<>(SpotTab.class)).put(tab,
                     SpotSort.of(current));
             openSpots(player, tab, 0);
@@ -1063,9 +1219,13 @@ public final class CamMenu implements Listener {
         if (settings.isViewpointsSetInCamOnly()) {
             newLore.addAll(lines(messages.getMessage("menu-new-spot-cam-only")));
         }
-        newLore.addAll(lines(messages.getMessage(sharing ? "menu-new-spot-lore-public" : "menu-new-spot-lore")));
-        put(page, SLOT_SPOT_NEW, Material.WRITABLE_BOOK, messages.getMessage("menu-new-spot"), newLore,
-                click -> act(player, () -> askName(player, sharing && click.isRightClick())));
+        newLore.addAll(lines(text(player, sharing ? "menu-new-spot-lore-public" : "menu-new-spot-lore")));
+        Consumer<ClickType> newSpot = click -> act(player, () -> askName(player, sharing && click.isRightClick()));
+        put(page, SLOT_SPOT_NEW, Material.WRITABLE_BOOK, messages.getMessage("menu-new-spot"), newLore, newSpot);
+        if (sharing) {
+            picks(player, page, SLOT_SPOT_NEW, List.of(pick("menu-pick-spot-private", newSpot, ClickType.LEFT),
+                    pick("menu-pick-spot-public", newSpot, ClickType.RIGHT)));
+        }
         if (settings.isGuestbookEnabled()) {
             guestbookButton(player, page, () -> openSpots(player, tab, number));
         }
@@ -1099,7 +1259,7 @@ public final class CamMenu implements Listener {
         List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-guestbook-lore")));
         if (guestbook.isLocked(id)) {
             lore.addAll(lines(messages.getMessage("menu-guestbook-locked")));
-            put(page, SLOT_SPOT_GUESTBOOK, item(Material.BELL, name, lore), null);
+            put(page, SLOT_SPOT_GUESTBOOK, item(Material.BELL, name, lore), NOTHING);
             return;
         }
         for (SpotGuestbook.Mode mode : modes) {
@@ -1107,13 +1267,21 @@ public final class CamMenu implements Listener {
                     : "menu-guestbook-option").replace("{mode}", guestbookMode(mode))));
         }
         lore.addAll(lines(messages.getMessage("menu-guestbook-interval").replace("{minutes}", minutes)));
-        lore.addAll(lines(messages.getMessage("menu-guestbook-action")));
+        lore.addAll(lines(text(player, "menu-guestbook-action")));
         put(page, SLOT_SPOT_GUESTBOOK, shine(item(Material.BELL, name, lore), now != SpotGuestbook.Mode.OFF),
                 click -> later(() -> {
                     int step = click.isRightClick() ? modes.size() - 1 : 1;
                     guestbook.set(player, modes.get((modes.indexOf(now) + step) % modes.size()));
                     again.run();
                 }));
+        List<Pick> picks = new ArrayList<>();
+        for (SpotGuestbook.Mode mode : modes) {
+            picks.add(new Pick(guestbookMode(mode), mode == now, () -> later(() -> {
+                guestbook.set(player, mode);
+                again.run();
+            })));
+        }
+        picks(player, page, SLOT_SPOT_GUESTBOOK, picks);
     }
 
     /** What a way of the guestbook is called on the bell. */
@@ -1187,21 +1355,28 @@ public final class CamMenu implements Listener {
                     .replace("{players}", spots.offeredTo(share))));
         }
         lore.addAll(reachLore());
-        lore.addAll(lines(messages.getMessage(settings.isViewpointsSharing() ? "menu-spot-actions-share"
+        lore.addAll(lines(text(player, settings.isViewpointsSharing() ? "menu-spot-actions-share"
                 : "menu-spot-actions")));
-        put(page, slot, Material.FILLED_MAP, messages.getMessage("menu-spot").replace("{spot}", spot.name()), lore,
-                click -> {
-                    if (click.isShiftClick()) {
-                        later(() -> {
-                            spots.delete(player, spot.name());
-                            openSpots(player, SpotTab.PRIVATE, 0);
-                        });
-                    } else if (click.isRightClick() && settings.isViewpointsSharing()) {
-                        later(() -> openShare(player, spot.key(), 0));
-                    } else if (click.isLeftClick()) {
-                        act(player, () -> spots.jump(player, spot.name()));
-                    }
+        Consumer<ClickType> action = click -> {
+            if (click.isShiftClick()) {
+                later(() -> {
+                    spots.delete(player, spot.name());
+                    openSpots(player, SpotTab.PRIVATE, 0);
                 });
+            } else if (click.isRightClick() && settings.isViewpointsSharing()) {
+                later(() -> openShare(player, spot.key(), 0));
+            } else if (click.isLeftClick()) {
+                act(player, () -> spots.jump(player, spot.name()));
+            }
+        };
+        put(page, slot, Material.FILLED_MAP, messages.getMessage("menu-spot").replace("{spot}", spot.name()), lore,
+                action);
+        List<Pick> picks = new ArrayList<>(List.of(pick("menu-pick-spot-jump", action, ClickType.LEFT)));
+        if (settings.isViewpointsSharing()) {
+            picks.add(pick("menu-pick-spot-share", action, ClickType.RIGHT));
+        }
+        picks.add(pick("menu-pick-spot-delete", action, ClickType.SHIFT_LEFT));
+        picks(player, page, slot, picks);
     }
 
     /**
@@ -1219,22 +1394,25 @@ public final class CamMenu implements Listener {
         lore.addAll(lines(messages.getMessage("menu-spot-likes").replace("{likes}", String.valueOf(share.likes()))));
         if (own) {
             lore.addAll(reachLore());
-            lore.addAll(lines(messages.getMessage("menu-public-own-actions")));
-            put(page, slot, Material.FILLED_MAP, messages.getMessage("menu-public-own").replace("{spot}", spot.name()),
-                    lore, click -> {
-                        if (click.isShiftClick()) {
-                            // Deleting is for the tab of his own spots, not this one.
-                            return;
-                        }
-                        if (click.isRightClick()) {
-                            later(() -> {
-                                spots.makePublic(player, spot, false);
-                                openSpots(player, SpotTab.PUBLIC, 0);
-                            });
-                        } else if (click.isLeftClick()) {
-                            act(player, () -> spots.jump(player, spot.name()));
-                        }
+            lore.addAll(lines(text(player, "menu-public-own-actions")));
+            Consumer<ClickType> action = click -> {
+                if (click.isShiftClick()) {
+                    // Deleting is for the tab of his own spots, not this one.
+                    return;
+                }
+                if (click.isRightClick()) {
+                    later(() -> {
+                        spots.makePublic(player, spot, false);
+                        openSpots(player, SpotTab.PUBLIC, 0);
                     });
+                } else if (click.isLeftClick()) {
+                    act(player, () -> spots.jump(player, spot.name()));
+                }
+            };
+            put(page, slot, Material.FILLED_MAP, messages.getMessage("menu-public-own").replace("{spot}", spot.name()),
+                    lore, action);
+            picks(player, page, slot, List.of(pick("menu-pick-spot-jump", action, ClickType.LEFT),
+                    pick("menu-pick-spot-offline", action, ClickType.RIGHT)));
             return;
         }
         boolean liked = share.isLikedBy(player.getUniqueId());
@@ -1242,11 +1420,11 @@ public final class CamMenu implements Listener {
             lore.addAll(lines(messages.getMessage("menu-spot-liked")));
         }
         lore.addAll(reachLore());
-        lore.addAll(lines(messages.getMessage(liked ? "menu-public-spot-actions-unlike"
+        lore.addAll(lines(text(player, liked ? "menu-public-spot-actions-unlike"
                 : "menu-public-spot-actions")));
         String name = messages.getMessage("menu-shared-spot").replace("{owner}", share.getOwnerName())
                 .replace("{spot}", spot.name());
-        put(page, slot, shine(item(Material.MAP, name, lore), liked), click -> {
+        Consumer<ClickType> action = click -> {
             if (click.isShiftClick()) {
                 // Nothing: a slip of the shift key neither jumps nor likes.
                 return;
@@ -1259,17 +1437,20 @@ public final class CamMenu implements Listener {
             } else if (click.isLeftClick()) {
                 act(player, () -> spots.jump(player, share.label()));
             }
-        });
+        };
+        put(page, slot, shine(item(Material.MAP, name, lore), liked), action);
+        picks(player, page, slot, List.of(pick("menu-pick-spot-jump", action, ClickType.LEFT),
+                pick(liked ? "menu-pick-spot-unlike" : "menu-pick-spot-like", action, ClickType.RIGHT)));
     }
 
     /** A spot offered to him: left-click accepts it, right-click turns it down. */
     private void putOffer(Player player, Page page, int slot, Share share) {
         CamSpots spots = plugin.getSpots();
         List<String> lore = spotLore(share.getOwner(), share.getSpot());
-        lore.addAll(lines(messages.getMessage("menu-offer-actions")));
+        lore.addAll(lines(text(player, "menu-offer-actions")));
         String name = messages.getMessage("menu-offer").replace("{owner}", share.getOwnerName())
                 .replace("{spot}", share.getSpot().name());
-        put(page, slot, shine(item(Material.PAPER, name, lore), true), click -> {
+        Consumer<ClickType> action = click -> {
             if (click.isRightClick()) {
                 later(() -> {
                     spots.decline(player, share);
@@ -1281,7 +1462,10 @@ public final class CamMenu implements Listener {
                     openSpots(player, SpotTab.SHARED, 0);
                 });
             }
-        });
+        };
+        put(page, slot, shine(item(Material.PAPER, name, lore), true), action);
+        picks(player, page, slot, List.of(pick("menu-pick-accept", action, ClickType.LEFT),
+                pick("menu-pick-decline", action, ClickType.RIGHT)));
     }
 
     /**
@@ -1293,10 +1477,10 @@ public final class CamMenu implements Listener {
         CamSpots spots = plugin.getSpots();
         List<String> lore = spotLore(share.getOwner(), share.getSpot());
         lore.addAll(reachLore());
-        lore.addAll(lines(messages.getMessage("menu-shared-spot-actions")));
+        lore.addAll(lines(text(player, "menu-shared-spot-actions")));
         String name = messages.getMessage("menu-shared-spot").replace("{owner}", share.getOwnerName())
                 .replace("{spot}", share.getSpot().name());
-        put(page, slot, Material.MAP, name, lore, click -> {
+        Consumer<ClickType> action = click -> {
             if (click.isShiftClick()) {
                 // Nothing: a slip of the shift key neither jumps nor drops it.
                 return;
@@ -1309,7 +1493,10 @@ public final class CamMenu implements Listener {
             } else if (click.isLeftClick()) {
                 act(player, () -> spots.jump(player, share.label()));
             }
-        });
+        };
+        put(page, slot, Material.MAP, name, lore, action);
+        picks(player, page, slot, List.of(pick("menu-pick-spot-jump", action, ClickType.LEFT),
+                pick("menu-pick-spot-remove", action, ClickType.RIGHT)));
     }
 
     /**
@@ -1490,19 +1677,26 @@ public final class CamMenu implements Listener {
      * @param orders every order it can have
      * @param choose what picking one does
      */
-    private void putSort(Page page, int slot, String now, List<String> orders, Consumer<String> choose) {
+    private void putSort(Player player, Page page, int slot, String now, List<String> orders,
+                         Consumer<String> choose) {
         String name = messages.getMessage("menu-sort").replace("{sort}", messages.getMessage("menu-sort-" + now));
         List<String> lore = new ArrayList<>();
         for (String order : orders) {
             lore.addAll(lines(messages.getMessage(order.equals(now) ? "menu-sort-option-current" : "menu-sort-option")
                     .replace("{sort}", messages.getMessage("menu-sort-" + order))));
         }
-        lore.addAll(lines(messages.getMessage("menu-sort-lore")));
+        lore.addAll(lines(text(player, "menu-sort-lore")));
         put(page, slot, Material.HOPPER, name, lore, click -> later(() -> {
             int at = Math.max(0, orders.indexOf(now));
             int step = click.isRightClick() ? orders.size() - 1 : 1;
             choose.accept(orders.get((at + step) % orders.size()));
         }));
+        List<Pick> picks = new ArrayList<>();
+        for (String order : orders) {
+            picks.add(new Pick(messages.getMessage("menu-sort-" + order), order.equals(now),
+                    () -> later(() -> choose.accept(order))));
+        }
+        picks(player, page, slot, picks);
     }
 
     /**
@@ -1535,7 +1729,7 @@ public final class CamMenu implements Listener {
             Page page = page(player, SMALL, messages.getMessage("menu-tour-title"));
             put(page, 11, head(guide, messages.getMessage("menu-tour-guide").replace("{player}", guide.getName()),
                     lines(messages.getMessage("menu-tour-guide-lore").replace("{player}", guide.getName()))),
-                    click -> { });
+                    NOTHING);
             viewButton(player, page, 13);
             put(page, 15, Material.BARRIER, "menu-tour-leave", click -> act(player, () -> tour.leave(player)));
             put(page, SLOT_SMALL_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
@@ -1550,19 +1744,23 @@ public final class CamMenu implements Listener {
         Page page = page(player, LIST, messages.getMessage("menu-tour-title"));
         for (Player inviter : tour.invitationsOf(player)) {
             String name = inviter.getName();
-            entries.add(new Row("invitation/" + inviter.getUniqueId(), slot -> put(page, slot, shine(head(inviter,
-                    messages.getMessage("menu-tour-invitation").replace("{player}", name),
-                    lines(messages.getMessage("menu-tour-invitation-lore").replace("{player}", name))), true),
-                    click -> {
-                        if (click.isRightClick()) {
-                            later(() -> {
-                                tour.decline(player, inviter, name);
-                                openTour(player, 0);
-                            });
-                        } else if (click.isLeftClick()) {
-                            act(player, () -> tour.accept(player, inviter, name));
-                        }
-                    })));
+            Consumer<ClickType> action = click -> {
+                if (click.isRightClick()) {
+                    later(() -> {
+                        tour.decline(player, inviter, name);
+                        openTour(player, 0);
+                    });
+                } else if (click.isLeftClick()) {
+                    act(player, () -> tour.accept(player, inviter, name));
+                }
+            };
+            entries.add(new Row("invitation/" + inviter.getUniqueId(), slot -> {
+                put(page, slot, shine(head(inviter,
+                        messages.getMessage("menu-tour-invitation").replace("{player}", name),
+                        lines(text(player, "menu-tour-invitation-lore").replace("{player}", name))), true), action);
+                picks(player, page, slot, List.of(pick("menu-pick-follow", action, ClickType.LEFT),
+                        pick("menu-pick-decline", action, ClickType.RIGHT)));
+            }));
         }
         TourModeration moderation = plugin.getTourModeration();
         TourModeration.Hold lead = moderation.hold(player, TourBans.What.LEAD);
@@ -1612,7 +1810,7 @@ public final class CamMenu implements Listener {
         Listed listed = list(page, "tour", entries, pageNumber);
         int number = listed.number();
         if (listed.empty() && lead != null) {
-            put(page, 22, tourKept(TourBans.What.LEAD, lead), click -> { });
+            put(page, 22, tourKept(TourBans.What.LEAD, lead), NOTHING);
         } else if (listed.empty() && tour.canLead(player)) {
             // How close one has to be: out of camera mode to the guide's
             // camera, in camera mode camera to camera.
@@ -1621,17 +1819,17 @@ public final class CamMenu implements Listener {
                     lines(messages.getMessage(start > 0.0 ? "menu-tour-empty-lore" : "menu-tour-empty-lore-cam-only")
                             .replace("{start}", String.valueOf(Math.round(start)))
                             .replace("{radius}", String.valueOf(Math.round(settings.getTourRadius())))),
-                    click -> { });
+                    NOTHING);
         } else if (listed.empty()) {
-            put(page, 22, Material.GRAY_DYE, "menu-tour-not-in-cam", click -> { });
+            put(page, 22, Material.GRAY_DYE, "menu-tour-not-in-cam", NOTHING);
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
         if (!guests.isEmpty()) {
             put(page, SLOT_TOUR_END, Material.BARRIER, "menu-tour-end", click -> act(player, () -> tour.end(player)));
         } else if (lead != null && !listed.empty()) {
-            put(page, SLOT_TOUR_END, tourKept(TourBans.What.LEAD, lead), click -> { });
+            put(page, SLOT_TOUR_END, tourKept(TourBans.What.LEAD, lead), NOTHING);
         } else if (join != null) {
-            put(page, SLOT_TOUR_END, tourKept(TourBans.What.JOIN, join), click -> { });
+            put(page, SLOT_TOUR_END, tourKept(TourBans.What.JOIN, join), NOTHING);
         }
         if (settings.isTourInviteAll() && lead == null && tour.canLead(player)) {
             inviteAllButton(player, page);
@@ -1779,24 +1977,28 @@ public final class CamMenu implements Listener {
             entries.add(new Row(camera.getUniqueId(), slot -> {
                 List<String> lore = new ArrayList<>(camLines(camera));
                 if (teleport) {
-                    lore.addAll(lines(messages.getMessage("menu-admin-list-actions")));
+                    lore.addAll(lines(text(player, "menu-admin-list-actions")));
                 }
                 String name = camera.getName();
+                Consumer<ClickType> action = click -> {
+                    if (click.isRightClick() && teleport) {
+                        act(player, () -> plugin.getListTeleport().command(player, new String[]{name, "body"}));
+                    } else if (click.isLeftClick() && teleport) {
+                        act(player, () -> plugin.getListTeleport().command(player, new String[]{name, "camera"}));
+                    }
+                };
                 put(page, slot, head(camera, messages.getMessage("menu-admin-player").replace("{player}", name), lore),
-                        click -> {
-                            if (click.isRightClick() && teleport) {
-                                act(player, () -> plugin.getListTeleport().command(player, new String[]{name, "body"}));
-                            } else if (click.isLeftClick() && teleport) {
-                                act(player, () -> plugin.getListTeleport().command(player,
-                                        new String[]{name, "camera"}));
-                            }
-                        });
+                        teleport ? action : NOTHING);
+                if (teleport) {
+                    picks(player, page, slot, List.of(pick("menu-pick-tp-camera", action, ClickType.LEFT),
+                            pick("menu-pick-tp-body", action, ClickType.RIGHT)));
+                }
             }));
         }
         Listed listed = list(page, "cameras:" + playerSort(player).key, entries, pageNumber);
         int number = listed.number();
         if (listed.empty()) {
-            put(page, 22, Material.GRAY_DYE, "menu-admin-list-empty", click -> { });
+            put(page, 22, Material.GRAY_DYE, "menu-admin-list-empty", NOTHING);
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
         playerSortButton(player, page, () -> openCamList(player, 0));
@@ -1824,7 +2026,7 @@ public final class CamMenu implements Listener {
 
     /** The button that sorts a list of players on the admin pages, by name or by the last flight. */
     private void playerSortButton(Player admin, Page page, Runnable reopen) {
-        putSort(page, SLOT_ADMIN_SORT, playerSort(admin).key, PlayerSort.KEYS, chosen -> {
+        putSort(admin, page, SLOT_ADMIN_SORT, playerSort(admin).key, PlayerSort.KEYS, chosen -> {
             playerSorts.put(admin.getUniqueId(), PlayerSort.of(chosen));
             reopen.run();
         });
@@ -1892,16 +2094,21 @@ public final class CamMenu implements Listener {
             entries.add(new Row(other.getUniqueId(), slot -> {
                 String name = other.getName();
                 List<String> lore = statLines(other.getUniqueId(), name);
-                lore.addAll(lines(messages.getMessage(resets ? "menu-admin-stats-actions-reset"
+                lore.addAll(lines(text(player, resets ? "menu-admin-stats-actions-reset"
                         : "menu-admin-stats-actions")));
+                Consumer<ClickType> action = click -> {
+                    if (click.isShiftClick() && resets) {
+                        act(player, () -> plugin.getStats().reset(player, name));
+                    } else {
+                        act(player, () -> plugin.getStats().command(player, new String[]{"player", name}));
+                    }
+                };
                 put(page, slot, head(other, messages.getMessage("menu-admin-player").replace("{player}", name), lore),
-                        click -> {
-                            if (click.isShiftClick() && resets) {
-                                act(player, () -> plugin.getStats().reset(player, name));
-                            } else {
-                                act(player, () -> plugin.getStats().command(player, new String[]{"player", name}));
-                            }
-                        });
+                        action);
+                if (resets) {
+                    picks(player, page, slot, List.of(pick("menu-pick-stats-show", action, ClickType.LEFT),
+                            pick("menu-pick-stats-reset", action, ClickType.SHIFT_LEFT)));
+                }
             }));
         }
         Listed listed = list(page, "stats:" + playerSort(player).key, entries, pageNumber);
@@ -1976,7 +2183,7 @@ public final class CamMenu implements Listener {
         CamBan ban = plugin.getBan();
         Page page = page(player, SMALL, messages.getMessage("menu-admin-target-title")
                 .replace("{player}", target.name()));
-        put(page, 13, targetItem(target, targetLines(player, target)), click -> { });
+        put(page, 13, targetItem(target, targetLines(player, target)), NOTHING);
         if (plugin.getStop().mayUse(player)) {
             boolean inCam = target.everybody() ? !plugin.getCameraPlayers().isEmpty() : target.inCam(plugin);
             if (inCam) {
@@ -1987,7 +2194,7 @@ public final class CamMenu implements Listener {
                             openTarget(player, target);
                         }));
             } else {
-                put(page, 11, Material.GRAY_DYE, "menu-admin-stop-none", click -> { });
+                put(page, 11, Material.GRAY_DYE, "menu-admin-stop-none", NOTHING);
             }
         }
         if (ban.mayUse(player)) {
@@ -2037,7 +2244,7 @@ public final class CamMenu implements Listener {
         Target target = draft.target;
         Page page = page(player, SMALL, messages.getMessage(draft.change
                 ? "menu-admin-ban-change-title" : "menu-admin-ban-title").replace("{player}", target.name()));
-        put(page, 4, targetItem(target, targetLines(player, target)), click -> { });
+        put(page, 4, targetItem(target, targetLines(player, target)), NOTHING);
         boolean forGood = draft.minutes == 0L;
         List<String> foreverLore = forGood ? lines(messages.getMessage("menu-state-current")) : List.of();
         put(page, 10, shine(item(Material.BEDROCK, messages.getMessage("menu-admin-ban-forever"), foreverLore), forGood),
@@ -2048,10 +2255,10 @@ public final class CamMenu implements Listener {
         String time = banTime(draft.minutes);
         LongConsumer set = minutes -> draft.minutes = minutes;
         Runnable reopen = () -> openBan(player);
-        banUnit(page, 12, "menu-admin-ban-days", draft.minutes, set, reopen, DAY, draft.minutes / DAY, time);
-        banUnit(page, 13, "menu-admin-ban-hours", draft.minutes, set, reopen, HOUR, draft.minutes % DAY / HOUR,
-                time);
-        banUnit(page, 14, "menu-admin-ban-minutes", draft.minutes, set, reopen, 1L, draft.minutes % HOUR, time);
+        LongSupplier current = () -> draft.minutes;
+        banUnit(player, page, 12, "menu-admin-ban-days", current, set, reopen, DAY, time);
+        banUnit(player, page, 13, "menu-admin-ban-hours", current, set, reopen, HOUR, time);
+        banUnit(player, page, 14, "menu-admin-ban-minutes", current, set, reopen, 1L, time);
         if (draft.change) {
             put(page, 16, Material.MILK_BUCKET, messages.getMessage("menu-admin-unban"),
                     lines(messages.getMessage("menu-admin-unban-lore").replace("{player}", target.name())),
@@ -2064,8 +2271,8 @@ public final class CamMenu implements Listener {
             String reason = draft.reason.isEmpty() ? messages.getMessage("menu-admin-ban-no-reason") : draft.reason;
             List<String> reasonLore = new ArrayList<>(lines(messages.getMessage("menu-state")
                     .replace("{state}", reason)));
-            reasonLore.addAll(lines(messages.getMessage("menu-admin-ban-reason-actions")));
-            put(page, 16, Material.WRITABLE_BOOK, messages.getMessage("menu-admin-ban-reason"), reasonLore, click -> {
+            reasonLore.addAll(lines(text(player, "menu-admin-ban-reason-actions")));
+            Consumer<ClickType> action = click -> {
                 if (click.isRightClick()) {
                     later(() -> {
                         draft.reason = "";
@@ -2077,7 +2284,10 @@ public final class CamMenu implements Listener {
                         openBan(player);
                     }, "{player}", target.name()));
                 }
-            });
+            };
+            put(page, 16, Material.WRITABLE_BOOK, messages.getMessage("menu-admin-ban-reason"), reasonLore, action);
+            picks(player, page, 16, List.of(pick("menu-pick-reason-write", action, ClickType.LEFT),
+                    pick("menu-pick-reason-none", action, ClickType.RIGHT)));
         }
         String summary = time;
         if (!draft.reason.isEmpty()) {
@@ -2102,32 +2312,92 @@ public final class CamMenu implements Listener {
      * minutes it has, and what that makes altogether. A click adds one, a
      * right-click takes one away, with shift {@code menu.ban-shift-step} of
      * them. Taking away stops short of nothing - nothing would be for good -,
-     * adding at the longest ban the buttons give.
+     * adding at the longest ban the buttons give. On Bedrock, with its
+     * windows, a window of its own that stays open, see {@link #banUnitWindow}.
      *
-     * @param minutes how long the ban lasts now, in minutes, 0 for good
+     * @param current how long the ban lasts now, in minutes, 0 for good
      * @param set     what takes a new length
      * @param reopen  what shows the page anew afterwards
      * @param unit    what one of them is, in minutes
-     * @param amount  how many of them the ban has now
      * @param time    how long it lasts altogether, as {@link #banTime} has it
      */
-    private void banUnit(Page page, int slot, String key, long minutes, LongConsumer set, Runnable reopen, long unit,
-                         long amount, String time) {
+    private void banUnit(Player player, Page page, int slot, String key, LongSupplier current, LongConsumer set,
+                         Runnable reopen, long unit, String time) {
+        long minutes = current.getAsLong();
+        long amount = amount(minutes, unit);
         int shiftStep = settings.getBanShiftStep();
         List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-ban-time-lore")
                 .replace("{time}", time)));
-        lore.addAll(lines(messages.getMessage("menu-admin-ban-time-actions")
+        lore.addAll(lines(text(player, "menu-admin-ban-time-actions")
                 .replace("{step}", String.valueOf(shiftStep))));
+        Consumer<ClickType> action = click -> later(() -> {
+            long step = unit * (click.isShiftClick() ? shiftStep : 1);
+            long next = click.isRightClick() ? minutes - step : minutes + step;
+            if (click.isRightClick() ? next >= 1L : next <= MAX_BAN_MINUTES) {
+                set.accept(next);
+            }
+            reopen.run();
+        });
         put(page, slot, item(Material.CLOCK, messages.getMessage(key).replace("{amount}", String.valueOf(amount)), lore),
-                click -> later(() -> {
-                    long step = unit * (click.isShiftClick() ? shiftStep : 1);
-                    long next = click.isRightClick() ? minutes - step : minutes + step;
-                    if (click.isRightClick() ? next >= 1L : next <= MAX_BAN_MINUTES) {
-                        set.accept(next);
-                    }
-                    reopen.run();
-                }));
+                action);
+        String step = String.valueOf(shiftStep);
+        picks(player, page, slot, List.of(pick("menu-pick-ban-more", action, ClickType.LEFT),
+                pick("menu-pick-ban-less", action, ClickType.RIGHT),
+                new Pick(messages.getMessage("menu-pick-ban-more-step").replace("{step}", step), false,
+                        () -> action.accept(ClickType.SHIFT_LEFT)),
+                new Pick(messages.getMessage("menu-pick-ban-less-step").replace("{step}", step), false,
+                        () -> action.accept(ClickType.SHIFT_RIGHT))));
+        page.windows.put(page.at(slot), () -> banUnitWindow(player, key, unit, current, set, reopen));
     }
+
+    /**
+     * One of the buttons of the time of a ban as a window of Bedrock: how
+     * many days, hours or minutes, and what that makes altogether, with
+     * {@code +1}, {@code -1} and as many at once as {@code menu.ban-shift-step}
+     * says. It stays open after each - sent anew as it stands then - until
+     * the way back, or closing it, leads back to the page. Taking away stops
+     * at a minute, rather than doing nothing where it would reach nought - a
+     * ban of nought is one for good -; a ban for good stays one, adding sets
+     * the time.
+     *
+     * @param current how long the ban lasts now, in minutes, 0 for good
+     * @param back    what shows the page anew
+     * @return whether the window went out
+     */
+    private boolean banUnitWindow(Player player, String key, long unit, LongSupplier current, LongConsumer set,
+                                  Runnable back) {
+        long minutes = current.getAsLong();
+        String step = String.valueOf(settings.getBanShiftStep());
+        long many = unit * settings.getBanShiftStep();
+        long[] changes = {unit, -unit, many, -many};
+        List<String> labels = List.of(ChatColor.stripColor(messages.getMessage("menu-pick-ban-more")),
+                ChatColor.stripColor(messages.getMessage("menu-pick-ban-less")),
+                ChatColor.stripColor(messages.getMessage("menu-pick-ban-more-step").replace("{step}", step)),
+                ChatColor.stripColor(messages.getMessage("menu-pick-ban-less-step").replace("{step}", step)),
+                ChatColor.stripColor(messages.getMessage("menu-pick-back")));
+        String title = ChatColor.stripColor(messages.getMessage(key)
+                .replace("{amount}", String.valueOf(amount(minutes, unit))));
+        String content = messages.getMessage("menu-admin-ban-time-lore").replace("{time}", banTime(minutes));
+        return plugin.getBedrock().forms().list(player, title, content, labels, index -> {
+            if (index >= changes.length) {
+                back.run();
+                return;
+            }
+            long now = current.getAsLong();
+            long change = changes[index];
+            set.accept(change > 0 ? Math.min(MAX_BAN_MINUTES, now + change)
+                    : now == 0L ? 0L : Math.max(1L, now + change));
+            if (!banUnitWindow(player, key, unit, current, set, back)) {
+                back.run();
+            }
+        }, back);
+    }
+
+    /** How many days, hours or minutes a ban of so many minutes has: of {@code unit}, in minutes. */
+    private static long amount(long minutes, long unit) {
+        return unit == DAY ? minutes / DAY : unit == HOUR ? minutes % DAY / HOUR : minutes % HOUR;
+    }
+
 
     /** How long a ban of so many minutes lasts, the way the texts put it: "for 2h 0m 0s", or "for good" for 0. */
     private String banTime(long minutes) {
@@ -2195,7 +2465,7 @@ public final class CamMenu implements Listener {
         int number = listed.number();
         if (page.listing.order().size() == 1) {
             // Everybody alone, and nobody gone either.
-            put(page, 22, Material.GRAY_DYE, "menu-admin-spots-empty", click -> { });
+            put(page, 22, Material.GRAY_DYE, "menu-admin-spots-empty", NOTHING);
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
         playerSortButton(player, page, () -> openSpotOwners(player, 0));
@@ -2283,7 +2553,7 @@ public final class CamMenu implements Listener {
         int number = listed.number();
         shown[0] = number;
         if (listed.empty()) {
-            put(page, 22, Material.GRAY_DYE, "menu-admin-spots-none", click -> { });
+            put(page, 22, Material.GRAY_DYE, "menu-admin-spots-none", NOTHING);
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-spot-owners", click -> later(() -> openSpotOwners(player, 0)));
         boolean restricted = moderation.banOf(owner) != null;
@@ -2295,7 +2565,7 @@ public final class CamMenu implements Listener {
                     spotDrafts.put(player.getUniqueId(), spotDraft(owner, name));
                     openSpotBan(player);
                 }));
-        putSort(page, SLOT_ADMIN_SORT, sort.key, ADMIN_SPOT_SORTS, chosen -> {
+        putSort(player, page, SLOT_ADMIN_SORT, sort.key, ADMIN_SPOT_SORTS, chosen -> {
             adminSpotSorts.put(player.getUniqueId(), SpotSort.of(chosen));
             openSpotsOf(player, owner, name, 0);
         });
@@ -2334,25 +2604,32 @@ public final class CamMenu implements Listener {
         if (!open && !shared) {
             lore.addAll(lines(messages.getMessage("menu-admin-spot-private")));
         }
-        lore.addAll(lines(messages.getMessage(open || shared ? "menu-admin-spot-actions-shared"
+        lore.addAll(lines(text(player, open || shared ? "menu-admin-spot-actions-shared"
                 : "menu-admin-spot-actions")));
         Material icon = open ? Material.GLOBE_BANNER_PATTERN : shared ? Material.MAP : Material.FILLED_MAP;
-        put(page, slot, item(icon, messages.getMessage("menu-spot").replace("{spot}", spot.name()), lore),
-                click -> {
-                    if (click.isShiftClick()) {
-                        later(() -> {
-                            moderation.delete(player, owner, name, spot);
-                            openSpotsOf(player, owner, name, shown[0]);
-                        });
-                    } else if (click.isRightClick()) {
-                        act(player, () -> moderation.teleport(player, name, spot));
-                    } else if (click.isLeftClick() && (open || shared)) {
-                        later(() -> {
-                            moderation.takeDown(player, owner, name, spot);
-                            openSpotsOf(player, owner, name, shown[0]);
-                        });
-                    }
+        Consumer<ClickType> action = click -> {
+            if (click.isShiftClick()) {
+                later(() -> {
+                    moderation.delete(player, owner, name, spot);
+                    openSpotsOf(player, owner, name, shown[0]);
                 });
+            } else if (click.isRightClick()) {
+                act(player, () -> moderation.teleport(player, name, spot));
+            } else if (click.isLeftClick() && (open || shared)) {
+                later(() -> {
+                    moderation.takeDown(player, owner, name, spot);
+                    openSpotsOf(player, owner, name, shown[0]);
+                });
+            }
+        };
+        put(page, slot, item(icon, messages.getMessage("menu-spot").replace("{spot}", spot.name()), lore), action);
+        List<Pick> picks = new ArrayList<>();
+        if (open || shared) {
+            picks.add(pick("menu-pick-spot-take-down", action, ClickType.LEFT));
+        }
+        picks.add(pick("menu-pick-spot-go", action, ClickType.RIGHT));
+        picks.add(pick("menu-pick-spot-delete", action, ClickType.SHIFT_LEFT));
+        picks(player, page, slot, picks);
     }
 
     /**
@@ -2408,7 +2685,7 @@ public final class CamMenu implements Listener {
                 ? "menu-admin-spot-restrict-change-title" : "menu-admin-spot-restrict-title")
                 .replace("{player}", draft.name));
         String now = draft.everybody() ? moderation.everybodyText() : moderation.banText(draft.id);
-        put(page, 4, restrictTarget(draft, restrictionLines(now)), click -> { });
+        put(page, 4, restrictTarget(draft, restrictionLines(now)), NOTHING);
         for (SpotTab tab : SpotTab.values()) {
             restrictStage(player, page, draft, tab);
         }
@@ -2465,14 +2742,14 @@ public final class CamMenu implements Listener {
                 }));
         String time = banTime(draft.minutes);
         LongConsumer set = minutes -> draft.minutes = minutes;
-        banUnit(page, 21, "menu-admin-ban-days", draft.minutes, set, reopen, DAY, draft.minutes / DAY, time);
-        banUnit(page, 22, "menu-admin-ban-hours", draft.minutes, set, reopen, HOUR, draft.minutes % DAY / HOUR,
-                time);
-        banUnit(page, 23, "menu-admin-ban-minutes", draft.minutes, set, reopen, 1L, draft.minutes % HOUR, time);
+        LongSupplier current = () -> draft.minutes;
+        banUnit(player, page, 21, "menu-admin-ban-days", current, set, reopen, DAY, time);
+        banUnit(player, page, 22, "menu-admin-ban-hours", current, set, reopen, HOUR, time);
+        banUnit(player, page, 23, "menu-admin-ban-minutes", current, set, reopen, 1L, time);
         String reason = draft.reason.isEmpty() ? messages.getMessage("menu-admin-ban-no-reason") : draft.reason;
         List<String> reasonLore = new ArrayList<>(lines(messages.getMessage("menu-state").replace("{state}", reason)));
-        reasonLore.addAll(lines(messages.getMessage("menu-admin-ban-reason-actions")));
-        put(page, 25, Material.WRITABLE_BOOK, messages.getMessage("menu-admin-ban-reason"), reasonLore, click -> {
+        reasonLore.addAll(lines(text(player, "menu-admin-ban-reason-actions")));
+        Consumer<ClickType> action = click -> {
             if (click.isRightClick()) {
                 later(() -> {
                     draft.reason = "";
@@ -2484,7 +2761,10 @@ public final class CamMenu implements Listener {
                     reopen.run();
                 }, "{player}", draft.name));
             }
-        });
+        };
+        put(page, 25, Material.WRITABLE_BOOK, messages.getMessage("menu-admin-ban-reason"), reasonLore, action);
+        picks(player, page, 25, List.of(pick("menu-pick-reason-write", action, ClickType.LEFT),
+                pick("menu-pick-reason-none", action, ClickType.RIGHT)));
     }
 
     /**
@@ -2513,7 +2793,7 @@ public final class CamMenu implements Listener {
                         back.run();
                     }));
         } else {
-            put(page, 31, Material.GRAY_DYE, prefix + "-nothing", click -> { });
+            put(page, 31, Material.GRAY_DYE, prefix + "-nothing", NOTHING);
         }
         if (draft.change) {
             put(page, 35, Material.MILK_BUCKET, messages.getMessage(lifts),
@@ -2542,12 +2822,23 @@ public final class CamMenu implements Listener {
                     : "spot-restriction-" + kind.key + "-" + stage.key);
             lore.addAll(stateLine(label, stage == now));
         }
-        lore.addAll(lines(messages.getMessage("menu-admin-restrict-steps")));
-        put(page, RESTRICT_SLOTS[kind.ordinal()], shine(item(tab.icon, messages.getMessage(what), lore),
+        lore.addAll(lines(text(player, "menu-admin-restrict-steps")));
+        int slot = RESTRICT_SLOTS[kind.ordinal()];
+        put(page, slot, shine(item(tab.icon, messages.getMessage(what), lore),
                 now != SpotBans.Stage.FREE), click -> later(() -> {
                     draft.stages.put(kind, now.next(click.isRightClick()));
                     openSpotBan(player);
                 }));
+        List<Pick> picks = new ArrayList<>();
+        for (SpotBans.Stage stage : SpotBans.Stage.values()) {
+            String label = messages.getMessage(stage == SpotBans.Stage.FREE ? "menu-admin-restrict-allowed"
+                    : "spot-restriction-" + kind.key + "-" + stage.key);
+            picks.add(new Pick(label, stage == now, () -> later(() -> {
+                draft.stages.put(kind, stage);
+                openSpotBan(player);
+            })));
+        }
+        picks(player, page, slot, picks);
     }
 
     /** One of the steps under a button of a restriction: the one it is at marked. */
@@ -2685,7 +2976,7 @@ public final class CamMenu implements Listener {
         Page page = page(player, MEDIUM, messages.getMessage(draft.change
                 ? "menu-admin-tour-restrict-change-title" : "menu-admin-tour-restrict-title")
                 .replace("{player}", draft.name));
-        put(page, 4, restrictTarget(draft, restrictionLines(moderation.banText(draft.id))), click -> { });
+        put(page, 4, restrictTarget(draft, restrictionLines(moderation.banText(draft.id))), NOTHING);
         restrictToggle(player, page, draft, TourBans.What.LEAD, 12, Material.LEAD);
         restrictToggle(player, page, draft, TourBans.What.JOIN, 14, Material.SADDLE);
         restrictTimeAndReason(player, page, draft, "menu-admin-tour-restrict-reason-question",
@@ -2722,7 +3013,7 @@ public final class CamMenu implements Listener {
         };
         Page page = page(player, MEDIUM, messages.getMessage(draft.change
                 ? "menu-admin-tour-off-change-title" : "menu-admin-tour-off-title"));
-        put(page, 4, everybodyItem(switchLines(moderation.offText()), draft.change), click -> { });
+        put(page, 4, everybodyItem(switchLines(moderation.offText()), draft.change), NOTHING);
         boolean off = draft.any();
         List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-tour-switch-lore")));
         lore.addAll(stateLine(messages.getMessage("menu-admin-tour-switch-on"), !off));
@@ -2883,16 +3174,19 @@ public final class CamMenu implements Listener {
                 if (flight.flying()) {
                     lore.addAll(lines(messages.getMessage("menu-admin-flight-flying")));
                 }
-                lore.addAll(lines(messages.getMessage("menu-admin-flight-actions")));
+                lore.addAll(lines(text(player, "menu-admin-flight-actions")));
                 String label = messages.getMessage("menu-admin-flight")
                         .replace("{number}", String.valueOf(flight.number())).replace("{date}", when);
-                put(page, slot, flight.flying() ? Material.ENDER_EYE : Material.PAPER, label, lore, click -> {
+                Consumer<ClickType> action = click -> {
                     if (click.isRightClick()) {
                         act(player, () -> trail.showFlight(player, name, flight.startedAt(), true));
                     } else if (click.isLeftClick()) {
                         act(player, () -> trail.showFlight(player, name, flight.startedAt(), false));
                     }
-                });
+                };
+                put(page, slot, flight.flying() ? Material.ENDER_EYE : Material.PAPER, label, lore, action);
+                picks(player, page, slot, List.of(pick("menu-pick-flight-show", action, ClickType.LEFT),
+                        pick("menu-pick-flight-go", action, ClickType.RIGHT)));
             }));
         }
         Listed listed = list(page, "flights:" + name.toLowerCase(Locale.ROOT), entries, pageNumber);
@@ -2969,11 +3263,27 @@ public final class CamMenu implements Listener {
     /**
      * Asks something in the chat: the next line he writes is the answer, or
      * {@code cancel}, which calls it off with {@code menu-answer-cancelled}.
+     * On Bedrock, under {@code bedrock.menu: forms} and {@code mixed}, in a
+     * window instead, see {@link #askInForm}, where that goes.
      *
      * @param key    the question, with {@code {cancel}} for the word that calls it off
      * @param answer what the answer does, on the main thread
      */
     private void ask(Player player, String key, Consumer<String> answer, String... fills) {
+        shown(player);
+        if (plugin.getBedrock().menuChoicesAsForms(player)) {
+            whenChestShut(player, () -> {
+                if (!askInForm(player, key, answer, fills)) {
+                    askInChat(player, key, answer, fills);
+                }
+            });
+            return;
+        }
+        askInChat(player, key, answer, fills);
+    }
+
+    /** {@link #ask} in the chat: the next line he writes is the answer, or {@code cancel}. */
+    private void askInChat(Player player, String key, Consumer<String> answer, String... fills) {
         questions.put(player.getUniqueId(), new Question(System.currentTimeMillis() + ANSWER_WAIT, answer));
         String[] all = Arrays.copyOf(fills, fills.length + 2);
         all[fills.length] = "{cancel}";
@@ -3008,9 +3318,37 @@ public final class CamMenu implements Listener {
         });
     }
 
+    /**
+     * Asks in a window of Bedrock instead of the chat: a line to type the
+     * answer into, under the text of the question with {@code -form} after
+     * its key. Closing the window, or an empty line, calls it off.
+     *
+     * @return whether the window went out; if not, the chat asks
+     */
+    private boolean askInForm(Player player, String key, Consumer<String> answer, String... fills) {
+        String label = messages.getMessage(key + "-form");
+        if (label.isEmpty()) {
+            label = messages.getMessage(key).replace("{cancel}", CANCEL);
+        }
+        for (int i = 0; i + 1 < fills.length; i += 2) {
+            label = label.replace(fills[i], fills[i + 1]);
+        }
+        return plugin.getBedrock().forms().input(player, ChatColor.stripColor(messages.getMessage("menu-title")),
+                label, messages.getMessage("menu-form-placeholder"), typed -> {
+                    String text = typed.trim();
+                    if (text.isEmpty()) {
+                        messages.sendConfiguredMessage(player, "menu-answer-cancelled");
+                    } else {
+                        answer.accept(text);
+                    }
+                }, () -> messages.sendConfiguredMessage(player, "menu-answer-cancelled"));
+    }
+
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         questions.remove(event.getPlayer().getUniqueId());
+        shownCount.remove(event.getPlayer().getUniqueId());
+        opening.remove(event.getPlayer().getUniqueId());
         drafts.remove(event.getPlayer().getUniqueId());
         spotDrafts.remove(event.getPlayer().getUniqueId());
         tourDrafts.remove(event.getPlayer().getUniqueId());
@@ -3042,7 +3380,16 @@ public final class CamMenu implements Listener {
         if (guarded != null && System.currentTimeMillis() < guarded) {
             return;
         }
-        Consumer<ClickType> button = page.buttons.get(event.getRawSlot());
+        int slot = event.getRawSlot();
+        if (page.picks.containsKey(slot) && event.getWhoClicked() instanceof Player player
+                && bedrock(player)) {
+            // Whatever the click: on Bedrock there is but one, the choices come on a page of their own.
+            if (event.getClick() != ClickType.DOUBLE_CLICK) {
+                later(() -> openPicks(player, page, slot));
+            }
+            return;
+        }
+        Consumer<ClickType> button = page.buttons.get(slot);
         if (button != null) {
             button.accept(event.getClick());
         }
@@ -3060,6 +3407,7 @@ public final class CamMenu implements Listener {
      * does not let a window be closed in the middle of a click into it.
      */
     private void act(Player player, Runnable action) {
+        shown(player);
         later(() -> {
             player.closeInventory();
             if (player.isOnline()) {
@@ -3071,6 +3419,322 @@ public final class CamMenu implements Listener {
     /** Runs something a tick later, out of the click. */
     private void later(Runnable action) {
         Bukkit.getScheduler().runTask(plugin, action);
+    }
+
+    // ------------------------------------------------------------ Bedrock
+
+    /**
+     * Whether the menu is made for him the way Bedrock needs it: there is but
+     * one kind of click, a tap - what a right-click or a click with shift does
+     * comes as a choice of its own, see {@link #openPicks}. See
+     * {@link de.elia.cameraplugin.bedrock.BedrockPlayers#adapts}.
+     */
+    private boolean bedrock(Player player) {
+        return plugin.getBedrock().adapts(player);
+    }
+
+    /**
+     * A text of the language file as it is for him: on Bedrock the one with
+     * {@code -bedrock} after the key, where there is one - it says how a
+     * button is used there -, otherwise the text itself.
+     */
+    private String text(Player player, String key) {
+        if (bedrock(player)) {
+            String own = messages.getMessage(key + "-bedrock");
+            if (!own.isEmpty()) {
+                return own;
+            }
+        }
+        return messages.getMessage(key);
+    }
+
+    /** One thing a button does, by the text of its name, as the click it stands for does it. */
+    private Pick pick(String key, Consumer<ClickType> action, ClickType click) {
+        return new Pick(messages.getMessage(key), false, () -> action.accept(click));
+    }
+
+    /**
+     * The things a button does, for him to pick on Bedrock instead of
+     * clicking a certain way - only there, and only where there is more than
+     * one.
+     */
+    private void picks(Player player, Page page, int slot, List<Pick> picks) {
+        if (bedrock(player) && picks.size() > 1) {
+            page.picks.put(page.at(slot), picks);
+        }
+    }
+
+    /**
+     * What a button does, to pick one, for a player on Bedrock: a click on it
+     * leads here. As a window of Bedrock where that goes - under
+     * {@code bedrock.menu: mixed} the chest is closed for it, see
+     * {@link #whenChestShut} -, otherwise as a page of its own, see
+     * {@link #picksChest}. Picking one does what its click does; when that
+     * shows nothing else, the page comes back, as it stands then, see
+     * {@link #afterwards}.
+     */
+    private void openPicks(Player player, Page from, int slot) {
+        List<Pick> picks = from.picks.get(slot);
+        ItemStack button = from.inventory.getItem(slot);
+        if (picks == null || button == null || !player.isOnline()) {
+            return;
+        }
+        shown(player);
+        if (plugin.getBedrock().menuChoicesAsForms(player)) {
+            BooleanSupplier own = from.windows.get(slot);
+            whenChestShut(player, () -> {
+                boolean sent = own != null ? own.getAsBoolean() : picksWindow(player, from, button, picks);
+                if (!sent) {
+                    picksChest(player, from, button, picks);
+                }
+            });
+            return;
+        }
+        picksChest(player, from, button, picks);
+    }
+
+    /**
+     * The choices of a button as a window of Bedrock: the name and the lines
+     * of the button in the text over them, the one that holds now marked,
+     * the way back last. Closing the window leads back as well: it called off
+     * the choice, not the menu.
+     *
+     * @return whether the window went out
+     */
+    private boolean picksWindow(Player player, Page from, ItemStack button, List<Pick> picks) {
+        List<String> labels = new ArrayList<>();
+        for (Pick pick : picks) {
+            labels.add(ChatColor.stripColor(pick.current()
+                    ? messages.getMessage("menu-pick-current").replace("{pick}", pick.label()) : pick.label()));
+        }
+        labels.add(ChatColor.stripColor(messages.getMessage("menu-pick-back")));
+        return plugin.getBedrock().forms().list(player, ChatColor.stripColor(displayName(button)), itemText(button),
+                labels, index -> {
+                    if (index < picks.size()) {
+                        picked(player, from, picks.get(index));
+                    } else {
+                        reshow(player, from);
+                    }
+                }, () -> reshow(player, from));
+    }
+
+    /**
+     * The choices of a button as a page of the chest: the button on top -
+     * its lines show when it is held -, the choices in the middle, the one
+     * that holds now shining, and the way back at the bottom. In a window of
+     * six rows with the title of the menu, like every page on Bedrock, see
+     * {@link #page}: Geyser keeps its chest for it, see {@link #openWindow}.
+     */
+    private void picksChest(Player player, Page from, ItemStack button, List<Pick> picks) {
+        String name = ChatColor.stripColor(displayName(button));
+        // A page of its own, never the one he has open drawn anew in place:
+        // that one is where the way back leads.
+        Page page = new Page();
+        page.title = messages.getMessage("menu-pick-title").replace("{button}", name);
+        page.inventory = Bukkit.createInventory(page, LIST, messages.getMessage("menu-title"));
+        page.bedrock = true;
+        put(page, SLOT_PICK_BUTTON, button.clone(), NOTHING);
+        for (int i = 0; i < picks.size() && i < PICK_SLOTS.length; i++) {
+            Pick pick = picks.get(i);
+            ItemStack item = pick.current()
+                    ? shine(item(Material.LIME_DYE, messages.getMessage("menu-pick-current")
+                    .replace("{pick}", pick.label()), lines(messages.getMessage("menu-state-current"))), true)
+                    : item(Material.PAPER, messages.getMessage("menu-pick").replace("{pick}", pick.label()), List.of());
+            put(page, PICK_SLOTS[i], item, click -> {
+                if (click != ClickType.DOUBLE_CLICK) {
+                    picked(player, from, pick);
+                }
+            });
+        }
+        put(page, SLOT_PICK_BACK, Material.ARROW, messages.getMessage("menu-pick-back"), List.of(),
+                click -> later(() -> reshow(player, from)));
+        show(player, page);
+    }
+
+    /**
+     * Runs what comes as a window of Bedrock: right away while the menu is
+     * windows itself ({@code bedrock.menu: forms}); out of the chest
+     * ({@code mixed}) once the chest is closed and Bedrock had a moment to
+     * take it off the screen, {@link #WINDOW_AFTER_CHEST_TICKS}.
+     */
+    private void whenChestShut(Player player, Runnable window) {
+        boolean chest = openPage(player) != null;
+        if (!chest && plugin.getBedrock().menuAsForms(player)) {
+            window.run();
+            return;
+        }
+        if (chest) {
+            player.closeInventory();
+        }
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline()) {
+                window.run();
+            }
+        }, WINDOW_AFTER_CHEST_TICKS);
+    }
+
+    /** Does what was picked; when that shows nothing else, the page it came from comes back. */
+    private void picked(Player player, Page from, Pick pick) {
+        int before = shownCount(player);
+        pick.action().run();
+        afterwards(player, before, () -> reshow(player, from));
+    }
+
+    /**
+     * Shows a page again after something was picked or clicked on Bedrock:
+     * drawn anew as it stands now, where it can be, otherwise as it was.
+     */
+    private void reshow(Player player, Page page) {
+        if (!player.isOnline()) {
+            return;
+        }
+        if (page.again != null) {
+            page.again.run();
+            return;
+        }
+        shown(player);
+        if (!plugin.getBedrock().menuAsForms(player) || !sendForm(player, page)) {
+            openWindow(player, page);
+        }
+    }
+
+    /**
+     * Opens the window of a page. On Bedrock, while another window of the
+     * menu is open, that one is closed first and this one opened a moment
+     * later, {@link #WINDOW_AFTER_CHEST_TICKS}: Geyser shows a chest on
+     * Bedrock as a chest of its own put down for it, and one opened in the
+     * place of another before the first is gone from the screen may close
+     * again at once. Opened in between, by a click or by himself, another
+     * one takes its place. Not so for a window as large as the one open,
+     * with the same title - every page of the menu on Bedrock, see
+     * {@link #page} -: Geyser keeps its chest for that one and only fills it
+     * anew, nothing closes there.
+     */
+    private void openWindow(Player player, Page page) {
+        UUID id = player.getUniqueId();
+        Page open = openPage(player);
+        if (!bedrock(player) || open == null
+                || open.bedrock && page.bedrock && open.inventory.getSize() == page.inventory.getSize()) {
+            opening.remove(id);
+            player.openInventory(page.inventory);
+            return;
+        }
+        player.closeInventory();
+        opening.put(id, page);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (opening.remove(id, page) && player.isOnline()) {
+                player.openInventory(page.inventory);
+            }
+        }, WINDOW_AFTER_CHEST_TICKS);
+    }
+
+    /**
+     * Shows something again once a button had its say, unless it showed
+     * something itself - a page, a question - or closed the menu for what it
+     * does. A button acts a tick after the click, or closes the menu right
+     * away; what it opens comes out of that, so it is looked a few ticks
+     * later.
+     *
+     * @param before {@link #shownCount} from before the button acted, which
+     *               may close the menu at once
+     */
+    private void afterwards(Player player, int before, Runnable again) {
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline() && shownCount(player) == before) {
+                again.run();
+            }
+        }, AFTERWARDS_TICKS);
+    }
+
+    /** How often the menu has shown him something so far, see {@link #shown}. */
+    private int shownCount(Player player) {
+        return shownCount.getOrDefault(player.getUniqueId(), 0);
+    }
+
+    /** Notes that the menu showed him something, or closed for what a button does, see {@link #afterwards}. */
+    private void shown(Player player) {
+        shownCount.merge(player.getUniqueId(), 1, Integer::sum);
+    }
+
+    /**
+     * Sends a page as a window of Bedrock: its buttons one under the other,
+     * in the order of their slots - the list first, then the row with the way
+     * back and on -, each with the first of its lines under its name; what
+     * only shows something stands in the text over them. A button that does
+     * more than one thing offers them on a tap, see {@link #openPicks};
+     * every other one does what its click does. When that shows nothing
+     * else, the page comes back as it stands then.
+     *
+     * @return whether the window went out; if not, the page is a chest
+     */
+    private boolean sendForm(Player player, Page page) {
+        List<Integer> slots = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
+        StringBuilder content = new StringBuilder();
+        for (int slot = 0; slot < page.inventory.getSize(); slot++) {
+            ItemStack item = page.inventory.getItem(slot);
+            if (item == null || item.getType().isAir()) {
+                continue;
+            }
+            Consumer<ClickType> action = page.buttons.get(slot);
+            if (action == null || action == NOTHING) {
+                if (!content.isEmpty()) {
+                    content.append("\n\n");
+                }
+                content.append(itemText(item));
+                continue;
+            }
+            slots.add(slot);
+            labels.add(formLabel(item));
+        }
+        return plugin.getBedrock().forms().list(player, ChatColor.stripColor(page.title), content.toString(), labels,
+                index -> {
+                    int slot = slots.get(index);
+                    if (page.picks.containsKey(slot)) {
+                        openPicks(player, page, slot);
+                        return;
+                    }
+                    Consumer<ClickType> action = page.buttons.get(slot);
+                    if (action != null) {
+                        int before = shownCount(player);
+                        action.accept(ClickType.LEFT);
+                        afterwards(player, before, () -> reshow(player, page));
+                    }
+                }, null);
+    }
+
+    /**
+     * What a button of a window of Bedrock says: the name of the item, and
+     * under it the first of its lines, cut short where it is long. Without
+     * colours - Bedrock draws the buttons light, and most colours of the menu
+     * are made for a dark window.
+     */
+    private static String formLabel(ItemStack item) {
+        String label = ChatColor.stripColor(displayName(item));
+        ItemMeta meta = item.getItemMeta();
+        List<String> lore = meta != null && meta.hasLore() ? meta.getLore() : null;
+        if (lore != null && !lore.isEmpty()) {
+            String first = ChatColor.stripColor(lore.get(0)).trim();
+            if (first.length() > FORM_LINE) {
+                first = first.substring(0, FORM_LINE - 1).trim() + "\u2026";
+            }
+            if (!first.isEmpty()) {
+                label += "\n" + first;
+            }
+        }
+        return label;
+    }
+
+    /** The name of an item and its lines, as a text of a window of Bedrock, with their colours. */
+    private static String itemText(ItemStack item) {
+        StringBuilder text = new StringBuilder(displayName(item));
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null && meta.hasLore() && meta.getLore() != null) {
+            for (String line : meta.getLore()) {
+                text.append("\n").append(line);
+            }
+        }
+        return text.toString();
     }
 
     // ------------------------------------------------------------ items
@@ -3085,9 +3749,34 @@ public final class CamMenu implements Listener {
         put(page, slot, item(material, name, lore), action);
     }
 
+    /**
+     * Puts a button into a page, by its slot on the page as it is laid out:
+     * on Bedrock a page of three or four rows has it where its window of six
+     * puts it, see {@link Page#rows}.
+     */
     private static void put(Page page, int slot, ItemStack item, Consumer<ClickType> action) {
-        page.inventory.setItem(slot, item);
-        page.buttons.put(slot, action);
+        int at = page.at(slot);
+        page.inventory.setItem(at, page.bedrock ? forBedrock(item) : item);
+        page.buttons.put(at, action);
+    }
+
+    /**
+     * An item as a page for Bedrock shows it: a filled map as an empty one.
+     * Bedrock names a filled map by the map it shows - "Unknown Map" for one
+     * without, which every map of the menu is -, and never by the name the
+     * menu gave it; an empty map keeps its name. Its name, its lines and its
+     * shine go along.
+     */
+    private static ItemStack forBedrock(ItemStack item) {
+        if (item == null || item.getType() != Material.FILLED_MAP) {
+            return item;
+        }
+        ItemStack map = new ItemStack(Material.MAP, item.getAmount());
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            map.setItemMeta(Bukkit.getItemFactory().asMetaFor(meta, Material.MAP));
+        }
+        return map;
     }
 
     /** The buttons to the page before and after, where there is one. */

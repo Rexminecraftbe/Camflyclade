@@ -144,11 +144,11 @@ public final class CamActionBar {
                 }
                 BaseComponent[] line;
                 if (!distance) {
-                    line = onLine();
+                    line = onLine(player);
                 } else if (onText && now < onTicks) {
                     // Sent again before the client lets it fade, as long as
                     // on-duration asks for it.
-                    line = now % TEXT_INTERVAL == 0 ? onLine() : null;
+                    line = now % TEXT_INTERVAL == 0 ? onLine(player) : null;
                 } else {
                     String text = distanceLine(player);
                     line = text == null ? null : withIcon(player, text);
@@ -167,10 +167,13 @@ public final class CamActionBar {
      * {@code {hint}}: {@code actionbar-hint} while the exit key is on, see
      * {@link de.elia.cameraplugin.session.ExitKey}, and
      * {@code actionbar-hint-command} while it is off - {@code /cam} ends it
-     * either way.
+     * either way. On Bedrock, which has no key that swaps the hands,
+     * {@code actionbar-hint-bedrock} instead of the first, see
+     * {@link de.elia.cameraplugin.bedrock.BedrockPlayers#adapts}.
      */
-    private BaseComponent[] onLine() {
-        String key = settings.isExitKeyEnabled() ? "actionbar-hint" : "actionbar-hint-command";
+    private BaseComponent[] onLine(Player player) {
+        String key = !settings.isExitKeyEnabled() ? "actionbar-hint-command"
+                : plugin.getBedrock().adapts(player) ? "actionbar-hint-bedrock" : "actionbar-hint";
         String hint = messages.isMessageEnabled(key) ? messages.getMessage(key) : "";
         return withKey(messages.getMessage("actionbar-on").replace("{hint}", hint));
     }
@@ -209,8 +212,9 @@ public final class CamActionBar {
      * Fills in {@code {icon}} of {@code actionbar-signal}: on Paper with the
      * ping icon of the game's gui, a picture colour codes cannot write - the
      * line is then sent right here, see {@link SpriteText} -, elsewhere with
-     * the bars of the signal in letters. The text after the icon goes on in
-     * the colour it had before it.
+     * the bars of the signal in letters - so on Bedrock as well, which draws
+     * no such picture. The text after the icon goes on in the colour it had
+     * before it.
      *
      * @return the line still to be sent, or {@code null} when it has been
      *         sent already
@@ -221,7 +225,7 @@ public final class CamActionBar {
             return TextComponent.fromLegacyText(text);
         }
         String sprite = plugin.getSignal().icon(player);
-        if (sprite != null && SpriteText.available()) {
+        if (sprite != null && SpriteText.available() && !plugin.getBedrock().adapts(player)) {
             SpriteText line = new SpriteText();
             String colors = "";
             int from = 0;

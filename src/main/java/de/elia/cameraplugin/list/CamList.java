@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.list;
 
+import de.elia.cameraplugin.bedrock.BedrockPlayers;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
@@ -7,9 +8,7 @@ import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.ClickEvent;
-import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.TextComponent;
-import net.md_5.bungee.api.chat.hover.content.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
@@ -40,11 +39,14 @@ public final class CamList {
     private final CamSettings settings;
     private final Messages messages;
     private final CameraPlayers cameraPlayers;
+    /** Who cannot click in the chat, and gets the commands of the buttons written out. */
+    private final BedrockPlayers bedrock;
 
-    public CamList(CamSettings settings, Messages messages, CameraPlayers cameraPlayers) {
+    public CamList(CamSettings settings, Messages messages, CameraPlayers cameraPlayers, BedrockPlayers bedrock) {
         this.settings = settings;
         this.messages = messages;
         this.cameraPlayers = cameraPlayers;
+        this.bedrock = bedrock;
     }
 
     /**
@@ -102,11 +104,13 @@ public final class CamList {
                         .replace("{time}", time).replace("{distance}", distance);
                 List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
                 if (teleport) {
-                    line.addAll(button("cam-list-camera", player.getName(), "/cam tp " + player.getName() + " camera"));
-                    line.addAll(button("cam-list-body", player.getName(), "/cam tp " + player.getName() + " body"));
+                    line.addAll(button(sender, "cam-list-camera", player.getName(),
+                            "/cam tp " + player.getName() + " camera"));
+                    line.addAll(button(sender, "cam-list-body", player.getName(),
+                            "/cam tp " + player.getName() + " body"));
                 }
                 if (stop) {
-                    line.addAll(button("cam-list-stop", player.getName(), "/cam stop " + player.getName()));
+                    line.addAll(button(sender, "cam-list-stop", player.getName(), "/cam stop " + player.getName()));
                 }
                 sender.spigot().sendMessage(line.toArray(new BaseComponent[0]));
             }
@@ -116,12 +120,13 @@ public final class CamList {
     /**
      * One button behind a line: its text, {@code cam-list-camera},
      * {@code cam-list-body} or {@code cam-list-stop}, and on hovering the text
-     * of the same name with {@code -hover} after it. Nothing when the text is
-     * switched off or empty.
+     * of the same name with {@code -hover} after it, and on Bedrock the
+     * command written out, see {@link BedrockPlayers#chatButton}. Nothing when
+     * the text is switched off or empty.
      *
      * @param command what a click runs, {@code /cam tp} or {@code /cam stop}
      */
-    private List<BaseComponent> button(String key, String player, String command) {
+    private List<BaseComponent> button(CommandSender to, String key, String player, String command) {
         if (!messages.isMessageEnabled(key)) {
             return List.of();
         }
@@ -129,16 +134,7 @@ public final class CamList {
         if (text.isEmpty()) {
             return List.of();
         }
-        HoverEvent hover = new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text(TextComponent.fromLegacyText(
-                messages.getMessage(key + "-hover").replace("{player}", player))));
-        ClickEvent click = new ClickEvent(ClickEvent.Action.RUN_COMMAND, command);
-        List<BaseComponent> parts = new ArrayList<>();
-        parts.add(new TextComponent(" "));
-        for (BaseComponent part : TextComponent.fromLegacyText(text)) {
-            part.setHoverEvent(hover);
-            part.setClickEvent(click);
-            parts.add(part);
-        }
-        return parts;
+        return bedrock.chatButton(to, text, messages.getMessage(key + "-hover").replace("{player}", player),
+                new ClickEvent(ClickEvent.Action.RUN_COMMAND, command));
     }
 }

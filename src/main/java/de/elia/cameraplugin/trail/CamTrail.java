@@ -7,9 +7,7 @@ import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.ClickEvent;
-import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.TextComponent;
-import net.md_5.bungee.api.chat.hover.content.Text;
 import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Particle;
@@ -417,17 +415,19 @@ public final class CamTrail implements Listener {
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(
                 TextComponent.fromLegacyText(messages.getMessage("trail-flights"))));
         for (int number = 1; number <= count; number++) {
-            line.addAll(button("trail-button", name, String.valueOf(number)));
+            line.addAll(button(sender, "trail-button", name, String.valueOf(number)));
         }
-        line.addAll(button("trail-button-all", name, ALL));
+        line.addAll(button(sender, "trail-button-all", name, ALL));
         sender.spigot().sendMessage(line.toArray(new BaseComponent[0]));
     }
 
     /**
      * One button: its text, and on hovering the text of the same name with
-     * {@code -hover} after it. Nothing when the text is switched off or empty.
+     * {@code -hover} after it, and on Bedrock the command written out, see
+     * {@link de.elia.cameraplugin.bedrock.BedrockPlayers#chatButton}. Nothing
+     * when the text is switched off or empty.
      */
-    private List<BaseComponent> button(String key, String name, String choice) {
+    private List<BaseComponent> button(CommandSender to, String key, String name, String choice) {
         if (!messages.isMessageEnabled(key)) {
             return List.of();
         }
@@ -435,18 +435,9 @@ public final class CamTrail implements Listener {
         if (text.isEmpty()) {
             return List.of();
         }
-        HoverEvent hover = new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text(TextComponent.fromLegacyText(
-                messages.getMessage(key + "-hover").replace("{number}", choice).replace("{player}", name))));
-        ClickEvent click = new ClickEvent(ClickEvent.Action.RUN_COMMAND,
-                "/cam trail " + name + " " + choice.toLowerCase(Locale.ROOT));
-        List<BaseComponent> parts = new ArrayList<>();
-        parts.add(new TextComponent(" "));
-        for (BaseComponent part : TextComponent.fromLegacyText(text)) {
-            part.setHoverEvent(hover);
-            part.setClickEvent(click);
-            parts.add(part);
-        }
-        return parts;
+        String hover = messages.getMessage(key + "-hover").replace("{number}", choice).replace("{player}", name);
+        String command = "/cam trail " + name + " " + choice.toLowerCase(Locale.ROOT);
+        return plugin.getBedrock().chatButton(to, text, hover, new ClickEvent(ClickEvent.Action.RUN_COMMAND, command));
     }
 
     /** {@code trail-flying}, or {@code trail-ago} with how long ago it ended. */

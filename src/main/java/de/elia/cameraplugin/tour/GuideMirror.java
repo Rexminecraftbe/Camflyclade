@@ -25,6 +25,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 
 /**
@@ -125,6 +126,12 @@ final class GuideMirror {
     private final CamSettings settings;
     /** The mark itself, in the custom data of an item. */
     private final NamespacedKey mark;
+    /** The guests who are not shown the guide's items in their hands, see the constructor. */
+    private final Predicate<Player> handless;
+    /** Puts the guide's items into the hotbar of a guest on Bedrock as well, see {@link GuideSlots}. */
+    private final GuideSlots slots;
+    /** The guests on Bedrock, see {@link de.elia.cameraplugin.bedrock.BedrockPlayers#adapts}. */
+    private final Predicate<Player> bedrock;
     /** Shows a guest the guide's frost as his own. */
     private final GuideFrost frost;
     /** Changes the server's packets with the guide's hands on their way to a guest. */
@@ -133,6 +140,8 @@ final class GuideMirror {
     private final QuietHearts quietHearts;
     /** An item of the guide's as the guests are shown it, for {@link GuideHands}. */
     private final UnaryOperator<ItemStack> asShown = item -> shown(item, false);
+    /** The guide's hands as a guest on Bedrock is sent them: empty, see {@link #shownTo}. */
+    private static final UnaryOperator<ItemStack> NO_ITEM = item -> new ItemStack(Material.AIR);
     /** What each guest's client was sent, by the id of the guest. */
     private final Map<UUID, Shown> shown = new HashMap<>();
 
@@ -198,13 +207,25 @@ final class GuideMirror {
         int sinceFrost;
     }
 
+    /**
+     * @param handless the guests who are shown the guide's items in their
+     *                 hotbar alone, not as the items in their hands, and are
+     *                 sent the guide's own hands empty: players on Bedrock
+     *                 who see through the guide's eyes with Geyser's camera,
+     *                 {@code bedrock.follow-view: camera}. It draws no hands,
+     *                 and the guide's items would hang in front of it, see
+     *                 {@link #shownTo}.
+     */
     GuideMirror(CamSettings settings, GuideFrost frost, GuideHands hands, QuietHearts quietHearts,
-                NamespacedKey mark) {
+                NamespacedKey mark, Predicate<Player> handless, GuideSlots slots, Predicate<Player> bedrock) {
         this.settings = settings;
         this.frost = frost;
         this.hands = hands;
         this.quietHearts = quietHearts;
         this.mark = mark;
+        this.handless = handless;
+        this.slots = slots;
+        this.bedrock = bedrock;
     }
 
     /**
@@ -221,8 +242,9 @@ final class GuideMirror {
         }
         state.refreshed |= refresh;
         state.guide = guide;
-        if (hides()) {
-            state.guideHandsWatched = hands.watch(guest, guide.getEntityId(), asShown);
+        if (hidesFor(guest)) {
+            state.guideHandsWatched = hands.watch(guest, guide.getEntityId(),
+                    handless.test(guest) ? NO_ITEM : asShown);
         } else if (state.guideHandsWatched) {
             hands.unwatch(guest);
             state.guideHandsWatched = false;
@@ -245,11 +267,13 @@ final class GuideMirror {
         state.offHandMarked = offHandMarked;
         state.mainHandUsed = false;
         state.offHandUsed = false;
-        state.mainHand = mirror(guest, EquipmentSlot.HAND, settings.isTourMirrorMainHand(), mainHand,
+        // With Geyser's camera, which draws no hands, the guide's items go into his hotbar alone.
+        boolean hotbarOnly = handless.test(guest);
+        state.mainHand = mirror(guest, EquipmentSlot.HAND, settings.isTourMirrorMainHand(), hotbarOnly, mainHand,
                 guest.getInventory().getItemInMainHand(), state.mainHand, mainHandMarked, refresh || mainHandAgain);
-        state.offHand = mirror(guest, EquipmentSlot.OFF_HAND, settings.isTourMirrorOffHand(), offHand,
+        state.offHand = mirror(guest, EquipmentSlot.OFF_HAND, settings.isTourMirrorOffHand(), hotbarOnly, offHand,
                 guest.getInventory().getItemInOffHand(), state.offHand, offHandMarked, refresh || offHandAgain);
-        state.head = mirror(guest, EquipmentSlot.HEAD, settings.isTourMirrorHead(),
+        state.head = mirror(guest, EquipmentSlot.HEAD, settings.isTourMirrorHead(), false,
                 guide.getInventory().getHelmet(), guest.getInventory().getHelmet(), state.head, false, refresh);
     }
 
@@ -282,23 +306,46 @@ final class GuideMirror {
      * time; a slot no longer mirrored is sent his own again - as empty as
      * camera mode keeps it.
      *
-     * @param marked whether to show it with the mark, see {@link #shown}
+     * @param hotbarOnly whether it goes into his hotbar alone, not as the
+     *                   item in his hand, see {@link GuideSlots}
+     * @param marked     whether to show it with the mark, see {@link #shown}
      * @return the guide's item his client was sent there, {@code null} for
      *         nothing sent
      */
-    private ItemStack mirror(Player guest, EquipmentSlot slot, boolean on, ItemStack item, ItemStack own,
-                             ItemStack before, boolean marked, boolean refresh) {
+    private ItemStack mirror(Player guest, EquipmentSlot slot, boolean on, boolean hotbarOnly, ItemStack item,
+                             ItemStack own, ItemStack before, boolean marked, boolean refresh) {
         if (!on) {
             if (before != null) {
-                guest.sendEquipmentChange(guest, slot, own == null ? new ItemStack(Material.AIR) : own);
+                ItemStack back = own == null ? new ItemStack(Material.AIR) : own;
+                guest.sendEquipmentChange(guest, slot, back);
+                inHotbar(guest, slot, hotbarOnly, back);
             }
             return null;
         }
         ItemStack now = item == null ? new ItemStack(Material.AIR) : item;
         if (refresh || before == null || !now.equals(before)) {
-            guest.sendEquipmentChange(guest, slot, shown(now, marked));
+            ItemStack shown = shown(now, marked);
+            if (!hotbarOnly) {
+                guest.sendEquipmentChange(guest, slot, shown);
+            }
+            inHotbar(guest, slot, hotbarOnly, shown);
         }
         return now.clone();
+    }
+
+    /**
+     * On Bedrock, an item for a hand of the guest goes into the slot of his
+     * hotbar he holds - or his off hand - as well: Geyser shows it in his hand
+     * only, where a client on Java shows it in the hotbar too, see
+     * {@link GuideSlots}. Into his hotbar alone, it goes next to the slot he
+     * holds instead: what he holds, his own invisible player there holds,
+     * where he stands - in front of Geyser's camera, it would hang in the
+     * view.
+     */
+    private void inHotbar(Player guest, EquipmentSlot slot, boolean hotbarOnly, ItemStack item) {
+        if ((slot == EquipmentSlot.HAND || slot == EquipmentSlot.OFF_HAND) && bedrock.test(guest)) {
+            slots.show(guest, slot == EquipmentSlot.OFF_HAND, hotbarOnly, item);
+        }
     }
 
     /**
@@ -514,7 +561,7 @@ final class GuideMirror {
         ItemStack offHand = guide.getInventory().getItemInOffHand();
         boolean again = state.guideHandsAgain;
         state.guideHandsAgain = false;
-        if (!hides()) {
+        if (!hidesFor(guest)) {
             if (state.guideMainHand != null) {
                 guest.sendEquipmentChange(guide, Map.of(EquipmentSlot.HAND, mainHand, EquipmentSlot.OFF_HAND, offHand));
                 state.guideMainHand = null;
@@ -526,8 +573,8 @@ final class GuideMirror {
                 || !offHand.equals(state.guideOffHand);
         if (state.guideMainHand == null
                 || !state.guideHandsWatched && (refresh || again || changed || state.guideHandsChanged)) {
-            guest.sendEquipmentChange(guide, Map.of(EquipmentSlot.HAND, shown(mainHand, false),
-                    EquipmentSlot.OFF_HAND, shown(offHand, false)));
+            guest.sendEquipmentChange(guide, Map.of(EquipmentSlot.HAND, shownTo(guest, mainHand),
+                    EquipmentSlot.OFF_HAND, shownTo(guest, offHand)));
             state.guideMainHand = mainHand.clone();
             state.guideOffHand = offHand.clone();
         }
@@ -711,6 +758,26 @@ final class GuideMirror {
         return settings.isTourMirrorHealth() || settings.isTourMirrorMainHand() || settings.isTourMirrorOffHand()
                 || settings.isTourMirrorHead() || settings.isTourMirrorEffects() || settings.isTourMirrorFrost()
                 || settings.isTourMirrorExperience() || hides();
+    }
+
+    /**
+     * Whether this guest is not sent the guide's hands as they are: the
+     * guests do not see all of them, see {@link #hides}, or he is on Bedrock,
+     * where they are not sent at all, see {@link #shownTo}.
+     */
+    private boolean hidesFor(Player guest) {
+        return hides() || handless.test(guest);
+    }
+
+    /**
+     * The guide's item in one hand as this guest is sent it: as the guests
+     * are shown it, see {@link #shown} - on Bedrock not at all. Geyser makes
+     * the guide invisible there while the guest sees through his eyes, but
+     * Bedrock still draws what an invisible player holds: right in front of
+     * the camera, and not turning with it.
+     */
+    private ItemStack shownTo(Player guest, ItemStack item) {
+        return handless.test(guest) ? new ItemStack(Material.AIR) : shown(item, false);
     }
 
     /** Whether the guests do not see all of the guide's items: their count, enchantments or wear. */

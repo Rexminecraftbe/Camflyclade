@@ -2691,6 +2691,16 @@ bot._client.on('window_items', (packet) => {
 bot._client.on('set_slot', (packet) => {
   if (Number(packet.windowId) === 0) lastInventoryResend = Date.now();
 });
+// Die einzelnen Plaetze des eigenen Inventars, die der Server schickt (set_slot
+// von Fenster 0), mit der Zahl darin: Einem Gast auf Bedrock legt eine
+// Fuehrung so die Items des Fuehrers in die Hotbar (36 bis 44, 45 die zweite Hand).
+const ownSlots = [];
+bot._client.on('set_slot', (packet) => {
+  if (Number(packet.windowId) !== 0) return;
+  const item = packet.item || {};
+  const count = item.itemCount !== undefined ? item.itemCount : (item.present ? (item.count || 1) : 0);
+  ownSlots.push({ t: Date.now(), slot: packet.slot, count });
+});
 // Welche Plaetze eines offenen Fensters (nicht des eigenen Inventars) der
 // Server einzeln neu schickt (set_slot): Zeichnet das Menue eine Seite neu und
 // ist ein Item dabei nicht mehr dasselbe - ein Kopf mit einem neuen Profil -,
@@ -2923,6 +2933,8 @@ async function handle(cmd) {
         level: bot.experience ? bot.experience.level : null,
         dead,
         hurtAgo: lastHurt ? Date.now() - lastHurt : null,
+        // Der Platz der Hotbar, den er haelt, von 0.
+        held: bot.quickBarSlot,
         pos: bot.entity ? [bot.entity.position.x, bot.entity.position.y, bot.entity.position.z] : null
       };
     case 'entities': {
@@ -3359,6 +3371,8 @@ async function handle(cmd) {
       const title = typeof w.title === 'string' ? w.title : JSON.stringify(w.title);
       const slots = {};
       const end = w.inventoryStart !== undefined ? w.inventoryStart : w.slots.length;
+      // Wie viele Plaetze das Fenster selbst hat, ohne das Inventar darunter.
+      const size = end;
       for (let i = 0; i < end; i++) {
         const it = w.slots[i];
         if (!it) continue;
@@ -3379,7 +3393,7 @@ async function handle(cmd) {
         } catch (e) { /* egal */ }
         slots[i] = { name: it.name, count: it.count, custom, lore, glint };
       }
-      return { open: true, title: title || '', slots };
+      return { open: true, title: title || '', slots, size, id: w.id };
     }
     case 'inventory': {
       const items = bot.inventory ? bot.inventory.items() : [];
@@ -3425,6 +3439,8 @@ async function handle(cmd) {
     case 'own_equipment':
       return { packets: ownEquipment.slice(cmd.since || 0), count: ownEquipment.length,
                resends: inventoryResends, last_resend: lastInventoryResend };
+    case 'own_slots':
+      return { packets: ownSlots.slice(cmd.since || 0), count: ownSlots.length };
     case 'other_equipment':
       // Nur die fuer die Entitaet mit dieser Nummer; count zaehlt alle.
       return { packets: otherEquipment.slice(cmd.since || 0).filter((p) => p.entityId === cmd.entity),
@@ -20443,6 +20459,425 @@ def umgebung_checks(env, bot):
         hinstellen(bot, heim[0], heim[1], heim[2])
 
 
+# Ein Spieler, den bedrock.name-prefix als Bedrock-Spieler erkennt: Sein Name
+# beginnt mit dem Punkt, den Floodgate voreingestellt vor die Namen setzt.
+# Paper laesst den Punkt im Namen zu, gerade fuer Floodgate.
+BEDROCK_NAME = ".CamFlyBedrock"
+
+
+def bedrock_checks(env, bot):
+    """bedrock: Was Bedrock-Spieler bekommen, wo Bedrock etwas nicht kann.
+
+    Voreingestellt steht apply-to: bedrock, name-prefix ".", menu: mixed,
+    invitation-forms, chat-commands, glow-particle: end_rod und follow-view:
+    camera da -
+    nachgesehen in der Datei, die das Plugin mitbringt. Fenster von Bedrock
+    gibt es nur mit Geyser oder Floodgate; die hat der Testserver nicht, und
+    der Bot spielt auf Java. Geprueft wird deshalb mit apply-to: all, unter
+    dem die Anpassungen auch fuer ihn gelten - das Menue ist dann die Truhe
+    mit der Auswahl, wie auf Bedrock ohne Fenster.
+
+    Mit apply-to: bedrock merkt der Java-Bot nichts: Die Action-Bar nennt
+    die Taste ("or type /cam"), hinter den Knoepfen von /cam spot list steht
+    kein Befehl, unter einem Punkt im Menue stehen die Klicks. Mit all sagt
+    die Action-Bar nur "type /cam to leave"; hinter den Knoepfen von
+    /cam spot list und /cam list steht der Befehl in Klammern - einer, der
+    noch einen Namen braucht, mit "..." am Ende. Im Menue oeffnet der Knopf
+    der Zeit eine Seite mit allen Zeiten, die der Welt markiert; noon
+    gewaehlt, sieht der Bot 6000, und das Menue ist zu und bleibt es. Unter
+    einem eigenen Punkt steht "Tap: jump there, share or delete", und er ist
+    ein anderes Item als unter bedrock - keine gefuellte Karte, die Bedrock
+    "Unknown Map" nennt. Zurueck fuehrt von den Punkten wieder ins Menue.
+    Ein Klick auf den Punkt bietet Springen, Teilen und Loeschen an:
+    Springen bringt die Kamera hin und laesst das Menue zu, Loeschen loescht
+    ihn und zeigt wieder die Punkte. Die Seite der Fuehrung oeffnet, die
+    Admin-Seite und von dort die Seite, wer im Cam-Modus ist, auch. Jede
+    Seite steht dabei im selben Fenster, mit sechs Reihen und dem Titel des
+    Menues, wie fuer Bedrock: Geyser baut dort fuer jedes Fenster eine Truhe
+    auf, und ein Wechsel ging manchmal schief. Die Seite, die Fuehrungen fuer
+    alle abschaltet, hat ebenso sechs Reihen statt vier: Eine Truhe mit vier
+    kennt Bedrock nicht.
+
+    Ein zweiter Spieler im Cam-Modus leuchtet (glowing-outline: true): Unter
+    all bekommt der Bot im Cam-Modus Partikel an den vier Kanten seines
+    Koerpers, unter bedrock keine. Laedt der Bot ihn unter all zum Folgen ein,
+    steht hinter dem Knopf /cam follow accept mit dem Namen des Bots. Folgt
+    er dem Bot, der ohne Cam-Modus ein Schwert haelt, bekommt er mit
+    follow-view: camera (voreingestellt) die Hand des Bots leer und das
+    Schwert nur in die Hotbar, rechts neben den Platz, den er haelt - nicht in
+    die Hand, die sein unsichtbarer Koerper sonst im Bild hielte; mit turn hat
+    er es in Hand
+    und Hotbar, bekommt keine Kamera des Bots und schaut, wohin der Bot
+    schaut.
+
+    Ein Spieler, dessen Name mit dem Punkt beginnt, ist unter apply-to:
+    bedrock ein Bedrock-Spieler: Seine Action-Bar sagt nur "type /cam to
+    leave". Mit name-prefix: "" ist er keiner mehr.
+    """
+    def fenster():
+        return bot.call("window_slots", wait=10)
+
+    def klick(slot, button=0, mode=0, warten=1.5):
+        bot.call("click_window", wait=15, slot=int(slot), button=button, mode=mode)
+        time.sleep(warten)
+
+    def menue():
+        befehl(bot, "/cam menu", warten=1.0)
+        return fenster()
+
+    def gross(slot, reihen=(0, 2, 5)):
+        """Wo ein Platz einer Seite mit drei Reihen - der Hauptseite, der
+        Admin-Seite - im Fenster mit sechs Reihen steht, das jede Seite fuer
+        Bedrock hat: die erste Reihe bleibt oben, die zweite kommt in die
+        dritte, die letzte ganz nach unten. Fuer vier Reihen (0, 2, 3, 5)."""
+        return reihen[slot // 9] * 9 + slot % 9
+
+    def platz_mit(f, text):
+        """Der Platz im offenen Fenster, dessen Item so heisst - nur der
+        Name zaehlt: unter dem Knopf oben auf der Seite der Auswahl stehen
+        alle Moeglichkeiten noch einmal."""
+        for platz, item in (f.get("slots") or {}).items():
+            if text in item_text(item).split("\n")[0]:
+                return platz
+        return None
+
+    def titel(f):
+        """Der Titel des Fensters als Text: er kommt als Textbaustein."""
+        roh = f.get("title") or ""
+        try:
+            return strip_colors(item_text({"custom": roh}).strip())
+        except (TypeError, ValueError):
+            return strip_colors(roh)
+
+    def start_zeilen(client):
+        """Was beim Start des Cam-Modus in Chat und Action-Bar kommt."""
+        cam_off(client)
+        seit = client.mark()
+        an = cam_on(client)
+        time.sleep(1.0)
+        return an, zeilen_seit(client, seit)
+
+    if not FIND.test("Cam-Modus ist vor dem Test fuer Bedrock aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    console(env, f"fill {_floor(x) - 3} {y} {_floor(z) - 3} {_floor(x) + 8} {y + 5} {_floor(z) + 3} minecraft:air",
+            pause=0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    punkt = BotClient(env, name=BEDROCK_NAME)
+    try:
+        FIND.test("Voreingestellt steht bedrock mit apply-to: bedrock, name-prefix \".\", menu: mixed, "
+                  "invitation-forms, chat-commands, glow-particle: end_rod und follow-view: camera da",
+                  re.search(r"(?m)^bedrock:\s*\n(?:\s*#.*\n)*\s*apply-to:\s*bedrock\s*\n"
+                            r"(?:\s*#.*\n)*\s*name-prefix:\s*\"\.\"\s*\n"
+                            r"(?:\s*#.*\n)*\s*menu:\s*mixed\s*\n"
+                            r"(?:\s*#.*\n)*\s*invitation-forms:\s*true\s*\n"
+                            r"(?:\s*#.*\n)*\s*chat-commands:\s*true\s*\n"
+                            r"(?:\s*#.*\n)*\s*glow-particle:\s*end_rod\s*\n"
+                            r"(?:\s*#.*\n)*\s*follow-view:\s*camera\s*$", quelle_config(env)) is not None, "")
+        spots_loeschen(bot, "Grundstein")
+        hinstellen(bot, x, y, z)
+
+        # --- apply-to: bedrock - der Java-Bot merkt nichts ---
+        an, zeilen = start_zeilen(bot)
+        FIND.test("apply-to: bedrock - die Action-Bar des Java-Bots nennt die Taste",
+                  an and gesagt(zeilen, r"or type /cam to leave"), zeige(zeilen[-3:]))
+        befehl(bot, "/cam spot set Grundstein")
+        zeilen = befehl(bot, "/cam spot list")
+        FIND.test("apply-to: bedrock - hinter den Knoepfen von /cam spot list steht kein Befehl",
+                  gesagt(zeilen, r"Grundstein") and not gesagt(zeilen, r"\(/cam spot"), zeige(zeilen))
+        menue()
+        klick(10)
+        f = fenster()
+        unter = item_text((f.get("slots") or {}).get("0"))
+        FIND.test("apply-to: bedrock - unter dem Punkt im Menue stehen die Klicks",
+                  "Grundstein" in unter and "Left-click: jump there" in unter and "Tap:" not in unter, unter)
+        # Welches Item der Punkt ist, sagt mineflayer nur mit den Namen von
+        # 26.1 - verglichen wird deshalb nur, ob es unter all ein anderes ist.
+        java_karte = ((f.get("slots") or {}).get("0") or {}).get("name")
+        bot.call("close_window", wait=10)
+        cam_off(bot)
+
+        # --- apply-to: all - der Java-Bot bekommt, was Bedrock-Spieler bekommen ---
+        set_option(env, "apply-to", "all", "bedrock")
+        an, zeilen = start_zeilen(bot)
+        FIND.test("apply-to: all - die Action-Bar sagt nur \"type /cam to leave\", ohne Taste",
+                  an and gesagt(zeilen, r"[Cc]am mode activated - type /cam to leave")
+                  and not gesagt(zeilen, r"or type /cam"), zeige(zeilen[-3:]))
+        zeilen = befehl(bot, "/cam spot list")
+        FIND.test("apply-to: all - hinter den Knoepfen von /cam spot list steht der Befehl",
+                  gesagt(zeilen, r"\[Go\] \(/cam spot Grundstein\)")
+                  and gesagt(zeilen, r"\[Share\] \(/cam spot share Grundstein \.\.\.\)")
+                  and gesagt(zeilen, r"\[Delete\] \(/cam spot delete Grundstein\)"), zeige(zeilen))
+        zeilen = befehl(bot, "/cam list")
+        FIND.test("apply-to: all - hinter den Knoepfen von /cam list steht der Befehl",
+                  gesagt(zeilen, rf"\(/cam tp {BOT_NAME} camera\)") and gesagt(zeilen, rf"\(/cam tp {BOT_NAME} body\)"),
+                  zeige(zeilen))
+
+        f = menue()
+        plaetze = f.get("slots") or {}
+        FIND.test("apply-to: all - die Hauptseite ist auf sechs Reihen verteilt: Punkte und Zeit in der dritten, "
+                  "Statistik, Start und Admin ganz unten",
+                  f.get("size") == 54 and platz_mit(f, "Spots") == str(gross(10)) == "19"
+                  and platz_mit(f, "Time of day") == str(gross(15)) == "24"
+                  and platz_mit(f, "Statistics") == str(gross(21)) == "48"
+                  and str(gross(22)) == "49" in plaetze and platz_mit(f, "Admin") == str(gross(23)) == "50"
+                  and not any(9 <= int(k) < 18 or 27 <= int(k) < 45 for k in plaetze),
+                  str({k: item_text(i).split(chr(10))[0] for k, i in plaetze.items()}))
+        klick(gross(15))
+        f = fenster()
+        jetzt = platz_mit(f, "» the world's")
+        mittag = platz_mit(f, "noon")
+        FIND.test("apply-to: all - der Knopf der Zeit oeffnet eine Seite mit allen Zeiten, die der Welt markiert - "
+                  "im Fenster mit sechs Reihen und dem Titel des Menues, der Knopf oben, zurueck ganz unten",
+                  "Time of day" in item_text((f.get("slots") or {}).get("4")).split("\n")[0]
+                  and f.get("size") == 54 and titel(f) == "Cam"
+                  and jetzt is not None and 18 <= int(jetzt) < 36 and mittag is not None
+                  and platz_mit(f, "midnight") is not None and platz_mit(f, "Back") == "49",
+                  f"{titel(f)} / {f.get('size')} / "
+                  f"{ {k: item_text(i).split(chr(10))[0] for k, i in (f.get('slots') or {}).items()} }")
+        if mittag is not None:
+            klick(mittag, warten=2.0)
+            zu = not fenster().get("open")
+            time.sleep(1.0)
+            FIND.test("noon gewaehlt: der Bot sieht 6000, und das Menue ist zu - und bleibt es",
+                      bot.call("sky").get("timeOfDay") == 6000 and zu and not fenster().get("open"),
+                      f"{bot.call('sky').get('timeOfDay')} / zu: {zu}, danach: {titel(fenster())}")
+        bot.call("close_window", wait=10)
+        befehl(bot, "/cam time reset")
+
+        menue()
+        klick(gross(10))
+        f = fenster()
+        unter = item_text((f.get("slots") or {}).get("0"))
+        FIND.test("apply-to: all - unter dem eigenen Punkt steht, was ein Tippen kann",
+                  "Grundstein" in unter and "Tap: jump there, share or delete" in unter
+                  and "Left-click" not in unter, unter)
+        karte = ((f.get("slots") or {}).get("0") or {}).get("name")
+        FIND.test("apply-to: all - der Punkt ist keine gefuellte Karte, die Bedrock \"Unknown Map\" nennt",
+                  karte is not None and java_karte is not None and karte != java_karte, f"{java_karte} / {karte}")
+        punkte_fenster = f.get("id")
+        klick(45, warten=2.0)
+        f = fenster()
+        FIND.test("apply-to: all - zurueck von den Punkten: das Menue ist wieder da, im selben Fenster",
+                  f.get("open") and platz_mit(f, "Statistics") is not None and f.get("id") == punkte_fenster,
+                  f"{titel(f)} / Fenster {punkte_fenster} -> {f.get('id')}")
+        FIND.test("apply-to: all - jede Seite hat sechs Reihen und den Titel des Menues",
+                  f.get("size") == 54 and titel(f) == "Cam", f"{f.get('size')} / {titel(f)}")
+        bot.call("close_window", wait=10)
+
+        bot.call("fly", wait=30, dx=-3, timeout=15000)
+        time.sleep(1.0)
+        menue()
+        klick(gross(10))
+        klick(0)
+        springen = platz_mit(fenster(), "Jump there")
+        if springen is not None:
+            klick(springen, warten=2.5)
+            zu = not fenster().get("open")
+            da = bot.server_pos()
+            time.sleep(1.0)
+            FIND.test("Springen gewaehlt: die Kamera ist am Punkt, und das Menue ist zu - und bleibt es",
+                      zu and not fenster().get("open") and da is not None and math.dist(da, (x, y, z)) < 1.0,
+                      f"zu: {zu}, danach: {titel(fenster())}, {da}")
+        bot.call("close_window", wait=10)
+
+        menue()
+        klick(gross(9), warten=2.0)
+        f = fenster()
+        FIND.test("apply-to: all - der Knopf der Fuehrung oeffnet ihre Seite",
+                  f.get("open") and platz_mit(f, "View when following") is not None,
+                  str([item_text(i).split(chr(10))[0] for i in (f.get("slots") or {}).values()]))
+        bot.call("close_window", wait=10)
+        menue()
+        klick(gross(23), warten=2.0)
+        f = fenster()
+        admin = f.get("open") and platz_mit(f, "Who is in cam mode") == str(gross(10))
+        FIND.test("apply-to: all - die Admin-Seite ist verteilt: zurueck ganz unten in der Mitte",
+                  admin and platz_mit(f, "Back") == str(gross(22)) == "49",
+                  str({k: item_text(i).split(chr(10))[0] for k, i in (f.get("slots") or {}).items()}))
+        klick(gross(10), warten=2.0)
+        f = fenster()
+        FIND.test("apply-to: all - die Admin-Seite oeffnet und von dort, wer im Cam-Modus ist",
+                  admin and f.get("open") and "In cam mode for" in item_text((f.get("slots") or {}).get("0")),
+                  item_text((f.get("slots") or {}).get("0")))
+        bot.call("close_window", wait=10)
+        # Eine Seite mit vier Reihen hat Bedrock nicht; Geyser fuellte den Rest mit Barrieren.
+        menue()
+        klick(gross(23), warten=2.0)
+        klick(gross(24), warten=2.0)
+        klick(0, warten=2.0)
+        f = fenster()
+        FIND.test("apply-to: all - die Seite, die Fuehrungen fuer alle abschaltet, hat sechs Reihen statt vier, "
+                  "verteilt: oben wer, der Schalter in der dritten Reihe, zurueck ganz unten links",
+                  f.get("open") and f.get("size") == 54 and "4" in (f.get("slots") or {})
+                  and str(gross(13, (0, 2, 3, 5))) == "22" in (f.get("slots") or {})
+                  and str(gross(27, (0, 2, 3, 5))) == "45" in (f.get("slots") or {}),
+                  f"{titel(f)} / {f.get('size')} / "
+                  f"{ {k: item_text(i).split(chr(10))[0] for k, i in (f.get('slots') or {}).items()} }")
+        bot.call("close_window", wait=10)
+
+        menue()
+        klick(gross(10))
+        klick(0)
+        f = fenster()
+        loeschen = platz_mit(f, "Delete")
+        FIND.test("Ein Klick auf den Punkt bietet Springen, Teilen und Loeschen an",
+                  "Grundstein" in item_text((f.get("slots") or {}).get("4")) and platz_mit(f, "Jump there") is not None
+                  and platz_mit(f, "Share or make public") is not None and loeschen is not None,
+                  f"{titel(f)} / {[item_text(i)[:30] for i in (f.get('slots') or {}).values()]}")
+        if loeschen is not None:
+            seit = bot.mark()
+            klick(loeschen, warten=2.0)
+            zeilen = zeilen_seit(bot, seit)
+            f = fenster()
+            FIND.test("Loeschen gewaehlt: der Punkt ist geloescht, und die Seite der Punkte ist wieder da",
+                      gesagt(zeilen, r"Spot Grundstein deleted") and platz_mit(f, "Your spots") is not None,
+                      f"{zeige(zeilen)} / {titel(f)}")
+        bot.call("close_window", wait=10)
+
+        # --- Ein zweiter Spieler: sein Umriss als Partikel, eine Einladung ---
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer den Test fuer Bedrock kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 4} {y} {z}", pause=1.5)
+
+        def ecken():
+            """Die Partikel der letzten zwei Sekunden an den Kanten des zweiten Spielers."""
+            da = bot.call("server_pos", selector=ZUSCHAUER_NAME).get("pos")
+            marke = partikel_marke(bot)
+            time.sleep(2.0)
+            if da is None:
+                return []
+            return [p["pos"] for p in partikel_seit(bot, marke)
+                    if abs(abs(p["pos"][0] - da[0]) - 0.3) < 0.05 and abs(abs(p["pos"][2] - da[2]) - 0.3) < 0.05
+                    and da[1] - 0.05 <= p["pos"][1] <= da[1] + 1.9]
+
+        FIND.test("Der zweite Spieler startet den Cam-Modus", cam_on(zuschauer), "")
+        hinstellen(bot, x, y, z)
+        cam_on(bot)
+        gefunden = ecken()
+        FIND.test("apply-to: all - der Bot sieht den Umriss der leuchtenden Kamera als Partikel an ihren Kanten",
+                  len(gefunden) >= 8, f"{len(gefunden)} Partikel an den Kanten")
+        seit = zuschauer.mark()
+        befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+        dort = zeilen_seit(zuschauer, seit)
+        FIND.test("apply-to: all - hinter den Knoepfen der Einladung steht /cam follow accept",
+                  gesagt(dort, rf"\[Follow\] \(/cam follow accept {BOT_NAME}\)")
+                  and gesagt(dort, rf"\(/cam follow decline {BOT_NAME}\)"), zeige(dort))
+        befehl(zuschauer, f"/cam follow decline {BOT_NAME}")
+
+        # Folgen ohne Cam-Modus des Fuehrers, mit einem Schwert in der Hand.
+        bot_nummer = bot.call("effects").get("self")
+
+        def folgen():
+            """Der zweite Spieler nimmt die Einladung an; was er danach an
+            Haenden des Fuehrers, eigenen Haenden und Kamera-Paketen bekam."""
+            cam_off(bot)
+            cam_off(zuschauer)
+            hinstellen(bot, x, y, z)
+            console(env, f"tp {ZUSCHAUER_NAME} {x + 4} {y} {z}", pause=0.5)
+            console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:diamond_sword", pause=0.5)
+            fremd = zuschauer.call("other_equipment").get("count", 0)
+            eigen = zuschauer.call("own_equipment").get("count", 0)
+            plaetze = zuschauer.call("own_slots").get("count", 0)
+            kameras = zuschauer.call("cameras").get("count", 0)
+            befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
+            dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
+            hand = [p.get("count") for p in zuschauer.call("other_equipment", since=fremd, entity=bot_nummer)
+                    .get("packets", []) if p.get("slot") == 0]
+            selbst = [p.get("count") for p in zuschauer.call("own_equipment", since=eigen).get("packets", [])
+                      if p.get("slot") == 0]
+            durch = [p.get("id") for p in zuschauer.call("cameras", since=kameras).get("packets", [])]
+            hotbar = [(p.get("slot"), p.get("count")) for p in zuschauer.call("own_slots", since=plaetze)
+                      .get("packets", []) if 36 <= (p.get("slot") or 0) <= 44]
+            return dort, hand, selbst, durch, hotbar
+
+        def aufhoeren():
+            befehl(bot, "/cam follow end")
+            console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:air", pause=0.5)
+            cam_off(zuschauer)
+
+        # follow-view: camera (voreingestellt) - die Kamera von Geyser zeichnet
+        # keine Haende: die Hand des Fuehrers kommt leer, das Schwert nur in
+        # die Hotbar, nicht als eigenes Item in der Hand.
+        dort, hand, selbst, durch, hotbar = folgen()
+        gehalten = 36 + (zuschauer.call("state").get("held") or 0)
+        neben = 36 + (gehalten - 36 + 1) % 9
+        # Wie jeder Platz zuletzt steht: der Start des Cam-Modus legt ihm
+        # seine eigenen Sachen kurz zurueck, ehe er sie wieder leert.
+        zuletzt = dict(hotbar)
+        FIND.test("follow-view: camera - der Gast bekommt die Hand des Fuehrers leer und das Schwert nur in die "
+                  "Hotbar, rechts neben den Platz, den er haelt - nicht in die Hand",
+                  gesagt(dort, rf"You follow {BOT_NAME} now") and bool(hand) and all(c == 0 for c in hand)
+                  and not any(selbst) and zuletzt.get(neben, 0) > 0 and zuletzt.get(gehalten, 0) == 0,
+                  f"{zeige(dort)} / am Fuehrer {hand} / eigene {selbst} / gehalten {gehalten} / Hotbar {hotbar}")
+        aufhoeren()
+
+        # follow-view: turn - er wird mitgedreht und hat das Schwert in der eigenen Hand.
+        set_option(env, "follow-view", "turn", "bedrock")
+        dort, hand, selbst, durch, hotbar = folgen()
+        FIND.test("follow-view: turn - der Gast hat das Schwert des Fuehrers in der eigenen Hand und in der "
+                  "Hotbar, ohne die Kamera des Fuehrers", gesagt(dort, rf"You follow {BOT_NAME} now")
+                  and any(selbst) and any(c for _, c in hotbar) and bot_nummer not in durch,
+                  f"{zeige(dort)} / eigene {selbst} / Hotbar {hotbar} / Kameras {durch}")
+        console(env, f"tp {BOT_NAME} {x} {y} {z} 90 20", pause=1.5)
+        # Gelesen ueber die Konsole: der zweite Spieler hat kein op fuer /data.
+        stand = log_stand(env)
+        console(env, f"data get entity {ZUSCHAUER_NAME} Rotation", pause=1.0)
+        neu = re.sub(r"\x1b\[[0-9;]*m", "", log_seit(env, stand))
+        treffer = re.search(r"entity data: \[(-?[\d.]+)f, (-?[\d.]+)f\]", neu)
+        blick = [float(treffer.group(1)), float(treffer.group(2))] if treffer else None
+        FIND.test("follow-view: turn - der Gast schaut, wohin der Fuehrer schaut (90 / 20)",
+                  blick is not None and abs(((blick[0] - 90 + 180) % 360) - 180) < 2 and abs(blick[1] - 20) < 2,
+                  str(blick))
+        aufhoeren()
+        set_option(env, "follow-view", "camera", "bedrock")
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 4} {y} {z}", pause=0.5)
+
+        set_option(env, "apply-to", "bedrock", "bedrock")
+        cam_on(zuschauer)
+        hinstellen(bot, x, y, z)
+        cam_on(bot)
+        gefunden = ecken()
+        FIND.test("apply-to: bedrock - der Java-Bot bekommt keine Partikel an den Kanten",
+                  not gefunden, f"{len(gefunden)} Partikel an den Kanten")
+        cam_off(bot)
+        cam_off(zuschauer)
+
+        # --- Ein Name mit dem Punkt vorn ---
+        punkt.start()
+        if not punkt.call("wait_spawn", wait=90, timeout=75000).get("spawned"):
+            FIND.problem(f"{BEDROCK_NAME} kam nicht herein - laesst der Server den Punkt im Namen nicht zu?")
+            return
+        time.sleep(1.5)
+        an, zeilen = start_zeilen(punkt)
+        FIND.test(f"name-prefix: \".\" - {BEDROCK_NAME} ist ein Bedrock-Spieler: \"type /cam to leave\" ohne Taste",
+                  an and gesagt(zeilen, r"[Cc]am mode activated - type /cam to leave")
+                  and not gesagt(zeilen, r"or type /cam"), zeige(zeilen[-3:]))
+        cam_off(punkt)
+        set_option(env, "name-prefix", '""', "bedrock")
+        an, zeilen = start_zeilen(punkt)
+        FIND.test(f"name-prefix: \"\" - {BEDROCK_NAME} ist keiner mehr: die Action-Bar nennt die Taste",
+                  an and gesagt(zeilen, r"or type /cam to leave"), zeige(zeilen[-3:]))
+        cam_off(punkt)
+    finally:
+        try:
+            bot.call("close_window", wait=10)
+        except Exception:
+            pass
+        set_options(env, [("apply-to", "bedrock", "bedrock"), ("name-prefix", '"."', "bedrock")])
+        cam_off(bot)
+        spots_loeschen(bot, "Grundstein")
+        zuschauer.stop()
+        punkt.stop()
+
+
 class Abschnitt:
     """Ein Abschnitt der Tests: sein Name, die Funktion, die ihn faehrt, und
     die Bereiche des Plugins, die er prueft.
@@ -21129,6 +21564,8 @@ ABSCHNITTE = [
     Abschnitt("ausspaehen", ausspaeh_checks, "scout"),
     Abschnitt("menue", menue_checks, "menu"),
     Abschnitt("menue_live", menue_live_checks, "menu tour/CamTour config/CamSettings stats"),
+    Abschnitt("bedrock", bedrock_checks,
+              "bedrock menu/CamMenu display/CamActionBar spot/CamSpots tour/CamTour list/CamList trail/CamTrail"),
     Abschnitt("spotreiter", spotreiter_checks, "menu spot"),
     Abschnitt("spotmoderation", spotmoderation_checks, "menu spot/SpotModeration spot/SpotBans spot/CamSpots"),
     Abschnitt("tourmoderation", tourmoderation_checks, "menu tour/TourModeration tour/TourBans tour/CamTour"),
@@ -21559,7 +21996,7 @@ DAUER_VORGABE = {
     "zeit_wetter": 46, "nachtsicht_wahl": 66, "naehe": 60, "einstellungen": 89, "teilen": 92,
     "fuehrung": 199, "fuehrung_ohne_cam": 148, "herzen_folgen": 60, "gaestebuch": 178, "weiter": 34,
     "weiter_himmel": 45, "alle_einladen": 70, "fuehrung_himmel": 80, "ausspaehen": 50,
-    "menue": 163, "menue_live": 95, "spotreiter": 112, "spotmoderation": 130, "tourmoderation": 99,
+    "menue": 163, "menue_live": 95, "bedrock": 90, "spotreiter": 112, "spotmoderation": 130, "tourmoderation": 99,
     "spot_nur_im_cam": 28, "spot_ansicht": 91, "webkarte": 75, "erze": 69, "anstupsen": 81,
     "funk": 77, "traenke": 58, "treffergrund": 77, "anfassen": 79, "sulfur_cube": 59,
     "ruestung": 10, "rueckstoss": 560, "rueckstoss_mob": 183, "schieben": 45, "waerter_ziel": 80,

@@ -84,7 +84,8 @@ camera-mode:
   #   true  = immer - auch durch Wände
   #   false = kein Umriss
   #   sight = nur, solange ihn ein anderer Spieler nicht von blöcken vertägt wird dann sehen den Umriss alle, auch durch Wände
-  # Bei player_visibility_mode: false gibt es keinen Umriss.
+  # Bei player_visibility_mode: false gibt es keinen Umriss. Bedrock zeigt keinen - Bedrock-Spieler sehen statt dessen
+  # Partikel, siehe bedrock.glow-particle.
   glowing-outline: true
 
   # Name über dem Spieler im Cam-Modus, an Stelle seines Namensschilds - so steht er auch über dem unsichtbaren Spieler,
@@ -811,8 +812,61 @@ menu:
 # Den Cam-Modus mit der Taste zum Tauschen der Hände beenden (voreingestellt F), wie mit /cam.
 # Geht mit leeren Händen. Hat ein Spieler die Taste anders belegt, gilt seine - und der Hinweis
 # in der Action-Bar nennt auch seine.
+# Bedrock hat diese Taste nicht: Bedrock-Spieler sehen in der Action-Bar actionbar-hint-bedrock (nur /cam). Mit
+# emote-offhand-workaround: "emotes-and-offhand" in der Config von Geyser tauscht dort ein Emote die Hände und beendet
+# den Cam-Modus genauso.
 exit-key:
   enabled: true
+
+# Bedrock-Spieler (über Geyser, mit oder ohne Floodgate): Was Bedrock nicht kann - klickbare Knöpfe im Chat, Rechts-
+# und Shift-Klick in einem Fenster, den Leuchtumriss, die Taste F -, bekommen sie auf einem anderen Weg. Rechte gibt
+# und nimmt das keine, es ändert nur, wie etwas aussieht und wie man hinkommt.
+bedrock:
+  # Für wen das gilt:
+  #   bedrock = nur für Bedrock-Spieler - Java-Spieler merken nichts davon
+  #   all     = für alle, auch für Java-Spieler - zum Ausprobieren ohne Bedrock-Gerät (Fenster von Bedrock gibt es
+  #             trotzdem nur auf Bedrock; Java-Spieler bekommen die Auswahl in der Truhe)
+  #   false   = für niemanden
+  apply-to: bedrock
+  # Woran ein Bedrock-Spieler erkannt wird, das Sicherste zuerst: Geyser oder Floodgate auf diesem Server sagen es
+  # (auch bei einem Konto, das mit einem Java-Konto verknüpft ist), sonst die UUID, die Floodgate vergibt (sie beginnt
+  # mit 00000000-0000-0000-, auch wenn Floodgate nur auf dem Proxy liegt), und zuletzt dieser Anfang des Namens - wie
+  # username-prefix in der Config von Floodgate, dort voreingestellt der Punkt. "" = nicht am Namen erkennen.
+  # Ein Java-Name hat keinen Punkt; nur auf einem Server im Offline-Modus kann sich jeder so nennen.
+  name-prefix: "."
+  # /cam menu für Bedrock-Spieler:
+  #   mixed = die Truhe wie auf Java, mit denselben Seiten. Nur was eine Truhe auf Bedrock schlecht kann,
+  #           kommt als Fenster von Bedrock: Ein Knopf, der mehr als eins kann (auf Java Rechts- oder Shift-Klick),
+  #           bietet es zur Auswahl an, und der Name eines Spots oder der Grund einer Sperre wird in ein Feld getippt
+  #           statt in den Chat. Die Truhe geht dafür kurz zu und danach wieder auf.
+  #   forms = jede Seite als Fenster von Bedrock: die Knöpfe als Liste untereinander, was nur etwas anzeigt, steht als
+  #           Text darüber; Auswahl und Eingabe wie bei mixed. Ohne Raster und ohne Live-Update der Seiten.
+  #   chest = nur die Truhe: die Auswahl auf einer eigenen Seite der Truhe, Name und Grund im Chat
+  # Fenster gibt es nur mit Geyser oder Floodgate auf diesem Server - ohne sie ist mixed und forms wie chest.
+  # Die Truhe hat auf Bedrock immer sechs Reihen, auch wo Java eine kleine Truhe zeigt: Ein Wechsel zwischen kleiner
+  # und großer Truhe schließt das Menü unter Geyser manchmal gleich wieder. Eine Seite mit drei oder vier Reihen wird
+  # deshalb verteilt: Die erste Reihe bleibt oben, die unterste (Zurück, Bestätigen) kommt ganz nach unten wie bei den
+  # Listen, der Rest in die Mitte. Die Plätze unter menu.buttons und menu.admin-buttons rücken so mit.
+  menu: mixed
+  # Ein angebotener Spot und eine Einladung zum Folgen kommen zusätzlich als Fenster mit Annehmen und Ablehnen
+  # (Texte: bedrock-form-...). Nur mit Geyser oder Floodgate auf diesem Server; die Nachricht im Chat kommt so oder so.
+  invitation-forms: true
+  # Hinter jedem Knopf im Chat (Spots, Einladungen, /cam list, /cam trail) steht der Befehl, den er ausführt - im Chat
+  # von Bedrock kann man nicht klicken (Text: bedrock-chat-command).
+  chat-commands: true
+  # Bedrock zeigt den Leuchtumriss (camera-mode.glowing-outline) nicht. Bedrock-Spieler sehen statt dessen einen Umriss
+  # aus diesen Partikeln an den Kanten des Spielers, solange er leuchtet - Namen wie bei camera-particles.particle.
+  # false = kein Umriss
+  glow-particle: end_rod
+  # Folgen durch die Augen des Leaders (follow.guide-view) für Bedrock-Spieler:
+  #   camera = die Kamera von Geyser, die dem Blick des Leaders flüssig folgt. Sie zeichnet keine Hände: die Items des
+  #            Leaders (follow.mirror-main-hand, -off-hand) stehen nur in der Hotbar des Folgers - neben dem Platz, den
+  #            er hält (Haupthand rechts daneben, zweite Hand dahinter). Hielte er sie, hielte sie sein unsichtbarer
+  #            Körper, und sie schwebten im Bild.
+  #   turn   = der Folger wird jeden Tick dorthin gedreht, wohin der Leader schaut, und sieht aus seiner eigenen
+  #            Kamera direkt hinter ihm. Die Items des Leaders hat er in der Hand wie auf Java, und sie drehen sich mit -
+  #            das Umschauen kommt aber nur in 20 Schritten pro Sekunde und ruckelt.
+  follow-view: camera
 
 # /cam back: Die Kamera springt zurück zum Körper, der Cam-Modus läuft weiter - für jeden, der sich verflogen hat.
 # Sie schaut danach in dieselbe Richtung wie vorher. Aus einer anderen Welt (Portal) geht es genauso zurück.

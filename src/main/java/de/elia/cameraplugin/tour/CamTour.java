@@ -13,9 +13,7 @@ import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.ClickEvent;
-import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.TextComponent;
-import net.md_5.bungee.api.chat.hover.content.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -233,6 +231,8 @@ public final class CamTour implements Listener {
     private final FineHold fineHold = new FineHold(sender);
     /** The internals that show a guest the frost of his guide as his own. */
     private final GuideFrost frost = new GuideFrost(sender);
+    /** The internals that put the guide's items into the hotbar of a guest on Bedrock, see {@link GuideMirror}. */
+    private final GuideSlots slots = new GuideSlots(sender);
     /** The internals that change the guide's hands on their way to a guest, see {@link GuideMirror}. */
     private final GuideHands hands = new GuideHands(sender);
     /** The internals that show a guest hearts without a hit, see {@link GuideMirror}. */
@@ -276,6 +276,12 @@ public final class CamTour implements Listener {
         boolean viewing;
         /** Ticks since the guide's view was last sent. */
         int sinceView;
+        /**
+         * Whether he sees through the guide's eyes by being turned along with
+         * him, on Bedrock, rather than through the guide's camera, see
+         * {@link #turnsAlong}.
+         */
+        boolean turning;
         /** Where he is held turned while he sees through the guide's eyes, see {@link #holdTurned}. */
         float yaw;
         float pitch;
@@ -293,7 +299,8 @@ public final class CamTour implements Listener {
         this.messages = plugin.getMessages();
         this.cameraPlayers = plugin.getCameraPlayers();
         this.mirror = new GuideMirror(settings, frost, hands, quietHearts,
-                new NamespacedKey(plugin, GuideMirror.MARK));
+                new NamespacedKey(plugin, GuideMirror.MARK), this::geyserCamera, slots,
+                guest -> plugin.getBedrock().adapts(guest));
     }
 
     /** Whether {@code /cam follow} is there at all. */
@@ -312,6 +319,8 @@ public final class CamTour implements Listener {
         fineHold.load(settings.isTourEnabled() && settings.isTourGuideView() && settings.isTourFineHold() ? log : null);
         frost.load(settings.isTourEnabled() && settings.isTourMirrorFrost() ? log : null);
         quietHearts.load(settings.isTourEnabled() && settings.isTourMirrorHealth() ? log : null);
+        slots.load(settings.isTourEnabled() && (settings.isTourMirrorMainHand() || settings.isTourMirrorOffHand())
+                ? log : null);
         boolean hides = !settings.isTourMirrorCount() || !settings.isTourMirrorEnchantments()
                 || !settings.isTourMirrorDurability();
         hands.load(settings.isTourEnabled() && hides ? log : null);
@@ -351,6 +360,28 @@ public final class CamTour implements Listener {
     /** Whether he sees through the eyes of his guide on tours, rather than looking round freely. */
     public boolean seesThroughGuide(Player guest) {
         return viewWorks() && !freeLook.contains(guest.getUniqueId());
+    }
+
+    /**
+     * Whether a guest on Bedrock sees through the eyes of his guide by
+     * looking himself where the guide looks, every tick, from his own camera
+     * right behind him, {@code bedrock.follow-view: turn}: the guide's items
+     * are then in his own hands, see {@link GuideMirror}, and turn with his
+     * view. Geyser's camera, which shows the guide's view otherwise, draws no
+     * hands.
+     */
+    private boolean turnsAlong(Player guest) {
+        return seesThroughGuide(guest) && plugin.getBedrock().adapts(guest) && settings.isBedrockFollowTurn();
+    }
+
+    /**
+     * Whether a guest on Bedrock sees through the eyes of his guide with
+     * Geyser's camera, {@code bedrock.follow-view: camera}: it follows the
+     * guide's view smoothly, but draws no hands - he is shown the guide's
+     * items in his hotbar alone, see {@link GuideMirror}, and nothing swings.
+     */
+    private boolean geyserCamera(Player guest) {
+        return seesThroughGuide(guest) && plugin.getBedrock().adapts(guest) && !settings.isBedrockFollowTurn();
     }
 
     /**
@@ -398,8 +429,10 @@ public final class CamTour implements Listener {
      * who sees through the guide's eyes.
      */
     private boolean keepsApart(Player viewer, Player other) {
+        // A guest turned along with his guide sees from right behind him: the
+        // guide would stand in his view, so he is kept from him as well.
         return hidesCamera(viewer, other) && !(other.getUniqueId().equals(guideOf.get(viewer.getUniqueId()))
-                && seesThroughGuide(viewer));
+                && seesThroughGuide(viewer) && !turnsAlong(viewer));
     }
 
     /**
@@ -1088,45 +1121,63 @@ public final class CamTour implements Listener {
 
     /**
      * Tells a player that he is invited, and for how many seconds, with the
-     * buttons to accept and to turn it down.
+     * buttons to accept and to turn it down. On Bedrock, with
+     * {@code bedrock.invitation-forms}, a window asks him as well - while
+     * there are buttons at all.
      */
     private void tellInvited(Player other, Player guide, int seconds) {
         if (!messages.isMessageEnabled("tour-invitation")) {
             return;
         }
-        String text = messages.getMessage("tour-invitation").replace("{player}", guide.getName())
+        String name = guide.getName();
+        String text = messages.getMessage("tour-invitation").replace("{player}", name)
                 .replace("{seconds}", String.valueOf(seconds)).replace("{time}", CamTimeLimit.formatSeconds(seconds));
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
-        line.addAll(button("tour-button-accept", guide.getName(), "/cam follow accept " + guide.getName()));
-        line.addAll(button("tour-button-decline", guide.getName(), "/cam follow decline " + guide.getName()));
+        line.addAll(button(other, "tour-button-accept", name, "/cam follow accept " + name));
+        line.addAll(button(other, "tour-button-decline", name, "/cam follow decline " + name));
         other.spigot().sendMessage(line.toArray(new BaseComponent[0]));
+        if (answerable() && plugin.getBedrock().invitationForms(other)) {
+            UUID guideId = guide.getUniqueId();
+            plugin.getBedrock().forms().question(other, messages.getMessage("bedrock-form-follow-title"), text,
+                    messages.getMessage("bedrock-form-follow-accept"),
+                    messages.getMessage("bedrock-form-follow-decline"), yes -> {
+                        // Whoever is still online by then: one who left has no invitation open.
+                        Player now = Bukkit.getPlayer(guideId);
+                        if (yes) {
+                            accept(other, now, name);
+                        } else {
+                            decline(other, now, name);
+                        }
+                    }, null);
+        }
+    }
+
+    /**
+     * Whether an invitation can be answered: through the commands or the
+     * menu. The buttons run the command either way, as an answer to the
+     * invitation needs no menu.
+     */
+    private boolean answerable() {
+        return settings.getMenuAccess().allowsMenu() || settings.getMenuAccess().allowsCommands();
     }
 
     /**
      * One button behind the invitation, running its command - also while
      * only the menu goes, as an answer to the invitation needs no menu -,
-     * with the text of the same name with {@code -hover} after it on hovering.
+     * with the text of the same name with {@code -hover} after it on hovering,
+     * and on Bedrock the command written out, see
+     * {@link de.elia.cameraplugin.bedrock.BedrockPlayers#chatButton}.
      */
-    private List<BaseComponent> button(String key, String guide, String command) {
-        if (!settings.getMenuAccess().allowsMenu() && !settings.getMenuAccess().allowsCommands()
-                || !messages.isMessageEnabled(key)) {
+    private List<BaseComponent> button(Player to, String key, String guide, String command) {
+        if (!answerable() || !messages.isMessageEnabled(key)) {
             return List.of();
         }
         String text = messages.getMessage(key).replace("{player}", guide);
         if (text.isEmpty()) {
             return List.of();
         }
-        HoverEvent hover = new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text(TextComponent.fromLegacyText(
-                messages.getMessage(key + "-hover").replace("{player}", guide))));
-        ClickEvent click = new ClickEvent(ClickEvent.Action.RUN_COMMAND, command);
-        List<BaseComponent> parts = new ArrayList<>();
-        parts.add(new TextComponent(" "));
-        for (BaseComponent part : TextComponent.fromLegacyText(text)) {
-            part.setHoverEvent(hover);
-            part.setClickEvent(click);
-            parts.add(part);
-        }
-        return parts;
+        return plugin.getBedrock().chatButton(to, text, messages.getMessage(key + "-hover").replace("{player}", guide),
+                new ClickEvent(ClickEvent.Action.RUN_COMMAND, command));
     }
 
     /**
@@ -1473,7 +1524,7 @@ public final class CamTour implements Listener {
         boolean swings = settings.isTourMirrorSwing() && swing.serverSwingsOnUse();
         for (Player guest : shownGuests(guide)) {
             mirror.placed(guest.getUniqueId(), offHand);
-            if (swings) {
+            if (swings && !geyserCamera(guest)) {
                 swing.swing(guest, guide, offHand, true);
             }
         }
@@ -1486,7 +1537,10 @@ public final class CamTour implements Listener {
     private void swingGuests(Player guide, boolean offHand, boolean use) {
         if (settings.isTourMirrorSwing()) {
             for (Player guest : shownGuests(guide)) {
-                swing.swing(guest, guide, offHand, use);
+                // Geyser's camera on Bedrock draws no hands, see GuideMirror: nothing to swing.
+                if (!geyserCamera(guest)) {
+                    swing.swing(guest, guide, offHand, use);
+                }
             }
         }
     }
@@ -1607,7 +1661,8 @@ public final class CamTour implements Listener {
                 endTour(guideId, guide == null ? "" : guide.getName());
                 continue;
             }
-            boolean mirrored = !cameraPlayers.contains(guideId) && mirror.isOn();
+            boolean guideOut = !cameraPlayers.contains(guideId);
+            boolean mirrored = guideOut && mirror.isOn();
             Location at = guide.getLocation();
             boolean along = tour.last != null && tour.last.getWorld().equals(at.getWorld());
             Vector step = along ? at.toVector().subtract(tour.last.toVector()) : new Vector();
@@ -1634,7 +1689,8 @@ public final class CamTour implements Listener {
                     continue;
                 }
                 takeLook(guide, guest);
-                if (mirrored) {
+                // A guest with Geyser's camera is sent the guide's hands empty in any case, see GuideMirror.
+                if (mirrored || guideOut && geyserCamera(guest)) {
                     mirror.update(guide, guest);
                 } else {
                     // Nothing to see of him: a guide who started camera mode
@@ -1895,6 +1951,23 @@ public final class CamTour implements Listener {
             unview(guest, state);
             return;
         }
+        if (turnsAlong(guest)) {
+            if (state.viewing && !state.turning) {
+                // From the guide's camera to turning along: his own camera back first.
+                view.show(guest, guest);
+            }
+            state.viewing = true;
+            state.turning = true;
+            Location look = guide.getLocation();
+            guest.setRotation(look.getYaw(), look.getPitch());
+            return;
+        }
+        if (state.turning) {
+            // From turning along to the guide's camera: it goes out below.
+            state.turning = false;
+            state.viewing = false;
+            state.centered = 0;
+        }
         if (!state.viewing) {
             // Centred first, while he still looks through his own eyes, see
             // CENTER_TICKS - then through the guide's.
@@ -1930,9 +2003,17 @@ public final class CamTour implements Listener {
      * it lets them sway by every turn without ever bringing them back: they
      * would hang askew in the guide's view. Turned back every tick, they still
      * tremble while he moves the mouse - less so held between the ticks too,
-     * see {@link FineHold}.
+     * see {@link FineHold}. Not on Bedrock, which is shown no hands there.
      */
     private void holdTurned(Player guest, Guest state) {
+        if (plugin.getBedrock().adapts(guest)) {
+            // On Bedrock, Geyser shows the guide's view through a camera of
+            // its own, which neither draws his hands nor turns with him: a
+            // turn back would only reach his client as a jump of his player,
+            // every tick, and make the view stutter.
+            fineHold.release(guest);
+            return;
+        }
         guest.setRotation(state.yaw, state.pitch);
         if (state.viewing && settings.isTourFineHold()) {
             fineHold.hold(guest, state.yaw, state.pitch);
@@ -1943,10 +2024,11 @@ public final class CamTour implements Listener {
     private void unview(Player guest, Guest state) {
         fineHold.release(guest);
         state.centered = 0;
-        if (state.viewing) {
+        if (state.viewing && !state.turning) {
             view.show(guest, guest);
-            state.viewing = false;
         }
+        state.viewing = false;
+        state.turning = false;
     }
 
     /**

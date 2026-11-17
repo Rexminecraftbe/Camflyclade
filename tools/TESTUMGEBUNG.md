@@ -1410,6 +1410,14 @@ einzutragen.
   anderen für Admins (`menu.admin-access: menu`). Die Abschnitte tippen sie als
   Befehle, der Testserver startet deshalb mit `both` für beide; nur der Test
   des Menüs stellt sie für sich um.
+* **Bedrock prüft der Abschnitt `bedrock` an einem Java-Bot.** Der Testserver
+  hat weder Geyser noch Floodgate, und mineflayer spielt auf Java. Mit
+  `bedrock.apply-to: all` gelten die Anpassungen auch für ihn - das Menü ist
+  dann die Truhe mit der Auswahl, wie auf Bedrock ohne Fenster. Die Fenster
+  von Bedrock selbst (Auswahl und Eingabe unter `bedrock.menu: mixed`, das
+  ganze Menü unter `forms`, `invitation-forms`) bekommt nur, wen Geyser oder
+  Floodgate kennt; sie prüft der Lauf nicht. Den Punkt vorn im Namen
+  (`.CamFlyBedrock`) lässt Paper zu, gerade für Floodgate.
 * **Im Menü klickt der Bot nach Plätzen, nicht nach Items.** mineflayer kennt
   die Arten nur aus den Daten von 26.1. Name und Zeilen eines Items liest er
   dagegen richtig, als NBT-Textbausteine; `item_text` sammelt den Text daraus. Der Server weist jeden Klick ins Menü
@@ -1895,6 +1903,22 @@ der letzte Knopf zeigt alle · „Save a spot
 here“ fragt im Chat nach dem Namen, ein Linksklick springt zum Punkt, ein
 Klick mit Umschalt löscht ihn · `access: menu` lässt nur das Menü, `command`
 nur die Befehle, `false` keins von beiden, `/cam` selbst aber schon ·
+voreingestellt steht `bedrock` mit `apply-to: bedrock` da, und der Java-Bot
+merkt davon nichts - die Action-Bar nennt die Taste, hinter den Knöpfen im Chat
+steht kein Befehl, unter einem Punkt im Menü stehen die Klicks · mit
+`apply-to: all` sagt die Action-Bar nur „type /cam to leave“, hinter den
+Knöpfen von `/cam spot list`, `/cam list` und der Einladung zum Folgen steht der
+Befehl in Klammern, jede Seite des Menüs hat sechs Reihen und den Titel des
+Menüs, eine Seite mit drei oder vier Reihen ist darauf verteilt (Hauptseite:
+Punkte und Zeit in der dritten Reihe, Statistik, Start und Admin ganz unten;
+Admin-Seite und die Seite, die Führungen abschaltet: zurück ganz unten), der
+Knopf der Zeit öffnet eine Seite mit allen Zeiten (die der Welt markiert, der
+Knopf oben, zurück ganz unten), noon gewählt gibt dem Bot 6000 und das Menü
+wieder, ein Punkt bietet Springen, Teilen und Löschen an, und Löschen löscht
+ihn · eine
+leuchtende Kamera hat unter `all` Partikel an ihren vier Kanten, unter
+`bedrock` nicht · ein Name mit Punkt vorn gilt als Bedrock-Spieler, mit
+`name-prefix: ""` nicht mehr ·
 Server-Log ohne Fehler des Plugins.
 
 Am Ende steht eine Zusammenfassung im Terminal, dazu `ergebnis.json` im
