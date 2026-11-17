@@ -14,6 +14,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Set;
+import java.util.function.BiConsumer;
 
 /**
  * The texts of the {@code messages} section and the switches of
@@ -27,8 +29,14 @@ import java.util.List;
  */
 public final class Messages {
 
+    /** The value of a switch of {@code message-settings} that sends its message above the hotbar. */
+    public static final String ACTION_BAR = "actionbar";
+
     /** The English language file built into the jar. */
     private final FileConfiguration builtIn;
+
+    /** Where a message with the switch {@code actionbar} goes, see {@link #useActionBar}. */
+    private BiConsumer<Player, String> actionBar;
 
     /**
      * The language file in use. Until a file has been read, and while there is
@@ -69,9 +77,10 @@ public final class Messages {
     }
 
     /**
-     * Whether a switch of {@code message-settings} is on. One that is no truth
-     * value counts as on and is reported, see {@link #check()}; so does one
-     * that is in neither file, as a message without a switch of its own is
+     * Whether a switch of {@code message-settings} is on. {@code actionbar}
+     * counts as on, see {@link #isActionBar}. Any other value that is no truth
+     * value counts as on as well and is reported, see {@link #check()}; so does
+     * one that is in neither file, as a message without a switch of its own is
      * always sent.
      */
     private boolean isSwitchedOn(String key) {
@@ -80,15 +89,34 @@ public final class Messages {
     }
 
     /**
+     * Whether the switch of a message says {@code actionbar}: it goes to a
+     * player above the hotbar, for a few seconds, instead of into the chat.
+     */
+    public boolean isActionBar(String path) {
+        return language.get("message-settings." + path) instanceof String value
+                && value.equalsIgnoreCase(ACTION_BAR);
+    }
+
+    /**
+     * Where a message whose switch says {@code actionbar} goes, set once the
+     * plugin has its action bar; until then the chat.
+     */
+    public void useActionBar(BiConsumer<Player, String> actionBar) {
+        this.actionBar = actionBar;
+    }
+
+    /**
      * Checks the switches of the language file in one go. They are read one by
      * one while the server runs, so a wrong value would show up again and
      * again instead of once.
      *
-     * @return a note for each switch that is no truth value
+     * @return a note for each switch that is neither a truth value nor
+     *         {@code actionbar} - {@code enabled}, the switch of them all,
+     *         takes a truth value alone
      */
     public List<ConfigIssue> check() {
         ConfigReader reader = new ConfigReader(language);
-        reader.checkBooleanSection("message-settings");
+        reader.checkSwitchSection("message-settings", ACTION_BAR, Set.of("enabled"));
         return reader.getWarnings();
     }
 
@@ -106,7 +134,20 @@ public final class Messages {
             for (int i = 0; i + 1 < fills.length; i += 2) {
                 text = text.replace(fills[i], fills[i + 1]);
             }
-            sender.sendMessage(text);
+            deliver(sender, path, text);
+        }
+    }
+
+    /**
+     * Puts the finished text of a message in front of whom it is for: into
+     * the chat, or above the hotbar while its switch says {@code actionbar}.
+     * The console has no hotbar and always gets it as a line.
+     */
+    public void deliver(CommandSender to, String path, String text) {
+        if (to instanceof Player player && actionBar != null && isActionBar(path)) {
+            actionBar.accept(player, text);
+        } else {
+            to.sendMessage(text);
         }
     }
 
@@ -127,7 +168,7 @@ public final class Messages {
         for (int i = 0; i + 1 < fills.length; i += 2) {
             text = text.replace(fills[i], fills[i + 1]);
         }
-        player.sendMessage(text);
+        deliver(player, key, text);
     }
 
     /**

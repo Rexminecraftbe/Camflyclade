@@ -2506,10 +2506,12 @@ const bot = mineflayer.createBot({
   plugins: { particle: false }
 });
 
-bot.on('message', (msg) => {
+// position ist 'game_info' fuer eine Zeile ueber der Hotbar (Action-Bar),
+// sonst 'chat' oder 'system': bar sagt, wo sie stand.
+bot.on('message', (msg, position) => {
   let text = '';
   try { text = msg.toString(); } catch (e) { text = String(msg); }
-  messages.push({ t: Date.now(), text });
+  messages.push({ t: Date.now(), text, bar: position === 'game_info' });
 });
 // Wann der Bot zuletzt Schaden genommen hat: Sein Leben ist gesunken, oder
 // der Server hat einen Treffer an ihm gemeldet. Danach laesst cam-safety
@@ -2583,7 +2585,7 @@ bot._client.on('action_bar', (packet) => {
   let text = '';
   try { text = require('prismarine-chat')(bot.registry).fromNotch(packet.text).toString(); }
   catch (e) { text = soundText(packet); }
-  messages.push({ t: Date.now(), text });
+  messages.push({ t: Date.now(), text, bar: true });
 });
 // Die Bossbars, die gerade zu sehen sind, nach ihrer UUID: der Titel als Text
 // des ganzen Titels, wie bei den Toenen, der Fuellstand und die Einteilung
@@ -4376,6 +4378,11 @@ def message_switch_checks(env, bot):
     Beide Schalter der Action-Bar heissen wie ihre Texte unter messages,
     die in derselben Datei stehen - gesetzt wird deshalb immer mit dem
     Abschnitt.
+
+    Ein Schalter kann auch actionbar sagen: Die Meldung steht dann ueber der
+    Hotbar statt im Chat. time-reset steht voreingestellt so da; mit true
+    kommt dieselbe Meldung in den Chat, und ein Wert wie "vielleicht" wird
+    beim Reload gemeldet.
     """
     def cam():
         """Einmal /cam, und alles, was danach ankommt, ohne Farbcodes."""
@@ -4438,12 +4445,34 @@ def message_switch_checks(env, bot):
         FIND.test("enabled: false nimmt auch die Action-Bar mit",
                   drin and not said(start + ende, r"[Cc]am mode (activated|ended)"),
                   shown(start + ende) if drin else "der Cam-Modus startete nicht")
+
+        # actionbar als Wert eines Schalters: die Meldung ueber der Hotbar
+        # statt im Chat. time-reset steht voreingestellt so da.
+        set_option(env, "enabled", "true", "message-settings")
+        seit = bot.mark()
+        befehl(bot, "/cam time reset")
+        FIND.test("message-settings: actionbar (voreingestellt bei time-reset) - die Meldung steht ueber der "
+                  "Hotbar, nicht im Chat",
+                  gesagt(leiste_seit(bot, seit), r"Cam time: the world's again")
+                  and not gesagt(chat_seit(bot, seit), r"Cam time"), shown(zeilen_seit(bot, seit)))
+        set_option(env, "time-reset", "true", "message-settings")
+        seit = bot.mark()
+        befehl(bot, "/cam time reset")
+        FIND.test("message-settings: true - dieselbe Meldung kommt in den Chat",
+                  gesagt(chat_seit(bot, seit), r"Cam time: the world's again")
+                  and not gesagt(leiste_seit(bot, seit), r"Cam time"), shown(zeilen_seit(bot, seit)))
+        set_option(env, "time-reset", "vielleicht", "message-settings")
+        zeilen = befehl(bot, "/cam reload", warten=3.0)
+        FIND.test("message-settings: ein Wert, der weder true, false noch actionbar ist, wird gemeldet",
+                  said(zeilen, r"Unknown value for message-settings\.time-reset: 'vielleicht'\. "
+                               r"Allowed: true, false, actionbar"), shown(zeilen))
     finally:
         # Der Reload dabei holt ihn auch aus dem Cam-Modus, falls eine Probe
         # mittendrin abgebrochen ist.
         set_options(env, [("actionbar-on", "true", "message-settings"),
                           ("actionbar-off", "true", "message-settings"),
-                          ("enabled", "true", "message-settings")])
+                          ("enabled", "true", "message-settings"),
+                          ("time-reset", "actionbar", "message-settings")])
 
 
 # ---------------------------------------------------------------------------
@@ -4455,6 +4484,18 @@ def zeilen_seit(bot, since):
     """Was seit der Marke im Chat und in der Action-Bar stand, ohne Farbcodes."""
     return [strip_colors(m["text"])
             for m in bot.call("messages", since=since).get("messages", [])]
+
+
+def chat_seit(bot, since):
+    """Was seit der Marke im Chat stand - ohne die Action-Bar -, ohne Farbcodes."""
+    return [strip_colors(m["text"])
+            for m in bot.call("messages", since=since).get("messages", []) if not m.get("bar")]
+
+
+def leiste_seit(bot, since):
+    """Was seit der Marke in der Action-Bar stand, ohne Farbcodes."""
+    return [strip_colors(m["text"])
+            for m in bot.call("messages", since=since).get("messages", []) if m.get("bar")]
 
 
 def gesagt(zeilen, muster):

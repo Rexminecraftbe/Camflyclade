@@ -202,6 +202,9 @@ public final class CameraPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         shuttingDown = false;
+        // A message whose switch says actionbar stands there as long as the
+        // client shows a line, and the distance of the action bar waits for it.
+        messages.useActionBar(actionBar::warn);
         saveDefaultConfig();
         configFile.saveDefaultLanguage();
         // Read before anything is set up, and not left to the first getConfig():

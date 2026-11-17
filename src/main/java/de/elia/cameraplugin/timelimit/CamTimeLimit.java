@@ -241,9 +241,7 @@ public final class CamTimeLimit {
                 long remaining = remainingMillis(id);
                 if (remaining <= 0L) {
                     stopWatching(id);
-                    if (messages.isMessageEnabled("cooldown-available")) {
-                        player.sendMessage(messages.getMessage("cooldown-available"));
-                    }
+                    messages.sendMessage(player, "cooldown-available");
                     return;
                 }
                 if (watch.bar != null) {

@@ -23,6 +23,9 @@ action-bar:
   # actionbar-on trägt den Hinweis, wie man den Cam-Modus beendet: mit der Taste (exit-key) oder /cam,
   # Text: actionbar-hint (bei exit-key: false actionbar-hint-command, nur /cam).
   # Warnungen (end-warning, body-alarm) und das Tempo des Mausrads kommen bei jeder Einstellung.
+  # Ebenso jede Meldung, deren Schalter in der Sprachdatei unter message-settings auf actionbar steht (voreingestellt
+  # z. B. die Warnungen an der Grenze, warum der Cam-Modus nicht startet, ein Sprung, der nicht geht): Sie steht dort
+  # statt im Chat, etwa drei Sekunden lang, und der Abstand wartet so lange.
   display: distance
   # Wie lange zu Beginn actionbar-on mit dem Hinweis steht (bei distance, bevor der Abstand kommt, und bei false),
   # in Ticks: 20 = 1 Sekunde, 0 = gleich der Abstand (bei false: gar nichts)

@@ -1458,7 +1458,14 @@ portal-names:
 #   item-names:
 #     ender_eye: "eye of ender"
 
-# Switch single messages on and off
+# Switch single messages on and off, and where they go:
+#   true      = in the chat
+#   actionbar = above the hotbar, for about three seconds - for what is short and only matters right then: a warning
+#               at the border while flying, why cam mode does not start, a jump that does not work, what a button of
+#               the menu just switched. The line of the action bar in cam mode (action-bar in config.yml) waits that
+#               long. Lines with buttons (spot list, invitations, offered spots) always go into the chat.
+#   false     = not at all
+# enabled switches all of them off at once: true or false.
 message-settings:
   actionbar-distance: true
   actionbar-distance-portal: true
@@ -1509,16 +1516,16 @@ message-settings:
   battery-bossbar: true
   battery-bossbar-charging: true
   battery-empty: true
-  battery-low: true
+  battery-low: actionbar
   bedrock-chat-command: true
   bossbar-text: true
-  cam-area-limit: true
-  cam-area-start: true
-  cam-body-blocked: true
+  cam-area-limit: actionbar
+  cam-area-start: actionbar
+  cam-body-blocked: actionbar
   cam-command-blocked: true
-  cam-effect-start: true
-  cam-falling-start: true
-  cam-lava-start: true
+  cam-effect-start: actionbar
+  cam-falling-start: actionbar
+  cam-lava-start: actionbar
   cam-list-body: true
   cam-list-camera: true
   cam-list-empty: true
@@ -1526,34 +1533,34 @@ message-settings:
   cam-list-entry-away: true
   cam-list-header: true
   cam-list-stop: true
-  cam-nearby-player: true
-  cam-powder-snow-start: true
-  cam-safety: true
-  cam-sleeping-start: true
-  cam-spectator-start: true
-  cam-tp-body: true
-  cam-tp-camera: true
+  cam-nearby-player: actionbar
+  cam-powder-snow-start: actionbar
+  cam-safety: actionbar
+  cam-sleeping-start: actionbar
+  cam-spectator-start: actionbar
+  cam-tp-body: actionbar
+  cam-tp-camera: actionbar
   cam-tp-cannot-fly: true
   cam-tp-not-in-cam: true
   cam-tp-self: true
   cam-tp-usage: true
   cam-unknown-command: true
-  cam-vehicle-start: true
-  cam-water-start: true
+  cam-vehicle-start: actionbar
+  cam-water-start: actionbar
   camera-off: false
   camera-on: false
-  cant-attack-other-body: true
-  cant-fly-in-lava: true
-  cant-fly-in-powder-snow: true
-  cant-fly-in-water: true
+  cant-attack-other-body: actionbar
+  cant-fly-in-lava: actionbar
+  cant-fly-in-powder-snow: actionbar
+  cant-fly-in-water: actionbar
   config-errors: true
-  cooldown-available: true
+  cooldown-available: actionbar
   cooldown-bossbar: true
   crash-restored: true
-  cooldown-text: true
-  cost-missing: true
+  cooldown-text: actionbar
+  cost-missing: actionbar
   cost-paid: true
-  distance-limit: true
+  distance-limit: actionbar
   end-warning-afk: true
   end-warning-battery: true
   end-warning-time-limit: true
@@ -1570,44 +1577,44 @@ message-settings:
   menu-spot-name: true
   menu-spot-name-public: true
   nightvision-off: true
-  nightvision-reset: true
-  nightvision-set: true
-  nightvision-set-memory: true
+  nightvision-reset: actionbar
+  nightvision-set: actionbar
+  nightvision-set-memory: actionbar
   nightvision-usage: true
   no-permission: true
-  no-projectiles: true
+  no-projectiles: actionbar
   not-in-cam: true
   nudge-received: true
   nudge-sent: true
-  photo-ended: true
+  photo-ended: actionbar
   photo-off: true
-  photo-started: true
-  portal-blocked: true
+  photo-started: actionbar
+  portal-blocked: actionbar
   portal-return-area: true
   portal-return-distance: true
   reload-exit: true
   reload-start: true
   reload-success: true
-  resume-area: true
-  resume-blocked: true
+  resume-area: actionbar
+  resume-blocked: actionbar
   resume-jumped: true
-  resume-no-signal: true
-  resume-none: true
+  resume-no-signal: actionbar
+  resume-none: actionbar
   resume-off: true
-  resume-other-world: true
-  resume-too-far: true
+  resume-other-world: actionbar
+  resume-too-far: actionbar
   signal-back-to-body: true
   signal-ended: true
   signal-lost: true
   spot-accepted: true
   spot-accepted-owner: true
   spot-admin-deleted: true
-  spot-admin-teleported: true
+  spot-admin-teleported: actionbar
   spot-admin-took-down: true
   spot-admin-tp-no-world: true
-  spot-area: true
+  spot-area: actionbar
   spot-bad-name: true
-  spot-blocked: true
+  spot-blocked: actionbar
   spot-button-accept: true
   spot-button-decline: true
   spot-button-delete: true
@@ -1632,13 +1639,13 @@ message-settings:
   spot-full: true
   spot-guestbook-entry: true
   spot-guestbook-header: true
-  spot-guestbook-login: true
-  spot-guestbook-off: true
-  spot-guestbook-on: true
+  spot-guestbook-login: actionbar
+  spot-guestbook-off: actionbar
+  spot-guestbook-on: actionbar
   spot-guestbook-update: true
   spot-jumped: true
   spot-like-own: true
-  spot-liked: true
+  spot-liked: actionbar
   spot-list-empty: true
   spot-list-entry: true
   spot-list-header: true
@@ -1654,14 +1661,14 @@ message-settings:
   spot-list-shared-entry: true
   spot-list-shared-header: true
   spot-moved: true
-  spot-no-signal: true
+  spot-no-signal: actionbar
   spot-not-shared: true
   spot-not-shared-all: true
   spot-off: true
   spot-offer-unknown: true
   spot-offered: true
   spot-offered-to-you: true
-  spot-other-world: true
+  spot-other-world: actionbar
   spot-public-unknown: true
   spot-removed: true
   spot-restrict-changed: true
@@ -1685,21 +1692,21 @@ message-settings:
   spot-shared-all: true
   spot-shared-already: true
   spot-shared-unknown: true
-  spot-start-too-far: true
+  spot-start-too-far: actionbar
   spot-taken-down: true
-  spot-too-far: true
+  spot-too-far: actionbar
   spot-unknown: true
-  spot-unliked: true
+  spot-unliked: actionbar
   spot-unrestrict-done: true
   spot-unrestrict-everybody-done: true
   spot-unrestricted-now: true
   spot-unshared: true
   spot-unshared-all: true
   spot-usage: true
-  start-delay-cancelled: true
+  start-delay-cancelled: actionbar
   start-delay-countdown: true
-  start-delay-damaged: true
-  start-delay-moved: true
+  start-delay-damaged: actionbar
+  start-delay-moved: actionbar
   startup-skins-failed: true
   startup-skins-loaded: true
   startup-skins-loading: true
@@ -1735,12 +1742,12 @@ message-settings:
   teleport-ended: true
   time-limit-expired: true
   time-off: true
-  time-reset: true
-  time-set: true
-  time-set-memory: true
+  time-reset: actionbar
+  time-set: actionbar
+  time-set-memory: actionbar
   time-usage: true
   tour-already-guest: true
-  tour-body-locked: true
+  tour-body-locked: actionbar
   tour-busy: true
   tour-busy-following: true
   tour-button-accept: true
@@ -1787,8 +1794,8 @@ message-settings:
   tour-other-not-in-cam: true
   tour-own-later: true
   tour-out-of-reach: true
-  tour-reach-lost: true
-  tour-reach-lost-guide: true
+  tour-reach-lost: actionbar
+  tour-reach-lost-guide: actionbar
   tour-reach-warning: true
   tour-reach-warning-guide: true
   tour-restrict-changed: true
@@ -1806,12 +1813,12 @@ message-settings:
   tour-unrestrict-done: true
   tour-unrestricted-now: true
   tour-usage: true
-  tour-view-free: true
-  tour-view-guide: true
+  tour-view-free: actionbar
+  tour-view-guide: actionbar
   tour-view-unavailable: true
   trail-all-entry: true
   trail-all-header: true
-  trail-at-start: true
+  trail-at-start: actionbar
   trail-button: true
   trail-button-all: true
   trail-elsewhere: true
@@ -1819,7 +1826,7 @@ message-settings:
   trail-from: true
   trail-gone: true
   trail-header: true
-  trail-hidden: true
+  trail-hidden: actionbar
   trail-no-such: true
   trail-none: true
   trail-off: true
@@ -1833,7 +1840,7 @@ message-settings:
   unbanned-everybody-now: true
   unbanned-now: true
   weather-off: true
-  weather-reset: true
-  weather-set: true
-  weather-set-memory: true
+  weather-reset: actionbar
+  weather-set: actionbar
+  weather-set-memory: actionbar
   weather-usage: true
