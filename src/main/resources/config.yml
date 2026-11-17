@@ -847,7 +847,8 @@ bedrock:
   #           bietet es zur Auswahl an, und der Name eines Spots oder der Grund einer Sperre wird in ein Feld getippt
   #           statt in den Chat. Die Truhe geht dafür kurz zu und danach wieder auf.
   #   forms = jede Seite als Fenster von Bedrock: die Knöpfe als Liste untereinander, was nur etwas anzeigt, steht als
-  #           Text darüber; Auswahl und Eingabe wie bei mixed. Ohne Raster und ohne Live-Update der Seiten.
+  #           Text darüber; Auswahl und Eingabe wie bei mixed. Ohne Raster und ohne Live-Update der Seiten. Wo ein
+  #           Text auf eine Stelle der Truhe zeigt ("das Buch rechts"), nennt er hier den Knopf (Texte mit -forms).
   #   chest = nur die Truhe: die Auswahl auf einer eigenen Seite der Truhe, Name und Grund im Chat
   # Fenster gibt es nur mit Geyser oder Floodgate auf diesem Server - ohne sie ist mixed und forms wie chest.
   # Die Truhe hat auf Bedrock immer sechs Reihen, auch wo Java eine kleine Truhe zeigt: Ein Wechsel zwischen kleiner

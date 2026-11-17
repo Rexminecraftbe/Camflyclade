@@ -4987,7 +4987,7 @@ def abschalten_checks(env, bot):
         time.sleep(3)
         zeilen = zeilen_seit(bot, 0)
         FIND.test("Nach dem Neustart heisst es nicht, der Server sei in seinem Cam-Modus ausgegangen",
-                  not gesagt(zeilen, r"server crashed during your cam mode"), zeige(zeilen))
+                  not gesagt(zeilen, r"Server crash during cam mode"), zeige(zeilen))
     finally:
         try:
             for client in (zuschauer, dritter):
@@ -5098,7 +5098,7 @@ def absturz_checks(env, bot):
     time.sleep(3)
     z = zeilen_seit(bot, 0)
     FIND.test("Nach dem Neustart: die Meldung, dass er alles zurueckhat",
-              gesagt(z, r"server crashed during your cam mode"), zeige(z))
+              gesagt(z, r"Server crash during cam mode"), zeige(z))
     FIND.test("Nach dem Neustart: die Diamanten sind wieder da",
               nbt_frage(bot, "@s", '{Inventory:[{id:"minecraft:diamond"}]}'), "")
     FIND.test("Nach dem Neustart: wieder im Ueberlebensmodus", spielmodus_ist(bot, "survival"), "")
@@ -5217,7 +5217,7 @@ def absturz_nach_dem_ende(env, bot, dateien):
     time.sleep(3)
     z = zeilen_seit(bot, 0)
     FIND.test(f"{wer}: keine Meldung des Absturzschutzes, es gab nichts zurueckzugeben",
-              not gesagt(z, r"server crashed during your cam mode"), zeige(z))
+              not gesagt(z, r"Server crash during cam mode"), zeige(z))
     FIND.test(f"{wer}: die Smaragde sind da",
               nbt_frage(bot, "@s", '{Inventory:[{id:"minecraft:emerald"}]}'), "")
     FIND.test(f"{wer}: im Ueberlebensmodus", spielmodus_ist(bot, "survival"), "")
@@ -6153,7 +6153,7 @@ def alte_absturzdatei_checks(env, bot):
         time.sleep(1)
         z = zeilen_seit(bot, 0)
         FIND.test("Alte Absturzdatei: die Meldung, dass er alles zurueckhat",
-                  gesagt(z, r"server crashed during your cam mode"), zeige(z))
+                  gesagt(z, r"Server crash during cam mode"), zeige(z))
         neu = bot.server_pos()
         FIND.test("Alte Absturzdatei: er steht an der Stelle aus der Datei",
                   neu is not None and math.dist(neu, ziel) < 1.0, f"{ziel} -> {neu}")
@@ -8216,7 +8216,7 @@ def nachtsicht_wahl_checks(env, bot):
         zeilen = befehl(bot, "/cam nightvision off")
         befehl(bot, "/cam nightvision on")
         FIND.test("storage: memory - die Meldung sagt, dass es bis zum Verlassen gilt",
-                  gesagt(zeilen, r"Night vision in cam mode: never \(until you leave\)"),
+                  gesagt(zeilen, r"Night vision in cam mode: never \(until you log out\)"),
                   zeige(zeilen))
         if FIND.test("Neu angemeldet fuer die eigene Nachtsicht im Speicher", neu_anmelden(bot), ""):
             cam_on(bot)
@@ -8374,8 +8374,8 @@ def einstellungen_checks(env, bot):
         zeilen = befehl(bot, "/cam time sunset")
         wetter = befehl(bot, "/cam weather rain")
         FIND.test("storage: memory - die Meldungen sagen, dass es bis zum Verlassen gilt",
-                  gesagt(zeilen, r"Cam time: sunset \(only you see it, until you leave\)")
-                  and gesagt(wetter, r"Cam weather: rain \(only you see it, until you leave\)"), f"{zeige(zeilen)} / {zeige(wetter)}")
+                  gesagt(zeilen, r"Cam time: sunset \(only you see it, until you log out\)")
+                  and gesagt(wetter, r"Cam weather: rain \(only you see it, until you log out\)"), f"{zeige(zeilen)} / {zeige(wetter)}")
         if FIND.test("Neu angemeldet fuer Zeit und Wetter im Speicher", neu_anmelden(bot), ""):
             cam_on(bot)
             time.sleep(6.5)
@@ -8455,6 +8455,8 @@ def teilen_checks(env, bot):
     punkt = (x + 6, y, z)
     fern = (x + 200, y, z)
     label = f"{BOT_NAME}:Haus"
+    # So nennen ihn die Meldungen (spot-name-other); label ist, was man tippt.
+    anzeige = re.escape(f"Haus ({BOT_NAME})")
     biom = f"{_floor(punkt[0]) - 2} {y - 2} {_floor(z) - 2} {_floor(punkt[0]) + 2} {y + 4} {_floor(z) + 2}"
     console(env, f"fill {_floor(x) - 2} {y} {_floor(z) - 3} {_floor(punkt[0]) + 8} {y + 6} {_floor(z) + 3} "
                  f"minecraft:air", pause=0.5)
@@ -8505,7 +8507,7 @@ def teilen_checks(env, bot):
         dort = befehl(zuschauer, f"/cam spot accept {label}")
         hier = zeilen_seit(bot, seit)
         FIND.test("/cam spot accept - angenommen, und der Bot erfaehrt es",
-                  gesagt(dort, rf"Accepted {label}") and gesagt(hier, rf"{ZUSCHAUER_NAME} accepted your spot Haus"),
+                  gesagt(dort, rf"Accepted {anzeige}") and gesagt(hier, rf"{ZUSCHAUER_NAME} accepted your spot Haus"),
                   f"{zeige(dort)} / {zeige(hier)}")
         text = geteilte_datei(env)
         FIND.test("Angenommen steht er in playerdata/shared-spots.yml unter players, nicht mehr unter pending",
@@ -8555,12 +8557,12 @@ def teilen_checks(env, bot):
         dort = befehl(zuschauer, f"/cam spot like {label}")
         eigene = befehl(bot, "/cam spot list")
         FIND.test("/cam spot like - er liked ihn, und die Liste des Bots zaehlt es",
-                  gesagt(dort, rf"Liked {label} \(1 likes\)") and gesagt(eigene, r"\(public, 1 likes\)"),
+                  gesagt(dort, rf"Liked {anzeige}: 1 likes") and gesagt(eigene, r"\(public, 1 likes\)"),
                   f"{zeige(dort)} / {zeige(eigene)}")
         zeilen = befehl(bot, f"/cam spot like {label}")
-        FIND.test("Den eigenen Punkt liked keiner", gesagt(zeilen, r"You cannot like your own spot"), zeige(zeilen))
+        FIND.test("Den eigenen Punkt liked keiner", gesagt(zeilen, r"You can't like your own spot"), zeige(zeilen))
         dort = befehl(zuschauer, f"/cam spot like {label}")
-        FIND.test("Noch einmal like nimmt es zurueck", gesagt(dort, rf"Unliked {label} \(0 likes\)"),
+        FIND.test("Noch einmal like nimmt es zurueck", gesagt(dort, rf"Unliked {anzeige}: 0 likes"),
                   zeige(dort))
         for name, eingabe, muster in (
                 ("Ein unbekannter Name wird abgewiesen", "/cam spot share Haus Niemand123",
@@ -8579,7 +8581,7 @@ def teilen_checks(env, bot):
         dort = befehl(zuschauer, f"/cam spot decline {label}")
         hier = zeilen_seit(bot, seit)
         FIND.test("/cam spot decline - abgelehnt, und der Bot erfaehrt es",
-                  gesagt(dort, rf"Declined {label}")
+                  gesagt(dort, rf"Declined {anzeige}")
                   and gesagt(hier, rf"{ZUSCHAUER_NAME} declined your spot Haus"), f"{zeige(dort)} / {zeige(hier)}")
         dort = befehl(zuschauer, f"/cam spot accept {label}")
         FIND.test("Danach ist nichts mehr anzunehmen", gesagt(dort, rf"No spot {label} is offered to you"),
@@ -8589,7 +8591,7 @@ def teilen_checks(env, bot):
         dort = befehl(zuschauer, f"/cam spot decline {label}")
         liste = befehl(zuschauer, "/cam spot list")
         FIND.test("decline bei einem angenommenen Punkt nimmt ihn von seiner Liste - oeffentlich bleibt er",
-                  gesagt(dort, rf"Removed {label} from your list")
+                  gesagt(dort, rf"Removed {anzeige} from your list")
                   and not gesagt(liste, r"Shared with you") and gesagt(liste, r"Public spots of others \(1\)"),
                   f"{zeige(dort)} / {zeige(liste)}")
 
@@ -8597,7 +8599,7 @@ def teilen_checks(env, bot):
         time.sleep(1.5)
         dort = befehl(zuschauer, f"/cam spot {label}", warten=2.0)
         FIND.test("Ein verbotenes Biom am Punkt sperrt den Sprung, und der Cam-Modus startet dafuer nicht",
-                  gesagt(dort, rf"Spot {label} is in Lush Caves") and not im_cam_modus(bot, ZUSCHAUER_NAME),
+                  gesagt(dort, rf"Spot {anzeige} is in Lush Caves") and not im_cam_modus(bot, ZUSCHAUER_NAME),
                   zeige(dort))
         bot.chat(f"/fillbiome {biom} minecraft:plains")
         time.sleep(1.5)
@@ -11674,7 +11676,8 @@ def spotreiter_checks(env, bot):
     x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
     console(env, f"fill {_floor(x) - 2} {y} {_floor(z) - 2} {_floor(x) + 8} {y + 4} {_floor(z) + 2} minecraft:air",
             pause=0.5)
-    label = f"{BOT_NAME}:Gamma"
+    # So heisst der oeffentliche Punkt des Bots beim anderen, im Menue und in den Meldungen.
+    anzeige = f"Gamma ({BOT_NAME})"
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
     try:
         spots_loeschen(bot, "Alpha", "Beta", "Cee", "Gamma")
@@ -11699,8 +11702,8 @@ def spotreiter_checks(env, bot):
                   f"{f.get('title')} / {namen(f)} / {item_text(knopf.get('51'))}")
         FIND.test("Unter jedem Punkt steht, wie nah man fuer den Sprung sein muss: viewpoints.start-distance (16) "
                   "ohne Cam-Modus, im Cam-Modus in Reichweite der Kamera",
-                  "Jump possible within 16 blocks" in item_text(knopf.get("0"))
-                  and "or in cam mode within range" in item_text(knopf.get("0")), item_text(knopf.get("0")))
+                  "Jump within 16 blocks or in camera range" in item_text(knopf.get("0")),
+                  item_text(knopf.get("0")))
         FIND.test("Das Buch sagt, wie viele Punkte er hat und wie viele noch gehen",
                   "Your spots: 3/10" in item_text(knopf.get("53")), item_text(knopf.get("53")))
         filter_text = item_text(knopf.get("51"))
@@ -11750,18 +11753,18 @@ def spotreiter_checks(env, bot):
         f = punkte(zuschauer)
         klick(zuschauer, 49)
         f = fenster(zuschauer)
-        FIND.test("Der andere sieht den oeffentlichen Punkt", label in " ".join(namen(f)), str(namen(f)))
-        platz = platz_von(f, label) or 0
+        FIND.test("Der andere sieht den oeffentlichen Punkt", anzeige in " ".join(namen(f)), str(namen(f)))
+        platz = platz_von(f, anzeige) or 0
         seit = zuschauer.mark()
         klick(zuschauer, platz, button=1)
         dort = zeilen_seit(zuschauer, seit)
         f = fenster(zuschauer)
         eintrag = f.get("slots", {}).get(str(platz)) or {}
         FIND.test("Rechtsklick liked ihn: danach steht das Like darunter, und er glaenzt",
-                  gesagt(dort, rf"Liked {label} \(1 likes\)") and "1 likes" in item_text(eintrag)
+                  gesagt(dort, rf"Liked {re.escape(anzeige)}: 1 likes") and "1 likes" in item_text(eintrag)
                   and eintrag.get("glint") is True, f"{zeige(dort)} / {item_text(eintrag)}")
         FIND.test("Auch unter dem oeffentlichen Punkt eines anderen steht, wie nah man fuer den Sprung sein muss",
-                  "Jump possible within 16 blocks" in item_text(eintrag), item_text(eintrag))
+                  "Jump within 16 blocks or in camera range" in item_text(eintrag), item_text(eintrag))
         seit = zuschauer.mark()
         klick(zuschauer, platz, warten=3.0)
         dort = zeilen_seit(zuschauer, seit)
@@ -11836,7 +11839,7 @@ def spotreiter_checks(env, bot):
         f = fenster(zuschauer)
         FIND.test("Er oeffnet auf dem Reiter der geteilten, vorn das Angebot",
                   "shared with you" in (f.get("title") or "")
-                  and f"{BOT_NAME}:Alpha" in item_text(f.get("slots", {}).get("0"))
+                  and f"Alpha ({BOT_NAME})" in item_text(f.get("slots", {}).get("0"))
                   and "Offered to you" in item_text(f.get("slots", {}).get("0")),
                   f"{f.get('title')} / {item_text(f.get('slots', {}).get('0'))}")
         seit = zuschauer.mark()
@@ -11844,14 +11847,14 @@ def spotreiter_checks(env, bot):
         dort = zeilen_seit(zuschauer, seit)
         f = fenster(zuschauer)
         FIND.test("Linksklick nimmt es an, danach steht der Punkt dort",
-                  gesagt(dort, rf"Accepted {BOT_NAME}:Alpha")
+                  gesagt(dort, rf"Accepted Alpha \({BOT_NAME}\)")
                   and "remove from list" in item_text(f.get("slots", {}).get("0")),
                   f"{zeige(dort)} / {item_text(f.get('slots', {}).get('0'))}")
         seit = zuschauer.mark()
         klick(zuschauer, 0, button=1)
         dort = zeilen_seit(zuschauer, seit)
         FIND.test("Rechtsklick nimmt ihn von der Liste",
-                  gesagt(dort, rf"Removed {BOT_NAME}:Alpha from your list"), zeige(dort))
+                  gesagt(dort, rf"Removed Alpha \({BOT_NAME}\) from your list"), zeige(dort))
         zuschauer.call("close_window", wait=10)
 
         cam_on(zuschauer)
@@ -21197,7 +21200,7 @@ def spot_ansicht_checks(env, bot):
         console(env, f"tp {ZUSCHAUER_NAME} {x + 3} {y} {z}", pause=1.5)
         dort = befehl(zuschauer, f"/cam spot {label}", warten=8.0)
         FIND.test("Der Sprung zeigt dem zweiten Spieler den Sonnenuntergang und den Regen des Spots",
-                  gesagt(dort, rf"At spot {BOT_NAME}:Abend") and zeit(zuschauer) == 12000
+                  gesagt(dort, rf"At spot Abend \({BOT_NAME}\)") and zeit(zuschauer) == 12000
                   and regen(zuschauer) > 0.99, f"{zeige(dort)} / {zeit(zuschauer)} / {regen(zuschauer)}")
         FIND.test("... der Bot daneben sieht seine eigene Zeit", zeit(bot) == 1000, str(zeit(bot)))
         befehl(zuschauer, "/cam back", warten=2.0)

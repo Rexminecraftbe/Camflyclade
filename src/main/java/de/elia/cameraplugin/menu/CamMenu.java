@@ -1201,8 +1201,12 @@ public final class CamMenu implements Listener {
             put(page, 22, Material.GRAY_DYE, messages.getMessage(key),
                     lines(plugin.getSpotModeration().fill(messages.getMessage(key + "-lore"), kept)), NOTHING);
         } else if (listed.empty()) {
+            // {button}: the name of the button that saves a spot, for the
+            // texts that cannot say where it is.
             String empty = "menu-spots-empty-" + tab.key;
-            put(page, 22, Material.GRAY_DYE, messages.getMessage(empty), lines(text(player, empty + "-lore")), NOTHING);
+            String button = ChatColor.stripColor(messages.getMessage("menu-new-spot"));
+            put(page, 22, Material.GRAY_DYE, messages.getMessage(empty),
+                    lines(text(player, empty + "-lore").replace("{button}", button)), NOTHING);
         }
         put(page, SLOT_BACK, Material.ARROW, "menu-to-main", click -> later(() -> openMain(player)));
         if (sharing) {
@@ -3442,16 +3446,23 @@ public final class CamMenu implements Listener {
     /**
      * A text of the language file as it is for him: on Bedrock the one with
      * {@code -bedrock} after the key, where there is one - it says how a
-     * button is used there -, otherwise the text itself.
+     * button is used there -, otherwise the text itself. Under
+     * {@code bedrock.menu: forms} the one with {@code -forms} after the key
+     * comes first, where there is one: a page as a window is a list, with no
+     * left or right to point at.
      */
     private String text(Player player, String key) {
-        if (bedrock(player)) {
-            String own = messages.getMessage(key + "-bedrock");
-            if (!own.isEmpty()) {
-                return own;
+        if (!bedrock(player)) {
+            return messages.getMessage(key);
+        }
+        if (plugin.getBedrock().menuAsForms(player)) {
+            String forms = messages.getMessage(key + "-forms");
+            if (!forms.isEmpty()) {
+                return forms;
             }
         }
-        return messages.getMessage(key);
+        String own = messages.getMessage(key + "-bedrock");
+        return own.isEmpty() ? messages.getMessage(key) : own;
     }
 
     /** One thing a button does, by the text of its name, as the click it stands for does it. */
