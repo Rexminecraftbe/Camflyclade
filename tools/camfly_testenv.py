@@ -14692,7 +14692,7 @@ def waerter_ziel_checks(env, bot):
         if laeuft:
             cam_off(bot)
         meldung = next((strip_colors(m["text"]) for m in bot.call("messages", since=since).get("messages", [])
-                        if "by a warden!" in strip_colors(m["text"])), "")
+                        if "by a warden." in strip_colors(m["text"])), "")
         return not laeuft and bool(meldung), meldung
 
     try:
@@ -14810,7 +14810,7 @@ def uebergabe_checks(env, bot):
         # irgendetwas anderes den Cam-Modus beendet hat.
         art = name_der_art[name]
         angegriffen = not laeuft and any(
-            f"by {art}!" in strip_colors(m["text"]) for m in bot.call("messages", since=since).get("messages", []))
+            f"by {art}." in strip_colors(m["text"]) for m in bot.call("messages", since=since).get("messages", []))
         nachher = None if not laeuft else server_says(bot, hat_ziel)
         # Mit dem Ende verschwindet der Koerper, und wer hinter ihm her war,
         # ist wieder hinter dem Spieler her.
