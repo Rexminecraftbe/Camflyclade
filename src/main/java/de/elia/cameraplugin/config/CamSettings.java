@@ -1495,7 +1495,7 @@ public final class CamSettings {
                 : menu.equalsIgnoreCase("chest") ? BedrockMenu.CHEST : BedrockMenu.MIXED;
         bedrockInvitationForms = config.getBoolean("bedrock.invitation-forms", true);
         bedrockChatCommands = config.getBoolean("bedrock.chat-commands", true);
-        bedrockFollowTurn = config.getChoice("bedrock.follow-view", "turn", "turn", "camera")
+        bedrockFollowTurn = config.getChoice("bedrock.follow-view", "camera", "camera", "turn")
                 .equalsIgnoreCase("turn");
         String glow = config.getString("bedrock.glow-particle", "end_rod");
         bedrockGlowParticle = glow.trim().equalsIgnoreCase("false") ? null

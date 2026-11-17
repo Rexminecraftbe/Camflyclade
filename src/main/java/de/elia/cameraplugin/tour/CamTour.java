@@ -377,8 +377,8 @@ public final class CamTour implements Listener {
     /**
      * Whether a guest on Bedrock sees through the eyes of his guide with
      * Geyser's camera, {@code bedrock.follow-view: camera}: it follows the
-     * guide's view smoothly, but draws no hands - he is shown none of the
-     * guide's items, see {@link GuideMirror}, and nothing swings.
+     * guide's view smoothly, but draws no hands - he is shown the guide's
+     * items in his hotbar alone, see {@link GuideMirror}, and nothing swings.
      */
     private boolean geyserCamera(Player guest) {
         return seesThroughGuide(guest) && plugin.getBedrock().adapts(guest) && !settings.isBedrockFollowTurn();

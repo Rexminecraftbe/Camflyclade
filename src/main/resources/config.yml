@@ -855,12 +855,12 @@ bedrock:
   # false = kein Umriss
   glow-particle: end_rod
   # Folgen durch die Augen des Leaders (follow.guide-view) für Bedrock-Spieler:
+  #   camera = die Kamera von Geyser, die dem Blick des Leaders flüssig folgt. Sie zeichnet keine Hände: die Items des
+  #            Leaders (follow.mirror-main-hand, -off-hand) stehen nur in der Hotbar des Folgers.
   #   turn   = der Folger wird jeden Tick dorthin gedreht, wohin der Leader schaut, und sieht aus seiner eigenen
-  #            Kamera direkt hinter ihm. Die Items des Leaders hat er in der Hand wie auf Java (follow.mirror-...) und sie
-  #            drehen sich mit. Das Umschauen kommt in 20 Schritten pro Sekunde.
-  #   camera = die Kamera von Geyser, die dem Blick des Leaders folgt: weicher, aber ohne Hände - von den Items des
-  #            Leaders ist nichts zu sehen
-  follow-view: turn
+  #            Kamera direkt hinter ihm. Die Items des Leaders hat er in der Hand wie auf Java, und sie drehen sich mit -
+  #            das Umschauen kommt aber nur in 20 Schritten pro Sekunde und ruckelt.
+  follow-view: camera
 
 # /cam back: Die Kamera springt zurück zum Körper, der Cam-Modus läuft weiter - für jeden, der sich verflogen hat.
 # Sie schaut danach in dieselbe Richtung wie vorher. Aus einer anderen Welt (Portal) geht es genauso zurück.

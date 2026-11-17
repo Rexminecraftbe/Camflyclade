@@ -20468,7 +20468,7 @@ def bedrock_checks(env, bot):
 
     Voreingestellt steht apply-to: bedrock, name-prefix ".", menu: mixed,
     invitation-forms, chat-commands, glow-particle: end_rod und follow-view:
-    turn da -
+    camera da -
     nachgesehen in der Datei, die das Plugin mitbringt. Fenster von Bedrock
     gibt es nur mit Geyser oder Floodgate; die hat der Testserver nicht, und
     der Bot spielt auf Java. Geprueft wird deshalb mit apply-to: all, unter
@@ -20500,11 +20500,11 @@ def bedrock_checks(env, bot):
     all bekommt der Bot im Cam-Modus Partikel an den vier Kanten seines
     Koerpers, unter bedrock keine. Laedt der Bot ihn unter all zum Folgen ein,
     steht hinter dem Knopf /cam follow accept mit dem Namen des Bots. Folgt
-    er dem Bot, der ohne Cam-Modus ein Schwert haelt, hat er es mit
-    follow-view: turn (voreingestellt) in der eigenen Hand und in seiner
-    Hotbar, bekommt keine Kamera des Bots und schaut, wohin der Bot schaut;
-    mit camera bekommt er
-    die Hand des Bots leer und nichts in die eigene.
+    er dem Bot, der ohne Cam-Modus ein Schwert haelt, bekommt er mit
+    follow-view: camera (voreingestellt) die Hand des Bots leer und das
+    Schwert nur in die Hotbar, nicht in die Hand; mit turn hat er es in Hand
+    und Hotbar, bekommt keine Kamera des Bots und schaut, wohin der Bot
+    schaut.
 
     Ein Spieler, dessen Name mit dem Punkt beginnt, ist unter apply-to:
     bedrock ein Bedrock-Spieler: Seine Action-Bar sagt nur "type /cam to
@@ -20558,14 +20558,14 @@ def bedrock_checks(env, bot):
     punkt = BotClient(env, name=BEDROCK_NAME)
     try:
         FIND.test("Voreingestellt steht bedrock mit apply-to: bedrock, name-prefix \".\", menu: mixed, "
-                  "invitation-forms, chat-commands, glow-particle: end_rod und follow-view: turn da",
+                  "invitation-forms, chat-commands, glow-particle: end_rod und follow-view: camera da",
                   re.search(r"(?m)^bedrock:\s*\n(?:\s*#.*\n)*\s*apply-to:\s*bedrock\s*\n"
                             r"(?:\s*#.*\n)*\s*name-prefix:\s*\"\.\"\s*\n"
                             r"(?:\s*#.*\n)*\s*menu:\s*mixed\s*\n"
                             r"(?:\s*#.*\n)*\s*invitation-forms:\s*true\s*\n"
                             r"(?:\s*#.*\n)*\s*chat-commands:\s*true\s*\n"
                             r"(?:\s*#.*\n)*\s*glow-particle:\s*end_rod\s*\n"
-                            r"(?:\s*#.*\n)*\s*follow-view:\s*turn\s*$", quelle_config(env)) is not None, "")
+                            r"(?:\s*#.*\n)*\s*follow-view:\s*camera\s*$", quelle_config(env)) is not None, "")
         spots_loeschen(bot, "Grundstein")
         hinstellen(bot, x, y, z)
 
@@ -20771,13 +20771,23 @@ def bedrock_checks(env, bot):
             console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:air", pause=0.5)
             cam_off(zuschauer)
 
-        # follow-view: turn (voreingestellt) - er wird mitgedreht und hat das Schwert in der eigenen Hand.
+        # follow-view: camera (voreingestellt) - die Kamera von Geyser zeichnet
+        # keine Haende: die Hand des Fuehrers kommt leer, das Schwert nur in
+        # die Hotbar, nicht als eigenes Item in der Hand.
         dort, hand, selbst, durch, hotbar = folgen()
-        FIND.test("follow-view: turn - der Gast hat das Schwert des Fuehrers in der eigenen Hand, ohne die "
-                  "Kamera des Fuehrers", gesagt(dort, rf"You follow {BOT_NAME} now") and any(selbst)
-                  and bot_nummer not in durch, f"{zeige(dort)} / eigene {selbst} / Kameras {durch}")
-        FIND.test("Auf Bedrock steht es auch in der Hotbar: der Platz, den er haelt, kommt mit dem Schwert",
-                  any(hotbar), str(hotbar))
+        FIND.test("follow-view: camera - der Gast bekommt die Hand des Fuehrers leer und das Schwert nur in die "
+                  "Hotbar, nicht in die Hand", gesagt(dort, rf"You follow {BOT_NAME} now") and bool(hand)
+                  and all(c == 0 for c in hand) and not any(selbst) and any(hotbar),
+                  f"{zeige(dort)} / am Fuehrer {hand} / eigene {selbst} / Hotbar {hotbar}")
+        aufhoeren()
+
+        # follow-view: turn - er wird mitgedreht und hat das Schwert in der eigenen Hand.
+        set_option(env, "follow-view", "turn", "bedrock")
+        dort, hand, selbst, durch, hotbar = folgen()
+        FIND.test("follow-view: turn - der Gast hat das Schwert des Fuehrers in der eigenen Hand und in der "
+                  "Hotbar, ohne die Kamera des Fuehrers", gesagt(dort, rf"You follow {BOT_NAME} now")
+                  and any(selbst) and any(hotbar) and bot_nummer not in durch,
+                  f"{zeige(dort)} / eigene {selbst} / Hotbar {hotbar} / Kameras {durch}")
         console(env, f"tp {BOT_NAME} {x} {y} {z} 90 20", pause=1.5)
         # Gelesen ueber die Konsole: der zweite Spieler hat kein op fuer /data.
         stand = log_stand(env)
@@ -20789,16 +20799,7 @@ def bedrock_checks(env, bot):
                   blick is not None and abs(((blick[0] - 90 + 180) % 360) - 180) < 2 and abs(blick[1] - 20) < 2,
                   str(blick))
         aufhoeren()
-
-        # follow-view: camera - die Kamera von Geyser zeichnet keine Haende:
-        # die Hand des Fuehrers kommt leer, nichts in die eigene.
         set_option(env, "follow-view", "camera", "bedrock")
-        dort, hand, selbst, durch, hotbar = folgen()
-        FIND.test("follow-view: camera - der Gast bekommt die Hand des Fuehrers leer und kein Schwert in die eigene",
-                  gesagt(dort, rf"You follow {BOT_NAME} now") and bool(hand) and all(c == 0 for c in hand)
-                  and not any(selbst), f"{zeige(dort)} / am Fuehrer {hand} / eigene {selbst}")
-        aufhoeren()
-        set_option(env, "follow-view", "turn", "bedrock")
         console(env, f"tp {ZUSCHAUER_NAME} {x + 4} {y} {z}", pause=0.5)
 
         set_option(env, "apply-to", "bedrock", "bedrock")

@@ -208,13 +208,13 @@ final class GuideMirror {
     }
 
     /**
-     * @param handless the guests who are not shown the guide's items in
-     *                 their hands, and are sent the guide's own hands empty:
-     *                 players on Bedrock who see through the guide's eyes
-     *                 with Geyser's camera, {@code bedrock.follow-view:
-     *                 camera}. It draws no hands - an item sent there would
-     *                 only stand in their hotbar -, and the guide's items
-     *                 would hang in front of it, see {@link #shownTo}.
+     * @param handless the guests who are shown the guide's items in their
+     *                 hotbar alone, not as the items in their hands, and are
+     *                 sent the guide's own hands empty: players on Bedrock
+     *                 who see through the guide's eyes with Geyser's camera,
+     *                 {@code bedrock.follow-view: camera}. It draws no hands,
+     *                 and the guide's items would hang in front of it, see
+     *                 {@link #shownTo}.
      */
     GuideMirror(CamSettings settings, GuideFrost frost, GuideHands hands, QuietHearts quietHearts,
                 NamespacedKey mark, Predicate<Player> handless, GuideSlots slots, Predicate<Player> bedrock) {
@@ -267,12 +267,13 @@ final class GuideMirror {
         state.offHandMarked = offHandMarked;
         state.mainHandUsed = false;
         state.offHandUsed = false;
-        boolean withHands = !handless.test(guest);
-        state.mainHand = mirror(guest, EquipmentSlot.HAND, settings.isTourMirrorMainHand() && withHands, mainHand,
+        // With Geyser's camera, which draws no hands, the guide's items go into his hotbar alone.
+        boolean hotbarOnly = handless.test(guest);
+        state.mainHand = mirror(guest, EquipmentSlot.HAND, settings.isTourMirrorMainHand(), hotbarOnly, mainHand,
                 guest.getInventory().getItemInMainHand(), state.mainHand, mainHandMarked, refresh || mainHandAgain);
-        state.offHand = mirror(guest, EquipmentSlot.OFF_HAND, settings.isTourMirrorOffHand() && withHands, offHand,
+        state.offHand = mirror(guest, EquipmentSlot.OFF_HAND, settings.isTourMirrorOffHand(), hotbarOnly, offHand,
                 guest.getInventory().getItemInOffHand(), state.offHand, offHandMarked, refresh || offHandAgain);
-        state.head = mirror(guest, EquipmentSlot.HEAD, settings.isTourMirrorHead(),
+        state.head = mirror(guest, EquipmentSlot.HEAD, settings.isTourMirrorHead(), false,
                 guide.getInventory().getHelmet(), guest.getInventory().getHelmet(), state.head, false, refresh);
     }
 
@@ -305,12 +306,14 @@ final class GuideMirror {
      * time; a slot no longer mirrored is sent his own again - as empty as
      * camera mode keeps it.
      *
-     * @param marked whether to show it with the mark, see {@link #shown}
+     * @param hotbarOnly whether it goes into his hotbar alone, not as the
+     *                   item in his hand, see {@link GuideSlots}
+     * @param marked     whether to show it with the mark, see {@link #shown}
      * @return the guide's item his client was sent there, {@code null} for
      *         nothing sent
      */
-    private ItemStack mirror(Player guest, EquipmentSlot slot, boolean on, ItemStack item, ItemStack own,
-                             ItemStack before, boolean marked, boolean refresh) {
+    private ItemStack mirror(Player guest, EquipmentSlot slot, boolean on, boolean hotbarOnly, ItemStack item,
+                             ItemStack own, ItemStack before, boolean marked, boolean refresh) {
         if (!on) {
             if (before != null) {
                 ItemStack back = own == null ? new ItemStack(Material.AIR) : own;
@@ -322,7 +325,9 @@ final class GuideMirror {
         ItemStack now = item == null ? new ItemStack(Material.AIR) : item;
         if (refresh || before == null || !now.equals(before)) {
             ItemStack shown = shown(now, marked);
-            guest.sendEquipmentChange(guest, slot, shown);
+            if (!hotbarOnly) {
+                guest.sendEquipmentChange(guest, slot, shown);
+            }
             inHotbar(guest, slot, shown);
         }
         return now.clone();
