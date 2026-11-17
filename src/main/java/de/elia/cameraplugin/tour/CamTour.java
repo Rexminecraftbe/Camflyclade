@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.tour;
 
+import de.elia.cameraplugin.bedrock.BedrockFollowView;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
@@ -299,7 +300,7 @@ public final class CamTour implements Listener {
         this.messages = plugin.getMessages();
         this.cameraPlayers = plugin.getCameraPlayers();
         this.mirror = new GuideMirror(settings, frost, hands, quietHearts,
-                new NamespacedKey(plugin, GuideMirror.MARK), this::geyserCamera, slots,
+                new NamespacedKey(plugin, GuideMirror.MARK), this::geyserCamera, this::hotbarOnly, slots,
                 guest -> plugin.getBedrock().adapts(guest));
     }
 
@@ -371,17 +372,37 @@ public final class CamTour implements Listener {
      * hands.
      */
     private boolean turnsAlong(Player guest) {
-        return seesThroughGuide(guest) && plugin.getBedrock().adapts(guest) && settings.isBedrockFollowTurn();
+        return bedrockView(guest) == BedrockFollowView.TURN;
     }
 
     /**
      * Whether a guest on Bedrock sees through the eyes of his guide with
-     * Geyser's camera, {@code bedrock.follow-view: camera}: it follows the
-     * guide's view smoothly, but draws no hands - he is shown the guide's
-     * items in his hotbar alone, see {@link GuideMirror}, and nothing swings.
+     * Geyser's camera, {@code bedrock.follow-view: camera} or {@code hotbar}:
+     * it follows the guide's view smoothly, but draws no hands, and the
+     * guide's own hands would hang in front of it - he is sent them empty,
+     * see {@link GuideMirror}.
      */
     private boolean geyserCamera(Player guest) {
-        return seesThroughGuide(guest) && plugin.getBedrock().adapts(guest) && !settings.isBedrockFollowTurn();
+        BedrockFollowView how = bedrockView(guest);
+        return how == BedrockFollowView.CAMERA || how == BedrockFollowView.HOTBAR;
+    }
+
+    /**
+     * Whether a guest on Bedrock is shown the guide's items in his hotbar
+     * alone, next to the slot he holds, {@code bedrock.follow-view: hotbar}:
+     * in his hands his own invisible player would hold them, where he stands.
+     */
+    private boolean hotbarOnly(Player guest) {
+        return bedrockView(guest) == BedrockFollowView.HOTBAR;
+    }
+
+    /**
+     * How a guest sees through the eyes of his guide on Bedrock,
+     * {@code bedrock.follow-view}; {@code null} for one on Java, or one who
+     * looks round freely.
+     */
+    private BedrockFollowView bedrockView(Player guest) {
+        return seesThroughGuide(guest) && plugin.getBedrock().adapts(guest) ? settings.getBedrockFollowView() : null;
     }
 
     /**
@@ -1524,7 +1545,7 @@ public final class CamTour implements Listener {
         boolean swings = settings.isTourMirrorSwing() && swing.serverSwingsOnUse();
         for (Player guest : shownGuests(guide)) {
             mirror.placed(guest.getUniqueId(), offHand);
-            if (swings && !geyserCamera(guest)) {
+            if (swings && !hotbarOnly(guest)) {
                 swing.swing(guest, guide, offHand, true);
             }
         }
@@ -1537,8 +1558,8 @@ public final class CamTour implements Listener {
     private void swingGuests(Player guide, boolean offHand, boolean use) {
         if (settings.isTourMirrorSwing()) {
             for (Player guest : shownGuests(guide)) {
-                // Geyser's camera on Bedrock draws no hands, see GuideMirror: nothing to swing.
-                if (!geyserCamera(guest)) {
+                // In his hotbar alone, nobody holds the items: nothing to swing.
+                if (!hotbarOnly(guest)) {
                     swing.swing(guest, guide, offHand, use);
                 }
             }
@@ -1976,12 +1997,12 @@ public final class CamTour implements Listener {
                 state.yaw = at.getYaw();
                 state.pitch = at.getPitch();
             }
-            holdTurned(guest, state);
+            holdTurned(guide, guest, state);
             if (++state.centered < CENTER_TICKS) {
                 return;
             }
         } else if (++state.sinceView < VIEW_REFRESH) {
-            holdTurned(guest, state);
+            holdTurned(guide, guest, state);
             return;
         }
         // A send that fails changes nothing on the client: whatever it saw
@@ -1992,7 +2013,7 @@ public final class CamTour implements Listener {
             mirror.viewed(guest.getUniqueId());
         }
         state.sinceView = 0;
-        holdTurned(guest, state);
+        holdTurned(guide, guest, state);
     }
 
     /**
@@ -2003,15 +2024,21 @@ public final class CamTour implements Listener {
      * it lets them sway by every turn without ever bringing them back: they
      * would hang askew in the guide's view. Turned back every tick, they still
      * tremble while he moves the mouse - less so held between the ticks too,
-     * see {@link FineHold}. Not on Bedrock, which is shown no hands there.
+     * see {@link FineHold}. Not on Bedrock, see below.
      */
-    private void holdTurned(Player guest, Guest state) {
+    private void holdTurned(Player guide, Player guest, Guest state) {
         if (plugin.getBedrock().adapts(guest)) {
             // On Bedrock, Geyser shows the guide's view through a camera of
-            // its own, which neither draws his hands nor turns with him: a
-            // turn back would only reach his client as a jump of his player,
-            // every tick, and make the view stutter.
+            // its own, which does not turn with him. Holding him between the
+            // ticks would only reach his client as jumps of his player. With
+            // the guide's items in his hands, his own invisible player holds
+            // them, where he stands: turned the way the guide looks, they turn
+            // with the view - once a tick, the camera itself untouched.
             fineHold.release(guest);
+            if (bedrockView(guest) == BedrockFollowView.CAMERA) {
+                Location look = guide.getLocation();
+                guest.setRotation(look.getYaw(), look.getPitch());
+            }
             return;
         }
         guest.setRotation(state.yaw, state.pitch);

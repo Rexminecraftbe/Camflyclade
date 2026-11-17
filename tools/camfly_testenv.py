@@ -20502,13 +20502,13 @@ def bedrock_checks(env, bot):
     all bekommt der Bot im Cam-Modus Partikel an den vier Kanten seines
     Koerpers, unter bedrock keine. Laedt der Bot ihn unter all zum Folgen ein,
     steht hinter dem Knopf /cam follow accept mit dem Namen des Bots. Folgt
-    er dem Bot, der ohne Cam-Modus ein Schwert haelt, bekommt er mit
-    follow-view: camera (voreingestellt) die Hand des Bots leer und das
-    Schwert nur in die Hotbar, rechts neben den Platz, den er haelt - nicht in
-    die Hand, die sein unsichtbarer Koerper sonst im Bild hielte; mit turn hat
-    er es in Hand
-    und Hotbar, bekommt keine Kamera des Bots und schaut, wohin der Bot
-    schaut.
+    er dem Bot, der ohne Cam-Modus ein Schwert haelt, hat er es mit
+    follow-view: camera (voreingestellt) in Hand und gehaltenem Platz, sieht
+    durch die Kamera des Bots, bekommt die Hand des Bots leer, und sein
+    Koerper schaut, wohin der Bot schaut; mit hotbar bekommt er das Schwert
+    nur rechts neben den gehaltenen Platz, nicht in die Hand; mit turn hat er
+    es in Hand und Hotbar, bekommt keine Kamera des Bots und schaut, wohin
+    der Bot schaut.
 
     Ein Spieler, dessen Name mit dem Punkt beginnt, ist unter apply-to:
     bedrock ein Bedrock-Spieler: Seine Action-Bar sagt nur "type /cam to
@@ -20775,16 +20775,45 @@ def bedrock_checks(env, bot):
             console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:air", pause=0.5)
             cam_off(zuschauer)
 
-        # follow-view: camera (voreingestellt) - die Kamera von Geyser zeichnet
-        # keine Haende: die Hand des Fuehrers kommt leer, das Schwert nur in
-        # die Hotbar, nicht als eigenes Item in der Hand.
+        def blick_des_gastes():
+            """Wohin der zweite Spieler schaut, ueber die Konsole gelesen: er hat kein op fuer /data."""
+            stand = log_stand(env)
+            console(env, f"data get entity {ZUSCHAUER_NAME} Rotation", pause=1.0)
+            neu = re.sub(r"\x1b\[[0-9;]*m", "", log_seit(env, stand))
+            treffer = re.search(r"entity data: \[(-?[\d.]+)f, (-?[\d.]+)f\]", neu)
+            return [float(treffer.group(1)), float(treffer.group(2))] if treffer else None
+
+        def wie_der_fuehrer(blick):
+            return blick is not None and abs(((blick[0] - 90 + 180) % 360) - 180) < 2 and abs(blick[1] - 20) < 2
+
+        # follow-view: camera (voreingestellt) - die Kamera von Geyser; das
+        # Schwert in seiner Hand und dem Platz, den er haelt, die Hand des
+        # Fuehrers leer, und er wird gedreht, wohin der Fuehrer schaut.
         dort, hand, selbst, durch, hotbar = folgen()
         gehalten = 36 + (zuschauer.call("state").get("held") or 0)
-        neben = 36 + (gehalten - 36 + 1) % 9
         # Wie jeder Platz zuletzt steht: der Start des Cam-Modus legt ihm
         # seine eigenen Sachen kurz zurueck, ehe er sie wieder leert.
         zuletzt = dict(hotbar)
-        FIND.test("follow-view: camera - der Gast bekommt die Hand des Fuehrers leer und das Schwert nur in die "
+        FIND.test("follow-view: camera - der Gast hat das Schwert in Hand und gehaltenem Platz, die Hand des "
+                  "Fuehrers kommt leer, und er sieht durch die Kamera des Fuehrers",
+                  gesagt(dort, rf"You follow {BOT_NAME} now") and bool(hand) and all(c == 0 for c in hand)
+                  and any(selbst) and zuletzt.get(gehalten, 0) > 0 and bot_nummer in durch,
+                  f"{zeige(dort)} / am Fuehrer {hand} / eigene {selbst} / gehalten {gehalten} / Hotbar {hotbar} "
+                  f"/ Kameras {durch}")
+        console(env, f"tp {BOT_NAME} {x} {y} {z} 90 20", pause=1.5)
+        blick = blick_des_gastes()
+        FIND.test("follow-view: camera - sein Koerper, der die Items haelt, schaut, wohin der Fuehrer schaut "
+                  "(90 / 20)", wie_der_fuehrer(blick), str(blick))
+        aufhoeren()
+
+        # follow-view: hotbar - die Hand des Fuehrers kommt leer, das Schwert
+        # nur in die Hotbar, rechts neben den Platz, den er haelt.
+        set_option(env, "follow-view", "hotbar", "bedrock")
+        dort, hand, selbst, durch, hotbar = folgen()
+        gehalten = 36 + (zuschauer.call("state").get("held") or 0)
+        neben = 36 + (gehalten - 36 + 1) % 9
+        zuletzt = dict(hotbar)
+        FIND.test("follow-view: hotbar - der Gast bekommt die Hand des Fuehrers leer und das Schwert nur in die "
                   "Hotbar, rechts neben den Platz, den er haelt - nicht in die Hand",
                   gesagt(dort, rf"You follow {BOT_NAME} now") and bool(hand) and all(c == 0 for c in hand)
                   and not any(selbst) and zuletzt.get(neben, 0) > 0 and zuletzt.get(gehalten, 0) == 0,
@@ -20799,14 +20828,8 @@ def bedrock_checks(env, bot):
                   and any(selbst) and any(c for _, c in hotbar) and bot_nummer not in durch,
                   f"{zeige(dort)} / eigene {selbst} / Hotbar {hotbar} / Kameras {durch}")
         console(env, f"tp {BOT_NAME} {x} {y} {z} 90 20", pause=1.5)
-        # Gelesen ueber die Konsole: der zweite Spieler hat kein op fuer /data.
-        stand = log_stand(env)
-        console(env, f"data get entity {ZUSCHAUER_NAME} Rotation", pause=1.0)
-        neu = re.sub(r"\x1b\[[0-9;]*m", "", log_seit(env, stand))
-        treffer = re.search(r"entity data: \[(-?[\d.]+)f, (-?[\d.]+)f\]", neu)
-        blick = [float(treffer.group(1)), float(treffer.group(2))] if treffer else None
-        FIND.test("follow-view: turn - der Gast schaut, wohin der Fuehrer schaut (90 / 20)",
-                  blick is not None and abs(((blick[0] - 90 + 180) % 360) - 180) < 2 and abs(blick[1] - 20) < 2,
+        blick = blick_des_gastes()
+        FIND.test("follow-view: turn - der Gast schaut, wohin der Fuehrer schaut (90 / 20)", wie_der_fuehrer(blick),
                   str(blick))
         aufhoeren()
         set_option(env, "follow-view", "camera", "bedrock")
