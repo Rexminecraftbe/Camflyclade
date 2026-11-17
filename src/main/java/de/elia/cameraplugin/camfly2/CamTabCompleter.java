@@ -19,6 +19,7 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -136,49 +137,65 @@ public class CamTabCompleter implements TabCompleter {
         Player own = player != null && plugin.getSettings().getMenuAccess().allowsCommands() ? player : null;
         boolean sharing = plugin.getSettings().isViewpointsSharing();
         boolean spotCommand = args.length > 1 && args[0].equalsIgnoreCase("spot") && own != null && spots.isEnabled();
+        // A name of a spot may have spaces: what he has typed of it, over
+        // several words, is matched as one, see restOf.
+        String spotWord = spotCommand ? args[1].toLowerCase(Locale.ROOT) : "";
         if (spotCommand && args.length == 2) {
             List<String> words = new ArrayList<>(
-                    startingWith(args[1].toLowerCase(Locale.ROOT), "set", "delete", "list"));
+                    startingWith(spotWord, "set", "delete", "list"));
             if (sharing) {
-                words.addAll(startingWith(args[1].toLowerCase(Locale.ROOT), "share", "unshare"));
+                words.addAll(startingWith(spotWord, "share", "unshare"));
                 if (!spots.offers(own).isEmpty()) {
-                    words.addAll(startingWith(args[1].toLowerCase(Locale.ROOT), "accept"));
+                    words.addAll(startingWith(spotWord, "accept"));
                 }
                 if (!spots.declinableLabels(own).isEmpty()) {
-                    words.addAll(startingWith(args[1].toLowerCase(Locale.ROOT), "decline"));
+                    words.addAll(startingWith(spotWord, "decline"));
                 }
                 if (!spots.likeableLabels(own).isEmpty()) {
-                    words.addAll(startingWith(args[1].toLowerCase(Locale.ROOT), "like"));
+                    words.addAll(startingWith(spotWord, "like"));
                 }
             }
-            words.addAll(spotNames(own, args[1]));
-            words.addAll(matching(spots.sharedLabels(own), args[1]));
+            words.addAll(restOf(spots.names(own), args, 1));
+            words.addAll(restOf(spots.sharedLabels(own), args, 1));
             return words;
         }
-        if (spotCommand && args.length == 3 && (args[1].equalsIgnoreCase("delete")
-                || (sharing && (args[1].equalsIgnoreCase("share") || args[1].equalsIgnoreCase("unshare"))))) {
-            return spotNames(own, args[2]);
+        if (spotCommand && !CamSpots.WORDS.contains(spotWord)) {
+            List<String> words = new ArrayList<>(restOf(spots.names(own), args, 1));
+            words.addAll(restOf(spots.sharedLabels(own), args, 1));
+            return words;
         }
-        if (spotCommand && args.length == 3 && sharing && args[1].equalsIgnoreCase("accept")) {
-            return matching(spots.offerLabels(own), args[2]);
+        if (spotCommand && spotWord.equals("delete")) {
+            return restOf(spots.names(own), args, 2);
         }
-        if (spotCommand && args.length == 3 && sharing && args[1].equalsIgnoreCase("decline")) {
-            return matching(spots.declinableLabels(own), args[2]);
+        if (spotCommand && sharing && spotWord.equals("accept")) {
+            return restOf(spots.offerLabels(own), args, 2);
         }
-        if (spotCommand && args.length == 3 && sharing && args[1].equalsIgnoreCase("like")) {
-            return matching(spots.likeableLabels(own), args[2]);
+        if (spotCommand && sharing && spotWord.equals("decline")) {
+            return restOf(spots.declinableLabels(own), args, 2);
         }
-        if (spotCommand && args.length == 4 && sharing && args[1].equalsIgnoreCase("share")) {
-            List<String> names = new ArrayList<>(startingWith(args[3].toLowerCase(Locale.ROOT), "all"));
-            for (Player other : Bukkit.getOnlinePlayers()) {
-                if (!other.equals(own) && own.canSee(other)) {
-                    names.add(other.getName());
+        if (spotCommand && sharing && spotWord.equals("like")) {
+            return restOf(spots.likeableLabels(own), args, 2);
+        }
+        if (spotCommand && sharing && (spotWord.equals("share") || spotWord.equals("unshare"))) {
+            // The name, word by word - and once the words before this one
+            // are the whole name of a spot of his, the player.
+            List<String> words = new ArrayList<>(restOf(spots.names(own), args, 2));
+            String spot = args.length > 3 ? String.join(" ", Arrays.copyOfRange(args, 2, args.length - 1)) : null;
+            if (spot != null && isSpotOf(own, spot)) {
+                String partial = args[args.length - 1];
+                if (spotWord.equals("unshare")) {
+                    words.addAll(matching(spots.sharedNames(own, spot), partial));
+                } else {
+                    List<String> names = new ArrayList<>(startingWith(partial.toLowerCase(Locale.ROOT), "all"));
+                    for (Player other : Bukkit.getOnlinePlayers()) {
+                        if (!other.equals(own) && own.canSee(other)) {
+                            names.add(other.getName());
+                        }
+                    }
+                    words.addAll(matching(names, partial));
                 }
             }
-            return matching(names, args[3]);
-        }
-        if (spotCommand && args.length == 4 && sharing && args[1].equalsIgnoreCase("unshare")) {
-            return matching(spots.sharedNames(own, args[2]), args[3]);
+            return words;
         }
         CamTour tour = plugin.getTour();
         if (args.length == 2 && CamCommand.isFollowWord(args[0]) && own != null && tour.isEnabled()) {
@@ -315,16 +332,34 @@ public class CamTabCompleter implements TabCompleter {
         return matches;
     }
 
-    /** The names of his own spots, for {@code /cam spot <name>} and {@code /cam spot delete <name>}. */
-    private List<String> spotNames(Player player, String partial) {
-        String start = partial.toLowerCase(Locale.ROOT);
-        List<String> names = new ArrayList<>();
-        for (String name : spots.names(player)) {
-            if (name.toLowerCase(Locale.ROOT).startsWith(start)) {
-                names.add(name);
+    /**
+     * Names that may have spaces - of spots, {@code Owner:spot} -, completed
+     * over the words of the command from one on: those that begin with all
+     * he has typed of them, capitals not counting. As only the last word is
+     * replaced, each comes from where that word begins - after
+     * {@code /cam spot Mein H} the name {@code Mein Haus} comes as
+     * {@code Haus}.
+     */
+    private static List<String> restOf(List<String> names, String[] args, int from) {
+        String typed = String.join(" ", Arrays.copyOfRange(args, from, args.length));
+        int cut = typed.length() - args[args.length - 1].length();
+        List<String> matches = new ArrayList<>();
+        for (String name : names) {
+            if (name.length() >= typed.length() && name.regionMatches(true, 0, typed, 0, typed.length())) {
+                matches.add(name.substring(cut));
             }
         }
-        return names;
+        return matches;
+    }
+
+    /** Whether he has a spot of this name, capitals not counting. */
+    private boolean isSpotOf(Player player, String name) {
+        for (String own : spots.names(player)) {
+            if (own.equalsIgnoreCase(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The players in camera mode, for {@code /cam tp <name>} - nobody's own. */

@@ -28,7 +28,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 /**
  * Spots, {@code /cam spot}: places the camera jumps to, each looking a way of
@@ -61,11 +60,14 @@ import java.util.regex.Pattern;
  */
 public final class CamSpots {
 
-    /** What a name of a spot is made of: letters, digits, - and _, one to sixteen of them. */
-    private static final Pattern NAME = Pattern.compile("[A-Za-z0-9_-]{1,16}");
-
-    /** The words after {@code /cam spot} that are no spot. */
-    private static final Set<String> WORDS = Set.of("set", "delete", "list", "share", "unshare", "accept",
+    /**
+     * The words after {@code /cam spot} that are no spot. A name of a spot
+     * may begin with one all the same: {@code /cam spot set list} saves a
+     * spot called list. The command then takes it for the word, so the
+     * button of the list jumps there as {@code Owner:spot}, see
+     * {@link #jumpCommand}.
+     */
+    public static final Set<String> WORDS = Set.of("set", "delete", "list", "share", "unshare", "accept",
             "decline", "like");
 
     /** The word that makes a spot public, {@code /cam spot share <spot> all}. */
@@ -240,26 +242,34 @@ public final class CamSpots {
             list(player);
             return;
         }
+        // A name may have spaces: it is all the words after the one of the
+        // command - after share and unshare all but the last, the player.
         String first = args[0].toLowerCase(Locale.ROOT);
-        if (args.length == 2 && first.equals("set")) {
-            set(player, args[1]);
-        } else if (args.length == 2 && first.equals("delete")) {
-            delete(player, args[1]);
-        } else if (args.length == 3 && first.equals("share")) {
-            share(player, args[1], args[2]);
-        } else if (args.length == 3 && first.equals("unshare")) {
-            unshare(player, args[1], args[2]);
-        } else if (args.length == 2 && first.equals("accept")) {
-            accept(player, args[1]);
-        } else if (args.length == 2 && first.equals("decline")) {
-            decline(player, args[1]);
-        } else if (args.length == 2 && first.equals("like")) {
-            like(player, args[1]);
-        } else if (args.length == 1 && !WORDS.contains(first)) {
-            jump(player, args[0]);
+        String rest = words(args, 1, args.length);
+        if (args.length >= 2 && first.equals("set")) {
+            set(player, rest);
+        } else if (args.length >= 2 && first.equals("delete")) {
+            delete(player, rest);
+        } else if (args.length >= 3 && first.equals("share")) {
+            share(player, words(args, 1, args.length - 1), args[args.length - 1]);
+        } else if (args.length >= 3 && first.equals("unshare")) {
+            unshare(player, words(args, 1, args.length - 1), args[args.length - 1]);
+        } else if (args.length >= 2 && first.equals("accept")) {
+            accept(player, rest);
+        } else if (args.length >= 2 && first.equals("decline")) {
+            decline(player, rest);
+        } else if (args.length >= 2 && first.equals("like")) {
+            like(player, rest);
+        } else if (!WORDS.contains(first)) {
+            jump(player, words(args, 0, args.length));
         } else {
             messages.sendConfiguredMessage(player, "spot-usage");
         }
+    }
+
+    /** The words of a command from one to before another, with a space between them: a name with spaces. */
+    private static String words(String[] args, int from, int to) {
+        return String.join(" ", Arrays.copyOfRange(args, from, to));
     }
 
     /**
@@ -268,11 +278,13 @@ public final class CamSpots {
      *
      * @return the spot, or {@code null} when it was not saved; he has been told why
      */
-    public Spot set(Player player, String name) {
+    public Spot set(Player player, String typed) {
         if (!maySetHere(player)) {
             return null;
         }
-        if (!NAME.matcher(name).matches() || WORDS.contains(Spot.key(name))) {
+        // Any sign goes, spaces too; only the length counts.
+        String name = Spot.validName(typed);
+        if (name == null) {
             messages.sendConfiguredMessage(player, "spot-bad-name");
             return null;
         }
@@ -793,7 +805,7 @@ public final class CamSpots {
         }
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
         line.addAll(button(player, "spot-button-go", spot.name(),
-                new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam spot " + spot.name())));
+                new ClickEvent(ClickEvent.Action.RUN_COMMAND, jumpCommand(player, spot))));
         if (settings.isViewpointsSharing()) {
             line.addAll(button(player, "spot-button-share", spot.name(),
                     new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/cam spot share " + spot.name() + " ")));
@@ -864,6 +876,34 @@ public final class CamSpots {
     }
 
     /**
+     * The command that jumps to one of his spots: {@code /cam spot <name>},
+     * or - when the name begins with a word of the command, such as
+     * {@code list}, which the command would take for that word -
+     * {@code /cam spot <he>:<name>}, as others reach it.
+     */
+    private static String jumpCommand(Player player, Spot spot) {
+        int space = spot.name().indexOf(' ');
+        String first = (space < 0 ? spot.name() : spot.name().substring(0, space)).toLowerCase(Locale.ROOT);
+        return "/cam spot " + (WORDS.contains(first) ? player.getName() + ":" : "") + spot.name();
+    }
+
+    /**
+     * One of his own spots by what follows {@code /cam spot}: its name, or
+     * {@code <he>:<name>} as others write it, see {@link #jumpCommand}.
+     * The name itself comes first, so a spot of his whose name has a
+     * {@code :} is found as well.
+     */
+    private Spot ownSpot(Player player, String name) {
+        Map<String, Spot> spots = spotsOf(player);
+        Spot spot = spots.get(Spot.key(name));
+        int colon = name.indexOf(':');
+        if (spot == null && colon > 0 && name.substring(0, colon).equalsIgnoreCase(player.getName())) {
+            spot = spots.get(Spot.key(name.substring(colon + 1)));
+        }
+        return spot;
+    }
+
+    /**
      * Puts the camera down at one of his spots, or at one shared with him -
      * {@code Owner:spot} -, if it may be there. Out of camera mode, it starts
      * first, where he stands, if the spot is no further than
@@ -871,10 +911,10 @@ public final class CamSpots {
      * of a start of {@code /cam}.
      */
     public void jump(Player player, String name) {
-        Spot spot;
+        Spot spot = ownSpot(player, name);
         String label;
         UUID owner;
-        if (name.indexOf(':') >= 0) {
+        if (spot == null && name.indexOf(':') >= 0) {
             Share share = settings.isViewpointsSharing() ? shared.find(player.getUniqueId(), name) : null;
             if (share == null) {
                 messages.sendConfiguredMessage(player, "spot-shared-unknown", "{spot}", name);
@@ -887,7 +927,6 @@ public final class CamSpots {
             label = share.label();
             owner = share.getOwner();
         } else {
-            spot = spotsOf(player).get(Spot.key(name));
             if (spot == null) {
                 messages.sendConfiguredMessage(player, "spot-unknown", "{spot}", name);
                 return;

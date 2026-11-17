@@ -373,7 +373,7 @@ public final class SpotGuestbook implements Listener {
                     }
                 }
                 if (!of.isEmpty()) {
-                    news.computeIfAbsent(owner, id -> new LinkedHashMap<>()).put(Spot.key(key), of);
+                    news.computeIfAbsent(owner, id -> new LinkedHashMap<>()).put(Spot.key(Spot.fromPathKey(key)), of);
                 }
             }
         }
@@ -411,7 +411,7 @@ public final class SpotGuestbook implements Listener {
         }
         for (Map.Entry<UUID, Map<String, News>> own : news.entrySet()) {
             for (Map.Entry<String, News> spot : own.getValue().entrySet()) {
-                String path = own.getKey() + ".news." + spot.getKey();
+                String path = own.getKey() + ".news." + Spot.pathKey(spot.getKey());
                 file.set(path + ".views", spot.getValue().views);
                 List<String> likes = new ArrayList<>();
                 for (UUID liker : spot.getValue().likes) {

@@ -412,7 +412,7 @@ public final class SharedSpots {
             for (Share share : own.getValue().values()) {
                 file.set(base + ".name", share.getOwnerName());
                 Spot spot = share.getSpot();
-                String path = base + ".spots." + spot.key();
+                String path = base + ".spots." + Spot.pathKey(spot.key());
                 file.set(path + ".name", spot.name());
                 file.set(path + ".world", spot.world());
                 file.set(path + ".x", spot.x());

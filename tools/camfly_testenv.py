@@ -7464,9 +7464,13 @@ def aussichtspunkt_checks(env, bot):
     Grundgestein dazwischen nicht hin - jedes Mal mit der Meldung, warum, und
     die Kamera bleibt, wo sie ist.
 
-    Ein falscher Name, ein voller Platz, ein unbekannter Punkt und das
+    Ein zu langer Name, ein voller Platz, ein unbekannter Punkt und das
     Loeschen sagen, was los ist; ein Name, den es schon gibt, wandert, auch
     wenn kein Platz mehr frei ist; mit max-per-player: 0 gibt es kein Limit.
+    Sonst ist jeder Name mit 1 bis 16 Zeichen recht: "Mein Haus.1" mit
+    Leerzeichen und Punkt geht zu setzen, anzuspringen, zu vervollstaendigen
+    und zu loeschen und steht nach /cam reload wieder in der Liste, und
+    "list", ein Wort des Befehls, springt ueber den Knopf als Besitzer:list.
     In der Datei steht bei jedem Punkt, wann er entstand. Die Tab-Vervollstaendigung bietet nach
     /cam spot set, delete, list und die Namen an, nach /cam spot delete die
     Namen. Mit storage: memory steht der Punkt nicht in der Datei, und nach
@@ -7620,8 +7624,7 @@ def aussichtspunkt_checks(env, bot):
 
         cam_off(bot)
         for name, eingabe, muster in (
-                ("/cam spot set mit einem Punkt im Namen", "/cam spot set a.b", r"A spot name has 1 to 16"),
-                ("/cam spot set list - ein Wort des Befehls ist kein Name", "/cam spot set list",
+                ("/cam spot set mit 17 Zeichen - zu lang", "/cam spot set Siebzehn-Zeichen!",
                  r"A spot name has 1 to 16"),
                 ("/cam spot delete eines unbekannten Punkts", "/cam spot delete Nix", r"You have no spot called Nix")):
             zeilen = befehl(bot, eingabe)
@@ -7641,6 +7644,39 @@ def aussichtspunkt_checks(env, bot):
                   f"{zeige(zeilen)} / {zeige(liste)}")
         befehl(bot, "/cam spot delete Dritter")
         set_option(env, "max-per-player", "10")
+
+        # Jeder Name mit 1 bis 16 Zeichen: Leerzeichen, Punkt, ein Wort des Befehls.
+        zeilen = befehl(bot, "/cam spot set Mein Haus.1") + befehl(bot, "/cam spot set list")
+        FIND.test("/cam spot set Mein Haus.1 und list - Leerzeichen, Punkt und ein Wort des Befehls gehen",
+                  gesagt(zeilen, r"Spot Mein Haus\.1 saved here") and gesagt(zeilen, r"Spot list saved here"),
+                  zeige(zeilen))
+        text = datei_text()
+        FIND.test("Mein Haus.1 steht in der Datei unter einem Schluessel ohne Punkt",
+                  re.search(r"name:\s*Mein Haus\.1", text) is not None
+                  and re.search(r"(?m)^  mein haus%2E1:\s*$", text) is not None, text[-400:] or "keine Datei")
+        seit = bot.call("chat_packets", since=10 ** 9).get("count", 0)
+        befehl(bot, "/cam spot list")
+        pakete = " ".join(p["text"] for p in bot.call("chat_packets", since=seit).get("packets", []))
+        FIND.test("/cam spot list - Knoepfe fuer Mein Haus.1, und list springt als Besitzer:list",
+                  "/cam spot Mein Haus.1" in pakete and "/cam spot delete Mein Haus.1" in pakete
+                  and f"/cam spot {BOT_NAME}:list" in pakete, pakete[-400:])
+        tabs = tab("/cam spot Mein H")
+        FIND.test("Tab nach /cam spot Mein H: der Rest des Namens", tabs == ["Haus.1"], str(tabs))
+        cam_on(bot)
+        zeilen = befehl(bot, "/cam spot mein haus.1")
+        FIND.test("/cam spot mein haus.1 - ein Name mit Leerzeichen springt", gesagt(zeilen, r"At spot Mein Haus\.1"),
+                  zeige(zeilen))
+        zeilen = befehl(bot, f"/cam spot {BOT_NAME}:list")
+        FIND.test("/cam spot Besitzer:list - der eigene Punkt list springt", gesagt(zeilen, r"At spot list"),
+                  zeige(zeilen))
+        cam_off(bot)
+        console(env, "cam reload", pause=2)
+        zeilen = befehl(bot, "/cam spot list")
+        FIND.test("Nach /cam reload ist Mein Haus.1 aus der Datei wieder da", gesagt(zeilen, r"- Mein Haus\.1: "),
+                  zeige(zeilen))
+        zeilen = befehl(bot, "/cam spot delete Mein Haus.1") + befehl(bot, "/cam spot delete list")
+        FIND.test("/cam spot delete Mein Haus.1 und list - beide geloescht",
+                  gesagt(zeilen, r"Spot Mein Haus\.1 deleted") and gesagt(zeilen, r"Spot list deleted"), zeige(zeilen))
         zeilen = befehl(bot, "/cam spot delete Turm")
         FIND.test("/cam spot delete Turm - der Punkt ist geloescht", gesagt(zeilen, r"Spot turm deleted"),
                   zeige(zeilen))
@@ -7667,7 +7703,7 @@ def aussichtspunkt_checks(env, bot):
             set_options(env, [("max-distance", "100.0"), ("max-distance-mode", "fixed"),
                               ("max-per-player", "10"), ("storage", "file", "viewpoints"),
                               ("start-distance", "16", "viewpoints")])
-            spots_loeschen(bot, "Turm", "Weit", "Mem", "Dritter")
+            spots_loeschen(bot, "Turm", "Weit", "Mem", "Dritter", "Mein Haus.1", "list")
             bot.chat(f"/fill {wand} minecraft:air")
             bot.chat(f"/setblock {bx} {y} {bz} minecraft:air")
             bot.chat(f"/fillbiome {biom} minecraft:plains")
