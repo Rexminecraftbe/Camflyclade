@@ -202,21 +202,14 @@ public class CamCommand implements CommandExecutor {
      * follow and of a spot offered to him, which run
      * {@code /cam follow accept|decline <player>} and
      * {@code /cam spot accept|decline <owner>:<spot>} - a click on them answers
-     * right away -, and the jump {@code /cam spot <owner>:<spot>} the web map
-     * gives to type, as a web page cannot open the menu.
+     * right away.
      */
     private static boolean fromOutsideTheMenu(String[] args) {
         if (args.length == 3 && isFollowWord(args[0])) {
             return args[1].equalsIgnoreCase("accept") || args[1].equalsIgnoreCase("decline");
         }
-        if (args.length < 2 || !args[0].equalsIgnoreCase("spot")) {
-            return false;
-        }
-        if (args[1].equalsIgnoreCase("accept") || args[1].equalsIgnoreCase("decline")) {
-            return args.length >= 3;
-        }
-        // No word of the command has a colon in it.
-        return args[1].indexOf(':') > 0;
+        return args.length >= 3 && args[0].equalsIgnoreCase("spot")
+                && (args[1].equalsIgnoreCase("accept") || args[1].equalsIgnoreCase("decline"));
     }
 
     /**

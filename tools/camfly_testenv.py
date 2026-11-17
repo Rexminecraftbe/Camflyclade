@@ -10897,9 +10897,9 @@ def menue_checks(env, bot):
 
     access: menu laesst nur das Menue: /cam spot sagt, dass es dafuer
     /cam menu gibt, und die Tab-Vervollstaendigung bietet menu an, spot
-    nicht. Was von ausserhalb des Menues kommt, geht trotzdem: /cam spot
-    accept (der Knopf im Chat) und /cam spot Besitzer:Name (der Sprung von
-    der Web-Karte). Ist photo-mode aus, sagt /cam photo, dass es aus ist,
+    nicht. Der Knopf eines angebotenen Spots im Chat geht trotzdem (/cam
+    spot accept), der Sprung /cam spot Besitzer:Name nicht. Ist photo-mode
+    aus, sagt /cam photo, dass es aus ist,
     statt aufs Menue zu verweisen. access: command laesst nur die Befehle,
     /cam menu ist aus. Mit
     false geht keins von beiden, /cam selbst aber schon.
@@ -11230,7 +11230,8 @@ def menue_checks(env, bot):
         FIND.test("Ein Klick auf den Kopf zeigt seine Fluege, der neueste zuerst, mit Datum, Dauer, Strecke, Start "
                   "und Ende",
                   f"Flights: {BOT_NAME}" in (f.get("title") or "") and "#1" in neuester and "#2" in aelterer
-                  and all(w in neuester for w in ("Started:", "Duration:", "Distance:", "From:", "To:"))
+                  and all(w in neuester for w in ("Duration:", "Distance:", "From:", "To:"))
+                  and "Started:" not in neuester
                   and "49" in knopf, f"{f.get('title')} / {neuester} / {aelterer}")
         seit = bot.mark()
         klick(1, warten=2.0)
@@ -11299,11 +11300,10 @@ def menue_checks(env, bot):
         bot.call("close_window", wait=10)
         annehmen = befehl(bot, "/cam spot accept Niemand:Haus")
         sprung = befehl(bot, "/cam spot Niemand:Haus")
-        FIND.test("access: menu - was von ausserhalb des Menues kommt, geht als Befehl: der Knopf eines "
-                  "angebotenen Spots im Chat und der Sprung, den die Web-Karte zum Abtippen zeigt",
+        FIND.test("access: menu - der Knopf eines angebotenen Spots im Chat geht als Befehl, der Sprung nicht",
                   gesagt(annehmen, r"No spot Niemand:Haus is offered to you")
-                  and gesagt(sprung, r"Nobody shares a spot called Niemand:Haus with you")
-                  and not gesagt(annehmen + sprung, r"Use /cam menu"), f"{zeige(annehmen)} / {zeige(sprung)}")
+                  and not gesagt(annehmen, r"Use /cam menu") and gesagt(sprung, r"Use /cam menu for that"),
+                  f"{zeige(annehmen)} / {zeige(sprung)}")
         set_option(env, "enabled", "false", "photo-mode")
         foto = befehl(bot, "/cam photo")
         FIND.test("access: menu - was in config.yml aus ist, heisst aus, statt aufs Menue zu verweisen",
@@ -12112,7 +12112,7 @@ def spotmoderation_checks(env, bot):
         f = fenster(zuschauer)
         gesperrt = item_text(f.get("slots", {}).get("22"))
         FIND.test("Im Spot-Menue zeigt ihm der Reiter der oeffentlichen nur das graue Zeichen: gesperrt",
-                  "Restricted for you" in gesperrt and "Restricted permanently" in gesperrt and platz(f, "AdmPub") is None, f"{gesperrt} / {texte(f)}")
+                  "Not available" in gesperrt and "Restricted for you permanently" in gesperrt and platz(f, "AdmPub") is None, f"{gesperrt} / {texte(f)}")
         klick(zuschauer, 48)
         f = fenster(zuschauer)
         FIND.test("Seine eigenen Punkte zeigt der Reiter der privaten weiter",
@@ -12169,7 +12169,7 @@ def spotmoderation_checks(env, bot):
         klick(zuschauer, 49)
         aus = item_text(fenster(zuschauer).get("slots", {}).get("22"))
         FIND.test("Fuer alle: der Reiter der oeffentlichen sagt, dass es abgeschaltet ist",
-                  "Switched off" in aus and "Off for everybody permanently" in aus, aus)
+                  "Not available" in aus and "Off for everybody permanently" in aus, aus)
         zuschauer.call("close_window", wait=10)
         befehl(bot, "/cam menu", warten=1.0)
         klick(bot, 10)
@@ -12404,7 +12404,7 @@ def tourmoderation_checks(env, bot):
         mitte = item_text(seite.get("slots", {}).get("22"))
         FIND.test("Aus: einladen sagt, dass Fuehrungen abgeschaltet sind, seine Seite sagt es einmal, in der Mitte",
                   gesagt(zeilen, r"Following is switched off permanently")
-                  and "Following is switched off" in mitte and "Off for everybody" in mitte
+                  and "Following is switched off" in mitte and "For everybody" in mitte
                   and "switched off" not in item_text(seite.get("slots", {}).get("47")),
                   f"{zeige(zeilen)} / {mitte} / {item_text(seite.get('slots', {}).get('47'))}")
         zeilen = befehl(zuschauer, f"/cam follow accept {BOT_NAME}")
@@ -20587,7 +20587,8 @@ def bedrock_checks(env, bot):
     Ein zweiter Spieler im Cam-Modus leuchtet (glowing-outline: true): Unter
     all bekommt der Bot im Cam-Modus Partikel an den vier Kanten seines
     Koerpers, unter bedrock keine. Laedt der Bot ihn unter all zum Folgen ein,
-    steht hinter dem Knopf /cam follow accept mit dem Namen des Bots. Folgt
+    steht hinter dem Knopf /cam follow accept mit dem Namen des Bots; mit
+    menu.access: menu steht statt der Knoepfe "answer in /cam menu". Folgt
     er dem Bot, der ohne Cam-Modus ein Schwert haelt, bekommt er mit
     follow-view: camera (voreingestellt) die Hand des Bots leer und das
     Schwert nur in die Hotbar, rechts neben den Platz, den er haelt - nicht in
@@ -20857,6 +20858,27 @@ def bedrock_checks(env, bot):
                   gesagt(dort, rf"\[Follow\] \(/cam follow accept {BOT_NAME}\)")
                   and gesagt(dort, rf"\(/cam follow decline {BOT_NAME}\)"), zeige(dort))
         befehl(zuschauer, f"/cam follow decline {BOT_NAME}")
+
+        # Unter menu.access: menu antwortet er im Menue: Das steht hinter der
+        # Einladung, ohne Befehl. Eingeladen wird darum ueber die Seite der
+        # Fuehrung; der Reload beendet beide Cam-Modi, der Bot fuehrt ohne.
+        set_option(env, "access", "menu", "menu")
+        hinstellen(bot, x, y, z)
+        console(env, f"tp {ZUSCHAUER_NAME} {x + 4} {y} {z}", pause=0.5)
+        seit = zuschauer.mark()
+        menue()
+        klick(gross(9), warten=2.0)
+        einladen = platz_mit(fenster(), ZUSCHAUER_NAME)
+        if einladen is not None:
+            klick(einladen, warten=2.0)
+        bot.call("close_window", wait=10)
+        dort = zeilen_seit(zuschauer, seit)
+        FIND.test("apply-to: all, menu.access: menu - hinter der Einladung steht, dass er im Menue antwortet, "
+                  "kein Befehl",
+                  gesagt(dort, rf"{BOT_NAME} invites you to follow") and gesagt(dort, r"answer in /cam menu")
+                  and not gesagt(dort, r"\(/cam follow"), zeige(dort))
+        befehl(zuschauer, f"/cam follow decline {BOT_NAME}")
+        set_option(env, "access", "both", "menu")
 
         # Folgen ohne Cam-Modus des Fuehrers, mit einem Schwert in der Hand.
         bot_nummer = bot.call("effects").get("self")
@@ -21228,7 +21250,9 @@ def webkarte_checks(env, bot):
     oeffentlich, dazu den privaten Spot Geheim: Auf jeder Karte steht eine
     Ebene "Spots", sichtbar und abschaltbar, mit einer Nadel camfly-<uuid>-karte
     "Karte (CamFlyTester)" an seinem Ort; ein Klick nennt den Befehl /cam spot
-    CamFlyTester:Karte, die Likes und was er zeigt. Dynmap nimmt das Icon
+    CamFlyTester:Karte, die Likes und was er zeigt, nicht aber Ort und Welt -
+    die zeigt die Nadel. Mit menu.access: menu nennt er statt des Befehls
+    den Weg durchs Menue. Dynmap nimmt das Icon
     camera, squaremap das eigene Icon der Ebene, 16 x 16. Geheim steht
     nirgends. Liked der zweite Spieler Karte, steht 1 like im Text, und Name
     und Icon bleiben, wie sie sind.
@@ -21300,9 +21324,18 @@ def webkarte_checks(env, bot):
         FIND.test("BlueMap: die Nadel steht am Ort des Spots",
                   ort is not None and abs(float(ort.group(1)) - x) < 1.0 and abs(float(ort.group(3)) - z) < 1.0,
                   b[0] if b else "")
-        FIND.test("Der Klick nennt den Befehl zum Hinspringen, die Likes und was der Spot zeigt",
+        FIND.test("Der Klick nennt den Befehl zum Hinspringen, die Likes und was der Spot zeigt - wo er liegt, "
+                  "zeigt die Nadel selbst",
                   all(f"/cam spot {BOT_NAME}:Karte" in t and "0 likes" in t and "Shows: sunset" in t
-                      for t in b + d + s), "\n".join(b + d + s))
+                      and "(world)" not in t for t in b + d + s), "\n".join(b + d + s))
+        set_option(env, "access", "menu", "menu")
+        time.sleep(1.0)
+        karten = alle()
+        menue_texte = nadeln(karten["bluemap"]) + nadeln(karten["dynmap"]) + nadeln(karten["squaremap"])
+        FIND.test("menu.access: menu - der Klick nennt statt des Befehls den Weg durchs Menue",
+                  len(menue_texte) == 3 and all("/cam menu" in t and "/cam spot" not in t for t in menue_texte),
+                  "\n".join(menue_texte))
+        set_option(env, "access", "both", "menu")
         FIND.test("Dynmap nimmt das Icon camera, squaremap das eigene der Ebene, 16 x 16",
                   bool(d) and "icon=camera" in d[0] and bool(s) and "icon=camfly-spots_spot 16x16" in s[0]
                   and any("icon id=camfly-spots_spot size=16x16" in z for z in square), "\n".join(d + s))

@@ -679,7 +679,9 @@ public final class CamSpots {
      * Tells a player online that a spot is offered to him, with the buttons to
      * accept it and to turn it down. They run their command while only the
      * menu goes as well - {@link de.elia.cameraplugin.camfly2.CamCommand}
-     * lets it through -, so a click answers right away. On Bedrock, with
+     * lets it through -, so a click answers right away; on Bedrock, where
+     * nothing in the chat can be clicked, the line says then that he answers
+     * in the menu. On Bedrock, with
      * {@code bedrock.invitation-forms}, a window asks him as well - while
      * there are buttons at all.
      */
@@ -692,7 +694,10 @@ public final class CamSpots {
                 .replace("{spot}", share.getSpot().name());
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
         boolean answerable = settings.getMenuAccess().allowsMenu() || settings.getMenuAccess().allowsCommands();
-        if (answerable) {
+        if (answerable && plugin.getBedrock().answersInMenu(other)) {
+            // He cannot click them, and typing is not what the menu is for.
+            line.addAll(plugin.getBedrock().menuHint());
+        } else if (answerable) {
             line.addAll(button(other, "spot-button-accept", share.label(),
                     new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam spot accept " + share.label())));
             line.addAll(button(other, "spot-button-decline", share.label(),

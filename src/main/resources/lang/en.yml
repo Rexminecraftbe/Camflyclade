@@ -86,8 +86,10 @@ messages:
   # says the command to type, {command}; one that needs more after it, such as a name, ends in ... The
   # bedrock-form-... texts are the windows that ask about a spot offered to them and about an invitation to follow
   # (bedrock.invitation-forms): their title and their two buttons; the text in them is spot-offered-to-you or
-  # tour-invitation.
+  # tour-invitation. While menu.access lets only the menu through, those two have bedrock-chat-menu behind them in
+  # place of their buttons: the answer goes through the menu.
   bedrock-chat-command: " &8(&7{command}&8)"
+  bedrock-chat-menu: " &8(&7answer in /cam menu&8)"
   bedrock-form-follow-accept: "Follow"
   bedrock-form-follow-decline: "Decline"
   bedrock-form-follow-title: "Invitation to follow"
@@ -291,13 +293,13 @@ messages:
   # The flights of a player on the admin page: menu-admin-flight with {number} (1 the newest) and {date}, when it
   # began as menu-admin-flight-date writes it (a pattern of Java's DateTimeFormatter, e.g. dd.MM.yyyy HH:mm), and
   # under it menu-admin-flight-lore with {time} how long it took, {distance} in blocks, {from} where the body stood and
-  # {to} where the camera was last, both as trail-place has them.
+  # {to} where the camera was last, both as trail-place has them ({date} there too).
   menu-admin-flight: "&f#{number} &7- &f{date}"
   menu-admin-flight-actions: "&eLeft-click: show\n&eRight-click: show and go to start"
   menu-admin-flight-actions-bedrock: "&eTap: show, or show and go to start"
   menu-admin-flight-date: "yyyy-MM-dd HH:mm"
   menu-admin-flight-flying: "&aStill in cam mode"
-  menu-admin-flight-lore: "&7Started: &f{date}\n&7Duration: &f{time}\n&7Distance: &f{distance} blocks\n&7From: &f{from}\n&7To: &f{to}"
+  menu-admin-flight-lore: "&7Duration: &f{time}\n&7Distance: &f{distance} blocks\n&7From: &f{from}\n&7To: &f{to}"
   menu-admin-flights-all: "&eShow all flights"
   menu-admin-flights-title: "&8Flights: {player}"
   menu-admin-list: "&bIn cam mode"
@@ -595,7 +597,7 @@ messages:
   menu-spot-views: "&7Views: &f{views}"
   menu-spot-views-hint: ""
   menu-spots: "&aSpots"
-  menu-spots-disabled: "&7Switched off"
+  menu-spots-disabled: "&7Not available"
   menu-spots-disabled-lore: "&7Off for everybody {time}{reason}."
   menu-spots-empty-private: "&7No spots yet"
   menu-spots-empty-private-lore: "&7Save one with the book\n&7on the right."
@@ -608,8 +610,8 @@ messages:
   # menu-spots-disabled when it is the one of everybody.
   menu-spots-lore: "&7Yours, public and shared."
   menu-spots-offers: "&eNew offers: {count}"
-  menu-spots-restricted: "&7Restricted for you"
-  menu-spots-restricted-lore: "&7Restricted {time}{reason}."
+  menu-spots-restricted: "&7Not available"
+  menu-spots-restricted-lore: "&7Restricted for you {time}{reason}."
   menu-spots-tab-private: "&fYour spots"
   menu-spots-tab-private-lore: "&7Including your public ones."
   menu-spots-tab-public: "&ePublic"
@@ -666,7 +668,7 @@ messages:
   menu-tour-candidate-restricted-lore: "&cNot allowed to follow"
   menu-tour-candidate-wait-lore: "&7Invited recently\n&7Again in {seconds} s"
   menu-tour-disabled: "&7Following is switched off"
-  menu-tour-disabled-lore: "&7Off for everybody {time}{reason}."
+  menu-tour-disabled-lore: "&7For everybody {time}{reason}."
   menu-tour-empty: "&7Nobody to invite"
   # {start} = follow.start-distance, {radius} = follow.radius.
   menu-tour-empty-lore: "&7Players appear here within\n&7{start} blocks (in cam mode: {radius})"
@@ -1165,12 +1167,16 @@ messages:
   weather-usage: "&eUse /cam weather clear, rain or reset."
   # The public spots on the web map (web-map): web-map-layer names the layer of the spots on the page of the map,
   # web-map-label the pin of a spot, plain text. A click on a pin shows web-map-detail, as HTML: {spot}, {owner},
-  # {likes}, {views}, {x} {y} {z}, {world} and {command} - the command that jumps there, which also goes under menu.access: menu -, with {look} being
-  # web-map-detail-look while the spot shows a look of its own ({look} as in spot-saved-look). An & is a colour code
+  # {likes}, {views}, {x} {y} {z} and {world} - where the pin stands, so left out here -, with {look} being
+  # web-map-detail-look while the spot shows a look of its own ({look} as in spot-saved-look), and {jump} how to get
+  # there in the game: web-map-jump-command with {command}, the command that jumps there, while menu.access lets the
+  # commands through, web-map-jump-menu while only the menu goes, nothing while neither does. An & is a colour code
   # here as everywhere and is left out, so write no HTML entities like &amp; - the names in it are written safe for
   # HTML by the plugin.
-  web-map-detail: "<b>{spot}</b> by {owner}<br>{likes} likes, {views} views{look}<br>{x} {y} {z} ({world}): <code>{command}</code>"
+  web-map-detail: "<b>{spot}</b> by {owner}<br>{likes} likes, {views} views{look}{jump}"
   web-map-detail-look: "<br>Shows: {look}"
+  web-map-jump-command: "<br>In game: <code>{command}</code>"
+  web-map-jump-menu: "<br>In game: /cam menu → Spots → Public"
   web-map-label: "{spot} ({owner})"
   web-map-layer: "Spots"
 
@@ -1518,6 +1524,7 @@ message-settings:
   battery-empty: true
   battery-low: actionbar
   bedrock-chat-command: true
+  bedrock-chat-menu: true
   bossbar-text: true
   cam-area-limit: actionbar
   cam-area-start: actionbar

@@ -1121,7 +1121,8 @@ public final class CamTour implements Listener {
 
     /**
      * Tells a player that he is invited, and for how many seconds, with the
-     * buttons to accept and to turn it down. On Bedrock, with
+     * buttons to accept and to turn it down - or, on Bedrock while only the
+     * menu goes, that he answers there. On Bedrock, with
      * {@code bedrock.invitation-forms}, a window asks him as well - while
      * there are buttons at all.
      */
@@ -1133,8 +1134,13 @@ public final class CamTour implements Listener {
         String text = messages.getMessage("tour-invitation").replace("{player}", name)
                 .replace("{seconds}", String.valueOf(seconds)).replace("{time}", CamTimeLimit.formatSeconds(seconds));
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
-        line.addAll(button(other, "tour-button-accept", name, "/cam follow accept " + name));
-        line.addAll(button(other, "tour-button-decline", name, "/cam follow decline " + name));
+        if (answerable() && plugin.getBedrock().answersInMenu(other)) {
+            // He cannot click them, and typing is not what the menu is for.
+            line.addAll(plugin.getBedrock().menuHint());
+        } else {
+            line.addAll(button(other, "tour-button-accept", name, "/cam follow accept " + name));
+            line.addAll(button(other, "tour-button-decline", name, "/cam follow decline " + name));
+        }
         other.spigot().sendMessage(line.toArray(new BaseComponent[0]));
         if (answerable() && plugin.getBedrock().invitationForms(other)) {
             UUID guideId = guide.getUniqueId();

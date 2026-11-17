@@ -4,6 +4,7 @@ import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.log.ConsoleLog;
+import de.elia.cameraplugin.menu.MenuAccess;
 import de.elia.cameraplugin.spot.CamSpots;
 import de.elia.cameraplugin.spot.Share;
 import de.elia.cameraplugin.spot.Spot;
@@ -28,8 +29,8 @@ import java.util.logging.Level;
  * Dynmap and squaremap, whichever of them is there. Each gets a layer of its
  * own - it can be switched off on the page of the map - with a pin for every
  * public spot; a click on it says whose it is, how often it was liked and
- * looked at, what it shows of its own, where it is and the command that
- * jumps there.
+ * looked at, what it shows of its own and how to get there in the game -
+ * where it is, the pin shows.
  *
  * <p>Only public spots, {@code /cam spot share <spot> all}: what is private,
  * or shared with single players, is for them alone, and the page of a map is
@@ -235,8 +236,22 @@ public final class CamWebMap implements Listener {
         String look = spots.describe(share.getSpot().look());
         String text = fill(messages.getMessage("web-map-detail"), share, spots, true)
                 .replace("{look}", look.isEmpty() ? ""
-                        : text("web-map-detail-look", share, spots).replace("{look}", html(strip(look))));
+                        : text("web-map-detail-look", share, spots).replace("{look}", html(strip(look))))
+                .replace("{jump}", jump(share, spots));
         return strip(text);
+    }
+
+    /**
+     * How to get there in the game, {@code {jump}}: the command while
+     * {@code menu.access} lets the commands through, the way through the menu
+     * while only the menu goes, nothing while neither does.
+     */
+    private String jump(Share share, CamSpots spots) {
+        MenuAccess access = settings.getMenuAccess();
+        if (access.allowsCommands()) {
+            return text("web-map-jump-command", share, spots);
+        }
+        return access.allowsMenu() ? text("web-map-jump-menu", share, spots) : "";
     }
 
     /** A part of {@code web-map-detail}, filled in. */
@@ -247,9 +262,7 @@ public final class CamWebMap implements Listener {
     /**
      * Fills in what a text of the map says about a spot. In the HTML of a
      * click the names are written so that no sign in them counts as HTML:
-     * the name of a spot may have any sign. {@code {command}} is the jump,
-     * which goes while only the menu goes as well, see
-     * {@link de.elia.cameraplugin.camfly2.CamCommand}.
+     * the name of a spot may have any sign. {@code {command}} is the jump.
      */
     private String fill(String text, Share share, CamSpots spots, boolean asHtml) {
         Spot spot = share.getSpot();
