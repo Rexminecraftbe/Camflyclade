@@ -1,7 +1,6 @@
 package de.elia.cameraplugin.config;
 
 import de.elia.cameraplugin.area.CamAreaRules;
-import de.elia.cameraplugin.bedrock.BedrockFollowView;
 import de.elia.cameraplugin.bedrock.BedrockMenu;
 import de.elia.cameraplugin.bedrock.BedrockScope;
 import de.elia.cameraplugin.body.BodyType;
@@ -657,8 +656,12 @@ public final class CamSettings {
     private boolean bedrockInvitationForms;
     /** Whether the buttons in the chat say the command they run, {@code bedrock.chat-commands}. */
     private boolean bedrockChatCommands;
-    /** How a guest on Bedrock sees through the eyes of his guide, {@code bedrock.follow-view}. */
-    private BedrockFollowView bedrockFollowView;
+    /**
+     * Whether a guest on Bedrock who sees through the eyes of his guide is
+     * turned along with him rather than shown Geyser's camera,
+     * {@code bedrock.follow-view: turn}.
+     */
+    private boolean bedrockFollowTurn;
     /**
      * The particle of the outline Bedrock players see of a camera player in
      * place of the glowing one, {@code bedrock.glow-particle}; {@code null}
@@ -1492,9 +1495,8 @@ public final class CamSettings {
                 : menu.equalsIgnoreCase("chest") ? BedrockMenu.CHEST : BedrockMenu.MIXED;
         bedrockInvitationForms = config.getBoolean("bedrock.invitation-forms", true);
         bedrockChatCommands = config.getBoolean("bedrock.chat-commands", true);
-        String follow = config.getChoice("bedrock.follow-view", "camera", "camera", "hotbar", "turn");
-        bedrockFollowView = follow.equalsIgnoreCase("turn") ? BedrockFollowView.TURN
-                : follow.equalsIgnoreCase("hotbar") ? BedrockFollowView.HOTBAR : BedrockFollowView.CAMERA;
+        bedrockFollowTurn = config.getChoice("bedrock.follow-view", "camera", "camera", "turn")
+                .equalsIgnoreCase("turn");
         String glow = config.getString("bedrock.glow-particle", "end_rod");
         bedrockGlowParticle = glow.trim().equalsIgnoreCase("false") ? null
                 : resolveParticle(config, "bedrock.glow-particle", Particle.END_ROD);
@@ -2549,8 +2551,8 @@ public final class CamSettings {
         return bedrockChatCommands;
     }
 
-    public BedrockFollowView getBedrockFollowView() {
-        return bedrockFollowView;
+    public boolean isBedrockFollowTurn() {
+        return bedrockFollowTurn;
     }
 
     /** The particle of the outline for Bedrock players, or {@code null} for none. */

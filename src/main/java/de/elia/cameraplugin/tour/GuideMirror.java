@@ -126,10 +126,8 @@ final class GuideMirror {
     private final CamSettings settings;
     /** The mark itself, in the custom data of an item. */
     private final NamespacedKey mark;
-    /** The guests who are sent the guide's own hands empty, see the constructor. */
+    /** The guests who are not shown the guide's items in their hands, see the constructor. */
     private final Predicate<Player> handless;
-    /** The guests who are shown the guide's items in their hotbar alone, see the constructor. */
-    private final Predicate<Player> hotbarOnly;
     /** Puts the guide's items into the hotbar of a guest on Bedrock as well, see {@link GuideSlots}. */
     private final GuideSlots slots;
     /** The guests on Bedrock, see {@link de.elia.cameraplugin.bedrock.BedrockPlayers#adapts}. */
@@ -210,26 +208,22 @@ final class GuideMirror {
     }
 
     /**
-     * @param handless   the guests who are sent the guide's own hands empty:
-     *                   players on Bedrock who see through the guide's eyes
-     *                   with Geyser's camera, {@code bedrock.follow-view:
-     *                   camera} or {@code hotbar}. The guide's items would
-     *                   hang in front of it, see {@link #shownTo}.
-     * @param hotbarOnly the guests who are shown the guide's items in their
-     *                   hotbar alone, next to the slot they hold, not as the
-     *                   items in their hands, {@code bedrock.follow-view:
-     *                   hotbar}, see {@link GuideSlots}
+     * @param handless the guests who are shown the guide's items in their
+     *                 hotbar alone, not as the items in their hands, and are
+     *                 sent the guide's own hands empty: players on Bedrock
+     *                 who see through the guide's eyes with Geyser's camera,
+     *                 {@code bedrock.follow-view: camera}. It draws no hands,
+     *                 and the guide's items would hang in front of it, see
+     *                 {@link #shownTo}.
      */
     GuideMirror(CamSettings settings, GuideFrost frost, GuideHands hands, QuietHearts quietHearts,
-                NamespacedKey mark, Predicate<Player> handless, Predicate<Player> hotbarOnly, GuideSlots slots,
-                Predicate<Player> bedrock) {
+                NamespacedKey mark, Predicate<Player> handless, GuideSlots slots, Predicate<Player> bedrock) {
         this.settings = settings;
         this.frost = frost;
         this.hands = hands;
         this.quietHearts = quietHearts;
         this.mark = mark;
         this.handless = handless;
-        this.hotbarOnly = hotbarOnly;
         this.slots = slots;
         this.bedrock = bedrock;
     }
@@ -273,8 +267,8 @@ final class GuideMirror {
         state.offHandMarked = offHandMarked;
         state.mainHandUsed = false;
         state.offHandUsed = false;
-        // With bedrock.follow-view: hotbar the guide's items go into his hotbar alone.
-        boolean hotbarOnly = this.hotbarOnly.test(guest);
+        // With Geyser's camera, which draws no hands, the guide's items go into his hotbar alone.
+        boolean hotbarOnly = handless.test(guest);
         state.mainHand = mirror(guest, EquipmentSlot.HAND, settings.isTourMirrorMainHand(), hotbarOnly, mainHand,
                 guest.getInventory().getItemInMainHand(), state.mainHand, mainHandMarked, refresh || mainHandAgain);
         state.offHand = mirror(guest, EquipmentSlot.OFF_HAND, settings.isTourMirrorOffHand(), hotbarOnly, offHand,
