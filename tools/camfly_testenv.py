@@ -20525,6 +20525,13 @@ def bedrock_checks(env, bot):
         befehl(bot, "/cam menu", warten=1.0)
         return fenster()
 
+    def gross(slot, reihen=(0, 2, 5)):
+        """Wo ein Platz einer Seite mit drei Reihen - der Hauptseite, der
+        Admin-Seite - im Fenster mit sechs Reihen steht, das jede Seite fuer
+        Bedrock hat: die erste Reihe bleibt oben, die zweite kommt in die
+        dritte, die letzte ganz nach unten. Fuer vier Reihen (0, 2, 3, 5)."""
+        return reihen[slot // 9] * 9 + slot % 9
+
     def platz_mit(f, text):
         """Der Platz im offenen Fenster, dessen Item so heisst - nur der
         Name zaehlt: unter dem Knopf oben auf der Seite der Auswahl stehen
@@ -20609,15 +20616,28 @@ def bedrock_checks(env, bot):
                   gesagt(zeilen, rf"\(/cam tp {BOT_NAME} camera\)") and gesagt(zeilen, rf"\(/cam tp {BOT_NAME} body\)"),
                   zeige(zeilen))
 
-        menue()
-        klick(15)
+        f = menue()
+        plaetze = f.get("slots") or {}
+        FIND.test("apply-to: all - die Hauptseite ist auf sechs Reihen verteilt: Punkte und Zeit in der dritten, "
+                  "Statistik, Start und Admin ganz unten",
+                  f.get("size") == 54 and platz_mit(f, "Spots") == str(gross(10)) == "19"
+                  and platz_mit(f, "Time of day") == str(gross(15)) == "24"
+                  and platz_mit(f, "Statistics") == str(gross(21)) == "48"
+                  and str(gross(22)) == "49" in plaetze and platz_mit(f, "Admin") == str(gross(23)) == "50"
+                  and not any(9 <= int(k) < 18 or 27 <= int(k) < 45 for k in plaetze),
+                  str({k: item_text(i).split(chr(10))[0] for k, i in plaetze.items()}))
+        klick(gross(15))
         f = fenster()
         jetzt = platz_mit(f, "» the world's")
         mittag = platz_mit(f, "noon")
-        FIND.test("apply-to: all - der Knopf der Zeit oeffnet eine Seite mit allen Zeiten, die der Welt markiert",
-                  "Time of day" in titel(f) and jetzt is not None and mittag is not None
-                  and platz_mit(f, "midnight") is not None and "4" in (f.get("slots") or {}),
-                  f"{titel(f)} / {[item_text(i).split(chr(10))[0] for i in (f.get('slots') or {}).values()]}")
+        FIND.test("apply-to: all - der Knopf der Zeit oeffnet eine Seite mit allen Zeiten, die der Welt markiert - "
+                  "im Fenster mit sechs Reihen und dem Titel des Menues, der Knopf oben, zurueck ganz unten",
+                  "Time of day" in item_text((f.get("slots") or {}).get("4")).split("\n")[0]
+                  and f.get("size") == 54 and titel(f) == "Cam"
+                  and jetzt is not None and 18 <= int(jetzt) < 36 and mittag is not None
+                  and platz_mit(f, "midnight") is not None and platz_mit(f, "Back") == "49",
+                  f"{titel(f)} / {f.get('size')} / "
+                  f"{ {k: item_text(i).split(chr(10))[0] for k, i in (f.get('slots') or {}).items()} }")
         if mittag is not None:
             klick(mittag, warten=2.0)
             zu = not fenster().get("open")
@@ -20629,7 +20649,7 @@ def bedrock_checks(env, bot):
         befehl(bot, "/cam time reset")
 
         menue()
-        klick(10)
+        klick(gross(10))
         f = fenster()
         unter = item_text((f.get("slots") or {}).get("0"))
         FIND.test("apply-to: all - unter dem eigenen Punkt steht, was ein Tippen kann",
@@ -20651,7 +20671,7 @@ def bedrock_checks(env, bot):
         bot.call("fly", wait=30, dx=-3, timeout=15000)
         time.sleep(1.0)
         menue()
-        klick(10)
+        klick(gross(10))
         klick(0)
         springen = platz_mit(fenster(), "Jump there")
         if springen is not None:
@@ -20665,17 +20685,20 @@ def bedrock_checks(env, bot):
         bot.call("close_window", wait=10)
 
         menue()
-        klick(9, warten=2.0)
+        klick(gross(9), warten=2.0)
         f = fenster()
         FIND.test("apply-to: all - der Knopf der Fuehrung oeffnet ihre Seite",
                   f.get("open") and platz_mit(f, "View when following") is not None,
                   str([item_text(i).split(chr(10))[0] for i in (f.get("slots") or {}).values()]))
         bot.call("close_window", wait=10)
         menue()
-        klick(23, warten=2.0)
+        klick(gross(23), warten=2.0)
         f = fenster()
-        admin = f.get("open") and platz_mit(f, "Who is in cam mode") is not None
-        klick(10, warten=2.0)
+        admin = f.get("open") and platz_mit(f, "Who is in cam mode") == str(gross(10))
+        FIND.test("apply-to: all - die Admin-Seite ist verteilt: zurueck ganz unten in der Mitte",
+                  admin and platz_mit(f, "Back") == str(gross(22)) == "49",
+                  str({k: item_text(i).split(chr(10))[0] for k, i in (f.get("slots") or {}).items()}))
+        klick(gross(10), warten=2.0)
         f = fenster()
         FIND.test("apply-to: all - die Admin-Seite oeffnet und von dort, wer im Cam-Modus ist",
                   admin and f.get("open") and "In cam mode for" in item_text((f.get("slots") or {}).get("0")),
@@ -20683,21 +20706,26 @@ def bedrock_checks(env, bot):
         bot.call("close_window", wait=10)
         # Eine Seite mit vier Reihen hat Bedrock nicht; Geyser fuellte den Rest mit Barrieren.
         menue()
-        klick(23, warten=2.0)
-        klick(24, warten=2.0)
+        klick(gross(23), warten=2.0)
+        klick(gross(24), warten=2.0)
         klick(0, warten=2.0)
         f = fenster()
-        FIND.test("apply-to: all - die Seite, die Fuehrungen fuer alle abschaltet, hat sechs Reihen statt vier",
-                  f.get("open") and f.get("size") == 54, f"{titel(f)} / {f.get('size')}")
+        FIND.test("apply-to: all - die Seite, die Fuehrungen fuer alle abschaltet, hat sechs Reihen statt vier, "
+                  "verteilt: oben wer, der Schalter in der dritten Reihe, zurueck ganz unten links",
+                  f.get("open") and f.get("size") == 54 and "4" in (f.get("slots") or {})
+                  and str(gross(13, (0, 2, 3, 5))) == "22" in (f.get("slots") or {})
+                  and str(gross(27, (0, 2, 3, 5))) == "45" in (f.get("slots") or {}),
+                  f"{titel(f)} / {f.get('size')} / "
+                  f"{ {k: item_text(i).split(chr(10))[0] for k, i in (f.get('slots') or {}).items()} }")
         bot.call("close_window", wait=10)
 
         menue()
-        klick(10)
+        klick(gross(10))
         klick(0)
         f = fenster()
         loeschen = platz_mit(f, "Delete")
         FIND.test("Ein Klick auf den Punkt bietet Springen, Teilen und Loeschen an",
-                  "Grundstein" in titel(f) and platz_mit(f, "Jump there") is not None
+                  "Grundstein" in item_text((f.get("slots") or {}).get("4")) and platz_mit(f, "Jump there") is not None
                   and platz_mit(f, "Share or make public") is not None and loeschen is not None,
                   f"{titel(f)} / {[item_text(i)[:30] for i in (f.get('slots') or {}).values()]}")
         if loeschen is not None:

@@ -112,13 +112,18 @@ import java.util.logging.Level;
  */
 public final class CamMenu implements Listener {
 
-    /** The sizes of the windows: three rows for the main page and the small ones, six for the lists. */
+    /**
+     * The sizes of the windows: three rows for the main page and the small
+     * ones, six for the lists - on Bedrock six for every page, see
+     * {@link #page}, a small one spread over them, {@link #SMALL_ON_LARGE}.
+     */
     private static final int SMALL = 27;
     private static final int LIST = 54;
     /**
      * The size of the pages of a restriction: four rows, for what it keeps
      * him from as well - on Bedrock six, like every page there, see
-     * {@link #page}: a chest of four Bedrock does not have.
+     * {@link #page}: a chest of four Bedrock does not have. Its rows are
+     * spread over them, {@link #MEDIUM_ON_LARGE}.
      */
     private static final int MEDIUM = 36;
     /** Where the page of a restriction has the buttons of his own spots, the public ones and the shared ones. */
@@ -163,14 +168,25 @@ public final class CamMenu implements Listener {
 
     /**
      * Where the choices of a button stand on the page that offers them on
-     * Bedrock, see {@link #openPicks}: the middle row first, then the rows
-     * around it - the button itself stands on top, the way back below.
+     * Bedrock, see {@link #openPicks}, a page of six rows like every page
+     * there: the two rows in the middle first, then the rows above and below
+     * them - the button itself stands on top, the way back at the bottom.
      */
-    private static final int[] PICK_SLOTS = {9, 10, 11, 12, 13, 14, 15, 16, 17, 0, 1, 2, 3, 5, 6, 7, 8,
-            18, 19, 20, 21, 23, 24, 25, 26};
+    private static final int[] PICK_SLOTS = {18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+            9, 10, 11, 12, 13, 14, 15, 16, 17, 36, 37, 38, 39, 40, 41, 42, 43, 44};
     /** On the page of the choices: the button they belong to, and the way back. */
     private static final int SLOT_PICK_BUTTON = 4;
-    private static final int SLOT_PICK_BACK = 22;
+    private static final int SLOT_PICK_BACK = 49;
+    /**
+     * Where the rows of a page of three rows - the main page and the small
+     * ones - go in the window of six rows every page has on Bedrock, see
+     * {@link #page}: the first stays on top, the second comes into the
+     * third, and the last, with the way back and what the page does, goes
+     * to the bottom, where the lists have their buttons to go on.
+     */
+    private static final int[] SMALL_ON_LARGE = {0, 2, 5};
+    /** The same for a page of four rows, a restriction: the two in the middle into the middle. */
+    private static final int[] MEDIUM_ON_LARGE = {0, 2, 3, 5};
     /**
      * How long after a click on Bedrock it is looked whether the menu showed
      * anything, in ticks, see {@link #afterwards}: a button acts a tick after
@@ -482,6 +498,18 @@ public final class CamMenu implements Listener {
         private String[] before;
         /** Until when a click on a slot is turned away, by slot: something else came there by itself. */
         private final Map<Integer, Long> guarded = new HashMap<>();
+        /**
+         * Where each row of the page as it is laid out goes in its window, by
+         * row: for a page of three or four rows in the window of six every
+         * page has on Bedrock, see {@link CamMenu#SMALL_ON_LARGE}; {@code null}
+         * where every slot stays where it is.
+         */
+        private int[] rows;
+
+        /** The slot of its window for a slot of the page as it is laid out, see {@link #rows}. */
+        private int at(int slot) {
+            return rows == null ? slot : rows[slot / 9] * 9 + slot % 9;
+        }
 
         @Override
         public Inventory getInventory() {
@@ -615,9 +643,11 @@ public final class CamMenu implements Listener {
         // On Bedrock every page of the menu goes into one window of six rows,
         // drawn anew in place from page to page: Geyser shows a chest there
         // as one of its own put down for it, and one window opened in the
-        // place of another now and then closes again at once, or never opens.
-        // Bedrock cannot rename a window that is open, so it keeps the title
-        // of the menu.
+        // place of another now and then closes again at once, or never opens
+        // - a small chest after a large one and back, too. Bedrock cannot
+        // rename a window that is open, so it keeps the title of the menu. A
+        // page of three or four rows is spread over the six, see
+        // SMALL_ON_LARGE.
         boolean bedrock = bedrock(player);
         int rows = bedrock ? LIST : size;
         Page page;
@@ -639,7 +669,12 @@ public final class CamMenu implements Listener {
         page.earlier = earlier;
         page.listing = null;
         page.again = null;
-        page.bedrock = bedrock(player);
+        page.bedrock = bedrock;
+        page.rows = !bedrock ? null : switch (size) {
+            case SMALL -> SMALL_ON_LARGE;
+            case MEDIUM -> MEDIUM_ON_LARGE;
+            default -> null;
+        };
         return page;
     }
 
@@ -2312,7 +2347,7 @@ public final class CamMenu implements Listener {
                         () -> action.accept(ClickType.SHIFT_LEFT)),
                 new Pick(messages.getMessage("menu-pick-ban-less-step").replace("{step}", step), false,
                         () -> action.accept(ClickType.SHIFT_RIGHT))));
-        page.windows.put(slot, () -> banUnitWindow(player, key, unit, current, set, reopen));
+        page.windows.put(page.at(slot), () -> banUnitWindow(player, key, unit, current, set, reopen));
     }
 
     /**
@@ -3425,7 +3460,7 @@ public final class CamMenu implements Listener {
      */
     private void picks(Player player, Page page, int slot, List<Pick> picks) {
         if (bedrock(player) && picks.size() > 1) {
-            page.picks.put(slot, picks);
+            page.picks.put(page.at(slot), picks);
         }
     }
 
@@ -3486,7 +3521,9 @@ public final class CamMenu implements Listener {
     /**
      * The choices of a button as a page of the chest: the button on top -
      * its lines show when it is held -, the choices in the middle, the one
-     * that holds now shining, and the way back below.
+     * that holds now shining, and the way back at the bottom. In a window of
+     * six rows with the title of the menu, like every page on Bedrock, see
+     * {@link #page}: Geyser keeps its chest for it, see {@link #openWindow}.
      */
     private void picksChest(Player player, Page from, ItemStack button, List<Pick> picks) {
         String name = ChatColor.stripColor(displayName(button));
@@ -3494,7 +3531,7 @@ public final class CamMenu implements Listener {
         // that one is where the way back leads.
         Page page = new Page();
         page.title = messages.getMessage("menu-pick-title").replace("{button}", name);
-        page.inventory = Bukkit.createInventory(page, SMALL, page.title);
+        page.inventory = Bukkit.createInventory(page, LIST, messages.getMessage("menu-title"));
         page.bedrock = true;
         put(page, SLOT_PICK_BUTTON, button.clone(), NOTHING);
         for (int i = 0; i < picks.size() && i < PICK_SLOTS.length; i++) {
@@ -3568,11 +3605,16 @@ public final class CamMenu implements Listener {
      * Bedrock as a chest of its own put down for it, and one opened in the
      * place of another before the first is gone from the screen may close
      * again at once. Opened in between, by a click or by himself, another
-     * one takes its place.
+     * one takes its place. Not so for a window as large as the one open,
+     * with the same title - every page of the menu on Bedrock, see
+     * {@link #page} -: Geyser keeps its chest for that one and only fills it
+     * anew, nothing closes there.
      */
     private void openWindow(Player player, Page page) {
         UUID id = player.getUniqueId();
-        if (!bedrock(player) || openPage(player) == null) {
+        Page open = openPage(player);
+        if (!bedrock(player) || open == null
+                || open.bedrock && page.bedrock && open.inventory.getSize() == page.inventory.getSize()) {
             opening.remove(id);
             player.openInventory(page.inventory);
             return;
@@ -3707,9 +3749,15 @@ public final class CamMenu implements Listener {
         put(page, slot, item(material, name, lore), action);
     }
 
+    /**
+     * Puts a button into a page, by its slot on the page as it is laid out:
+     * on Bedrock a page of three or four rows has it where its window of six
+     * puts it, see {@link Page#rows}.
+     */
     private static void put(Page page, int slot, ItemStack item, Consumer<ClickType> action) {
-        page.inventory.setItem(slot, page.bedrock ? forBedrock(item) : item);
-        page.buttons.put(slot, action);
+        int at = page.at(slot);
+        page.inventory.setItem(at, page.bedrock ? forBedrock(item) : item);
+        page.buttons.put(at, action);
     }
 
     /**

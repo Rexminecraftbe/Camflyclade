@@ -248,7 +248,8 @@ messages:
   # menu-admin-ban-time-actions is menu.ban-shift-step. The -change ones are there instead while the player is banned
   # already: then the page changes his ban, and menu-admin-unban ({player} in its -lore) lifts it.
   # On Bedrock (see bedrock in config.yml) there is but one click, a tap: a button that does something else on a
-  # right-click or with shift offers what it does on a page of its own, menu-pick-title ({button} its name), each
+  # right-click or with shift offers what it does on a page of its own, menu-pick-title ({button} its name - the
+  # chest itself keeps menu-title as its title there, like every page on Bedrock), each
   # as menu-pick with one of the menu-pick-... texts for {pick} - a button that steps through choices offers every
   # choice, the one that holds now as menu-pick-current -, and menu-pick-back leads back. The texts with -bedrock
   # after their key stand in place of the ones without it there, saying a tap instead of the clicks. With

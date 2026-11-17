@@ -835,7 +835,7 @@ bedrock:
   # Ein Java-Name hat keinen Punkt; nur auf einem Server im Offline-Modus kann sich jeder so nennen.
   name-prefix: "."
   # /cam menu für Bedrock-Spieler:
-  #   mixed = die Truhe wie auf Java, mit denselben Seiten und Plätzen. Nur was eine Truhe auf Bedrock schlecht kann,
+  #   mixed = die Truhe wie auf Java, mit denselben Seiten. Nur was eine Truhe auf Bedrock schlecht kann,
   #           kommt als Fenster von Bedrock: Ein Knopf, der mehr als eins kann (auf Java Rechts- oder Shift-Klick),
   #           bietet es zur Auswahl an, und der Name eines Spots oder der Grund einer Sperre wird in ein Feld getippt
   #           statt in den Chat. Die Truhe geht dafür kurz zu und danach wieder auf.
@@ -843,6 +843,10 @@ bedrock:
   #           Text darüber; Auswahl und Eingabe wie bei mixed. Ohne Raster und ohne Live-Update der Seiten.
   #   chest = nur die Truhe: die Auswahl auf einer eigenen Seite der Truhe, Name und Grund im Chat
   # Fenster gibt es nur mit Geyser oder Floodgate auf diesem Server - ohne sie ist mixed und forms wie chest.
+  # Die Truhe hat auf Bedrock immer sechs Reihen, auch wo Java eine kleine Truhe zeigt: Ein Wechsel zwischen kleiner
+  # und großer Truhe schließt das Menü unter Geyser manchmal gleich wieder. Eine Seite mit drei oder vier Reihen wird
+  # deshalb verteilt: Die erste Reihe bleibt oben, die unterste (Zurück, Bestätigen) kommt ganz nach unten wie bei den
+  # Listen, der Rest in die Mitte. Die Plätze unter menu.buttons und menu.admin-buttons rücken so mit.
   menu: mixed
   # Ein angebotener Spot und eine Einladung zum Folgen kommen zusätzlich als Fenster mit Annehmen und Ablehnen
   # (Texte: bedrock-form-...). Nur mit Geyser oder Floodgate auf diesem Server; die Nachricht im Chat kommt so oder so.

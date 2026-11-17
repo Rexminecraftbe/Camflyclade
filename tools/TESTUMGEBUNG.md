@@ -1908,9 +1908,14 @@ merkt davon nichts - die Action-Bar nennt die Taste, hinter den Knöpfen im Chat
 steht kein Befehl, unter einem Punkt im Menü stehen die Klicks · mit
 `apply-to: all` sagt die Action-Bar nur „type /cam to leave“, hinter den
 Knöpfen von `/cam spot list`, `/cam list` und der Einladung zum Folgen steht der
-Befehl in Klammern, der Knopf der Zeit öffnet eine Seite mit allen Zeiten (die
-der Welt markiert), noon gewählt gibt dem Bot 6000 und das Menü wieder, ein
-Punkt bietet Springen, Teilen und Löschen an, und Löschen löscht ihn · eine
+Befehl in Klammern, jede Seite des Menüs hat sechs Reihen und den Titel des
+Menüs, eine Seite mit drei oder vier Reihen ist darauf verteilt (Hauptseite:
+Punkte und Zeit in der dritten Reihe, Statistik, Start und Admin ganz unten;
+Admin-Seite und die Seite, die Führungen abschaltet: zurück ganz unten), der
+Knopf der Zeit öffnet eine Seite mit allen Zeiten (die der Welt markiert, der
+Knopf oben, zurück ganz unten), noon gewählt gibt dem Bot 6000 und das Menü
+wieder, ein Punkt bietet Springen, Teilen und Löschen an, und Löschen löscht
+ihn · eine
 leuchtende Kamera hat unter `all` Partikel an ihren vier Kanten, unter
 `bedrock` nicht · ein Name mit Punkt vorn gilt als Bedrock-Spieler, mit
 `name-prefix: ""` nicht mehr ·
