@@ -1,7 +1,9 @@
 package de.elia.cameraplugin.camfly2;
 
+import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.list.CamList;
+import de.elia.cameraplugin.list.ListAccess;
 import de.elia.cameraplugin.menu.MenuAccess;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -184,21 +186,62 @@ public class CamCommand implements CommandExecutor {
         } else {
             return true;
         }
-        if (access.allowsCommands() || (access.allowsMenu() && answersInvitation(args))) {
+        if (access.allowsCommands() || (access.allowsMenu() && fromOutsideTheMenu(args))) {
             return true;
         }
-        messages.sendConfiguredMessage(player, access.allowsMenu() ? "menu-only" : "menu-features-off");
+        // What the config file switches off is not in the menu either: sent
+        // there, he would look for a button that is not there.
+        messages.sendConfiguredMessage(player, access.allowsMenu() && !switchedOff(args)
+                ? "menu-only" : "menu-features-off");
         return false;
     }
 
     /**
-     * Whether the command answers an invitation to a tour, which the buttons
-     * of the invitation in the chat run: it goes while only the menu goes as
-     * well, so that a click on them starts the tour right away.
+     * Whether the command is one that comes from outside the menu, and goes
+     * while only the menu goes as well: the buttons of an invitation to
+     * follow and of a spot offered to him, which run
+     * {@code /cam follow accept|decline <player>} and
+     * {@code /cam spot accept|decline <owner>:<spot>} - a click on them answers
+     * right away -, and the jump {@code /cam spot <owner>:<spot>} the web map
+     * gives to type, as a web page cannot open the menu.
      */
-    private static boolean answersInvitation(String[] args) {
-        return args.length == 3 && isFollowWord(args[0])
-                && (args[1].equalsIgnoreCase("accept") || args[1].equalsIgnoreCase("decline"));
+    private static boolean fromOutsideTheMenu(String[] args) {
+        if (args.length == 3 && isFollowWord(args[0])) {
+            return args[1].equalsIgnoreCase("accept") || args[1].equalsIgnoreCase("decline");
+        }
+        if (args.length < 2 || !args[0].equalsIgnoreCase("spot")) {
+            return false;
+        }
+        if (args[1].equalsIgnoreCase("accept") || args[1].equalsIgnoreCase("decline")) {
+            return args.length >= 3;
+        }
+        // No word of the command has a colon in it.
+        return args[1].indexOf(':') > 0;
+    }
+
+    /**
+     * Whether what the command is for is switched off in the config file, so
+     * that the menu has no button for it either.
+     */
+    private boolean switchedOff(String[] args) {
+        CamSettings settings = plugin.getSettings();
+        return switch (args[0].toLowerCase(Locale.ROOT)) {
+            case "back" -> !settings.isBackCommandEnabled();
+            case "resume" -> !settings.isResumeEnabled();
+            case "spot" -> !settings.isViewpointsEnabled();
+            case "follow", "tour" -> !settings.isTourEnabled();
+            case "photo" -> !settings.isPhotoModeEnabled();
+            case "time" -> !settings.isCamTimeEnabled();
+            case "weather" -> !settings.isCamWeatherEnabled();
+            case "nightvision" -> !settings.isNightVisionPlayerChoice();
+            case "stats" -> isAdminCommand(args) ? !settings.isStatsEnabled() : !plugin.getStats().showsAnything();
+            case "list" -> settings.getCamListAccess() == ListAccess.OFF;
+            case "tp" -> settings.getCamListAccess() == ListAccess.OFF || !settings.isCamListTeleport();
+            case "stop" -> !settings.isStopCommandEnabled();
+            case "ban", "unban", "banlist" -> !settings.isCamBanEnabled();
+            case "trail" -> !settings.isTrailEnabled();
+            default -> false;
+        };
     }
 
     /**

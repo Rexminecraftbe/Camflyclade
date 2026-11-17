@@ -246,9 +246,10 @@ public final class CamWebMap implements Listener {
 
     /**
      * Fills in what a text of the map says about a spot. In the HTML of a
-     * click the names are written so that no sign in them counts as HTML -
-     * a spot or a player cannot have one anyway, but the text should not
-     * hang on that.
+     * click the names are written so that no sign in them counts as HTML:
+     * the name of a spot may have any sign. {@code {command}} is the jump,
+     * which goes while only the menu goes as well, see
+     * {@link de.elia.cameraplugin.camfly2.CamCommand}.
      */
     private String fill(String text, Share share, CamSpots spots, boolean asHtml) {
         Spot spot = share.getSpot();

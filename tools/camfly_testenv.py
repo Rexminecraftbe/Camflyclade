@@ -3958,7 +3958,7 @@ def neu_laden(env):
     console(env, "cam reload", pause=0)
     ende = time.time() + RELOAD_HOECHSTENS
     while time.time() < ende:
-        if "reload successful" in log_seit(env, stand):
+        if "CamFly reloaded" in log_seit(env, stand):
             time.sleep(RELOAD_NACHLAUF)
             return
         time.sleep(0.01)
@@ -4107,7 +4107,7 @@ def potion_probe(env, bot, kind, label):
               f"Cam-Modus ({label})",
               bot.call("state").get("gameMode") != "adventure",
               f"Spielmodus {bot.call('state').get('gameMode')}")
-    told = bot.expect("hit by the effect slowness", since, 8000)
+    told = bot.expect("your body got slowness", since, 8000)
     FIND.test(f"Die Meldung nennt den Effekt, an dem es lag ({label})",
               bool(told),
               strip_colors(told["text"]) if told else "keine Meldung im Chat")
@@ -4153,7 +4153,7 @@ def grund_checks(env, bot):
     sagt, was ihn getroffen hat.
 
     Ein fallender Amboss ist dabei kein Angriff, auch wenn er als fallender
-    Block eine Entitaet ist: Die Meldung heisst "damaged by a falling anvil"
+    Block eine Entitaet ist: Die Meldung heisst "hurt by a falling anvil"
     und nicht mehr "attacked by FALLING_BLOCK". Ein Kaktus heisst Kaktus statt
     CONTACT. Ein Mob heisst, wie mob-names ihn nennt, und ein Mob mit eigenem
     Namen so, wie er heisst. Eine eigene Sprachdatei liefert die Namen, die
@@ -4226,8 +4226,8 @@ def grund_checks(env, bot):
     time.sleep(0.5)
     set_option(env, "enabled", "false", "cam-safety")
     try:
-        probe("den fallenden Amboss", amboss, "damaged by a falling anvil")
-        probe("den Kaktus", schaden("minecraft:cactus"), "damaged by a cactus")
+        probe("den fallenden Amboss", amboss, "hurt by a falling anvil")
+        probe("den Kaktus", schaden("minecraft:cactus"), "hurt by a cactus")
 
         console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
         console(env, f"summon minecraft:iron_golem {heim[0] + 4} {heim[1]} {heim[2]} "
@@ -4252,9 +4252,9 @@ def grund_checks(env, bot):
         time.sleep(0.5)
         since = bot.mark()
         bot.chat("/cam")
-        hit = bot.expect("cannot start cam mode with", since, 8000)
+        hit = bot.expect("can't start cam mode with", since, 8000)
         FIND.test(f"Ein Effekt heisst, wie lang/{TESTSPRACHE}.yml ihn nennt",
-                  bool(hit) and "with Langsamkeit on you" in strip_colors(hit["text"]),
+                  bool(hit) and "with Langsamkeit." in strip_colors(hit["text"]),
                   strip_colors(hit["text"]) if hit else "keine Ablehnung im Chat")
         if not hit:
             cam_off(bot)
@@ -4300,7 +4300,7 @@ def effect_start_checks(env, bot):
             hit = bot.expect("Camera mode activated|Cam mode activated", since, 8000)
             FIND.test(name, bool(hit), "" if hit else "der Start wurde abgelehnt")
         else:
-            hit = bot.expect(f"cannot start cam mode with {genannt} on you",
+            hit = bot.expect(f"can't start cam mode with {genannt}\\.",
                              since, 8000)
             FIND.test(name, bool(hit),
                       strip_colors(hit["text"]) if hit else "keine Ablehnung im Chat")
@@ -4329,7 +4329,7 @@ def effect_start_checks(env, bot):
         time.sleep(1)
         since = bot.mark()
         bot.chat("/cam")
-        hit = bot.expect("cannot start cam mode with", since, 8000)
+        hit = bot.expect("can't start cam mode with", since, 8000)
         text = strip_colors(hit["text"]) if hit else ""
         FIND.test("Die Ablehnung nennt jeden schaedlichen Effekt und nur die",
                   "slowness" in text and "blindness" in text and "speed" not in text,
@@ -4946,7 +4946,7 @@ def abschalten_checks(env, bot):
         time.sleep(3)
         zeilen = zeilen_seit(bot, 0)
         FIND.test("Nach dem Neustart heisst es nicht, der Server sei in seinem Cam-Modus ausgegangen",
-                  not gesagt(zeilen, r"server went down while you were in cam mode"), zeige(zeilen))
+                  not gesagt(zeilen, r"server crashed during your cam mode"), zeige(zeilen))
     finally:
         try:
             for client in (zuschauer, dritter):
@@ -5057,7 +5057,7 @@ def absturz_checks(env, bot):
     time.sleep(3)
     z = zeilen_seit(bot, 0)
     FIND.test("Nach dem Neustart: die Meldung, dass er alles zurueckhat",
-              gesagt(z, r"server went down while you were in cam mode"), zeige(z))
+              gesagt(z, r"server crashed during your cam mode"), zeige(z))
     FIND.test("Nach dem Neustart: die Diamanten sind wieder da",
               nbt_frage(bot, "@s", '{Inventory:[{id:"minecraft:diamond"}]}'), "")
     FIND.test("Nach dem Neustart: wieder im Ueberlebensmodus", spielmodus_ist(bot, "survival"), "")
@@ -5176,7 +5176,7 @@ def absturz_nach_dem_ende(env, bot, dateien):
     time.sleep(3)
     z = zeilen_seit(bot, 0)
     FIND.test(f"{wer}: keine Meldung des Absturzschutzes, es gab nichts zurueckzugeben",
-              not gesagt(z, r"server went down while you were in cam mode"), zeige(z))
+              not gesagt(z, r"server crashed during your cam mode"), zeige(z))
     FIND.test(f"{wer}: die Smaragde sind da",
               nbt_frage(bot, "@s", '{Inventory:[{id:"minecraft:emerald"}]}'), "")
     FIND.test(f"{wer}: im Ueberlebensmodus", spielmodus_ist(bot, "survival"), "")
@@ -5268,7 +5268,7 @@ def taste_checks(env, bot):
 
     Voreingestellt ist exit-key an - nachgesehen in der ausgelieferten
     config.yml. Zu Beginn steht in der Action-Bar "Cam mode activated" mit
-    dem Hinweis "or type /cam to leave". Die Taste zum Tauschen der Haende beendet den
+    dem Hinweis "or /cam to leave". Die Taste zum Tauschen der Haende beendet den
     Cam-Modus, und der Stein, den er vorher hielt, ist danach wieder in der
     Hand und nicht in der anderen. Gegenprobe: ohne Cam-Modus tauscht
     dieselbe Taste die Haende wie immer. Mit exit-key: false nennt der
@@ -5314,7 +5314,7 @@ def taste_checks(env, bot):
         # den der echte Client durch die belegte Taste ersetzt.
         FIND.test("exit-key: zu Beginn steht der Hinweis auf die Taste und /cam in der Action-Bar",
                   gesagt(z, r"[Cc]am mode activated")
-                  and gesagt(z, r"key\.swapOffhand or type /cam to leave"), zeige(z))
+                  and gesagt(z, r"key\.swapOffhand or /cam to leave"), zeige(z))
         z = taste()
         FIND.test("exit-key: die Taste beendet den Cam-Modus",
                   gesagt(z, r"[Cc]am mode ended") and spielmodus_ist(bot, modus), zeige(z))
@@ -5324,7 +5324,7 @@ def taste_checks(env, bot):
         set_option(env, "enabled", "false", "exit-key")
         z = befehl(bot, "/cam", warten=2)
         FIND.test("exit-key: false - der Hinweis nennt nur noch /cam, keine Taste",
-                  gesagt(z, r"[Cc]am mode activated") and gesagt(z, r"- type /cam to leave")
+                  gesagt(z, r"[Cc]am mode activated") and gesagt(z, r"- /cam to leave")
                   and not gesagt(z, r"swapOffhand"), zeige(z))
         taste()
         FIND.test("exit-key: false - die Taste laesst den Cam-Modus laufen", spielmodus_ist(bot, "adventure"), "")
@@ -5464,7 +5464,7 @@ def akku_checks(env, bot):
         da, titel = balken(r"Battery: \d")
         FIND.test("battery: im Flug zeigt die Bossbar den Akku", da, str(titel))
         since = bot.mark()
-        leer = bot.expect(r"battery is empty", since, 10000)
+        leer = bot.expect(r"battery empty", since, 10000)
         dauer = time.time() - start
         FIND.test("battery: nach 5 Sekunden ist der Akku leer und der Cam-Modus endet",
                   bool(leer) and 3.5 <= dauer <= 8.0, f"nach {dauer:.1f} s")
@@ -5474,8 +5474,8 @@ def akku_checks(env, bot):
 
         z = befehl(bot, "/cam")
         FIND.test("battery: mit leerem Akku startet der Cam-Modus nicht, und er erfaehrt, wie lange es dauert",
-                  gesagt(z, r"battery holds 0 seconds of flight, a start needs 2 seconds\. "
-                            r"Ready again in 3m \d+s") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
+                  gesagt(z, r"Battery too low: 0 seconds, a start needs 2 seconds\. "
+                            r"Ready in 3m \d+s") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
         z = befehl(bot, "/cam stats")
         FIND.test("battery: /cam stats zeigt den Ladestand", gesagt(z, r"Battery: 0 seconds of 5 seconds"), zeige(z))
         zahlen = [i for i, t in enumerate(z) if re.search(r"Distance flown: |Longest distance in one flight: ", t)]
@@ -5544,7 +5544,7 @@ def kosten_checks(env, bot):
                           ("items", "{diamond: 3}", "start-cost")])
         z = befehl(bot, "/cam")
         FIND.test("start-cost: ohne Level und Diamanten kein Start, und er erfaehrt, was fehlt",
-                  gesagt(z, r"costs 2 XP levels, 3x diamond\. You are missing 2 XP levels, 3x diamond")
+                  gesagt(z, r"costs 2 XP levels, 3x diamond, you are missing 2 XP levels, 3x diamond")
                   and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
 
         bot.chat("/give @s minecraft:diamond 5")
@@ -5645,7 +5645,7 @@ def statistik_checks(env, bot):
         time.sleep(1)
         z = befehl(bot, "/cam stats")
         FIND.test("/cam stats im Flug: der Flug, der gerade laeuft, zaehlt schon mit und sagt, wie lange er geht",
-                  zahl(z, r"Flights: (\d+)") == mal + 1 and gesagt(z, r"In cam mode right now: "),
+                  zahl(z, r"Flights: (\d+)") == mal + 1 and gesagt(z, r"In cam mode now: "),
                   zeige(z))
         cam_off(bot)
         z = befehl(bot, "/cam stats")
@@ -5679,7 +5679,7 @@ def statistik_checks(env, bot):
 
         z = befehl(bot, "/cam stats player NiemandHier")
         FIND.test("/cam stats player <Name> - ein unbekannter Name wird gemeldet",
-                  gesagt(z, r"Nobody called NiemandHier"), zeige(z))
+                  gesagt(z, r"Unknown player: NiemandHier"), zeige(z))
         z = befehl(bot, "/cam stats quatsch")
         FIND.test("/cam stats mit einem unbekannten Wort sagt, wie es geht",
                   gesagt(z, r"Use /cam stats, /cam stats reset \[name\] or /cam stats player"), zeige(z))
@@ -5687,18 +5687,18 @@ def statistik_checks(env, bot):
         console(env, f"cam stats player {BOT_NAME}", pause=1.5)
         log = strip_colors(server_log(env)[vorher:])
         FIND.test("/cam stats player <Name> geht auch von der Konsole",
-                  f"Cam mode statistics of {BOT_NAME}" in log, log.strip()[-200:] or "nichts im Log")
+                  f"Statistics of {BOT_NAME}" in log, log.strip()[-200:] or "nichts im Log")
 
         console(env, f"deop {BOT_NAME}", pause=1.5)
         z = befehl(bot, f"/cam stats player {BOT_NAME}")
         FIND.test("view-others: admin - ohne op sieht er sich unter seinem eigenen Namen",
-                  gesagt(z, rf"Cam mode statistics of {BOT_NAME}"), zeige(z))
+                  gesagt(z, rf"Statistics of {BOT_NAME}"), zeige(z))
         z = befehl(bot, "/cam stats player NiemandHier")
         FIND.test("view-others: admin - ohne op darf er andere nicht ansehen", gesagt(z, r"permission"), zeige(z))
         set_option(env, "view-others", "all", "statistics")
         z = befehl(bot, "/cam stats player NiemandHier")
         FIND.test("view-others: all - auch ohne op darf er andere ansehen",
-                  gesagt(z, r"Nobody called NiemandHier"), zeige(z))
+                  gesagt(z, r"Unknown player: NiemandHier"), zeige(z))
         console(env, f"op {BOT_NAME}", pause=1.5)
         set_option(env, "view-others", "false", "statistics")
         z = befehl(bot, "/cam stats player NiemandHier")
@@ -5707,7 +5707,7 @@ def statistik_checks(env, bot):
 
         z = befehl(bot, "/cam stats reset")
         FIND.test("/cam stats reset meldet, dass die Statistik weg ist",
-                  gesagt(z, r"statistics have been reset"), zeige(z))
+                  gesagt(z, r"statistics were reset"), zeige(z))
         z = befehl(bot, "/cam stats")
         FIND.test("/cam stats reset - danach ist sie wirklich auf null",
                   gesagt(z, rf"{BOT_NAME} has not been in cam mode yet"), zeige(z))
@@ -5723,7 +5723,7 @@ def statistik_checks(env, bot):
         if FIND.test("min-seconds: Cam-Modus fuer einen kurzen Flug gestartet", cam_on(bot), ""):
             z = befehl(bot, "/cam stats")
             FIND.test("min-seconds: 30 - im Flug sagt /cam stats, ab wann er zaehlt, und zeigt noch keine Zahlen",
-                      gesagt(z, r"In cam mode right now: .*\(counts from 30 seconds\)")
+                      gesagt(z, r"In cam mode now: .*\(counts from 30 seconds\)")
                       and not gesagt(z, r"Flights: |has not been in cam mode"), zeige(z))
             cam_off(bot)
             z = befehl(bot, "/cam stats")
@@ -5741,7 +5741,7 @@ def statistik_checks(env, bot):
             time.sleep(8)
             z = befehl(bot, "/cam stats")
             FIND.test("min-seconds: 8 - danach zaehlt er mit, und gezaehlt wird seit dem Tag, an dem er begann",
-                      gesagt(z, r"\(counted in\)") and zahl(z, r"Flights: (\d+)") == 1
+                      gesagt(z, r"In cam mode now: ") and not gesagt(z, r"\(counts from") and zahl(z, r"Flights: (\d+)") == 1
                       and gesagt(z, rf"Counted since: {heute}$"), zeige(z))
             cam_off(bot)
             z = befehl(bot, "/cam stats")
@@ -5765,7 +5765,7 @@ def statistik_checks(env, bot):
             bot.call("fly", wait=30, dy=10, timeout=15000)
             time.sleep(1.0)
             z = befehl(bot, "/cam spot set Statistik")
-            gesetzt = gesagt(z, r"Spot Statistik saved here")
+            gesetzt = gesagt(z, r"Spot Statistik saved\.")
             cam_off(bot)
             befehl(bot, "/cam stats reset")
             if FIND.test("Punkt zehn Bloecke ueber dem Koerper gesetzt, Statistik auf null, Cam-Modus wieder an",
@@ -5834,7 +5834,7 @@ def statistik_checks(env, bot):
             log = konsole[0] if konsole else ""
             FIND.test("/cam stats reset <Name> von der Konsole, waehrend er abgemeldet ist: danach ist seine "
                       "Statistik leer",
-                      f"The cam mode statistics of {BOT_NAME} have been reset" in log
+                      f"Reset {BOT_NAME}'s statistics" in log
                       and gesagt(z, rf"{BOT_NAME} has not been in cam mode yet"),
                       f"{log.strip()[-200:] or 'nichts im Log'} / {zeige(z)}")
         ersetzt.clear()
@@ -5848,26 +5848,26 @@ def statistik_checks(env, bot):
             z = befehl(bot, "/cam stats")
             FIND.test("/cam stats reset <Name> von der Konsole, waehrend er online ist: seine Statistik ist leer, und "
                       "er erfaehrt, wer es war",
-                      f"The cam mode statistics of {BOT_NAME} have been reset" in log
-                      and gesagt(zeilen, r"the server has reset your cam mode statistics")
+                      f"Reset {BOT_NAME}'s statistics" in log
+                      and gesagt(zeilen, r"the server reset your statistics")
                       and gesagt(z, rf"{BOT_NAME} has not been in cam mode yet"),
                       f"{log.strip()[-200:] or 'nichts im Log'} / {zeige(zeilen)} / {zeige(z)}")
         z = befehl(bot, "/cam stats reset NiemandHier")
         FIND.test("/cam stats reset <Name> - ein unbekannter Name wird gemeldet",
-                  gesagt(z, r"Nobody called NiemandHier"), zeige(z))
+                  gesagt(z, r"Unknown player: NiemandHier"), zeige(z))
         console(env, f"deop {BOT_NAME}", pause=1.5)
         fremd = befehl(bot, "/cam stats reset NiemandHier")
         selbst = befehl(bot, f"/cam stats reset {BOT_NAME}")
         console(env, f"op {BOT_NAME}", pause=1.5)
         FIND.test("/cam stats reset <Name> - ohne op (camplugin.stats.reset) darf er niemand anderen zuruecksetzen, "
                   "unter seinem eigenen Namen sich selbst schon",
-                  gesagt(fremd, r"permission") and gesagt(selbst, r"Your cam mode statistics have been reset"),
+                  gesagt(fremd, r"permission") and gesagt(selbst, r"Your statistics were reset"),
                   f"{zeige(fremd)} / {zeige(selbst)}")
 
         set_option(env, "enabled", "false", "statistics")
         z = befehl(bot, "/cam stats")
         FIND.test("statistics.enabled: false - /cam stats sagt, dass sie aus ist",
-                  gesagt(z, r"statistics are switched off"), zeige(z))
+                  gesagt(z, r"[Ss]tatistics are switched off"), zeige(z))
     finally:
         console(env, f"op {BOT_NAME}", pause=1.5)
         set_options(env, [("enabled", "true", "statistics"), ("view-others", "admin", "statistics"),
@@ -5921,7 +5921,7 @@ def statistik_folgen_checks(env, bot):
             return dort
         if frei:
             dort = befehl(zuschauer, "/cam follow view", warten=1.0)
-            if not gesagt(dort, r"When following you look round freely now"):
+            if not gesagt(dort, r"View while following: free"):
                 return dort
         time.sleep(1.0)
         bot.call("fly", wait=30, dx=20, timeout=15000)
@@ -5987,7 +5987,7 @@ def statistik_afk_checks(env, bot):
     16 Sekunden still, sind es danach um die 16 in "Time in cam mode". Mit
     skip-afk-time: true und afk-seconds: 10 steht er gut 20 Sekunden still:
     Nach 14 und nach 21 Sekunden steht in /cam stats dieselbe Zeit, um die
-    10 Sekunden, waehrend "In cam mode right now" weiterlaeuft. Fliegt er
+    10 Sekunden, waehrend "In cam mode now" weiterlaeuft. Fliegt er
     danach ein Stueck, waechst sie wieder. Am Ende zaehlt der Flug ohne das
     Stillstehen nach den 10 Sekunden, in der Zeit und im laengsten Flug.
     Weniger als 10 Sekunden afk-seconds werden gemeldet und auf 10 gehoben.
@@ -6031,10 +6031,10 @@ def statistik_afk_checks(env, bot):
             bis(start, 21)
             z2 = befehl(bot, "/cam stats")
             t1, t2 = sekunden(z1, zeit_muster), sekunden(z2, zeit_muster)
-            l1 = sekunden(z1, r"In cam mode right now: (.+?) \(")
-            l2 = sekunden(z2, r"In cam mode right now: (.+?) \(")
+            l1 = sekunden(z1, r"In cam mode now: (.+?)(?: \(|$)")
+            l2 = sekunden(z2, r"In cam mode now: (.+?)(?: \(|$)")
             FIND.test("skip-afk-time: nach afk-seconds ohne etwas zu tun waechst die Zeit nicht mehr - "
-                      "\"In cam mode right now\" laeuft weiter",
+                      "\"In cam mode now\" laeuft weiter",
                       9 <= t1 <= 13 and t2 == t1 and l2 >= l1 + 5, f"{zeige(z1)} / {zeige(z2)}")
             for schritt in range(3):
                 bot.call("fly", wait=30, dy=1, timeout=5000)
@@ -6112,7 +6112,7 @@ def alte_absturzdatei_checks(env, bot):
         time.sleep(1)
         z = zeilen_seit(bot, 0)
         FIND.test("Alte Absturzdatei: die Meldung, dass er alles zurueckhat",
-                  gesagt(z, r"server went down while you were in cam mode"), zeige(z))
+                  gesagt(z, r"server crashed during your cam mode"), zeige(z))
         neu = bot.server_pos()
         FIND.test("Alte Absturzdatei: er steht an der Stelle aus der Datei",
                   neu is not None and math.dist(neu, ziel) < 1.0, f"{ziel} -> {neu}")
@@ -6189,7 +6189,7 @@ def zurueck_checks(env, bot):
 
         z = befehl(bot, "/cam back")
         FIND.test("/cam back ohne Cam-Modus sagt, dass er keinen hat",
-                  gesagt(z, r"You are not in cam mode") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
+                  gesagt(z, r"Only in cam mode") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
     finally:
         cam_off(bot)
         set_option(env, "enabled", "true", "back-command")
@@ -6222,13 +6222,13 @@ def endwarnung_checks(env, bot):
         FIND.test("sounds.end-warning - der Ton zur Warnung", ton_da(bot, seit, "item.lodestone_compass.lock"), "")
         fuenf = bot.expect(r"Cam mode ends in 5 seconds", since, 10000)
         FIND.test("end-warning: bei 5 Sekunden Rest noch einmal", bool(fuenf), "")
-        ende = bot.expect(r"Time limit expired", since, 10000)
+        ende = bot.expect(r"time is up", since, 10000)
         FIND.test("end-warning: danach endet der Cam-Modus mit dem Zeitlimit", bool(ende), "")
 
         set_option(env, "enabled", "false", "end-warning")
         since = bot.mark()
         cam_on(bot)
-        ende = bot.expect(r"Time limit expired", since, 20000)
+        ende = bot.expect(r"time is up", since, 20000)
         z = zeilen_seit(bot, since)
         FIND.test("end-warning.enabled: false - das Zeitlimit endet ohne Warnung",
                   bool(ende) and not gesagt(z, r"Cam mode ends in \d"), zeige(z[-3:]))
@@ -6242,7 +6242,7 @@ def endwarnung_checks(env, bot):
         warnung = bot.expect(r"Battery almost empty: (9|10) seconds left", since, 8000)
         FIND.test("end-warning: der Akku warnt bei 10 Sekunden mit \"Battery almost empty\"", bool(warnung),
                   strip_colors(warnung["text"]) if warnung else "")
-        leer = bot.expect(r"battery is empty", since, 15000)
+        leer = bot.expect(r"battery empty", since, 15000)
         FIND.test("end-warning: danach ist der Akku leer und der Cam-Modus endet", bool(leer), "")
     finally:
         cam_off(bot)
@@ -6440,7 +6440,7 @@ def knoepfe_checks(env, bot):
         time.sleep(1.0)
         antwort = befehl(bot, f"/cam tp {ZUSCHAUER_NAME} camera")
         FIND.test("/cam tp ... camera: im Ueberlebensmodus nicht, er fiele herunter",
-                  gesagt(antwort, r"only go to a camera while you can fly"), zeige(antwort))
+                  gesagt(antwort, r"only go to a camera if you can fly"), zeige(antwort))
         bot.chat("/gamemode creative")
         time.sleep(0.5)
         # Ohne Schwerkraft beim Bot, sonst fiele er auf seiner Seite gleich
@@ -6556,10 +6556,10 @@ def stopp_checks(env, bot):
         seit = toene_marke(zuschauer)
         zeilen = befehl(bot, f"/cam stop {ZUSCHAUER_NAME}")
         FIND.test("/cam stop <Name>: der Bot bekommt die Bestaetigung",
-                  gesagt(zeilen, rf"Ended the cam mode of {ZUSCHAUER_NAME}"), zeige(zeilen))
+                  gesagt(zeilen, rf"Ended {ZUSCHAUER_NAME}'s cam mode"), zeige(zeilen))
         FIND.test("/cam stop <Name>: der Cam-Modus des anderen ist vorbei", not noch_im_cam_modus(), "")
         FIND.test("/cam stop <Name>: er erfaehrt, wer es war",
-                  bool(zuschauer.expect(rf"Your cam mode was ended by {BOT_NAME}", since, 4000)), "")
+                  bool(zuschauer.expect(rf"{BOT_NAME} ended your cam mode", since, 4000)), "")
         FIND.test("/cam stop <Name>: er hoert sounds.end-forced",
                   ton_da(zuschauer, seit, "block.respawn_anchor.deplete"), "")
         zeilen = befehl(bot, f"/cam stop {ZUSCHAUER_NAME}")
@@ -6573,10 +6573,10 @@ def stopp_checks(env, bot):
         console(env, "cam stop all", pause=1.5)
         log = strip_colors(server_log(env)[vorher:])
         FIND.test("/cam stop all von der Konsole beendet den Cam-Modus von beiden",
-                  "Ended the cam mode of 2 players" in log and not noch_im_cam_modus()
+                  "Ended cam mode for 2 players" in log and not noch_im_cam_modus()
                   and not spielmodus_ist(bot, "adventure"), log.strip()[-200:] or "nichts im Log")
         FIND.test("/cam stop all von der Konsole: er liest, dass es der Server war",
-                  bool(zuschauer.expect(r"Your cam mode was ended by the server", since, 4000)), "")
+                  bool(zuschauer.expect(r"the server ended your cam mode", since, 4000)), "")
 
         kamera_an()
         console(env, f"deop {BOT_NAME}", pause=1.5)
@@ -6617,7 +6617,7 @@ def bann_checks(env, bot):
     dass sie das nicht mehr ist und bis wann. /cam unban schaltet ihn wieder
     frei, er erfaehrt von wem; ein zweites Mal sagt es, dass er nicht
     gesperrt ist. Fuer immer mit einem Grund heisst es nur "because: ...",
-    ohne for good - nur /cam banlist sagt for good. Eine Sperre fuer drei
+    ohne permanently - nur /cam banlist sagt permanently. Eine Sperre fuer drei
     Sekunden laeuft von selbst ab. /cam ban all von der Konsole sperrt den
     zweiten Spieler aus, den Bot nicht: Als op hat er camplugin.ban.bypass.
     Noch einmal mit 2h sagt sie ihm, wie viel laenger. /cam unban all macht
@@ -6705,30 +6705,30 @@ def bann_checks(env, bot):
         FIND.test("/cam ban noch einmal: die Sperre ist geaendert, jetzt zwei Stunden ohne Grund",
                   gesagt(zeilen, rf"{ZUSCHAUER_NAME} is now banned from cam mode for 2h 0m 0s\."), zeige(zeilen))
         FIND.test("/cam ban noch einmal, laenger: er erfaehrt die neue Zeit, bis wann und wie viel laenger",
-                  bool(zuschauer.expect(rf"{BOT_NAME} changed your cam mode ban: it now lasts for 2h 0m 0s, "
-                                        rf"until {datum}\. You have to wait 1h [01]m 0s longer\.", since, 4000)), "")
+                  bool(zuschauer.expect(rf"{BOT_NAME} extended your cam mode ban by 1h [01]m 0s: now for 2h 0m 0s, "
+                                        rf"until {datum}\.", since, 4000)), "")
         since = zuschauer.mark()
         befehl(bot, f"/cam ban {ZUSCHAUER_NAME} 30m")
         FIND.test("/cam ban noch einmal, kuerzer: er erfaehrt, wie viel weniger",
-                  bool(zuschauer.expect(rf"changed your cam mode ban: it now lasts for 30m 0s, until {datum}\. "
-                                        rf"You have to wait 1h (29|30)m 0s less\.", since, 4000)), "")
+                  bool(zuschauer.expect(rf"shortened your cam mode ban by 1h (29|30)m 0s: now for 30m 0s, "
+                                        rf"until {datum}\.", since, 4000)), "")
         since = zuschauer.mark()
         befehl(bot, f"/cam ban {ZUSCHAUER_NAME}")
         FIND.test("/cam ban noch einmal, ohne Zeit: er erfaehrt, dass sie jetzt dauerhaft ist",
-                  bool(zuschauer.expect(rf"{BOT_NAME} changed your cam mode ban: it is permanent now\.", since, 4000)),
+                  bool(zuschauer.expect(rf"{BOT_NAME} made your cam mode ban permanent\.", since, 4000)),
                   "")
         since = zuschauer.mark()
         befehl(bot, f"/cam ban {ZUSCHAUER_NAME} 1h")
         FIND.test("/cam ban noch einmal, wieder mit Zeit: er erfaehrt, dass sie nicht mehr dauerhaft ist und bis wann",
-                  bool(zuschauer.expect(rf"changed your cam mode ban: it is not permanent any more and ends on "
+                  bool(zuschauer.expect(rf"made your cam mode ban temporary: it ends on "
                                         rf"{datum}\.", since, 4000)), "")
 
         since = zuschauer.mark()
         zeilen = befehl(bot, f"/cam unban {ZUSCHAUER_NAME}")
         FIND.test("/cam unban <Name>: die Bestaetigung - er ist freigeschaltet",
-                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} is unlocked and may use cam mode again"), zeige(zeilen))
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} is unbanned"), zeige(zeilen))
         FIND.test("/cam unban <Name>: er erfaehrt, wer ihn freigeschaltet hat",
-                  bool(zuschauer.expect(rf"{BOT_NAME} unlocked you: you may use cam mode again", since, 4000)), "")
+                  bool(zuschauer.expect(rf"{BOT_NAME} unbanned you from cam mode", since, 4000)), "")
         an = kamera_an()
         cam_off(zuschauer)
         FIND.test("/cam unban <Name>: danach startet er wieder", an, "")
@@ -6738,19 +6738,19 @@ def bann_checks(env, bot):
 
         since = zuschauer.mark()
         zeilen = befehl(bot, f"/cam ban {ZUSCHAUER_NAME} Griefing")
-        FIND.test("/cam ban <Name> <Grund>, fuer immer: die Bestaetigung nennt nur den Grund, kein for good",
+        FIND.test("/cam ban <Name> <Grund>, fuer immer: die Bestaetigung nennt nur den Grund, kein permanently",
                   gesagt(zeilen, rf"{ZUSCHAUER_NAME} is banned from cam mode because: Griefing\.")
-                  and not gesagt(zeilen, r"for good"), zeige(zeilen))
-        FIND.test("/cam ban <Name> <Grund>, fuer immer: er erfaehrt es ohne for good",
+                  and not gesagt(zeilen, r"permanently"), zeige(zeilen))
+        FIND.test("/cam ban <Name> <Grund>, fuer immer: er erfaehrt es ohne permanently",
                   bool(zuschauer.expect(rf"{BOT_NAME} banned you from cam mode because: Griefing\.", since, 4000)),
                   "")
         zeilen = befehl(zuschauer, "/cam")
         FIND.test("/cam ban <Name> <Grund>, fuer immer: beim Startversuch auch",
-                  gesagt(zeilen, r"You are banned from cam mode because: Griefing\.") and not gesagt(zeilen, r"for good"),
+                  gesagt(zeilen, r"You are banned from cam mode because: Griefing\.") and not gesagt(zeilen, r"permanently"),
                   zeige(zeilen))
         zeilen = befehl(bot, "/cam banlist")
-        FIND.test("/cam banlist sagt dabei weiter for good",
-                  gesagt(zeilen, rf"{ZUSCHAUER_NAME}: for good, by {BOT_NAME} \(Griefing\)"), zeige(zeilen))
+        FIND.test("/cam banlist sagt dabei weiter permanently",
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME}: permanently, by {BOT_NAME} \(Griefing\)"), zeige(zeilen))
         befehl(bot, f"/cam unban {ZUSCHAUER_NAME}")
 
         befehl(bot, f"/cam ban {ZUSCHAUER_NAME} 3s")
@@ -6767,17 +6767,17 @@ def bann_checks(env, bot):
         since = zuschauer.mark()
         log = konsole("cam ban all 1h Event")
         FIND.test("/cam ban all von der Konsole: die Bestaetigung",
-                  "Cam mode is locked for everybody for 1h 0m 0s because: Event." in log, log.strip()[-200:] or "nichts im Log")
+                  "Everybody is banned from cam mode for 1h 0m 0s because: Event." in log, log.strip()[-200:] or "nichts im Log")
         FIND.test("/cam ban all: der Cam-Modus des zweiten Spielers endet", not noch_im_cam_modus(), "")
         FIND.test("/cam ban all: er erfaehrt, dass es der Server war",
-                  bool(zuschauer.expect(rf"the server locked cam mode for everybody {stunde} because: Event\.", since,
+                  bool(zuschauer.expect(rf"the server banned everybody from cam mode {stunde} because: Event\.", since,
                                         4000)),
                   "")
         FIND.test("camplugin.ban.bypass: der Bot (op) bleibt dabei im Cam-Modus", spielmodus_ist(bot, "adventure"), "")
         cam_off(bot)
         zeilen = befehl(zuschauer, "/cam")
         FIND.test("/cam ban all: ohne camplugin.ban.bypass startet er nicht",
-                  gesagt(zeilen, rf"Cam mode is locked for everybody {stunde} because: Event\.")
+                  gesagt(zeilen, rf"Everybody is banned from cam mode {stunde} because: Event\.")
                   and not gesagt(zeilen, r"[Cc]am mode activated"), zeige(zeilen))
         an = cam_on(bot)
         cam_off(bot)
@@ -6788,32 +6788,32 @@ def bann_checks(env, bot):
         since = zuschauer.mark()
         log = konsole("cam ban all 2h Event")
         FIND.test("/cam ban all noch einmal: die Bestaetigung sagt, dass sie geaendert ist",
-                  "Cam mode is now locked for everybody for 2h 0m 0s because: Event." in log,
+                  "Everybody is now banned from cam mode for 2h 0m 0s because: Event." in log,
                   log.strip()[-200:] or "nichts im Log")
         FIND.test("/cam ban all noch einmal: der zweite Spieler erfaehrt, wie viel laenger",
-                  bool(zuschauer.expect(rf"the server changed the lock of cam mode for everybody: it now lasts for "
-                                        rf"2h 0m 0s, until {datum}\. You have to wait 1h [01]m 0s longer\.", since,
+                  bool(zuschauer.expect(rf"the server extended the cam mode ban for everybody by 1h [01]m 0s: now for "
+                                        rf"2h 0m 0s, until {datum}\.", since,
                                         4000)), "")
         since = zuschauer.mark()
         log = konsole("cam unban all")
         FIND.test("/cam unban all von der Konsole: die Bestaetigung",
-                  "Cam mode is unlocked: everybody may use it again" in log, log.strip()[-200:] or "nichts im Log")
+                  "The ban for everybody is lifted" in log, log.strip()[-200:] or "nichts im Log")
         FIND.test("/cam unban all: der zweite Spieler erfaehrt es, und von wem",
-                  bool(zuschauer.expect(r"the server unlocked cam mode: everybody may use it again", since, 4000)),
+                  bool(zuschauer.expect(r"the server lifted the cam mode ban for everybody", since, 4000)),
                   "")
         an = kamera_an()
         cam_off(zuschauer)
         FIND.test("/cam unban all: danach startet er wieder", an, "")
 
         zeilen = befehl(bot, "/cam ban NiemandHier")
-        FIND.test("/cam ban: ein unbekannter Name wird gemeldet", gesagt(zeilen, r"Nobody called NiemandHier"),
+        FIND.test("/cam ban: ein unbekannter Name wird gemeldet", gesagt(zeilen, r"Unknown player: NiemandHier"),
                   zeige(zeilen))
         console(env, f"deop {BOT_NAME}", pause=1.5)
         zeilen = befehl(bot, f"/cam ban {ZUSCHAUER_NAME}")
         console(env, f"op {BOT_NAME}", pause=1.5)
         liste = befehl(bot, "/cam banlist")
         FIND.test("/cam ban ohne camplugin.ban: keine Berechtigung, und niemand ist gesperrt",
-                  gesagt(zeilen, r"permission") and gesagt(liste, r"Nobody is banned from cam mode"),
+                  gesagt(zeilen, r"permission") and gesagt(liste, r"Nobody is banned"),
                   f"{zeige(zeilen)} - {zeige(liste)}")
 
         if sperren.exists():
@@ -6826,7 +6826,7 @@ def bann_checks(env, bot):
                   f"alt da: {alte_sperren.exists()}, neu: {text[-200:] or 'keine Datei'}")
         zeilen = befehl(bot, "/cam banlist")
         FIND.test("bans.yml von vor dem Umzug: ihre Sperre gilt weiter",
-                  gesagt(zeilen, r"Everybody: for good, by Testlauf \(Altdatei\)"), zeige(zeilen))
+                  gesagt(zeilen, r"Everybody: permanently, by Testlauf \(Altdatei\)"), zeige(zeilen))
         konsole("cam unban all")
     finally:
         try:
@@ -6865,12 +6865,12 @@ def welten_checks(env, bot):
         set_option(env, "worlds-enabled", "true")
         z = befehl(bot, "/cam")
         FIND.test("forbidden-worlds: in einer verbotenen Welt startet der Cam-Modus nicht, die Meldung nennt sie",
-                  gesagt(z, r"cannot start cam mode in the world world") and not gesagt(z, r"[Cc]am mode activated"),
+                  gesagt(z, r"can't start cam mode in the world world") and not gesagt(z, r"[Cc]am mode activated"),
                   zeige(z))
         set_option(env, "forbidden-worlds", "[WORLD]")
         z = befehl(bot, "/cam")
         FIND.test("forbidden-worlds: der Name zaehlt ohne Gross- und Kleinschreibung",
-                  gesagt(z, r"cannot start cam mode in the world world"), zeige(z))
+                  gesagt(z, r"can't start cam mode in the world world"), zeige(z))
 
         set_option(env, "level", "0", "cam-area")
         an = cam_on(bot)
@@ -6928,7 +6928,7 @@ def angriff_checks(env, bot):
 
     def sperrt(name, wo):
         geschlagen, an, zeilen = start_nach(wo)
-        FIND.test(f"after-attack: {name}", geschlagen and not an and gesagt(zeilen, r"remain safe"), zeige(zeilen))
+        FIND.test(f"after-attack: {name}", geschlagen and not an and gesagt(zeilen, r"Too soon after damage"), zeige(zeilen))
         time.sleep(5.5)
 
     def sperrt_nicht(name, wo):
@@ -6988,8 +6988,8 @@ def afk_checks(env, bot):
     Voreingestellt ist es aus und warnt bei 80 Prozent - nachgesehen in der
     ausgelieferten Datei. Mit seconds: 12 und warning-percent: 50 steht der
     Bot im Cam-Modus still: Nach etwa sechs Sekunden kommt "You are not
-    moving: cam mode ends in 6 seconds" mit dem Ton von sounds.end-warning,
-    nach zwoelf endet der Cam-Modus mit "you did not move for 12 seconds" und
+    cam mode ends in 6 seconds" mit dem Ton von sounds.end-warning,
+    nach zwoelf endet der Cam-Modus mit "inactive for 12 seconds" und
     dem Ton von sounds.end-forced. Mit warning-percent: 0 endet er ohne
     Warnung. Wer sich bewegt, bleibt: Der Bot fliegt alle paar Sekunden ein
     Stueck und ist nach zwanzig Sekunden noch im Cam-Modus. Weniger als 10
@@ -7009,13 +7009,13 @@ def afk_checks(env, bot):
         if not FIND.test("Cam-Modus fuer afk-end gestartet", cam_on(bot), ""):
             return
         start = time.time() - 1.5
-        warnung = bot.expect(r"You are not moving: cam mode ends in [56] seconds", since, 12000)
+        warnung = bot.expect(r"Inactive: cam mode ends in [56] seconds", since, 12000)
         gewarnt = time.time() - start
         FIND.test("afk-end.warning-percent: 50 - nach der Haelfte der 12 Sekunden kommt die Warnung",
                   bool(warnung) and 5.0 <= gewarnt <= 8.5, f"nach {gewarnt:.1f} s")
         FIND.test("afk-end: die Warnung mit dem Ton von sounds.end-warning",
                   ton_da(bot, seit, "item.lodestone_compass.lock"), "")
-        ende = bot.expect(r"you did not move for 12 seconds", since, 12000)
+        ende = bot.expect(r"inactive for 12 seconds", since, 12000)
         dauer = time.time() - start
         FIND.test("afk-end: nach 12 Sekunden ohne Bewegung endet der Cam-Modus",
                   bool(ende) and 10.0 <= dauer <= 16.0, f"nach {dauer:.1f} s")
@@ -7024,10 +7024,10 @@ def afk_checks(env, bot):
         set_option(env, "warning-percent", "0", "afk-end")
         since = bot.mark()
         if FIND.test("Cam-Modus fuer afk-end ohne Warnung gestartet", cam_on(bot), ""):
-            ende = bot.expect(r"you did not move for 12 seconds", since, 16000)
+            ende = bot.expect(r"inactive for 12 seconds", since, 16000)
             z = zeilen_seit(bot, since)
             FIND.test("afk-end.warning-percent: 0 - der Cam-Modus endet ohne Warnung",
-                      bool(ende) and not gesagt(z, r"You are not moving"), zeige(z[-3:]))
+                      bool(ende) and not gesagt(z, r"Inactive: cam mode ends"), zeige(z[-3:]))
 
         if FIND.test("Cam-Modus fuer afk-end mit Bewegung gestartet", cam_on(bot), ""):
             since = bot.mark()
@@ -7036,7 +7036,7 @@ def afk_checks(env, bot):
                 time.sleep(2.5)
             z = zeilen_seit(bot, since)
             FIND.test("afk-end: wer sich bewegt, bleibt im Cam-Modus",
-                      spielmodus_ist(bot, "adventure") and not gesagt(z, r"did not move"), zeige(z[-3:]))
+                      spielmodus_ist(bot, "adventure") and not gesagt(z, r"inactive for"), zeige(z[-3:]))
             cam_off(bot)
 
         vorher = len(server_log(env))
@@ -7239,7 +7239,7 @@ def flugspur_checks(env, bot):
         oben = bot.server_pos()
         log = konsole(f"cam trail {BOT_NAME}")
         FIND.test("/cam trail mitten im Flug: \"still in cam mode\"",
-                  re.search(rf"Cam flight #1 of {BOT_NAME}: \d+ blocks in .+, still in cam mode", log) is not None,
+                  re.search(rf"Flight #1 of {BOT_NAME}: \d+ blocks in .+, still in cam mode", log) is not None,
                   log.strip()[-200:] or "nichts im Log")
         bot.call("fly", wait=30, dx=6, timeout=15000)
         time.sleep(0.5)
@@ -7254,7 +7254,7 @@ def flugspur_checks(env, bot):
             return
 
         log = konsole(f"cam trail {BOT_NAME}")
-        strecke = re.search(rf"Cam flight #1 of {BOT_NAME}: (\d+) blocks in .+, ended .+ ago", log)
+        strecke = re.search(rf"Flight #1 of {BOT_NAME}: (\d+) blocks in .+, ended .+ ago", log)
         FIND.test("/cam trail von der Konsole: die Strecke ohne den Sprung von /cam back",
                   strecke is not None and 14 <= int(strecke.group(1)) <= 19, log.strip()[-300:] or "nichts im Log")
         FIND.test("/cam trail von der Konsole: der Platz des Koerpers",
@@ -7265,7 +7265,7 @@ def flugspur_checks(env, bot):
         seit = partikel_marke(bot)
         z = befehl(bot, f"/cam trail {BOT_NAME}")
         FIND.test("/cam trail: der Bot bekommt die Zusammenfassung und wie lange die Linie steht",
-                  gesagt(z, rf"Cam flight #1 of {BOT_NAME}: \d+ blocks") and gesagt(z, r"Shown for 4 seconds"), zeige(z))
+                  gesagt(z, rf"Flight #1 of {BOT_NAME}: \d+ blocks") and gesagt(z, r"Shown for 4 seconds"), zeige(z))
         teile = partikel_seit(bot, seit)
         FIND.test("/cam trail: die Linie kommt als Partikel an", len(teile) >= 20, f"{len(teile)} Partikel")
         FIND.test("/cam trail: alle mit dem Flag fuer die Sichtweite",
@@ -7283,7 +7283,7 @@ def flugspur_checks(env, bot):
         seit = partikel_marke(bot)
         time.sleep(1.5)
         FIND.test("/cam trail ohne Namen blendet die Linie aus",
-                  gesagt(z, r"The flight is hidden again") and not partikel_seit(bot, seit), zeige(z))
+                  gesagt(z, r"Flight hidden") and not partikel_seit(bot, seit), zeige(z))
         z = befehl(bot, "/cam trail")
         FIND.test("/cam trail ohne Namen und ohne Linie sagt, wie es geht",
                   gesagt(z, r"Use /cam trail <player>"), zeige(z))
@@ -7322,47 +7322,47 @@ def flugspur_checks(env, bot):
 
         z, teile, pakete = gezeigt(f"/cam trail {BOT_NAME}")
         FIND.test("/cam trail <Name>: der neueste Flug, nur seine Linie",
-                  gesagt(z, rf"Cam flight #1 of {BOT_NAME}") and bei(teile, nord) and not bei(teile, ecke),
+                  gesagt(z, rf"Flight #1 of {BOT_NAME}") and bei(teile, nord) and not bei(teile, ecke),
                   zeige(z[:1]) + f" - {len(teile)} Partikel")
         FIND.test("/cam trail: Knoepfe fuer die gemerkten Fluege und fuer alle",
-                  gesagt(z, r"Kept flights: \[1\] \[2\] \[all\]") and f"/cam trail {BOT_NAME} 2" in pakete
+                  gesagt(z, r"Flights: \[1\] \[2\] \[all\]") and f"/cam trail {BOT_NAME} 2" in pakete
                   and f"/cam trail {BOT_NAME} all" in pakete, zeige(z))
         z, teile, _ = gezeigt(f"/cam trail {BOT_NAME} 2")
         FIND.test("/cam trail <Name> 2: der Flug davor, nur seine Linie",
-                  gesagt(z, rf"Cam flight #2 of {BOT_NAME}") and bei(teile, ecke) and not bei(teile, nord),
+                  gesagt(z, rf"Flight #2 of {BOT_NAME}") and bei(teile, ecke) and not bei(teile, nord),
                   zeige(z[:1]) + f" - {len(teile)} Partikel")
         z, teile, _ = gezeigt(f"/cam trail {BOT_NAME} all")
         FIND.test("/cam trail <Name> all: beide Fluege im Chat und beide Linien",
-                  gesagt(z, rf"The last 2 cam flights of {BOT_NAME}") and gesagt(z, r"^#1: \d+ blocks")
+                  gesagt(z, rf"Last 2 flights of {BOT_NAME}") and gesagt(z, r"^#1: \d+ blocks")
                   and gesagt(z, r"^#2: \d+ blocks") and bei(teile, ecke) and bei(teile, nord),
                   zeige(z[:3]) + f" - {len(teile)} Partikel")
         befehl(bot, "/cam trail", warten=0.5)
         z = befehl(bot, f"/cam trail {BOT_NAME} 3")
         FIND.test("/cam trail <Name> 3: den gibt es nicht",
-                  gesagt(z, rf"{BOT_NAME} has no cam flight #3, only 2 kept"), zeige(z))
+                  gesagt(z, rf"No flight #3: {BOT_NAME} has only 2"), zeige(z))
         vorschlag = bot.call("tab", text=f"/cam trail {BOT_NAME} ").get("matches", [])
         FIND.test("Tab-Vervollstaendigung nach dem Namen: 1, 2 und all",
                   sorted(vorschlag) == ["1", "2", "all"], str(vorschlag))
         set_option(env, "flights", "1", "cam-trail")
         log = konsole(f"cam trail {BOT_NAME} 2")
         FIND.test("cam-trail.flights: 1 - nach dem Reload ist nur noch der letzte Flug da",
-                  f"{BOT_NAME} has no cam flight #2, only 1 kept" in log, log.strip()[-200:] or "nichts im Log")
+                  f"No flight #2: {BOT_NAME} has only 1." in log, log.strip()[-200:] or "nichts im Log")
 
         z = befehl(bot, "/cam trail Niemand")
         FIND.test("/cam trail: wer keinen Flug hat, wird gemeldet",
-                  gesagt(z, r"Niemand has no recorded cam flight"), zeige(z))
+                  gesagt(z, r"Niemand has no recorded flights"), zeige(z))
 
         console(env, f"deop {BOT_NAME}", pause=1.5)
         z = befehl(bot, f"/cam trail {BOT_NAME}")
         console(env, f"op {BOT_NAME}", pause=1.5)
         FIND.test("/cam trail ohne camplugin.trail: keine Berechtigung",
-                  gesagt(z, r"permission") and not gesagt(z, r"Cam flight"), zeige(z))
+                  gesagt(z, r"permission") and not gesagt(z, r"Flight #"), zeige(z))
 
         set_option(env, "enabled", "false", "cam-trail")
         set_option(env, "enabled", "true", "cam-trail")
         log = konsole(f"cam trail {BOT_NAME}")
         FIND.test("cam-trail.enabled: false vergisst die Fluege",
-                  f"{BOT_NAME} has no recorded cam flight" in log, log.strip()[-200:] or "nichts im Log")
+                  f"{BOT_NAME} has no recorded flights" in log, log.strip()[-200:] or "nichts im Log")
     finally:
         console(env, f"op {BOT_NAME}", pause=1.0)
         cam_off(bot)
@@ -7452,7 +7452,7 @@ def aussichtspunkt_checks(env, bot):
     der Action-Bar, und schaut danach wieder nach Osten. Ohne Cam-Modus
     springt er hin, wenn der Punkt nicht weiter als start-distance (16) weg
     ist: der Cam-Modus startet dort, wo er steht; weiter weg sagt "You are X
-    blocks too far away", mit start-distance: 0 geht es nur im Cam-Modus.
+    blocks too far from the spot", mit start-distance: 0 geht es nur im Cam-Modus.
     /cam spot list zeigt den Punkt mit einem Klick auf
     "/cam spot Turm" und einem, der "/cam spot delete Turm" in die Zeile
     legt, und in der Datei des Bots steht er unter spots.
@@ -7506,7 +7506,7 @@ def aussichtspunkt_checks(env, bot):
                             r"(?:\s*#.*\n)*\s*storage:\s*file\s*$", ausgeliefert(env)) is not None, "")
         spots_loeschen(bot, "Turm", "Weit", "Mem")
         zeilen = befehl(bot, "/cam spot")
-        FIND.test("/cam spot ohne Punkte sagt, wie man einen setzt", gesagt(zeilen, r"You have no spots yet"),
+        FIND.test("/cam spot ohne Punkte sagt, wie man einen setzt", gesagt(zeilen, r"No spots yet"),
                   zeige(zeilen))
 
         hinstellen(bot, x, y, z)
@@ -7520,7 +7520,7 @@ def aussichtspunkt_checks(env, bot):
         time.sleep(1.0)
         punkt = bot.server_pos()
         zeilen = befehl(bot, "/cam spot set Turm")
-        FIND.test("/cam spot set Turm - der Punkt ist gemerkt", gesagt(zeilen, r"Spot Turm saved here"), zeige(zeilen))
+        FIND.test("/cam spot set Turm - der Punkt ist gemerkt", gesagt(zeilen, r"Spot Turm saved\."), zeige(zeilen))
         bot.chat("/tp @s ~ ~ ~ 90 0")
         time.sleep(0.5)
         bot.call("fly", wait=30, dy=-2, dx=-5, timeout=15000)
@@ -7548,12 +7548,12 @@ def aussichtspunkt_checks(env, bot):
                   re.search(r"(?m)^  start-distance:\s*16\s*$", quelle_config(env)) is not None, "")
         set_option(env, "start-distance", "3", "viewpoints")
         zeilen = befehl(bot, "/cam spot Turm")
-        FIND.test("start-distance: 3 - weiter weg: \"You are X blocks too far away\", und nichts startet",
-                  gesagt(zeilen, r"You are \d+ blocks too far away") and not spielmodus_ist(bot, "adventure"),
+        FIND.test("start-distance: 3 - weiter weg: \"You are X blocks too far from the spot\", und nichts startet",
+                  gesagt(zeilen, r"You are \d+ blocks too far from the spot") and not spielmodus_ist(bot, "adventure"),
                   zeige(zeilen))
         set_option(env, "start-distance", "0", "viewpoints")
         zeilen = befehl(bot, "/cam spot Turm")
-        FIND.test("start-distance: 0 - ohne Cam-Modus springt er nicht", gesagt(zeilen, r"only works in cam mode"),
+        FIND.test("start-distance: 0 - ohne Cam-Modus springt er nicht", gesagt(zeilen, r"Only in cam mode"),
                   zeige(zeilen))
         set_option(env, "start-distance", "16", "viewpoints")
         seit = bot.call("chat_packets", since=10 ** 9).get("count", 0)
@@ -7570,7 +7570,7 @@ def aussichtspunkt_checks(env, bot):
 
         hinstellen(bot, bx + 0.5, y, z)
         zeilen = befehl(bot, "/cam spot set Weit")
-        FIND.test("/cam spot set geht auch zu Fuss", gesagt(zeilen, r"Spot Weit saved here"), zeige(zeilen))
+        FIND.test("/cam spot set geht auch zu Fuss", gesagt(zeilen, r"Spot Weit saved\."), zeige(zeilen))
         weit = (bx + 0.5, y, z)
         hinstellen(bot, x, y, z)
         cam_on(bot)
@@ -7596,20 +7596,20 @@ def aussichtspunkt_checks(env, bot):
         # Jeder reload beendet den Cam-Modus, gesperrt() startet ihn neu.
         set_option(env, "max-distance", "6.0")
         gesperrt("max-distance: 6 - der Punkt ist zu weit, die Kamera bleibt",
-                 r"You are too far away", "max-distance 6")
+                 r"The spot is out of your camera's range", "max-distance 6")
         set_option(env, "max-distance", "100.0")
 
         bot.chat(f"/fillbiome {biom} minecraft:lush_caves")
         time.sleep(1.5)
         gesperrt("cam-area: der Punkt liegt in einem verbotenen Biom, die Kamera bleibt",
-                 r"Spot Weit lies in Lush Caves", "Biom")
+                 r"Spot Weit is in Lush Caves", "Biom")
         bot.chat(f"/fillbiome {biom} minecraft:plains")
         time.sleep(1.5)
 
         bot.chat(f"/setblock {bx} {y} {bz} minecraft:stone")
         time.sleep(0.5)
         gesperrt("Ein Stein an der Stelle - der Punkt ist verstellt, die Kamera bleibt",
-                 r"Something has been built at spot Weit", "Stein")
+                 r"Something was built at spot Weit", "Stein")
         bot.chat(f"/setblock {bx} {y} {bz} minecraft:air")
         time.sleep(0.5)
 
@@ -7617,7 +7617,7 @@ def aussichtspunkt_checks(env, bot):
         bot.chat(f"/fill {wand} minecraft:bedrock")
         time.sleep(0.5)
         gesperrt("max-distance-mode: signal - durch Grundgestein reicht das Signal nicht zum Punkt",
-                 r"The signal does not reach spot Weit", "Signal")
+                 r"No signal at spot Weit", "Signal")
         bot.chat(f"/fill {wand} minecraft:air")
         time.sleep(0.5)
         set_option(env, "max-distance-mode", "fixed")
@@ -7632,15 +7632,15 @@ def aussichtspunkt_checks(env, bot):
         set_option(env, "max-per-player", "2")
         zeilen = befehl(bot, "/cam spot set Dritter")
         FIND.test("max-per-player: 2 - ein dritter Punkt hat keinen Platz",
-                  gesagt(zeilen, r"You have 2 spots already"), zeige(zeilen))
+                  gesagt(zeilen, r"Spot limit reached \(2\)"), zeige(zeilen))
         zeilen = befehl(bot, "/cam spot set turm")
         FIND.test("max-per-player: 2 - ein Name, den es schon gibt, wandert trotzdem",
-                  gesagt(zeilen, r"Spot turm moved here"), zeige(zeilen))
+                  gesagt(zeilen, r"Spot turm moved here\."), zeige(zeilen))
         set_option(env, "max-per-player", "0")
         zeilen = befehl(bot, "/cam spot set Dritter")
         liste = befehl(bot, "/cam spot list")
         FIND.test("max-per-player: 0 - kein Limit, und die Liste nennt keins",
-                  gesagt(zeilen, r"Spot Dritter saved here") and gesagt(liste, r"Your spots \(3\):"),
+                  gesagt(zeilen, r"Spot Dritter saved\.") and gesagt(liste, r"Your spots \(3\):"),
                   f"{zeige(zeilen)} / {zeige(liste)}")
         befehl(bot, "/cam spot delete Dritter")
         set_option(env, "max-per-player", "10")
@@ -7648,7 +7648,7 @@ def aussichtspunkt_checks(env, bot):
         # Jeder Name mit 1 bis 16 Zeichen: Leerzeichen, Punkt, ein Wort des Befehls.
         zeilen = befehl(bot, "/cam spot set Mein Haus.1") + befehl(bot, "/cam spot set list")
         FIND.test("/cam spot set Mein Haus.1 und list - Leerzeichen, Punkt und ein Wort des Befehls gehen",
-                  gesagt(zeilen, r"Spot Mein Haus\.1 saved here") and gesagt(zeilen, r"Spot list saved here"),
+                  gesagt(zeilen, r"Spot Mein Haus\.1 saved\.") and gesagt(zeilen, r"Spot list saved\."),
                   zeige(zeilen))
         text = datei_text()
         FIND.test("Mein Haus.1 steht in der Datei unter einem Schluessel ohne Punkt",
@@ -7689,10 +7689,10 @@ def aussichtspunkt_checks(env, bot):
         zeilen = befehl(bot, "/cam spot set Mem")
         text = datei_text()
         FIND.test("storage: memory - der Punkt ist gemerkt, aber nicht in der Datei",
-                  gesagt(zeilen, r"Spot Mem saved here") and re.search(r"name:\s*Mem", text) is None, zeige(zeilen))
+                  gesagt(zeilen, r"Spot Mem saved\.") and re.search(r"name:\s*Mem", text) is None, zeige(zeilen))
         console(env, "cam reload", pause=2)
         zeilen = befehl(bot, "/cam spot list")
-        FIND.test("storage: memory - nach /cam reload ist der Punkt weg", gesagt(zeilen, r"You have no spots yet"),
+        FIND.test("storage: memory - nach /cam reload ist der Punkt weg", gesagt(zeilen, r"No spots yet"),
                   zeige(zeilen))
         set_option(env, "storage", "file", "viewpoints")
         zeilen = befehl(bot, "/cam spot list")
@@ -7825,7 +7825,7 @@ def foto_checks(env, bot):
         schwein_hin(schwein)
         stein_hin(stein)
         zeilen = befehl(bot, "/cam photo")
-        FIND.test("/cam photo ohne Cam-Modus geht nicht", gesagt(zeilen, r"only works in cam mode"), zeige(zeilen))
+        FIND.test("/cam photo ohne Cam-Modus geht nicht", gesagt(zeilen, r"Only in cam mode"), zeige(zeilen))
         FIND.test("Ohne Cam-Modus schlaegt /cam kein photo vor", "photo" not in tab("/cam "), "")
         zuschauer.start()
         if not FIND.test("Zweiter Spieler fuer den Foto-Modus kommt herein",
@@ -8013,7 +8013,7 @@ def zeit_wetter_checks(env, bot):
 
         zeilen = befehl(bot, "/cam time sunset", warten=2.0)
         FIND.test("/cam time ohne Cam-Modus: fuer den naechsten Flug gemerkt, zu Fuss bleibt die Zeit der Welt",
-                  gesagt(zeilen, r"Your own time in cam mode: sunset\. Only you see it\. Kept for your next flights")
+                  gesagt(zeilen, r"Cam time: sunset \(only you see it\)")
                   and zeit(bot) == 1000, f"{zeige(zeilen)} / {zeit(bot)}")
         jetzt = tab("/cam ")
         FIND.test("Auch ohne Cam-Modus schlaegt /cam time und weather vor",
@@ -8032,7 +8032,7 @@ def zeit_wetter_checks(env, bot):
                   and sorted(wetter) == ["clear", "rain", "reset"], f"{jetzt} / {worte} / {wetter}")
 
         zeilen = befehl(bot, "/cam time sunset", warten=2.0)
-        FIND.test("/cam time sunset - der Bot sieht 12000", gesagt(zeilen, r"Your own time in cam mode: sunset")
+        FIND.test("/cam time sunset - der Bot sieht 12000", gesagt(zeilen, r"Cam time: sunset")
                   and zeit(bot) == 12000, f"{zeige(zeilen)} / {zeit(bot)}")
         FIND.test("/cam time: der zweite Spieler sieht weiter die Zeit der Welt", zeit(zuschauer) == 1000,
                   str(zeit(zuschauer)))
@@ -8042,12 +8042,12 @@ def zeit_wetter_checks(env, bot):
         FIND.test("/cam time 24000 - keine Tageszeit, sie bleibt", gesagt(zeilen, r"Use /cam time")
                   and zeit(bot) == 18000, f"{zeige(zeilen)} / {zeit(bot)}")
         zeilen = befehl(bot, "/cam time reset", warten=2.0)
-        FIND.test("/cam time reset - wieder die Zeit der Welt", gesagt(zeilen, r"time of the world again")
+        FIND.test("/cam time reset - wieder die Zeit der Welt", gesagt(zeilen, r"Cam time: the world's again")
                   and zeit(bot) == 1000, f"{zeige(zeilen)} / {zeit(bot)}")
 
         befehl(bot, "/cam time sunset")
         zeilen = befehl(bot, "/cam weather rain", warten=6.5)
-        FIND.test("/cam weather rain - beim Bot regnet es voll", gesagt(zeilen, r"Your own weather in cam mode: rain")
+        FIND.test("/cam weather rain - beim Bot regnet es voll", gesagt(zeilen, r"Cam weather: rain")
                   and regen(bot) > 0.99, f"{zeige(zeilen)} / {regen(bot)}")
         FIND.test("/cam weather: beim zweiten Spieler regnet es nicht", regen(zuschauer) == 0,
                   str(regen(zuschauer)))
@@ -8061,8 +8061,8 @@ def zeit_wetter_checks(env, bot):
         zeit_weg = befehl(bot, "/cam time reset")
         wetter_weg = befehl(bot, "/cam weather reset")
         FIND.test("reset geht auch ohne Cam-Modus",
-                  gesagt(zeit_weg, r"In cam mode you see the time of the world again")
-                  and gesagt(wetter_weg, r"In cam mode you see the weather of the world again"),
+                  gesagt(zeit_weg, r"Cam time: the world's again")
+                  and gesagt(wetter_weg, r"Cam weather: the world's again"),
                   f"{zeige(zeit_weg)} / {zeige(wetter_weg)}")
 
         set_options(env, [("enabled", "false", "cam-time"), ("enabled", "false", "cam-weather")])
@@ -8140,7 +8140,7 @@ def nachtsicht_wahl_checks(env, bot):
                   gesagt(zeilen, r"Night vision in cam mode: always") and hat(), zeige(zeilen))
         zeilen = befehl(bot, "/cam nightvision reset")
         FIND.test("/cam nightvision reset - wieder dark: um Mitternacht mit",
-                  gesagt(zeilen, r"only in the dark, as the server has it") and hat(), zeige(zeilen))
+                  gesagt(zeilen, r"server default \(in the dark\)") and hat(), zeige(zeilen))
         zeit("noon")
         FIND.test("/cam nightvision reset - wieder dark: am Tag ohne", not hat(), "")
         zeilen = befehl(bot, "/cam nightvision bunt")
@@ -8152,7 +8152,7 @@ def nachtsicht_wahl_checks(env, bot):
         cam_on(bot)
         time.sleep(1.0)
         FIND.test("Vor dem Cam-Modus gewaehlt, gilt es fuer den naechsten Flug",
-                  gesagt(zeilen, r"Night vision in cam mode: always\. Kept for your next flights") and hat(),
+                  gesagt(zeilen, r"Night vision in cam mode: always\.") and hat(),
                   zeige(zeilen))
         cam_off(bot)
         cam_on(bot)
@@ -8175,7 +8175,7 @@ def nachtsicht_wahl_checks(env, bot):
         zeilen = befehl(bot, "/cam nightvision off")
         befehl(bot, "/cam nightvision on")
         FIND.test("storage: memory - die Meldung sagt, dass es bis zum Verlassen gilt",
-                  gesagt(zeilen, r"Night vision in cam mode: never\. Holds until you leave the server"),
+                  gesagt(zeilen, r"Night vision in cam mode: never \(until you leave\)"),
                   zeige(zeilen))
         if FIND.test("Neu angemeldet fuer die eigene Nachtsicht im Speicher", neu_anmelden(bot), ""):
             cam_on(bot)
@@ -8287,9 +8287,8 @@ def einstellungen_checks(env, bot):
         zeilen = befehl(bot, "/cam time sunset", warten=2.0)
         wetter = befehl(bot, "/cam weather rain", warten=2.0)
         FIND.test("Zeit und Wetter: die Meldungen sagen, dass sie bleiben",
-                  gesagt(zeilen, r"Your own time in cam mode: sunset\. Only you see it\. Kept for your next flights")
-                  and gesagt(wetter, r"Your own weather in cam mode: rain\. Only you see it\. Kept for your next "
-                                     r"flights"),
+                  gesagt(zeilen, r"Cam time: sunset \(only you see it\)")
+                  and gesagt(wetter, r"Cam weather: rain \(only you see it\)"),
                   f"{zeige(zeilen)} / {zeige(wetter)}")
         cam_off(bot)
         time.sleep(6.5)
@@ -8316,8 +8315,8 @@ def einstellungen_checks(env, bot):
         zeilen = befehl(bot, "/cam time night", warten=1.0)
         wetter_weg = befehl(bot, "/cam weather reset", warten=1.0)
         FIND.test("Ohne Cam-Modus gewaehlt: zu Fuss weiter die Zeit der Welt",
-                  gesagt(zeilen, r"Your own time in cam mode: night") and zeit() == 1000
-                  and gesagt(wetter_weg, r"In cam mode you see the weather of the world again"),
+                  gesagt(zeilen, r"Cam time: night") and zeit() == 1000
+                  and gesagt(wetter_weg, r"Cam weather: the world's again"),
                   f"{zeige(zeilen)} / {zeige(wetter_weg)} / {zeit()}")
         cam_on(bot)
         time.sleep(6.5)
@@ -8334,10 +8333,8 @@ def einstellungen_checks(env, bot):
         zeilen = befehl(bot, "/cam time sunset")
         wetter = befehl(bot, "/cam weather rain")
         FIND.test("storage: memory - die Meldungen sagen, dass es bis zum Verlassen gilt",
-                  gesagt(zeilen, r"Your own time in cam mode: sunset\. Only you see it\. Holds until you leave "
-                                 r"the server")
-                  and gesagt(wetter, r"Your own weather in cam mode: rain\. Only you see it\. Holds until you leave "
-                                     r"the server"), f"{zeige(zeilen)} / {zeige(wetter)}")
+                  gesagt(zeilen, r"Cam time: sunset \(only you see it, until you leave\)")
+                  and gesagt(wetter, r"Cam weather: rain \(only you see it, until you leave\)"), f"{zeige(zeilen)} / {zeige(wetter)}")
         if FIND.test("Neu angemeldet fuer Zeit und Wetter im Speicher", neu_anmelden(bot), ""):
             cam_on(bot)
             time.sleep(6.5)
@@ -8443,11 +8440,11 @@ def teilen_checks(env, bot):
         pakete_seit = zuschauer.call("chat_packets", since=10 ** 9).get("count", 0)
         zeilen = befehl(bot, f"/cam spot share Haus {ZUSCHAUER_NAME}")
         FIND.test("/cam spot share Haus <Spieler> - angeboten, noch nicht geteilt",
-                  gesagt(zeilen, rf"Spot Haus is offered to {ZUSCHAUER_NAME} now"), zeige(zeilen))
+                  gesagt(zeilen, rf"Offered Haus to {ZUSCHAUER_NAME}"), zeige(zeilen))
         dort = zeilen_seit(zuschauer, seit)
         pakete = " ".join(p["text"] for p in zuschauer.call("chat_packets", since=pakete_seit).get("packets", []))
         FIND.test("Wer online ist, erfaehrt es - mit Knoepfen zum Annehmen und Ablehnen",
-                  gesagt(dort, rf"{BOT_NAME} wants to share the spot Haus with you")
+                  gesagt(dort, rf"{BOT_NAME} offers you the spot Haus")
                   and f"/cam spot accept {label}" in pakete and f"/cam spot decline {label}" in pakete,
                   f"{zeige(dort)} / {pakete[-300:]}")
         text = geteilte_datei(env)
@@ -8467,7 +8464,7 @@ def teilen_checks(env, bot):
         dort = befehl(zuschauer, f"/cam spot accept {label}")
         hier = zeilen_seit(bot, seit)
         FIND.test("/cam spot accept - angenommen, und der Bot erfaehrt es",
-                  gesagt(dort, rf"You accepted {label}") and gesagt(hier, rf"{ZUSCHAUER_NAME} accepted your spot Haus"),
+                  gesagt(dort, rf"Accepted {label}") and gesagt(hier, rf"{ZUSCHAUER_NAME} accepted your spot Haus"),
                   f"{zeige(dort)} / {zeige(hier)}")
         text = geteilte_datei(env)
         FIND.test("Angenommen steht er in playerdata/shared-spots.yml unter players, nicht mehr unter pending",
@@ -8482,14 +8479,14 @@ def teilen_checks(env, bot):
         FIND.test("Tab nach /cam: visit gibt es nicht mehr", "visit" not in tabs and "spot" in tabs, str(tabs))
         zeilen = befehl(bot, f"/cam spot share Haus {ZUSCHAUER_NAME}")
         FIND.test("Noch einmal angeboten - er hat ihn schon",
-                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} has spot Haus already"), zeige(zeilen))
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} already has spot Haus"), zeige(zeilen))
 
         if not FIND.test("Der zweite Spieler ist weit weg im Cam-Modus",
                          zuschauer_cam_an(env, zuschauer, fern[0], y, z), ""):
             return
         dort = befehl(zuschauer, f"/cam spot {label}")
         FIND.test("/cam spot Besitzer:Name springt nur wie zu einem eigenen Punkt: zu weit vom eigenen Koerper",
-                  gesagt(dort, r"You are too far away")
+                  gesagt(dort, r"The spot is out of your camera's range")
                   and nahe(zuschauer_pos(), fern, 1.5), zeige(dort))
         cam_off(zuschauer)
         console(env, f"tp {ZUSCHAUER_NAME} {x + 3} {y} {z}", pause=1.5)
@@ -8517,17 +8514,17 @@ def teilen_checks(env, bot):
         dort = befehl(zuschauer, f"/cam spot like {label}")
         eigene = befehl(bot, "/cam spot list")
         FIND.test("/cam spot like - er liked ihn, und die Liste des Bots zaehlt es",
-                  gesagt(dort, rf"You like {label} now\. It has 1 likes") and gesagt(eigene, r"\(public, 1 likes\)"),
+                  gesagt(dort, rf"Liked {label} \(1 likes\)") and gesagt(eigene, r"\(public, 1 likes\)"),
                   f"{zeige(dort)} / {zeige(eigene)}")
         zeilen = befehl(bot, f"/cam spot like {label}")
         FIND.test("Den eigenen Punkt liked keiner", gesagt(zeilen, r"You cannot like your own spot"), zeige(zeilen))
         dort = befehl(zuschauer, f"/cam spot like {label}")
-        FIND.test("Noch einmal like nimmt es zurueck", gesagt(dort, rf"You no longer like {label}\. It has 0 likes"),
+        FIND.test("Noch einmal like nimmt es zurueck", gesagt(dort, rf"Unliked {label} \(0 likes\)"),
                   zeige(dort))
         for name, eingabe, muster in (
                 ("Ein unbekannter Name wird abgewiesen", "/cam spot share Haus Niemand123",
-                 r"Nobody called Niemand123 has been on this server"),
-                ("Mit sich selbst teilt keiner", f"/cam spot share Haus {BOT_NAME}", r"Your own spots are yours")):
+                 r"Unknown player: Niemand123"),
+                ("Mit sich selbst teilt keiner", f"/cam spot share Haus {BOT_NAME}", r"You can't share with yourself")):
             zeilen = befehl(bot, eingabe)
             FIND.test(name, gesagt(zeilen, muster), zeige(zeilen))
         tabs = tab(bot, "/cam spot share Haus ")
@@ -8541,17 +8538,17 @@ def teilen_checks(env, bot):
         dort = befehl(zuschauer, f"/cam spot decline {label}")
         hier = zeilen_seit(bot, seit)
         FIND.test("/cam spot decline - abgelehnt, und der Bot erfaehrt es",
-                  gesagt(dort, rf"You turned down {label}")
-                  and gesagt(hier, rf"{ZUSCHAUER_NAME} turned down your spot Haus"), f"{zeige(dort)} / {zeige(hier)}")
+                  gesagt(dort, rf"Declined {label}")
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} declined your spot Haus"), f"{zeige(dort)} / {zeige(hier)}")
         dort = befehl(zuschauer, f"/cam spot accept {label}")
-        FIND.test("Danach ist nichts mehr anzunehmen", gesagt(dort, rf"Nobody offers you a spot called {label}"),
+        FIND.test("Danach ist nichts mehr anzunehmen", gesagt(dort, rf"No spot {label} is offered to you"),
                   zeige(dort))
         befehl(bot, f"/cam spot share Haus {ZUSCHAUER_NAME}")
         befehl(zuschauer, f"/cam spot accept {label}")
         dort = befehl(zuschauer, f"/cam spot decline {label}")
         liste = befehl(zuschauer, "/cam spot list")
         FIND.test("decline bei einem angenommenen Punkt nimmt ihn von seiner Liste - oeffentlich bleibt er",
-                  gesagt(dort, rf"Spot {label} is no longer among the spots shared with you")
+                  gesagt(dort, rf"Removed {label} from your list")
                   and not gesagt(liste, r"Shared with you") and gesagt(liste, r"Public spots of others \(1\)"),
                   f"{zeige(dort)} / {zeige(liste)}")
 
@@ -8559,7 +8556,7 @@ def teilen_checks(env, bot):
         time.sleep(1.5)
         dort = befehl(zuschauer, f"/cam spot {label}", warten=2.0)
         FIND.test("Ein verbotenes Biom am Punkt sperrt den Sprung, und der Cam-Modus startet dafuer nicht",
-                  gesagt(dort, rf"Spot {label} lies in Lush Caves") and not im_cam_modus(bot, ZUSCHAUER_NAME),
+                  gesagt(dort, rf"Spot {label} is in Lush Caves") and not im_cam_modus(bot, ZUSCHAUER_NAME),
                   zeige(dort))
         bot.chat(f"/fillbiome {biom} minecraft:plains")
         time.sleep(1.5)
@@ -8616,7 +8613,7 @@ def gaestebuch_checks(env, bot):
     macht den Punkt "Buch" oeffentlich. Springt der zweite Spieler zweimal
     hin, liked ihn, nimmt das Like zurueck und liked ihn wieder, liest der
     Bot davon nichts sofort, sondern mit der naechsten Minute ein einziges
-    Mal "Guestbook: what your spots got in the last 1 minutes" und
+    Mal "Guestbook: last 1 minutes" und
     "- Buch: 2 views, 1 likes" - der eigene Sprung des Bots zaehlt nicht.
 
     Im Menue steht auf der Seite der Punkte unten auf Platz 47, links neben
@@ -8703,14 +8700,14 @@ def gaestebuch_checks(env, bot):
         FIND.test("Springt ein anderer zum Punkt und liked ihn, liest der Besitzer davon nicht sofort etwas",
                   gesagt(dort, r"At spot") and not gesagt(hier, r"Guestbook"), f"{zeige(dort)} / {zeige(hier)}")
         cam_off(bot)
-        bot.expect(r"Guestbook: what your spots got in the last 1 minutes", seit, timeout=75000)
+        bot.expect(r"Guestbook: last 1 minutes", seit, timeout=75000)
         um = time.time()
         time.sleep(1.0)
         hier = zeilen_seit(bot, seit)
         FIND.test("Mit der naechsten Minute liest er es einmal: zwei Aufrufe und ein Like - das zurueckgenommene "
                   "und sein eigener Sprung zaehlen nicht",
                   sum(1 for zeile in hier if "Guestbook" in zeile) == 1
-                  and gesagt(hier, r"Guestbook: what your spots got in the last 1 minutes")
+                  and gesagt(hier, r"Guestbook: last 1 minutes")
                   and gesagt(hier, r"- Buch: 2 views, 1 likes"), zeige(hier))
 
         knopf = punkte(bot)
@@ -8718,12 +8715,12 @@ def gaestebuch_checks(env, bot):
         FIND.test("Im Menue: unten auf 47, links neben den Reitern, die Glocke wie der Knopf zum Sortieren - "
                   "\"Guestbook: on\", alle drei Stufen, wie oft \"on\" kommt, und sie glaenzt",
                   "Guestbook: on" in item_text(glocke) and "» on" in item_text(glocke)
-                  and "only at login" in item_text(glocke) and "On: updates every 1 min" in item_text(glocke)
+                  and "only at login" in item_text(glocke) and "On: every 1 min while online" in item_text(glocke)
                   and glocke.get("glint") is True, item_text(glocke))
         bot.call("close_window", wait=10)
         hier, glocke = glocke_klicken(bot)
         FIND.test("Ein Klick auf die Glocke: nur beim Login",
-                  gesagt(hier, r"Guestbook only at login") and "Guestbook: only at login" in item_text(glocke)
+                  gesagt(hier, r"Guestbook: only at login\.") and "Guestbook: only at login" in item_text(glocke)
                   and "» only at login" in item_text(glocke) and glocke.get("glint") is True,
                   f"{zeige(hier)} / {item_text(glocke)}")
         hier, glocke = glocke_klicken(bot)
@@ -8732,7 +8729,7 @@ def gaestebuch_checks(env, bot):
                   and not glocke.get("glint"), f"{zeige(hier)} / {item_text(glocke)}")
         hier, glocke = glocke_klicken(bot, button=1)
         FIND.test("Ein Rechtsklick: zurueck auf nur beim Login",
-                  gesagt(hier, r"Guestbook only at login") and "Guestbook: only at login" in item_text(glocke),
+                  gesagt(hier, r"Guestbook: only at login\.") and "Guestbook: only at login" in item_text(glocke),
                   f"{zeige(hier)} / {item_text(glocke)}")
         glocke_klicken(bot)
 
@@ -8764,7 +8761,7 @@ def gaestebuch_checks(env, bot):
         time.sleep(4.0)
         dort = zeilen_seit(zuschauer, 0)
         FIND.test("\"Nur beim Login\": kommt er neu herein, liest er, was sein Punkt bekam",
-                  bool(da) and gesagt(dort, r"Guestbook: what your spots got since you were last here")
+                  bool(da) and gesagt(dort, r"Guestbook: since your last visit")
                   and gesagt(dort, r"- Gast: 1 views, 1 likes"), zeige(dort))
         FIND.test("Danach steht es nicht mehr in der Datei", "gast:" not in gaestebuch_datei(env),
                   gaestebuch_datei(env)[-300:])
@@ -8783,7 +8780,7 @@ def gaestebuch_checks(env, bot):
         hier = zeilen_seit(bot, seit)
         bot.call("close_window", wait=10)
         FIND.test("Darf er keine oeffentlichen Punkte ansehen, sagt die Glocke es, und ein Klick tut nichts",
-                  "Closed while you may not look" in item_text(glocke) and "» on" not in item_text(glocke)
+                  "Unavailable: you can't view" in item_text(glocke) and "» on" not in item_text(glocke)
                   and not glocke.get("glint") and not gesagt(hier, r"Guestbook"),
                   f"{item_text(glocke)} / {zeige(hier)}")
         befehl(zuschauer, f"/cam spot {label}", warten=3.0)
@@ -8839,7 +8836,7 @@ def fuehrung_checks(env, bot):
     Tab-Vervollstaendigung bietet ihn nicht an. Ohne Cam-Modus sechs Bloecke
     hinter dem Fuehrer bietet sie ihn an, die Einladung kommt mit Knoepfen
     und dem Ton von sounds.follow-invite. Steht er beim Annehmen 30 Bloecke
-    weg, heisst es "You are X blocks too far away", und nichts startet; nah
+    weg, heisst es "You are X blocks too far from <Leader>", und nichts startet; nah
     dran startet sein Cam-Modus dort, wo er steht, seine Kamera steht beim
     Fuehrer, der es erfaehrt, und sein Flugtempo ist 0. Fliegt
     der Fuehrer acht Bloecke, fliegt der Gast mit; im Menue sagt der Knopf
@@ -8985,8 +8982,8 @@ def fuehrung_checks(env, bot):
         leer = item_text(fenster(bot).get("slots", {}).get("22"))
         FIND.test("Menue: niemand nah genug - die Seite sagt, wie nah: ohne Cam-Modus start-distance, im Cam-Modus "
                   "radius",
-                  "Nobody to invite" in leer and "- without cam mode: within 16 blocks" in leer
-                  and "- in cam mode: within 16 blocks" in leer, leer)
+                  "Nobody to invite" in leer and "16 blocks" in leer
+                  and "(in cam mode: 16)" in leer, leer)
         bot.call("close_window", wait=10)
         cam_off(zuschauer)
         zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
@@ -9007,16 +9004,16 @@ def fuehrung_checks(env, bot):
         pakete = " ".join(p["text"] for p in zuschauer.call("chat_packets", since=pakete_seit).get("packets", []))
         FIND.test("Die Einladung kommt an - mit Knoepfen zum Annehmen und Ablehnen, und beide lesen, dass sie in "
                   "60 Sekunden ablaeuft (follow.invitation-seconds)",
-                  gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to follow you\. The invitation runs out in 60 seconds")
-                  and gesagt(dort, rf"{BOT_NAME} invites you to follow them with your camera - it runs out in 60 seconds")
+                  gesagt(zeilen, rf"Invited {ZUSCHAUER_NAME} \(expires in 60 seconds\)")
+                  and gesagt(dort, rf"{BOT_NAME} invites you to follow \(expires in 60 seconds\)")
                   and f"/cam follow accept {BOT_NAME}" in pakete and f"/cam follow decline {BOT_NAME}" in pakete,
                   f"{zeige(zeilen)} / {zeige(dort)} / {pakete[-300:]}")
         FIND.test("sounds.follow-invite - der Eingeladene hoert den Ton", ton_da(zuschauer, ton, "block.note_block.bell"),
                   "")
         console(env, f"tp {ZUSCHAUER_NAME} {x + 30} {y} {z}", pause=1.0)
         dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=2.0)
-        FIND.test("Ohne Cam-Modus zu weit weg: \"You are X blocks too far away\", und nichts startet",
-                  gesagt(dort, r"You are \d+ blocks too far away") and not im_cam_modus(bot, ZUSCHAUER_NAME),
+        FIND.test("Ohne Cam-Modus zu weit weg: \"You are X blocks too far from <Leader>\", und nichts startet",
+                  gesagt(dort, rf"You are \d+ blocks too far from {BOT_NAME}") and not im_cam_modus(bot, ZUSCHAUER_NAME),
                   zeige(dort))
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=1.0)
         seit = bot.mark()
@@ -9073,7 +9070,7 @@ def fuehrung_checks(env, bot):
         zuschauer.call("attack_entity", wait=20, at=list(gast), radius=2)
         time.sleep(1.0)
         dort = zeilen_seit(zuschauer, seit)
-        gesperrt = sum(1 for z in dort if re.search(rf"You follow {BOT_NAME}: stop that first", z))
+        gesperrt = sum(1 for z in dort if re.search(rf"Stop following {BOT_NAME} first", z))
         FIND.test("Wer folgt, kann seinen eigenen Koerper weder anklicken noch schlagen: der Cam-Modus bleibt an",
                   im_cam_modus(bot, ZUSCHAUER_NAME) and gesperrt == 2, f"{gesperrt} / {zeige(dort)}")
         bot.call("fly", wait=30, dx=5, timeout=15000)
@@ -9100,7 +9097,7 @@ def fuehrung_checks(env, bot):
         klick(zuschauer, 9)
         knopf = fenster(zuschauer).get("slots", {})
         FIND.test("Auf der Seite der Fuehrung: der Knopf des Blicks, er steht auf dem des Fuehrers",
-                  "View when following" in item_text(knopf.get("13")) and "Now: the leader's" in item_text(knopf.get("13")),
+                  "View while following" in item_text(knopf.get("13")) and "Now: the leader's" in item_text(knopf.get("13")),
                   item_text(knopf.get("13")))
         kamera = kamera_marke()
         seit = zuschauer.mark()
@@ -9108,7 +9105,7 @@ def fuehrung_checks(env, bot):
         dort = zeilen_seit(zuschauer, seit)
         knopf = fenster(zuschauer).get("slots", {})
         FIND.test("Ein Klick schaltet auf freies Umsehen: die eigene Kamera wieder",
-                  gesagt(dort, r"When following you look round freely now") and kameras_seit(kamera)[-1:] == ["selbst"]
+                  gesagt(dort, r"View while following: free") and kameras_seit(kamera)[-1:] == ["selbst"]
                   and "Now: free" in item_text(knopf.get("13")), f"{zeige(dort)} / {kameras_seit(kamera)}")
         zuschauer.call("close_window", wait=10)
         time.sleep(1.0)
@@ -9117,7 +9114,7 @@ def fuehrung_checks(env, bot):
         kamera = kamera_marke()
         dort = befehl(zuschauer, "/cam follow view", warten=2.0)
         FIND.test("/cam follow view schaltet zurueck auf den Blick des Fuehrers",
-                  gesagt(dort, r"When following you see through the eyes of the leader")
+                  gesagt(dort, r"View while following: the leader's")
                   and "fuehrer" in kameras_seit(kamera), f"{zeige(dort)} / {kameras_seit(kamera)}")
 
         # Der Fuehrer ist bei x + 8, max-distance ist 20: Bei x + 16 ist er 22
@@ -9129,8 +9126,8 @@ def fuehrung_checks(env, bot):
         time.sleep(1.0)
         dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, seit_bot)
         FIND.test("Ausser Reichweite: beide lesen in der Action-Bar, dass die Fuehrung endet",
-                  gesagt(dort, rf"{BOT_NAME} is out of your reach: following ends in")
-                  and gesagt(hier, rf"{ZUSCHAUER_NAME} cannot follow: it ends for them in"),
+                  gesagt(dort, rf"{BOT_NAME} out of range: following ends in")
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} out of range: ends in"),
                   f"{zeige(dort)} / {zeige(hier)}")
         FIND.test("sounds.follow-reach - der Gast hoert den Ton", ton_da(zuschauer, ton, "block.conduit.deactivate"), "")
         FIND.test("Ausser Reichweite sieht der Gast wieder aus seiner eigenen Kamera",
@@ -9145,7 +9142,7 @@ def fuehrung_checks(env, bot):
         FIND.test("Wieder in Reichweite: wieder der Blick des Fuehrers", "fuehrer" in kameras_seit(kamera),
                   str(kameras_seit(kamera)))
         FIND.test("Rechtzeitig zurueck: der Gast fliegt wieder mit, die Fuehrung geht weiter",
-                  nahe(zuschauer_pos(), bot.server_pos(), 2.5) and not gesagt(dort, r"for too long"),
+                  nahe(zuschauer_pos(), bot.server_pos(), 2.5) and not gesagt(dort, r"too long"),
                   f"{zuschauer_pos()} / {bot.server_pos()} / {zeige(dort)}")
 
         seit, seit_bot = zuschauer.mark(), bot.mark()
@@ -9153,15 +9150,15 @@ def fuehrung_checks(env, bot):
         time.sleep(10.0)
         dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, seit_bot)
         FIND.test("Zu lange ausser Reichweite: die Fuehrung ist fuer den Gast vorbei, beide erfahren es",
-                  gesagt(dort, rf"{BOT_NAME} was out of your reach for too long")
-                  and gesagt(hier, rf"{ZUSCHAUER_NAME} could not follow you for too long"),
+                  gesagt(dort, rf"{BOT_NAME} was out of range too long: following ended")
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} was out of range too long and stopped following"),
                   f"{zeige(dort)} / {zeige(hier)}")
         tempo = flugtempo(env, ZUSCHAUER_NAME)
         FIND.test("Danach fliegt der Gast wieder mit seinem eigenen Tempo",
                   tempo is not None and tempo > 0.0, str(tempo))
         zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         FIND.test("Einladen geht nicht, solange der Fuehrer ausser seiner Reichweite ist",
-                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} could not follow you from there"), zeige(zeilen))
+                  gesagt(zeilen, rf"You are out of {ZUSCHAUER_NAME}'s camera range"), zeige(zeilen))
 
         bot.call("fly", wait=30, dx=-8, timeout=15000)
         time.sleep(1.0)
@@ -9195,7 +9192,7 @@ def fuehrung_checks(env, bot):
         zeilen = befehl(bot, f"/cam follow kick {ZUSCHAUER_NAME}")
         dort = zeilen_seit(zuschauer, seit)
         FIND.test("/cam follow kick - der Gast ist weggeschickt",
-                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} no longer follows you") and gesagt(dort, rf"{BOT_NAME} sent you away"),
+                  gesagt(zeilen, rf"{ZUSCHAUER_NAME} no longer follows you") and gesagt(dort, rf"{BOT_NAME} removed you as a follower"),
                   f"{zeige(zeilen)} / {zeige(dort)}")
         einladen_und_annehmen()
         seit = zuschauer.mark()
@@ -9214,8 +9211,8 @@ def fuehrung_checks(env, bot):
         dort = befehl(zuschauer, f"/cam follow decline {BOT_NAME}")
         hier = zeilen_seit(bot, seit)
         FIND.test("/cam follow decline - abgelehnt, der Fuehrer erfaehrt es",
-                  gesagt(dort, rf"You turned {BOT_NAME} down")
-                  and gesagt(hier, rf"{ZUSCHAUER_NAME} does not want to follow you"), f"{zeige(dort)} / {zeige(hier)}")
+                  gesagt(dort, rf"Declined {BOT_NAME}'s invitation")
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} declined"), f"{zeige(dort)} / {zeige(hier)}")
 
         befehl(bot, "/cam menu", warten=1.0)
         klick(bot, 9)
@@ -9232,7 +9229,7 @@ def fuehrung_checks(env, bot):
         f = fenster(zuschauer)
         FIND.test("Menue: beim Eingeladenen steht die Einladung",
                   BOT_NAME in item_text(f.get("slots", {}).get("0"))
-                  and "Invites you to follow them" in item_text(f.get("slots", {}).get("0")),
+                  and "Invites you to follow" in item_text(f.get("slots", {}).get("0")),
                   item_text(f.get("slots", {}).get("0")))
         klick(zuschauer, 0, warten=2.0)
         FIND.test("Menue: ein Linksklick nimmt die Einladung an", nahe(zuschauer_pos(), bot.server_pos(), 1.0),
@@ -9277,11 +9274,11 @@ def fuehrung_checks(env, bot):
                       f"{dritter.call('players').get('players')}")
             zeilen = befehl(dritter, f"/cam follow accept {BOT_NAME}", warten=2.0)
             FIND.test("Die Fuehrung ist voll: wer eingeladen ist, kommt nicht mehr mit, und nichts startet",
-                      gesagt(zeilen, rf"Nobody else can follow {BOT_NAME} right now")
+                      gesagt(zeilen, rf"{BOT_NAME} has no room for more followers")
                       and not im_cam_modus(bot, DRITTER_NAME), zeige(zeilen))
             zeilen = befehl(bot, f"/cam follow invite {DRITTER_NAME}")
             FIND.test("Die Fuehrung ist voll: der Fuehrer kann niemanden mehr einladen",
-                      gesagt(zeilen, r"You have as many followers as there may be: 1\."), zeige(zeilen))
+                      gesagt(zeilen, r"Follower limit reached \(1\)\."), zeige(zeilen))
             befehl(bot, "/cam menu", warten=1.0)
             knopf = item_text(fenster(bot).get("slots", {}).get("9"))
             FIND.test("Im Menue sagt der Knopf der Fuehrung \"Guests: 1/1\"", "Followers: 1/1" in knopf, knopf)
@@ -9307,32 +9304,32 @@ def fuehrung_checks(env, bot):
         eingeladen = time.time()
         dort = zeilen_seit(zuschauer, seit)
         FIND.test("invitation-seconds: 5 - beide lesen, dass die Einladung in 5 Sekunden ablaeuft",
-                  gesagt(zeilen, r"The invitation runs out in 5 seconds") and gesagt(dort, r"it runs out in 5 seconds"),
+                  gesagt(zeilen, r"expires in 5 seconds") and gesagt(dort, r"expires in 5 seconds"),
                   f"{zeige(zeilen)} / {zeige(dort)}")
         befehl(bot, "/cam menu", warten=1.0)
         klick(bot, 9)
         f = fenster(bot)
         FIND.test("Menue: unter ihm steht, wann die Einladung ablaeuft",
                   ZUSCHAUER_NAME in item_text(f.get("slots", {}).get("0"))
-                  and re.search(r"The invitation runs out\s*in [1-5] s", item_text(f.get("slots", {}).get("0"))),
+                  and re.search(r"Expires in [1-5] s", item_text(f.get("slots", {}).get("0"))),
                   item_text(f.get("slots", {}).get("0")))
         bot.call("close_window", wait=10)
         set_option(env, "invite-cooldown-seconds", "60", "follow")
         zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
-        warten = re.search(rf"You invited {ZUSCHAUER_NAME} a moment ago: you can invite them again in (\d+) seconds",
+        warten = re.search(rf"You can invite {ZUSCHAUER_NAME} again in (\d+) seconds",
                            " ".join(zeilen))
         FIND.test("invite-cooldown-seconds: 60 - gleich noch einmal einladen geht nicht, und er liest, wie lange noch",
                   warten is not None and 40 <= int(warten.group(1)) <= 60, zeige(zeilen))
         time.sleep(max(0.0, 6.0 - (time.time() - eingeladen)))
         dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}")
         FIND.test("Nach 5 Sekunden ist die Einladung abgelaufen",
-                  gesagt(dort, rf"{BOT_NAME} has not invited you, or the invitation ran out")
+                  gesagt(dort, rf"No valid invitation from {BOT_NAME}")
                   and not im_cam_modus(bot, ZUSCHAUER_NAME), zeige(dort))
         befehl(bot, "/cam menu", warten=1.0)
         klick(bot, 9)
         f = fenster(bot)
         FIND.test("Menue: danach steht unter ihm, wann der Fuehrer ihn wieder einladen kann",
-                  re.search(r"You can invite them again\s*in \d+ s", item_text(f.get("slots", {}).get("0"))),
+                  re.search(r"Again in \d+ s", item_text(f.get("slots", {}).get("0"))),
                   item_text(f.get("slots", {}).get("0")))
         bot.call("close_window", wait=10)
         set_options(env, [("invitation-seconds", "60", "follow"), ("invite-cooldown-seconds", "0", "follow")])
@@ -9345,7 +9342,7 @@ def fuehrung_checks(env, bot):
 
         # Die alten Namen aus der Zeit, als es /cam tour hiess.
         zeilen = befehl(bot, "/cam tour leave")
-        FIND.test("Der alte Befehl /cam tour geht weiter", gesagt(zeilen, r"You follow nobody"), zeige(zeilen))
+        FIND.test("Der alte Befehl /cam tour geht weiter", gesagt(zeilen, r"You are not following anybody"), zeige(zeilen))
         datei = env.server / "plugins" / "CamFly" / "config.yml"
         text = datei.read_text(encoding="utf-8")
         alt, umbenannt = re.subn(r"(?m)^follow:", "tour:", text)
@@ -9526,7 +9523,7 @@ def fuehrung_ohne_cam_checks(env, bot):
                   ZUSCHAUER_NAME in tabs, str(tabs))
         zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         FIND.test("Ohne Cam-Modus einladen geht",
-                  gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to follow you") and not im_cam_modus(bot, BOT_NAME),
+                  gesagt(zeilen, rf"Invited {ZUSCHAUER_NAME}") and not im_cam_modus(bot, BOT_NAME),
                   zeige(zeilen))
         ausruestung = zuschauer.call("own_equipment").get("count", 0)
         seit = bot.mark()
@@ -9776,7 +9773,7 @@ def fuehrung_ohne_cam_checks(env, bot):
         # zu zehn Ticks spaeter - dreimal hintereinander so knapp waere Zufall.
         FIND.test("Klickt der Gast seinen Koerper an, schickt der Server seine leere Hand - Schwert und Schild "
                   "kommen im selben Tick wieder, dreimal hintereinander",
-                  gesagt(dort, rf"You follow {BOT_NAME}: stop that first")
+                  gesagt(dort, rf"Stop following {BOT_NAME} first")
                   and all(a is not None and a < 100 for a in abstaende), f"{abstaende} / {zeige(dort)}")
         hinstellen(bot, x, y, z)
         time.sleep(1.5)
@@ -9913,7 +9910,7 @@ def fuehrung_ohne_cam_checks(env, bot):
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         console(env, f"gamemode spectator {BOT_NAME}", pause=1.0)
         zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
-        FIND.test("Im Zuschauermodus fuehrt keiner", gesagt(zeilen, r"Not in spectator mode"), zeige(zeilen))
+        FIND.test("Im Zuschauermodus fuehrt keiner", gesagt(zeilen, r"You can't lead in spectator mode"), zeige(zeilen))
         console(env, f"gamemode {spielmodus} {BOT_NAME}", pause=1.0)
         hinstellen(bot, x, y, z)
         einladen_und_annehmen()
@@ -10222,19 +10219,19 @@ def alle_einladen_checks(env, bot):
         text = knopf()
         FIND.test("Menue: unten rechts auf der Seite der Fuehrung steht \"Invite everybody\", zaehlt die beiden und "
                   "sagt, wie nah sie sein muessen",
-                  "Invite everybody" in text and "2 players now" in text
-                  and "without cam mode: within 16 blocks" in text and "in cam mode: within 16 blocks" in text, text)
+                  "Invite everybody" in text and "2 players within 16 blocks" in text
+                  and "(in cam mode: 16)" in text, text)
         seit = bot.mark()
         seit_zuschauer = zuschauer.mark()
         seit_dritter = dritter.mark()
         klick(bot, 53, warten=2.0)
         hier = zeilen_seit(bot, seit)
         FIND.test("Ein Klick auf den Knopf laedt beide ein, und der Bot liest, wen",
-                  gesagt(hier, rf"You invited 2 players to follow you: {DRITTER_NAME}, {ZUSCHAUER_NAME}"),
+                  gesagt(hier, rf"Invited 2 players: {DRITTER_NAME}, {ZUSCHAUER_NAME}"),
                   zeige(hier))
         FIND.test("Beide bekommen die Einladung",
-                  gesagt(zeilen_seit(zuschauer, seit_zuschauer), rf"{BOT_NAME} invites you to follow them")
-                  and gesagt(zeilen_seit(dritter, seit_dritter), rf"{BOT_NAME} invites you to follow them"), "")
+                  gesagt(zeilen_seit(zuschauer, seit_zuschauer), rf"{BOT_NAME} invites you to follow")
+                  and gesagt(zeilen_seit(dritter, seit_dritter), rf"{BOT_NAME} invites you to follow"), "")
         danach = item_text(fenster(bot).get("slots", {}).get("53"))
         FIND.test("Danach ist niemand mehr einzuladen: der Knopf ist weg", "Invite everybody" not in danach, danach)
         bot.call("close_window", wait=10)
@@ -10242,15 +10239,15 @@ def alle_einladen_checks(env, bot):
         zeilen = befehl(bot, "/cam follow invite all")
         FIND.test("... all wird nicht mehr angeboten, und /cam follow invite all sagt, dass niemand da ist und wie "
                   "nah sie sein muessten",
-                  "all" not in tabs and gesagt(zeilen, r"Nobody to invite right now: without cam mode they have to be "
-                                                       r"within 16 blocks of you, in cam mode within 16 blocks"),
+                  "all" not in tabs and gesagt(zeilen, r"Nobody to invite: players must be "
+                                                       r"within 16 blocks \(in cam mode: 16\)"),
                   f"{tabs} / {zeige(zeilen)}")
         dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
         FIND.test("Der zweite nimmt die Einladung an", gesagt(dort, rf"You follow {BOT_NAME} now"), zeige(dort))
         unten = seite()
         bot.call("close_window", wait=10)
         FIND.test("Unten in der Mitte (49) der Blick, links (47) der Knopf, der alle gehen laesst",
-                  "View when following" in item_text(unten.get("49"))
+                  "View while following" in item_text(unten.get("49"))
                   and "Let everybody go" in item_text(unten.get("47")),
                   f"{item_text(unten.get('49'))} / {item_text(unten.get('47'))}")
         befehl(zuschauer, "/cam follow leave", warten=1.0)
@@ -10258,8 +10255,8 @@ def alle_einladen_checks(env, bot):
         dritter_zeilen = befehl(bot, f"/cam follow invite {DRITTER_NAME}")
         FIND.test("invite-cooldown-seconds: 60 - wer angenommen hat, kann gleich wieder eingeladen werden, der "
                   "andere nicht",
-                  gesagt(wieder, rf"You invited {ZUSCHAUER_NAME} to follow you")
-                  and gesagt(dritter_zeilen, rf"You invited {DRITTER_NAME} a moment ago"),
+                  gesagt(wieder, rf"Invited {ZUSCHAUER_NAME}")
+                  and gesagt(dritter_zeilen, rf"You can invite {DRITTER_NAME} again in"),
                   f"{zeige(wieder)} / {zeige(dritter_zeilen)}")
 
         # Ohne Wartezeit: Der Reload beendet seinen Cam-Modus, und damit
@@ -10270,7 +10267,7 @@ def alle_einladen_checks(env, bot):
         befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
         zeilen = befehl(bot, "/cam follow invite all")
         FIND.test("max-guests: 1 - die Fuehrung ist voll, /cam follow invite all sagt das",
-                  gesagt(zeilen, r"You have as many followers as there may be: 1"), zeige(zeilen))
+                  gesagt(zeilen, r"Follower limit reached \(1\)"), zeige(zeilen))
         cam_off(zuschauer)
 
         set_options(env, [("max-guests", "5", "follow"), ("invite-all", "false", "follow")])
@@ -10280,7 +10277,7 @@ def alle_einladen_checks(env, bot):
         text = knopf()
         bot.call("close_window", wait=10)
         FIND.test("invite-all: false - kein Knopf, all wird nicht angeboten und ist ein Name wie jeder andere",
-                  "all" not in tabs and gesagt(zeilen, r"Nobody called all is online")
+                  "all" not in tabs and gesagt(zeilen, r"all is not online")
                   and "Invite everybody" not in text, f"{tabs} / {zeige(zeilen)} / {text}")
     finally:
         try:
@@ -10399,10 +10396,10 @@ def fuehrung_himmel_checks(env, bot):
         nacht_zeilen = befehl(zuschauer, "/cam nightvision off", warten=1.5)
         FIND.test("Stellt der Gast beim Folgen selbst sunrise und keine Nachtsicht ein, wird es gemerkt, und die "
                   "Meldung sagt, dass es nach dem Folgen gilt",
-                  gesagt(zeit_zeilen, r"Your own time in cam mode: sunrise")
-                  and gesagt(zeit_zeilen, r"yours holds again once you stop following")
+                  gesagt(zeit_zeilen, r"Cam time: sunrise")
+                  and gesagt(zeit_zeilen, r"you see the leader's until you stop following")
                   and gesagt(nacht_zeilen, r"Night vision in cam mode: never")
-                  and gesagt(nacht_zeilen, r"yours holds again once you stop following"),
+                  and gesagt(nacht_zeilen, r"you see the leader's until you stop following"),
                   f"{zeige(zeit_zeilen)} / {zeige(nacht_zeilen)}")
         FIND.test("... er sieht aber weiter die Zeit des Bots (6000) und hat seine Nachtsicht",
                   zeit(zuschauer) == 6000 and nachtsicht(), str(zeit(zuschauer)))
@@ -10412,8 +10409,8 @@ def fuehrung_himmel_checks(env, bot):
         uhr, trank = item_text(knopf.get("15")), item_text(knopf.get("17"))
         FIND.test("Im Menue stehen bei Zeit und Nachtsicht seine eigenen, mit dem Hinweis, dass sie nach dem "
                   "Folgen gelten",
-                  "Time of day: sunrise" in uhr and "While you follow, you see the leader's" in uhr
-                  and "Night vision: never" in trank and "While you follow, you see the leader's" in trank,
+                  "Time of day: sunrise" in uhr and "Following: you see the leader's" in uhr
+                  and "Night vision: never" in trank and "Following: you see the leader's" in trank,
                   f"{uhr} / {trank}")
         befehl(bot, "/cam time midnight", warten=1.5)
         FIND.test("Stellt der Bot danach Mitternacht ein, sieht der Gast auch die (18000)", zeit(zuschauer) == 18000,
@@ -10530,7 +10527,7 @@ def weiter_checks(env, bot):
         time.sleep(0.5)
         zeilen = befehl(bot, "/cam resume", warten=2.0)
         FIND.test("Ein Stein an der Stelle - verstellt, und der Cam-Modus startet nicht",
-                  gesagt(zeilen, r"Something has been built where your last flight ended")
+                  gesagt(zeilen, r"Something was built where your last flight ended")
                   and not spielmodus_ist(bot, "adventure"), zeige(zeilen))
         bot.chat(f"/setblock {stein[0]} {stein[1]} {stein[2]} minecraft:air")
         time.sleep(0.5)
@@ -10831,11 +10828,11 @@ def menue_checks(env, bot):
     menu.ban-shift-step (voreingestellt 10, im Test 5), und mit einem
     Rechtsklick weg, nur nie bis auf nichts. Der Grund kommt aus dem Chat -
     einer, der mit 1h anfaengt, bleibt der Grund -, und die Nachricht sagt
-    "because:". Danach steht Banned unter dem Kopf, der Knopf Change the ban
+    "because:". Danach steht Banned unter dem Kopf, der Knopf Change ban
     glaenzt; einen eigenen Knopf zum Aufheben hat die Seite nicht. Change
-    the ban hat die Zeit, die noch bleibt, und statt des Grundes Lift the
-    ban, das sagt, dass er wieder freigeschaltet ist; ein Tag mehr gibt die
-    Nachricht, dass die Sperre geaendert ist, und Lift the ban hebt sie auf.
+    ban hat die Zeit, die noch bleibt, und statt des Grundes Unban, das
+    sagt, dass er wieder in den Cam-Modus darf; ein Tag mehr gibt die
+    Nachricht, dass die Sperre geaendert ist, und Unban hebt sie auf.
     Mit
     cam-trail.enabled: true und zwei Fluegen sagt der Kopf des Bots auf der
     Seite der Flugspuren, dass zwei gemerkt sind; ein Klick zeigt sie, den
@@ -10859,7 +10856,11 @@ def menue_checks(env, bot):
 
     access: menu laesst nur das Menue: /cam spot sagt, dass es dafuer
     /cam menu gibt, und die Tab-Vervollstaendigung bietet menu an, spot
-    nicht. access: command laesst nur die Befehle, /cam menu ist aus. Mit
+    nicht. Was von ausserhalb des Menues kommt, geht trotzdem: /cam spot
+    accept (der Knopf im Chat) und /cam spot Besitzer:Name (der Sprung von
+    der Web-Karte). Ist photo-mode aus, sagt /cam photo, dass es aus ist,
+    statt aufs Menue zu verweisen. access: command laesst nur die Befehle,
+    /cam menu ist aus. Mit
     false geht keins von beiden, /cam selbst aber schon.
     """
     def fenster():
@@ -10907,7 +10908,7 @@ def menue_checks(env, bot):
         FIND.test("Vor dem Cam-Modus: Zeit der Welt, Foto-Modus aus, Nachtsicht nur im Dunkeln",
                   "Time of day: the world's" in item_text(knopf.get("15"))
                   and "Now: off" in item_text(knopf.get("14"))
-                  and "Night vision: as the server has it (only in the dark)" in item_text(knopf.get("17")),
+                  and "Night vision: server default (in the dark)" in item_text(knopf.get("17")),
                   f"{item_text(knopf.get('15'))} / {item_text(knopf.get('14'))} / {item_text(knopf.get('17'))}")
         FIND.test("Die Knoepfe stehen auf ihren Plaetzen",
                   all(str(i) in f.get("slots", {}) for i in (9, 10, 11, 12, 14, 15, 16, 17, 22))
@@ -10974,15 +10975,15 @@ def menue_checks(env, bot):
         f = fenster()
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Rechtsklick: wieder die Nachtsicht des Servers",
-                  gesagt(zeilen, r"Night vision in cam mode: only in the dark, as the server has it") and f.get("open")
-                  and "» as the server has it" in item_text(f.get("slots", {}).get("17")),
+                  gesagt(zeilen, r"Night vision in cam mode: server default \(in the dark\)") and f.get("open")
+                  and "» server default" in item_text(f.get("slots", {}).get("17")),
                   f"{zeige(zeilen)} / {item_text(f.get('slots', {}).get('17'))}")
         seit = bot.mark()
         klick(16, button=1, warten=2.0)
         f = fenster()
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Rechtsklick auf das Wetter der Welt: von hinten herum rain, und das Menue bleibt offen",
-                  gesagt(zeilen, r"Your own weather in cam mode: rain") and f.get("open")
+                  gesagt(zeilen, r"Cam weather: rain") and f.get("open")
                   and "Weather: rain" in item_text(f.get("slots", {}).get("16")),
                   f"{zeige(zeilen)} / {item_text(f.get('slots', {}).get('16'))}")
         seit = bot.mark()
@@ -10990,7 +10991,7 @@ def menue_checks(env, bot):
         f = fenster()
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Linksklick nach rain: wieder das Wetter der Welt",
-                  gesagt(zeilen, r"you see the weather of the world again") and f.get("open")
+                  gesagt(zeilen, r"Cam weather: the world's again") and f.get("open")
                   and "Weather: the world's" in item_text(f.get("slots", {}).get("16")),
                   f"{zeige(zeilen)} / {item_text(f.get('slots', {}).get('16'))}")
         bot.call("close_window", wait=10)
@@ -11004,11 +11005,11 @@ def menue_checks(env, bot):
         klick(53)
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Save a spot here - das Fenster ist zu, und der Chat fragt nach dem Namen",
-                  gesagt(zeilen, r"Type the name of the new spot in the chat") and not fenster().get("open"),
+                  gesagt(zeilen, r"Type the spot name in chat") and not fenster().get("open"),
                   zeige(zeilen))
         punkt = bot.server_pos()
         zeilen = befehl(bot, "Menue")
-        FIND.test("Die naechste Zeile im Chat ist der Name", gesagt(zeilen, r"Spot Menue saved here"), zeige(zeilen))
+        FIND.test("Die naechste Zeile im Chat ist der Name", gesagt(zeilen, r"Spot Menue saved\."), zeige(zeilen))
         bot.call("fly", wait=30, dx=-5, timeout=15000)
         time.sleep(1.0)
         menue()
@@ -11037,10 +11038,10 @@ def menue_checks(env, bot):
         klick(10)
         f = fenster()
         FIND.test("Wer im Cam-Modus ist: der Bot, mit der Zeit im Cam-Modus und dem Teleport",
-                  "Who is in cam mode" in (f.get("title") or "")
+                  "In cam mode" in (f.get("title") or "")
                   and BOT_NAME in item_text(f.get("slots", {}).get("0"))
-                  and "In cam mode for" in item_text(f.get("slots", {}).get("0"))
-                  and "teleport to the camera" in item_text(f.get("slots", {}).get("0")),
+                  and "In cam mode: " in item_text(f.get("slots", {}).get("0"))
+                  and "go to camera" in item_text(f.get("slots", {}).get("0")),
                   item_text(f.get("slots", {}).get("0")))
         bot.call("close_window", wait=10)
         cam_off(bot)
@@ -11051,7 +11052,7 @@ def menue_checks(env, bot):
         console(env, "cam list", pause=1.5)
         log = strip_colors(server_log(env)[vorher:])
         FIND.test("admin-access: menu - /cam list verweist auf das Menue, die Konsole darf es weiter",
-                  gesagt(zeilen, r"That goes through /cam menu") and "Nobody is in cam mode" in log
+                  gesagt(zeilen, r"Use /cam menu for that") and "Nobody is in cam mode" in log
                   and "list" not in tab("/cam "), f"{zeige(zeilen)} / {log.strip()[-200:]}")
         FIND.test("Voreingestellt steht menu.ban-shift-step: 10 da",
                   re.search(r"(?m)^  ban-shift-step:\s*10\s*$", quelle_config(env)) is not None, "")
@@ -11074,12 +11075,12 @@ def menue_checks(env, bot):
                   "Everybody" in (f.get("title") or "") and "End everybody's cam mode" in item_text(knopf.get("11"))
                   and "Everybody" in item_text(knopf.get("13")) and "Ban" in item_text(knopf.get("15"))
                   and not (knopf.get("15") or {}).get("glint")
-                  and not any("Lift the ban" in item_text(v) for v in knopf.values()),
+                  and not any("Unban" in item_text(v) for v in knopf.values()),
                   f"{f.get('title')} / {sorted(knopf)}")
         seit = bot.mark()
         klick(11, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
-        FIND.test("Beenden beendet den Cam-Modus aller", gesagt(zeilen, r"Ended the cam mode of 1 players")
+        FIND.test("Beenden beendet den Cam-Modus aller", gesagt(zeilen, r"Ended cam mode for 1 players")
                   and not spielmodus_ist(bot, "adventure"), zeige(zeilen))
         menue()
         klick(23)
@@ -11090,15 +11091,15 @@ def menue_checks(env, bot):
         knopf = f.get("slots", {})
         FIND.test("Sperren: Dauer im Menue, voreingestellt fuer immer, daneben Tage, Stunden und Minuten",
                   "Ban Everybody" in (f.get("title") or "") and "Now" in item_text(knopf.get("10"))
-                  and "For good" in item_text(knopf.get("10")) and "Days: 0" in item_text(knopf.get("12"))
+                  and "Permanent" in item_text(knopf.get("10")) and "Days: 0" in item_text(knopf.get("12"))
                   and "Hours: 0" in item_text(knopf.get("13")) and "Minutes: 0" in item_text(knopf.get("14"))
-                  and "Altogether: for good" in item_text(knopf.get("13")) and "26" not in knopf,
+                  and "Total: permanently" in item_text(knopf.get("13")) and "26" not in knopf,
                   f"{f.get('title')} / {item_text(knopf.get('10'))} / {item_text(knopf.get('13'))}")
         arten = {(knopf.get(platz) or {}).get("name") for platz in ("12", "13", "14")}
         FIND.test("Tage, Stunden und Minuten sind dasselbe Item (die Uhr)", len(arten) == 1 and None not in arten,
                   str(arten))
         FIND.test("ban-shift-step: 5 - die Knoepfe sagen, dass Umschalt fuenf auf einmal gibt",
-                  "With shift: 5 at once" in item_text(knopf.get("14")), item_text(knopf.get("14")))
+                  "Shift: ±5" in item_text(knopf.get("14")), item_text(knopf.get("14")))
         klick(13)
         klick(14, mode=1)
         klick(14, button=1)
@@ -11106,7 +11107,7 @@ def menue_checks(env, bot):
         knopf = fenster().get("slots", {})
         FIND.test("Zeit: Stunde dazu, mit Umschalt fuenf Minuten dazu, eine weg - 1h 4m, fuer immer ist es nicht mehr",
                   "Hours: 1" in item_text(knopf.get("13")) and "Minutes: 4" in item_text(knopf.get("14"))
-                  and "Altogether: for 1h 4m 0s" in item_text(knopf.get("14"))
+                  and "Total: for 1h 4m 0s" in item_text(knopf.get("14"))
                   and "Now" not in item_text(knopf.get("10")),
                   f"{item_text(knopf.get('13'))} / {item_text(knopf.get('14'))} / {item_text(knopf.get('10'))}")
         FIND.test("Zeit: einen Tag weg geht bei 1h 4m nicht - es bleibt, wie es ist (nichts waere fuer immer)",
@@ -11115,7 +11116,7 @@ def menue_checks(env, bot):
         seit = bot.mark()
         klick(16)
         zeilen = zeilen_seit(bot, seit)
-        FIND.test("Der Grund: der Chat fragt danach", gesagt(zeilen, r"Type in the chat why Everybody is banned"),
+        FIND.test("Der Grund: der Chat fragt danach", gesagt(zeilen, r"Type the ban reason for Everybody in chat"),
                   zeige(zeilen))
         befehl(bot, "1h Testgrund")
         f = fenster()
@@ -11128,38 +11129,37 @@ def menue_checks(env, bot):
         zeilen = zeilen_seit(bot, seit)
         knopf = fenster().get("slots", {})
         FIND.test("Sperren sperrt alle fuer 1h 4m mit dem Grund - der mit 1h anfaengt, bleibt der Grund",
-                  gesagt(zeilen, r"Cam mode is locked for everybody for 1h 4m 0s because: 1h Testgrund\."),
+                  gesagt(zeilen, r"Everybody is banned from cam mode for 1h 4m 0s because: 1h Testgrund\."),
                   zeige(zeilen))
-        FIND.test("Danach: Banned unter dem Kopf, Change the ban glaenzt - und kein eigener Knopf zum Aufheben",
-                  "Banned" in item_text(knopf.get("13")) and "Change the ban" in item_text(knopf.get("15"))
+        FIND.test("Danach: Banned unter dem Kopf, Change ban glaenzt - und kein eigener Knopf zum Aufheben",
+                  "Banned" in item_text(knopf.get("13")) and "Change ban" in item_text(knopf.get("15"))
                   and (knopf.get("15") or {}).get("glint") is True
-                  and not any("Lift the ban" in item_text(v) for v in knopf.values()),
+                  and not any("Unban" in item_text(v) for v in knopf.values()),
                   f"{item_text(knopf.get('13'))} / {knopf.get('15')}")
         klick(15)
         f = fenster()
         knopf = f.get("slots", {})
-        FIND.test("Change the ban: die Seite hat die Zeit, die noch bleibt, und statt des Grundes Lift the ban",
-                  "Change the ban of Everybody" in (f.get("title") or "") and "Hours: 1" in item_text(knopf.get("13"))
-                  and "Minutes: 4" in item_text(knopf.get("14")) and "Lift the ban" in item_text(knopf.get("16"))
-                  and "Unlock Everybody again, so they" in item_text(knopf.get("16"))
-                  and "can use cam mode again" in item_text(knopf.get("16"))
+        FIND.test("Change ban: die Seite hat die Zeit, die noch bleibt, und statt des Grundes Unban",
+                  "Change ban: Everybody" in (f.get("title") or "") and "Hours: 1" in item_text(knopf.get("13"))
+                  and "Minutes: 4" in item_text(knopf.get("14")) and "Unban" in item_text(knopf.get("16"))
+                  and "Everybody can use cam mode again" in item_text(knopf.get("16"))
                   and not any("Reason" in item_text(v) for v in knopf.values())
-                  and "Change the ban" in item_text(knopf.get("22")) and "26" not in knopf,
+                  and "Change ban" in item_text(knopf.get("22")) and "26" not in knopf,
                   f"{f.get('title')} / {item_text(knopf.get('14'))} / {item_text(knopf.get('16'))}")
         klick(12)
         seit = bot.mark()
         klick(22, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
-        FIND.test("Change the ban: ein Tag mehr - jetzt 1d 1h 4m, und es heisst, sie ist geaendert",
-                  gesagt(zeilen, r"Cam mode is now locked for everybody for 1d 1h 4m because: 1h Testgrund\."),
+        FIND.test("Change ban: ein Tag mehr - jetzt 1d 1h 4m, und es heisst, sie ist geaendert",
+                  gesagt(zeilen, r"Everybody is now banned from cam mode for 1d 1h 4m because: 1h Testgrund\."),
                   zeige(zeilen))
         klick(15)
         seit = bot.mark()
         klick(16, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
         knopf = fenster().get("slots", {})
-        FIND.test("Lift the ban auf der Seite der Sperre hebt sie auf, danach steht wieder Ban da",
-                  gesagt(zeilen, r"Cam mode is unlocked: everybody may use it again")
+        FIND.test("Unban auf der Seite der Sperre hebt sie auf, danach steht wieder Ban da",
+                  gesagt(zeilen, r"The ban for everybody is lifted")
                   and "Ban" in item_text(knopf.get("15"))
                   and not (knopf.get("15") or {}).get("glint"), f"{zeige(zeilen)} / {item_text(knopf.get('15'))}")
         bot.call("close_window", wait=10)
@@ -11181,20 +11181,20 @@ def menue_checks(env, bot):
         klick(16)
         knopf = fenster().get("slots", {})
         FIND.test("Flugspuren: der Kopf des Bots sagt, wie viele Fluege gemerkt sind",
-                  "2 flights kept" in item_text(knopf.get("0")), item_text(knopf.get("0")))
+                  "2 flights, last:" in item_text(knopf.get("0")), item_text(knopf.get("0")))
         klick(0)
         f = fenster()
         knopf = f.get("slots", {})
         neuester, aelterer = item_text(knopf.get("0")), item_text(knopf.get("1"))
         FIND.test("Ein Klick auf den Kopf zeigt seine Fluege, der neueste zuerst, mit Datum, Dauer, Strecke, Start "
                   "und Ende",
-                  f"Flights of {BOT_NAME}" in (f.get("title") or "") and "#1" in neuester and "#2" in aelterer
+                  f"Flights: {BOT_NAME}" in (f.get("title") or "") and "#1" in neuester and "#2" in aelterer
                   and all(w in neuester for w in ("Started:", "Duration:", "Distance:", "From:", "To:"))
                   and "49" in knopf, f"{f.get('title')} / {neuester} / {aelterer}")
         seit = bot.mark()
         klick(1, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
-        FIND.test("Linksklick zeigt den aelteren Flug", gesagt(zeilen, rf"Cam flight #2 of {BOT_NAME}"), zeige(zeilen))
+        FIND.test("Linksklick zeigt den aelteren Flug", gesagt(zeilen, rf"Flight #2 of {BOT_NAME}"), zeige(zeilen))
         menue()
         klick(23)
         klick(16)
@@ -11204,7 +11204,7 @@ def menue_checks(env, bot):
         zeilen = zeilen_seit(bot, seit)
         da = bot.server_pos()
         FIND.test("Rechtsklick zeigt ihn und bringt den Bot zum Start, wo der Koerper stand",
-                  gesagt(zeilen, rf"At the start of cam flight #1 of {BOT_NAME}")
+                  gesagt(zeilen, rf"At the start of {BOT_NAME}'s flight #1")
                   and da is not None and math.dist(da, (x, y, z)) < 1.0, f"{da} / {zeige(zeilen)}")
         menue()
         klick(23)
@@ -11213,7 +11213,7 @@ def menue_checks(env, bot):
         seit = bot.mark()
         klick(49, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
-        FIND.test("Der letzte Knopf zeigt alle Fluege", gesagt(zeilen, rf"The last 2 cam flights of {BOT_NAME}"),
+        FIND.test("Der letzte Knopf zeigt alle Fluege", gesagt(zeilen, rf"Last 2 flights of {BOT_NAME}"),
                   zeige(zeilen))
         set_option(env, "enabled", "false", "cam-trail")
 
@@ -11252,21 +11252,33 @@ def menue_checks(env, bot):
         jetzt = tab("/cam ")
         f = menue()
         FIND.test("access: menu - /cam spot verweist auf das Menue, und das Menue geht",
-                  gesagt(zeilen, r"That goes through /cam menu") and f.get("open"), zeige(zeilen))
+                  gesagt(zeilen, r"Use /cam menu for that") and f.get("open"), zeige(zeilen))
         FIND.test("access: menu - vorgeschlagen wird menu, aber nicht spot", "menu" in jetzt and "spot" not in jetzt,
                   str(jetzt))
         bot.call("close_window", wait=10)
+        annehmen = befehl(bot, "/cam spot accept Niemand:Haus")
+        sprung = befehl(bot, "/cam spot Niemand:Haus")
+        FIND.test("access: menu - was von ausserhalb des Menues kommt, geht als Befehl: der Knopf eines "
+                  "angebotenen Spots im Chat und der Sprung, den die Web-Karte zum Abtippen zeigt",
+                  gesagt(annehmen, r"No spot Niemand:Haus is offered to you")
+                  and gesagt(sprung, r"Nobody shares a spot called Niemand:Haus with you")
+                  and not gesagt(annehmen + sprung, r"Use /cam menu"), f"{zeige(annehmen)} / {zeige(sprung)}")
+        set_option(env, "enabled", "false", "photo-mode")
+        foto = befehl(bot, "/cam photo")
+        FIND.test("access: menu - was in config.yml aus ist, heisst aus, statt aufs Menue zu verweisen",
+                  gesagt(foto, r"That is switched off") and not gesagt(foto, r"Use /cam menu"), zeige(foto))
+        set_option(env, "enabled", "true", "photo-mode")
         set_option(env, "access", "command", "menu")
         zeilen = befehl(bot, "/cam menu")
         spots = befehl(bot, "/cam spot list")
         FIND.test("access: command - /cam menu ist aus, /cam spot geht",
-                  gesagt(zeilen, r"/cam menu is switched off") and gesagt(spots, r"You have no spots yet")
+                  gesagt(zeilen, r"/cam menu is switched off") and gesagt(spots, r"No spots yet")
                   and "menu" not in tab("/cam "), f"{zeige(zeilen)} / {zeige(spots)}")
         set_option(env, "access", "false", "menu")
         zeilen = befehl(bot, "/cam menu")
         foto = befehl(bot, "/cam photo")
         FIND.test("access: false - weder das Menue noch /cam photo",
-                  gesagt(zeilen, r"/cam menu is switched off") and gesagt(foto, r"That is switched off on this server"),
+                  gesagt(zeilen, r"/cam menu is switched off") and gesagt(foto, r"That is switched off"),
                   f"{zeige(zeilen)} / {zeige(foto)}")
         FIND.test("access: false - /cam selbst geht weiter", cam_on(bot) and cam_off(bot), "")
     finally:
@@ -11308,7 +11320,7 @@ def menue_live_checks(env, bot):
     Fenster: Der Bot zaehlt, wie oft der Server ein Fenster geoeffnet hat.
 
     Die erste Seite: Laedt der zweite Spieler den Bot ein, steht unter dem
-    Knopf des Folgens (9) von selbst "Invitations for you: 1", und er
+    Knopf des Folgens (9) von selbst "Invitations: 1", und er
     glaenzt; endet sein Cam-Modus, ist das wieder weg.
 
     Die Admin-Seite, wer im Cam-Modus ist: Startet der zweite Spieler, steht
@@ -11318,7 +11330,7 @@ def menue_live_checks(env, bot):
 
     Die Statistik zaehlt den Flug, der gerade laeuft, schon mit: Auf der
     Admin-Seite der Statistik steht unter dem zweiten Spieler im Cam-Modus
-    "In cam mode right now", und was dort steht, waechst von selbst. Unter
+    "In cam mode now", und was dort steht, waechst von selbst. Unter
     dem Knopf der eigenen Statistik (21) genauso, solange der Bot fliegt;
     endet sein Flug, sagt /cam stats so viele Fluege, wie eben dort standen.
 
@@ -11419,16 +11431,16 @@ def menue_live_checks(env, bot):
             klick(bot, 0, warten=1.5)
         FIND.test("Kommt er zurueck, steht er wieder auf demselben Platz", da and ZUSCHAUER_NAME in text, text)
         FIND.test("Ein Klick gleich, nachdem er von selbst wieder da ist, zaehlt nicht: keine Einladung",
-                  not gesagt(zeilen_seit(zuschauer, seit_zuschauer), rf"{BOT_NAME} invites you to follow them")
-                  and not gesagt(zeilen_seit(bot, seit_bot), rf"You invited {ZUSCHAUER_NAME}"),
+                  not gesagt(zeilen_seit(zuschauer, seit_zuschauer), rf"{BOT_NAME} invites you to follow")
+                  and not gesagt(zeilen_seit(bot, seit_bot), rf"Invited {ZUSCHAUER_NAME}"),
                   zeige(zeilen_seit(bot, seit_bot)))
         klick(bot, 0, warten=1.5)
         FIND.test("Ein Klick danach laedt ihn ein",
-                  gesagt(zeilen_seit(zuschauer, seit_zuschauer), rf"{BOT_NAME} invites you to follow them"),
+                  gesagt(zeilen_seit(zuschauer, seit_zuschauer), rf"{BOT_NAME} invites you to follow"),
                   zeige(zeilen_seit(zuschauer, seit_zuschauer)))
-        vorher = sekunden(platz(bot, 0), r"runs out\s*in (\d+) s")
+        vorher = sekunden(platz(bot, 0), r"Expires in (\d+) s")
         time.sleep(2.5)
-        nachher = sekunden(platz(bot, 0), r"runs out\s*in (\d+) s")
+        nachher = sekunden(platz(bot, 0), r"Expires in (\d+) s")
         FIND.test("Die Zeit, die die Einladung noch hat, zaehlt von selbst herunter",
                   vorher is not None and nachher is not None and nachher < vorher, f"{vorher} -> {nachher}")
         befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=0.5)
@@ -11449,13 +11461,13 @@ def menue_live_checks(env, bot):
             befehl(bot, "/cam menu", warten=1.0)
             anfang = geoeffnet(bot)
             FIND.test("Vorher steht unter dem Knopf des Folgens keine Einladung",
-                      "Invitations for you" not in platz(bot, 9), platz(bot, 9))
+                      "Invitations:" not in platz(bot, 9), platz(bot, 9))
             befehl(zuschauer, f"/cam follow invite {BOT_NAME}", warten=0)
-            da, text = warten_auf(bot, 9, lambda t: "Invitations for you: 1" in t)
+            da, text = warten_auf(bot, 9, lambda t: "Invitations: 1" in t)
             FIND.test("Erste Seite: die Einladung steht von selbst unter dem Knopf des Folgens, und er glaenzt",
                       da and (fenster(bot).get("slots", {}).get("9") or {}).get("glint"), text)
             cam_off(zuschauer)
-            da, text = warten_auf(bot, 9, lambda t: "Invitations for you" not in t)
+            da, text = warten_auf(bot, 9, lambda t: "Invitations:" not in t)
             FIND.test("Endet sein Cam-Modus, ist die Einladung von selbst wieder weg", da, text)
             FIND.test("... im selben Fenster", geoeffnet(bot) == anfang, f"{anfang} -> {geoeffnet(bot)}")
             bot.call("close_window", wait=10)
@@ -11464,16 +11476,16 @@ def menue_live_checks(env, bot):
         f = admin_liste()
         anfang = geoeffnet(bot)
         FIND.test("Die Admin-Liste ist offen, niemand im Cam-Modus",
-                  "Who is in cam mode" in (f.get("title") or "")
+                  "In cam mode" in (f.get("title") or "")
                   and "Nobody is in cam mode" in item_text(f.get("slots", {}).get("22")), str(f)[:300])
         cam_on(zuschauer)
-        da, text = warten_auf(bot, 0, lambda t: ZUSCHAUER_NAME in t and "In cam mode for" in t)
+        da, text = warten_auf(bot, 0, lambda t: ZUSCHAUER_NAME in t and "In cam mode: " in t)
         FIND.test("Admin: wer den Cam-Modus startet, steht von selbst in der Liste", da, text)
         vorher = platz(bot, 0)
         time.sleep(2.5)
         nachher = platz(bot, 0)
         FIND.test("... und die Zeit im Cam-Modus zaehlt von selbst weiter",
-                  "In cam mode for" in nachher and nachher != vorher, f"{vorher} -> {nachher}")
+                  "In cam mode: " in nachher and nachher != vorher, f"{vorher} -> {nachher}")
         cam_off(zuschauer)
         da, text = warten_auf(bot, 0, lambda t: "No longer here" in t)
         FIND.test("Endet er, bleibt sein Platz grau stehen", da and ZUSCHAUER_NAME in text, text)
@@ -11497,7 +11509,7 @@ def menue_live_checks(env, bot):
             time.sleep(2.5)
             nachher = platz(bot, slot) if slot else ""
             FIND.test("Admin-Statistik: der Flug, der gerade laeuft, zaehlt mit, und was dasteht, waechst von selbst",
-                      "In cam mode right now" in vorher and "In cam mode right now" in nachher and nachher != vorher,
+                      "In cam mode now" in vorher and "In cam mode now" in nachher and nachher != vorher,
                       f"{vorher} -> {nachher}")
             bot.call("close_window", wait=10)
             cam_off(zuschauer)
@@ -11507,7 +11519,7 @@ def menue_live_checks(env, bot):
             time.sleep(2.5)
             nachher = platz(bot, 21)
             FIND.test("Erste Seite: die eigene Statistik zaehlt den Flug mit und waechst von selbst",
-                      "In cam mode right now" in vorher and "In cam mode right now" in nachher and nachher != vorher,
+                      "In cam mode now" in vorher and "In cam mode now" in nachher and nachher != vorher,
                       f"{vorher} -> {nachher}")
             mal = re.search(r"Flights: (\d+)", nachher)
             bot.call("close_window", wait=10)
@@ -11646,10 +11658,10 @@ def spotreiter_checks(env, bot):
                   f"{f.get('title')} / {namen(f)} / {item_text(knopf.get('51'))}")
         FIND.test("Unter jedem Punkt steht, wie nah man fuer den Sprung sein muss: viewpoints.start-distance (16) "
                   "ohne Cam-Modus, im Cam-Modus in Reichweite der Kamera",
-                  "To jump there: within 16 blocks" in item_text(knopf.get("0"))
-                  and "reach of your camera" in item_text(knopf.get("0")), item_text(knopf.get("0")))
+                  "Jump possible within 16 blocks" in item_text(knopf.get("0"))
+                  and "or in cam mode within range" in item_text(knopf.get("0")), item_text(knopf.get("0")))
         FIND.test("Das Buch sagt, wie viele Punkte er hat und wie viele noch gehen",
-                  "Your spots: 3 of 10 - 7 more possible" in item_text(knopf.get("53")), item_text(knopf.get("53")))
+                  "Your spots: 3/10" in item_text(knopf.get("53")), item_text(knopf.get("53")))
         filter_text = item_text(knopf.get("51"))
         FIND.test("Der Filter zeigt alle Sortierungen, die gewaehlte markiert",
                   "» newest first" in filter_text and "by name" in filter_text and "nearest first" in filter_text
@@ -11671,8 +11683,7 @@ def spotreiter_checks(env, bot):
                   "zuerst; unter jedem steht \"Views: 0\" und, wie oft ein Spieler zaehlt",
                   namen(f)[:3] == ["Cee", "Beta", "Alpha"]
                   and "» most views first" in item_text(f.get("slots", {}).get("51"))
-                  and "Views: 0" in item_text(f.get("slots", {}).get("0"))
-                  and "One view per player every 10 min" in item_text(f.get("slots", {}).get("0")), str(namen(f)))
+                  and "Views: 0" in item_text(f.get("slots", {}).get("0")), str(namen(f)))
         klick(bot, 51)
         f = fenster(bot)
         FIND.test("Noch ein Klick: nach der Reichweite, die naechsten zuerst",
@@ -11683,7 +11694,7 @@ def spotreiter_checks(env, bot):
         befehl(bot, "Gamma")
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Rechtsklick auf das Buch: ein oeffentlicher Punkt",
-                  gesagt(zeilen, r"Type the name of the new public spot") and gesagt(zeilen, r"Spot Gamma saved here")
+                  gesagt(zeilen, r"Type the public spot's name in chat") and gesagt(zeilen, r"Spot Gamma saved\.")
                   and gesagt(zeilen, r"Spot Gamma is public now"), zeige(zeilen))
         f = punkte(bot)
         platz = platz_von(f, "Gamma")
@@ -11706,10 +11717,10 @@ def spotreiter_checks(env, bot):
         f = fenster(zuschauer)
         eintrag = f.get("slots", {}).get(str(platz)) or {}
         FIND.test("Rechtsklick liked ihn: danach steht das Like darunter, und er glaenzt",
-                  gesagt(dort, rf"You like {label} now\. It has 1 likes") and "1 likes" in item_text(eintrag)
+                  gesagt(dort, rf"Liked {label} \(1 likes\)") and "1 likes" in item_text(eintrag)
                   and eintrag.get("glint") is True, f"{zeige(dort)} / {item_text(eintrag)}")
         FIND.test("Auch unter dem oeffentlichen Punkt eines anderen steht, wie nah man fuer den Sprung sein muss",
-                  "To jump there: within 16 blocks" in item_text(eintrag), item_text(eintrag))
+                  "Jump possible within 16 blocks" in item_text(eintrag), item_text(eintrag))
         seit = zuschauer.mark()
         klick(zuschauer, platz, warten=3.0)
         dort = zeilen_seit(zuschauer, seit)
@@ -11757,7 +11768,7 @@ def spotreiter_checks(env, bot):
                   "(53) der Knopf, der ihn oeffentlich macht",
                   "Share Gamma" in (f.get("title") or "") and any(ZUSCHAUER_NAME in n for n in namen(f))
                   and "Public" not in item_text(f.get("slots", {}).get("0"))
-                  and "Public" in oeffentlich and "click to make it public" in oeffentlich,
+                  and "Public" in oeffentlich and "Click: make public" in oeffentlich,
                   f"{f.get('title')} / {namen(f)} / {oeffentlich}")
         seit = bot.mark()
         klick(bot, 53)
@@ -11765,7 +11776,7 @@ def spotreiter_checks(env, bot):
         f = fenster(bot)
         oeffentlich = f.get("slots", {}).get("53") or {}
         FIND.test("Ein Klick darauf macht ihn oeffentlich, der Knopf glaenzt und bleibt auf seinem Platz",
-                  gesagt(zeilen, r"Spot Gamma is public now") and "click to make it private" in item_text(oeffentlich)
+                  gesagt(zeilen, r"Spot Gamma is public now") and "Click: make private" in item_text(oeffentlich)
                   and oeffentlich.get("glint") is True, f"{zeige(zeilen)} / {item_text(oeffentlich)}")
         seit = bot.mark()
         klick(bot, 53)
@@ -11779,7 +11790,7 @@ def spotreiter_checks(env, bot):
         knopf = fenster(zuschauer).get("slots", {})
         FIND.test("Ein Angebot: beim anderen glaenzt der Knopf der Punkte und sagt, dass eins wartet",
                   (knopf.get("10") or {}).get("glint") is True
-                  and "New, offered to you: 1" in item_text(knopf.get("10")), item_text(knopf.get("10")))
+                  and "New offers: 1" in item_text(knopf.get("10")), item_text(knopf.get("10")))
         klick(zuschauer, 10)
         f = fenster(zuschauer)
         FIND.test("Er oeffnet auf dem Reiter der geteilten, vorn das Angebot",
@@ -11792,14 +11803,14 @@ def spotreiter_checks(env, bot):
         dort = zeilen_seit(zuschauer, seit)
         f = fenster(zuschauer)
         FIND.test("Linksklick nimmt es an, danach steht der Punkt dort",
-                  gesagt(dort, rf"You accepted {BOT_NAME}:Alpha")
-                  and "take it off your list" in item_text(f.get("slots", {}).get("0")),
+                  gesagt(dort, rf"Accepted {BOT_NAME}:Alpha")
+                  and "remove from list" in item_text(f.get("slots", {}).get("0")),
                   f"{zeige(dort)} / {item_text(f.get('slots', {}).get('0'))}")
         seit = zuschauer.mark()
         klick(zuschauer, 0, button=1)
         dort = zeilen_seit(zuschauer, seit)
         FIND.test("Rechtsklick nimmt ihn von der Liste",
-                  gesagt(dort, rf"Spot {BOT_NAME}:Alpha is no longer among the spots shared with you"), zeige(dort))
+                  gesagt(dort, rf"Removed {BOT_NAME}:Alpha from your list"), zeige(dort))
         zuschauer.call("close_window", wait=10)
 
         cam_on(zuschauer)
@@ -11824,8 +11835,8 @@ def spotreiter_checks(env, bot):
         FIND.test("Admin-Seite, Statistik: unter dem Kopf steht der Umschalt-Klick zum Zuruecksetzen, er setzt die "
                   "Statistik des anderen auf null, und der erfaehrt, wer es war",
                   "Shift-click: reset" in kopf and "Flights:" in kopf
-                  and gesagt(beim_bot, rf"The cam mode statistics of {ZUSCHAUER_NAME} have been reset")
-                  and gesagt(beim_zuschauer, rf"{BOT_NAME} has reset your cam mode statistics")
+                  and gesagt(beim_bot, rf"Reset {ZUSCHAUER_NAME}'s statistics")
+                  and gesagt(beim_zuschauer, rf"{BOT_NAME} reset your statistics")
                   and gesagt(z, rf"{ZUSCHAUER_NAME} has not been in cam mode yet"),
                   f"{kopf} / {zeige(beim_bot)} / {zeige(beim_zuschauer)} / {zeige(z)}")
         bot.call("close_window", wait=10)
@@ -11957,9 +11968,9 @@ def spotmoderation_checks(env, bot):
         alle = texte(f)
         a, b, c = (alle.get(platz(f, n), "") for n in ("ModA", "ModB", "ModC"))
         FIND.test("Ein Klick zeigt seine Punkte: privat, oeffentlich, angeboten",
-                  f"Spots of {ZUSCHAUER_NAME}" in (f.get("title") or "") and "Private" in a
+                  f"Spots: {ZUSCHAUER_NAME}" in (f.get("title") or "") and "Private" in a
                   and "Public, 0 likes" in b and f"Offered to: {BOT_NAME}" in c
-                  and "Left-click: take it down" in b and "Shift-click: delete" in a,
+                  and "Left-click: make private" in b and "Shift-click: delete" in a,
                   f"{f.get('title')} / {a} / {b} / {c}")
 
         seit = zuschauer.mark()
@@ -11968,7 +11979,7 @@ def spotmoderation_checks(env, bot):
         f = fenster(bot)
         b = texte(f).get(platz(f, "ModB"), "")
         FIND.test("Linksklick nimmt einen oeffentlichen herunter: wieder privat, und der Besitzer erfaehrt es",
-                  "Private" in b and gesagt(dort, rf"{BOT_NAME} took your spot ModB down"), f"{b} / {zeige(dort)}")
+                  "Private" in b and gesagt(dort, rf"{BOT_NAME} made your spot ModB private"), f"{b} / {zeige(dort)}")
         seit = zuschauer.mark()
         klick(bot, platz(f, "ModA"), mode=1)
         dort = zeilen_seit(zuschauer, seit)
@@ -11986,7 +11997,7 @@ def spotmoderation_checks(env, bot):
         wo = bot.server_pos()
         FIND.test("Rechtsklick teleportiert den Admin zum Punkt, von wo er auch ist",
                   wo is not None and math.dist(wo, (x + 2, y, z)) < 0.6
-                  and gesagt(zeilen_seit(bot, seit), rf"You are at spot ModC of {ZUSCHAUER_NAME}"),
+                  and gesagt(zeilen_seit(bot, seit), rf"At {ZUSCHAUER_NAME}'s spot ModC"),
                   f"{wo} / {zeige(zeilen_seit(bot, seit))}")
         liste, f = seine_punkte()
 
@@ -12011,8 +12022,8 @@ def spotmoderation_checks(env, bot):
 
         FIND.test("Der Knopf der Einschraenkung (49) oeffnet ihre Seite: je ein Knopf fuer eigene, oeffentliche "
                   "und geteilte Punkte, alle erlaubt",
-                  f"Restrict the spots of {ZUSCHAUER_NAME}" in (f.get("title") or "")
-                  and stufe(f, 11).startswith("His own spots") and stufe(f, 13).startswith("Public spots")
+                  f"Restrict spots: {ZUSCHAUER_NAME}" in (f.get("title") or "")
+                  and stufe(f, 11).startswith("Own spots") and stufe(f, 13).startswith("Public spots")
                   and stufe(f, 15).startswith("Shared spots")
                   and all("» allowed" in stufe(f, slot) for slot in (11, 13, 15)),
                   f"{f.get('title')} / {stufe(f, 11)} / {stufe(f, 13)} / {stufe(f, 15)}")
@@ -12037,18 +12048,18 @@ def spotmoderation_checks(env, bot):
         dort = zeilen_seit(zuschauer, seit)
         f = fenster(bot)
         FIND.test("Bestaetigt: er erfaehrt es, und der Knopf glaenzt",
-                  gesagt(dort, rf"{BOT_NAME} restricted your spots: no new spots, no public spots at all for good")
+                  gesagt(dort, rf"{BOT_NAME} restricted your spots: no new spots, no public spots at all permanently")
                   and (f.get("slots", {}).get("49") or {}).get("glint") is True, zeige(dort))
         bot.call("close_window", wait=10)
         zeilen = befehl(zuschauer, "/cam spot set ModD")
         FIND.test("Eingeschraenkt: keinen neuen Punkt speichern",
-                  gesagt(zeilen, r"You may not save new spots for good"), zeige(zeilen))
+                  gesagt(zeilen, r"You may not save new spots permanently"), zeige(zeilen))
         zeilen = befehl(zuschauer, "/cam spot share ModC all")
         FIND.test("Eingeschraenkt: nichts oeffentlich machen",
-                  gesagt(zeilen, r"You may not make spots public for good"), zeige(zeilen))
+                  gesagt(zeilen, r"You may not make spots public permanently"), zeige(zeilen))
         zeilen = befehl(zuschauer, f"/cam spot {BOT_NAME}:AdmPub")
         FIND.test("Eingeschraenkt: keinen oeffentlichen Punkt anschauen",
-                  gesagt(zeilen, r"You may not look at public spots for good")
+                  gesagt(zeilen, r"You may not jump to public spots permanently")
                   and not im_cam_modus(bot, ZUSCHAUER_NAME), zeige(zeilen))
         zeilen = befehl(zuschauer, "/cam spot set ModC") + befehl(zuschauer, f"/cam spot share ModB {BOT_NAME}")
         FIND.test("Verschieben und teilen darf er weiter", gesagt(zeilen, r"Spot ModC moved here")
@@ -12060,8 +12071,7 @@ def spotmoderation_checks(env, bot):
         f = fenster(zuschauer)
         gesperrt = item_text(f.get("slots", {}).get("22"))
         FIND.test("Im Spot-Menue zeigt ihm der Reiter der oeffentlichen nur das graue Zeichen: gesperrt",
-                  "Sorry, you can't look at these" in gesperrt and "You are restricted" in gesperrt
-                  and "for good" in gesperrt and platz(f, "AdmPub") is None, f"{gesperrt} / {texte(f)}")
+                  "Restricted for you" in gesperrt and "Restricted permanently" in gesperrt and platz(f, "AdmPub") is None, f"{gesperrt} / {texte(f)}")
         klick(zuschauer, 48)
         f = fenster(zuschauer)
         FIND.test("Seine eigenen Punkte zeigt der Reiter der privaten weiter",
@@ -12071,7 +12081,7 @@ def spotmoderation_checks(env, bot):
         liste, f = seine_punkte()
         eintrag = texte(liste).get(platz(liste, ZUSCHAUER_NAME), "")
         FIND.test("In der Liste steht die Einschraenkung unter ihm",
-                  "Restricted: no new spots, no public spots at all for good" in eintrag, eintrag)
+                  "Restricted: no new spots, no public spots at all permanently" in eintrag, eintrag)
         klick(bot, 49)
         seit = zuschauer.mark()
         klick(bot, 35)
@@ -12079,7 +12089,7 @@ def spotmoderation_checks(env, bot):
         bot.call("close_window", wait=10)
         zeilen = befehl(zuschauer, "/cam spot set ModD")
         FIND.test("Der Milcheimer hebt sie auf: er erfaehrt es und darf wieder speichern",
-                  gesagt(dort, rf"{BOT_NAME} lifted the restriction of your spots")
+                  gesagt(dort, rf"{BOT_NAME} lifted your spot restriction")
                   and gesagt(zeilen, r"Spot ModD saved"), f"{zeige(dort)} / {zeige(zeilen)}")
 
         # Alle auf einmal: vorn in der Liste der Spieler.
@@ -12092,7 +12102,7 @@ def spotmoderation_checks(env, bot):
         klick(bot, 0)
         f = fenster(bot)
         FIND.test("Ein Klick oeffnet die Einschraenkung von allen, mit denselben Knoepfen",
-                  "Restrict the spots of Everybody" in (f.get("title") or "")
+                  "Restrict spots: Everybody" in (f.get("title") or "")
                   and stufe(f, 13).startswith("Public spots"), str(f.get("title")))
         klick(bot, 13)
         klick(bot, 13)
@@ -12102,24 +12112,23 @@ def spotmoderation_checks(env, bot):
         dort = zeilen_seit(zuschauer, seit)
         hier = zeilen_seit(bot, hier_seit)
         FIND.test("Fuer alle bestaetigt: er liest, dass es abgeschaltet ist, der Admin, dass es fuer alle gilt",
-                  gesagt(dort, rf"{BOT_NAME} switched spots off for everybody: no public spots at all for good")
-                  and gesagt(hier, r"Spots are restricted for everybody: no public spots at all for good"),
+                  gesagt(dort, rf"{BOT_NAME} restricted spots for everybody: no public spots at all permanently")
+                  and gesagt(hier, r"Spots are restricted for everybody: no public spots at all permanently"),
                   f"{zeige(dort)} / {zeige(hier)}")
         bot.call("close_window", wait=10)
         zeilen = befehl(zuschauer, "/cam spot share ModC all")
         FIND.test("Fuer alle: oeffentlich machen ist abgeschaltet",
-                  gesagt(zeilen, r"Making spots public is switched off for good"), zeige(zeilen))
+                  gesagt(zeilen, r"Making spots public is switched off permanently"), zeige(zeilen))
         zeilen = befehl(zuschauer, f"/cam spot {BOT_NAME}:AdmPub")
         FIND.test("Fuer alle: oeffentliche Punkte anschauen ist abgeschaltet",
-                  gesagt(zeilen, r"Looking at public spots is switched off for good")
+                  gesagt(zeilen, r"Public spots are switched off permanently")
                   and not im_cam_modus(bot, ZUSCHAUER_NAME), zeige(zeilen))
         befehl(zuschauer, "/cam menu", warten=1.0)
         klick(zuschauer, 10)
         klick(zuschauer, 49)
         aus = item_text(fenster(zuschauer).get("slots", {}).get("22"))
         FIND.test("Fuer alle: der Reiter der oeffentlichen sagt, dass es abgeschaltet ist",
-                  "Looking at these is switched off" in aus and "It is off for everybody" in aus
-                  and "for good" in aus, aus)
+                  "Switched off" in aus and "Off for everybody permanently" in aus, aus)
         zuschauer.call("close_window", wait=10)
         befehl(bot, "/cam menu", warten=1.0)
         klick(bot, 10)
@@ -12138,8 +12147,8 @@ def spotmoderation_checks(env, bot):
         bot.call("close_window", wait=10)
         zeilen = befehl(zuschauer, "/cam spot share ModC all")
         FIND.test("Unter \"Everybody\" steht die Einschraenkung; der Milcheimer hebt sie fuer alle auf",
-                  "Restricted: no public spots at all for good" in alle
-                  and gesagt(dort, rf"{BOT_NAME} switched spots on again for everybody")
+                  "Restricted: no public spots at all permanently" in alle
+                  and gesagt(dort, rf"{BOT_NAME} lifted the spot restriction for everybody")
                   and gesagt(zeilen, r"Spot ModC is public now"), f"{alle} / {zeige(dort)} / {zeige(zeilen)}")
 
         zuschauer.stop()
@@ -12187,7 +12196,7 @@ def tourmoderation_checks(env, bot):
     teilnehmen (14), beide erlaubt. Teilnehmen verboten, fuer immer,
     bestaetigt: er erfaehrt es, ist von der Fuehrung, und der Bot erfaehrt
     es. Der Bot kann ihn nicht mehr einladen - im Menue steht er trotzdem in
-    der Liste, mit "You can't invite him" -, annehmen sagt ihm, dass er nicht
+    der Liste, mit "Not allowed to follow" -, annehmen sagt ihm, dass er nicht
     teilnehmen darf, und sein Menue sagt es unten (49).
 
     Geaendert auf fuehren: er erfaehrt es, einladen sagt ihm, dass er nicht
@@ -12270,7 +12279,7 @@ def tourmoderation_checks(env, bot):
         f = fenster(bot)
         fuehren, teilnehmen = item_text(f.get("slots", {}).get("12")), item_text(f.get("slots", {}).get("14"))
         FIND.test("Ein Klick oeffnet seine Einschraenkung: fuehren (12) und teilnehmen (14), beide erlaubt",
-                  f"Restrict the following of {ZUSCHAUER_NAME}" in (f.get("title") or "")
+                  f"Restrict following: {ZUSCHAUER_NAME}" in (f.get("title") or "")
                   and fuehren.startswith("Leading") and teilnehmen.startswith("Following")
                   and "» allowed" in fuehren and "» allowed" in teilnehmen, f"{fuehren} / {teilnehmen}")
         klick(bot, 14)
@@ -12278,33 +12287,33 @@ def tourmoderation_checks(env, bot):
         teilnehmen = item_text(f.get("slots", {}).get("14"))
         FIND.test("Teilnehmen umgeschaltet: nicht erlaubt, der Knopf glaenzt",
                   "» no following" in teilnehmen and (f.get("slots", {}).get("14") or {}).get("glint") is True
-                  and "no following for good" in item_text(f.get("slots", {}).get("31")), teilnehmen)
+                  and "no following permanently" in item_text(f.get("slots", {}).get("31")), teilnehmen)
         seit, hier_seit = zuschauer.mark(), bot.mark()
         klick(bot, 31, warten=2.0)
         dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, hier_seit)
         bot.call("close_window", wait=10)
         FIND.test("Bestaetigt: er erfaehrt es und ist von der Fuehrung, der Bot erfaehrt beides",
-                  gesagt(dort, rf"{BOT_NAME} restricted your following: no following for good")
+                  gesagt(dort, rf"{BOT_NAME} restricted your following: no following permanently")
                   and gesagt(hier, rf"{ZUSCHAUER_NAME} stopped following you")
-                  and gesagt(hier, rf"{ZUSCHAUER_NAME} is restricted: no following for good"),
+                  and gesagt(hier, rf"{ZUSCHAUER_NAME} is restricted: no following permanently"),
                   f"{zeige(dort)} / {zeige(hier)}")
         zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         FIND.test("Der Bot kann ihn nicht mehr einladen",
-                  gesagt(zeilen, rf"You can't invite {ZUSCHAUER_NAME}: he may not follow anybody"), zeige(zeilen))
+                  gesagt(zeilen, rf"You can't invite {ZUSCHAUER_NAME}: they may not follow"), zeige(zeilen))
         f = fuehrung_seite(bot)
         er = texte(f).get(platz(f, ZUSCHAUER_NAME), "")
         FIND.test("Im Menue steht er trotzdem in der Liste, mit dem Grund, warum er nicht eingeladen werden kann",
-                  "You can't invite him" in er and "he may not follow anybody" in er, er)
+                  "Not allowed to follow" in er, er)
         zeilen = befehl(zuschauer, f"/cam follow accept {BOT_NAME}")
         f = fuehrung_seite(zuschauer)
         unten = item_text(f.get("slots", {}).get("47"))
         FIND.test("Annehmen sagt ihm, dass er nicht teilnehmen darf, und seine Seite der Fuehrung sagt es unten",
-                  gesagt(zeilen, r"You may not follow anybody for good")
-                  and "Sorry, you may not follow anybody" in unten and "You are restricted" in unten,
+                  gesagt(zeilen, r"You may not follow permanently")
+                  and "You may not follow" in unten and "Restricted permanently" in unten,
                   f"{zeige(zeilen)} / {unten}")
 
         f = seine_seite()
-        FIND.test("Seine Seite heisst nun Aendern", f"Change the follow restriction of {ZUSCHAUER_NAME}"
+        FIND.test("Seine Seite heisst nun Aendern", f"Change restriction: {ZUSCHAUER_NAME}"
                   in (f.get("title") or ""), str(f.get("title")))
         klick(bot, 12)
         klick(bot, 14)
@@ -12316,9 +12325,9 @@ def tourmoderation_checks(env, bot):
         mitte = item_text(fuehrung_seite(zuschauer).get("slots", {}).get("22"))
         FIND.test("Geaendert auf fuehren: er erfaehrt es, einladen sagt, dass er nicht fuehren darf, die Seite "
                   "der Fuehrung sagt es in der Mitte",
-                  gesagt(dort, rf"{BOT_NAME} changed your follow restriction: no leading for good")
-                  and gesagt(zeilen, r"You may not lead for good")
-                  and "Sorry, you may not lead" in mitte, f"{zeige(dort)} / {zeige(zeilen)} / {mitte}")
+                  gesagt(dort, rf"{BOT_NAME} changed your follow restriction: no leading permanently")
+                  and gesagt(zeilen, r"You may not lead permanently")
+                  and "You may not lead" in mitte, f"{zeige(dort)} / {zeige(zeilen)} / {mitte}")
         seine_seite()
         seit = zuschauer.mark()
         klick(bot, 35)
@@ -12332,40 +12341,40 @@ def tourmoderation_checks(env, bot):
         f = fenster(bot)
         schalter = item_text(f.get("slots", {}).get("13"))
         FIND.test("Everybody oeffnet den Schalter fuer alle: ein Knopf (13), an",
-                  "Switch following off for everybody" in (f.get("title") or "")
-                  and schalter.startswith("Following for everybody") and "» on" in schalter
+                  "Following off for all" in (f.get("title") or "")
+                  and schalter.startswith("Following for all") and "» on" in schalter
                   and "12" not in f.get("slots", {}) and "14" not in f.get("slots", {}),
                   f"{f.get('title')} / {schalter}")
         klick(bot, 13)
         f = fenster(bot)
         schalter = item_text(f.get("slots", {}).get("13"))
         FIND.test("Umgeschaltet: aus, der Knopf glaenzt, unten steht, was es tut",
-                  "» switched off" in schalter and (f.get("slots", {}).get("13") or {}).get("glint") is True
-                  and "Following: switched off for good" in item_text(f.get("slots", {}).get("31")), schalter)
+                  "» off" in schalter and (f.get("slots", {}).get("13") or {}).get("glint") is True
+                  and "Following: off permanently" in item_text(f.get("slots", {}).get("31")), schalter)
         seit, hier_seit = zuschauer.mark(), bot.mark()
         klick(bot, 31)
         dort, hier = zeilen_seit(zuschauer, seit), zeilen_seit(bot, hier_seit)
         bot.call("close_window", wait=10)
         FIND.test("Fuer alle aus: er liest es, der Admin auch",
-                  gesagt(dort, rf"{BOT_NAME} switched following off for everybody for good")
-                  and gesagt(hier, r"Following is switched off for everybody for good"), f"{zeige(dort)} / {zeige(hier)}")
+                  gesagt(dort, rf"{BOT_NAME} switched following off for everybody permanently")
+                  and gesagt(hier, r"Following is switched off for everybody permanently"), f"{zeige(dort)} / {zeige(hier)}")
         zeilen = befehl(zuschauer, f"/cam follow invite {BOT_NAME}")
         seite = fuehrung_seite(zuschauer)
         mitte = item_text(seite.get("slots", {}).get("22"))
         FIND.test("Aus: einladen sagt, dass Fuehrungen abgeschaltet sind, seine Seite sagt es einmal, in der Mitte",
-                  gesagt(zeilen, r"Following is switched off for good")
-                  and "Following is switched off" in mitte and "It is off for everybody" in mitte
+                  gesagt(zeilen, r"Following is switched off permanently")
+                  and "Following is switched off" in mitte and "Off for everybody" in mitte
                   and "switched off" not in item_text(seite.get("slots", {}).get("47")),
                   f"{zeige(zeilen)} / {mitte} / {item_text(seite.get('slots', {}).get('47'))}")
         zeilen = befehl(zuschauer, f"/cam follow accept {BOT_NAME}")
-        FIND.test("Aus: annehmen geht auch nicht", gesagt(zeilen, r"Following is switched off for good"), zeige(zeilen))
+        FIND.test("Aus: annehmen geht auch nicht", gesagt(zeilen, r"Following is switched off permanently"), zeige(zeilen))
         zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         f = fuehrung_seite(bot)
         er = texte(f).get(platz(f, ZUSCHAUER_NAME), "")
         FIND.test("camplugin.followadmin.bypass (op): der Bot darf weiter fuehren - den zweiten aber nicht einladen, "
                   "die Liste sagt warum",
                   gesagt(zeilen, rf"You can't invite {ZUSCHAUER_NAME}: following is switched off")
-                  and "You can't invite him" in er and "following is switched off" in er
+                  and "Following is switched off" in er
                   and "Following is switched off" not in item_text(f.get("slots", {}).get("22")),
                   f"{zeige(zeilen)} / {er}")
         liste()
@@ -12378,8 +12387,8 @@ def tourmoderation_checks(env, bot):
         zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         FIND.test("Der Milcheimer schaltet sie fuer alle wieder an: er hoert es, unter Everybody steht \"on\", "
                   "der Bot laedt wieder ein",
-                  gesagt(dort, rf"{BOT_NAME} switched following on again for everybody") and "Following is on" in alle
-                  and gesagt(zeilen, rf"You invited {ZUSCHAUER_NAME} to follow you"),
+                  gesagt(dort, rf"{BOT_NAME} switched following back on") and "Following is on" in alle
+                  and gesagt(zeilen, rf"Invited {ZUSCHAUER_NAME}"),
                   f"{zeige(dort)} / {alle} / {zeige(zeilen)}")
     finally:
         try:
@@ -12454,15 +12463,15 @@ def naehe_checks(env, bot):
         an, zeilen = startet()
         FIND.test("nearby-players: true - mit einem Spieler drei Bloecke daneben startet /cam nicht, "
                   "die Meldung sagt, wie weit man weg muss",
-                  not an and gesagt(zeilen, rf"too close to {ZUSCHAUER_NAME} to start cam mode\. "
-                                            r"Get at least 16 blocks away \(13 more\)"), zeige(zeilen))
+                  not an and gesagt(zeilen, rf"Too close to {ZUSCHAUER_NAME}: "
+                                            r"move 13 more blocks away"), zeige(zeilen))
         zuschauer_bei(20)
         an, zeilen = startet()
         FIND.test("nearby-players: true - zwanzig Bloecke weg haelt er nicht mehr auf", an, zeige(zeilen))
         set_option(env, "nearby-radius", "25.0")
         an, zeilen = startet()
         FIND.test("nearby-radius: 25 - zwanzig Bloecke weg haelt er auf",
-                  not an and gesagt(zeilen, r"Get at least 25 blocks away \(5 more\)"), zeige(zeilen))
+                  not an and gesagt(zeilen, r"move 5 more blocks away"), zeige(zeilen))
         set_option(env, "nearby-radius", "16.0")
 
         # Die Sperre gilt fuer den zweiten Spieler genauso: Neben dem Bot kommt
@@ -12471,7 +12480,7 @@ def naehe_checks(env, bot):
         hinstellen(bot, x, y, z)
         zeilen = befehl(zuschauer, "/cam")
         FIND.test("nearby-players: true - auch der zweite Spieler startet nicht neben dem Bot",
-                  gesagt(zeilen, rf"too close to {BOT_NAME} to start cam mode"), zeige(zeilen))
+                  gesagt(zeilen, rf"Too close to {BOT_NAME}"), zeige(zeilen))
         zuschauer_bei(20)
         cam_on(bot)
         if FIND.test("Der zweite Spieler ist fuer die Kampfsperre im Cam-Modus",
@@ -12569,7 +12578,7 @@ def anstups_checks(env, bot):
                   angestupst(beim_bot) == 1, zeige(beim_bot))
         FIND.test("sounds.nudge - der Ton dazu", ton_da(bot, seit, "block.note_block.chime"), "")
         FIND.test("nudge: wer anstupst, liest \"You nudged <Bot>\"",
-                  gesagt(beim_zuschauer, rf"You nudged {BOT_NAME}, who is in cam mode"), zeige(beim_zuschauer))
+                  gesagt(beim_zuschauer, rf"You nudged {BOT_NAME}\."), zeige(beim_zuschauer))
         FIND.test("nudge: der Cam-Modus laeuft weiter", spielmodus_ist(bot, "adventure"), "")
 
         time.sleep(2.0)
@@ -12823,7 +12832,7 @@ def funk_checks(env, bot):
         time.sleep(3.0)
         z_ = zeilen_seit(bot, since)
         FIND.test("signal: keine Grenze - in freier Luft ueber die 30 Bloecke hinaus",
-                  draussen is not None and draussen[0] - x > 30.5 and not gesagt(z_, r"cannot move further"),
+                  draussen is not None and draussen[0] - x > 30.5 and not gesagt(z_, r"can't go further"),
                   f"{draussen} - {zeige(z_[-3:])}")
         FIND.test("signal: dort holt das Signal die Kamera zurueck", gesagt(z_, r"back at your body")
                   and am_koerper()[0], zeige(z_[-3:]))
@@ -13037,7 +13046,7 @@ def wartezeit_checks(env, bot):
 
     Mit cooldowns-enabled und 30 Sekunden Wartezeit bringt ein Ende durch
     /cam reload keine Wartezeit, der Cam-Modus startet gleich wieder. Nach
-    einem /cam zeigt eine Bossbar "Cam mode again in: ...", voreingestellt
+    einem /cam zeigt eine Bossbar "Cam mode again in ...", voreingestellt
     ohne Einteilung, und ein neuer Start wird abgelehnt. /cam stats nennt die
     Wartezeit, und sie steht in der Datei des Bots unter cooldown.started.
     Voreingestellt liegt sie dort (storage: file): Ein /cam reload laesst
@@ -13058,13 +13067,13 @@ def wartezeit_checks(env, bot):
         FIND.test("time-limit: ein Ende durch /cam reload bringt keine Wartezeit", an, "")
         cam_off(bot)
         time.sleep(1.5)
-        treffer, titel = bossbar_suche(bot, r"Cam mode again in: \d")
+        treffer, titel = bossbar_suche(bot, r"Cam mode again in \d")
         FIND.test("show-bossbar-cooldown: nach dem Ende zeigt eine Bossbar die Wartezeit", bool(treffer), str(titel))
         FIND.test("time-limit.bossbar-notches: voreingestellt 0 - die Bossbar ohne Einteilung",
                   bool(treffer) and treffer[0].get("dividers") == 0, str(treffer))
         z = befehl(bot, "/cam")
         FIND.test("time-limit: waehrend der Wartezeit wird ein Start abgelehnt",
-                  gesagt(z, r"can start cam mode again in") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
+                  gesagt(z, r"Cam mode again in \d") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
         z = befehl(bot, "/cam stats")
         FIND.test("/cam stats nennt die Wartezeit", gesagt(z, r"Cam mode again in: \d"), zeige(z))
         datei = spielerdatei(env)
@@ -13074,7 +13083,7 @@ def wartezeit_checks(env, bot):
         console(env, "cam reload", pause=2)
         z = befehl(bot, "/cam")
         FIND.test("time-limit.storage: file - nach /cam reload laeuft die Wartezeit weiter",
-                  gesagt(z, r"can start cam mode again in"), zeige(z))
+                  gesagt(z, r"Cam mode again in \d"), zeige(z))
         if FIND.test("Bot meldet sich waehrend der Wartezeit neu an", neu_anmelden(bot), ""):
             treffer, titel = bossbar_suche(bot, r"Cam mode again in")
             FIND.test("show-bossbar-cooldown: nach dem Betreten ist die Bossbar wieder da", bool(treffer), str(titel))
@@ -13093,7 +13102,7 @@ def wartezeit_checks(env, bot):
         cam_off(bot)
         z = befehl(bot, "/cam")
         FIND.test("time-limit.storage: memory - nach dem Ende wartet er wie sonst",
-                  gesagt(z, r"can start cam mode again in"), zeige(z))
+                  gesagt(z, r"Cam mode again in \d"), zeige(z))
         console(env, "cam reload", pause=2)
         an = cam_on(bot)
         FIND.test("time-limit.storage: memory - /cam reload vergisst die Wartezeit", an, "")
@@ -13133,7 +13142,7 @@ def akku_speicher_checks(env, bot):
         since = bot.mark()
         if not cam_on(bot):
             return False
-        return bool(bot.expect(r"battery is empty", since, 12000))
+        return bool(bot.expect(r"battery empty", since, 12000))
 
     try:
         cam_off(bot)
@@ -13158,7 +13167,7 @@ def akku_speicher_checks(env, bot):
         console(env, "cam reload", pause=2)
         z = befehl(bot, "/cam")
         FIND.test("battery.storage: file - nach /cam reload ist der Akku immer noch leer",
-                  gesagt(z, r"battery holds 0 seconds") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
+                  gesagt(z, r"Battery too low: 0 seconds") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
 
         set_option(env, "storage", "memory", "battery")
         an = cam_on(bot)
@@ -13167,7 +13176,7 @@ def akku_speicher_checks(env, bot):
         leer_fliegen()
         z = befehl(bot, "/cam")
         FIND.test("battery.storage: memory - leer ist er auch im Speicher leer",
-                  gesagt(z, r"battery holds 0 seconds"), zeige(z))
+                  gesagt(z, r"Battery too low: 0 seconds"), zeige(z))
         console(env, "cam reload", pause=2)
         an = cam_on(bot)
         FIND.test("battery.storage: memory - nach /cam reload ist der Akku wieder voll", an, "")
@@ -13258,7 +13267,7 @@ def language_checks(env, bot):
                   said(antwort, f"has an error in lang/{TESTSPRACHE}.yml") and said(antwort, "line 2"),
                   shown(antwort))
         FIND.test("Der Reload meldet dann keinen Erfolg",
-                  not said(antwort, "reload successful"), shown(antwort))
+                  not said(antwort, "CamFly reloaded"), shown(antwort))
         start = cam()
         adventure = spielmodus_ist(bot, "adventure")
         FIND.test("Die bisherigen Texte gelten weiter", said(start, "Kamera an"), shown(start))
@@ -15887,7 +15896,7 @@ def gamemode_checks(env, bot):
         time.sleep(1.5)
         gesagt = [strip_colors(m["text"])
                   for m in bot.call("messages", since=since).get("messages", [])]
-        abgelehnt = any("cannot start cam mode in spectator mode" in t.lower()
+        abgelehnt = any("can't start cam mode in spectator mode" in t.lower()
                         for t in gesagt)
         gestartet = any(re.search(r"[Cc]am mode activated", t) for t in gesagt)
         FIND.test(f"gamemode {wert}: /cam lehnt den Zuschauermodus ab",
@@ -16279,19 +16288,19 @@ def medium_checks(env, bot):
         ergebnis = medium_flug(bot, heim, in_die_lava)
         FIND.test("allow_lava_flight: false - die Kamera bleibt ueber der Lava "
                   "stehen, der Cam-Modus laeuft weiter, die Meldung kommt",
-                  gestoppt(ergebnis, "cannot fly into lava",
+                  gestoppt(ergebnis, "can't fly into lava",
                            lambda y: y >= oben - 0.01), zeige(ergebnis))
         lief, gesagt = start_in_lava()
         FIND.test("allow_lava_flight: false - in der Lava startet /cam nicht, "
                   "und die Ablehnung sagt warum",
                   not lief and not gesagt_hat(gesagt, "cam mode activated")
-                  and gesagt_hat(gesagt, "cannot start cam mode in lava"),
+                  and gesagt_hat(gesagt, "can't start cam mode in lava"),
                   "; ".join(gesagt) or "nichts im Chat")
 
         ergebnis = medium_flug(bot, heim, ins_becken)
         FIND.test("allow_water_flight: false - die Kamera bleibt ueber dem Wasser "
                   "stehen, der Cam-Modus laeuft weiter, die Meldung kommt",
-                  gestoppt(ergebnis, "cannot fly into water",
+                  gestoppt(ergebnis, "can't fly into water",
                            lambda y: y >= oben - 0.01), zeige(ergebnis))
 
         # Wer schon drin ist - hier per /tp -, kommt heraus, aber nicht tiefer.
@@ -16316,23 +16325,23 @@ def medium_checks(env, bot):
         lief, gesagt = medium_start(bot, im_becken, heim)
         FIND.test("allow_water_flight: false - im Wasser startet /cam nicht, "
                   "und die Ablehnung sagt warum",
-                  not lief and gesagt_hat(gesagt, "cannot start cam mode in water"),
+                  not lief and gesagt_hat(gesagt, "can't start cam mode in water"),
                   "; ".join(gesagt) or "nichts im Chat")
 
         ergebnis = medium_flug(bot, heim, in_den_wuerfel)
         FIND.test("allow_powder_snow_flight: false - die Kamera bleibt auf dem "
                   "Pulverschnee stehen, der Cam-Modus laeuft weiter, die Meldung kommt",
-                  gestoppt(ergebnis, "cannot fly into powder snow",
+                  gestoppt(ergebnis, "can't fly into powder snow",
                            lambda y: y >= oben - 0.01), zeige(ergebnis))
         ergebnis = medium_flug(bot, unter_der_decke, durch_die_decke)
         FIND.test("allow_powder_snow_flight: false - der Kopf der Kamera bleibt "
                   "unter der Pulverschnee-Decke",
-                  gestoppt(ergebnis, "cannot fly into powder snow",
+                  gestoppt(ergebnis, "can't fly into powder snow",
                            lambda y: y + 1.8 <= by + 5.01), zeige(ergebnis))
         lief, gesagt = medium_start(bot, im_wuerfel, heim)
         FIND.test("allow_powder_snow_flight: false - im Pulverschnee startet /cam "
                   "nicht, und die Ablehnung sagt warum",
-                  not lief and gesagt_hat(gesagt, "cannot start cam mode in powder snow"),
+                  not lief and gesagt_hat(gesagt, "can't start cam mode in powder snow"),
                   "; ".join(gesagt) or "nichts im Chat")
 
         # --- Mit border-mode: barrier wird das Gesperrte zur Wand ---
@@ -16397,7 +16406,7 @@ def medium_checks(env, bot):
                       "Kamera auf der Lava wie auf einem Block, ohne zurueckgesetzt zu "
                       "werden, und die Meldung kommt",
                       gelandet is not None and oben - 0.01 <= gelandet[1] <= oben + 0.1
-                      and fall.get("forced") == 0 and gesagt_hat(gesagt, "cannot fly into lava"),
+                      and fall.get("forced") == 0 and gesagt_hat(gesagt, "can't fly into lava"),
                       f"{gelandet}, {fall.get('forced')}x zurueckgesetzt, Chat: "
                       f"{'; '.join(g for g in gesagt if g) or 'nichts'}")
             FIND.test("Die Wand zeigt gesperrte Lava als Magma, gesperrtes Wasser als "
@@ -16523,7 +16532,7 @@ def fall_checks(env, bot):
             hit = bot.expect("Camera mode activated|Cam mode activated", since, 6000)
             FIND.test(name, bool(hit), "" if hit else "der Start wurde abgelehnt")
         else:
-            hit = bot.expect("cannot start cam mode while falling", since, 6000)
+            hit = bot.expect("can't start cam mode while falling", since, 6000)
             time.sleep(0.5)
             lief = spielmodus_ist(bot, "adventure")
             FIND.test(name, bool(hit) and not lief,
@@ -16796,7 +16805,7 @@ def reiten_checks(env, bot):
             return
         since = bot.mark()
         bot.chat("/cam")
-        hit = bot.expect("cannot start cam mode while riding", since, 6000)
+        hit = bot.expect("can't start cam mode while riding", since, 6000)
         time.sleep(0.5)
         lief = spielmodus_ist(bot, "adventure")
         FIND.test("In einer Lore startet /cam nicht, und er hoert, warum", bool(hit) and not lief,
@@ -16849,7 +16858,7 @@ def bett_checks(env, bot):
             return
         since = bot.mark()
         bot.chat("/cam")
-        hit = bot.expect("cannot start cam mode while lying in a bed", since, 3000)
+        hit = bot.expect("can't start cam mode in bed", since, 3000)
         lief = spielmodus_ist(bot, "adventure")
         FIND.test("Im Bett startet /cam nicht, und er hoert, warum", bool(hit) and not lief,
                   "Cam-Modus laeuft" if lief else
@@ -16916,7 +16925,7 @@ def tippfehler_checks(env, bot):
         zeilen = befehl(bot, "/cam spto", warten=2.0)
         lief = spielmodus_ist(bot, "adventure")
         FIND.test("/cam spto startet den Cam-Modus nicht und sagt, dass es den Befehl nicht gibt",
-                  gesagt(zeilen, r"/cam spto is no command") and not lief,
+                  gesagt(zeilen, r"Unknown command: /cam spto") and not lief,
                   "Cam-Modus laeuft" if lief else zeige(zeilen))
         if lief:
             cam_off(bot)
@@ -16924,7 +16933,7 @@ def tippfehler_checks(env, bot):
             zeilen = befehl(bot, "/cam hlep", warten=2.0)
             lief = spielmodus_ist(bot, "adventure")
             FIND.test("/cam hlep beendet den Cam-Modus nicht und sagt, dass es den Befehl nicht gibt",
-                      gesagt(zeilen, r"/cam hlep is no command") and lief,
+                      gesagt(zeilen, r"Unknown command: /cam hlep") and lief,
                       "Cam-Modus ist aus" if not lief else zeige(zeilen))
     finally:
         cam_off(bot)
@@ -17070,7 +17079,7 @@ def koerpersperre_checks(env, bot):
         zeilen = befehl(bot, "/cam", warten=2.0)
         lief = spielmodus_ist(bot, "adventure")
         FIND.test("Kann der Koerper nicht spawnen, startet /cam nicht, und er hoert, warum",
-                  gesagt(zeilen, r"body cannot be put down here") and not lief,
+                  gesagt(zeilen, r"your body can't be placed") and not lief,
                   "Cam-Modus laeuft" if lief else zeige(zeilen))
         if lief:
             cam_off(bot)
@@ -17119,7 +17128,7 @@ def treffer_unterwegs_checks(env, bot):
         lief = spielmodus_ist(bot, "adventure")
         leben = bot.server_data("Health")
         FIND.test("Ein /cam, waehrend der Treffer auf den Koerper noch unterwegs ist, startet nicht",
-                  not lief and gesagt(zeilen, r"remain safe"),
+                  not lief and gesagt(zeilen, r"Too soon after damage"),
                   "Cam-Modus laeuft" if lief else zeige(zeilen))
         FIND.test("Der Treffer hat ihn ausserhalb des Cam-Modus erreicht",
                   leben is not None and leben < 19.99, f"Leben {leben}")
@@ -17315,7 +17324,7 @@ def border_checks(env, bot):
         FIND.test("border-mode: barrier - die Kamera bleibt an max-distance stehen, "
                   "ohne zurueckgesetzt zu werden, und die Meldung kommt",
                   drin(ergebnis) and ergebnis[1] == 0
-                  and gewarnt(ergebnis, "cannot move further"), grenz_zeige(ergebnis, heim))
+                  and gewarnt(ergebnis, "can't go further"), grenz_zeige(ergebnis, heim))
         wand_x = None
         for x in range(bx + 1, bx + GRENZ_ABSTAND + 4):
             if sieht((x, by, bz)) == "barrier":
@@ -17347,7 +17356,7 @@ def border_checks(env, bot):
         FIND.test("border-mode: push-back - die Kamera kommt nicht ueber max-distance, "
                   "wird dabei aber zurueckgesetzt, und die Meldung kommt",
                   drin(ergebnis) and ergebnis[1] > 0
-                  and gewarnt(ergebnis, "cannot move further"), grenz_zeige(ergebnis, heim))
+                  and gewarnt(ergebnis, "can't go further"), grenz_zeige(ergebnis, heim))
         cam_off(bot)
 
         # --- keine Grenze ---
@@ -17362,7 +17371,7 @@ def border_checks(env, bot):
             FIND.test(f"{name} - keine Grenze, die Kamera laeuft ueber max-distance "
                       f"hinaus, ohne Meldung",
                       frei(ergebnis) and ergebnis[1] == 0
-                      and not gewarnt(ergebnis, "cannot move further"),
+                      and not gewarnt(ergebnis, "can't go further"),
                       grenz_zeige(ergebnis, heim))
             cam_off(bot)
 
@@ -17747,13 +17756,13 @@ def portal_probe(bot, portal, heim, label=""):
     def heard(pattern):
         return any(re.search(pattern, line, re.I) for line in said)
 
-    if heard(r"cannot go through .*portals"):
+    if heard(r"can't use .*portals"):
         was = "zu"
-    elif heard(r"cannot go any further"):
+    elif heard(r"^(?!.*brought back).*not allowed in"):
         was = "abgewiesen"
     elif heard(r"not allowed in .*brought back"):
         was = "zurueckgeholt"
-    elif heard(r"blocks away from .*brought back"):
+    elif heard(r"blocks from .*brought back"):
         was = "zu weit"
     elif in_nether(bot):
         was = "drueben"
@@ -18029,7 +18038,7 @@ def fuehrung_nether_checks(env, bot):
     def folgt_drueben(was, seit):
         """Ob der Bot noch drueben ist, beim Leader, und nichts vom Verlieren gehoert hat."""
         zeilen = zeilen_seit(bot, seit)
-        verloren = [z for z in zeilen if re.search(r"out of your reach|brought back|no longer follow", z)]
+        verloren = [z for z in zeilen if re.search(r"out of range|brought back|no longer follow|following ended", z)]
         drueben = in_nether(bot)
         wo, leader = bot.server_pos(), leader_pos()
         nah = wo is not None and leader is not None and math.dist(wo, leader) < 6.0
@@ -18073,7 +18082,7 @@ def fuehrung_nether_checks(env, bot):
         console(env, f"execute in minecraft:the_nether run tp {ZUSCHAUER_NAME} "
                      f"{erster[0] + 0.5} {erster[1]} {erster[2] + 0.5}", pause=1.5)
         zeilen = befehl(zuschauer, f"/cam follow invite {BOT_NAME}")
-        if not FIND.test("Der Leader drueben laedt den Gast ein", gesagt(zeilen, rf"You invited {BOT_NAME}"),
+        if not FIND.test("Der Leader drueben laedt den Gast ein", gesagt(zeilen, rf"Invited {BOT_NAME}"),
                          zeige(zeilen)):
             return
         seit = bot.mark()
@@ -18381,7 +18390,7 @@ def teleport_checks(env, bot):
                       and not tp_koerper_da(bot, *heim), "")
             if ursache == "plugin":
                 FIND.test("Die Meldung teleport-ended kommt",
-                          bool(bot.expect("You were teleported", since, 3000)), "")
+                          bool(bot.expect("you were teleported", since, 3000)), "")
 
         # --- Eine Ender-Perle von vor dem Cam-Modus landet ---
         perle = (hx + 8, hy, hz)
@@ -18399,7 +18408,7 @@ def teleport_checks(env, bot):
                                        "run say {marke}")
                       and not tp_koerper_da(bot, *heim), "")
             FIND.test("teleports.ender-pearl: die Meldung teleport-ended kommt",
-                      bool(bot.expect("You were teleported", since, 3000)), "")
+                      bool(bot.expect("you were teleported", since, 3000)), "")
         else:
             FIND.test("teleports.ender-pearl: Cam-Modus startet", False, "")
         # Die Perle hat ihn verletzt: cam-safety laesst ihn so lange nicht.
@@ -19049,7 +19058,7 @@ def effekt_weg_checks(env, bot):
     Spieler bekommt ihn. Das Plugin hielt aber jede Aenderung an den Effekten
     des Koerpers fuer einen solchen Treffer, auch eine, die einen wegnimmt:
     /effect clear auf den Koerper beendete den Cam-Modus mit "Your body was
-    hit by the effect invisibility" - der Unsichtbarkeit, die das Mannequin im
+    hit by the effect invisibility" (heute "your body got invisibility") - der Unsichtbarkeit, die das Mannequin im
     Ruestungsstaender unsichtbar haelt. Ebenso jedes Plugin, das den Koerper
     wegraeumt: Mit ihm gehen seine Effekte.
     """
@@ -19069,7 +19078,7 @@ def effekt_weg_checks(env, bot):
         zeilen = zeilen_seit(bot, since)
         lief = spielmodus_ist(bot, "adventure")
         FIND.test("/effect clear auf den Koerper beendet den Cam-Modus nicht",
-                  lief and not gesagt(zeilen, r"hit by the effect"), zeige(zeilen))
+                  lief and not gesagt(zeilen, r"your body got"), zeige(zeilen))
         FIND.test("Das Mannequin im Ruestungsstaender bleibt unsichtbar",
                   nbt_frage(bot, "@e[type=minecraft:mannequin,distance=..2,limit=1]",
                             '{active_effects:[{id:"minecraft:invisibility"}]}'), "")
@@ -19079,7 +19088,7 @@ def effekt_weg_checks(env, bot):
         console(env, f"{koerper} give @e[type=minecraft:mannequin,distance=..2] minecraft:slowness 5 0", pause=1.5)
         zeilen = zeilen_seit(bot, since)
         FIND.test("Ein Effekt, der den Koerper trifft, beendet den Cam-Modus weiterhin (Gegenprobe)",
-                  not spielmodus_ist(bot, "adventure") and gesagt(zeilen, r"hit by the effect"), zeige(zeilen))
+                  not spielmodus_ist(bot, "adventure") and gesagt(zeilen, r"your body got"), zeige(zeilen))
     finally:
         cam_off(bot)
         bot.chat("/effect clear @s")
@@ -20416,7 +20425,7 @@ def fuehrung_kette_checks(env, bot):
             return
         zeilen = befehl(dritter, f"/cam follow invite {BOT_NAME}")
         FIND.test("Der dritte laedt den Bot ein, der noch niemanden fuehrt",
-                  gesagt(zeilen, rf"You invited {BOT_NAME} to follow you"), zeige(zeilen))
+                  gesagt(zeilen, rf"Invited {BOT_NAME}"), zeige(zeilen))
         befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         dort = befehl(zuschauer, f"/cam follow accept {BOT_NAME}", warten=3.0)
         if not FIND.test("Der Bot fuehrt ohne Cam-Modus den zweiten Spieler",
@@ -20426,10 +20435,10 @@ def fuehrung_kette_checks(env, bot):
         hier = befehl(bot, f"/cam follow accept {DRITTER_NAME}", warten=3.0)
         FIND.test("Nimmt der Bot, der fuehrt, die Einladung an, heisst es: er fuehrt schon - und er bleibt "
                   "ohne Cam-Modus",
-                  gesagt(hier, r"You lead or follow already") and not im_cam_modus(bot, BOT_NAME), zeige(hier))
+                  gesagt(hier, r"You already lead or follow") and not im_cam_modus(bot, BOT_NAME), zeige(hier))
         zeilen = befehl(dritter, f"/cam follow invite {BOT_NAME}")
         FIND.test("Den Bot, der fuehrt, kann der dritte nicht mehr einladen",
-                  gesagt(zeilen, rf"{BOT_NAME} leads or follows already"), zeige(zeilen))
+                  gesagt(zeilen, rf"{BOT_NAME} already leads or follows"), zeige(zeilen))
         tabs = dritter.call("tab", text="/cam follow invite ").get("matches", [])
         FIND.test("Tab nach /cam follow invite bietet dem dritten den Bot nicht an", BOT_NAME not in tabs, str(tabs))
     finally:
@@ -20514,9 +20523,9 @@ def bedrock_checks(env, bot):
     mit der Auswahl, wie auf Bedrock ohne Fenster.
 
     Mit apply-to: bedrock merkt der Java-Bot nichts: Die Action-Bar nennt
-    die Taste ("or type /cam"), hinter den Knoepfen von /cam spot list steht
+    die Taste ("or /cam"), hinter den Knoepfen von /cam spot list steht
     kein Befehl, unter einem Punkt im Menue stehen die Klicks. Mit all sagt
-    die Action-Bar nur "type /cam to leave"; hinter den Knoepfen von
+    die Action-Bar nur "/cam to leave"; hinter den Knoepfen von
     /cam spot list und /cam list steht der Befehl in Klammern - einer, der
     noch einen Namen braucht, mit "..." am Ende. Im Menue oeffnet der Knopf
     der Zeit eine Seite mit allen Zeiten, die der Welt markiert; noon
@@ -20619,7 +20628,7 @@ def bedrock_checks(env, bot):
         # --- apply-to: bedrock - der Java-Bot merkt nichts ---
         an, zeilen = start_zeilen(bot)
         FIND.test("apply-to: bedrock - die Action-Bar des Java-Bots nennt die Taste",
-                  an and gesagt(zeilen, r"or type /cam to leave"), zeige(zeilen[-3:]))
+                  an and gesagt(zeilen, r"or /cam to leave"), zeige(zeilen[-3:]))
         befehl(bot, "/cam spot set Grundstein")
         zeilen = befehl(bot, "/cam spot list")
         FIND.test("apply-to: bedrock - hinter den Knoepfen von /cam spot list steht kein Befehl",
@@ -20639,9 +20648,9 @@ def bedrock_checks(env, bot):
         # --- apply-to: all - der Java-Bot bekommt, was Bedrock-Spieler bekommen ---
         set_option(env, "apply-to", "all", "bedrock")
         an, zeilen = start_zeilen(bot)
-        FIND.test("apply-to: all - die Action-Bar sagt nur \"type /cam to leave\", ohne Taste",
-                  an and gesagt(zeilen, r"[Cc]am mode activated - type /cam to leave")
-                  and not gesagt(zeilen, r"or type /cam"), zeige(zeilen[-3:]))
+        FIND.test("apply-to: all - die Action-Bar sagt nur \"/cam to leave\", ohne Taste",
+                  an and gesagt(zeilen, r"[Cc]am mode activated - /cam to leave")
+                  and not gesagt(zeilen, r"or /cam"), zeige(zeilen[-3:]))
         zeilen = befehl(bot, "/cam spot list")
         FIND.test("apply-to: all - hinter den Knoepfen von /cam spot list steht der Befehl",
                   gesagt(zeilen, r"\[Go\] \(/cam spot Grundstein\)")
@@ -20724,20 +20733,20 @@ def bedrock_checks(env, bot):
         klick(gross(9), warten=2.0)
         f = fenster()
         FIND.test("apply-to: all - der Knopf der Fuehrung oeffnet ihre Seite",
-                  f.get("open") and platz_mit(f, "View when following") is not None,
+                  f.get("open") and platz_mit(f, "View while following") is not None,
                   str([item_text(i).split(chr(10))[0] for i in (f.get("slots") or {}).values()]))
         bot.call("close_window", wait=10)
         menue()
         klick(gross(23), warten=2.0)
         f = fenster()
-        admin = f.get("open") and platz_mit(f, "Who is in cam mode") == str(gross(10))
+        admin = f.get("open") and platz_mit(f, "In cam mode") == str(gross(10))
         FIND.test("apply-to: all - die Admin-Seite ist verteilt: zurueck ganz unten in der Mitte",
                   admin and platz_mit(f, "Back") == str(gross(22)) == "49",
                   str({k: item_text(i).split(chr(10))[0] for k, i in (f.get("slots") or {}).items()}))
         klick(gross(10), warten=2.0)
         f = fenster()
         FIND.test("apply-to: all - die Admin-Seite oeffnet und von dort, wer im Cam-Modus ist",
-                  admin and f.get("open") and "In cam mode for" in item_text((f.get("slots") or {}).get("0")),
+                  admin and f.get("open") and "In cam mode: " in item_text((f.get("slots") or {}).get("0")),
                   item_text((f.get("slots") or {}).get("0")))
         bot.call("close_window", wait=10)
         # Eine Seite mit vier Reihen hat Bedrock nicht; Geyser fuellte den Rest mit Barrieren.
@@ -20893,14 +20902,14 @@ def bedrock_checks(env, bot):
             return
         time.sleep(1.5)
         an, zeilen = start_zeilen(punkt)
-        FIND.test(f"name-prefix: \".\" - {BEDROCK_NAME} ist ein Bedrock-Spieler: \"type /cam to leave\" ohne Taste",
-                  an and gesagt(zeilen, r"[Cc]am mode activated - type /cam to leave")
-                  and not gesagt(zeilen, r"or type /cam"), zeige(zeilen[-3:]))
+        FIND.test(f"name-prefix: \".\" - {BEDROCK_NAME} ist ein Bedrock-Spieler: \"/cam to leave\" ohne Taste",
+                  an and gesagt(zeilen, r"[Cc]am mode activated - /cam to leave")
+                  and not gesagt(zeilen, r"or /cam"), zeige(zeilen[-3:]))
         cam_off(punkt)
         set_option(env, "name-prefix", '""', "bedrock")
         an, zeilen = start_zeilen(punkt)
         FIND.test(f"name-prefix: \"\" - {BEDROCK_NAME} ist keiner mehr: die Action-Bar nennt die Taste",
-                  an and gesagt(zeilen, r"or type /cam to leave"), zeige(zeilen[-3:]))
+                  an and gesagt(zeilen, r"or /cam to leave"), zeige(zeilen[-3:]))
         cam_off(punkt)
     finally:
         try:
@@ -20973,7 +20982,7 @@ def spot_nur_im_cam_checks(env, bot):
         zeilen = befehl(bot, "/cam spot set Zufuss")
         liste = befehl(bot, "/cam spot list")
         FIND.test("set-in-cam-only: true - zu Fuss sagt /cam spot set, dass es nur im Cam-Modus geht",
-                  gesagt(zeilen, r"Spots are saved in cam mode only") and not gesagt(liste, r"- Zufuss: "),
+                  gesagt(zeilen, r"Spots can only be saved in cam mode") and not gesagt(liste, r"- Zufuss: "),
                   f"{zeige(zeilen)} / {zeige(liste)}")
 
         befehl(bot, "/cam menu", warten=1.0)
@@ -20985,8 +20994,8 @@ def spot_nur_im_cam_checks(env, bot):
         time.sleep(1.5)
         dort = zeilen_seit(bot, seit)
         FIND.test("Im Menue sagt der Knopf fuer einen neuen Spot \"Only in cam mode\", und ein Klick fragt nicht "
-                  "nach dem Namen", "Only in cam mode" in knopf and gesagt(dort, r"Spots are saved in cam mode only")
-                  and not gesagt(dort, r"Type the name"), f"{knopf} / {zeige(dort)}")
+                  "nach dem Namen", "Only in cam mode" in knopf and gesagt(dort, r"Spots can only be saved in cam mode")
+                  and not gesagt(dort, r"Type the spot name"), f"{knopf} / {zeige(dort)}")
         bot.call("close_window", wait=10)
 
         if not FIND.test("Cam-Modus fuer set-in-cam-only gestartet", cam_on(bot), ""):
@@ -20999,13 +21008,13 @@ def spot_nur_im_cam_checks(env, bot):
         teil = text[text.find("nurcam:"):text.find("nurcam:") + 300] if "nurcam:" in text else ""
         treffer = re.search(r"(?m)^\s+y:\s*(-?[\d.]+)", teil)
         FIND.test("Im Cam-Modus wird der Spot gesetzt, an der Stelle der Kamera",
-                  gesagt(zeilen, r"Spot Nurcam saved here") and treffer is not None and kamera is not None
+                  gesagt(zeilen, r"Spot Nurcam saved\.") and treffer is not None and kamera is not None
                   and abs(float(treffer.group(1)) - kamera[1]) < 0.6, f"{zeige(zeilen)} / {teil[:200]} / {kamera}")
         cam_off(bot)
 
         set_option(env, "set-in-cam-only", "false", "viewpoints")
         zeilen = befehl(bot, "/cam spot set Zufuss")
-        FIND.test("set-in-cam-only: false - zu Fuss geht es auch", gesagt(zeilen, r"Spot Zufuss saved here"),
+        FIND.test("set-in-cam-only: false - zu Fuss geht es auch", gesagt(zeilen, r"Spot Zufuss saved\."),
                   zeige(zeilen))
     finally:
         try:
@@ -21066,7 +21075,7 @@ def spot_ansicht_checks(env, bot):
         befehl(bot, "/cam nightvision on")
         zeilen = befehl(bot, "/cam spot set Zufuss")
         FIND.test("Zu Fuss gesetzt nimmt ein Spot nichts mit, auch keine gemerkte Nachtsicht",
-                  gesagt(zeilen, r"Spot Zufuss saved here") and not gesagt(zeilen, r"sees it with"), zeige(zeilen))
+                  gesagt(zeilen, r"Spot Zufuss saved\.") and not gesagt(zeilen, r"Saved with"), zeige(zeilen))
 
         if not FIND.test("Cam-Modus fuer die Ansicht eines Spots gestartet", cam_on(bot), ""):
             return
@@ -21074,8 +21083,8 @@ def spot_ansicht_checks(env, bot):
         befehl(bot, "/cam weather rain")
         zeilen = befehl(bot, "/cam spot set Abend", warten=2.0)
         FIND.test("Im Cam-Modus gesetzt sagt die Meldung, was der Spot mitnimmt",
-                  gesagt(zeilen, r"Spot Abend saved here")
-                  and gesagt(zeilen, r"sees it with: sunset, rain, night vision always"), zeige(zeilen))
+                  gesagt(zeilen, r"Spot Abend saved\.")
+                  and gesagt(zeilen, r"Saved with: sunset, rain, night vision always"), zeige(zeilen))
         text = spot_datei_des_bots(env)
         teil = text[text.find("abend:"):] if "abend:" in text else ""
         FIND.test("In der Datei des Bots: time: 12000, weather: rain, night-vision: on unter dem Spot",
@@ -21901,11 +21910,11 @@ def step_tests(env):
         # --- Reload, von der Konsole und vom Spieler ---
         console(env, "cam reload", pause=2)
         FIND.nebenbei("/cam reload von der Konsole",
-                      "reload successful" in strip_colors(server_log(env)).lower(),
+                      "camfly reloaded" in strip_colors(server_log(env)).lower(),
                       "")
         since = bot.mark()
         bot.chat("/cam reload")
-        hit = bot.expect("reload successful|Plugin is restarting", since, 8000)
+        hit = bot.expect("CamFly reloaded|Reloading CamFly", since, 8000)
         FIND.nebenbei("/cam reload vom Spieler (op)", bool(hit),
                       strip_colors(hit["text"]) if hit else "keine Antwort im Chat")
 
@@ -21920,7 +21929,7 @@ def step_tests(env):
         time.sleep(2)
         since = bot.mark()
         bot.chat("/cam")
-        hit = bot.expect("cannot start cam mode|cannot go any further", since, 8000)
+        hit = bot.expect("can't start cam mode|not allowed in", since, 8000)
         FIND.nebenbei("Verbotenes Biom sperrt /cam", bool(hit),
                       strip_colors(hit["text"]) if hit else "der Cam-Modus startete trotzdem")
         if not hit:

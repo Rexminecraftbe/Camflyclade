@@ -1300,7 +1300,9 @@ public final class CamTour implements Listener {
         // From the first moment on, not only from the next tick of the tour.
         takeLook(guide, guest);
         syncVisibility();
-        messages.sendConfiguredMessage(guest, "tour-joined", "{player}", guide.getName());
+        // How to stop: with the command, or while only the menu goes, there.
+        messages.sendConfiguredMessage(guest, settings.getMenuAccess().allowsCommands() ? "tour-joined"
+                : "tour-joined-menu", "{player}", guide.getName());
         messages.sendConfiguredMessage(guide, "tour-joined-guide", "{player}", guest.getName());
         startTask();
     }

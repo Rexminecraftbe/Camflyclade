@@ -510,7 +510,7 @@ statistics:
   # dreht nicht am Mausrad, wie bei afk-end -, zählt die Zeit danach nicht mehr mit, bis er wieder etwas tut: nicht
   # in der Zeit im Cam-Modus, im Schnitt und im längsten Flug. So zählt eine Kamera, die stundenlang irgendwo
   # geparkt steht, nicht als langer Flug. Wer bei /cam follow folgt, schaut zu und zählt als aktiv.
-  # Ob ein Flug min-seconds lang lief, zählt weiter mit der ganzen Zeit; "In cam mode right now" auch.
+  # Ob ein Flug min-seconds lang lief, zählt weiter mit der ganzen Zeit; "In cam mode now" auch.
   # false = jede Sekunde im Cam-Modus zählt
   skip-afk-time: false
   # Nach wie vielen Sekunden ohne etwas zu tun die Zeit nicht mehr zählt (mindestens 10)
@@ -644,7 +644,10 @@ camera-head:
 # und nichts kommt heraus, auch nicht im Cam-Modus, wo sonst jedes Fenster zu bleibt. Texte: menu-... in der Sprachdatei.
 menu:
   # Wie die Spieler an back, resume, spot, follow, photo, time, weather, nightvision und stats kommen:
-  #   menu    = nur über das Menü - die Befehle sagen, dass es dafür /cam menu gibt (Text: menu-only)
+  #   menu    = nur über das Menü - die Befehle sagen, dass es dafür /cam menu gibt (Text: menu-only; ist die Sache
+  #             in dieser Datei aus, menu-features-off). Als Befehl gehen trotzdem, was von außerhalb des Menüs kommt:
+  #             die Knöpfe im Chat zum Annehmen und Ablehnen einer Einladung zum Folgen und eines angebotenen Spots,
+  #             und der Sprung /cam spot <Spieler>:<Name>, den die Web-Karte zum Abtippen zeigt.
   #   both    = über das Menü und über die Befehle
   #   command = nur über die Befehle, /cam menu ist aus
   #   false   = gar nicht, weder über das Menü noch über die Befehle (Text: menu-features-off) - nur /cam selbst,
@@ -905,7 +908,7 @@ resume-command:
 #                              Gibt es den Namen schon, wandert er hierher.
 #   /cam spot <Name>         = die Kamera springt dorthin (Ton: sounds.spot, Text: spot-jumped). Ohne Cam-Modus
 #                              startet er dafür erst, dort wo man steht - wenn der Punkt nicht weiter als
-#                              start-distance weg ist (sonst: "You are X blocks too far away.")
+#                              start-distance weg ist (sonst: "You are X blocks too far from the spot.")
 #   /cam spot delete <Name>  = den Punkt löschen
 #   /cam spot list           = alle eigenen, mit Knöpfen zum Hinspringen, Teilen und Löschen, darunter die, die andere
 #                              mit einem teilen, die öffentlichen der anderen und was einem angeboten wird
@@ -923,7 +926,7 @@ resume-command:
 #   /cam spot <Spieler>:<Name>              = zu einem Punkt springen, den ein anderer mit einem teilt oder der
 #                                             öffentlich ist - nach denselben Regeln wie zu einem eigenen, gemessen
 #                                             vom eigenen Körper
-# Ein Name hat 1 bis 16 Buchstaben, Ziffern, - und _; groß oder klein zählt nicht.
+# Ein Name hat 1 bis 16 Zeichen, jedes Zeichen geht, auch Leerzeichen; groß oder klein zählt nicht.
 # Was ein Punkt zeigt: Setzt man ihn im Cam-Modus, nimmt er die Tageszeit, das Wetter und die Nachtsicht mit, die man
 # sich selbst eingestellt hat (/cam time, /cam weather, /cam nightvision) - nie die Zeit und das Wetter der Welt.
 # Wer hinspringt, sieht den Bau dann so, z. B. im Sonnenuntergang im Regen, nur auf seinem eigenen
@@ -991,7 +994,8 @@ viewpoints:
 # bekommt eine eigene Ebene (Text: web-map-layer), die man auf der Seite der Karte ein- und ausschalten kann, mit einer
 # Nadel für jeden öffentlichen Punkt. Ein Klick darauf zeigt, wem er gehört, wie oft er geliked und angesehen wurde, was
 # er zeigt (Zeit, Wetter, Nachtsicht) und wo er ist, mit dem Befehl, der hinspringt (Texte: web-map-...). Im Spiel geht
-# von der Karte aus nichts: Eine Webseite kann für einen Spieler keine Befehle schicken - den Befehl tippt man selbst.
+# von der Karte aus nichts: Eine Webseite kann für einen Spieler keine Befehle schicken - den Befehl tippt man selbst
+# (er geht auch bei menu.access: menu).
 # Nur öffentliche Punkte (/cam spot share <Name> all): Private und die, die nur einzelnen Spielern angeboten sind,
 # kommen nie auf die Karte - die Seite einer Karte ist oft für jeden im Internet offen, nicht nur für die Spieler. Von
 # der Kamera und vom Körper zeigt die Karte nie etwas. Sperrt die Admin-Seite der Punkte für alle das Ansehen
@@ -1092,7 +1096,7 @@ follow:
   radius: 16.0
   # Wie nah ein Spieler ohne Cam-Modus dem Leader sein muss, um ihm zu folgen, in Blöcken (0 bis 128,
   # 0 = nur wer schon im Cam-Modus ist). Nimmt er an, startet sein Cam-Modus dort, wo er steht, mit allem, was ein
-  # Start mit /cam prüft und kostet (z. B. nicht direkt nach Schaden). Zu weit weg: "You are X blocks too far away."
+  # Start mit /cam prüft und kostet (z. B. nicht direkt nach Schaden). Zu weit weg: "You are X blocks too far from <Leader>."
   start-distance: 16
   # Wie viele Sekunden der Leader außer Reichweite eines Followers sein darf, bevor das Folgen für ihn endet
   # (1 bis 60)

@@ -127,7 +127,10 @@ public final class CamTimeLimit {
                 if (finalBar != null) {
                     finalBar.setProgress(Math.max(0.0, remaining / (double) total));
                     if (messages.isMessageEnabled("bossbar-text")) {
-                        finalBar.setTitle(messages.getMessage("bossbar-text").replace("%time%", formatDuration(remaining)));
+                        // %time% as a language file from before has it.
+                        String time = formatDuration(remaining);
+                        finalBar.setTitle(messages.getMessage("bossbar-text").replace("{time}", time)
+                                .replace("%time%", time));
                     }
                 }
                 if (remaining <= 0) {
