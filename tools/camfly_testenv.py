@@ -5552,21 +5552,21 @@ def kosten_checks(env, bot):
         time.sleep(0.5)
         z = befehl(bot, "/cam", warten=2)
         FIND.test("start-cost: mit allem startet er und erfaehrt, was es gekostet hat",
-                  gesagt(z, r"[Cc]am mode activated") and gesagt(z, r"cost you 2 XP levels, 3x diamond"), zeige(z))
+                  gesagt(z, r"[Cc]am mode activated") and gesagt(z, r"Paid 2 XP levels, 3x diamond"), zeige(z))
         cam_off(bot)
         time.sleep(0.5)
         FIND.test("start-cost: danach sind 1 Level und 2 Diamanten uebrig", bestand(2, 1), "")
 
         z = befehl(bot, "/cam")
         FIND.test("start-cost: reicht es nur fuer einen Teil, wird gar nichts genommen",
-                  gesagt(z, r"You are missing 1 XP level, 1x diamond") and bestand(2, 1), zeige(z))
+                  gesagt(z, r"you are missing 1 XP level, 1x diamond") and bestand(2, 1), zeige(z))
 
         set_options(env, [("xp", "10", "start-cost"), ("xp-type", "points", "start-cost"),
                           ("items", "{}", "start-cost")])
         punkte(25)
         z = befehl(bot, "/cam", warten=2)
         FIND.test("start-cost.xp-type: points - der Start kostet 10 Punkte",
-                  gesagt(z, r"[Cc]am mode activated") and gesagt(z, r"cost you 10 XP points"), zeige(z))
+                  gesagt(z, r"[Cc]am mode activated") and gesagt(z, r"Paid 10 XP points"), zeige(z))
         cam_off(bot)
         time.sleep(0.5)
         FIND.test("start-cost.xp-type: points - von 25 Punkten bleiben 15, Level 1",
@@ -5574,7 +5574,7 @@ def kosten_checks(env, bot):
         punkte(5)
         z = befehl(bot, "/cam")
         FIND.test("start-cost.xp-type: points - mit 5 Punkten fehlen 5",
-                  gesagt(z, r"You are missing 5 XP points") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
+                  gesagt(z, r"you are missing 5 XP points") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
 
         set_options(env, [("xp", "0", "start-cost"), ("xp-type", "levels", "start-cost"),
                           ("money", "5.0", "start-cost")])
@@ -7138,7 +7138,7 @@ def startverzoegerung_checks(env, bot):
         set_options(env, [("enabled", "true", "start-cost"), ("items", "{diamond: 3}", "start-cost")])
         z = befehl(bot, "/cam", warten=1.5)
         FIND.test("start-delay mit start-cost: wer nicht zahlen kann, hoert es gleich und wartet nicht",
-                  gesagt(z, r"You are missing 3x diamond") and not gesagt(z, r"Cam mode in"), zeige(z))
+                  gesagt(z, r"you are missing 3x diamond") and not gesagt(z, r"Cam mode in"), zeige(z))
         bot.chat("/give @s minecraft:diamond 3")
         time.sleep(0.5)
         since = bot.mark()
