@@ -2933,6 +2933,8 @@ async function handle(cmd) {
         level: bot.experience ? bot.experience.level : null,
         dead,
         hurtAgo: lastHurt ? Date.now() - lastHurt : null,
+        // Der Platz der Hotbar, den er haelt, von 0.
+        held: bot.quickBarSlot,
         pos: bot.entity ? [bot.entity.position.x, bot.entity.position.y, bot.entity.position.z] : null
       };
     case 'entities': {
@@ -20502,7 +20504,9 @@ def bedrock_checks(env, bot):
     steht hinter dem Knopf /cam follow accept mit dem Namen des Bots. Folgt
     er dem Bot, der ohne Cam-Modus ein Schwert haelt, bekommt er mit
     follow-view: camera (voreingestellt) die Hand des Bots leer und das
-    Schwert nur in die Hotbar, nicht in die Hand; mit turn hat er es in Hand
+    Schwert nur in die Hotbar, rechts neben den Platz, den er haelt - nicht in
+    die Hand, die sein unsichtbarer Koerper sonst im Bild hielte; mit turn hat
+    er es in Hand
     und Hotbar, bekommt keine Kamera des Bots und schaut, wohin der Bot
     schaut.
 
@@ -20762,8 +20766,8 @@ def bedrock_checks(env, bot):
             selbst = [p.get("count") for p in zuschauer.call("own_equipment", since=eigen).get("packets", [])
                       if p.get("slot") == 0]
             durch = [p.get("id") for p in zuschauer.call("cameras", since=kameras).get("packets", [])]
-            hotbar = [p.get("count") for p in zuschauer.call("own_slots", since=plaetze).get("packets", [])
-                      if 36 <= (p.get("slot") or 0) <= 44]
+            hotbar = [(p.get("slot"), p.get("count")) for p in zuschauer.call("own_slots", since=plaetze)
+                      .get("packets", []) if 36 <= (p.get("slot") or 0) <= 44]
             return dort, hand, selbst, durch, hotbar
 
         def aufhoeren():
@@ -20775,10 +20779,16 @@ def bedrock_checks(env, bot):
         # keine Haende: die Hand des Fuehrers kommt leer, das Schwert nur in
         # die Hotbar, nicht als eigenes Item in der Hand.
         dort, hand, selbst, durch, hotbar = folgen()
+        gehalten = 36 + (zuschauer.call("state").get("held") or 0)
+        neben = 36 + (gehalten - 36 + 1) % 9
+        # Wie jeder Platz zuletzt steht: der Start des Cam-Modus legt ihm
+        # seine eigenen Sachen kurz zurueck, ehe er sie wieder leert.
+        zuletzt = dict(hotbar)
         FIND.test("follow-view: camera - der Gast bekommt die Hand des Fuehrers leer und das Schwert nur in die "
-                  "Hotbar, nicht in die Hand", gesagt(dort, rf"You follow {BOT_NAME} now") and bool(hand)
-                  and all(c == 0 for c in hand) and not any(selbst) and any(hotbar),
-                  f"{zeige(dort)} / am Fuehrer {hand} / eigene {selbst} / Hotbar {hotbar}")
+                  "Hotbar, rechts neben den Platz, den er haelt - nicht in die Hand",
+                  gesagt(dort, rf"You follow {BOT_NAME} now") and bool(hand) and all(c == 0 for c in hand)
+                  and not any(selbst) and zuletzt.get(neben, 0) > 0 and zuletzt.get(gehalten, 0) == 0,
+                  f"{zeige(dort)} / am Fuehrer {hand} / eigene {selbst} / gehalten {gehalten} / Hotbar {hotbar}")
         aufhoeren()
 
         # follow-view: turn - er wird mitgedreht und hat das Schwert in der eigenen Hand.
@@ -20786,7 +20796,7 @@ def bedrock_checks(env, bot):
         dort, hand, selbst, durch, hotbar = folgen()
         FIND.test("follow-view: turn - der Gast hat das Schwert des Fuehrers in der eigenen Hand und in der "
                   "Hotbar, ohne die Kamera des Fuehrers", gesagt(dort, rf"You follow {BOT_NAME} now")
-                  and any(selbst) and any(hotbar) and bot_nummer not in durch,
+                  and any(selbst) and any(c for _, c in hotbar) and bot_nummer not in durch,
                   f"{zeige(dort)} / eigene {selbst} / Hotbar {hotbar} / Kameras {durch}")
         console(env, f"tp {BOT_NAME} {x} {y} {z} 90 20", pause=1.5)
         # Gelesen ueber die Konsole: der zweite Spieler hat kein op fuer /data.

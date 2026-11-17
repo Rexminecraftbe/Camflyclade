@@ -11,8 +11,8 @@ import java.util.logging.Level;
 
 /**
  * The guide's items in the hotbar of a guest on Bedrock, see
- * {@link GuideMirror}: in the slot he holds and in his off hand, on his
- * client only.
+ * {@link GuideMirror}: in the slot he holds and in his off hand - or next to
+ * the slot he holds, see {@link #show} -, on his client only.
  *
  * <p>A client on Java puts an item it is sent for its own player's hand -
  * {@code sendEquipmentChange} - into its hotbar as well. Geyser does not: on
@@ -85,16 +85,22 @@ final class GuideSlots {
 
     /**
      * Shows the guest the item in the slot of his hotbar he holds, or in his
-     * off hand, on his client only.
+     * off hand, on his client only - or, beside his hands, in the slot right
+     * of the one he holds for the main hand and the one after for the off
+     * hand, round the hotbar: in his hands his own player would hold them.
+     * Camera mode keeps the slot he holds as it is, see
+     * {@link de.elia.cameraplugin.speed.CamFlightSpeed}.
      *
+     * @param beside whether it goes next to his hands instead of into them
      * @return whether the packet went out
      */
-    boolean show(Player guest, boolean offHand, ItemStack item) {
+    boolean show(Player guest, boolean offHand, boolean beside, ItemStack item) {
         if (!available) {
             return false;
         }
         try {
-            int slot = offHand ? OFF_HAND : HOTBAR + guest.getInventory().getHeldItemSlot();
+            int held = guest.getInventory().getHeldItemSlot();
+            int slot = beside ? HOTBAR + (held + (offHand ? 2 : 1)) % 9 : offHand ? OFF_HAND : HOTBAR + held;
             Object window = ownWindow.get(sender.handleOf(guest));
             int state = (Integer) stateId.invoke(window);
             sender.send(guest, slotPacket.newInstance(OWN_WINDOW, state, slot, asServerItem.invoke(null, item)));

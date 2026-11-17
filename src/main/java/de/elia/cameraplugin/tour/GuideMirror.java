@@ -318,7 +318,7 @@ final class GuideMirror {
             if (before != null) {
                 ItemStack back = own == null ? new ItemStack(Material.AIR) : own;
                 guest.sendEquipmentChange(guest, slot, back);
-                inHotbar(guest, slot, back);
+                inHotbar(guest, slot, hotbarOnly, back);
             }
             return null;
         }
@@ -328,7 +328,7 @@ final class GuideMirror {
             if (!hotbarOnly) {
                 guest.sendEquipmentChange(guest, slot, shown);
             }
-            inHotbar(guest, slot, shown);
+            inHotbar(guest, slot, hotbarOnly, shown);
         }
         return now.clone();
     }
@@ -337,11 +337,14 @@ final class GuideMirror {
      * On Bedrock, an item for a hand of the guest goes into the slot of his
      * hotbar he holds - or his off hand - as well: Geyser shows it in his hand
      * only, where a client on Java shows it in the hotbar too, see
-     * {@link GuideSlots}.
+     * {@link GuideSlots}. Into his hotbar alone, it goes next to the slot he
+     * holds instead: what he holds, his own invisible player there holds,
+     * where he stands - in front of Geyser's camera, it would hang in the
+     * view.
      */
-    private void inHotbar(Player guest, EquipmentSlot slot, ItemStack item) {
+    private void inHotbar(Player guest, EquipmentSlot slot, boolean hotbarOnly, ItemStack item) {
         if ((slot == EquipmentSlot.HAND || slot == EquipmentSlot.OFF_HAND) && bedrock.test(guest)) {
-            slots.show(guest, slot == EquipmentSlot.OFF_HAND, item);
+            slots.show(guest, slot == EquipmentSlot.OFF_HAND, hotbarOnly, item);
         }
     }
 
