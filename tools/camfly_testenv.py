@@ -12187,8 +12187,10 @@ def spotmoderation_checks(env, bot):
         dort = zeilen_seit(zuschauer, seit)
         bot.call("close_window", wait=10)
         zeilen = befehl(zuschauer, "/cam spot share ModC all")
-        FIND.test("Unter \"Everybody\" steht die Einschraenkung; der Milcheimer hebt sie fuer alle auf",
+        FIND.test("Unter \"Everybody\" steht die Einschraenkung, dass ein Klick sie aendert oder aufhebt, und "
+                  "kein Name eines Rechts; der Milcheimer hebt sie fuer alle auf",
                   "Restricted: no public spots at all permanently" in alle
+                  and "Click: change or lift" in alle and "camplugin." not in alle
                   and gesagt(dort, rf"{BOT_NAME} lifted the spot restriction for everybody")
                   and gesagt(zeilen, r"Spot ModC is public now"), f"{alle} / {zeige(dort)} / {zeige(zeilen)}")
 
@@ -12314,7 +12316,8 @@ def tourmoderation_checks(env, bot):
         er = texte(f).get(platz(f, ZUSCHAUER_NAME), "")
         FIND.test("Admin-Seite, Fuehrungen (24): vorn Everybody, dann er - wem er folgt, ohne Einschraenkung",
                   "Follow: players" in (f.get("title") or "") and alle.startswith("Everybody")
-                  and "Following is on" in alle and f"Follows {BOT_NAME}" in er and "No restrictions" in er,
+                  and "Following is on" in alle and "Click: switch off" in alle and "camplugin." not in alle
+                  and f"Follows {BOT_NAME}" in er and "No restrictions" in er and "Click: restrict" in er,
                   f"{f.get('title')} / {alle} / {er}")
         klick(bot, platz(f, ZUSCHAUER_NAME))
         f = fenster(bot)

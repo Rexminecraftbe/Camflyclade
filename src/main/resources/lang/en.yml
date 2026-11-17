@@ -332,9 +332,9 @@ messages:
   menu-admin-restrict-switch-bedrock: "&eTap: switch"
   menu-admin-restricted: "&cRestricted: {ban}"
   # The admin page of the spots (camplugin.spotadmin): menu-admin-spots-... is the list of the players who have spots
-  # ({count} spots, {public} of them public, {shared} shared by name), everybody first (-everybody-...);
-  # menu-admin-spot-... the page of one player's spots and the page that restricts them, with a button for each kind
-  # of spots (-private, -public, -shared).
+  # ({count} spots, {public} of them public, {shared} shared by name), everybody first (-everybody-..., with
+  # -actions-change in place of -actions while a restriction holds); menu-admin-spot-... the page of one player's
+  # spots and the page that restricts them, with a button for each kind of spots (-private, -public, -shared).
   menu-admin-spot-actions: "&bRight-click: go there\n&cShift-click: delete"
   menu-admin-spot-actions-bedrock: "&eTap: go there or delete"
   menu-admin-spot-actions-shared: "&eLeft-click: make private\n&bRight-click: go there\n&cShift-click: delete"
@@ -370,7 +370,9 @@ messages:
   menu-admin-spots-empty-lore: "&7Players appear here once\n&7they save a spot."
   menu-admin-spots-everybody-actions: "&eClick: restrict"
   menu-admin-spots-everybody-actions-bedrock: "&eTap: restrict"
-  menu-admin-spots-everybody-lore: "&7Restrict spots for all players\n&7(except camplugin.spotadmin.bypass)"
+  menu-admin-spots-everybody-actions-change: "&eClick: change or lift"
+  menu-admin-spots-everybody-actions-change-bedrock: "&eTap: change or lift"
+  menu-admin-spots-everybody-lore: "&8Except players with bypass permission"
   menu-admin-spots-lore: "&7View, take down or delete the\n&7spots of players, restrict them."
   menu-admin-spots-none: "&7No spots"
   menu-admin-spots-none-lore: ""
@@ -397,6 +399,8 @@ messages:
   # followers) or follows somebody ({player} is the leader). menu-admin-tour-off-... is the page that switches following
   # off for everybody, with the button -switch (-switch-on or -switch-off) and menu-admin-tour-on, which switches it
   # on again; menu-admin-tour-restrict-... the page that restricts one player, with the buttons -lead and -join.
+  # While something holds already, menu-admin-tours-actions-change (a player) and -everybody-actions-off (everybody)
+  # stand under it in place of -actions and -everybody-actions.
   menu-admin-tour-off-change-confirm: "&4Save"
   menu-admin-tour-off-change-title: "&8Following: off for all"
   menu-admin-tour-off-confirm: "&4Switch following off"
@@ -422,7 +426,7 @@ messages:
   menu-admin-tour-restrict-reason-question-form: "Reason for restricting {player}"
   menu-admin-tour-restrict-title: "&8Restrict following: {player}"
   menu-admin-tour-switch: "&6Following for all"
-  menu-admin-tour-switch-lore: "&7For all players (except\n&7camplugin.followadmin.bypass)"
+  menu-admin-tour-switch-lore: "&8Except players with bypass permission"
   menu-admin-tour-switch-off: "off"
   menu-admin-tour-switch-on: "on"
   menu-admin-tour-unrestrict: "&aLift the restriction"
@@ -430,9 +434,13 @@ messages:
   menu-admin-tours: "&6Follow"
   menu-admin-tours-actions: "&eClick: restrict"
   menu-admin-tours-actions-bedrock: "&eTap: restrict"
-  menu-admin-tours-everybody-actions: "&eClick: on or off"
-  menu-admin-tours-everybody-actions-bedrock: "&eTap: on or off"
-  menu-admin-tours-everybody-lore: "&7Switch following off for all\n&7(except camplugin.followadmin.bypass)"
+  menu-admin-tours-actions-change: "&eClick: change or lift"
+  menu-admin-tours-actions-change-bedrock: "&eTap: change or lift"
+  menu-admin-tours-everybody-actions: "&eClick: switch off"
+  menu-admin-tours-everybody-actions-bedrock: "&eTap: switch off"
+  menu-admin-tours-everybody-actions-off: "&eClick: change or switch on"
+  menu-admin-tours-everybody-actions-off-bedrock: "&eTap: change or switch on"
+  menu-admin-tours-everybody-lore: "&8Except players with bypass permission"
   menu-admin-tours-following: "&7Follows {player}"
   menu-admin-tours-guiding: "&7Leads {count}"
   menu-admin-tours-lore: "&7Keep players from leading\n&7or following."

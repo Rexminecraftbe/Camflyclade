@@ -2443,10 +2443,13 @@ public final class CamMenu implements Listener {
         List<Row> entries = new ArrayList<>();
         entries.add(new Row("everybody", slot -> {
             String everybody = messages.getMessage("menu-admin-everybody-name");
+            boolean restricted = moderation.everybodyBan() != null;
             List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-spots-everybody-lore")));
             lore.addAll(restrictionLines(moderation.everybodyText()));
-            lore.addAll(lines(text(player, "menu-admin-spots-everybody-actions")));
-            put(page, slot, everybodyItem(lore, moderation.everybodyBan() != null), click -> later(() -> {
+            // A click opens the page that changes or lifts a restriction that holds already.
+            lore.addAll(lines(text(player, restricted ? "menu-admin-spots-everybody-actions-change"
+                    : "menu-admin-spots-everybody-actions")));
+            put(page, slot, everybodyItem(lore, restricted), click -> later(() -> {
                 spotDrafts.put(player.getUniqueId(), spotDraft(null, everybody));
                 openSpotBan(player);
             }));
@@ -2887,8 +2890,11 @@ public final class CamMenu implements Listener {
                         ? lines(messages.getMessage("menu-admin-tours-everybody-lore")) : tourLines(id));
                 lore.addAll(id == null ? switchLines(moderation.offText())
                         : restrictionLines(moderation.banText(id)));
-                lore.addAll(lines(text(player, id == null ? "menu-admin-tours-everybody-actions"
-                        : "menu-admin-tours-actions")));
+                // A click opens the page that changes or lifts what holds already.
+                boolean kept = id == null ? moderation.everybodyBan() != null : moderation.banOf(id) != null;
+                lore.addAll(lines(text(player, id == null
+                        ? kept ? "menu-admin-tours-everybody-actions-off" : "menu-admin-tours-everybody-actions"
+                        : kept ? "menu-admin-tours-actions-change" : "menu-admin-tours-actions")));
                 ItemStack item = id == null ? everybodyItem(lore, moderation.everybodyBan() != null)
                         : playerItem(id, name, lore, moderation.banOf(id) != null);
                 put(page, slot, item, click -> later(() -> {
