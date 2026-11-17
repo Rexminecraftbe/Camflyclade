@@ -145,7 +145,7 @@ public final class SpotViews {
             for (String key : spots.getKeys(false)) {
                 long count = spots.getLong(key);
                 if (count > 0L) {
-                    views.computeIfAbsent(owner, id -> new LinkedHashMap<>()).put(Spot.key(key), count);
+                    views.computeIfAbsent(owner, id -> new LinkedHashMap<>()).put(Spot.key(Spot.fromPathKey(key)), count);
                 }
             }
         }
@@ -163,7 +163,7 @@ public final class SpotViews {
         file.options().setHeader(HEADER);
         for (Map.Entry<UUID, Map<String, Long>> own : views.entrySet()) {
             for (Map.Entry<String, Long> spot : own.getValue().entrySet()) {
-                file.set(own.getKey() + "." + spot.getKey(), spot.getValue());
+                file.set(own.getKey() + "." + Spot.pathKey(spot.getKey()), spot.getValue());
             }
         }
         Path target = file();

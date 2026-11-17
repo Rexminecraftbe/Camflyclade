@@ -357,7 +357,7 @@ public final class PlayerStore {
             file.set("cooldown.started", record.getCooldownStarted());
         }
         for (Spot spot : record.getSpots().values()) {
-            String path = "spots." + spot.key();
+            String path = "spots." + Spot.pathKey(spot.key());
             file.set(path + ".name", spot.name());
             file.set(path + ".world", spot.world());
             file.set(path + ".x", spot.x());

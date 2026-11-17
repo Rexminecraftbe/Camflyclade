@@ -224,7 +224,7 @@ public final class CamWebMap implements Listener {
                 continue;
             }
             String label = ChatColor.stripColor(fill(messages.getMessage("web-map-label"), share, spots, false));
-            list.add(new MapSpot("camfly-" + share.getOwner() + "-" + spot.key(), spot.world(),
+            list.add(new MapSpot("camfly-" + share.getOwner() + "-" + idPart(spot.key()), spot.world(),
                     spot.x(), spot.y(), spot.z(), label, detail(share, spots)));
         }
         return list;
@@ -263,6 +263,25 @@ public final class CamWebMap implements Listener {
                 .replace("{z}", String.valueOf(Location.locToBlock(spot.z())))
                 .replace("{world}", asHtml ? html(spot.world()) : spot.world())
                 .replace("{command}", "/cam spot " + (asHtml ? html(share.label()) : share.label()));
+    }
+
+    /**
+     * The key of a spot as a part of the id of its pin: letters a to z,
+     * digits, {@code _} and {@code -} stay, any other sign - a space, an
+     * umlaut - is written as {@code .} and its number in hex and {@code .}:
+     * squaremap takes no other signs in an id, and no two keys come out the
+     * same. A key of a name without such signs stays as it was.
+     */
+    static String idPart(String key) {
+        StringBuilder out = new StringBuilder(key.length());
+        key.codePoints().forEach(c -> {
+            if (c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+                out.appendCodePoint(c);
+            } else {
+                out.append('.').append(Integer.toHexString(c)).append('.');
+            }
+        });
+        return out.toString();
     }
 
     /** A text of the language file without its colours: a web page has none of those. */
