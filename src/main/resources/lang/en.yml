@@ -192,7 +192,7 @@ messages:
   cooldown-available: "&aCam mode available again"
   # The bossbar of time-limit.show-bossbar-cooldown, {time} is the time left.
   cooldown-bossbar: "Cam mode again in {time}"
-  crash-restored: "&eThe server crashed during your cam mode: you are back at your body with all your things."
+  crash-restored: "&eServer crash during cam mode: back at your body, nothing lost."
   # time-limit.cooldowns-enabled: {time} is how long he still has to wait.
   cooldown-text: "&cCam mode again in {time}."
   # The parts of start-cost that cost-missing and cost-paid list, one after the other.
@@ -258,7 +258,9 @@ messages:
   # chest itself keeps menu-title as its title there, like every page on Bedrock), each
   # as menu-pick with one of the menu-pick-... texts for {pick} - a button that steps through choices offers every
   # choice, the one that holds now as menu-pick-current -, and menu-pick-back leads back. The texts with -bedrock
-  # after their key stand in place of the ones without it there, saying a tap instead of the clicks. With
+  # after their key stand in place of the ones without it there, saying a tap instead of the clicks; with
+  # bedrock.menu: forms the ones with -forms after their key come first, where a window, a list, has no left or
+  # right to point at - {button} in them is the name of the button meant. With
   # bedrock.menu: mixed (and forms, where the whole menu is windows of Bedrock) the choices and the questions come
   # in a window of Bedrock: the title of the window of the choices is the name of the button; over the line to type
   # into stands the text with -form after the key of the question, menu-form-placeholder in it.
@@ -406,7 +408,7 @@ messages:
   menu-admin-tour-off-confirm: "&4Switch following off"
   menu-admin-tour-off-confirm-lore: "&7Following: {ban}"
   menu-admin-tour-off-nothing: "&7Nothing to switch off"
-  menu-admin-tour-off-nothing-lore: "&7Switch following off above first."
+  menu-admin-tour-off-nothing-lore: "&7Set 'Following for all'\n&7to off first."
   menu-admin-tour-off-reason-question: "&eType the reason for switching following off in chat (&f{cancel}&e to abort)."
   menu-admin-tour-off-reason-question-form: "Reason for switching following off"
   menu-admin-tour-off-title: "&8Following off for all"
@@ -505,7 +507,7 @@ messages:
   # place (follow.guide-time, -weather, -night-vision): what one picks there holds once one stops following.
   menu-own-later: "&6Following: you see the leader's.\n&6Yours applies afterwards."
   menu-off: "&c/cam menu is switched off."
-  menu-offer: "&e{owner}:{spot}"
+  menu-offer: "&e{spot} &7({owner})"
   menu-offer-actions: "&eOffered to you\n&aLeft-click: accept\n&cRight-click: decline"
   menu-offer-actions-bedrock: "&eOffered to you\n&eTap: accept or decline"
   menu-only: "&eUse /cam menu for that."
@@ -566,7 +568,7 @@ messages:
   menu-share-public-lore: "&aPublic\n&eClick: make private"
   menu-share-public-lore-bedrock: "&aPublic\n&eTap: make private"
   menu-share-title: "&8Share {spot}"
-  menu-shared-spot: "&b{owner}:{spot}"
+  menu-shared-spot: "&b{spot} &7({owner})"
   menu-shared-spot-actions: "&eLeft-click: jump there\n&cRight-click: remove from list"
   menu-shared-spot-actions-bedrock: "&eTap: jump there or remove"
   menu-sort: "&eOrder: &f{sort}"
@@ -599,8 +601,8 @@ messages:
   menu-spot-offered-lore: "&7Offered to: {players}"
   menu-spot-public-lore: "&ePublic, {likes} likes"
   # {start} = viewpoints.start-distance; the second while it is 0.
-  menu-spot-reach-lore: "&7Jump possible within {start} blocks,\n&7or in cam mode within range"
-  menu-spot-reach-lore-cam-only: "&7Jump possible in cam mode\n&7within range"
+  menu-spot-reach-lore: "&7Jump within {start} blocks or in camera range"
+  menu-spot-reach-lore-cam-only: "&7Jump in camera range (cam mode only)"
   menu-spot-shared-lore: "&7Shared with: {players}"
   menu-spot-views: "&7Views: &f{views}"
   menu-spot-views-hint: ""
@@ -609,9 +611,11 @@ messages:
   menu-spots-disabled-lore: "&7Off for everybody {time}{reason}."
   menu-spots-empty-private: "&7No spots yet"
   menu-spots-empty-private-lore: "&7Save one with the book\n&7on the right."
+  menu-spots-empty-private-lore-forms: "&7Save one with '{button}'."
   menu-spots-empty-public: "&7No public spots yet"
   menu-spots-empty-public-lore: "&7Right-click the book on the right\n&7to save a public one."
   menu-spots-empty-public-lore-bedrock: "&7Tap the book on the right\n&7and pick public to save one."
+  menu-spots-empty-public-lore-forms: "&7Tap '{button}' and pick public."
   menu-spots-empty-shared: "&7Nothing shared with you"
   menu-spots-empty-shared-lore: "&7What others offer you\n&7shows up here."
   # In place of the spots of a tab a restriction keeps him from looking at ({time} and {reason} as with /cam ban);
@@ -733,7 +737,7 @@ messages:
   nightvision-off: "&c/cam nightvision is switched off."
   nightvision-reset: "&aNight vision in cam mode: server default ({mode})."
   nightvision-set: "&aNight vision in cam mode: {mode}."
-  nightvision-set-memory: "&aNight vision in cam mode: {mode} (until you leave)."
+  nightvision-set-memory: "&aNight vision in cam mode: {mode} (until you log out)."
   nightvision-usage: "&eUse /cam nightvision on, off, dark or reset."
   no-permission: "&cYou don't have permission."
   no-player: "&cOnly players can use this."
@@ -789,7 +793,9 @@ messages:
   signal-quality-none: "&4none"
   signal-quality-very-weak: "&cvery weak"
   signal-quality-weak: "&6weak"
-  # /cam spot (viewpoints): {spot} is the name of the spot - Owner:spot for one of another player -, {max}
+  # /cam spot (viewpoints): {spot} is the name of the spot - one of another player as spot-name-other has it; in
+  # /cam spot list and its buttons, and where a command names one that is not there, Owner:spot, as the command
+  # takes it -, {max}
   # viewpoints.max-per-player, {area} as in cam-area-limit, {distance} camera-mode.max-distance, {likes} how many
   # like a public spot. spot-jumped comes in the action bar. Behind each line of spot-list-entry stand spot-list-public
   # while it is public, spot-list-shared while players accepted it and spot-list-offered while it waits for players to
@@ -863,8 +869,8 @@ messages:
   spot-guestbook-on: "&aGuestbook on: every {minutes} minutes and at login."
   spot-guestbook-update: "&6Guestbook: &7last {minutes} minutes"
   spot-jumped: "&aAt spot {spot}"
-  spot-like-own: "&cYou cannot like your own spot."
-  spot-liked: "&dLiked {spot} ({likes} likes)."
+  spot-like-own: "&cYou can't like your own spot."
+  spot-liked: "&dLiked {spot}: {likes} likes."
   spot-list-empty: "&eNo spots yet. Save one with /cam spot set <name>."
   spot-list-entry: "&7- &f{spot}&7: {x} {y} {z} ({world})"
   spot-list-header: "&eYour spots ({count} of {max}):"
@@ -898,6 +904,9 @@ messages:
   spot-look-weather-clear: "clear sky"
   spot-look-weather-rain: "rain"
   spot-moved: "&aSpot &f{spot}&a moved here."
+  # How {spot} names a spot of another player in the texts, {owner} being whose it is. No colour codes: it stands
+  # inside a line, and a colour would go on to the rest of it.
+  spot-name-other: "{spot} ({owner})"
   spot-no-signal: "&cNo signal at spot {spot}."
   spot-not-shared: "&eSpot {spot} is not shared with {player}."
   spot-not-shared-all: "&eSpot {spot} is not public."
@@ -943,7 +952,7 @@ messages:
   spot-taken-down: "&c{player} made your spot {spot} private."
   spot-too-far: "&cThe spot is out of your camera's range."
   spot-unknown: "&cYou have no spot called {spot}."
-  spot-unliked: "&7Unliked {spot} ({likes} likes)."
+  spot-unliked: "&7Unliked {spot}: {likes} likes."
   spot-unrestrict-done: "&aLifted {player}'s spot restriction."
   spot-unrestrict-everybody-done: "&aLifted the spot restriction for everybody."
   spot-unrestricted-now: "&a{player} lifted your spot restriction."
@@ -1025,7 +1034,7 @@ messages:
   time-off: "&c/cam time is switched off."
   time-reset: "&aCam time: the world's again."
   time-set: "&aCam time: {time} (only you see it)."
-  time-set-memory: "&aCam time: {time} (only you see it, until you leave)."
+  time-set-memory: "&aCam time: {time} (only you see it, until you log out)."
   time-usage: "&eUse /cam time day, noon, sunset, night, midnight, sunrise, 0 to 23999 (ticks) or reset."
   # /cam follow (follow; the keys keep the name it had before, tour): {player} is the other one - the leader, a follower
   # or whom he invites -, {blocks} by how much he stands further than follow.start-distance from the leader out of cam
@@ -1068,7 +1077,7 @@ messages:
   tour-declined: "&eDeclined {player}'s invitation."
   tour-declined-guide: "&e{player} declined."
   tour-disabled: "&cFollowing is switched off {time}{reason}."
-  tour-disabled-changed: "&e{player} changed it: following is switched off for everybody {time}{reason}."
+  tour-disabled-changed: "&e{player} changed following for everybody: off {time}{reason}."
   tour-disabled-guest: "&cYou can't invite {player}: following is switched off."
   tour-disabled-now: "&c{player} switched following off for everybody {time}{reason}."
   tour-enabled-now: "&a{player} switched following back on."
@@ -1123,7 +1132,7 @@ messages:
   tour-restriction-join: "no following"
   tour-restriction-lead: "no leading"
   tour-restriction-separator: ", "
-  tour-self: "&cYou cannot invite yourself."
+  tour-self: "&cYou can't invite yourself."
   tour-start-too-far: "&cYou are {blocks} blocks too far from {player}."
   tour-too-far: "&c{player} is too far away."
   tour-too-far-guest: "&cYou are too far from {player}."
@@ -1171,7 +1180,7 @@ messages:
   weather-off: "&c/cam weather is switched off."
   weather-reset: "&aCam weather: the world's again."
   weather-set: "&aCam weather: {weather} (only you see it)."
-  weather-set-memory: "&aCam weather: {weather} (only you see it, until you leave)."
+  weather-set-memory: "&aCam weather: {weather} (only you see it, until you log out)."
   weather-usage: "&eUse /cam weather clear, rain or reset."
   # The public spots on the web map (web-map): web-map-layer names the layer of the spots on the page of the map,
   # web-map-label the pin of a spot, plain text. A click on a pin shows web-map-detail, as HTML: {spot}, {owner},

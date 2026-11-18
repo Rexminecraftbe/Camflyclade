@@ -575,11 +575,11 @@ public final class CamSpots {
     /** Takes a spot offered to him, from {@code /cam spot accept} or the menu; its owner hears about it. */
     public void accept(Player player, Share share) {
         if (!share.isOfferedTo(player.getUniqueId())) {
-            messages.sendConfiguredMessage(player, "spot-offer-unknown", "{spot}", share.label());
+            messages.sendConfiguredMessage(player, "spot-offer-unknown", "{spot}", shown(share));
             return;
         }
         shared.accept(share, player.getUniqueId(), player.getName());
-        messages.sendConfiguredMessage(player, "spot-accepted", "{spot}", share.label());
+        messages.sendConfiguredMessage(player, "spot-accepted", "{spot}", shown(share));
         Player owner = Bukkit.getPlayer(share.getOwner());
         if (owner != null) {
             messages.sendConfiguredMessage(owner, "spot-accepted-owner", "{player}", player.getName(),
@@ -616,10 +616,10 @@ public final class CamSpots {
     public void decline(Player player, Share share) {
         boolean offer = share.isOfferedTo(player.getUniqueId());
         if (!shared.decline(share, player.getUniqueId())) {
-            messages.sendConfiguredMessage(player, "spot-offer-unknown", "{spot}", share.label());
+            messages.sendConfiguredMessage(player, "spot-offer-unknown", "{spot}", shown(share));
             return;
         }
-        messages.sendConfiguredMessage(player, offer ? "spot-declined" : "spot-removed", "{spot}", share.label());
+        messages.sendConfiguredMessage(player, offer ? "spot-declined" : "spot-removed", "{spot}", shown(share));
         Player owner = Bukkit.getPlayer(share.getOwner());
         if (owner != null && offer) {
             messages.sendConfiguredMessage(owner, "spot-declined-owner", "{player}", player.getName(),
@@ -648,13 +648,23 @@ public final class CamSpots {
             return;
         }
         if (!share.isEveryone()) {
-            messages.sendConfiguredMessage(player, "spot-public-unknown", "{spot}", share.label());
+            messages.sendConfiguredMessage(player, "spot-public-unknown", "{spot}", shown(share));
             return;
         }
         boolean likes = shared.toggleLike(share, player.getUniqueId());
-        messages.sendConfiguredMessage(player, likes ? "spot-liked" : "spot-unliked", "{spot}", share.label(),
+        messages.sendConfiguredMessage(player, likes ? "spot-liked" : "spot-unliked", "{spot}", shown(share),
                 "{likes}", String.valueOf(share.likes()));
         guestbook.liked(share.getOwner(), share.getSpot(), player, likes);
+    }
+
+    /**
+     * How a message names a spot of another player, {@code spot-name-other}:
+     * {@code Haus (Steve)}. {@link Share#label} stays for the commands and
+     * for {@code /cam spot list}, which shows what to type.
+     */
+    public String shown(Share share) {
+        return messages.getMessage("spot-name-other").replace("{owner}", share.getOwnerName())
+                .replace("{spot}", share.getSpot().name());
     }
 
     /**
@@ -698,9 +708,11 @@ public final class CamSpots {
             // He cannot click them, and typing is not what the menu is for.
             line.addAll(plugin.getBedrock().menuHint());
         } else if (answerable) {
-            line.addAll(button(other, "spot-button-accept", share.label(),
+            // The hover names the spot as the line does; only the click
+            // takes the command's Owner:spot.
+            line.addAll(button(other, "spot-button-accept", shown(share),
                     new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam spot accept " + share.label())));
-            line.addAll(button(other, "spot-button-decline", share.label(),
+            line.addAll(button(other, "spot-button-decline", shown(share),
                     new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cam spot decline " + share.label())));
         }
         other.spigot().sendMessage(line.toArray(new BaseComponent[0]));
@@ -929,7 +941,7 @@ public final class CamSpots {
                 return;
             }
             spot = share.getSpot();
-            label = share.label();
+            label = shown(share);
             owner = share.getOwner();
         } else {
             if (spot == null) {
