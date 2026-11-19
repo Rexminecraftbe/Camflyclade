@@ -3284,6 +3284,63 @@ async function handle(cmd) {
                  reason: String(err && err.message || err) };
       }
     }
+    case 'click_held': {
+      // Ein Klick auf eine Entitaet, und die Taste bleibt danach noch unten -
+      // wie beim echten Client, der mit der gehaltenen Taste weitermacht,
+      // sobald nichts mehr unter dem Fadenkreuz steht als ein Block. Links
+      // (Voreinstellung) schlaegt er die Entitaet und baut danach ab, wie in
+      // Kreativ: jeder Versuch ein START_DESTROY_BLOCK, der dort den Block
+      // gleich nimmt. Mit 'right' klickt er sie an und setzt danach den
+      // Block aus der Hand oben auf den bei x y z. Der erste Versuch kommt
+      // 'delay' ms nach dem Klick, jeder weitere 'every' ms danach - in
+      // Kreativ liegen fuenf Ticks zwischen zwei Bloecken, beim Rechtsklick
+      // vier. Geschrieben wird alles selbst, nach einem harten Blick auf die
+      // Entitaet, wie bei attack_entity und activate_entity.
+      const Vec3 = require('vec3');
+      const e = pickEntity(cmd);
+      if (!e) return { done: false, reason: 'keine solche Entitaet in der Naehe' };
+      const ziel = new Vec3(cmd.x, cmd.y, cmd.z);
+      const hoehe = cmd.aim === undefined ? 0.5 : cmd.aim;
+      try {
+        await Promise.race([
+          bot.lookAt(e.position.offset(0, hoehe, 0), true),
+          new Promise((r) => setTimeout(r, 2000))
+        ]);
+        await new Promise((r) => setTimeout(r, 150));
+        if (cmd.right) {
+          bot._client.write('use_entity', {
+            target: e.id, mouse: 2, sneaking: false, hand: 0,
+            x: 0, y: hoehe, z: 0, location: new Vec3(0, hoehe, 0)
+          });
+          bot._client.write('use_entity', {
+            target: e.id, mouse: 0, sneaking: false, hand: 0,
+            location: new Vec3(0, 0, 0)
+          });
+        } else {
+          bot._client.write('attack', { entityId: e.id });
+        }
+        bot.swingArm();
+        let sequence = cmd.sequence || 1;
+        for (let i = 0; i < (cmd.tries || 1); i++) {
+          await new Promise((r) => setTimeout(r, i === 0 ? (cmd.delay || 150) : (cmd.every || 250)));
+          if (cmd.right) {
+            bot._client.write('block_place', {
+              location: ziel, direction: 1, hand: 0,
+              cursorX: 0.5, cursorY: 1, cursorZ: 0.5,
+              insideBlock: false, sequence: sequence++, worldBorderHit: false
+            });
+          } else {
+            bot._client.write('block_dig', { status: 0, location: ziel, face: 1, sequence: sequence++ });
+          }
+          bot.swingArm();
+        }
+        await new Promise((r) => setTimeout(r, 100));
+        return { done: true, id: e.id, type: e.name };
+      } catch (err) {
+        return { done: false, id: e.id, type: e.name,
+                 reason: String(err && err.message || err) };
+      }
+    }
     case 'stab': {
       // Ein Stich mit dem Speer. Der Speer schlaegt nicht ueber das Paket
       // fuer den Schlag, das nimmt der Server mit einem Speer in der Hand
@@ -19723,6 +19780,227 @@ def zerschlagen_checks(env, bot):
         hinstellen(bot, heim[0], heim[1], heim[2])
 
 
+def nachklick_checks(env, bot):
+    """Der Klick, der den Cam-Modus am eigenen Koerper beendet, trifft nur den
+    Koerper - nicht den Block dahinter.
+
+    Die Taste ist nach dem Klick noch einen Moment unten. Der Cam-Modus endet
+    in dem Tick, in dem der Klick ankommt, der Koerper ist weg, und der
+    Spieler steht wieder in dem Modus, aus dem er gestartet ist. War das
+    Kreativ, baute sein Client mit der gehaltenen Taste sofort den Block ab,
+    der hinter dem Koerper stand. Ein gehaltener Rechtsklick setzte genauso
+    den Block aus der Hand, den er gerade zurueckbekommen hat.
+
+    Der Bot spielt die Pakete eines solchen Clients nach (click_held): erst
+    der Schlag auf den Koerper, dann - die Taste noch unten - drei Versuche im
+    Takt der gehaltenen Taste auf den Block dahinter. Keiner kommt durch, auch
+    der letzte nicht, der schon lange nach den voreingestellten 0.3 Sekunden
+    liegt: Die Taste ist noch unten. Danach, losgelassen, baut und setzt er wieder wie
+    sonst.
+
+    Die Gegenprobe macht dasselbe ohne Cam-Modus an einem gewoehnlichen
+    Ruestungsstaender. Dort kommen die Versuche durch - sonst hiesse "der
+    Block steht noch" nur, dass die Pakete des Bots nichts tun.
+
+    Laeuft mit beiden Koerpertypen: Den Ruestungsstaender erreicht der Klick
+    ueber andere Ereignisse als das Mannequin.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test des Nachklicks aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    bx, bz = _floor(heim[0]), _floor(heim[2])
+    y = BODEN_Y + 1
+    x, z = bx + 0.5, bz + 0.5
+    # Der Block hinter dem Koerper, von der Kamera aus gesehen: Sie steht zwei
+    # Bloecke westlich davon, er einen oestlich. Ein Brett, damit nichts
+    # anderes zufaellig dasselbe ist.
+    hinten = f"{bx + 1} {y} {bz}"
+    darauf = f"{bx + 1} {y + 1} {bz}"
+    brett = "minecraft:oak_planks"
+
+    def aufbauen():
+        console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.2)
+        console(env, f"fill {bx - 3} {y} {bz - 2} {bx + 2} {y + 3} {bz + 2} minecraft:air", pause=0.3)
+        console(env, f"setblock {hinten} {brett}", pause=0.5)
+
+    def nachklick(rechts=False, versuche=3):
+        """Der Klick auf das, was bei x y z steht, und die Versuche danach."""
+        antwort = klicken(bot, "click_held", at=[x, y, z], radius=1.0, right=rechts,
+                          x=bx + 1, y=y, z=bz, delay=150, every=200 if rechts else 250,
+                          tries=versuche)
+        time.sleep(1.0)
+        return bool(antwort.get("done"))
+
+    def staender_gegenprobe(rechts):
+        aufbauen()
+        hinstellen(bot, x - 2, y, z)
+        console(env, f'summon minecraft:armor_stand {x} {y} {z} {{Tags:["{INTERACT_TAG}"]}}', pause=1.0)
+        geklickt = nachklick(rechts=rechts, versuche=1)
+        if rechts:
+            durch = block_is(bot, "minecraft:overworld", darauf, "minecraft:stone")
+            was = "setzt der gehaltene Rechtsklick den Stein auf den Block dahinter"
+        else:
+            durch = not block_is(bot, "minecraft:overworld", hinten, brett)
+            was = "baut der gehaltene Linksklick in Kreativ den Block dahinter ab"
+        FIND.test(f"Gegenprobe: ohne Cam-Modus {was}", geklickt and durch,
+                  "der Klick ging nicht hinaus" if not geklickt else ""
+                  if durch else "kam nicht durch - die Probe daneben sagt damit nichts")
+
+    def am_koerper(rechts):
+        aufbauen()
+        hinstellen(bot, x, y, z)
+        if not FIND.test("/cam startet fuer den Test des Nachklicks", cam_on(bot), ""):
+            return
+        bot.call("fly", wait=30, dx=-2, timeout=10000)
+        time.sleep(0.5)
+        klick = "Rechtsklick" if rechts else "Schlag"
+        geklickt = nachklick(rechts=rechts)
+        beendet = spielmodus_ist(bot, "creative")
+        FIND.test(f"Der {klick} auf den eigenen Koerper beendet den Cam-Modus, zurueck in Kreativ",
+                  geklickt and beendet,
+                  "der Klick ging nicht hinaus" if not geklickt else "" if beendet else "der Cam-Modus lief weiter")
+        if not beendet:
+            cam_off(bot)
+            return
+        if rechts:
+            frei = block_is(bot, "minecraft:overworld", darauf, "minecraft:air")
+            FIND.test("Der gehaltene Rechtsklick setzt danach keinen Block hinter den Koerper",
+                      frei, "" if frei else "der Stein wurde gesetzt")
+        else:
+            steht = block_is(bot, "minecraft:overworld", hinten, brett)
+            FIND.test("Der gehaltene Schlag baut danach den Block hinter dem Koerper nicht ab",
+                      steht, "" if steht else "der Block wurde abgebaut")
+
+        # Losgelassen: Seine Haende sind wieder seine.
+        time.sleep(1.0)
+        if rechts:
+            gesetzt = bot.call("place", wait=15, x=bx + 1, y=y, z=bz).get("placed")
+            wieder = block_is(bot, "minecraft:overworld", darauf, "minecraft:stone")
+            FIND.test("Nach dem Loslassen setzt er wieder Bloecke", wieder,
+                      "" if wieder else f"der Stein steht nicht da (place: {gesetzt})")
+        else:
+            klicken(bot, "dig_block", x=bx + 1, y=y, z=bz, timeout=8000)
+            time.sleep(INTERACT_WAIT)
+            wieder = not block_is(bot, "minecraft:overworld", hinten, brett)
+            FIND.test("Nach dem Loslassen baut er in Kreativ wieder ab", wieder,
+                      "" if wieder else "der Block steht noch")
+
+    try:
+        spielmodus_setzen(bot, "creative")
+        # Leere Haende fuer den Schlag: Mit einem Schwert baut Kreativ nichts ab.
+        bot.chat(f"/clear {BOT_NAME}")
+        time.sleep(0.6)
+        staender_gegenprobe(rechts=False)
+        am_koerper(rechts=False)
+
+        # Fuer den Rechtsklick ein Stein in der Hand, den der Cam-Modus beim
+        # Ende zurueckgibt.
+        bot.chat(f"/give {BOT_NAME} minecraft:stone 16")
+        time.sleep(0.6)
+        bot.call("hotbar", slot=0)
+        staender_gegenprobe(rechts=True)
+        am_koerper(rechts=True)
+    finally:
+        cam_off(bot)
+        console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.2)
+        console(env, f"fill {bx - 3} {y} {bz - 2} {bx + 2} {y + 3} {bz + 2} minecraft:air", pause=0.3)
+        bot.chat(f"/clear {BOT_NAME}")
+        spielmodus_setzen(bot, "survival")
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
+def nachklick_schalter_checks(env, bot):
+    """exit-click-guard: ob der Schutz aus nachklick_checks ueberhaupt gilt
+    (enabled) und wie lange (seconds).
+
+    Voreingestellt ist er an, mit 0.3 Sekunden - nachgesehen in der
+    ausgelieferten Datei. Gemessen wird mit einem einzigen Abbau in Kreativ
+    1.2 Sekunden nach dem Schlag auf den eigenen Koerper: Mit 0.3 kommt er
+    durch, die Zeit ist um; mit seconds: 2 nicht. Mit enabled: false kommt
+    schon der Abbau gleich nach dem Schlag durch, wie vor dem Schutz.
+
+    Das Kleinste, was seconds annimmt, ist 0.15: Darunter kaeme schon der
+    erste Versuch einer gehaltenen Taste durch. 0.1 wird gemeldet und auf
+    0.15 gehoben, 0.15 selbst nicht.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test von exit-click-guard aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    bx, bz = _floor(heim[0]), _floor(heim[2])
+    y = BODEN_Y + 1
+    x, z = bx + 0.5, bz + 0.5
+    hinten = f"{bx + 1} {y} {bz}"
+    brett = "minecraft:oak_planks"
+
+    def abbau_nach(millis):
+        """Der Schlag auf den eigenen Koerper und ein Abbau des Blocks
+        dahinter `millis` danach. Gibt zurueck: (Cam-Modus beendet, Block
+        abgebaut) - oder None, wenn der Cam-Modus nicht startete."""
+        console(env, f"fill {bx - 3} {y} {bz - 2} {bx + 2} {y + 3} {bz + 2} minecraft:air", pause=0.3)
+        console(env, f"setblock {hinten} {brett}", pause=0.5)
+        hinstellen(bot, x, y, z)
+        if not cam_on(bot):
+            return None
+        bot.call("fly", wait=30, dx=-2, timeout=10000)
+        time.sleep(0.5)
+        klicken(bot, "click_held", at=[x, y, z], radius=1.0, x=bx + 1, y=y, z=bz,
+                delay=millis, tries=1)
+        time.sleep(1.0)
+        beendet = spielmodus_ist(bot, "creative")
+        if not beendet:
+            cam_off(bot)
+        return beendet, not block_is(bot, "minecraft:overworld", hinten, brett)
+
+    def probe(name, millis, soll_abgebaut):
+        ergebnis = abbau_nach(millis)
+        if ergebnis is None:
+            FIND.test(f"{name}: /cam startet", False, "")
+            return
+        beendet, abgebaut = ergebnis
+        FIND.test(name, beendet and abgebaut == soll_abgebaut,
+                  "der Schlag beendete den Cam-Modus nicht" if not beendet
+                  else "" if abgebaut == soll_abgebaut
+                  else "der Block wurde abgebaut" if abgebaut else "der Block steht noch")
+
+    try:
+        FIND.test("Voreingestellt steht exit-click-guard.enabled: true mit seconds: 0.3 da",
+                  re.search(r"(?m)^exit-click-guard:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*seconds:\s*0\.3\s*$",
+                            ausgeliefert(env)) is not None, "")
+        spielmodus_setzen(bot, "creative")
+        bot.chat(f"/clear {BOT_NAME}")
+        time.sleep(0.6)
+
+        probe("exit-click-guard.seconds: 0.3 - ein Abbau 1.2 s nach dem Schlag kommt durch", 1200, True)
+        set_option(env, "seconds", "2", "exit-click-guard")
+        probe("exit-click-guard.seconds: 2 - derselbe Abbau 1.2 s nach dem Schlag kommt nicht durch",
+              1200, False)
+        set_options(env, [("enabled", "false", "exit-click-guard"), ("seconds", "0.3", "exit-click-guard")])
+        probe("exit-click-guard.enabled: false - schon der Abbau gleich nach dem Schlag kommt durch",
+              150, True)
+
+        vorher = len(server_log(env))
+        set_option(env, "seconds", "0.1", "exit-click-guard")
+        log = strip_colors(server_log(env)[vorher:])
+        FIND.test("exit-click-guard.seconds: weniger als 0.15 wird gemeldet und auf 0.15 gehoben",
+                  "exit-click-guard.seconds is too small: 0.1. Using 0.15" in log,
+                  log.strip()[-200:] or "nichts im Log")
+        vorher = len(server_log(env))
+        set_option(env, "seconds", "0.15", "exit-click-guard")
+        log = strip_colors(server_log(env)[vorher:])
+        FIND.test("exit-click-guard.seconds: 0.15 nimmt er ohne Meldung an",
+                  "exit-click-guard.seconds" not in log, log.strip()[-200:])
+    finally:
+        cam_off(bot)
+        set_options(env, [("enabled", "true", "exit-click-guard"), ("seconds", "0.3", "exit-click-guard")])
+        console(env, f"fill {bx - 3} {y} {bz - 2} {bx + 2} {y + 3} {bz + 2} minecraft:air", pause=0.3)
+        spielmodus_setzen(bot, "survival")
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
 def team_checks(env, bot):
     """Nach dem Cam-Modus steht ein Spieler wieder in seinem Team.
 
@@ -21733,6 +22011,10 @@ ABSCHNITTE = [
     Abschnitt("treffergrund", grund_checks, "mirrordamage/DamageMirror body/BodyWatch config/Messages",
               koerpertypen=True),
     Abschnitt("anfassen", interact_checks, "interaction inventory ghast session/CameraMode"),
+    Abschnitt("nachklick", nachklick_checks,
+              "interaction/ExitClickGuard interaction/CamInteractionGuard mirrordamage/DamageMirror",
+              koerpertypen=True),
+    Abschnitt("nachklick_schalter", nachklick_schalter_checks, "interaction/ExitClickGuard"),
     Abschnitt("sulfur_cube", sulfur_cube_checks, "sulfurcube"),
     Abschnitt("ruestung", armor_checks, "inventory session/CameraMode"),
     Abschnitt("rueckstoss", rueckstoss_checks, "mirrordamage interaction/CamKnockbackGuard",

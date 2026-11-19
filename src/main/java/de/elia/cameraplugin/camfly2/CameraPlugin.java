@@ -29,6 +29,7 @@ import de.elia.cameraplugin.hunger.CamHungerGuard;
 import de.elia.cameraplugin.hunger.CamRegenGuard;
 import de.elia.cameraplugin.interaction.CamInteractionGuard;
 import de.elia.cameraplugin.interaction.CamKnockbackGuard;
+import de.elia.cameraplugin.interaction.ExitClickGuard;
 import de.elia.cameraplugin.inventory.CamInventoryGuard;
 import de.elia.cameraplugin.inventory.CamInventoryLock;
 import de.elia.cameraplugin.list.CamList;
@@ -160,6 +161,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final EndWarning endWarning = new EndWarning(this);
     private final BodyAlarm bodyAlarm = new BodyAlarm(this);
     private final CamNudge nudge = new CamNudge(this);
+    private final ExitClickGuard exitClickGuard = new ExitClickGuard(settings);
     private final CamSignal signal = new CamSignal(this);
     private final CamAfk afk = new CamAfk(this);
     private final CamBack back = new CamBack(this);
@@ -278,6 +280,7 @@ public final class CameraPlugin extends JavaPlugin {
         List<Listener> listeners = List.of(
                 damageMirror,
                 new CamInteractionGuard(this),
+                exitClickGuard,
                 mobTargeting,
                 new CamRegenGuard(cameraPlayers),
                 startChecks,
@@ -753,6 +756,10 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CamNudge getNudge() {
         return nudge;
+    }
+
+    public ExitClickGuard getExitClickGuard() {
+        return exitClickGuard;
     }
 
     public CamSignal getSignal() {

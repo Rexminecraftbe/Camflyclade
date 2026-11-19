@@ -107,6 +107,27 @@ public final class CamSettings {
      */
     private static final int MAX_START_DELAY_SECONDS = 60;
 
+    /**
+     * The shortest time {@code exit-click-guard.seconds} accepts. The first
+     * try of a held button comes in after the player's ping, which is added
+     * on top, and up to two ticks more, his own and the server's: 100 ms. A
+     * shorter time would let that try through.
+     */
+    private static final double MIN_EXIT_CLICK_GUARD_SECONDS = 0.15;
+
+    /**
+     * The default of {@code exit-click-guard.seconds}: twice the shortest,
+     * with room for a try that the server takes up late, when it lags.
+     */
+    private static final double DEFAULT_EXIT_CLICK_GUARD_SECONDS = 0.3;
+
+    /**
+     * The longest time {@code exit-click-guard.seconds} accepts. Longer, it
+     * no longer catches the tail of a click but keeps a player who is back at
+     * his body from building.
+     */
+    private static final double MAX_EXIT_CLICK_GUARD_SECONDS = 5.0;
+
     /** The longest {@code cam-trail.show-seconds} accepts: ten minutes. */
     private static final int MAX_TRAIL_SHOW_SECONDS = 600;
 
@@ -648,6 +669,14 @@ public final class CamSettings {
     /** Whether the key that swaps the hands ends camera mode, {@code exit-key.enabled}. */
     private boolean exitKeyEnabled;
 
+    /**
+     * Whether the click on his own body that ends camera mode reaches nothing
+     * else, {@code exit-click-guard.enabled}.
+     */
+    private boolean exitClickGuardEnabled;
+    /** For how long, in milliseconds, {@code exit-click-guard.seconds}. */
+    private long exitClickGuardMillis;
+
     /** For whom the adjustments for Bedrock hold, {@code bedrock.apply-to}. */
     private BedrockScope bedrockScope;
     /** The start of a name that marks a player on Bedrock, {@code bedrock.name-prefix}; empty for none. */
@@ -1011,6 +1040,9 @@ public final class CamSettings {
         camSafetyNearbyRadius = config.getDouble("cam-safety.nearby-radius", 16.0, 0.0,
                 MobTargeting.MAX_MOB_TARGET_RANGE);
         exitKeyEnabled = config.getBoolean("exit-key.enabled", true);
+        exitClickGuardEnabled = config.getBoolean("exit-click-guard.enabled", true);
+        exitClickGuardMillis = Math.round(1000.0 * config.getDouble("exit-click-guard.seconds", DEFAULT_EXIT_CLICK_GUARD_SECONDS,
+                MIN_EXIT_CLICK_GUARD_SECONDS, MAX_EXIT_CLICK_GUARD_SECONDS));
         readBedrock(config);
         readBattery(config);
         readStartCost(config);
@@ -2538,6 +2570,16 @@ public final class CamSettings {
 
     public boolean isExitKeyEnabled() {
         return exitKeyEnabled;
+    }
+
+    // ------------------------------------------------------- exit-click-guard
+
+    public boolean isExitClickGuardEnabled() {
+        return exitClickGuardEnabled;
+    }
+
+    public long getExitClickGuardMillis() {
+        return exitClickGuardMillis;
     }
 
     // ---------------------------------------------------------------- bedrock

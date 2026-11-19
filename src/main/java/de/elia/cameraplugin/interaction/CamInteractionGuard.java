@@ -120,6 +120,9 @@ public final class CamInteractionGuard implements Listener {
             messages.sendConfiguredMessage(player, "camera-off");
             if (owner != null) {
                 plugin.exitCameraMode(owner, EndReason.COMMAND);
+                // The click goes on while the button is held, and with the
+                // body gone it would reach the block behind it.
+                plugin.getExitClickGuard().guard(owner);
             }
         } else if (owner != null && !cameraPlayers.contains(player.getUniqueId())) {
             plugin.getNudge().nudge(player, owner);
