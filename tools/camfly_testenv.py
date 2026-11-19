@@ -7808,7 +7808,8 @@ def aussichtspunkt_checks(env, bot):
         FIND.test("/cam spot delete Mein Haus.1 und list - beide geloescht",
                   gesagt(zeilen, r"Spot Mein Haus\.1 deleted") and gesagt(zeilen, r"Spot list deleted"), zeige(zeilen))
         zeilen = befehl(bot, "/cam spot delete Turm")
-        FIND.test("/cam spot delete Turm - der Punkt ist geloescht", gesagt(zeilen, r"Spot turm deleted"),
+        # Er heisst noch Turm: set turm hat ihn weder verschoben noch umbenannt.
+        FIND.test("/cam spot delete Turm - der Punkt ist geloescht", gesagt(zeilen, r"Spot Turm deleted"),
                   zeige(zeilen))
         cam_on(bot)
         zeilen = befehl(bot, "/cam spot Turm")
