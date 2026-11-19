@@ -147,6 +147,9 @@ public final class DamageMirror implements Listener {
                 selfHit.getDamager().getUniqueId().equals(owner.getUniqueId())) {
             messages.sendConfiguredMessage(owner, "camera-off");
             plugin.exitCameraMode(owner, EndReason.COMMAND);
+            // His button is still down: in the creative mode it would break
+            // the block behind the body, which is gone now.
+            plugin.getExitClickGuard().guard(owner);
             return;
         }
 
