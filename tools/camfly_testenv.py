@@ -19794,8 +19794,8 @@ def nachklick_checks(env, bot):
     Der Bot spielt die Pakete eines solchen Clients nach (click_held): erst
     der Schlag auf den Koerper, dann - die Taste noch unten - drei Versuche im
     Takt der gehaltenen Taste auf den Block dahinter. Keiner kommt durch, auch
-    der letzte nicht, der schon nach der ersten halben Sekunde liegt: Die
-    Taste ist noch unten. Danach, losgelassen, baut und setzt er wieder wie
+    der letzte nicht, der schon lange nach den voreingestellten 0.3 Sekunden
+    liegt: Die Taste ist noch unten. Danach, losgelassen, baut und setzt er wieder wie
     sonst.
 
     Die Gegenprobe macht dasselbe ohne Cam-Modus an einem gewoehnlichen
@@ -19915,9 +19915,9 @@ def nachklick_schalter_checks(env, bot):
     """exit-click-guard: ob der Schutz aus nachklick_checks ueberhaupt gilt
     (enabled) und wie lange (seconds).
 
-    Voreingestellt ist er an, mit 0.5 Sekunden - nachgesehen in der
+    Voreingestellt ist er an, mit 0.3 Sekunden - nachgesehen in der
     ausgelieferten Datei. Gemessen wird mit einem einzigen Abbau in Kreativ
-    1.2 Sekunden nach dem Schlag auf den eigenen Koerper: Mit 0.5 kommt er
+    1.2 Sekunden nach dem Schlag auf den eigenen Koerper: Mit 0.3 kommt er
     durch, die Zeit ist um; mit seconds: 2 nicht. Mit enabled: false kommt
     schon der Abbau gleich nach dem Schlag durch, wie vor dem Schutz.
     """
@@ -19963,23 +19963,23 @@ def nachklick_schalter_checks(env, bot):
                   else "der Block wurde abgebaut" if abgebaut else "der Block steht noch")
 
     try:
-        FIND.test("Voreingestellt steht exit-click-guard.enabled: true mit seconds: 0.5 da",
-                  re.search(r"(?m)^exit-click-guard:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*seconds:\s*0\.5\s*$",
+        FIND.test("Voreingestellt steht exit-click-guard.enabled: true mit seconds: 0.3 da",
+                  re.search(r"(?m)^exit-click-guard:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*seconds:\s*0\.3\s*$",
                             ausgeliefert(env)) is not None, "")
         spielmodus_setzen(bot, "creative")
         bot.chat(f"/clear {BOT_NAME}")
         time.sleep(0.6)
 
-        probe("exit-click-guard.seconds: 0.5 - ein Abbau 1.2 s nach dem Schlag kommt durch", 1200, True)
+        probe("exit-click-guard.seconds: 0.3 - ein Abbau 1.2 s nach dem Schlag kommt durch", 1200, True)
         set_option(env, "seconds", "2", "exit-click-guard")
         probe("exit-click-guard.seconds: 2 - derselbe Abbau 1.2 s nach dem Schlag kommt nicht durch",
               1200, False)
-        set_options(env, [("enabled", "false", "exit-click-guard"), ("seconds", "0.5", "exit-click-guard")])
+        set_options(env, [("enabled", "false", "exit-click-guard"), ("seconds", "0.3", "exit-click-guard")])
         probe("exit-click-guard.enabled: false - schon der Abbau gleich nach dem Schlag kommt durch",
               150, True)
     finally:
         cam_off(bot)
-        set_options(env, [("enabled", "true", "exit-click-guard"), ("seconds", "0.5", "exit-click-guard")])
+        set_options(env, [("enabled", "true", "exit-click-guard"), ("seconds", "0.3", "exit-click-guard")])
         console(env, f"fill {bx - 3} {y} {bz - 2} {bx + 2} {y + 3} {bz + 2} minecraft:air", pause=0.3)
         spielmodus_setzen(bot, "survival")
         hinstellen(bot, heim[0], heim[1], heim[2])

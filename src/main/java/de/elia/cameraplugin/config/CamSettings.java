@@ -108,10 +108,10 @@ public final class CamSettings {
     private static final int MAX_START_DELAY_SECONDS = 60;
 
     /**
-     * The shortest time {@code exit-click-guard.seconds} accepts. A held
-     * button tries again every five ticks in the creative mode and every four
-     * with a right click; a shorter time would run out between two tries and
-     * let the next one through while the button is still down.
+     * The shortest time {@code exit-click-guard.seconds} accepts, and the
+     * default. The first try of a held button comes in after the player's
+     * ping, which is added on top, and up to a tick or two more, his own and
+     * the server's; this leaves room for one that comes in late.
      */
     private static final double MIN_EXIT_CLICK_GUARD_SECONDS = 0.3;
 
@@ -1035,7 +1035,7 @@ public final class CamSettings {
                 MobTargeting.MAX_MOB_TARGET_RANGE);
         exitKeyEnabled = config.getBoolean("exit-key.enabled", true);
         exitClickGuardEnabled = config.getBoolean("exit-click-guard.enabled", true);
-        exitClickGuardMillis = Math.round(1000.0 * config.getDouble("exit-click-guard.seconds", 0.5,
+        exitClickGuardMillis = Math.round(1000.0 * config.getDouble("exit-click-guard.seconds", MIN_EXIT_CLICK_GUARD_SECONDS,
                 MIN_EXIT_CLICK_GUARD_SECONDS, MAX_EXIT_CLICK_GUARD_SECONDS));
         readBedrock(config);
         readBattery(config);

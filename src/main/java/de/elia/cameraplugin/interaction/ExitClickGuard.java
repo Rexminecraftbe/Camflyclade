@@ -36,9 +36,9 @@ import java.util.UUID;
  * {@code exit-click-guard.seconds} and his ping on top, the time the client
  * takes to learn that camera mode is over: until then it cannot break
  * anything in the creative mode, and its first try comes in only after. Every
- * try turned away starts the while anew: a button held on breaks a block
- * every few ticks in the creative mode, and it is still the same click until
- * he lets go.</p>
+ * try turned away starts the while anew, and for at least
+ * {@link #MIN_HOLD_MILLIS}: a button held on breaks a block every few ticks in
+ * the creative mode, and it is still the same click until he lets go.</p>
  *
  * <p>Ending camera mode in any other way - {@code /cam}, the exit key -
  * comes with no click on the world, and leaves him his hands at once. So does
@@ -48,6 +48,16 @@ public final class ExitClickGuard implements Listener {
 
     /** The most ping that is added: a ping beyond that is no ping, but a stalled connection. */
     private static final long MAX_PING_MILLIS = 1000L;
+
+    /**
+     * The least a try turned away keeps the guard up for, in milliseconds,
+     * however short {@code exit-click-guard.seconds} is. A held button tries
+     * again every five ticks in the creative mode, 250 ms, and every four with
+     * a right click; the rest is room for a try that comes a tick or two late,
+     * held up on the way or on the server. Without it, a short setting would
+     * run out between two tries of a button still down.
+     */
+    private static final long MIN_HOLD_MILLIS = 400L;
 
     private final CamSettings settings;
     /** Until when the clicks of each player are turned away, as {@link System#currentTimeMillis()} counts. */
@@ -110,7 +120,8 @@ public final class ExitClickGuard implements Listener {
     /**
      * Turns the event away if the player's click is still the one that ended
      * camera mode, and keeps it that for another
-     * {@code exit-click-guard.seconds}: he still holds the button.
+     * {@code exit-click-guard.seconds}, at least {@link #MIN_HOLD_MILLIS}: he
+     * still holds the button.
      */
     private void turnAway(Player player, Cancellable event) {
         UUID id = player.getUniqueId();
@@ -124,6 +135,6 @@ public final class ExitClickGuard implements Listener {
             return;
         }
         event.setCancelled(true);
-        heldUntil.put(id, Math.max(until, now + settings.getExitClickGuardMillis()));
+        heldUntil.put(id, Math.max(until, now + Math.max(MIN_HOLD_MILLIS, settings.getExitClickGuardMillis())));
     }
 }

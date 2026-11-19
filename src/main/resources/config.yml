@@ -829,13 +829,13 @@ exit-key:
 # unten - und sein Spiel macht damit gleich weiter, sobald der Körper weg ist: In Kreativ baut es den Block ab, der
 # hinter dem Körper stand, und ein gehaltener Rechtsklick setzt den Block aus der Hand dorthin.
 # Mit enabled: true trifft der Klick nur den Körper: Für seconds danach baut, setzt und benutzt der Spieler nichts.
-# Hält er die Taste länger, gilt die Zeit ab jedem weiteren Versuch neu, bis er loslässt.
+# Hält er die Taste länger, bleibt der Schutz, bis er loslässt.
 # Wer mit /cam oder exit-key aufhört, hat seine Hände sofort wieder.
 exit-click-guard:
   enabled: true
   # Wie lange, in Sekunden (0.3 bis 5). Dazu kommt der Ping des Spielers: So lange braucht sein Spiel, bis es
   # erfährt, dass der Cam-Modus vorbei ist.
-  seconds: 0.5
+  seconds: 0.3
 
 # Bedrock-Spieler (über Geyser, mit oder ohne Floodgate): Was Bedrock nicht kann - klickbare Knöpfe im Chat, Rechts-
 # und Shift-Klick in einem Fenster, den Leuchtumriss, die Taste F -, bekommen sie auf einem anderen Weg. Rechte gibt
