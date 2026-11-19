@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.interaction;
 
+import de.elia.cameraplugin.config.CamSettings;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Cancellable;
 import org.bukkit.event.EventHandler;
@@ -32,37 +33,41 @@ import java.util.UUID;
  * to break it, to dig it, to click it or to set something on it - and every
  * use of the item in his hand is turned away, the way it is in camera mode.
  * The block he hit comes back on his screen with that. The while is
- * {@link #HOLD_MILLIS} and his ping on top, the time the client takes to
- * learn that camera mode is over: until then it cannot break anything in the
- * creative mode, and its first try comes in only after. Every try turned away
- * starts the while anew: a button held on breaks a block every few ticks in
- * the creative mode, and it is still the same click until he lets go.</p>
+ * {@code exit-click-guard.seconds} and his ping on top, the time the client
+ * takes to learn that camera mode is over: until then it cannot break
+ * anything in the creative mode, and its first try comes in only after. Every
+ * try turned away starts the while anew: a button held on breaks a block
+ * every few ticks in the creative mode, and it is still the same click until
+ * he lets go.</p>
  *
  * <p>Ending camera mode in any other way - {@code /cam}, the exit key -
- * comes with no click on the world, and leaves him his hands at once.</p>
+ * comes with no click on the world, and leaves him his hands at once. So does
+ * {@code exit-click-guard.enabled: false}, for every end.</p>
  */
 public final class ExitClickGuard implements Listener {
-
-    /**
-     * How long a click of his still counts as the one that ended camera mode,
-     * in milliseconds, once his client knows it has ended. Twice the time
-     * between two blocks of a held button in the creative mode, five ticks.
-     */
-    static final long HOLD_MILLIS = 500L;
 
     /** The most ping that is added: a ping beyond that is no ping, but a stalled connection. */
     private static final long MAX_PING_MILLIS = 1000L;
 
+    private final CamSettings settings;
     /** Until when the clicks of each player are turned away, as {@link System#currentTimeMillis()} counts. */
     private final Map<UUID, Long> heldUntil = new HashMap<>();
 
+    public ExitClickGuard(CamSettings settings) {
+        this.settings = settings;
+    }
+
     /**
      * A player ended camera mode with a click on his own body: what that
-     * click does on after it is turned away.
+     * click does on after it is turned away - unless the guard is switched
+     * off.
      */
     public void guard(Player player) {
+        if (!settings.isExitClickGuardEnabled()) {
+            return;
+        }
         long ping = Math.min(MAX_PING_MILLIS, Math.max(0, player.getPing()));
-        heldUntil.put(player.getUniqueId(), System.currentTimeMillis() + HOLD_MILLIS + ping);
+        heldUntil.put(player.getUniqueId(), System.currentTimeMillis() + settings.getExitClickGuardMillis() + ping);
     }
 
     /**
@@ -104,8 +109,8 @@ public final class ExitClickGuard implements Listener {
 
     /**
      * Turns the event away if the player's click is still the one that ended
-     * camera mode, and keeps it that for another {@link #HOLD_MILLIS}: he
-     * still holds the button.
+     * camera mode, and keeps it that for another
+     * {@code exit-click-guard.seconds}: he still holds the button.
      */
     private void turnAway(Player player, Cancellable event) {
         UUID id = player.getUniqueId();
@@ -119,6 +124,6 @@ public final class ExitClickGuard implements Listener {
             return;
         }
         event.setCancelled(true);
-        heldUntil.put(id, Math.max(until, now + HOLD_MILLIS));
+        heldUntil.put(id, Math.max(until, now + settings.getExitClickGuardMillis()));
     }
 }

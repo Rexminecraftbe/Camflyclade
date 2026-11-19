@@ -19911,6 +19911,80 @@ def nachklick_checks(env, bot):
         hinstellen(bot, heim[0], heim[1], heim[2])
 
 
+def nachklick_schalter_checks(env, bot):
+    """exit-click-guard: ob der Schutz aus nachklick_checks ueberhaupt gilt
+    (enabled) und wie lange (seconds).
+
+    Voreingestellt ist er an, mit 0.5 Sekunden - nachgesehen in der
+    ausgelieferten Datei. Gemessen wird mit einem einzigen Abbau in Kreativ
+    1.2 Sekunden nach dem Schlag auf den eigenen Koerper: Mit 0.5 kommt er
+    durch, die Zeit ist um; mit seconds: 2 nicht. Mit enabled: false kommt
+    schon der Abbau gleich nach dem Schlag durch, wie vor dem Schutz.
+    """
+    if not FIND.test("Cam-Modus ist vor dem Test von exit-click-guard aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    bx, bz = _floor(heim[0]), _floor(heim[2])
+    y = BODEN_Y + 1
+    x, z = bx + 0.5, bz + 0.5
+    hinten = f"{bx + 1} {y} {bz}"
+    brett = "minecraft:oak_planks"
+
+    def abbau_nach(millis):
+        """Der Schlag auf den eigenen Koerper und ein Abbau des Blocks
+        dahinter `millis` danach. Gibt zurueck: (Cam-Modus beendet, Block
+        abgebaut) - oder None, wenn der Cam-Modus nicht startete."""
+        console(env, f"fill {bx - 3} {y} {bz - 2} {bx + 2} {y + 3} {bz + 2} minecraft:air", pause=0.3)
+        console(env, f"setblock {hinten} {brett}", pause=0.5)
+        hinstellen(bot, x, y, z)
+        if not cam_on(bot):
+            return None
+        bot.call("fly", wait=30, dx=-2, timeout=10000)
+        time.sleep(0.5)
+        klicken(bot, "click_held", at=[x, y, z], radius=1.0, x=bx + 1, y=y, z=bz,
+                delay=millis, tries=1)
+        time.sleep(1.0)
+        beendet = spielmodus_ist(bot, "creative")
+        if not beendet:
+            cam_off(bot)
+        return beendet, not block_is(bot, "minecraft:overworld", hinten, brett)
+
+    def probe(name, millis, soll_abgebaut):
+        ergebnis = abbau_nach(millis)
+        if ergebnis is None:
+            FIND.test(f"{name}: /cam startet", False, "")
+            return
+        beendet, abgebaut = ergebnis
+        FIND.test(name, beendet and abgebaut == soll_abgebaut,
+                  "der Schlag beendete den Cam-Modus nicht" if not beendet
+                  else "" if abgebaut == soll_abgebaut
+                  else "der Block wurde abgebaut" if abgebaut else "der Block steht noch")
+
+    try:
+        FIND.test("Voreingestellt steht exit-click-guard.enabled: true mit seconds: 0.5 da",
+                  re.search(r"(?m)^exit-click-guard:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*seconds:\s*0\.5\s*$",
+                            ausgeliefert(env)) is not None, "")
+        spielmodus_setzen(bot, "creative")
+        bot.chat(f"/clear {BOT_NAME}")
+        time.sleep(0.6)
+
+        probe("exit-click-guard.seconds: 0.5 - ein Abbau 1.2 s nach dem Schlag kommt durch", 1200, True)
+        set_option(env, "seconds", "2", "exit-click-guard")
+        probe("exit-click-guard.seconds: 2 - derselbe Abbau 1.2 s nach dem Schlag kommt nicht durch",
+              1200, False)
+        set_options(env, [("enabled", "false", "exit-click-guard"), ("seconds", "0.5", "exit-click-guard")])
+        probe("exit-click-guard.enabled: false - schon der Abbau gleich nach dem Schlag kommt durch",
+              150, True)
+    finally:
+        cam_off(bot)
+        set_options(env, [("enabled", "true", "exit-click-guard"), ("seconds", "0.5", "exit-click-guard")])
+        console(env, f"fill {bx - 3} {y} {bz - 2} {bx + 2} {y + 3} {bz + 2} minecraft:air", pause=0.3)
+        spielmodus_setzen(bot, "survival")
+        hinstellen(bot, heim[0], heim[1], heim[2])
+
+
 def team_checks(env, bot):
     """Nach dem Cam-Modus steht ein Spieler wieder in seinem Team.
 
@@ -21924,6 +21998,7 @@ ABSCHNITTE = [
     Abschnitt("nachklick", nachklick_checks,
               "interaction/ExitClickGuard interaction/CamInteractionGuard mirrordamage/DamageMirror",
               koerpertypen=True),
+    Abschnitt("nachklick_schalter", nachklick_schalter_checks, "interaction/ExitClickGuard"),
     Abschnitt("sulfur_cube", sulfur_cube_checks, "sulfurcube"),
     Abschnitt("ruestung", armor_checks, "inventory session/CameraMode"),
     Abschnitt("rueckstoss", rueckstoss_checks, "mirrordamage interaction/CamKnockbackGuard",
