@@ -833,8 +833,8 @@ exit-key:
 # Wer mit /cam oder exit-key aufhört, hat seine Hände sofort wieder.
 exit-click-guard:
   enabled: true
-  # Wie lange, in Sekunden (0.3 bis 5). Dazu kommt der Ping des Spielers: So lange braucht sein Spiel, bis es
-  # erfährt, dass der Cam-Modus vorbei ist.
+  # Wie lange, in Sekunden (0.15 bis 5). Dazu kommt der Ping des Spielers: So lange braucht sein Spiel, bis es
+  # erfährt, dass der Cam-Modus vorbei ist. Unter 0.3 kann bei Lag doch noch ein Block durchkommen.
   seconds: 0.3
 
 # Bedrock-Spieler (über Geyser, mit oder ohne Floodgate): Was Bedrock nicht kann - klickbare Knöpfe im Chat, Rechts-

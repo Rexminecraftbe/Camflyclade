@@ -19920,6 +19920,10 @@ def nachklick_schalter_checks(env, bot):
     1.2 Sekunden nach dem Schlag auf den eigenen Koerper: Mit 0.3 kommt er
     durch, die Zeit ist um; mit seconds: 2 nicht. Mit enabled: false kommt
     schon der Abbau gleich nach dem Schlag durch, wie vor dem Schutz.
+
+    Das Kleinste, was seconds annimmt, ist 0.15: Darunter kaeme schon der
+    erste Versuch einer gehaltenen Taste durch. 0.1 wird gemeldet und auf
+    0.15 gehoben, 0.15 selbst nicht.
     """
     if not FIND.test("Cam-Modus ist vor dem Test von exit-click-guard aus", cam_off(bot), ""):
         return
@@ -19977,6 +19981,18 @@ def nachklick_schalter_checks(env, bot):
         set_options(env, [("enabled", "false", "exit-click-guard"), ("seconds", "0.3", "exit-click-guard")])
         probe("exit-click-guard.enabled: false - schon der Abbau gleich nach dem Schlag kommt durch",
               150, True)
+
+        vorher = len(server_log(env))
+        set_option(env, "seconds", "0.1", "exit-click-guard")
+        log = strip_colors(server_log(env)[vorher:])
+        FIND.test("exit-click-guard.seconds: weniger als 0.15 wird gemeldet und auf 0.15 gehoben",
+                  "exit-click-guard.seconds is too small: 0.1. Using 0.15" in log,
+                  log.strip()[-200:] or "nichts im Log")
+        vorher = len(server_log(env))
+        set_option(env, "seconds", "0.15", "exit-click-guard")
+        log = strip_colors(server_log(env)[vorher:])
+        FIND.test("exit-click-guard.seconds: 0.15 nimmt er ohne Meldung an",
+                  "exit-click-guard.seconds" not in log, log.strip()[-200:])
     finally:
         cam_off(bot)
         set_options(env, [("enabled", "true", "exit-click-guard"), ("seconds", "0.3", "exit-click-guard")])

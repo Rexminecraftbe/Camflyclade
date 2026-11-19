@@ -108,12 +108,18 @@ public final class CamSettings {
     private static final int MAX_START_DELAY_SECONDS = 60;
 
     /**
-     * The shortest time {@code exit-click-guard.seconds} accepts, and the
-     * default. The first try of a held button comes in after the player's
-     * ping, which is added on top, and up to a tick or two more, his own and
-     * the server's; this leaves room for one that comes in late.
+     * The shortest time {@code exit-click-guard.seconds} accepts. The first
+     * try of a held button comes in after the player's ping, which is added
+     * on top, and up to two ticks more, his own and the server's: 100 ms. A
+     * shorter time would let that try through.
      */
-    private static final double MIN_EXIT_CLICK_GUARD_SECONDS = 0.3;
+    private static final double MIN_EXIT_CLICK_GUARD_SECONDS = 0.15;
+
+    /**
+     * The default of {@code exit-click-guard.seconds}: twice the shortest,
+     * with room for a try that the server takes up late, when it lags.
+     */
+    private static final double DEFAULT_EXIT_CLICK_GUARD_SECONDS = 0.3;
 
     /**
      * The longest time {@code exit-click-guard.seconds} accepts. Longer, it
@@ -1035,7 +1041,7 @@ public final class CamSettings {
                 MobTargeting.MAX_MOB_TARGET_RANGE);
         exitKeyEnabled = config.getBoolean("exit-key.enabled", true);
         exitClickGuardEnabled = config.getBoolean("exit-click-guard.enabled", true);
-        exitClickGuardMillis = Math.round(1000.0 * config.getDouble("exit-click-guard.seconds", MIN_EXIT_CLICK_GUARD_SECONDS,
+        exitClickGuardMillis = Math.round(1000.0 * config.getDouble("exit-click-guard.seconds", DEFAULT_EXIT_CLICK_GUARD_SECONDS,
                 MIN_EXIT_CLICK_GUARD_SECONDS, MAX_EXIT_CLICK_GUARD_SECONDS));
         readBedrock(config);
         readBattery(config);
