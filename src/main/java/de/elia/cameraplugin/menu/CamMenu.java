@@ -1781,7 +1781,8 @@ public final class CamMenu implements Listener {
                     openNewSpot(player);
                 }, again, "{spot}", draft.name))));
         if (spots.icons().size() > 1) {
-            row.add(new RowButton(item(icon, messages.getMessage("menu-new-spot-icon")
+            // A frame, not the icon itself: that one is the spot on top.
+            row.add(new RowButton(item(Material.ITEM_FRAME, messages.getMessage("menu-new-spot-icon")
                     .replace("{icon}", spots.iconName(draft.icon)), lines(messages.getMessage("menu-new-spot-icon-lore"))),
                     click -> later(() -> openIcons(player, draft.name, draft.icon, chosen -> {
                         NewSpot now = newSpots.get(id);
@@ -1972,7 +1973,8 @@ public final class CamMenu implements Listener {
                     }, again, "{spot}", spot.name()))));
         }
         if ((admin || settings.isSpotOptionIcon()) && spots.icons().size() > 1) {
-            row.add(new RowButton(item(icon, messages.getMessage("menu-spot-options-icon"),
+            // A frame, not the icon itself: that one is the spot on top.
+            row.add(new RowButton(item(Material.ITEM_FRAME, messages.getMessage("menu-spot-options-icon"),
                     lines(messages.getMessage("menu-spot-options-icon-lore").replace("{icon}",
                             spots.iconName(spot.icon() != null ? spot.icon()
                                     : icon.name().toLowerCase(Locale.ROOT))))),

@@ -12434,7 +12434,9 @@ def spotoptionen_checks(env, bot):
     geschrieben), geht nicht, cancel ruft es ab - beide Male kommt die Seite
     mit dem alten Namen wieder -, ein neuer steht danach im Titel. Die Seite
     der Symbole hat auf 26.2 nur die Karte und die leere Karte, die Karte
-    markiert; die leere gewaehlt, zeigen der Punkt oben und der Knopf sie.
+    markiert; die leere gewaehlt, zeigt der Punkt oben sie, und der Knopf -
+    ein Rahmen, keine der Karten - nennt sie. Auch Change icon in den
+    Optionen ist ein Rahmen.
     Abbrechen speichert nichts. Ein zweiter Anlauf mit Speichern: icon: map
     steht in der Datei, und die Liste zeigt ihn als leere Karte.
 
@@ -12563,9 +12565,11 @@ def spotoptionen_checks(env, bot):
                   f"{titel(f)} / {k} / {karte} {leer}")
         klick(1)
         f = fenster()
-        FIND.test("Die leere Karte gewaehlt: zurueck auf der Seite, der Punkt oben und der Knopf zeigen sie",
+        FIND.test("Die leere Karte gewaehlt: zurueck auf der Seite, der Punkt oben zeigt sie, der Knopf (ein Rahmen, "
+                  "keine der Karten) nennt sie",
                   "New spot: Optzwei" in titel(f) and item(f, 4).get("name") == leer
-                  and item(f, 13).get("name") == leer and "Icon: Empty Map" in item_text(item(f, 13)),
+                  and item(f, 13).get("name") not in (None, karte, leer)
+                  and "Icon: Empty Map" in item_text(item(f, 13)),
                   f"{titel(f)} / {item(f, 4).get('name')} / {item_text(item(f, 13))}")
         seit = bot.mark()
         klick(18)
@@ -12616,7 +12620,11 @@ def spotoptionen_checks(env, bot):
                   and abschnitt("optdrei") and not abschnitt("optzwei")
                   and "name: Optdrei" in geteilt() and "Optzwei" not in geteilt(),
                   f"{zeige(zeilen)} / {titel(f)} / {item_text(item(f, 4))}")
-        klick(platz_mit(f, "Change icon") or 12)
+        rahmen = platz_mit(f, "Change icon")
+        FIND.test("Change icon ist ein Rahmen, keine der Karten - die zeigt der Punkt oben",
+                  rahmen is not None and item(f, rahmen).get("name") not in (None, karte, leer)
+                  and item(f, 4).get("name") == leer, f"{rahmen} / {item(f, rahmen or 0).get('name')}")
+        klick(rahmen or 12)
         f = fenster()
         FIND.test("Change icon: die Seite der Symbole, die leere Karte markiert",
                   "Icon: Optdrei" in titel(f) and item(f, 1).get("glint") is True, titel(f))
