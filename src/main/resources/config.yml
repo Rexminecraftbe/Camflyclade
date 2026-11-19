@@ -1079,7 +1079,8 @@ web-map:
 # unten seiner (Text: player.tour-builder-format), siehe guide-name. Nie mehr, als sein eigener Name zeigen würde:
 # nicht, solange er unsichtbar ist, und nicht durch Wände, solange er schleicht.
 # Seine Follower sehen auf ihrem eigenen Bildschirm seine Herzen, die Items in seinen Händen (voreingestellt ohne die
-# Zahl im Stapel, ohne die Verzauberungen und ohne Abnutzung, siehe mirror-count, -enchantments und -durability) und
+# Zahl im Stapel, ohne die Verzauberungen, ohne Abnutzung und ohne den Namen, den er ihnen gegeben hat, siehe
+# mirror-count, -enchantments, -durability und -name) und
 # auf seinem Kopf, seine Effekte und seinen Frost (mirror-...) - nur auf ihrem Bildschirm: Am Server bleiben ihre
 # Herzen, Effekte und ihr Frost ihre, und ihre Hände bleiben leer wie im Cam-Modus; nehmen, wegwerfen oder benutzen
 # lässt sich nichts davon, und sein übriges Inventar sehen sie nicht. Ihr Hunger bleibt ihrer, ihre XP auch, außer mit
@@ -1159,6 +1160,11 @@ follow:
   # in dessen Hotbar, und mit F3+H die Haltbarkeit im Tooltip. Mit false sehen seine Items bei ihnen aus wie neu (auch
   # eine fast kaputte Elytra, die das Spiel sonst kaputt zeichnet).
   mirror-durability: false
+  # Ob sie die Namen sehen, die er seinen Items gegeben hat (z. B. am Amboss umbenannt): über ihrer Hotbar, wenn das
+  # Item in die Hand kommt, und im Tooltip. Mit false sehen sie nur den normalen Namen des Items - ein Schwert, das er
+  # "Exkalibur" genannt hat, heißt bei ihnen "Diamantschwert". Am Server und für alle anderen bleibt sein Name.
+  # Gilt auch für das Item auf seinem Kopf (mirror-head).
+  mirror-name: false
   # Ob ihr Arm mit seinem Item schwingt, wenn seiner schwingt (schlagen, abbauen, Blöcke setzen). Nur der Schwung:
   # Wie das Item nach einem Schlag oder dem Setzen absinkt und wieder hochkommt, zeigt ein Client nur bei eigenen.
   # Geht wie guide-view nur auf Paper (ein Paket über das Innere des Servers).

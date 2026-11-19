@@ -80,7 +80,9 @@ import java.util.function.UnaryOperator;
  * sent, see {@link #shown}: how many are in a stack, unless
  * {@code follow.mirror-count}; which enchantments they have, unless
  * {@code follow.mirror-enchantments} - only that they have some -; how worn
- * they are, unless {@code follow.mirror-durability}. Seen through the guide's
+ * they are, unless {@code follow.mirror-durability}; the names the guide gave
+ * them - at an anvil, say -, unless {@code follow.mirror-name}: they see the
+ * item's own name instead. Seen through the guide's
  * eyes, the hotbar a client draws is not the guest's but the guide's, filled
  * with what the server sends everybody of the guide's hands - the real ones.
  * On their way to the guest, those packets are changed, see
@@ -351,10 +353,11 @@ final class GuideMirror {
     /**
      * The item as the guests' clients are shown it: as one, unless the guests
      * see the count; without its enchantments, unless they see them; as new,
-     * unless they see the wear - and with the mark, if so. The mark is a byte
-     * in the item's custom data, which a client shows nowhere - but an item
-     * with it is another one to the client than the same without, and one
-     * that comes in place of another in a hand, it lowers and raises.
+     * unless they see the wear; with the item's own name, not the one the
+     * guide gave it, unless they see that - and with the mark, if so. The
+     * mark is a byte in the item's custom data, which a client shows nowhere -
+     * but an item with it is another one to the client than the same without,
+     * and one that comes in place of another in a hand, it lowers and raises.
      */
     private ItemStack shown(ItemStack item, boolean marked) {
         if (item.getType().isAir()) {
@@ -366,14 +369,15 @@ final class GuideMirror {
                 && (meta.hasEnchants() || meta instanceof EnchantmentStorageMeta stored && stored.hasStoredEnchants());
         boolean worn = !settings.isTourMirrorDurability() && meta instanceof Damageable damageable
                 && damageable.hasDamage();
-        if (!marked && !asOne && !enchanted && !worn) {
+        boolean named = !settings.isTourMirrorName() && meta != null && meta.hasDisplayName();
+        if (!marked && !asOne && !enchanted && !worn && !named) {
             return item;
         }
         ItemStack copy = item.clone();
         if (asOne) {
             copy.setAmount(1);
         }
-        if (marked || enchanted || worn) {
+        if (marked || enchanted || worn || named) {
             ItemMeta changed = meta != null ? meta : copy.getItemMeta();
             if (changed != null) {
                 if (enchanted) {
@@ -383,6 +387,11 @@ final class GuideMirror {
                     // Undamaged, an item has no bar - and no durability in
                     // the tooltip either, not even with F3+H.
                     ((Damageable) changed).setDamage(0);
+                }
+                if (named) {
+                    // Without the name the guide gave it, a client shows
+                    // the item's own: over the hotbar and in the tooltip.
+                    changed.setDisplayName(null);
                 }
                 if (marked) {
                     changed.getPersistentDataContainer().set(mark, PersistentDataType.BYTE, (byte) 1);
@@ -780,9 +789,9 @@ final class GuideMirror {
         return handless.test(guest) ? new ItemStack(Material.AIR) : shown(item, false);
     }
 
-    /** Whether the guests do not see all of the guide's items: their count, enchantments or wear. */
+    /** Whether the guests do not see all of the guide's items: their count, enchantments, wear or name. */
     private boolean hides() {
         return !settings.isTourMirrorCount() || !settings.isTourMirrorEnchantments()
-                || !settings.isTourMirrorDurability();
+                || !settings.isTourMirrorDurability() || !settings.isTourMirrorName();
     }
 }

@@ -9448,7 +9448,9 @@ def fuehrung_ohne_cam_checks(env, bot):
     verzaubertes, abgenutztes Schwert mit einer Verzauberung, die nichts sagt
     (Stufe 1, im Tooltip ausgeblendet), und ohne Schaden - als eigenes und am
     Bot; der dritte bekommt das echte. Nimmt es Schaden, wechselt die Marke.
-    Ein verzaubertes Buch kommt ohne seine Verzauberung.
+    Ein verzaubertes Buch kommt ohne seine Verzauberung. Mit mirror-name:
+    false, voreingestellt, kommt ein umbenanntes Schwert ohne seinen Namen -
+    als eigenes und am Bot; der dritte bekommt es mit.
     Schwingt der Bot den Arm, schwingt der
     Gast seinen mit (Paket animation mit der eigenen Nummer: 0, und 3 fuer die
     zweite Hand). Seine Effekte kommen beim Gast am Bot an und als eigene -
@@ -9465,7 +9467,7 @@ def fuehrung_ohne_cam_checks(env, bot):
     endet die Fuehrung. Mit mirror-main-hand: false kommt nur die zweite
     Hand, mit mirror-count: true mit ihrer Zahl, als eigene und am Bot, mit
     mirror-enchantments und -durability: true ein Schild mit seiner
-    Verzauberung und seinem Schaden, mit
+    Verzauberung und seinem Schaden, mit mirror-name: true mit seinem Namen, mit
     mirror-swing: false schwingt nichts mit, mit mirror-effects:
     false kommen keine Effekte, mit fine-hold: false haelt ihn der Server nur
     jeden Tick fest. Mit guide-name: above bleibt sein Name, ueber ihm steht nur der
@@ -9537,7 +9539,7 @@ def fuehrung_ohne_cam_checks(env, bot):
     try:
         quelle = quelle_config(env)
         FIND.test("Voreingestellt stehen lead-without-cam: true, guide-name: replace, sieben mirror-... und "
-                  "fine-hold auf true, mirror-experience, -count, -enchantments und -durability auf false da",
+                  "fine-hold auf true, mirror-experience, -count, -enchantments, -durability und -name auf false da",
                   all(re.search(rf"(?m)^\s+{schluessel}:\s*{wert}\s*$", quelle) is not None
                       for schluessel, wert in (("lead-without-cam", "true"), ("guide-name", "replace"),
                                                ("mirror-health", "true"), ("mirror-main-hand", "true"),
@@ -9545,7 +9547,8 @@ def fuehrung_ohne_cam_checks(env, bot):
                                                ("mirror-head", "true"), ("mirror-effects", "true"),
                                                ("mirror-frost", "true"), ("mirror-experience", "false"),
                                                ("mirror-count", "false"), ("mirror-enchantments", "false"),
-                                               ("mirror-durability", "false"), ("fine-hold", "true"))), "")
+                                               ("mirror-durability", "false"), ("mirror-name", "false"),
+                                               ("fine-hold", "true"))), "")
         zuschauer.start()
         dritter.start()
         if not FIND.test("Zweiter und dritter Spieler fuer die Fuehrung ohne Cam-Modus kommen herein",
@@ -9756,6 +9759,23 @@ def fuehrung_ohne_cam_checks(env, bot):
         FIND.test("Ein verzaubertes Buch (Reparatur) kommt beim Gast ohne seine Verzauberung",
                   bool(buch) and buch[-1].get("count") == 1 and stufen(buch[-1], "stored_enchantments") == [],
                   str(buch[-2:]))
+        # Den Namen, den der Bot seinem Schwert gegeben hat - wie am Amboss -,
+        # sieht der Gast nicht: nur den des Items.
+        fremd_gast = zuschauer.call("other_equipment").get("count", 0)
+        fremd_dritter = dritter.call("other_equipment").get("count", 0)
+        ausruestung = zuschauer.call("own_equipment").get("count", 0)
+        console(env, f'item replace entity {BOT_NAME} weapon.mainhand with '
+                     f'minecraft:diamond_sword[custom_name="Exkalibur"]', pause=1.0)
+        eigen = eigene_hand(ausruestung)
+        am_bot = haende_des_bots(zuschauer, fremd_gast)
+        beim_dritten = haende_des_bots(dritter, fremd_dritter)
+        FIND.test("mirror-name: false - das Schwert \"Exkalibur\" des Bots kommt beim Gast ohne seinen Namen, als "
+                  "eigenes und am Bot",
+                  bool(eigen) and bool(am_bot)
+                  and all("custom_name" not in bestandteile(p) for p in eigen + am_bot),
+                  f"{eigen[-2:]} / {am_bot[-2:]}")
+        FIND.test("Der dritte Spieler bekommt das Schwert mit seinem Namen",
+                  bool(beim_dritten) and "custom_name" in bestandteile(beim_dritten[-1]), str(beim_dritten[-2:]))
         console(env, f"item replace entity {BOT_NAME} weapon.offhand with minecraft:shield", pause=0.3)
         console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:diamond_sword", pause=1.0)
 
@@ -9968,7 +9988,8 @@ def fuehrung_ohne_cam_checks(env, bot):
         set_options(env, [("mirror-main-hand", "false", "follow"), ("mirror-swing", "false", "follow"),
                           ("mirror-effects", "false", "follow"), ("fine-hold", "false", "follow"),
                           ("mirror-experience", "true", "follow"), ("mirror-count", "true", "follow"),
-                          ("mirror-enchantments", "true", "follow"), ("mirror-durability", "true", "follow")])
+                          ("mirror-enchantments", "true", "follow"), ("mirror-durability", "true", "follow"),
+                          ("mirror-name", "true", "follow")])
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         ausruestung = zuschauer.call("own_equipment").get("count", 0)
@@ -9994,6 +10015,12 @@ def fuehrung_ohne_cam_checks(env, bot):
                   "seinem Schaden (50)",
                   bool(eigen) and stufen(eigen[-1]) == [3] and bestandteile(eigen[-1]).get("damage") == 50,
                   str(eigen[-2:]))
+        ausruestung = zuschauer.call("own_equipment").get("count", 0)
+        console(env, f'item replace entity {BOT_NAME} weapon.offhand with minecraft:shield[custom_name="Burgtor"]',
+                pause=1.5)
+        eigen = eigene_hand(ausruestung, 1)
+        FIND.test("mirror-name: true - der Schild kommt mit seinem Namen (\"Burgtor\")",
+                  bool(eigen) and "custom_name" in bestandteile(eigen[-1]), str(eigen[-2:]))
         console(env, f"item replace entity {BOT_NAME} weapon.offhand with minecraft:shield", pause=0.3)
         schwuenge = zuschauer.call("own_swings").get("count", 0)
         bot.call("swing")
@@ -10027,7 +10054,7 @@ def fuehrung_ohne_cam_checks(env, bot):
                           ("mirror-effects", "true", "follow"), ("fine-hold", "true", "follow"),
                           ("mirror-experience", "false", "follow"), ("mirror-count", "false", "follow"),
                           ("mirror-enchantments", "false", "follow"), ("mirror-durability", "false", "follow"),
-                          ("guide-name", "above", "follow")])
+                          ("mirror-name", "false", "follow"), ("guide-name", "above", "follow")])
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         einladen_und_annehmen()
@@ -10059,7 +10086,8 @@ def fuehrung_ohne_cam_checks(env, bot):
             console(env, f"item replace entity {BOT_NAME} weapon.offhand with minecraft:air", pause=0.3)
             set_options(env, [("lead-without-cam", "true", "follow"), ("guide-name", "replace", "follow"),
                               ("mirror-main-hand", "true", "follow"), ("mirror-count", "false", "follow"),
-                              ("mirror-enchantments", "false", "follow"), ("mirror-durability", "false", "follow")])
+                              ("mirror-enchantments", "false", "follow"), ("mirror-durability", "false", "follow"),
+                              ("mirror-name", "false", "follow")])
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test der Fuehrung ohne Cam-Modus: {exc}")
