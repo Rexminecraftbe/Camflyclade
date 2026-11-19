@@ -322,7 +322,7 @@ public final class CamTour implements Listener {
         slots.load(settings.isTourEnabled() && (settings.isTourMirrorMainHand() || settings.isTourMirrorOffHand())
                 ? log : null);
         boolean hides = !settings.isTourMirrorCount() || !settings.isTourMirrorEnchantments()
-                || !settings.isTourMirrorDurability();
+                || !settings.isTourMirrorDurability() || !settings.isTourMirrorName();
         hands.load(settings.isTourEnabled() && hides ? log : null);
     }
 

@@ -445,6 +445,8 @@ public final class CamSettings {
     private boolean tourMirrorEnchantments;
     /** Whether they see how worn his items are, {@code follow.mirror-durability}. */
     private boolean tourMirrorDurability;
+    /** Whether they see the names he gave his items, at an anvil say, {@code follow.mirror-name}. */
+    private boolean tourMirrorName;
     /** Whether guests in the guide's view are held turned between the ticks too, {@code follow.fine-hold}. */
     private boolean tourFineHold;
     /** Whether a guide may invite everybody he could invite at once, {@code follow.invite-all}. */
@@ -920,6 +922,7 @@ public final class CamSettings {
         tourMirrorCount = config.getBoolean(follow + ".mirror-count", false);
         tourMirrorEnchantments = config.getBoolean(follow + ".mirror-enchantments", false);
         tourMirrorDurability = config.getBoolean(follow + ".mirror-durability", false);
+        tourMirrorName = config.getBoolean(follow + ".mirror-name", false);
         tourFineHold = config.getBoolean(follow + ".fine-hold", true);
         tourInviteAll = config.getBoolean(follow + ".invite-all", true);
         tourGuideTime = config.getBoolean(follow + ".guide-time", true);
@@ -2109,6 +2112,14 @@ public final class CamSettings {
     /** Whether the guests see how worn the guide's items are: the bar under them, and the tooltip. */
     public boolean isTourMirrorDurability() {
         return tourMirrorDurability;
+    }
+
+    /**
+     * Whether the guests see the names the guide gave his items - at an anvil,
+     * say -, otherwise only the item's own name, as the game calls it.
+     */
+    public boolean isTourMirrorName() {
+        return tourMirrorName;
     }
 
     /** Whether guests who see through the guide's eyes are held turned between the ticks too. */

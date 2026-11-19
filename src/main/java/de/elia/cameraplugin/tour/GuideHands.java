@@ -25,7 +25,8 @@ import java.util.logging.Level;
 /**
  * The guide's hands as the server sends them to a guest, changed on their way
  * to him: what the guests do not see of the guide's items - the count, the
- * enchantments, the wear, see {@link GuideMirror} - never reaches his client.
+ * enchantments, the wear, the name, see {@link GuideMirror} - never reaches
+ * his client.
  *
  * <p>The server sends everybody who sees the guide what is in the guide's
  * hands, whenever it changes, and all of it whenever a client gets to know
