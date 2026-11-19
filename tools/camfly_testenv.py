@@ -12528,8 +12528,10 @@ def spotoptionen_checks(env, bot):
         f = fenster()
         FIND.test("Der Name im Chat oeffnet die Seite des neuen Punkts", "New spot: Optneu" in titel(f),
                   titel(f))
+        seit = bot.mark()
         klick(11)
-        zeilen = befehl(bot, "optalt")
+        befehl(bot, "optalt")
+        zeilen = zeilen_seit(bot, seit)
         f = fenster()
         FIND.test("Umbenennen auf der Seite in einen Namen, den er schon hat (klein geschrieben): der Hinweis, und "
                   "die Seite kommt mit dem alten Namen wieder",
