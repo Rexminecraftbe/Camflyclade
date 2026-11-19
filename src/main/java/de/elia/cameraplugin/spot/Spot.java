@@ -3,6 +3,8 @@ package de.elia.cameraplugin.spot;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.util.Locale;
 
@@ -19,13 +21,21 @@ import java.util.Locale;
  *                kept, whose date nobody knows
  * @param look    the time, weather and night vision its owner had picked for
  *                himself when he saved it, see {@link SpotLook}
+ * @param icon    the item the menu shows it as, by its key without the
+ *                namespace ({@code filled_map}), as its owner picked it from
+ *                {@code viewpoints.icons}; {@code null} for one that was never
+ *                given one - saved with the command, or before there were
+ *                icons -, which the menu shows as it always did
  */
 public record Spot(String name, String world, double x, double y, double z, float yaw, float pitch,
-                   long created, SpotLook look) {
+                   long created, SpotLook look, String icon) {
 
     public Spot {
         if (look == null) {
             look = SpotLook.NONE;
+        }
+        if (icon != null && icon.isBlank()) {
+            icon = null;
         }
     }
 
@@ -33,9 +43,56 @@ public record Spot(String name, String world, double x, double y, double z, floa
      * The spot of a location, under a name, with a look of its own, first
      * saved at a moment before: a spot that is moved keeps its date.
      */
-    public static Spot at(String name, Location where, long created, SpotLook look) {
+    public static Spot at(String name, Location where, long created, SpotLook look, String icon) {
         return new Spot(name, where.getWorld() == null ? "" : where.getWorld().getName(),
-                where.getX(), where.getY(), where.getZ(), where.getYaw(), where.getPitch(), created, look);
+                where.getX(), where.getY(), where.getZ(), where.getYaw(), where.getPitch(), created, look, icon);
+    }
+
+    /** The same spot under another name: where it is, its date, its look and its icon stay. */
+    public Spot withName(String other) {
+        return new Spot(other, world, x, y, z, yaw, pitch, created, look, icon);
+    }
+
+    /** The same spot with another icon, {@code null} for none of its own. */
+    public Spot withIcon(String other) {
+        return new Spot(name, world, x, y, z, yaw, pitch, created, look, other);
+    }
+
+    /**
+     * Reads a spot from its section of a file - of a player, or of the
+     * shared spots. It goes by the name written inside it and not by the key
+     * above it, which YAML may have turned into something else: a name like
+     * {@code 1e3} reads back as a number.
+     *
+     * @return the spot, or {@code null} for one without a name or a world
+     */
+    public static Spot read(ConfigurationSection section) {
+        String name = section == null ? null : section.getString("name");
+        String world = section == null ? null : section.getString("world");
+        if (name == null || name.isEmpty() || world == null) {
+            return null;
+        }
+        return new Spot(name, world, section.getDouble("x"), section.getDouble("y"), section.getDouble("z"),
+                (float) section.getDouble("yaw"), (float) section.getDouble("pitch"), section.getLong("created"),
+                SpotLook.read(section), section.getString("icon"));
+    }
+
+    /** Writes the spot under a path of a file, as {@link #read} reads it back. */
+    public void write(YamlConfiguration file, String path) {
+        file.set(path + ".name", name);
+        file.set(path + ".world", world);
+        file.set(path + ".x", x);
+        file.set(path + ".y", y);
+        file.set(path + ".z", z);
+        file.set(path + ".yaw", (double) yaw);
+        file.set(path + ".pitch", (double) pitch);
+        if (created > 0L) {
+            file.set(path + ".created", created);
+        }
+        look.write(file, path);
+        if (icon != null) {
+            file.set(path + ".icon", icon);
+        }
     }
 
     /** The most characters a name of a spot has; the least is one. */

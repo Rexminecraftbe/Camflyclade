@@ -339,6 +339,8 @@ messages:
   # spots and the page that restricts them, with a button for each kind of spots (-private, -public, -shared).
   menu-admin-spot-actions: "&bRight-click: go there\n&cShift-click: delete"
   menu-admin-spot-actions-bedrock: "&eTap: go there or delete"
+  menu-admin-spot-actions-options: "&bLeft-click: go there\n&aRight-click: options"
+  menu-admin-spot-actions-options-bedrock: "&eTap: go there or options"
   menu-admin-spot-actions-shared: "&eLeft-click: make private\n&bRight-click: go there\n&cShift-click: delete"
   menu-admin-spot-actions-shared-bedrock: "&eTap: make private, go there\n&eor delete"
   menu-admin-spot-private: "&7Private"
@@ -487,7 +489,29 @@ messages:
   menu-guestbook-on: "on"
   menu-guestbook-option: "&7   {mode}"
   menu-guestbook-option-current: "&a» {mode}"
+  # The page that picks the icon of a spot (viewpoints.icons): menu-icons-title over it, each icon as menu-icon
+  # ({icon}: its name, see map-names) with menu-icon-lore under it - the one it has now with menu-state-current.
+  menu-icon: "&f{icon}"
+  menu-icon-lore: "&7Pick this icon."
+  menu-icons-title: "&8Icon: {spot}"
   menu-new-spot: "&aSave a spot here"
+  # The page of a new spot (viewpoints.create-page), menu-new-spot-title ({spot}: its name): on top the spot as it
+  # will be, under it menu-new-spot-rename ({spot} in its -lore), menu-new-spot-icon ({icon}) and menu-new-spot-public
+  # or -private with menu-new-spot-visibility-lore; then menu-new-spot-cancel and menu-new-spot-confirm, whose lore
+  # is menu-new-spot-confirm-public-lore while it is to be public. On Bedrock with its windows (bedrock.menu: mixed
+  # or forms) all of it is one window, menu-new-spot-form, with menu-new-spot-form-name, -icon and -public over its
+  # fields.
+  menu-new-spot-cancel: "&cCancel"
+  menu-new-spot-cancel-lore: "&7Nothing is saved."
+  menu-new-spot-confirm: "&aSave spot"
+  menu-new-spot-confirm-lore: "&7Saves &f{spot}&7 where you named it."
+  menu-new-spot-confirm-public-lore: "&7Saves &f{spot}&7 where you named it\n&7and makes it public."
+  menu-new-spot-form: "New spot"
+  menu-new-spot-form-icon: "Icon"
+  menu-new-spot-form-name: "Name (max. 16 characters)"
+  menu-new-spot-form-public: "Public"
+  menu-new-spot-icon: "&eIcon: &f{icon}"
+  menu-new-spot-icon-lore: "&7Pick another icon."
   menu-new-spot-count: "&7Your spots: &f{count}/{max}"
   menu-new-spot-count-full: "&cYour spots: {count}/{max} - delete one first"
   menu-new-spot-count-unlimited: "&7Your spots: &f{count}"
@@ -496,6 +520,12 @@ messages:
   menu-new-spot-lore: "&7Saves your position and view."
   menu-new-spot-lore-public: "&7Saves your position and view.\n&fLeft-click: private\n&eRight-click: public"
   menu-new-spot-lore-public-bedrock: "&7Saves your position and view.\n&eTap: private or public"
+  menu-new-spot-private: "&eVisibility: &fPrivate"
+  menu-new-spot-public: "&eVisibility: &aPublic"
+  menu-new-spot-rename: "&eRename"
+  menu-new-spot-rename-lore: "&7Name: &f{spot}"
+  menu-new-spot-title: "&8New spot: {spot}"
+  menu-new-spot-visibility-lore: "&7Switch between private and public."
   menu-next: "&7Next page »"
   menu-nightvision: "&eNight vision: &f{mode}"
   menu-nightvision-dark: "in the dark"
@@ -532,6 +562,7 @@ messages:
   menu-pick-spot-jump: "&eJump there"
   menu-pick-spot-like: "&dLike"
   menu-pick-spot-offline: "&7Make private"
+  menu-pick-spot-options: "&aOptions"
   menu-pick-spot-private: "&fPrivate"
   menu-pick-spot-public: "&ePublic"
   menu-pick-spot-remove: "&cRemove from list"
@@ -547,6 +578,8 @@ messages:
   menu-public-own: "&f{spot} &7(yours)"
   menu-public-own-actions: "&eLeft-click: jump there\n&7Right-click: make private"
   menu-public-own-actions-bedrock: "&eTap: jump there or make private"
+  menu-public-own-actions-options: "&eLeft-click: jump there\n&aRight-click: options"
+  menu-public-own-actions-options-bedrock: "&eTap: jump there or options"
   menu-public-spot-actions: "&eLeft-click: jump there\n&dRight-click: like"
   menu-public-spot-actions-bedrock: "&eTap: jump there or like"
   menu-public-spot-actions-unlike: "&eLeft-click: jump there\n&7Right-click: unlike"
@@ -586,6 +619,8 @@ messages:
   menu-spot: "&f{spot}"
   menu-spot-actions: "&eLeft-click: jump there\n&cShift-click: delete"
   menu-spot-actions-bedrock: "&eTap: jump there or delete"
+  menu-spot-actions-options: "&eLeft-click: jump there\n&aRight-click: options"
+  menu-spot-actions-options-bedrock: "&eTap: jump there or options"
   menu-spot-actions-share: "&eLeft-click: jump there\n&aRight-click: share or make public\n&cShift-click: delete"
   menu-spot-actions-share-bedrock: "&eTap: jump there, share or delete"
   menu-spot-created: "&7Saved: &f{date}"
@@ -599,10 +634,40 @@ messages:
   menu-spot-name-public: "&eType the public spot's name in chat, max. 16 characters (&f{cancel}&e to abort)."
   menu-spot-name-public-form: "Name of the new public spot (max. 16 characters)"
   menu-spot-offered-lore: "&7Offered to: {players}"
+  # The options of a spot (viewpoints.options), a right-click on it: menu-spot-options-title ({spot}), on the admin
+  # page menu-spot-options-admin-title ({player}: its owner); on top the spot, under it what may be done with it.
+  # menu-spot-options-icon-lore names the icon it has now ({icon}); -move-cam-only stands under -move out of cam
+  # mode. -delete asks once more: -delete-keep takes its place, and -delete-confirm ({spot}) deletes it.
+  # -take-down (admins) makes it private again. -none: the config file allows none of them.
+  menu-spot-options-admin-title: "&8Options: {spot} ({player})"
+  menu-spot-options-delete: "&cDelete"
+  menu-spot-options-delete-confirm: "&4Delete for good"
+  menu-spot-options-delete-confirm-lore: "&7{spot} is gone, also for everybody\n&7it is shared with."
+  menu-spot-options-delete-keep: "&aKeep it"
+  menu-spot-options-delete-keep-lore: "&7Do not delete it."
+  menu-spot-options-delete-lore: "&7Asks once more first."
+  menu-spot-options-icon: "&eChange icon"
+  menu-spot-options-icon-lore: "&7Now: &f{icon}"
+  menu-spot-options-move: "&bMove here"
+  menu-spot-options-move-cam-only: "&eOnly in cam mode"
+  menu-spot-options-move-lore: "&7Moves it to where your camera is,\n&7looking the way you look."
+  menu-spot-options-none: "&7Nothing to change"
+  menu-spot-options-none-lore: "&7The server allows no options here."
+  menu-spot-options-rename: "&eRename"
+  menu-spot-options-rename-lore: "&7Give it another name."
+  menu-spot-options-share: "&aShare or make public"
+  menu-spot-options-share-lore: "&7Offer it to players, or make it public."
+  menu-spot-options-take-down: "&eMake private"
+  menu-spot-options-take-down-lore: "&7No longer public, shared with nobody."
+  menu-spot-options-title: "&8Options: {spot}"
   menu-spot-public-lore: "&ePublic, {likes} likes"
   # {start} = viewpoints.start-distance; the second while it is 0.
   menu-spot-reach-lore: "&7Jump within {start} blocks or in camera range"
   menu-spot-reach-lore-cam-only: "&7Jump in camera range (cam mode only)"
+  # menu-spot-rename asks for the new name of a spot ({spot}: its name now), on its page of options or on the page
+  # of a new spot; -form is the line of the window on Bedrock.
+  menu-spot-rename: "&eType the new name of &f{spot}&e in chat, max. 16 characters (&f{cancel}&e to abort)."
+  menu-spot-rename-form: "New name of {spot} (max. 16 characters)"
   menu-spot-shared-lore: "&7Shared with: {players}"
   menu-spot-views: "&7Views: &f{views}"
   menu-spot-views-hint: ""
@@ -661,6 +726,7 @@ messages:
   menu-title: "&8Cam"
   menu-to-admin: "&7« Back"
   menu-to-players: "&7« Back"
+  menu-to-spot: "&7« Back"
   menu-to-spot-owners: "&7« Back"
   menu-to-spots-of: "&7« Back"
   menu-to-target: "&7« Back"
@@ -825,6 +891,10 @@ messages:
   # in place of spot-restricted-<kind>-..., spot-disabled-now, -changed and spot-enabled-now to every player but those
   # with camplugin.spotadmin.bypass.
   spot-admin-deleted: "&aDeleted {player}'s spot {spot}."
+  # spot-admin-renamed and -icon-changed tell the admin ({player}: the owner, {old}: the name it had, {icon}: the
+  # name of the icon), spot-renamed-by-admin and spot-icon-changed-by-admin the owner ({player}: the admin).
+  spot-admin-icon-changed: "&aSpot &f{spot}&a of {player} now shows as &f{icon}&a."
+  spot-admin-renamed: "&aSpot &f{old}&a of {player} is now called &f{spot}&a."
   spot-admin-teleported: "&aAt {player}'s spot {spot}."
   spot-admin-took-down: "&a{player}'s spot {spot} is private now."
   spot-admin-tp-no-world: "&cSpot {spot} is in {world}, which is not loaded."
@@ -868,6 +938,8 @@ messages:
   spot-guestbook-off: "&eGuestbook off."
   spot-guestbook-on: "&aGuestbook on: every {minutes} minutes and at login."
   spot-guestbook-update: "&6Guestbook: &7last {minutes} minutes"
+  spot-icon-changed: "&aSpot &f{spot}&a now shows as &f{icon}&a."
+  spot-icon-changed-by-admin: "&e{player} changed the icon of your spot &f{spot}&e to &f{icon}&e."
   spot-jumped: "&aAt spot {spot}"
   spot-like-own: "&cYou can't like your own spot."
   spot-liked: "&dLiked {spot}: {likes} likes."
@@ -903,10 +975,14 @@ messages:
   spot-look-weather: "{weather}"
   spot-look-weather-clear: "clear sky"
   spot-look-weather-rain: "rain"
+  # spot-move-cam-only: a spot moves (its options, viewpoints.options.move) only in cam mode, to where the camera is.
+  spot-move-cam-only: "&cSpot &f{spot}&c moves only in cam mode, to where your camera is."
   spot-moved: "&aSpot &f{spot}&a moved here."
   # How {spot} names a spot of another player in the texts, {owner} being whose it is. No colour codes: it stands
   # inside a line, and a colour would go on to the rest of it.
   spot-name-other: "{spot} ({owner})"
+  # spot-name-taken: he has a spot of that name already ({spot}) - two of his spots never have the same name.
+  spot-name-taken: "&cYou already have a spot called &f{spot}&c - pick another name."
   spot-no-signal: "&cNo signal at spot {spot}."
   spot-not-shared: "&eSpot {spot} is not shared with {player}."
   spot-not-shared-all: "&eSpot {spot} is not public."
@@ -917,6 +993,9 @@ messages:
   spot-other-world: "&cSpot {spot} is in another world."
   spot-public-unknown: "&cThere is no public spot called {spot}."
   spot-removed: "&eRemoved {spot} from your list."
+  # spot-renamed: he renamed one of his spots ({old}: the name it had).
+  spot-renamed: "&aSpot &f{old}&a is now called &f{spot}&a."
+  spot-renamed-by-admin: "&e{player} renamed your spot &f{old}&e to &f{spot}&e."
   spot-restrict-changed: "&aChanged {player}'s restriction: {what} {time}{reason}."
   spot-restrict-done: "&a{player} is restricted: {what} {time}{reason}."
   spot-restrict-everybody-changed: "&aChanged the restriction for everybody: {what} {time}{reason}."
@@ -1476,6 +1555,28 @@ portal-names:
   end: "end"
   nether: "nether"
 
+# The icons of the spots (viewpoints.icons in config.yml), for {icon} and the page that picks one. Without a name
+# here an icon goes by its key, with spaces for the underscores.
+map-names:
+  filled_map: "Map"
+  map: "Empty Map"
+  ocean_monument_map: "Ocean Monument Map"
+  woodland_mansion_map: "Woodland Mansion Map"
+  buried_trial_chambers_map: "Trial Chambers Map"
+  jungle_pyramid_map: "Jungle Temple Map"
+  swamp_hut_map: "Swamp Hut Map"
+  desert_village_map: "Desert Village Map"
+  plains_village_map: "Plains Village Map"
+  savanna_village_map: "Savanna Village Map"
+  snowy_village_map: "Snowy Village Map"
+  taiga_village_map: "Taiga Village Map"
+  buried_treasure_map: "Treasure Map"
+  buried_ancient_city_map: "Ancient City Map"
+  buried_mineshaft_map: "Mineshaft Map"
+  desert_pyramid_map: "Desert Temple Map"
+  abandoned_camp_map: "Abandoned Camp Map"
+  warm_ocean_ruins_map: "Warm Ocean Ruins Map"
+
 # Items, for {item} in cost-item (start-cost.items). Without a name here an item goes by its key, with
 # spaces for the underscores: ender_eye reads "ender eye". To give it a name of its own, add a list:
 #   item-names:
@@ -1633,6 +1734,8 @@ message-settings:
   spot-accepted: true
   spot-accepted-owner: true
   spot-admin-deleted: true
+  spot-admin-icon-changed: true
+  spot-admin-renamed: true
   spot-admin-teleported: actionbar
   spot-admin-took-down: true
   spot-admin-tp-no-world: true
@@ -1667,6 +1770,8 @@ message-settings:
   spot-guestbook-off: actionbar
   spot-guestbook-on: actionbar
   spot-guestbook-update: true
+  spot-icon-changed: true
+  spot-icon-changed-by-admin: true
   spot-jumped: true
   spot-like-own: true
   spot-liked: actionbar
@@ -1684,7 +1789,9 @@ message-settings:
   spot-list-shared: true
   spot-list-shared-entry: true
   spot-list-shared-header: true
+  spot-move-cam-only: true
   spot-moved: true
+  spot-name-taken: true
   spot-no-signal: actionbar
   spot-not-shared: true
   spot-not-shared-all: true
@@ -1695,6 +1802,8 @@ message-settings:
   spot-other-world: actionbar
   spot-public-unknown: true
   spot-removed: true
+  spot-renamed: true
+  spot-renamed-by-admin: true
   spot-restrict-changed: true
   spot-restrict-done: true
   spot-restrict-everybody-changed: true

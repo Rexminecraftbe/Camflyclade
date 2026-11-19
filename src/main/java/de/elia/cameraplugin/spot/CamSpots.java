@@ -14,7 +14,9 @@ import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
@@ -273,8 +275,10 @@ public final class CamSpots {
     }
 
     /**
-     * Saves the spot where he is, looking the way he looks. A spot of the
-     * same name moves here and keeps the day it was first saved.
+     * Saves the spot where he is, looking the way he looks, under a name none
+     * of his spots has yet: a name he has already is turned down, so that two
+     * of his spots are never mistaken for each other - nor one overwritten by
+     * another. Moving a spot is for its page of options, see {@link #move}.
      *
      * @return the spot, or {@code null} when it was not saved; he has been told why
      */
@@ -282,42 +286,259 @@ public final class CamSpots {
         if (!maySetHere(player)) {
             return null;
         }
-        // Any sign goes, spaces too; only the length counts.
-        String name = Spot.validName(typed);
-        if (name == null) {
-            messages.sendConfiguredMessage(player, "spot-bad-name");
+        return save(player, typed, player.getLocation(), lookOf(player), null);
+    }
+
+    /**
+     * Saves a new spot of his - from {@code /cam spot set}, or from the menu,
+     * where it was named a moment before -: under a name none of his spots
+     * has yet, while no restriction keeps him from it and he has room for one
+     * more. If not, he has been told why.
+     *
+     * @param where where it is, looking its way
+     * @param look  what it shows, see {@link #lookOf}
+     * @param icon  its icon, see {@link #icons}; {@code null} for none of its own
+     * @return the spot, or {@code null} when it was not saved
+     */
+    public Spot save(Player player, String typed, Location where, SpotLook look, String icon) {
+        String name = checkName(player, player.getUniqueId(), typed, null);
+        if (name == null || !plugin.getSpotModeration().checkNew(player, SpotBans.Kind.PRIVATE)
+                || !hasRoom(player)) {
             return null;
         }
-        Map<String, Spot> spots = spotsOf(player);
-        Spot before = spots.get(Spot.key(name));
-        if (before == null && !plugin.getSpotModeration().checkNew(player, SpotBans.Kind.PRIVATE)) {
-            return null;
-        }
-        if (before == null && settings.limitsViewpoints() && spots.size() >= settings.getViewpointsMax()) {
-            messages.sendConfiguredMessage(player, "spot-full", "{max}",
-                    String.valueOf(settings.getViewpointsMax()));
-            return null;
-        }
-        // Under the name he gave it now, capitals and all, with the look he
-        // has picked for himself now - also when it moves.
-        SpotLook look = lookOf(player);
-        Spot spot = Spot.at(name, player.getLocation(), before == null ? System.currentTimeMillis() : before.created(),
-                look);
+        Spot spot = Spot.at(name, where, System.currentTimeMillis(), look, icon);
         if (inFile()) {
             store.get(player.getUniqueId()).putSpot(player.getName(), spot);
             store.save(player.getUniqueId());
         } else {
             inMemory.computeIfAbsent(player.getUniqueId(), id -> new LinkedHashMap<>()).put(spot.key(), spot);
         }
-        // Whoever it is shared with finds it where it is now.
-        shared.moved(player.getUniqueId(), player.getName(), spot);
         countOwner(player);
-        messages.sendConfiguredMessage(player, before != null ? "spot-moved" : "spot-saved", "{spot}", name);
+        messages.sendConfiguredMessage(player, "spot-saved", "{spot}", name);
+        tellLook(player, name, look);
+        return spot;
+    }
+
+    /** After a spot was saved or moved, while it takes along a look of its own: what it shows, {@code spot-saved-look}. */
+    private void tellLook(Player player, String name, SpotLook look) {
         String described = describe(look);
         if (!described.isEmpty()) {
             messages.sendMessage(player, "spot-saved-look", "{spot}", name, "{look}", described);
         }
-        return spot;
+    }
+
+    /**
+     * Whether he has room for one more spot under
+     * {@code viewpoints.max-per-player}. If not, he has been told.
+     */
+    public boolean hasRoom(Player player) {
+        if (settings.limitsViewpoints() && spotsOf(player).size() >= settings.getViewpointsMax()) {
+            messages.sendConfiguredMessage(player, "spot-full", "{max}",
+                    String.valueOf(settings.getViewpointsMax()));
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * A name as it is typed, made into the name of a spot of this owner: one
+     * of 1 to {@value Spot#MAX_NAME} characters that none of his other spots
+     * has - capitals and extra spaces not counting, as the spots are found by
+     * their names. If not, whoever typed it has been told why.
+     *
+     * @param keep the {@link Spot#key()} of the spot that is being renamed,
+     *             which may keep its own name in other capitals; {@code null}
+     *             for a new spot
+     * @return the name, or {@code null}
+     */
+    public String checkName(CommandSender to, UUID owner, String typed, String keep) {
+        String name = Spot.validName(typed);
+        if (name == null) {
+            messages.sendConfiguredMessage(to, "spot-bad-name");
+            return null;
+        }
+        Spot other = spotsOf(owner).get(Spot.key(name));
+        if (other != null && !other.key().equals(keep)) {
+            messages.sendConfiguredMessage(to, "spot-name-taken", "{spot}", other.name());
+            return null;
+        }
+        return name;
+    }
+
+    /**
+     * Renames a spot of an owner, online or not - by himself or by an admin -,
+     * to a name none of his other spots has. Whoever it is shared with finds
+     * it under its new name; its views and likes, and what the guestbook has
+     * for it, go along. If not, {@code to} has been told why.
+     *
+     * @param key the {@link Spot#key()} it has now
+     * @return the spot under its new name, or {@code null}
+     */
+    public Spot rename(CommandSender to, UUID owner, String key, String typed) {
+        Spot spot = spotsOf(owner).get(key);
+        if (spot == null) {
+            messages.sendConfiguredMessage(to, "spot-unknown", "{spot}", typed);
+            return null;
+        }
+        String name = checkName(to, owner, typed, key);
+        if (name == null) {
+            return null;
+        }
+        Spot renamed = spot.withName(name);
+        return replace(owner, key, renamed) ? renamed : null;
+    }
+
+    /** Renames one of his own spots, from its page of options; he hears how it went. */
+    public Spot renameOwn(Player player, String key, String typed) {
+        Spot before = spotsOf(player).get(key);
+        Spot renamed = rename(player, player.getUniqueId(), key, typed);
+        if (renamed != null) {
+            messages.sendConfiguredMessage(player, "spot-renamed", "{old}", before.name(), "{spot}", renamed.name());
+        }
+        return renamed;
+    }
+
+    /** Gives one of his own spots another icon, from the menu; he hears about it. */
+    public Spot changeOwnIcon(Player player, String key, String icon) {
+        Spot changed = changeIcon(player.getUniqueId(), key, icon);
+        if (changed == null) {
+            messages.sendConfiguredMessage(player, "spot-unknown", "{spot}", key);
+            return null;
+        }
+        messages.sendConfiguredMessage(player, "spot-icon-changed", "{spot}", changed.name(),
+                "{icon}", iconName(icon));
+        return changed;
+    }
+
+    /**
+     * Gives a spot of an owner, online or not, another icon - by himself or by
+     * an admin. Whoever it is shared with sees it so as well.
+     *
+     * @param icon one of {@link #icons}
+     * @return the spot with its new icon, or {@code null} while there is no such spot
+     */
+    public Spot changeIcon(UUID owner, String key, String icon) {
+        Spot spot = spotsOf(owner).get(key);
+        if (spot == null) {
+            return null;
+        }
+        Spot changed = spot.withIcon(icon);
+        return replace(owner, key, changed) ? changed : null;
+    }
+
+    /**
+     * Moves one of his spots to where his camera is, looking the way it
+     * looks, with the look he has picked for himself now - only in camera
+     * mode, where a spot is saved as well. It keeps its name, its date, its
+     * icon, its views and likes, and whoever it is shared with finds it
+     * there. If not, he has been told why.
+     *
+     * @return the spot where it is now, or {@code null}
+     */
+    public Spot move(Player player, String key) {
+        Spot spot = spotsOf(player).get(key);
+        if (spot == null) {
+            messages.sendConfiguredMessage(player, "spot-unknown", "{spot}", key);
+            return null;
+        }
+        if (!plugin.isInCameraMode(player)) {
+            messages.sendConfiguredMessage(player, "spot-move-cam-only", "{spot}", spot.name());
+            return null;
+        }
+        SpotLook look = lookOf(player);
+        Spot moved = Spot.at(spot.name(), player.getLocation(), spot.created(), look, spot.icon());
+        if (!replace(player.getUniqueId(), key, moved)) {
+            return null;
+        }
+        shared.moved(player.getUniqueId(), player.getName(), moved);
+        messages.sendConfiguredMessage(player, "spot-moved", "{spot}", moved.name());
+        tellLook(player, moved.name(), look);
+        return moved;
+    }
+
+    /**
+     * Puts a spot of an owner, online or not, in the place of one of his -
+     * renamed, moved, with another icon -, and lets whatever goes by its name
+     * follow it: whom it is shared with, its views, its guestbook.
+     *
+     * @param key the {@link Spot#key()} of the one it replaces
+     * @return whether he had that one
+     */
+    private boolean replace(UUID owner, String key, Spot spot) {
+        boolean replaced;
+        if (inFile()) {
+            replaced = store.change(owner, record -> record.replaceSpot(key, spot));
+        } else {
+            Map<String, Spot> own = inMemory.get(owner);
+            replaced = own != null && own.containsKey(key);
+            if (replaced) {
+                Map<String, Spot> before = new LinkedHashMap<>(own);
+                own.clear();
+                for (Map.Entry<String, Spot> entry : before.entrySet()) {
+                    own.putIfAbsent(entry.getKey().equals(key) ? spot.key() : entry.getKey(),
+                            entry.getKey().equals(key) ? spot : entry.getValue());
+                }
+            }
+        }
+        if (!replaced) {
+            return false;
+        }
+        shared.changed(owner, key, spot);
+        views.renamed(owner, key, spot.key());
+        guestbook.renamed(owner, key, spot.key());
+        return true;
+    }
+
+    // ------------------------------------------------------------ icons
+
+    /**
+     * The icons a spot may have: those of {@code viewpoints.icons} this
+     * server knows, in their order - up to 26.2 the filled map and the empty
+     * one, from 26.3 the maps of the structures as well, each an item of its
+     * own there.
+     */
+    public List<String> icons() {
+        List<String> known = new ArrayList<>();
+        for (String key : settings.getViewpointsIcons()) {
+            if (iconItem(key) != null) {
+                known.add(key);
+            }
+        }
+        return known;
+    }
+
+    /** The icon a new spot of the menu starts with: the first of {@link #icons}, or {@code null} for none. */
+    public String firstIcon() {
+        List<String> known = icons();
+        return known.isEmpty() ? null : known.get(0);
+    }
+
+    /** The item of an icon, or {@code null} for one this server does not know. */
+    public static Material iconItem(String key) {
+        if (key == null) {
+            return null;
+        }
+        Material material = Material.matchMaterial(key);
+        return material != null && material.isItem() && !material.isAir() ? material : null;
+    }
+
+    /**
+     * The item the menu shows a spot as: its icon, or {@code fallback} for one
+     * without - or with one this server does not know, from a later version.
+     */
+    public static Material iconOf(Spot spot, Material fallback) {
+        Material own = iconItem(spot.icon());
+        return own != null ? own : fallback;
+    }
+
+    /**
+     * What an icon is called, {@code map-names} in the language file; for
+     * none of its own, what the filled map is called, as which a spot without
+     * one shows.
+     */
+    public String iconName(String key) {
+        String icon = key == null ? "filled_map" : key;
+        return messages.getName("map-names", icon, icon.replace('_', ' '));
     }
 
     /**

@@ -375,6 +375,57 @@ public final class SpotModeration {
         messages.sendConfiguredMessage(admin, "spot-admin-deleted", "{player}", ownerName, "{spot}", spot.name());
     }
 
+    /**
+     * Renames one of his spots, whether he is online or not, to a name none
+     * of his other spots has - a name that should not stand there, say.
+     * He hears about it while he is online.
+     *
+     * @return the spot under its new name, or {@code null}; the admin has been told why
+     */
+    public Spot rename(CommandSender admin, UUID owner, String ownerName, Spot spot, String typed) {
+        if (!mayUse(admin)) {
+            return null;
+        }
+        Spot renamed = plugin.getSpots().rename(admin, owner, spot.key(), typed);
+        if (renamed == null) {
+            return null;
+        }
+        Player online = Bukkit.getPlayer(owner);
+        if (online != null && !online.equals(admin)) {
+            messages.sendMessage(online, "spot-renamed-by-admin", "{player}", name(admin), "{old}", spot.name(),
+                    "{spot}", renamed.name());
+        }
+        messages.sendConfiguredMessage(admin, "spot-admin-renamed", "{player}", ownerName, "{old}", spot.name(),
+                "{spot}", renamed.name());
+        return renamed;
+    }
+
+    /**
+     * Gives one of his spots another icon, whether he is online or not. He
+     * hears about it while he is online.
+     *
+     * @return the spot with its new icon, or {@code null} while it is gone
+     */
+    public Spot changeIcon(CommandSender admin, UUID owner, String ownerName, Spot spot, String icon) {
+        if (!mayUse(admin)) {
+            return null;
+        }
+        CamSpots spots = plugin.getSpots();
+        Spot changed = spots.changeIcon(owner, spot.key(), icon);
+        if (changed == null) {
+            return null;
+        }
+        String iconName = spots.iconName(icon);
+        Player online = Bukkit.getPlayer(owner);
+        if (online != null && !online.equals(admin)) {
+            messages.sendMessage(online, "spot-icon-changed-by-admin", "{player}", name(admin),
+                    "{spot}", changed.name(), "{icon}", iconName);
+        }
+        messages.sendConfiguredMessage(admin, "spot-admin-icon-changed", "{player}", ownerName,
+                "{spot}", changed.name(), "{icon}", iconName);
+        return changed;
+    }
+
     /** How long it still holds, the way the texts of a ban put it: "for 2h 0m 0s" or "for good". */
     private String time(SpotBans.Ban ban, long now) {
         return ban.forGood()

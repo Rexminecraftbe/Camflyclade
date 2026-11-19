@@ -4,6 +4,7 @@ import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.ban.BanList;
+import de.elia.cameraplugin.bedrock.BedrockForms;
 import de.elia.cameraplugin.ban.CamBan;
 import de.elia.cameraplugin.body.PlayerSkins;
 import de.elia.cameraplugin.nightvision.CamNightVision;
@@ -21,6 +22,7 @@ import de.elia.cameraplugin.spot.Share;
 import de.elia.cameraplugin.spot.Spot;
 import de.elia.cameraplugin.spot.SpotBans;
 import de.elia.cameraplugin.spot.SpotGuestbook;
+import de.elia.cameraplugin.spot.SpotLook;
 import de.elia.cameraplugin.spot.SpotModeration;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -246,8 +248,12 @@ public final class CamMenu implements Listener {
     /** Who is asked for something in the chat, until when and what to do with it. Read from the chat thread. */
     private final Map<UUID, Question> questions = new ConcurrentHashMap<>();
 
-    /** A question in the chat: until when the answer counts, and what it does - on the main thread. */
-    private record Question(long until, Consumer<String> answer) {
+    /**
+     * A question in the chat: until when the answer counts, what it does - on
+     * the main thread -, and what calling it off does besides saying so,
+     * {@code null} for nothing.
+     */
+    private record Question(long until, Consumer<String> answer, Runnable cancelled) {
     }
 
     /** The bans being set up on their page, by the id of the admin. */
@@ -257,6 +263,9 @@ public final class CamMenu implements Listener {
     private final Map<UUID, SpotBanDraft> spotDrafts = new HashMap<>();
     /** The restrictions of the tours being set up on their page, by the id of the admin. */
     private final Map<UUID, TourBanDraft> tourDrafts = new HashMap<>();
+
+    /** The new spots being set up on their page before they are saved, by the id of their owner. */
+    private final Map<UUID, NewSpot> newSpots = new HashMap<>();
 
     /** How each player has the tabs of the spots sorted, while he is online. */
     private final Map<UUID, Map<SpotTab, SpotSort>> spotSorts = new HashMap<>();
@@ -450,6 +459,32 @@ public final class CamMenu implements Listener {
     }
 
     /**
+     * A new spot being set up on its page, {@code viewpoints.create-page}:
+     * where it is - where its owner was when he named it -, which way it
+     * looks and what it shows, which are fixed; its name, its icon and
+     * whether it is to be public, which the page changes until it is saved.
+     */
+    private static final class NewSpot {
+        String name;
+        final Location where;
+        final SpotLook look;
+        String icon;
+        boolean open;
+
+        NewSpot(String name, Location where, SpotLook look, String icon) {
+            this.name = name;
+            this.where = where;
+            this.look = look;
+            this.icon = icon;
+        }
+
+        /** The spot as it would be saved now, to show it. */
+        Spot spot() {
+            return Spot.at(name, where, System.currentTimeMillis(), look, icon);
+        }
+    }
+
+    /**
      * One window of the menu, and what each of its slots does when clicked.
      *
      * <p>While it is open, it is drawn anew in place - by itself every
@@ -477,6 +512,8 @@ public final class CamMenu implements Listener {
          * otherwise than Java does, see {@link CamMenu#forBedrock}.
          */
         private boolean bedrock;
+        /** Whether the maps of 26.3 stay themselves on Bedrock, {@code bedrock.map-icons}, see {@link CamMenu#forBedrock}. */
+        private boolean bedrockMaps;
         private Inventory inventory;
         /**
          * Its title, which a page drawn anew in place keeps. On Bedrock the
@@ -670,6 +707,7 @@ public final class CamMenu implements Listener {
         page.listing = null;
         page.again = null;
         page.bedrock = bedrock;
+        page.bedrockMaps = settings.isBedrockMapIcons();
         page.rows = !bedrock ? null : switch (size) {
             case SMALL -> SMALL_ON_LARGE;
             case MEDIUM -> MEDIUM_ON_LARGE;
@@ -1223,10 +1261,14 @@ public final class CamMenu implements Listener {
         if (settings.isViewpointsSetInCamOnly()) {
             newLore.addAll(lines(messages.getMessage("menu-new-spot-cam-only")));
         }
-        newLore.addAll(lines(text(player, sharing ? "menu-new-spot-lore-public" : "menu-new-spot-lore")));
-        Consumer<ClickType> newSpot = click -> act(player, () -> askName(player, sharing && click.isRightClick()));
+        // With its own page, whether it is public is set there: one click starts it.
+        boolean createPage = settings.isViewpointsCreatePage();
+        newLore.addAll(lines(text(player, sharing && !createPage ? "menu-new-spot-lore-public"
+                : "menu-new-spot-lore")));
+        Consumer<ClickType> newSpot = createPage ? click -> act(player, () -> startNewSpot(player))
+                : click -> act(player, () -> askName(player, sharing && click.isRightClick()));
         put(page, SLOT_SPOT_NEW, Material.WRITABLE_BOOK, messages.getMessage("menu-new-spot"), newLore, newSpot);
-        if (sharing) {
+        if (sharing && !createPage) {
             picks(player, page, SLOT_SPOT_NEW, List.of(pick("menu-pick-spot-private", newSpot, ClickType.LEFT),
                     pick("menu-pick-spot-public", newSpot, ClickType.RIGHT)));
         }
@@ -1359,10 +1401,22 @@ public final class CamMenu implements Listener {
                     .replace("{players}", spots.offeredTo(share))));
         }
         lore.addAll(reachLore());
-        lore.addAll(lines(text(player, settings.isViewpointsSharing() ? "menu-spot-actions-share"
-                : "menu-spot-actions")));
+        boolean options = settings.isSpotOptionsEnabled();
+        lore.addAll(lines(text(player, options ? "menu-spot-actions-options"
+                : settings.isViewpointsSharing() ? "menu-spot-actions-share" : "menu-spot-actions")));
         Consumer<ClickType> action = click -> {
-            if (click.isShiftClick()) {
+            if (options) {
+                if (click.isShiftClick()) {
+                    // Nothing: deleting is for the page of the options.
+                    return;
+                }
+                if (click.isRightClick()) {
+                    later(() -> openSpotOptions(player, player.getUniqueId(), player.getName(), spot.key(), false,
+                            false));
+                } else if (click.isLeftClick()) {
+                    act(player, () -> spots.jump(player, spot.name()));
+                }
+            } else if (click.isShiftClick()) {
                 later(() -> {
                     spots.delete(player, spot.name());
                     openSpots(player, SpotTab.PRIVATE, 0);
@@ -1373,13 +1427,17 @@ public final class CamMenu implements Listener {
                 act(player, () -> spots.jump(player, spot.name()));
             }
         };
-        put(page, slot, Material.FILLED_MAP, messages.getMessage("menu-spot").replace("{spot}", spot.name()), lore,
-                action);
+        put(page, slot, CamSpots.iconOf(spot, Material.FILLED_MAP),
+                messages.getMessage("menu-spot").replace("{spot}", spot.name()), lore, action);
         List<Pick> picks = new ArrayList<>(List.of(pick("menu-pick-spot-jump", action, ClickType.LEFT)));
-        if (settings.isViewpointsSharing()) {
-            picks.add(pick("menu-pick-spot-share", action, ClickType.RIGHT));
+        if (options) {
+            picks.add(pick("menu-pick-spot-options", action, ClickType.RIGHT));
+        } else {
+            if (settings.isViewpointsSharing()) {
+                picks.add(pick("menu-pick-spot-share", action, ClickType.RIGHT));
+            }
+            picks.add(pick("menu-pick-spot-delete", action, ClickType.SHIFT_LEFT));
         }
-        picks.add(pick("menu-pick-spot-delete", action, ClickType.SHIFT_LEFT));
         picks(player, page, slot, picks);
     }
 
@@ -1398,13 +1456,17 @@ public final class CamMenu implements Listener {
         lore.addAll(lines(messages.getMessage("menu-spot-likes").replace("{likes}", String.valueOf(share.likes()))));
         if (own) {
             lore.addAll(reachLore());
-            lore.addAll(lines(text(player, "menu-public-own-actions")));
+            boolean options = settings.isSpotOptionsEnabled();
+            lore.addAll(lines(text(player, options ? "menu-public-own-actions-options" : "menu-public-own-actions")));
             Consumer<ClickType> action = click -> {
                 if (click.isShiftClick()) {
-                    // Deleting is for the tab of his own spots, not this one.
+                    // Deleting is for the tab of his own spots, or for its options, not this one.
                     return;
                 }
-                if (click.isRightClick()) {
+                if (click.isRightClick() && options) {
+                    later(() -> openSpotOptions(player, player.getUniqueId(), player.getName(), spot.key(), false,
+                            false));
+                } else if (click.isRightClick()) {
                     later(() -> {
                         spots.makePublic(player, spot, false);
                         openSpots(player, SpotTab.PUBLIC, 0);
@@ -1413,10 +1475,10 @@ public final class CamMenu implements Listener {
                     act(player, () -> spots.jump(player, spot.name()));
                 }
             };
-            put(page, slot, Material.FILLED_MAP, messages.getMessage("menu-public-own").replace("{spot}", spot.name()),
-                    lore, action);
+            put(page, slot, CamSpots.iconOf(spot, Material.FILLED_MAP),
+                    messages.getMessage("menu-public-own").replace("{spot}", spot.name()), lore, action);
             picks(player, page, slot, List.of(pick("menu-pick-spot-jump", action, ClickType.LEFT),
-                    pick("menu-pick-spot-offline", action, ClickType.RIGHT)));
+                    pick(options ? "menu-pick-spot-options" : "menu-pick-spot-offline", action, ClickType.RIGHT)));
             return;
         }
         boolean liked = share.isLikedBy(player.getUniqueId());
@@ -1442,7 +1504,7 @@ public final class CamMenu implements Listener {
                 act(player, () -> spots.jump(player, share.label()));
             }
         };
-        put(page, slot, shine(item(Material.MAP, name, lore), liked), action);
+        put(page, slot, shine(item(CamSpots.iconOf(spot, Material.MAP), name, lore), liked), action);
         picks(player, page, slot, List.of(pick("menu-pick-spot-jump", action, ClickType.LEFT),
                 pick(liked ? "menu-pick-spot-unlike" : "menu-pick-spot-like", action, ClickType.RIGHT)));
     }
@@ -1498,7 +1560,7 @@ public final class CamMenu implements Listener {
                 act(player, () -> spots.jump(player, share.label()));
             }
         };
-        put(page, slot, Material.MAP, name, lore, action);
+        put(page, slot, CamSpots.iconOf(share.getSpot(), Material.MAP), name, lore, action);
         picks(player, page, slot, List.of(pick("menu-pick-spot-jump", action, ClickType.LEFT),
                 pick("menu-pick-spot-remove", action, ClickType.RIGHT)));
     }
@@ -1619,10 +1681,414 @@ public final class CamMenu implements Listener {
                     spots.makePublic(player, target, !everybody);
                     openShare(player, key, number);
                 }));
-        put(page, SLOT_BACK, Material.ARROW, "menu-to-spots",
-                click -> later(() -> openSpots(player, SpotTab.PRIVATE, 0)));
+        // Shared from its options, it leads back there.
+        put(page, SLOT_BACK, Material.ARROW, settings.isSpotOptionsEnabled() ? "menu-to-spot" : "menu-to-spots",
+                click -> later(() -> {
+                    if (settings.isSpotOptionsEnabled()) {
+                        openSpotOptions(player, player.getUniqueId(), player.getName(), key, false, false);
+                    } else {
+                        openSpots(player, SpotTab.PRIVATE, 0);
+                    }
+                }));
         paging(page, number, listed.pages(), n -> openShare(player, key, n));
         show(player, page, EVERY_SECOND, () -> openShare(player, key, number));
+    }
+
+    // ------------------------------------------------------------ a new spot, its icon and its options
+
+    /**
+     * A new spot, with {@code viewpoints.create-page}: first what is asked of
+     * every new spot - whether it may be saved here, whether a restriction
+     * keeps him from it, whether he has room for one more -, then its name,
+     * in the chat, and then its page, see {@link #openNewSpot}. On Bedrock,
+     * with its windows, one window with all of it instead, see
+     * {@link #newSpotWindow}.
+     */
+    private void startNewSpot(Player player) {
+        CamSpots spots = plugin.getSpots();
+        if (!spots.maySetHere(player) || !plugin.getSpotModeration().checkNew(player, SpotBans.Kind.PRIVATE)
+                || !spots.hasRoom(player)) {
+            return;
+        }
+        if (plugin.getBedrock().menuChoicesAsForms(player)) {
+            shown(player);
+            whenChestShut(player, () -> {
+                if (!newSpotWindow(player, "", spots.firstIcon(), false)) {
+                    askNewName(player);
+                }
+            });
+            return;
+        }
+        askNewName(player);
+    }
+
+    /**
+     * Asks for the name of a new spot: it is where he is when he answers,
+     * looking the way he looks then - the page that comes next changes
+     * nothing of that.
+     */
+    private void askNewName(Player player) {
+        ask(player, "menu-spot-name", typed -> {
+            CamSpots spots = plugin.getSpots();
+            // He may have left camera mode while he typed.
+            if (!spots.maySetHere(player)) {
+                return;
+            }
+            String name = spots.checkName(player, player.getUniqueId(), typed, null);
+            if (name == null) {
+                return;
+            }
+            newSpots.put(player.getUniqueId(), new NewSpot(name, player.getLocation(), spots.lookOf(player),
+                    spots.firstIcon()));
+            openNewSpot(player);
+        });
+    }
+
+    /**
+     * The page of a new spot before it is saved: the spot on top as it will
+     * be - where it is, what it shows -, under it its name to change, its
+     * icon to pick and whether it is to be public, each saying how it is
+     * now, and in the last row the buttons that call it off and that save
+     * it. Saved, his spots open, with it among them.
+     */
+    private void openNewSpot(Player player) {
+        UUID id = player.getUniqueId();
+        NewSpot draft = newSpots.get(id);
+        if (draft == null || !settings.isViewpointsEnabled()) {
+            newSpots.remove(id);
+            openSpots(player, SpotTab.PRIVATE, 0);
+            return;
+        }
+        CamSpots spots = plugin.getSpots();
+        Spot preview = draft.spot();
+        Material icon = CamSpots.iconOf(preview, Material.FILLED_MAP);
+        Page page = page(player, SMALL, messages.getMessage("menu-new-spot-title").replace("{spot}", draft.name));
+        put(page, 4, item(icon, messages.getMessage("menu-spot").replace("{spot}", draft.name), placeLore(preview)),
+                NOTHING);
+        Runnable again = () -> openNewSpot(player);
+        List<RowButton> row = new ArrayList<>();
+        row.add(new RowButton(item(Material.NAME_TAG, messages.getMessage("menu-new-spot-rename"),
+                lines(messages.getMessage("menu-new-spot-rename-lore").replace("{spot}", draft.name))),
+                click -> act(player, () -> ask(player, "menu-spot-rename", typed -> {
+                    NewSpot now = newSpots.get(id);
+                    if (now == null) {
+                        return;
+                    }
+                    String name = spots.checkName(player, id, typed, null);
+                    if (name != null) {
+                        now.name = name;
+                    }
+                    openNewSpot(player);
+                }, again, "{spot}", draft.name))));
+        if (spots.icons().size() > 1) {
+            row.add(new RowButton(item(icon, messages.getMessage("menu-new-spot-icon")
+                    .replace("{icon}", spots.iconName(draft.icon)), lines(messages.getMessage("menu-new-spot-icon-lore"))),
+                    click -> later(() -> openIcons(player, draft.name, draft.icon, chosen -> {
+                        NewSpot now = newSpots.get(id);
+                        if (now != null) {
+                            now.icon = chosen;
+                        }
+                        openNewSpot(player);
+                    }, again))));
+        }
+        if (settings.isViewpointsSharing()) {
+            row.add(new RowButton(shine(item(Material.GLOBE_BANNER_PATTERN,
+                    messages.getMessage(draft.open ? "menu-new-spot-public" : "menu-new-spot-private"),
+                    lines(messages.getMessage("menu-new-spot-visibility-lore"))), draft.open),
+                    click -> later(() -> {
+                        NewSpot now = newSpots.get(id);
+                        if (now == null) {
+                            return;
+                        }
+                        // Made public, it is asked what is asked of every public spot.
+                        if (now.open || plugin.getSpotModeration().checkNew(player, SpotBans.Kind.PUBLIC)) {
+                            now.open = !now.open;
+                        }
+                        openNewSpot(player);
+                    })));
+        }
+        putRow(page, row);
+        put(page, 18, Material.BARRIER, messages.getMessage("menu-new-spot-cancel"),
+                lines(messages.getMessage("menu-new-spot-cancel-lore")), click -> later(() -> {
+                    newSpots.remove(id);
+                    messages.sendConfiguredMessage(player, "menu-answer-cancelled");
+                    openSpots(player, SpotTab.PRIVATE, 0);
+                }));
+        put(page, 22, Material.EMERALD, messages.getMessage("menu-new-spot-confirm"),
+                lines(messages.getMessage(draft.open ? "menu-new-spot-confirm-public-lore"
+                        : "menu-new-spot-confirm-lore").replace("{spot}", draft.name)), click -> later(() -> {
+                    NewSpot now = newSpots.remove(id);
+                    if (now == null) {
+                        openSpots(player, SpotTab.PRIVATE, 0);
+                        return;
+                    }
+                    Spot spot = spots.save(player, now.name, now.where, now.look, now.icon);
+                    if (spot == null) {
+                        // He has been told why: the page stays, to put it right.
+                        newSpots.put(id, now);
+                        openNewSpot(player);
+                        return;
+                    }
+                    if (now.open) {
+                        spots.makePublic(player, spot, true);
+                    }
+                    openSpots(player, SpotTab.PRIVATE, 0);
+                }));
+        // A spot being set up stays as he leaves it, until he clicks.
+        show(player, page);
+    }
+
+    /**
+     * A new spot on Bedrock, with its windows: one window with all of it - the
+     * line for its name, the list of the icons, the switch that makes it
+     * public - and the button that saves it where he is then. A name that
+     * does not go brings the window back with what was filled in; an empty
+     * one, or closing it, calls it off.
+     *
+     * @return whether the window went out; if not, the name is asked as on Java
+     */
+    private boolean newSpotWindow(Player player, String name, String icon, boolean open) {
+        CamSpots spots = plugin.getSpots();
+        List<String> icons = spots.icons();
+        boolean sharing = settings.isViewpointsSharing();
+        List<BedrockForms.Field> fields = new ArrayList<>();
+        fields.add(new BedrockForms.Input(messages.getMessage("menu-new-spot-form-name"),
+                messages.getMessage("menu-form-placeholder"), name));
+        if (icons.size() > 1) {
+            List<String> names = new ArrayList<>();
+            for (String key : icons) {
+                names.add(ChatColor.stripColor(spots.iconName(key)));
+            }
+            fields.add(new BedrockForms.Dropdown(messages.getMessage("menu-new-spot-form-icon"), names,
+                    Math.max(0, icons.indexOf(icon))));
+        }
+        if (sharing) {
+            fields.add(new BedrockForms.Toggle(messages.getMessage("menu-new-spot-form-public"), open));
+        }
+        shown(player);
+        return plugin.getBedrock().forms().fill(player, ChatColor.stripColor(messages.getMessage("menu-new-spot-form")),
+                fields, values -> {
+                    String typed = String.valueOf(values.get(0)).trim();
+                    String chosen = spots.firstIcon();
+                    int next = 1;
+                    if (icons.size() > 1) {
+                        int at = values.get(next++) instanceof Integer picked ? picked : 0;
+                        chosen = icons.get(Math.max(0, Math.min(icons.size() - 1, at)));
+                    }
+                    boolean makePublic = sharing && Boolean.TRUE.equals(values.get(next));
+                    if (typed.isEmpty()) {
+                        messages.sendConfiguredMessage(player, "menu-answer-cancelled");
+                        return;
+                    }
+                    if (!spots.maySetHere(player)) {
+                        return;
+                    }
+                    if (spots.checkName(player, player.getUniqueId(), typed, null) == null) {
+                        newSpotWindow(player, typed, chosen, makePublic);
+                        return;
+                    }
+                    Spot spot = spots.save(player, typed, player.getLocation(), spots.lookOf(player), chosen);
+                    if (spot == null) {
+                        return;
+                    }
+                    if (makePublic) {
+                        spots.makePublic(player, spot, true);
+                    }
+                    openSpots(player, SpotTab.PRIVATE, 0);
+                }, () -> messages.sendConfiguredMessage(player, "menu-answer-cancelled"));
+    }
+
+    /**
+     * The icons a spot may have, {@link CamSpots#icons}, to pick one: each as
+     * itself, under its name, the one it has now shining. A click picks it.
+     *
+     * @param now    the icon it has now, {@code null} for none of its own
+     * @param choose what picking one does
+     * @param back   what the way back does
+     */
+    private void openIcons(Player player, String spot, String now, Consumer<String> choose, Runnable back) {
+        CamSpots spots = plugin.getSpots();
+        Page page = page(player, LIST, messages.getMessage("menu-icons-title").replace("{spot}", spot));
+        List<String> icons = spots.icons();
+        for (int slot = 0; slot < icons.size() && slot < ENTRIES; slot++) {
+            String key = icons.get(slot);
+            boolean current = key.equals(now);
+            put(page, slot, shine(item(CamSpots.iconItem(key), messages.getMessage("menu-icon")
+                            .replace("{icon}", spots.iconName(key)),
+                    lines(messages.getMessage(current ? "menu-state-current" : "menu-icon-lore"))), current),
+                    click -> later(() -> choose.accept(key)));
+        }
+        put(page, SLOT_BACK, Material.ARROW, "menu-to-spot", click -> later(back));
+        show(player, page);
+    }
+
+    /**
+     * The options of one spot - a right-click on it -, for its owner, or on
+     * the admin page of the spots for an admin: the spot on top, under it
+     * what may be done with it. Its owner as {@code viewpoints.options} lets
+     * him: rename it, give it another icon, share it or make it public, move
+     * it to where his camera is - in camera mode only -, delete it. An admin
+     * always: rename it, give it another icon, make it private again, delete
+     * it. Deleting takes a second click, on a button of its own in the last
+     * row, so that neither a slip nor a double click loses a spot.
+     *
+     * @param admin    whether an admin moderates it, from the admin page of the spots
+     * @param deleting whether the second click that deletes it is waited for
+     */
+    private void openSpotOptions(Player player, UUID owner, String ownerName, String key, boolean admin,
+                                 boolean deleting) {
+        CamSpots spots = plugin.getSpots();
+        SpotModeration moderation = plugin.getSpotModeration();
+        if (admin && !moderation.mayUse(player)) {
+            openAdmin(player);
+            return;
+        }
+        Runnable back = admin ? () -> openSpotsOf(player, owner, ownerName, 0)
+                : () -> openSpots(player, SpotTab.PRIVATE, 0);
+        Spot spot = spots.spotsOf(owner).get(key);
+        if (spot == null || !settings.isSpotOptionsEnabled()) {
+            back.run();
+            return;
+        }
+        Runnable again = () -> openSpotOptions(player, owner, ownerName, key, admin, false);
+        Share share = spots.shareOf(owner, key);
+        boolean shared = share != null
+                && (share.isEveryone() || !share.getPlayers().isEmpty() || !share.getPending().isEmpty());
+        Page page = page(player, SMALL, messages.getMessage(admin ? "menu-spot-options-admin-title"
+                : "menu-spot-options-title").replace("{spot}", spot.name()).replace("{player}", ownerName));
+        List<String> lore = spotLore(owner, spot);
+        lore.addAll(shareLore(share));
+        Material icon = CamSpots.iconOf(spot, Material.FILLED_MAP);
+        put(page, 4, item(icon, messages.getMessage("menu-spot").replace("{spot}", spot.name()), lore), NOTHING);
+        List<RowButton> row = new ArrayList<>();
+        if (admin || settings.isSpotOptionRename()) {
+            row.add(new RowButton(item(Material.NAME_TAG, messages.getMessage("menu-spot-options-rename"),
+                    lines(messages.getMessage("menu-spot-options-rename-lore"))),
+                    click -> act(player, () -> ask(player, "menu-spot-rename", typed -> {
+                        Spot renamed = admin ? moderation.rename(player, owner, ownerName, spot, typed)
+                                : spots.renameOwn(player, key, typed);
+                        openSpotOptions(player, owner, ownerName, renamed != null ? renamed.key() : key, admin,
+                                false);
+                    }, again, "{spot}", spot.name()))));
+        }
+        if ((admin || settings.isSpotOptionIcon()) && spots.icons().size() > 1) {
+            row.add(new RowButton(item(icon, messages.getMessage("menu-spot-options-icon"),
+                    lines(messages.getMessage("menu-spot-options-icon-lore").replace("{icon}",
+                            spots.iconName(spot.icon() != null ? spot.icon()
+                                    : icon.name().toLowerCase(Locale.ROOT))))),
+                    click -> later(() -> openIcons(player, spot.name(), spot.icon(), chosen -> {
+                        if (admin) {
+                            moderation.changeIcon(player, owner, ownerName, spot, chosen);
+                        } else {
+                            spots.changeOwnIcon(player, key, chosen);
+                        }
+                        again.run();
+                    }, again))));
+        }
+        if (!admin && settings.isSpotOptionShare()) {
+            row.add(new RowButton(item(Material.GLOBE_BANNER_PATTERN, messages.getMessage("menu-spot-options-share"),
+                    lines(messages.getMessage("menu-spot-options-share-lore"))),
+                    click -> later(() -> openShare(player, key, 0))));
+        }
+        if (admin && shared) {
+            row.add(new RowButton(item(Material.GRAY_DYE, messages.getMessage("menu-spot-options-take-down"),
+                    lines(messages.getMessage("menu-spot-options-take-down-lore"))), click -> later(() -> {
+                        moderation.takeDown(player, owner, ownerName, spot);
+                        again.run();
+                    })));
+        }
+        if (!admin && settings.isSpotOptionMove()) {
+            boolean inCam = plugin.isInCameraMode(player);
+            row.add(new RowButton(item(Material.ENDER_PEARL, messages.getMessage("menu-spot-options-move"),
+                    lines(messages.getMessage(inCam ? "menu-spot-options-move-lore"
+                            : "menu-spot-options-move-cam-only"))), click -> later(() -> {
+                        spots.move(player, key);
+                        again.run();
+                    })));
+        }
+        if (admin || settings.isSpotOptionDelete()) {
+            row.add(deleting
+                    ? new RowButton(item(Material.BARRIER, messages.getMessage("menu-spot-options-delete-keep"),
+                    lines(messages.getMessage("menu-spot-options-delete-keep-lore"))), click -> later(again))
+                    : new RowButton(item(Material.BARRIER, messages.getMessage("menu-spot-options-delete"),
+                    lines(messages.getMessage("menu-spot-options-delete-lore"))), click -> later(() ->
+                    openSpotOptions(player, owner, ownerName, key, admin, true))));
+            if (deleting) {
+                put(page, 22, shine(item(Material.LAVA_BUCKET, messages.getMessage("menu-spot-options-delete-confirm"),
+                        lines(messages.getMessage("menu-spot-options-delete-confirm-lore")
+                                .replace("{spot}", spot.name()))), true), click -> {
+                    // The second click of a double click on the button above it is no second thought.
+                    if (click == ClickType.DOUBLE_CLICK) {
+                        return;
+                    }
+                    later(() -> {
+                        if (admin) {
+                            moderation.delete(player, owner, ownerName, spot);
+                        } else {
+                            spots.delete(player, spot.name());
+                        }
+                        back.run();
+                    });
+                });
+            }
+        }
+        if (row.isEmpty()) {
+            put(page, 13, Material.GRAY_DYE, "menu-spot-options-none", NOTHING);
+        } else {
+            putRow(page, row);
+        }
+        put(page, 18, Material.ARROW, admin ? "menu-to-spots-of" : "menu-to-spots", click -> later(back));
+        // What he is doing with it stays as he leaves it, until he clicks.
+        show(player, page);
+    }
+
+    /** One button of the middle row of a page of three rows, see {@link #putRow}. */
+    private record RowButton(ItemStack item, Consumer<ClickType> action) {
+    }
+
+    /** Buttons in the middle row of a page of three rows, spread out from its middle. */
+    private static void putRow(Page page, List<RowButton> row) {
+        int[] slots = switch (row.size()) {
+            case 1 -> new int[]{13};
+            case 2 -> new int[]{11, 15};
+            case 3 -> new int[]{11, 13, 15};
+            case 4 -> new int[]{10, 12, 14, 16};
+            default -> new int[]{9, 11, 13, 15, 17};
+        };
+        for (int index = 0; index < row.size() && index < slots.length; index++) {
+            put(page, slots[index], row.get(index).item(), row.get(index).action());
+        }
+    }
+
+    /** Where a spot is and what it shows, as lines under it. */
+    private List<String> placeLore(Spot spot) {
+        List<String> lore = new ArrayList<>(lines(place(messages.getMessage("menu-spot-lore"), spot)));
+        String look = plugin.getSpots().describe(spot.look());
+        if (!look.isEmpty()) {
+            lore.addAll(lines(messages.getMessage("menu-spot-look").replace("{look}", look)));
+        }
+        return lore;
+    }
+
+    /** Whether a spot is public, and whom it is shared with and offered to, as lines under it. */
+    private List<String> shareLore(Share share) {
+        List<String> lore = new ArrayList<>();
+        if (share == null) {
+            return lore;
+        }
+        CamSpots spots = plugin.getSpots();
+        if (share.isEveryone()) {
+            lore.addAll(lines(messages.getMessage("menu-spot-public-lore")
+                    .replace("{likes}", String.valueOf(share.likes()))));
+        }
+        if (!share.getPlayers().isEmpty()) {
+            lore.addAll(lines(messages.getMessage("menu-spot-shared-lore").replace("{players}", spots.whom(share))));
+        }
+        if (!share.getPending().isEmpty()) {
+            lore.addAll(lines(messages.getMessage("menu-spot-offered-lore")
+                    .replace("{players}", spots.offeredTo(share))));
+        }
+        return lore;
     }
 
     /** How he has a tab of the spots sorted: the newest first, until he picks another order. */
@@ -2611,9 +3077,30 @@ public final class CamMenu implements Listener {
         if (!open && !shared) {
             lore.addAll(lines(messages.getMessage("menu-admin-spot-private")));
         }
-        lore.addAll(lines(text(player, open || shared ? "menu-admin-spot-actions-shared"
-                : "menu-admin-spot-actions")));
-        Material icon = open ? Material.GLOBE_BANNER_PATTERN : shared ? Material.MAP : Material.FILLED_MAP;
+        boolean options = settings.isSpotOptionsEnabled();
+        lore.addAll(lines(text(player, options ? "menu-admin-spot-actions-options"
+                : open || shared ? "menu-admin-spot-actions-shared" : "menu-admin-spot-actions")));
+        // Its own icon where it has one; else how it is shared.
+        Material icon = CamSpots.iconOf(spot,
+                open ? Material.GLOBE_BANNER_PATTERN : shared ? Material.MAP : Material.FILLED_MAP);
+        if (options) {
+            Consumer<ClickType> action = click -> {
+                if (click.isShiftClick()) {
+                    // Nothing: deleting is for the page of the options.
+                    return;
+                }
+                if (click.isRightClick()) {
+                    later(() -> openSpotOptions(player, owner, name, spot.key(), true, false));
+                } else if (click.isLeftClick()) {
+                    act(player, () -> moderation.teleport(player, name, spot));
+                }
+            };
+            put(page, slot, item(icon, messages.getMessage("menu-spot").replace("{spot}", spot.name()), lore),
+                    action);
+            picks(player, page, slot, List.of(pick("menu-pick-spot-go", action, ClickType.LEFT),
+                    pick("menu-pick-spot-options", action, ClickType.RIGHT)));
+            return;
+        }
         Consumer<ClickType> action = click -> {
             if (click.isShiftClick()) {
                 later(() -> {
@@ -3280,21 +3767,33 @@ public final class CamMenu implements Listener {
      * @param answer what the answer does, on the main thread
      */
     private void ask(Player player, String key, Consumer<String> answer, String... fills) {
+        ask(player, key, answer, (Runnable) null, fills);
+    }
+
+    /**
+     * {@link #ask(Player, String, Consumer, String...)}, and when he calls it
+     * off, something besides saying so - the page he came from comes back.
+     *
+     * @param cancelled what calling it off does, {@code null} for nothing
+     */
+    private void ask(Player player, String key, Consumer<String> answer, Runnable cancelled, String... fills) {
         shown(player);
         if (plugin.getBedrock().menuChoicesAsForms(player)) {
             whenChestShut(player, () -> {
-                if (!askInForm(player, key, answer, fills)) {
-                    askInChat(player, key, answer, fills);
+                if (!askInForm(player, key, answer, cancelled, fills)) {
+                    askInChat(player, key, answer, cancelled, fills);
                 }
             });
             return;
         }
-        askInChat(player, key, answer, fills);
+        askInChat(player, key, answer, cancelled, fills);
     }
 
     /** {@link #ask} in the chat: the next line he writes is the answer, or {@code cancel}. */
-    private void askInChat(Player player, String key, Consumer<String> answer, String... fills) {
-        questions.put(player.getUniqueId(), new Question(System.currentTimeMillis() + ANSWER_WAIT, answer));
+    private void askInChat(Player player, String key, Consumer<String> answer, Runnable cancelled,
+                           String... fills) {
+        questions.put(player.getUniqueId(), new Question(System.currentTimeMillis() + ANSWER_WAIT, answer,
+                cancelled));
         String[] all = Arrays.copyOf(fills, fills.length + 2);
         all[fills.length] = "{cancel}";
         all[fills.length + 1] = CANCEL;
@@ -3322,6 +3821,9 @@ public final class CamMenu implements Listener {
             }
             if (answer.equalsIgnoreCase(CANCEL)) {
                 messages.sendConfiguredMessage(player, "menu-answer-cancelled");
+                if (question.cancelled() != null) {
+                    question.cancelled().run();
+                }
             } else {
                 question.answer().accept(answer);
             }
@@ -3335,7 +3837,8 @@ public final class CamMenu implements Listener {
      *
      * @return whether the window went out; if not, the chat asks
      */
-    private boolean askInForm(Player player, String key, Consumer<String> answer, String... fills) {
+    private boolean askInForm(Player player, String key, Consumer<String> answer, Runnable cancelled,
+                              String... fills) {
         String label = messages.getMessage(key + "-form");
         if (label.isEmpty()) {
             label = messages.getMessage(key).replace("{cancel}", CANCEL);
@@ -3347,11 +3850,19 @@ public final class CamMenu implements Listener {
                 label, messages.getMessage("menu-form-placeholder"), typed -> {
                     String text = typed.trim();
                     if (text.isEmpty()) {
-                        messages.sendConfiguredMessage(player, "menu-answer-cancelled");
+                        called(player, cancelled);
                     } else {
                         answer.accept(text);
                     }
-                }, () -> messages.sendConfiguredMessage(player, "menu-answer-cancelled"));
+                }, () -> called(player, cancelled));
+    }
+
+    /** A question called off: he hears so, and what calling it off does besides is done. */
+    private void called(Player player, Runnable cancelled) {
+        messages.sendConfiguredMessage(player, "menu-answer-cancelled");
+        if (cancelled != null) {
+            cancelled.run();
+        }
     }
 
     @EventHandler
@@ -3361,6 +3872,7 @@ public final class CamMenu implements Listener {
         opening.remove(event.getPlayer().getUniqueId());
         drafts.remove(event.getPlayer().getUniqueId());
         spotDrafts.remove(event.getPlayer().getUniqueId());
+        newSpots.remove(event.getPlayer().getUniqueId());
         tourDrafts.remove(event.getPlayer().getUniqueId());
         adminSpotSorts.remove(event.getPlayer().getUniqueId());
         spotSorts.remove(event.getPlayer().getUniqueId());
@@ -3550,6 +4062,7 @@ public final class CamMenu implements Listener {
         page.title = messages.getMessage("menu-pick-title").replace("{button}", name);
         page.inventory = Bukkit.createInventory(page, LIST, messages.getMessage("menu-title"));
         page.bedrock = true;
+        page.bedrockMaps = settings.isBedrockMapIcons();
         put(page, SLOT_PICK_BUTTON, button.clone(), NOTHING);
         for (int i = 0; i < picks.size() && i < PICK_SLOTS.length; i++) {
             Pick pick = picks.get(i);
@@ -3773,7 +4286,7 @@ public final class CamMenu implements Listener {
      */
     private static void put(Page page, int slot, ItemStack item, Consumer<ClickType> action) {
         int at = page.at(slot);
-        page.inventory.setItem(at, page.bedrock ? forBedrock(item) : item);
+        page.inventory.setItem(at, page.bedrock ? forBedrock(item, page.bedrockMaps) : item);
         page.buttons.put(at, action);
     }
 
@@ -3782,10 +4295,17 @@ public final class CamMenu implements Listener {
      * Bedrock names a filled map by the map it shows - "Unknown Map" for one
      * without, which every map of the menu is -, and never by the name the
      * menu gave it; an empty map keeps its name. Its name, its lines and its
-     * shine go along.
+     * shine go along. So do the maps of the structures 26.3 brings, the icons
+     * a spot may have, unless {@code bedrock.map-icons} lets them be.
+     *
+     * @param maps whether the maps of 26.3 stay as they are, {@code bedrock.map-icons}
      */
-    private static ItemStack forBedrock(ItemStack item) {
-        if (item == null || item.getType() != Material.FILLED_MAP) {
+    private static ItemStack forBedrock(ItemStack item, boolean maps) {
+        if (item == null || item.getType() == Material.MAP) {
+            return item;
+        }
+        boolean filled = item.getType() == Material.FILLED_MAP;
+        if (!filled && (maps || !item.getType().name().endsWith("_MAP"))) {
             return item;
         }
         ItemStack map = new ItemStack(Material.MAP, item.getAmount());

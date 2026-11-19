@@ -309,9 +309,7 @@ public final class PlayerStore {
     }
 
     /**
-     * Reads the spots of a file. Each goes by the name written inside it and
-     * not by the key above it, which YAML may have turned into something else
-     * - a name like {@code 1e3} reads back as a number. One without a name or
+     * Reads the spots of a file, see {@link Spot#read}. One without a name or
      * a world is left out.
      */
     private static void readSpots(YamlConfiguration file, PlayerRecord record) {
@@ -320,15 +318,10 @@ public final class PlayerStore {
             return;
         }
         for (String key : section.getKeys(false)) {
-            ConfigurationSection spot = section.getConfigurationSection(key);
-            String name = spot == null ? null : spot.getString("name");
-            String world = spot == null ? null : spot.getString("world");
-            if (name == null || name.isEmpty() || world == null) {
-                continue;
+            Spot spot = Spot.read(section.getConfigurationSection(key));
+            if (spot != null) {
+                record.loadSpot(spot);
             }
-            record.loadSpot(new Spot(name, world, spot.getDouble("x"), spot.getDouble("y"), spot.getDouble("z"),
-                    (float) spot.getDouble("yaw"), (float) spot.getDouble("pitch"), spot.getLong("created"),
-                    SpotLook.read(spot)));
         }
     }
 
@@ -357,18 +350,7 @@ public final class PlayerStore {
             file.set("cooldown.started", record.getCooldownStarted());
         }
         for (Spot spot : record.getSpots().values()) {
-            String path = "spots." + Spot.pathKey(spot.key());
-            file.set(path + ".name", spot.name());
-            file.set(path + ".world", spot.world());
-            file.set(path + ".x", spot.x());
-            file.set(path + ".y", spot.y());
-            file.set(path + ".z", spot.z());
-            file.set(path + ".yaw", (double) spot.yaw());
-            file.set(path + ".pitch", (double) spot.pitch());
-            if (spot.created() > 0L) {
-                file.set(path + ".created", spot.created());
-            }
-            spot.look().write(file, path);
+            spot.write(file, "spots." + Spot.pathKey(spot.key()));
         }
         if (record.getNightVision() != null) {
             file.set("settings.night-vision", nightVisionWord(record.getNightVision()));
