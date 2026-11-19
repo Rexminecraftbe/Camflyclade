@@ -12550,17 +12550,21 @@ def spotoptionen_checks(env, bot):
         klick(13)
         f = fenster()
         k = knoepfe(f)
-        FIND.test("Die Seite der Symbole: auf 26.2 nur die Karte und die leere Karte, die Karte markiert",
+        # Welches Item es ist, sagt mineflayer nur mit den Namen von 26.1, die
+        # auf 26.2 nicht stimmen: verglichen wird mit den Items dieser Seite.
+        karte, leer = item(f, 0).get("name"), item(f, 1).get("name")
+        FIND.test("Die Seite der Symbole: auf 26.2 nur die Karte und die leere Karte, zwei verschiedene Items, die "
+                  "Karte markiert",
                   "Icon: Optzwei" in titel(f) and k.get("0") == "Map" and k.get("1") == "Empty Map"
                   and not any(int(p) < 45 and int(p) > 1 for p in k)
                   and item(f, 0).get("glint") is True and not item(f, 1).get("glint")
-                  and item(f, 0).get("name") == "filled_map" and item(f, 1).get("name") == "map",
-                  f"{titel(f)} / {k} / {item(f, 0).get('name')} {item(f, 1).get('name')}")
+                  and karte is not None and leer is not None and karte != leer,
+                  f"{titel(f)} / {k} / {karte} {leer}")
         klick(1)
         f = fenster()
         FIND.test("Die leere Karte gewaehlt: zurueck auf der Seite, der Punkt oben und der Knopf zeigen sie",
-                  "New spot: Optzwei" in titel(f) and item(f, 4).get("name") == "map"
-                  and item(f, 13).get("name") == "map" and "Icon: Empty Map" in item_text(item(f, 13)),
+                  "New spot: Optzwei" in titel(f) and item(f, 4).get("name") == leer
+                  and item(f, 13).get("name") == leer and "Icon: Empty Map" in item_text(item(f, 13)),
                   f"{titel(f)} / {item(f, 4).get('name')} / {item_text(item(f, 13))}")
         seit = bot.mark()
         klick(18)
@@ -12584,7 +12588,7 @@ def spotoptionen_checks(env, bot):
         FIND.test("Speichern: icon: map steht in der Datei, und die Liste zeigt ihn als leere Karte",
                   gesagt(zeilen, r"Spot Optzwei saved\.")
                   and re.search(r"(?m)^    icon:\s*map\s*$", abschnitt("optzwei")) is not None
-                  and wo is not None and item(f, wo).get("name") == "map",
+                  and wo is not None and item(f, wo).get("name") == leer,
                   f"{zeige(zeilen)} / {abschnitt('optzwei')[-80:]} / {wo}")
         bot.call("close_window", wait=10)
 
@@ -12621,7 +12625,7 @@ def spotoptionen_checks(env, bot):
         f = fenster()
         FIND.test("Die Karte gewaehlt: der Chat sagt es, die Optionen zeigen sie, die Datei sagt filled_map",
                   gesagt(zeilen, r"Spot Optdrei now shows as Map") and "Options: Optdrei" in titel(f)
-                  and item(f, 4).get("name") == "filled_map"
+                  and item(f, 4).get("name") == karte
                   and re.search(r"(?m)^    icon:\s*filled_map\s*$", abschnitt("optdrei")) is not None,
                   f"{zeige(zeilen)} / {titel(f)} / {item(f, 4).get('name')}")
         bot.call("close_window", wait=10)
