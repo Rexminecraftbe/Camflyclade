@@ -145,6 +145,17 @@ public final class CamSettings {
     /** The longest {@code viewpoints.views-cooldown-minutes} accepts: a day. */
     private static final int MAX_VIEWS_COOLDOWN_MINUTES = 1440;
 
+    /**
+     * What {@code viewpoints.icons} offers when the file lists nothing: the
+     * filled map and the empty one, and the maps 26.3 brings - each as its
+     * own item -, by their keys there. A server offers only what it knows.
+     */
+    private static final List<String> DEFAULT_SPOT_ICONS = List.of("filled_map", "map", "ocean_monument_map",
+            "woodland_mansion_map", "buried_trial_chambers_map", "jungle_pyramid_map", "swamp_hut_map",
+            "desert_village_map", "plains_village_map", "savanna_village_map", "snowy_village_map",
+            "taiga_village_map", "buried_treasure_map", "buried_ancient_city_map", "buried_mineshaft_map",
+            "desert_pyramid_map", "abandoned_camp_map", "warm_ocean_ruins_map");
+
     /** The longest {@code viewpoints.guestbook-interval-minutes} accepts: a day. */
     private static final int MAX_GUESTBOOK_INTERVAL_MINUTES = 1440;
 
@@ -486,6 +497,18 @@ public final class CamSettings {
     private double viewpointsStartDistance;
     /** Whether a spot is saved only in camera mode, {@code viewpoints.set-in-cam-only}. */
     private boolean viewpointsSetInCamOnly;
+    /** Whether a new spot of the menu gets its page before it is saved, {@code viewpoints.create-page}. */
+    private boolean viewpointsCreatePage;
+    /** The icons a spot may have, {@code viewpoints.icons}: keys of items without the namespace. */
+    private List<String> viewpointsIcons = DEFAULT_SPOT_ICONS;
+    /** Whether a spot of the menu has its page of options, {@code viewpoints.options.enabled}. */
+    private boolean spotOptionsEnabled;
+    /** What the owner may do on the page of the options, {@code viewpoints.options.<what>}. */
+    private boolean spotOptionRename;
+    private boolean spotOptionIcon;
+    private boolean spotOptionShare;
+    private boolean spotOptionDelete;
+    private boolean spotOptionMove;
     /** How long the same player at the same spot is no new view, {@code viewpoints.views-cooldown-minutes}. */
     private int viewsCooldownMinutes;
 
@@ -687,6 +710,8 @@ public final class CamSettings {
     private boolean bedrockInvitationForms;
     /** Whether the buttons in the chat say the command they run, {@code bedrock.chat-commands}. */
     private boolean bedrockChatCommands;
+    /** Whether Bedrock is shown the maps of 26.3 as themselves, {@code bedrock.map-icons}. */
+    private boolean bedrockMapIcons;
     /**
      * Whether a guest on Bedrock who sees through the eyes of his guide is
      * turned along with him rather than shown Geyser's camera,
@@ -962,6 +987,14 @@ public final class CamSettings {
                 MAX_GUESTBOOK_INTERVAL_MINUTES);
         viewpointsStartDistance = config.getDouble("viewpoints.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
         viewpointsSetInCamOnly = config.getBoolean("viewpoints.set-in-cam-only", true);
+        viewpointsCreatePage = config.getBoolean("viewpoints.create-page", true);
+        viewpointsIcons = readSpotIcons(config);
+        spotOptionsEnabled = config.getBoolean("viewpoints.options.enabled", true);
+        spotOptionRename = config.getBoolean("viewpoints.options.rename", true);
+        spotOptionIcon = config.getBoolean("viewpoints.options.icon", true);
+        spotOptionShare = config.getBoolean("viewpoints.options.share", true);
+        spotOptionDelete = config.getBoolean("viewpoints.options.delete", true);
+        spotOptionMove = config.getBoolean("viewpoints.options.move", false);
         viewsCooldownMinutes = config.getInt("viewpoints.views-cooldown-minutes", 10, 0, MAX_VIEWS_COOLDOWN_MINUTES);
         hideOres = config.getBoolean("hide-ores.enabled", true);
         readOreCovers(config);
@@ -1530,6 +1563,7 @@ public final class CamSettings {
                 : menu.equalsIgnoreCase("chest") ? BedrockMenu.CHEST : BedrockMenu.MIXED;
         bedrockInvitationForms = config.getBoolean("bedrock.invitation-forms", true);
         bedrockChatCommands = config.getBoolean("bedrock.chat-commands", true);
+        bedrockMapIcons = config.getBoolean("bedrock.map-icons", false);
         bedrockFollowTurn = config.getChoice("bedrock.follow-view", "camera", "camera", "turn")
                 .equalsIgnoreCase("turn");
         String glow = config.getString("bedrock.glow-particle", "end_rod");
@@ -2207,6 +2241,81 @@ public final class CamSettings {
     }
 
     /**
+     * Whether a new spot of the menu - after its name - gets a page of its
+     * own, with its icon, its name once more and whether it is public, before
+     * it is saved, {@code viewpoints.create-page}; if not, the name saves it.
+     */
+    public boolean isViewpointsCreatePage() {
+        return viewpointsCreatePage;
+    }
+
+    /**
+     * The icons a spot may have, {@code viewpoints.icons}, in their order:
+     * keys of items without the namespace, in small letters - also those this
+     * server does not know, which {@link de.elia.cameraplugin.spot.CamSpots#icons}
+     * leaves out.
+     */
+    public List<String> getViewpointsIcons() {
+        return viewpointsIcons;
+    }
+
+    /**
+     * {@code viewpoints.icons}: the keys of items, with or without
+     * {@code minecraft:}. Whether the server knows one is not asked here - an
+     * item of a later version is no mistake on an earlier one.
+     */
+    private static List<String> readSpotIcons(ConfigReader config) {
+        List<String> icons = new ArrayList<>();
+        for (String entry : config.getStringList("viewpoints.icons", DEFAULT_SPOT_ICONS)) {
+            String key = entry.trim().toLowerCase(Locale.ROOT);
+            if (key.startsWith("minecraft:")) {
+                key = key.substring("minecraft:".length());
+            }
+            if (!key.isEmpty() && !icons.contains(key)) {
+                icons.add(key);
+            }
+        }
+        return Collections.unmodifiableList(icons);
+    }
+
+    /**
+     * Whether a spot of the menu has its page of options - a right-click on
+     * it -, {@code viewpoints.options.enabled}; if not, a right-click shares
+     * it and a click with shift deletes it, as before there was the page.
+     */
+    public boolean isSpotOptionsEnabled() {
+        return isViewpointsEnabled() && spotOptionsEnabled;
+    }
+
+    /** Whether the owner may rename a spot on its page of options, {@code viewpoints.options.rename}. */
+    public boolean isSpotOptionRename() {
+        return spotOptionRename;
+    }
+
+    /** Whether the owner may give a spot another icon there, {@code viewpoints.options.icon}. */
+    public boolean isSpotOptionIcon() {
+        return spotOptionIcon;
+    }
+
+    /** Whether the owner may share a spot there, or make it public, {@code viewpoints.options.share}. */
+    public boolean isSpotOptionShare() {
+        return spotOptionShare && isViewpointsSharing();
+    }
+
+    /** Whether the owner may delete a spot there, {@code viewpoints.options.delete}. */
+    public boolean isSpotOptionDelete() {
+        return spotOptionDelete;
+    }
+
+    /**
+     * Whether the owner may move a spot there, to where his camera is,
+     * {@code viewpoints.options.move} - off unless switched on.
+     */
+    public boolean isSpotOptionMove() {
+        return spotOptionMove;
+    }
+
+    /**
      * How close, in blocks, a player out of camera mode has to be to a spot
      * to jump there, which starts camera mode for him; 0 while only who is in
      * camera mode may jump.
@@ -2602,6 +2711,15 @@ public final class CamSettings {
 
     public boolean isBedrockChatCommands() {
         return bedrockChatCommands;
+    }
+
+    /**
+     * Whether the menu shows Bedrock the maps 26.3 brings as themselves,
+     * {@code bedrock.map-icons}; if not, as an empty map, like the filled
+     * map, whose name Bedrock does not show.
+     */
+    public boolean isBedrockMapIcons() {
+        return bedrockMapIcons;
     }
 
     public boolean isBedrockFollowTurn() {

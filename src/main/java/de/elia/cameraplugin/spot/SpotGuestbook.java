@@ -223,6 +223,17 @@ public final class SpotGuestbook implements Listener {
         save();
     }
 
+    /** A spot its owner or an admin renamed: what happened to it stays news, under its new name. */
+    public void renamed(UUID owner, String key, String newKey) {
+        Map<String, News> own = news.get(owner);
+        News of = own == null || key.equals(newKey) ? null : own.remove(key);
+        if (of == null) {
+            return;
+        }
+        own.put(newKey, of);
+        save();
+    }
+
     private News newsOf(UUID owner, String key) {
         return news.computeIfAbsent(owner, id -> new LinkedHashMap<>()).computeIfAbsent(key, k -> new News());
     }

@@ -168,6 +168,30 @@ public final class PlayerRecord {
         dirty = true;
     }
 
+    /**
+     * Puts a spot in the place of one of his - renamed, moved, with another
+     * icon -, where that one stood in the order he saved them.
+     *
+     * @param key the {@link Spot#key()} of the one it replaces
+     * @return whether he had that one
+     */
+    public boolean replaceSpot(String key, Spot spot) {
+        if (!spots.containsKey(key)) {
+            return false;
+        }
+        Map<String, Spot> before = new LinkedHashMap<>(spots);
+        spots.clear();
+        for (Map.Entry<String, Spot> entry : before.entrySet()) {
+            if (entry.getKey().equals(key)) {
+                spots.put(spot.key(), spot);
+            } else {
+                spots.putIfAbsent(entry.getKey(), entry.getValue());
+            }
+        }
+        dirty = true;
+        return true;
+    }
+
     /** Takes a spot away, by {@link Spot#key()}; whether there was one. */
     public boolean removeSpot(String key) {
         if (spots.remove(key) == null) {

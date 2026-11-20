@@ -7538,6 +7538,28 @@ def spots_loeschen(bot, *namen):
     time.sleep(0.5)
 
 
+def spot_option(env, key, value):
+    """Einen Wert unter viewpoints.options in der config.yml des Testservers
+    setzen und neu laden. set_option sucht nur in einem Abschnitt der
+    obersten Ebene, und enabled steht unter viewpoints zweimal."""
+    datei = env.server / "plugins" / "CamFly" / "config.yml"
+    text = datei.read_text(encoding="utf-8")
+    kopf = re.search(r"(?m)^viewpoints:.*\n(?:(?:[ \t].*|)\n)*?  options:.*\n", text)
+    if kopf is None:
+        FIND.problem("viewpoints.options steht nicht in der config.yml des Testservers")
+        return
+    rest = text[kopf.end():]
+    # Der Abschnitt reicht bis zur naechsten Zeile, die weniger als vier Leerzeichen eingerueckt ist.
+    ende = re.search(r"(?m)^(?!    |\s*$)", rest)
+    schnitt = ende.start() if ende else len(rest)
+    block, n = re.subn(rf"(?m)^(    {re.escape(key)}:\s*).*$", rf"\g<1>{value}", rest[:schnitt])
+    if n != 1:
+        FIND.problem(f"viewpoints.options.{key} steht {n} Mal in der config.yml des Testservers")
+        return
+    datei.write_text(text[:kopf.end()] + block + rest[schnitt:], encoding="utf-8")
+    neu_laden(env)
+
+
 def aussichtspunkt_checks(env, bot):
     """viewpoints: /cam spot merkt sich Stellen mit Blickrichtung, und die
     Kamera springt dorthin - nur, wohin sie auch fliegen duerfte.
@@ -7563,8 +7585,10 @@ def aussichtspunkt_checks(env, bot):
     die Kamera bleibt, wo sie ist.
 
     Ein zu langer Name, ein voller Platz, ein unbekannter Punkt und das
-    Loeschen sagen, was los ist; ein Name, den es schon gibt, wandert, auch
-    wenn kein Platz mehr frei ist; mit max-per-player: 0 gibt es kein Limit.
+    Loeschen sagen, was los ist; ein Name, den es schon gibt - auch klein
+    geschrieben -, ueberschreibt den Punkt nicht und verschiebt ihn nicht,
+    sondern sagt, dass es ihn schon gibt; mit max-per-player: 0 gibt es kein
+    Limit.
     Sonst ist jeder Name mit 1 bis 16 Zeichen recht: "Mein Haus.1" mit
     Leerzeichen und Punkt geht zu setzen, anzuspringen, zu vervollstaendigen
     und zu loeschen und steht nach /cam reload wieder in der Liste, und
@@ -7731,9 +7755,17 @@ def aussichtspunkt_checks(env, bot):
         zeilen = befehl(bot, "/cam spot set Dritter")
         FIND.test("max-per-player: 2 - ein dritter Punkt hat keinen Platz",
                   gesagt(zeilen, r"Spot limit reached \(2\)"), zeige(zeilen))
+        def turm_in_datei():
+            treffer = re.search(r"(?m)^  turm:\n(?:    .*\n)+", datei_text())
+            return treffer.group(0) if treffer else ""
+
+        vorher = turm_in_datei()
         zeilen = befehl(bot, "/cam spot set turm")
-        FIND.test("max-per-player: 2 - ein Name, den es schon gibt, wandert trotzdem",
-                  gesagt(zeilen, r"Spot turm moved here\."), zeige(zeilen))
+        FIND.test("Ein Name, den es schon gibt, auch klein geschrieben: kein Ueberschreiben und kein Verschieben, "
+                  "sondern der Hinweis, dass es ihn schon gibt",
+                  gesagt(zeilen, r"You already have a spot called Turm - pick another name")
+                  and not gesagt(zeilen, r"moved here|saved") and vorher and turm_in_datei() == vorher,
+                  f"{zeige(zeilen)} / {vorher[:120]}")
         set_option(env, "max-per-player", "0")
         zeilen = befehl(bot, "/cam spot set Dritter")
         liste = befehl(bot, "/cam spot list")
@@ -7776,7 +7808,8 @@ def aussichtspunkt_checks(env, bot):
         FIND.test("/cam spot delete Mein Haus.1 und list - beide geloescht",
                   gesagt(zeilen, r"Spot Mein Haus\.1 deleted") and gesagt(zeilen, r"Spot list deleted"), zeige(zeilen))
         zeilen = befehl(bot, "/cam spot delete Turm")
-        FIND.test("/cam spot delete Turm - der Punkt ist geloescht", gesagt(zeilen, r"Spot turm deleted"),
+        # Er heisst noch Turm: set turm hat ihn weder verschoben noch umbenannt.
+        FIND.test("/cam spot delete Turm - der Punkt ist geloescht", gesagt(zeilen, r"Spot Turm deleted"),
                   zeige(zeilen))
         cam_on(bot)
         zeilen = befehl(bot, "/cam spot Turm")
@@ -10940,8 +10973,11 @@ def menue_checks(env, bot):
     Seite: drei Linksklicks auf ihren Knopf schalten von der Zeit der Welt
     ueber day und noon zu sunset - der Bot sieht 12000 -, ein Rechtsklick
     eine zurueck, und das Menue bleibt dabei offen. Aussichtspunkte, "Save a spot here" fragt im Chat
-    nach dem Namen, und die naechste Zeile speichert ihn; ein Linksklick auf
-    den Punkt springt hin, ein Klick mit Umschalt loescht ihn.
+    nach dem Namen; die naechste Zeile ist der Name, und die Seite des neuen
+    Punkts kommt - gespeichert ist er erst mit "Save spot". Ein Linksklick
+    auf den Punkt springt hin, ein Klick mit Umschalt loescht ihn nicht mehr:
+    das geht ueber seine Optionen (Rechtsklick), und dort erst nach einem
+    zweiten Klick auf "Delete for good".
 
     Unter dem Knopf der Statistik stehen die Zahlen des Bots, und er hat als
     op den Knopf der Admin-Seite. Darauf stehen die Liste und die Statistik
@@ -11137,7 +11173,20 @@ def menue_checks(env, bot):
                   zeige(zeilen))
         punkt = bot.server_pos()
         zeilen = befehl(bot, "Menue")
-        FIND.test("Die naechste Zeile im Chat ist der Name", gesagt(zeilen, r"Spot Menue saved\."), zeige(zeilen))
+        f = fenster()
+        FIND.test("Die naechste Zeile im Chat ist der Name: die Seite des neuen Punkts kommt, gespeichert ist er "
+                  "noch nicht",
+                  f.get("open") and "New spot: Menue" in (f.get("title") or "")
+                  and "Save spot" in item_text(f.get("slots", {}).get("26"))
+                  and not gesagt(zeilen, r"Spot Menue saved"), f"{f.get('title')} / {zeige(zeilen)}")
+        seit = bot.mark()
+        klick(26, warten=2.0)
+        zeilen = zeilen_seit(bot, seit)
+        f = fenster()
+        FIND.test("Save spot speichert ihn, und die Seite der Punkte zeigt ihn",
+                  gesagt(zeilen, r"Spot Menue saved\.") and "Spots" in (f.get("title") or "")
+                  and "Menue" in item_text(f.get("slots", {}).get("0")), f"{zeige(zeilen)} / {f.get('title')}")
+        bot.call("close_window", wait=10)
         bot.call("fly", wait=30, dx=-5, timeout=15000)
         time.sleep(1.0)
         menue()
@@ -11151,7 +11200,27 @@ def menue_checks(env, bot):
         seit = bot.mark()
         klick(0, mode=1)
         zeilen = zeilen_seit(bot, seit)
-        FIND.test("Ein Klick mit Umschalt loescht den Punkt", gesagt(zeilen, r"Spot Menue deleted"), zeige(zeilen))
+        FIND.test("Ein Klick mit Umschalt loescht den Punkt nicht mehr", not gesagt(zeilen, r"deleted")
+                  and "Menue" in item_text(fenster().get("slots", {}).get("0")), zeige(zeilen))
+        klick(0, button=1)
+        f = fenster()
+        FIND.test("Ein Rechtsklick oeffnet seine Optionen", "Options: Menue" in (f.get("title") or ""),
+                  str(f.get("title")))
+        loeschen = next((p for p, i in f.get("slots", {}).items() if item_text(i).split("\n")[0] == "Delete"), None)
+        seit = bot.mark()
+        if loeschen is not None:
+            klick(loeschen)
+        f = fenster()
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Delete fragt noch einmal: dort steht jetzt Keep it, unten Delete for good, geloescht ist nichts",
+                  loeschen is not None and not gesagt(zeilen, r"deleted")
+                  and "Keep it" in item_text(f.get("slots", {}).get(loeschen))
+                  and "Delete for good" in item_text(f.get("slots", {}).get("22")),
+                  f"{loeschen} / {sorted(f.get('slots', {}))}")
+        klick(22, warten=2.0)
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Delete for good loescht ihn, und die Seite der Punkte ist wieder da",
+                  gesagt(zeilen, r"Spot Menue deleted") and "Spots" in (fenster().get("title") or ""), zeige(zeilen))
         bot.call("close_window", wait=10)
 
         menue()
@@ -11694,17 +11763,23 @@ def spotreiter_checks(env, bot):
     entstand, und wie nah man fuer den Sprung sein muss; das Buch sagt, wie viele Punkte er hat und wie viele noch gehen.
     Der Filter zeigt alle Sortierungen, die gewaehlte markiert, und sortiert
     nach dem Namen, nach den Aufrufen (noch keiner hat einen, "Views: 0")
-    und dann nach der Reichweite, die naechsten zuerst. Ein Rechtsklick auf das Buch fragt nach
-    einem oeffentlichen Punkt, Gamma ist danach oeffentlich und steht bei den
-    eigenen - dort mit "Public" darunter - und bei den oeffentlichen, als
-    seiner. Der zweite Spieler sieht ihn dort und liked ihn mit einem
+    und dann nach der Reichweite, die naechsten zuerst. Das Buch fragt nach
+    dem Namen, dann kommt die Seite des neuen Punkts: oben der Punkt, in der
+    Mitte Umbenennen, das Symbol und Teilen, unten Abbrechen und Speichern.
+    Teilen oeffnet dieselbe Seite wie bei einem gespeicherten; dort
+    oeffentlich gemacht, gespeichert ist Gamma danach oeffentlich und steht
+    bei den eigenen - dort mit "Public" darunter - und bei den oeffentlichen,
+    als seiner. Der zweite Spieler sieht ihn dort und liked ihn mit einem
     Rechtsklick; danach steht das Like darunter, und der Punkt glaenzt. Ein
     Linksklick springt wie zu einem eigenen Punkt: ohne Cam-Modus, aber nah
     dran, startet er dort, und seine Kamera steht danach am Punkt. Der Filter des Bots auf den
     oeffentlichen kommt nach drei Klicks zu den meisten Likes, nach vier zu
     den meisten Aufrufen - der Sprung des anderen hat Gamma einen gegeben. Umschalt-Klick
     auf den eigenen oeffentlichen loescht ihn dort nicht, ein Rechtsklick
-    nimmt ihn offline - bei den eigenen bleibt er.
+    oeffnet seine Optionen: Umbenennen, Symbol, Teilen und Loeschen,
+    Verschieben ist voreingestellt aus. Teilen oeffnet die Seite zum Teilen,
+    deren Leuchtfeuer ihn privat und wieder oeffentlich macht; zurueck geht
+    es zu den Optionen.
 
     Bietet der Bot Alpha an, glaenzt beim anderen der Knopf der Punkte und
     sagt, dass einer wartet, und er oeffnet auf dem Reiter der geteilten: vorn
@@ -11819,12 +11894,40 @@ def spotreiter_checks(env, bot):
                   namen(f)[:3] == ["Beta", "Alpha", "Cee"]
                   and "» nearest first" in item_text(f.get("slots", {}).get("51")), str(namen(f)))
         seit = bot.mark()
-        klick(bot, 53, button=1)
+        klick(bot, 53)
         befehl(bot, "Gamma")
+        f = fenster(bot)
+        knopf = f.get("slots", {})
+        FIND.test("Das Buch fragt nach dem Namen, dann die Seite des neuen Punkts: oben der Punkt, Umbenennen (11), "
+                  "Symbol (13), Teilen - noch privat - (15), Abbrechen (18) und Speichern (26, unten rechts)",
+                  "New spot: Gamma" in (f.get("title") or "") and "Gamma" in item_text(knopf.get("4"))
+                  and "Rename" in item_text(knopf.get("11")) and "Icon: Map" in item_text(knopf.get("13"))
+                  and "Share or make public" in item_text(knopf.get("15")) and "Private" in item_text(knopf.get("15"))
+                  and "Cancel" in item_text(knopf.get("18")) and "Save spot" in item_text(knopf.get("26")),
+                  f"{f.get('title')} / {[(k, item_text(v).split(chr(10))[0]) for k, v in sorted(knopf.items())]}")
+        klick(bot, 15)
+        f = fenster(bot)
+        FIND.test("Teilen oeffnet dieselbe Seite wie bei einem gespeicherten: die Spieler, unten rechts (53) der "
+                  "Knopf, der ihn oeffentlich macht",
+                  "Share Gamma" in (f.get("title") or "") and any(ZUSCHAUER_NAME in n for n in namen(f))
+                  and "Click: make public" in item_text(f.get("slots", {}).get("53")),
+                  f"{f.get('title')} / {namen(f)} / {item_text(f.get('slots', {}).get('53'))}")
+        klick(bot, 53)
+        klick(bot, 45)
+        f = fenster(bot)
+        knopf = f.get("slots", {})
+        FIND.test("Oeffentlich gemacht und zurueck: der Knopf sagt Public und glaenzt, oben steht \"Public, 0 likes\" "
+                  "- oeffentlich ist er erst nach dem Speichern",
+                  "New spot: Gamma" in (f.get("title") or "") and "Public" in item_text(knopf.get("15"))
+                  and (knopf.get("15") or {}).get("glint") is True and "Public, 0 likes" in item_text(knopf.get("4"))
+                  and not gesagt(zeilen_seit(bot, seit), r"is public now"),
+                  f"{item_text(knopf.get('15'))} / {item_text(knopf.get('4'))}")
+        klick(bot, 26)
         zeilen = zeilen_seit(bot, seit)
-        FIND.test("Rechtsklick auf das Buch: ein oeffentlicher Punkt",
-                  gesagt(zeilen, r"Type the public spot's name in chat") and gesagt(zeilen, r"Spot Gamma saved\.")
+        FIND.test("Save spot: ein oeffentlicher Punkt",
+                  gesagt(zeilen, r"Type the spot name in chat") and gesagt(zeilen, r"Spot Gamma saved\.")
                   and gesagt(zeilen, r"Spot Gamma is public now"), zeige(zeilen))
+        bot.call("close_window", wait=10)
         f = punkte(bot)
         platz = platz_von(f, "Gamma")
         eigene = item_text(f.get("slots", {}).get(str(platz))) if platz is not None else ""
@@ -11880,31 +11983,36 @@ def spotreiter_checks(env, bot):
         FIND.test("Umschalt-Klick auf den eigenen oeffentlichen loescht ihn dort nicht",
                   not gesagt(geklickt, r"Spot Gamma deleted")
                   and any("Gamma (yours)" in n for n in namen(fenster(bot))), zeige(geklickt))
-        seit = bot.mark()
         klick(bot, platz_von(fenster(bot), "Gamma (yours)") or 0, button=1)
-        zeilen = zeilen_seit(bot, seit)
-        bot.call("close_window", wait=10)
-        f = punkte(bot)
-        platz = platz_von(f, "Gamma")
-        eigene = item_text(f.get("slots", {}).get(str(platz))) if platz is not None else ""
-        FIND.test("Rechtsklick nimmt den eigenen oeffentlichen offline - bei den eigenen bleibt er",
-                  gesagt(zeilen, r"Spot Gamma is private again") and platz is not None and "Public" not in eigene,
-                  f"{zeige(zeilen)} / {namen(f)}")
-        klick(bot, platz if platz is not None else 0, button=1)
+        f = fenster(bot)
+        knopf = f.get("slots", {})
+        FIND.test("Rechtsklick auf den eigenen oeffentlichen oeffnet seine Optionen: oben der Punkt mit \"Public\", "
+                  "Umbenennen (10), Symbol (12), Teilen (14) und Loeschen (16) - Verschieben ist voreingestellt aus -, "
+                  "zurueck (18)",
+                  "Options: Gamma" in (f.get("title") or "") and "Public, 1 likes" in item_text(knopf.get("4"))
+                  and "Rename" in item_text(knopf.get("10")) and "Change icon" in item_text(knopf.get("12"))
+                  and "Share or make public" in item_text(knopf.get("14")) and "Delete" in item_text(knopf.get("16"))
+                  and not any("Move here" in item_text(i) for i in knopf.values()) and "18" in knopf,
+                  f"{f.get('title')} / {[(k, item_text(v).split(chr(10))[0]) for k, v in sorted(knopf.items())]}")
+        klick(bot, 14)
         f = fenster(bot)
         oeffentlich = item_text(f.get("slots", {}).get("53"))
-        FIND.test("Rechtsklick auf einen eigenen oeffnet die Seite zum Teilen: die Spieler ab Platz 0, unten rechts "
-                  "(53) der Knopf, der ihn oeffentlich macht",
+        FIND.test("Teilen oeffnet die Seite zum Teilen: die Spieler ab Platz 0, unten rechts (53) der Knopf, der ihn "
+                  "privat oder oeffentlich macht - er ist oeffentlich",
                   "Share Gamma" in (f.get("title") or "") and any(ZUSCHAUER_NAME in n for n in namen(f))
-                  and "Public" not in item_text(f.get("slots", {}).get("0"))
-                  and "Public" in oeffentlich and "Click: make public" in oeffentlich,
+                  and "Public" in oeffentlich and "Click: make private" in oeffentlich,
                   f"{f.get('title')} / {namen(f)} / {oeffentlich}")
+        seit = bot.mark()
+        klick(bot, 53)
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Ein Klick darauf macht ihn privat", gesagt(zeilen, r"Spot Gamma is private again")
+                  and "Click: make public" in item_text(fenster(bot).get("slots", {}).get("53")), zeige(zeilen))
         seit = bot.mark()
         klick(bot, 53)
         zeilen = zeilen_seit(bot, seit)
         f = fenster(bot)
         oeffentlich = f.get("slots", {}).get("53") or {}
-        FIND.test("Ein Klick darauf macht ihn oeffentlich, der Knopf glaenzt und bleibt auf seinem Platz",
+        FIND.test("Noch ein Klick macht ihn oeffentlich, der Knopf glaenzt und bleibt auf seinem Platz",
                   gesagt(zeilen, r"Spot Gamma is public now") and "Click: make private" in item_text(oeffentlich)
                   and oeffentlich.get("glint") is True, f"{zeige(zeilen)} / {item_text(oeffentlich)}")
         seit = bot.mark()
@@ -11912,6 +12020,10 @@ def spotreiter_checks(env, bot):
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Noch ein Klick macht ihn wieder privat", gesagt(zeilen, r"Spot Gamma is private again"),
                   zeige(zeilen))
+        klick(bot, 45)
+        f = fenster(bot)
+        FIND.test("Zurueck fuehrt von der Seite zum Teilen zu seinen Optionen", "Options: Gamma" in (f.get("title") or ""),
+                  str(f.get("title")))
         bot.call("close_window", wait=10)
 
         befehl(bot, f"/cam spot share Alpha {ZUSCHAUER_NAME}")
@@ -12029,8 +12141,7 @@ def spotmoderation_checks(env, bot):
     eines neuen Punkts sagt ihm, dass er keine neuen speichern darf,
     /cam spot share ... all, dass er nichts oeffentlich machen darf, der
     Sprung zum oeffentlichen Punkt AdmPub des Bots, dass er keine
-    oeffentlichen anschauen darf; einen Punkt verschieben und teilen darf er
-    weiter. In seinem Spot-Menue zeigt der Reiter der oeffentlichen nur das
+    oeffentlichen anschauen darf; einen Punkt teilen darf er weiter. In seinem Spot-Menue zeigt der Reiter der oeffentlichen nur das
     graue Zeichen, dass er gesperrt ist, der der privaten seine Punkte. Der
     Knopf glaenzt danach, und auf seiner Seite hebt der Milcheimer (35) die
     Einschraenkung auf: er darf wieder speichern.
@@ -12038,6 +12149,10 @@ def spotmoderation_checks(env, bot):
     Geht er offline, steht er weiter in der Liste, und ein Umschalt-Klick
     loescht seine Punkte aus seiner Datei. Die Koepfe der Seite fragen nicht
     bei Mojang nach: die Spieler dieses Servers haben keine Skin.
+
+    Das alles mit viewpoints.options.enabled: false, den Klicks von frueher;
+    die Seite der Optionen, die sonst Herunternehmen und Loeschen hat, prueft
+    spotoptionen.
     """
     def fenster(client):
         return client.call("window_slots", wait=10)
@@ -12075,6 +12190,7 @@ def spotmoderation_checks(env, bot):
     datei = env.server / "plugins" / "CamFly" / "playerdata" / "stats" / f"{offline_uuid(ZUSCHAUER_NAME)}.yml"
     log_vorher = len(server_log(env))
     try:
+        spot_option(env, "enabled", "false")
         zuschauer.start()
         if not FIND.test("Zweiter Spieler fuer die Moderation kommt herein",
                          zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
@@ -12190,9 +12306,8 @@ def spotmoderation_checks(env, bot):
         FIND.test("Eingeschraenkt: keinen oeffentlichen Punkt anschauen",
                   gesagt(zeilen, r"You may not jump to public spots permanently")
                   and not im_cam_modus(bot, ZUSCHAUER_NAME), zeige(zeilen))
-        zeilen = befehl(zuschauer, "/cam spot set ModC") + befehl(zuschauer, f"/cam spot share ModB {BOT_NAME}")
-        FIND.test("Verschieben und teilen darf er weiter", gesagt(zeilen, r"Spot ModC moved here")
-                  and gesagt(zeilen, rf"offered|{BOT_NAME}"), zeige(zeilen))
+        zeilen = befehl(zuschauer, f"/cam spot share ModB {BOT_NAME}")
+        FIND.test("Teilen darf er weiter", gesagt(zeilen, rf"offered|{BOT_NAME}"), zeige(zeilen))
 
         befehl(zuschauer, "/cam menu", warten=1.0)
         klick(zuschauer, 10)
@@ -12313,8 +12428,417 @@ def spotmoderation_checks(env, bot):
                 spots_loeschen(zuschauer, "ModA", "ModB", "ModC", "ModD")
                 zuschauer.stop()
             einschraenkungen_weg(env, "spot-bans.yml")
+            spot_option(env, "enabled", "true")
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test der Moderation: {exc}")
+
+
+def spotoptionen_checks(env, bot):
+    """viewpoints.create-page, -icons und -options: wie ein Punkt im Menue
+    entsteht, welches Symbol er hat und was seine Optionen koennen.
+
+    Voreingestellt stehen create-page: true, die Symbole mit filled_map und
+    map vorn, options mit enabled, rename, icon, share und delete an und move
+    aus, dazu bedrock.map-icons: false da - nachgesehen in der Datei, die das
+    Plugin mitbringt.
+
+    Ein neuer Punkt: das Buch fragt nach dem Namen. Einen, den er schon hat,
+    fragt der Chat gleich noch einmal ab - die naechste Zeile ist der naechste
+    Versuch -, dann kommt seine Seite; der Punkt oben zeigt "Views: 0" und,
+    oeffentlich gestellt, auch "Public, 0 likes".
+    Umbenennen dort fragt im Chat; ein Name, den er schon hat (auch klein
+    geschrieben), geht nicht, cancel ruft es ab - beide Male kommt die Seite
+    mit dem alten Namen wieder -, ein neuer steht danach im Titel. Die Seite
+    der Symbole hat auf 26.2 nur die Karte und die leere Karte, die Karte
+    markiert; die leere gewaehlt, zeigt der Punkt oben sie, und der Knopf -
+    ein Rahmen, keine der Karten - nennt sie. Auch Change icon in den
+    Optionen ist ein Rahmen. Teilen oeffnet dieselbe Seite wie bei einem
+    gespeicherten Punkt: der zweite Spieler gewaehlt, steht er dort als
+    angeboten, sobald der Punkt gespeichert ist - erfahren tut er noch
+    nichts -, und die Seite des Punkts sagt oben, am Knopf und an Speichern,
+    wem er angeboten wird. Erst das Speichern bietet ihn an: der andere
+    bekommt die Einladung, der Besitzer hoert, dass sie raus ist.
+    Abbrechen speichert nichts. Ein zweiter Anlauf mit Speichern: icon: map
+    steht in der Datei, und die Liste zeigt ihn als leere Karte.
+
+    Seine Optionen (Rechtsklick): Umbenennen in einen Namen, den er schon hat,
+    geht nicht; in einen neuen schon - die Aufrufe bleiben, und der
+    oeffentliche steht unter dem neuen Namen in shared-spots.yml, der alte
+    nicht mehr. Das Symbol wechselt zur Karte, die Datei sagt filled_map.
+    Mit options.move: true steht "Move here" da: ohne Cam-Modus mit "Only in
+    cam mode" darunter, und ein Klick sagt, dass es nur dort geht - der Punkt
+    bleibt -; im Cam-Modus wandert er an die Stelle der Kamera und behaelt
+    sein Symbol. Delete und gleich Keep it lassen ihn stehen. Mit
+    options.rename: false fehlt Umbenennen. Mit options.enabled: false stehen
+    unter dem Punkt die Klicks von frueher, und der Rechtsklick oeffnet wieder
+    die Seite zum Teilen. Mit create-page: false speichert der Name im Chat
+    den Punkt sofort, ohne Seite.
+
+    Auf der Admin-Seite der Punkte steht unter einem Punkt des Bots Linksklick
+    hin, Rechtsklick Optionen; seine Optionen fuer Admins haben Umbenennen,
+    Symbol, Privat machen und Loeschen. Umbenannt sagt der Chat es dem Admin,
+    Privat machen nimmt den oeffentlichen herunter.
+    """
+    namen_der_punkte = ("Optneu", "Optalt", "Optzwei", "Optdrei", "Optvier", "Sofort")
+
+    def fenster():
+        return bot.call("window_slots", wait=10)
+
+    def klick(slot, button=0, mode=0, warten=1.5):
+        bot.call("click_window", wait=15, slot=int(slot), button=button, mode=mode)
+        time.sleep(warten)
+
+    def titel(f):
+        return f.get("title") or ""
+
+    def knoepfe(f):
+        """Der Name jedes Items im Fenster, nach seinem Platz."""
+        return {k: item_text(i).split("\n")[0] for k, i in (f.get("slots") or {}).items()}
+
+    def platz_mit(f, name):
+        return next((k for k, n in sorted(knoepfe(f).items(), key=lambda e: int(e[0])) if n == name), None)
+
+    def item(f, platz):
+        return (f.get("slots") or {}).get(str(platz)) or {}
+
+    def punkte():
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(10)
+        return fenster()
+
+    def optionen(name):
+        f = punkte()
+        wo = platz_mit(f, name)
+        if wo is None:
+            return f
+        klick(wo, button=1)
+        return fenster()
+
+    def abschnitt(schluessel):
+        treffer = re.search(rf"(?m)^  {re.escape(schluessel)}:\n(?:    .*\n)+", spot_datei_des_bots(env))
+        return treffer.group(0) if treffer else ""
+
+    def geteilt():
+        datei = env.server / "plugins" / "CamFly" / "playerdata" / "shared-spots.yml"
+        return datei.read_text(encoding="utf-8") if datei.exists() else ""
+
+    if not FIND.test("Cam-Modus ist vor dem Test der Optionen der Punkte aus", cam_off(bot), ""):
+        return
+    heim = bot.server_pos()
+    if heim is None:
+        return
+    x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
+    console(env, f"fill {_floor(x) - 2} {y} {_floor(z) - 2} {_floor(x) + 2} {y + 6} {_floor(z) + 2} minecraft:air",
+            pause=0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    try:
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Einladung kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
+        quelle = quelle_config(env)
+        FIND.test("Voreingestellt stehen viewpoints.create-page: true, icons mit filled_map und map vorn, options "
+                  "mit enabled, rename, icon, share und delete an und move aus, und bedrock.map-icons: false da",
+                  re.search(r"(?m)^  create-page:\s*true\s*$", quelle) is not None
+                  and re.search(r"(?m)^  icons:\s*\n\s*- filled_map\s*\n\s*- map\s*\n", quelle) is not None
+                  and re.search(r"(?m)^  options:\s*\n(?:\s*#.*\n)*\s*enabled:\s*true\s*\n(?:\s*#.*\n)*"
+                                r"\s*rename:\s*true\s*\n(?:\s*#.*\n)*\s*icon:\s*true\s*\n(?:\s*#.*\n)*"
+                                r"\s*share:\s*true\s*\n(?:\s*#.*\n)*\s*delete:\s*true\s*\n(?:\s*#.*\n)*"
+                                r"\s*move:\s*false\s*$", quelle) is not None
+                  and re.search(r"(?m)^  map-icons:\s*false\s*$", quelle) is not None, "")
+        spots_loeschen(bot, *namen_der_punkte)
+        hinstellen(bot, x, y, z)
+        befehl(bot, "/cam spot set Optalt")
+
+        # --- Ein neuer Punkt und seine Seite ---
+        punkte()
+        seit = bot.mark()
+        klick(53)
+        befehl(bot, "OPTALT")
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Ein Name, den er schon hat (gross geschrieben): der Hinweis, und der Chat fragt gleich noch "
+                  "einmal - keine Seite, kein neuer Klick noetig",
+                  gesagt(zeilen, r"You already have a spot called Optalt")
+                  and gesagt(zeilen, r"Type another name in chat") and not fenster().get("open"), zeige(zeilen))
+        befehl(bot, "Optneu")
+        f = fenster()
+        vorschau = item_text(item(f, 4))
+        FIND.test("Die naechste Zeile ist der naechste Versuch: die Seite des neuen Punkts, oben mit \"Views: 0\" "
+                  "und ohne Likes, solange er privat ist",
+                  "New spot: Optneu" in titel(f) and "Views: 0" in vorschau and "likes" not in vorschau,
+                  f"{titel(f)} / {vorschau}")
+        # Ueber die Seite zum Teilen oeffentlich und wieder privat.
+        klick(15)
+        klick(53)
+        klick(45)
+        vorschau = item_text(item(fenster(), 4))
+        FIND.test("Oeffentlich gestellt zeigt die Vorschau auch die Likes, 0", "Public, 0 likes" in vorschau
+                  and "Views: 0" in vorschau, vorschau)
+        klick(15)
+        klick(53)
+        klick(45)
+        seit = bot.mark()
+        klick(11)
+        befehl(bot, "optalt")
+        zeilen = zeilen_seit(bot, seit)
+        f = fenster()
+        FIND.test("Umbenennen auf der Seite in einen Namen, den er schon hat (klein geschrieben): der Hinweis, und "
+                  "die Seite kommt mit dem alten Namen wieder",
+                  gesagt(zeilen, r"Type the new name of Optneu") and gesagt(zeilen, r"You already have a spot called "
+                                                                                  r"Optalt")
+                  and "New spot: Optneu" in titel(f), f"{zeige(zeilen)} / {titel(f)}")
+        klick(11)
+        zeilen = befehl(bot, "cancel")
+        f = fenster()
+        FIND.test("cancel ruft das Umbenennen ab, und die Seite ist wieder da",
+                  gesagt(zeilen, r"Cancelled") and "New spot: Optneu" in titel(f), f"{zeige(zeilen)} / {titel(f)}")
+        klick(11)
+        befehl(bot, "Optzwei")
+        f = fenster()
+        FIND.test("Ein neuer Name steht danach im Titel", "New spot: Optzwei" in titel(f), titel(f))
+        klick(13)
+        f = fenster()
+        k = knoepfe(f)
+        # Welches Item es ist, sagt mineflayer nur mit den Namen von 26.1, die
+        # auf 26.2 nicht stimmen: verglichen wird mit den Items dieser Seite.
+        karte, leer = item(f, 0).get("name"), item(f, 1).get("name")
+        FIND.test("Die Seite der Symbole: auf 26.2 nur die Karte und die leere Karte, zwei verschiedene Items, die "
+                  "Karte markiert",
+                  "Icon: Optzwei" in titel(f) and k.get("0") == "Map" and k.get("1") == "Empty Map"
+                  and not any(int(p) < 45 and int(p) > 1 for p in k)
+                  and item(f, 0).get("glint") is True and not item(f, 1).get("glint")
+                  and karte is not None and leer is not None and karte != leer,
+                  f"{titel(f)} / {k} / {karte} {leer}")
+        klick(1)
+        f = fenster()
+        FIND.test("Die leere Karte gewaehlt: zurueck auf der Seite, der Punkt oben zeigt sie, der Knopf (ein Rahmen, "
+                  "keine der Karten) nennt sie",
+                  "New spot: Optzwei" in titel(f) and item(f, 4).get("name") == leer
+                  and item(f, 13).get("name") not in (None, karte, leer)
+                  and "Icon: Empty Map" in item_text(item(f, 13)),
+                  f"{titel(f)} / {item(f, 4).get('name')} / {item_text(item(f, 13))}")
+        seit = bot.mark()
+        klick(18)
+        zeilen = zeilen_seit(bot, seit)
+        f = fenster()
+        liste = befehl(bot, "/cam spot list")
+        FIND.test("Abbrechen speichert nichts, und die Seite der Punkte ist wieder da",
+                  gesagt(zeilen, r"Cancelled") and "Spots" in titel(f) and not gesagt(liste, r"Optzwei"),
+                  f"{zeige(zeilen)} / {titel(f)} / {zeige(liste)}")
+        bot.call("close_window", wait=10)
+        punkte()
+        klick(53)
+        befehl(bot, "Optzwei")
+        klick(13)
+        klick(1)
+        klick(15)
+        f = fenster()
+        wer = platz_mit(f, ZUSCHAUER_NAME)
+        seit_dort = zuschauer.mark()
+        if wer is not None:
+            klick(wer)
+        f = fenster()
+        FIND.test("Teilen auf der Seite des neuen Punkts: der andere gewaehlt sagt \"Offered once the spot is saved\" "
+                  "- er selbst weiss noch nichts",
+                  "Share Optzwei" in titel(f) and wer is not None
+                  and "Offered once the spot is saved" in item_text(item(f, wer))
+                  and not gesagt(zeilen_seit(zuschauer, seit_dort), r"offers you"),
+                  f"{titel(f)} / {wer} / {item_text(item(f, wer or 0))}")
+        klick(45)
+        f = fenster()
+        FIND.test("Zurueck auf der Seite: oben, am Knopf Teilen und an Speichern steht, wem er angeboten wird",
+                  "New spot: Optzwei" in titel(f) and f"Offered to: {ZUSCHAUER_NAME}" in item_text(item(f, 4))
+                  and ZUSCHAUER_NAME in item_text(item(f, 15))
+                  and f"Then offers it to: {ZUSCHAUER_NAME}" in item_text(item(f, 26)),
+                  f"{item_text(item(f, 4))} / {item_text(item(f, 15))} / {item_text(item(f, 26))}")
+        seit = bot.mark()
+        klick(26, warten=2.0)
+        zeilen = zeilen_seit(bot, seit)
+        dort = zeilen_seit(zuschauer, seit_dort)
+        FIND.test("Erst mit dem Speichern bekommt der andere die Einladung, und der Besitzer hoert, dass sie raus ist",
+                  gesagt(dort, rf"{BOT_NAME} offers you the spot Optzwei")
+                  and gesagt(zeilen, rf"Offered Optzwei to {ZUSCHAUER_NAME}"), f"{zeige(dort)} / {zeige(zeilen)}")
+        f = fenster()
+        wo = platz_mit(f, "Optzwei")
+        FIND.test("Speichern: icon: map steht in der Datei, und die Liste zeigt ihn als leere Karte",
+                  gesagt(zeilen, r"Spot Optzwei saved\.")
+                  and re.search(r"(?m)^    icon:\s*map\s*$", abschnitt("optzwei")) is not None
+                  and wo is not None and item(f, wo).get("name") == leer,
+                  f"{zeige(zeilen)} / {abschnitt('optzwei')[-80:]} / {wo}")
+        bot.call("close_window", wait=10)
+
+        # --- Seine Optionen ---
+        befehl(bot, "/cam spot Optzwei", warten=2.5)
+        cam_off(bot)
+        befehl(bot, "/cam spot share Optzwei all")
+        f = optionen("Optzwei")
+        FIND.test("Rechtsklick oeffnet seine Optionen", "Options: Optzwei" in titel(f), titel(f))
+        klick(platz_mit(f, "Rename") or 10)
+        zeilen = befehl(bot, "Optalt")
+        f = fenster()
+        FIND.test("Umbenennen in einen Namen, den er schon hat: geht nicht, die Optionen kommen wieder",
+                  gesagt(zeilen, r"You already have a spot called Optalt") and "Options: Optzwei" in titel(f),
+                  f"{zeige(zeilen)} / {titel(f)}")
+        klick(platz_mit(f, "Rename") or 10)
+        zeilen = befehl(bot, "Optdrei")
+        f = fenster()
+        aufrufe = re.search(r"Views: (\d+)", item_text(item(f, 4)))
+        FIND.test("Umbenennen in einen neuen Namen: die Aufrufe bleiben, und der oeffentliche steht unter dem neuen "
+                  "Namen in der Datei des Spielers und in shared-spots.yml",
+                  gesagt(zeilen, r"Spot Optzwei is now called Optdrei") and "Options: Optdrei" in titel(f)
+                  and aufrufe is not None and aufrufe.group(1) == "1" and "Public, 0 likes" in item_text(item(f, 4))
+                  and abschnitt("optdrei") and not abschnitt("optzwei")
+                  and "name: Optdrei" in geteilt() and "Optzwei" not in geteilt(),
+                  f"{zeige(zeilen)} / {titel(f)} / {item_text(item(f, 4))}")
+        rahmen = platz_mit(f, "Change icon")
+        FIND.test("Change icon ist ein Rahmen, keine der Karten - die zeigt der Punkt oben",
+                  rahmen is not None and item(f, rahmen).get("name") not in (None, karte, leer)
+                  and item(f, 4).get("name") == leer, f"{rahmen} / {item(f, rahmen or 0).get('name')}")
+        klick(rahmen or 12)
+        f = fenster()
+        FIND.test("Change icon: die Seite der Symbole, die leere Karte markiert",
+                  "Icon: Optdrei" in titel(f) and item(f, 1).get("glint") is True, titel(f))
+        seit = bot.mark()
+        klick(0)
+        zeilen = zeilen_seit(bot, seit)
+        f = fenster()
+        FIND.test("Die Karte gewaehlt: der Chat sagt es, die Optionen zeigen sie, die Datei sagt filled_map",
+                  gesagt(zeilen, r"Spot Optdrei now shows as Map") and "Options: Optdrei" in titel(f)
+                  and item(f, 4).get("name") == karte
+                  and re.search(r"(?m)^    icon:\s*filled_map\s*$", abschnitt("optdrei")) is not None,
+                  f"{zeige(zeilen)} / {titel(f)} / {item(f, 4).get('name')}")
+        bot.call("close_window", wait=10)
+
+        spot_option(env, "move", "true")
+        vorher = abschnitt("optdrei")
+        f = optionen("Optdrei")
+        verschieben = platz_mit(f, "Move here")
+        FIND.test("options.move: true - Move here steht da, ohne Cam-Modus mit \"Only in cam mode\" darunter",
+                  verschieben is not None and "Only in cam mode" in item_text(item(f, verschieben)),
+                  str(knoepfe(f)))
+        seit = bot.mark()
+        if verschieben is not None:
+            klick(verschieben)
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Ohne Cam-Modus sagt Move here, dass es nur dort geht, und der Punkt bleibt",
+                  gesagt(zeilen, r"Spot Optdrei moves only in cam mode") and abschnitt("optdrei") == vorher,
+                  zeige(zeilen))
+        bot.call("close_window", wait=10)
+        if FIND.test("Cam-Modus fuer Move here gestartet", cam_on(bot), ""):
+            bot.call("fly", wait=30, dy=3, timeout=6000)
+            time.sleep(1.0)
+            kamera = bot.server_pos()
+            f = optionen("Optdrei")
+            verschieben = platz_mit(f, "Move here")
+            seit = bot.mark()
+            if verschieben is not None:
+                klick(verschieben, warten=2.0)
+            zeilen = zeilen_seit(bot, seit)
+            teil = abschnitt("optdrei")
+            hoehe = re.search(r"(?m)^    y:\s*(-?[\d.]+)", teil)
+            FIND.test("Im Cam-Modus wandert der Punkt an die Stelle der Kamera und behaelt sein Symbol",
+                      gesagt(zeilen, r"Spot Optdrei moved here") and hoehe is not None and kamera is not None
+                      and abs(float(hoehe.group(1)) - kamera[1]) < 0.6
+                      and re.search(r"(?m)^    icon:\s*filled_map\s*$", teil) is not None
+                      and "Options: Optdrei" in titel(fenster()), f"{zeige(zeilen)} / {teil[:200]} / {kamera}")
+            bot.call("close_window", wait=10)
+            cam_off(bot)
+        spot_option(env, "move", "false")
+
+        f = optionen("Optdrei")
+        loeschen = platz_mit(f, "Delete")
+        if loeschen is not None:
+            klick(loeschen)
+            klick(loeschen)
+        f = fenster()
+        FIND.test("Delete und gleich Keep it lassen ihn stehen", loeschen is not None
+                  and knoepfe(f).get(loeschen) == "Delete" and "22" not in (f.get("slots") or {})
+                  and abschnitt("optdrei") != "", str(knoepfe(f)))
+        bot.call("close_window", wait=10)
+        spot_option(env, "rename", "false")
+        f = optionen("Optdrei")
+        FIND.test("options.rename: false - Umbenennen fehlt, Symbol und Loeschen bleiben",
+                  "Options: Optdrei" in titel(f) and platz_mit(f, "Rename") is None
+                  and platz_mit(f, "Change icon") is not None and platz_mit(f, "Delete") is not None, str(knoepfe(f)))
+        bot.call("close_window", wait=10)
+        spot_option(env, "rename", "true")
+        spot_option(env, "enabled", "false")
+        f = punkte()
+        wo = platz_mit(f, "Optdrei")
+        unter = item_text(item(f, wo)) if wo is not None else ""
+        if wo is not None:
+            klick(wo, button=1)
+        f = fenster()
+        FIND.test("options.enabled: false - unter dem Punkt die Klicks von frueher, und der Rechtsklick oeffnet die "
+                  "Seite zum Teilen",
+                  "Shift-click: delete" in unter and "Right-click: share" in unter and "Share Optdrei" in titel(f),
+                  f"{unter} / {titel(f)}")
+        bot.call("close_window", wait=10)
+        spot_option(env, "enabled", "true")
+        set_option(env, "create-page", "false", "viewpoints")
+        punkte()
+        seit = bot.mark()
+        klick(53)
+        befehl(bot, "Sofort")
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("create-page: false - der Name im Chat speichert den Punkt sofort, ohne Seite",
+                  gesagt(zeilen, r"Spot Sofort saved\.") and not fenster().get("open"), zeige(zeilen))
+        set_option(env, "create-page", "true", "viewpoints")
+
+        # --- Die Optionen fuer Admins ---
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(23)
+        klick(20)
+        f = fenster()
+        wer = next((k for k, n in knoepfe(f).items() if int(k) < 45 and n.startswith(BOT_NAME)), None)
+        if wer is not None:
+            klick(wer)
+        f = fenster()
+        wo = platz_mit(f, "Optdrei")
+        unter = item_text(item(f, wo)) if wo is not None else ""
+        if wo is not None:
+            klick(wo, button=1)
+        f = fenster()
+        FIND.test("Admin-Seite der Punkte: Linksklick hin, Rechtsklick Optionen; die Optionen fuer Admins mit "
+                  "Umbenennen, Symbol, Privat machen und Loeschen",
+                  "Left-click: go there" in unter and "Right-click: options" in unter
+                  and f"Options: Optdrei ({BOT_NAME})" in titel(f) and platz_mit(f, "Rename") is not None
+                  and platz_mit(f, "Change icon") is not None and platz_mit(f, "Make private") is not None
+                  and platz_mit(f, "Delete") is not None, f"{unter} / {titel(f)} / {knoepfe(f)}")
+        umbenennen = platz_mit(f, "Rename")
+        if umbenennen is not None:
+            klick(umbenennen)
+        zeilen = befehl(bot, "Optvier")
+        f = fenster()
+        FIND.test("Der Admin benennt ihn um: der Chat sagt es ihm, und die Optionen kommen mit dem neuen Namen wieder",
+                  gesagt(zeilen, rf"Spot Optdrei of {BOT_NAME} is now called Optvier")
+                  and f"Options: Optvier ({BOT_NAME})" in titel(f), f"{zeige(zeilen)} / {titel(f)}")
+        privat = platz_mit(f, "Make private")
+        seit = bot.mark()
+        if privat is not None:
+            klick(privat)
+        zeilen = zeilen_seit(bot, seit)
+        f = fenster()
+        FIND.test("Privat machen nimmt den oeffentlichen herunter, danach fehlt der Knopf",
+                  gesagt(zeilen, rf"{BOT_NAME}'s spot Optvier is private now") and platz_mit(f, "Make private") is None,
+                  f"{zeige(zeilen)} / {knoepfe(f)}")
+        bot.call("close_window", wait=10)
+    finally:
+        try:
+            if zuschauer.proc is not None:
+                zuschauer.stop()
+            bot.call("close_window", wait=10)
+            cam_off(bot)
+            spot_option(env, "move", "false")
+            spot_option(env, "rename", "true")
+            spot_option(env, "enabled", "true")
+            set_option(env, "create-page", "true", "viewpoints")
+            spots_loeschen(bot, *namen_der_punkte)
+            hinstellen(bot, heim[0], heim[1], heim[2])
+        except Exception as exc:
+            FIND.problem(f"Aufraeumen nach dem Test der Optionen der Punkte: {exc}")
 
 
 def tourmoderation_checks(env, bot):
@@ -20883,12 +21407,14 @@ def bedrock_checks(env, bot):
     noch einen Namen braucht, mit "..." am Ende. Im Menue oeffnet der Knopf
     der Zeit eine Seite mit allen Zeiten, die der Welt markiert; noon
     gewaehlt, sieht der Bot 6000, und das Menue ist zu und bleibt es. Unter
-    einem eigenen Punkt steht "Tap: jump there, share or delete", und er ist
+    einem eigenen Punkt steht "Tap: jump there or options", und er ist
     ein anderes Item als unter bedrock - keine gefuellte Karte, die Bedrock
     "Unknown Map" nennt. Zurueck fuehrt von den Punkten wieder ins Menue.
-    Ein Klick auf den Punkt bietet Springen, Teilen und Loeschen an:
-    Springen bringt die Kamera hin und laesst das Menue zu, Loeschen loescht
-    ihn und zeigt wieder die Punkte. Die Seite der Fuehrung oeffnet, die
+    Ein Klick auf den Punkt bietet Springen und seine Optionen an:
+    Springen bringt die Kamera hin und laesst das Menue zu. Die Optionen
+    stehen auf sechs Reihen verteilt, ihre Knoepfe in der dritten; Loeschen
+    fragt noch einmal, "Delete for good" ganz unten loescht ihn und zeigt
+    wieder die Punkte. Die Seite der Fuehrung oeffnet, die
     Admin-Seite und von dort die Seite, wer im Cam-Modus ist, auch. Jede
     Seite steht dabei im selben Fenster, mit sechs Reihen und dem Titel des
     Menues, wie fuer Bedrock: Geyser baut dort fuer jedes Fenster eine Truhe
@@ -21052,7 +21578,7 @@ def bedrock_checks(env, bot):
         f = fenster()
         unter = item_text((f.get("slots") or {}).get("0"))
         FIND.test("apply-to: all - unter dem eigenen Punkt steht, was ein Tippen kann",
-                  "Grundstein" in unter and "Tap: jump there, share or delete" in unter
+                  "Grundstein" in unter and "Tap: jump there or options" in unter
                   and "Left-click" not in unter, unter)
         karte = ((f.get("slots") or {}).get("0") or {}).get("name")
         FIND.test("apply-to: all - der Punkt ist keine gefuellte Karte, die Bedrock \"Unknown Map\" nennt",
@@ -21122,17 +21648,33 @@ def bedrock_checks(env, bot):
         klick(gross(10))
         klick(0)
         f = fenster()
-        loeschen = platz_mit(f, "Delete")
-        FIND.test("Ein Klick auf den Punkt bietet Springen, Teilen und Loeschen an",
+        optionen = platz_mit(f, "Options")
+        FIND.test("Ein Klick auf den Punkt bietet Springen und seine Optionen an",
                   "Grundstein" in item_text((f.get("slots") or {}).get("4")) and platz_mit(f, "Jump there") is not None
-                  and platz_mit(f, "Share or make public") is not None and loeschen is not None,
+                  and optionen is not None and platz_mit(f, "Delete") is None,
                   f"{titel(f)} / {[item_text(i)[:30] for i in (f.get('slots') or {}).values()]}")
-        if loeschen is not None:
+        if optionen is not None:
+            klick(optionen, warten=2.0)
+            f = fenster()
+            loeschen = platz_mit(f, "Delete")
+            FIND.test("Optionen gewaehlt: ihre Seite, auf sechs Reihen verteilt - der Punkt oben, Loeschen in der "
+                      "dritten Reihe, zurueck ganz unten links",
+                      f.get("open") and f.get("size") == 54 and "Grundstein" in item_text((f.get("slots") or {}).get("4"))
+                      and loeschen == str(gross(16)) and platz_mit(f, "Back") == str(gross(18)),
+                      f"{titel(f)} / { {k: item_text(i).split(chr(10))[0] for k, i in (f.get('slots') or {}).items()} }")
             seit = bot.mark()
-            klick(loeschen, warten=2.0)
+            if loeschen is not None:
+                klick(loeschen, warten=2.0)
+            f = fenster()
+            endgueltig = platz_mit(f, "Delete for good")
+            FIND.test("Loeschen fragt noch einmal: Delete for good ganz unten in der Mitte",
+                      endgueltig == str(gross(22)) and not gesagt(zeilen_seit(bot, seit), r"deleted"),
+                      f"{endgueltig} / { {k: item_text(i).split(chr(10))[0] for k, i in (f.get('slots') or {}).items()} }")
+            if endgueltig is not None:
+                klick(endgueltig, warten=2.0)
             zeilen = zeilen_seit(bot, seit)
             f = fenster()
-            FIND.test("Loeschen gewaehlt: der Punkt ist geloescht, und die Seite der Punkte ist wieder da",
+            FIND.test("Delete for good: der Punkt ist geloescht, und die Seite der Punkte ist wieder da",
                       gesagt(zeilen, r"Spot Grundstein deleted") and platz_mit(f, "Your spots") is not None,
                       f"{zeige(zeilen)} / {titel(f)}")
         bot.call("close_window", wait=10)
@@ -21999,6 +22541,8 @@ ABSCHNITTE = [
               "bedrock menu/CamMenu display/CamActionBar spot/CamSpots tour/CamTour list/CamList trail/CamTrail"),
     Abschnitt("spotreiter", spotreiter_checks, "menu spot"),
     Abschnitt("spotmoderation", spotmoderation_checks, "menu spot/SpotModeration spot/SpotBans spot/CamSpots"),
+    Abschnitt("spotoptionen", spotoptionen_checks,
+              "menu spot/CamSpots spot/Spot spot/SpotModeration spot/SharedSpots spot/SpotViews storage/PlayerRecord"),
     Abschnitt("tourmoderation", tourmoderation_checks, "menu tour/TourModeration tour/TourBans tour/CamTour"),
     Abschnitt("spot_nur_im_cam", spot_nur_im_cam_checks, "spot/CamSpots menu config/CamSettings"),
     Abschnitt("spot_ansicht", spot_ansicht_checks,
@@ -22431,7 +22975,8 @@ DAUER_VORGABE = {
     "zeit_wetter": 46, "nachtsicht_wahl": 66, "naehe": 60, "einstellungen": 89, "teilen": 92,
     "fuehrung": 199, "fuehrung_ohne_cam": 148, "herzen_folgen": 60, "gaestebuch": 178, "weiter": 34,
     "weiter_himmel": 45, "alle_einladen": 70, "fuehrung_himmel": 80, "ausspaehen": 50,
-    "menue": 163, "menue_live": 95, "bedrock": 90, "spotreiter": 112, "spotmoderation": 130, "tourmoderation": 99,
+    "menue": 163, "menue_live": 95, "bedrock": 90, "spotreiter": 112, "spotmoderation": 130, "spotoptionen": 150,
+    "tourmoderation": 99,
     "spot_nur_im_cam": 28, "spot_ansicht": 91, "webkarte": 75, "erze": 69, "anstupsen": 81,
     "funk": 77, "traenke": 58, "treffergrund": 77, "anfassen": 79, "sulfur_cube": 59,
     "ruestung": 10, "rueckstoss": 560, "rueckstoss_mob": 183, "schieben": 45, "waerter_ziel": 80,

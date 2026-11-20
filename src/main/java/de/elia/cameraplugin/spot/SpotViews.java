@@ -117,6 +117,33 @@ public final class SpotViews {
         save();
     }
 
+    /**
+     * A spot its owner or an admin renamed keeps its views, under its new
+     * name - and whoever counted there a moment ago still waits.
+     */
+    public void renamed(UUID owner, String key, String newKey) {
+        if (key.equals(newKey)) {
+            return;
+        }
+        String prefix = owner + "/" + key + "/";
+        Map<String, Long> waiting = new HashMap<>();
+        lastCounted.entrySet().removeIf(entry -> {
+            if (!entry.getKey().startsWith(prefix)) {
+                return false;
+            }
+            waiting.put(owner + "/" + newKey + "/" + entry.getKey().substring(prefix.length()), entry.getValue());
+            return true;
+        });
+        lastCounted.putAll(waiting);
+        Map<String, Long> own = views.get(owner);
+        Long count = own == null ? null : own.remove(key);
+        if (count == null) {
+            return;
+        }
+        own.put(newKey, count);
+        save();
+    }
+
     /** At the start and after a reload: the views of the file, or none on {@code storage: memory}. */
     public void load() {
         views.clear();

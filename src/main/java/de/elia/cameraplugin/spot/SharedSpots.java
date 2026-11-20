@@ -294,6 +294,30 @@ public final class SharedSpots {
         save();
     }
 
+    /**
+     * Follows a spot that was changed - renamed, or given another icon, by
+     * its owner or by an admin -: whoever it is shared with finds it under
+     * its new name, with its likes, in the place it had among his shares.
+     *
+     * @param key the {@link Spot#key()} it had before
+     */
+    public void changed(UUID owner, String key, Spot spot) {
+        Map<String, Share> own = shares.get(owner);
+        Share share = own == null ? null : own.get(key);
+        if (share == null) {
+            return;
+        }
+        share.setSpot(spot);
+        if (!key.equals(spot.key())) {
+            Map<String, Share> before = new LinkedHashMap<>(own);
+            own.clear();
+            for (Map.Entry<String, Share> entry : before.entrySet()) {
+                own.putIfAbsent(entry.getKey().equals(key) ? spot.key() : entry.getKey(), entry.getValue());
+            }
+        }
+        save();
+    }
+
     /** A spot its owner has deleted is shared with nobody any more. */
     public void deleted(UUID owner, String key) {
         if (get(owner, key) != null) {
@@ -347,14 +371,10 @@ public final class SharedSpots {
      * a world or anybody it is shared with is left out.
      */
     private void readShare(UUID owner, String ownerName, ConfigurationSection entry) {
-        String name = entry == null ? null : entry.getString("name");
-        String world = entry == null ? null : entry.getString("world");
-        if (name == null || name.isEmpty() || world == null) {
+        Spot spot = Spot.read(entry);
+        if (spot == null) {
             return;
         }
-        Spot spot = new Spot(name, world, entry.getDouble("x"), entry.getDouble("y"), entry.getDouble("z"),
-                (float) entry.getDouble("yaw"), (float) entry.getDouble("pitch"), entry.getLong("created"),
-                SpotLook.read(entry));
         Share share = new Share(owner, ownerName, spot);
         share.setEveryone(entry.getBoolean("everyone"));
         ConfigurationSection pending = entry.getConfigurationSection("pending");
@@ -413,17 +433,7 @@ public final class SharedSpots {
                 file.set(base + ".name", share.getOwnerName());
                 Spot spot = share.getSpot();
                 String path = base + ".spots." + Spot.pathKey(spot.key());
-                file.set(path + ".name", spot.name());
-                file.set(path + ".world", spot.world());
-                file.set(path + ".x", spot.x());
-                file.set(path + ".y", spot.y());
-                file.set(path + ".z", spot.z());
-                file.set(path + ".yaw", (double) spot.yaw());
-                file.set(path + ".pitch", (double) spot.pitch());
-                if (spot.created() > 0L) {
-                    file.set(path + ".created", spot.created());
-                }
-                spot.look().write(file, path);
+                spot.write(file, path);
                 file.set(path + ".everyone", share.isEveryone());
                 for (Map.Entry<UUID, String> player : share.getPlayers().entrySet()) {
                     file.set(path + ".players." + player.getKey(), player.getValue());
