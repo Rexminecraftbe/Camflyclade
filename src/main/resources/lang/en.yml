@@ -496,14 +496,18 @@ messages:
   menu-icons-title: "&8Icon: {spot}"
   menu-new-spot: "&aSave a spot here"
   # The page of a new spot (viewpoints.create-page), menu-new-spot-title ({spot}: its name): on top the spot as it
-  # will be, under it menu-new-spot-rename ({spot} in its -lore), menu-new-spot-icon ({icon}) and menu-new-spot-public
-  # or -private with menu-new-spot-visibility-lore; then menu-new-spot-cancel and menu-new-spot-confirm, whose lore
-  # is menu-new-spot-confirm-public-lore while it is to be public. The name is asked with menu-spot-name; one that does
+  # will be, under it menu-new-spot-rename ({spot} in its -lore), menu-new-spot-icon ({icon}) and menu-new-spot-share,
+  # which opens the same page as for a saved spot (menu-share-...) - under it -share-public or -private, and
+  # -share-invited ({players}) while somebody is picked; nothing is shared before it is saved, a player picked there
+  # stands as menu-share-player-offered with menu-share-invited-lore. Then menu-new-spot-cancel and
+  # menu-new-spot-confirm, whose lore is menu-new-spot-confirm-public-lore while it is to be public, with
+  # menu-new-spot-confirm-invited-lore ({players}) under it while it is to be offered to somebody. The name is asked with menu-spot-name; one that does
   # not go is asked for again with menu-spot-name-again, after the message that says why.
   menu-new-spot-cancel: "&cCancel"
   menu-new-spot-cancel-lore: "&7Nothing is saved."
   menu-new-spot-confirm: "&aSave spot"
   menu-new-spot-confirm-lore: "&7Saves &f{spot}&7 where you named it."
+  menu-new-spot-confirm-invited-lore: "&7Then offers it to: &f{players}"
   menu-new-spot-confirm-public-lore: "&7Saves &f{spot}&7 where you named it\n&7and makes it public."
   menu-new-spot-icon: "&eIcon: &f{icon}"
   menu-new-spot-icon-lore: "&7Pick another icon."
@@ -515,12 +519,15 @@ messages:
   menu-new-spot-lore: "&7Saves your position and view."
   menu-new-spot-lore-public: "&7Saves your position and view.\n&fLeft-click: private\n&eRight-click: public"
   menu-new-spot-lore-public-bedrock: "&7Saves your position and view.\n&eTap: private or public"
-  menu-new-spot-private: "&eVisibility: &fPrivate"
-  menu-new-spot-public: "&eVisibility: &aPublic"
   menu-new-spot-rename: "&eRename"
   menu-new-spot-rename-lore: "&7Name: &f{spot}"
+  menu-new-spot-share: "&aShare or make public"
+  menu-new-spot-share-invited: "&7Offered to: &f{players}&7, once saved"
+  menu-new-spot-share-lore: "&eClick: pick players or make it public"
+  menu-new-spot-share-lore-bedrock: "&eTap: pick players or make it public"
+  menu-new-spot-share-private: "&7Private"
+  menu-new-spot-share-public: "&aPublic"
   menu-new-spot-title: "&8New spot: {spot}"
-  menu-new-spot-visibility-lore: "&7Switch between private and public."
   menu-next: "&7Next page »"
   menu-nightvision: "&eNight vision: &f{mode}"
   menu-nightvision-dark: "in the dark"
@@ -584,6 +591,8 @@ messages:
   menu-share-everybody: "&ePublic"
   menu-share-off-lore: "&7Not shared\n&eClick: offer"
   menu-share-off-lore-bedrock: "&7Not shared\n&eTap: offer"
+  menu-share-invited-lore: "&eOffered once the spot is saved\n&eClick: take back"
+  menu-share-invited-lore-bedrock: "&eOffered once the spot is saved\n&eTap: take back"
   menu-share-offered-lore: "&eOffered, not accepted yet\n&eClick: take back"
   menu-share-offered-lore-bedrock: "&eOffered, not accepted yet\n&eTap: take back"
   menu-share-on-lore: "&aShared\n&eClick: take back"

@@ -1018,7 +1018,8 @@ viewpoints:
   # Verschieben geht über die Optionen (options.move).
   # Wie ein neuer Punkt im Menü entsteht:
   #   true  = Knopf "Neuer Punkt", dann den Namen in den Chat, dann eine Seite mit Symbol (icons), noch einmal
-  #           Umbenennen, Privat/Öffentlich, Bestätigen und Abbrechen. Gespeichert wird die Stelle, an der man beim
+  #           Umbenennen, Teilen (dieselbe Seite wie in den Optionen: Spieler auswählen oder öffentlich machen - geteilt
+  #           wird erst beim Bestätigen, dann bekommen die Ausgewählten die Einladung), Bestätigen und Abbrechen. Gespeichert wird die Stelle, an der man beim
   #           Eintippen des Namens war. Gibt es den Namen schon (oder ist er zu lang), fragt der Chat gleich noch
   #           einmal - die nächste Zeile ist der nächste Versuch. Bedrock-Spieler mit Fenstern (bedrock.menu: mixed
   #           oder forms) tippen den Namen in ein Fenster statt in den Chat; die Seite danach ist dieselbe.

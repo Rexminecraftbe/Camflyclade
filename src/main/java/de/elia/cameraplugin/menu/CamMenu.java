@@ -64,9 +64,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntConsumer;
 import java.util.function.LongConsumer;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
@@ -460,8 +462,9 @@ public final class CamMenu implements Listener {
     /**
      * A new spot being set up on its page, {@code viewpoints.create-page}:
      * where it is - where its owner was when he named it -, which way it
-     * looks and what it shows, which are fixed; its name, its icon and
-     * whether it is to be public, which the page changes until it is saved.
+     * looks and what it shows, which are fixed; its name, its icon, whether
+     * it is to be public and whom it is to be offered to, which the page
+     * changes until it is saved - only then is any of it shared.
      */
     private static final class NewSpot {
         String name;
@@ -469,6 +472,8 @@ public final class CamMenu implements Listener {
         final SpotLook look;
         String icon;
         boolean open;
+        /** Whom it is offered to once it is saved, by id, with their names, in the order he picked them. */
+        final Map<UUID, String> invited = new LinkedHashMap<>();
 
         NewSpot(String name, Location where, SpotLook look, String icon) {
             this.name = name;
@@ -1614,10 +1619,10 @@ public final class CamMenu implements Listener {
     /**
      * Whom one of his spots is shared with: the players online and those it
      * is shared with or offered to who are not, a page of {@value #ENTRIES}
-     * at a time. A click on a player offers it to him, or takes it back. The
-     * beacon in the corner of the last row, on every page, makes it public,
-     * or private again - where the page of the tour has the button that
-     * invites everybody.
+     * at a time, see {@link #sharePage}. A click on a player offers it to
+     * him, or takes it back. The beacon in the corner of the last row, on
+     * every page, makes it public, or private again - where the page of the
+     * tour has the button that invites everybody.
      */
     private void openShare(Player player, String key, int pageNumber) {
         CamSpots spots = plugin.getSpots();
@@ -1633,14 +1638,7 @@ public final class CamMenu implements Listener {
         }
         Spot target = spot;
         Share share = spots.shareOf(player, spot);
-        Map<UUID, String> people = new LinkedHashMap<>();
-        List<Player> online = new ArrayList<>(Bukkit.getOnlinePlayers());
-        online.sort((a, b) -> a.getName().compareToIgnoreCase(b.getName()));
-        for (Player other : online) {
-            if (!other.equals(player) && player.canSee(other)) {
-                people.put(other.getUniqueId(), other.getName());
-            }
-        }
+        Map<UUID, String> people = sharePeople(player);
         if (share != null) {
             for (Map.Entry<UUID, String> entry : share.getPlayers().entrySet()) {
                 people.putIfAbsent(entry.getKey(), entry.getValue());
@@ -1649,19 +1647,72 @@ public final class CamMenu implements Listener {
                 people.putIfAbsent(entry.getKey(), entry.getValue());
             }
         }
-        Page page = page(player, LIST, messages.getMessage("menu-share-title").replace("{spot}", spot.name()));
+        // Shared from its options, it leads back there.
+        boolean options = settings.isSpotOptionsEnabled();
+        sharePage(player, spot.name(), "share:" + key, people,
+                other -> share == null ? "off" : share.isAcceptedBy(other) ? "on"
+                        : share.isOfferedTo(other) ? "offered" : "off",
+                (other, name) -> {
+                    if (share != null && (share.isAcceptedBy(other) || share.isOfferedTo(other))) {
+                        spots.unshareWith(player, target, other, name);
+                    } else {
+                        Player online = Bukkit.getPlayer(other);
+                        spots.shareWith(player, target, online != null ? online : Bukkit.getOfflinePlayer(other));
+                    }
+                },
+                share != null && share.isEveryone(), everybody -> spots.makePublic(player, target, everybody),
+                options ? "menu-to-spot" : "menu-to-spots", () -> {
+                    if (options) {
+                        openSpotOptions(player, player.getUniqueId(), player.getName(), key, false, false);
+                    } else {
+                        openSpots(player, SpotTab.PRIVATE, 0);
+                    }
+                }, number -> openShare(player, key, number), pageNumber);
+    }
+
+    /** Whom he may share a spot with on its page: every other player online he can see, by name. */
+    private static Map<UUID, String> sharePeople(Player player) {
+        Map<UUID, String> people = new LinkedHashMap<>();
+        List<Player> online = new ArrayList<>(Bukkit.getOnlinePlayers());
+        online.sort((a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+        for (Player other : online) {
+            if (!other.equals(player) && player.canSee(other)) {
+                people.put(other.getUniqueId(), other.getName());
+            }
+        }
+        return people;
+    }
+
+    /**
+     * The page of whom a spot is shared with - one that is saved, see
+     * {@link #openShare}, or a new one, see {@link #openNewShare}: a head for
+     * each player, saying how it stands with him, a page of {@value #ENTRIES}
+     * at a time; the beacon in the corner of the last row that makes it
+     * public or private; the way back.
+     *
+     * @param state    how it stands with a player: {@code on} (he accepted it), {@code offered},
+     *                 {@code invited} (a new spot: offered once it is saved) or {@code off}
+     * @param toggle   what a click on a player does
+     * @param everybody whether it is public
+     * @param toPublic what the beacon does: made public ({@code true}) or private
+     * @param again    draws the page anew, on the page of the list given
+     */
+    private void sharePage(Player player, String spot, String list, Map<UUID, String> people,
+                           Function<UUID, String> state, BiConsumer<UUID, String> toggle, boolean everybody,
+                           Consumer<Boolean> toPublic, String backKey, Runnable back, IntConsumer again,
+                           int pageNumber) {
+        Page page = page(player, LIST, messages.getMessage("menu-share-title").replace("{spot}", spot));
         // Filled in below, once the list knows which page of it is shown.
         int[] shown = new int[1];
         List<Row> entries = new ArrayList<>();
         for (Map.Entry<UUID, String> entry : people.entrySet()) {
-            boolean with = share != null && share.isAcceptedBy(entry.getKey());
-            boolean offered = share != null && share.isOfferedTo(entry.getKey());
-            String state = with ? "on" : offered ? "offered" : "off";
+            String now = state.apply(entry.getKey());
+            String name = now.equals("off") ? "menu-share-player"
+                    : "menu-share-player-" + (now.equals("invited") ? "offered" : now);
             entries.add(new Row(entry.getKey(), slot -> {
                 ItemStack head = item(Material.PLAYER_HEAD,
-                        messages.getMessage(with || offered ? "menu-share-player-" + state : "menu-share-player")
-                                .replace("{player}", entry.getValue()),
-                        lines(text(player, "menu-share-" + state + "-lore")));
+                        messages.getMessage(name).replace("{player}", entry.getValue()),
+                        lines(text(player, "menu-share-" + now + "-lore")));
                 Player other = Bukkit.getPlayer(entry.getKey());
                 if (other != null && head.getItemMeta() instanceof SkullMeta skull) {
                     // Only of a player online: one offline might have to be
@@ -1670,37 +1721,23 @@ public final class CamMenu implements Listener {
                     head.setItemMeta(skull);
                 }
                 put(page, slot, head, click -> later(() -> {
-                    if (with || offered) {
-                        spots.unshareWith(player, target, entry.getKey(), entry.getValue());
-                    } else {
-                        OfflinePlayer whom = other != null ? other : Bukkit.getOfflinePlayer(entry.getKey());
-                        spots.shareWith(player, target, whom);
-                    }
-                    openShare(player, key, shown[0]);
+                    toggle.accept(entry.getKey(), entry.getValue());
+                    again.accept(shown[0]);
                 }));
             }));
         }
-        Listed listed = list(page, "share:" + key, entries, pageNumber);
+        Listed listed = list(page, list, entries, pageNumber);
         int number = listed.number();
         shown[0] = number;
-        boolean everybody = share != null && share.isEveryone();
         put(page, SLOT_EVERYBODY, shine(item(Material.BEACON, messages.getMessage("menu-share-everybody"),
                 lines(text(player, everybody ? "menu-share-public-lore" : "menu-share-private-lore"))),
                 everybody), click -> later(() -> {
-                    spots.makePublic(player, target, !everybody);
-                    openShare(player, key, number);
+                    toPublic.accept(!everybody);
+                    again.accept(number);
                 }));
-        // Shared from its options, it leads back there.
-        put(page, SLOT_BACK, Material.ARROW, settings.isSpotOptionsEnabled() ? "menu-to-spot" : "menu-to-spots",
-                click -> later(() -> {
-                    if (settings.isSpotOptionsEnabled()) {
-                        openSpotOptions(player, player.getUniqueId(), player.getName(), key, false, false);
-                    } else {
-                        openSpots(player, SpotTab.PRIVATE, 0);
-                    }
-                }));
-        paging(page, number, listed.pages(), n -> openShare(player, key, n));
-        show(player, page, EVERY_SECOND, () -> openShare(player, key, number));
+        put(page, SLOT_BACK, Material.ARROW, backKey, click -> later(back));
+        paging(page, number, listed.pages(), again::accept);
+        show(player, page, EVERY_SECOND, () -> again.accept(number));
     }
 
     // ------------------------------------------------------------ a new spot, its icon and its options
@@ -1750,11 +1787,12 @@ public final class CamMenu implements Listener {
 
     /**
      * The page of a new spot before it is saved: the spot on top as it will
-     * be - where it is, what it shows -, under it its name to change, its
-     * icon to pick and whether it is to be public, each saying how it is
-     * now, and in the last row the buttons that call it off, on the left,
-     * and that save it, on the right. Saved, his spots open, with it among
-     * them.
+     * be - where it is, what it shows, no views yet, and the likes and whom
+     * it is offered to while it is to be shared -, under it its name to
+     * change, its icon to pick and whom to share it with, see
+     * {@link #openNewShare}, each saying how it is now, and in the last row
+     * the buttons that call it off, on the left, and that save it, on the
+     * right. Saved, his spots open, with it among them.
      */
     private void openNewSpot(Player player) {
         UUID id = player.getUniqueId();
@@ -1774,6 +1812,10 @@ public final class CamMenu implements Listener {
         previewLore.addAll(viewsLore(0L));
         if (draft.open) {
             previewLore.addAll(lines(messages.getMessage("menu-spot-public-lore").replace("{likes}", "0")));
+        }
+        String invited = String.join(", ", draft.invited.values());
+        if (!invited.isEmpty()) {
+            previewLore.addAll(lines(messages.getMessage("menu-spot-offered-lore").replace("{players}", invited)));
         }
         put(page, 4, item(icon, messages.getMessage("menu-spot").replace("{spot}", draft.name), previewLore),
                 NOTHING);
@@ -1805,20 +1847,16 @@ public final class CamMenu implements Listener {
                     }, again))));
         }
         if (settings.isViewpointsSharing()) {
-            row.add(new RowButton(shine(item(Material.GLOBE_BANNER_PATTERN,
-                    messages.getMessage(draft.open ? "menu-new-spot-public" : "menu-new-spot-private"),
-                    lines(messages.getMessage("menu-new-spot-visibility-lore"))), draft.open),
-                    click -> later(() -> {
-                        NewSpot now = newSpots.get(id);
-                        if (now == null) {
-                            return;
-                        }
-                        // Made public, it is asked what is asked of every public spot.
-                        if (now.open || plugin.getSpotModeration().checkNew(player, SpotBans.Kind.PUBLIC)) {
-                            now.open = !now.open;
-                        }
-                        openNewSpot(player);
-                    })));
+            // The same page as for a saved spot; nothing is shared before it is saved.
+            List<String> shareLore = new ArrayList<>(lines(messages.getMessage(draft.open
+                    ? "menu-new-spot-share-public" : "menu-new-spot-share-private")));
+            if (!invited.isEmpty()) {
+                shareLore.addAll(lines(messages.getMessage("menu-new-spot-share-invited")
+                        .replace("{players}", invited)));
+            }
+            shareLore.addAll(lines(text(player, "menu-new-spot-share-lore")));
+            row.add(new RowButton(shine(item(Material.GLOBE_BANNER_PATTERN, messages.getMessage("menu-new-spot-share"),
+                    shareLore), draft.open || !invited.isEmpty()), click -> later(() -> openNewShare(player, 0))));
         }
         putRow(page, row);
         put(page, 18, Material.BARRIER, messages.getMessage("menu-new-spot-cancel"),
@@ -1827,9 +1865,14 @@ public final class CamMenu implements Listener {
                     messages.sendConfiguredMessage(player, "menu-answer-cancelled");
                     openSpots(player, SpotTab.PRIVATE, 0);
                 }));
-        put(page, 26, Material.EMERALD, messages.getMessage("menu-new-spot-confirm"),
-                lines(messages.getMessage(draft.open ? "menu-new-spot-confirm-public-lore"
-                        : "menu-new-spot-confirm-lore").replace("{spot}", draft.name)), click -> later(() -> {
+        List<String> confirmLore = new ArrayList<>(lines(messages.getMessage(draft.open
+                ? "menu-new-spot-confirm-public-lore" : "menu-new-spot-confirm-lore").replace("{spot}", draft.name)));
+        if (!invited.isEmpty()) {
+            confirmLore.addAll(lines(messages.getMessage("menu-new-spot-confirm-invited-lore")
+                    .replace("{players}", invited)));
+        }
+        put(page, 26, Material.EMERALD, messages.getMessage("menu-new-spot-confirm"), confirmLore,
+                click -> later(() -> {
                     NewSpot now = newSpots.remove(id);
                     if (now == null) {
                         openSpots(player, SpotTab.PRIVATE, 0);
@@ -1845,10 +1888,50 @@ public final class CamMenu implements Listener {
                     if (now.open) {
                         spots.makePublic(player, spot, true);
                     }
+                    // Now they are offered it, and hear about it, as with a spot shared later.
+                    for (UUID other : settings.isViewpointsSharing() ? now.invited.keySet() : Set.<UUID>of()) {
+                        Player online = Bukkit.getPlayer(other);
+                        spots.shareWith(player, spot, online != null ? online : Bukkit.getOfflinePlayer(other));
+                    }
                     openSpots(player, SpotTab.PRIVATE, 0);
                 }));
         // A spot being set up stays as he leaves it, until he clicks.
         show(player, page);
+    }
+
+    /**
+     * Whom a new spot is to be shared with, before it is saved: the same page
+     * as for a saved one, see {@link #sharePage} - the players online and
+     * those he picked already. A click picks one or takes him back, the
+     * beacon makes it public or private again; what keeps him from offering
+     * spots or making them public is asked right away, as it is for a saved
+     * one. Nothing is shared yet: once the spot is saved, it is made public
+     * and offered to each of them, who hears about it then.
+     */
+    private void openNewShare(Player player, int pageNumber) {
+        UUID id = player.getUniqueId();
+        NewSpot draft = newSpots.get(id);
+        if (draft == null || !settings.isViewpointsSharing()) {
+            openNewSpot(player);
+            return;
+        }
+        SpotModeration moderation = plugin.getSpotModeration();
+        Map<UUID, String> people = sharePeople(player);
+        for (Map.Entry<UUID, String> entry : draft.invited.entrySet()) {
+            people.putIfAbsent(entry.getKey(), entry.getValue());
+        }
+        sharePage(player, draft.name, "share-new:" + id, people,
+                other -> draft.invited.containsKey(other) ? "invited" : "off",
+                (other, name) -> {
+                    if (draft.invited.remove(other) == null && moderation.checkNew(player, SpotBans.Kind.SHARED)) {
+                        draft.invited.put(other, name);
+                    }
+                },
+                draft.open, everybody -> {
+                    if (!everybody || moderation.checkNew(player, SpotBans.Kind.PUBLIC)) {
+                        draft.open = everybody;
+                    }
+                }, "menu-to-spot", () -> openNewSpot(player), number -> openNewShare(player, number), pageNumber);
     }
 
     /**

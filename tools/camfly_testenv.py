@@ -11765,10 +11765,11 @@ def spotreiter_checks(env, bot):
     nach dem Namen, nach den Aufrufen (noch keiner hat einen, "Views: 0")
     und dann nach der Reichweite, die naechsten zuerst. Das Buch fragt nach
     dem Namen, dann kommt die Seite des neuen Punkts: oben der Punkt, in der
-    Mitte Umbenennen, das Symbol und Privat/Oeffentlich, unten Abbrechen und
-    Speichern. Ein Klick macht ihn oeffentlich, gespeichert ist Gamma danach
-    oeffentlich und steht bei den eigenen - dort mit "Public" darunter - und
-    bei den oeffentlichen, als seiner. Der zweite Spieler sieht ihn dort und liked ihn mit einem
+    Mitte Umbenennen, das Symbol und Teilen, unten Abbrechen und Speichern.
+    Teilen oeffnet dieselbe Seite wie bei einem gespeicherten; dort
+    oeffentlich gemacht, gespeichert ist Gamma danach oeffentlich und steht
+    bei den eigenen - dort mit "Public" darunter - und bei den oeffentlichen,
+    als seiner. Der zweite Spieler sieht ihn dort und liked ihn mit einem
     Rechtsklick; danach steht das Like darunter, und der Punkt glaenzt. Ein
     Linksklick springt wie zu einem eigenen Punkt: ohne Cam-Modus, aber nah
     dran, startet er dort, und seine Kamera steht danach am Punkt. Der Filter des Bots auf den
@@ -11898,17 +11899,29 @@ def spotreiter_checks(env, bot):
         f = fenster(bot)
         knopf = f.get("slots", {})
         FIND.test("Das Buch fragt nach dem Namen, dann die Seite des neuen Punkts: oben der Punkt, Umbenennen (11), "
-                  "Symbol (13), Privat (15), Abbrechen (18) und Speichern (26, unten rechts)",
+                  "Symbol (13), Teilen - noch privat - (15), Abbrechen (18) und Speichern (26, unten rechts)",
                   "New spot: Gamma" in (f.get("title") or "") and "Gamma" in item_text(knopf.get("4"))
                   and "Rename" in item_text(knopf.get("11")) and "Icon: Map" in item_text(knopf.get("13"))
-                  and "Visibility: Private" in item_text(knopf.get("15"))
+                  and "Share or make public" in item_text(knopf.get("15")) and "Private" in item_text(knopf.get("15"))
                   and "Cancel" in item_text(knopf.get("18")) and "Save spot" in item_text(knopf.get("26")),
                   f"{f.get('title')} / {[(k, item_text(v).split(chr(10))[0]) for k, v in sorted(knopf.items())]}")
         klick(bot, 15)
-        oeffentlich = fenster(bot).get("slots", {}).get("15") or {}
-        FIND.test("Ein Klick auf Privat macht ihn oeffentlich, der Knopf glaenzt",
-                  "Visibility: Public" in item_text(oeffentlich) and oeffentlich.get("glint") is True,
-                  item_text(oeffentlich))
+        f = fenster(bot)
+        FIND.test("Teilen oeffnet dieselbe Seite wie bei einem gespeicherten: die Spieler, unten rechts (53) der "
+                  "Knopf, der ihn oeffentlich macht",
+                  "Share Gamma" in (f.get("title") or "") and any(ZUSCHAUER_NAME in n for n in namen(f))
+                  and "Click: make public" in item_text(f.get("slots", {}).get("53")),
+                  f"{f.get('title')} / {namen(f)} / {item_text(f.get('slots', {}).get('53'))}")
+        klick(bot, 53)
+        klick(bot, 45)
+        f = fenster(bot)
+        knopf = f.get("slots", {})
+        FIND.test("Oeffentlich gemacht und zurueck: der Knopf sagt Public und glaenzt, oben steht \"Public, 0 likes\" "
+                  "- oeffentlich ist er erst nach dem Speichern",
+                  "New spot: Gamma" in (f.get("title") or "") and "Public" in item_text(knopf.get("15"))
+                  and (knopf.get("15") or {}).get("glint") is True and "Public, 0 likes" in item_text(knopf.get("4"))
+                  and not gesagt(zeilen_seit(bot, seit), r"is public now"),
+                  f"{item_text(knopf.get('15'))} / {item_text(knopf.get('4'))}")
         klick(bot, 26)
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Save spot: ein oeffentlicher Punkt",
@@ -12439,7 +12452,12 @@ def spotoptionen_checks(env, bot):
     der Symbole hat auf 26.2 nur die Karte und die leere Karte, die Karte
     markiert; die leere gewaehlt, zeigt der Punkt oben sie, und der Knopf -
     ein Rahmen, keine der Karten - nennt sie. Auch Change icon in den
-    Optionen ist ein Rahmen.
+    Optionen ist ein Rahmen. Teilen oeffnet dieselbe Seite wie bei einem
+    gespeicherten Punkt: der zweite Spieler gewaehlt, steht er dort als
+    angeboten, sobald der Punkt gespeichert ist - erfahren tut er noch
+    nichts -, und die Seite des Punkts sagt oben, am Knopf und an Speichern,
+    wem er angeboten wird. Erst das Speichern bietet ihn an: der andere
+    bekommt die Einladung, der Besitzer hoert, dass sie raus ist.
     Abbrechen speichert nichts. Ein zweiter Anlauf mit Speichern: icon: map
     steht in der Datei, und die Liste zeigt ihn als leere Karte.
 
@@ -12512,7 +12530,14 @@ def spotoptionen_checks(env, bot):
     x, y, z = _floor(heim[0]) + 0.5, BODEN_Y + 1, _floor(heim[2]) + 0.5
     console(env, f"fill {_floor(x) - 2} {y} {_floor(z) - 2} {_floor(x) + 2} {y + 6} {_floor(z) + 2} minecraft:air",
             pause=0.5)
+    zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
     try:
+        zuschauer.start()
+        if not FIND.test("Zweiter Spieler fuer die Einladung kommt herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+            return
+        time.sleep(1.5)
+        cam_off(zuschauer)
         quelle = quelle_config(env)
         FIND.test("Voreingestellt stehen viewpoints.create-page: true, icons mit filled_map und map vorn, options "
                   "mit enabled, rename, icon, share und delete an und move aus, und bedrock.map-icons: false da",
@@ -12544,11 +12569,16 @@ def spotoptionen_checks(env, bot):
                   "und ohne Likes, solange er privat ist",
                   "New spot: Optneu" in titel(f) and "Views: 0" in vorschau and "likes" not in vorschau,
                   f"{titel(f)} / {vorschau}")
+        # Ueber die Seite zum Teilen oeffentlich und wieder privat.
         klick(15)
+        klick(53)
+        klick(45)
         vorschau = item_text(item(fenster(), 4))
         FIND.test("Oeffentlich gestellt zeigt die Vorschau auch die Likes, 0", "Public, 0 likes" in vorschau
                   and "Views: 0" in vorschau, vorschau)
         klick(15)
+        klick(53)
+        klick(45)
         seit = bot.mark()
         klick(11)
         befehl(bot, "optalt")
@@ -12603,9 +12633,33 @@ def spotoptionen_checks(env, bot):
         befehl(bot, "Optzwei")
         klick(13)
         klick(1)
+        klick(15)
+        f = fenster()
+        wer = platz_mit(f, ZUSCHAUER_NAME)
+        seit_dort = zuschauer.mark()
+        if wer is not None:
+            klick(wer)
+        f = fenster()
+        FIND.test("Teilen auf der Seite des neuen Punkts: der andere gewaehlt sagt \"Offered once the spot is saved\" "
+                  "- er selbst weiss noch nichts",
+                  "Share Optzwei" in titel(f) and wer is not None
+                  and "Offered once the spot is saved" in item_text(item(f, wer))
+                  and not gesagt(zeilen_seit(zuschauer, seit_dort), r"offers you"),
+                  f"{titel(f)} / {wer} / {item_text(item(f, wer or 0))}")
+        klick(45)
+        f = fenster()
+        FIND.test("Zurueck auf der Seite: oben, am Knopf Teilen und an Speichern steht, wem er angeboten wird",
+                  "New spot: Optzwei" in titel(f) and f"Offered to: {ZUSCHAUER_NAME}" in item_text(item(f, 4))
+                  and ZUSCHAUER_NAME in item_text(item(f, 15))
+                  and f"Then offers it to: {ZUSCHAUER_NAME}" in item_text(item(f, 26)),
+                  f"{item_text(item(f, 4))} / {item_text(item(f, 15))} / {item_text(item(f, 26))}")
         seit = bot.mark()
         klick(26, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
+        dort = zeilen_seit(zuschauer, seit_dort)
+        FIND.test("Erst mit dem Speichern bekommt der andere die Einladung, und der Besitzer hoert, dass sie raus ist",
+                  gesagt(dort, rf"{BOT_NAME} offers you the spot Optzwei")
+                  and gesagt(zeilen, rf"Offered Optzwei to {ZUSCHAUER_NAME}"), f"{zeige(dort)} / {zeige(zeilen)}")
         f = fenster()
         wo = platz_mit(f, "Optzwei")
         FIND.test("Speichern: icon: map steht in der Datei, und die Liste zeigt ihn als leere Karte",
@@ -12773,6 +12827,8 @@ def spotoptionen_checks(env, bot):
         bot.call("close_window", wait=10)
     finally:
         try:
+            if zuschauer.proc is not None:
+                zuschauer.stop()
             bot.call("close_window", wait=10)
             cam_off(bot)
             spot_option(env, "move", "false")
