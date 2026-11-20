@@ -498,18 +498,13 @@ messages:
   # The page of a new spot (viewpoints.create-page), menu-new-spot-title ({spot}: its name): on top the spot as it
   # will be, under it menu-new-spot-rename ({spot} in its -lore), menu-new-spot-icon ({icon}) and menu-new-spot-public
   # or -private with menu-new-spot-visibility-lore; then menu-new-spot-cancel and menu-new-spot-confirm, whose lore
-  # is menu-new-spot-confirm-public-lore while it is to be public. On Bedrock with its windows (bedrock.menu: mixed
-  # or forms) all of it is one window, menu-new-spot-form, with menu-new-spot-form-name, -icon and -public over its
-  # fields.
+  # is menu-new-spot-confirm-public-lore while it is to be public. The name is asked with menu-spot-name; one that does
+  # not go is asked for again with menu-spot-name-again, after the message that says why.
   menu-new-spot-cancel: "&cCancel"
   menu-new-spot-cancel-lore: "&7Nothing is saved."
   menu-new-spot-confirm: "&aSave spot"
   menu-new-spot-confirm-lore: "&7Saves &f{spot}&7 where you named it."
   menu-new-spot-confirm-public-lore: "&7Saves &f{spot}&7 where you named it\n&7and makes it public."
-  menu-new-spot-form: "New spot"
-  menu-new-spot-form-icon: "Icon"
-  menu-new-spot-form-name: "Name (max. 16 characters)"
-  menu-new-spot-form-public: "Public"
   menu-new-spot-icon: "&eIcon: &f{icon}"
   menu-new-spot-icon-lore: "&7Pick another icon."
   menu-new-spot-count: "&7Your spots: &f{count}/{max}"
@@ -630,6 +625,8 @@ messages:
   menu-spot-look: "&bShows: &f{look}"
   menu-spot-lore: "&7{x} {y} {z} ({world})"
   menu-spot-name: "&eType the spot name in chat, max. 16 characters (&f{cancel}&e to abort)."
+  menu-spot-name-again: "&eType another name in chat, max. 16 characters (&f{cancel}&e to abort)."
+  menu-spot-name-again-form: "Another name for the new spot (max. 16 characters)"
   menu-spot-name-form: "Name of the new spot (max. 16 characters)"
   menu-spot-name-public: "&eType the public spot's name in chat, max. 16 characters (&f{cancel}&e to abort)."
   menu-spot-name-public-form: "Name of the new public spot (max. 16 characters)"
@@ -1700,6 +1697,7 @@ message-settings:
   menu-off: true
   menu-only: true
   menu-spot-name: true
+  menu-spot-name-again: true
   menu-spot-name-public: true
   nightvision-off: true
   nightvision-reset: actionbar

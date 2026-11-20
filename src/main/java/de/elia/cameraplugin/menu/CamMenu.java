@@ -4,7 +4,6 @@ import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.ban.BanList;
-import de.elia.cameraplugin.bedrock.BedrockForms;
 import de.elia.cameraplugin.ban.CamBan;
 import de.elia.cameraplugin.body.PlayerSkins;
 import de.elia.cameraplugin.nightvision.CamNightVision;
@@ -1592,8 +1591,18 @@ public final class CamMenu implements Listener {
         if (!look.isEmpty()) {
             lore.addAll(lines(messages.getMessage("menu-spot-look").replace("{look}", look)));
         }
-        lore.addAll(lines(messages.getMessage("menu-spot-views")
-                .replace("{views}", String.valueOf(plugin.getSpots().views(owner, spot)))));
+        lore.addAll(viewsLore(plugin.getSpots().views(owner, spot)));
+        return lore;
+    }
+
+    /**
+     * How often a spot was looked at, as lines under it - with how often one
+     * player counts, while {@code viewpoints.views-cooldown-minutes} holds him
+     * back.
+     */
+    private List<String> viewsLore(long views) {
+        List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-spot-views")
+                .replace("{views}", String.valueOf(views))));
         int minutes = settings.getViewsCooldownMinutes();
         if (minutes > 0) {
             lore.addAll(lines(messages.getMessage("menu-spot-views-hint")
@@ -1700,9 +1709,8 @@ public final class CamMenu implements Listener {
      * A new spot, with {@code viewpoints.create-page}: first what is asked of
      * every new spot - whether it may be saved here, whether a restriction
      * keeps him from it, whether he has room for one more -, then its name,
-     * in the chat, and then its page, see {@link #openNewSpot}. On Bedrock,
-     * with its windows, one window with all of it instead, see
-     * {@link #newSpotWindow}.
+     * in the chat - on Bedrock with its windows in a line to type into -, and
+     * then its page, see {@link #openNewSpot}, on Java and on Bedrock alike.
      */
     private void startNewSpot(Player player) {
         CamSpots spots = plugin.getSpots();
@@ -1710,25 +1718,20 @@ public final class CamMenu implements Listener {
                 || !spots.hasRoom(player)) {
             return;
         }
-        if (plugin.getBedrock().menuChoicesAsForms(player)) {
-            shown(player);
-            whenChestShut(player, () -> {
-                if (!newSpotWindow(player, "", spots.firstIcon(), false)) {
-                    askNewName(player);
-                }
-            });
-            return;
-        }
-        askNewName(player);
+        askNewName(player, "menu-spot-name");
     }
 
     /**
      * Asks for the name of a new spot: it is where he is when he answers,
      * looking the way he looks then - the page that comes next changes
-     * nothing of that.
+     * nothing of that. A name that does not go - one he has already, one
+     * too long - is asked for again right away, {@code menu-spot-name-again}:
+     * the next line he writes is the next try, and he need not start anew.
+     *
+     * @param key the question: {@code menu-spot-name} the first time
      */
-    private void askNewName(Player player) {
-        ask(player, "menu-spot-name", typed -> {
+    private void askNewName(Player player, String key) {
+        ask(player, key, typed -> {
             CamSpots spots = plugin.getSpots();
             // He may have left camera mode while he typed.
             if (!spots.maySetHere(player)) {
@@ -1736,6 +1739,7 @@ public final class CamMenu implements Listener {
             }
             String name = spots.checkName(player, player.getUniqueId(), typed, null);
             if (name == null) {
+                askNewName(player, "menu-spot-name-again");
                 return;
             }
             newSpots.put(player.getUniqueId(), new NewSpot(name, player.getLocation(), spots.lookOf(player),
@@ -1764,7 +1768,14 @@ public final class CamMenu implements Listener {
         Spot preview = draft.spot();
         Material icon = CamSpots.iconOf(preview, Material.FILLED_MAP);
         Page page = page(player, SMALL, messages.getMessage("menu-new-spot-title").replace("{spot}", draft.name));
-        put(page, 4, item(icon, messages.getMessage("menu-spot").replace("{spot}", draft.name), placeLore(preview)),
+        // As its page of options will show it: where, what it shows, its views
+        // - none yet - and, to be public, its likes, none yet either.
+        List<String> previewLore = placeLore(preview);
+        previewLore.addAll(viewsLore(0L));
+        if (draft.open) {
+            previewLore.addAll(lines(messages.getMessage("menu-spot-public-lore").replace("{likes}", "0")));
+        }
+        put(page, 4, item(icon, messages.getMessage("menu-spot").replace("{spot}", draft.name), previewLore),
                 NOTHING);
         Runnable again = () -> openNewSpot(player);
         List<RowButton> row = new ArrayList<>();
@@ -1838,66 +1849,6 @@ public final class CamMenu implements Listener {
                 }));
         // A spot being set up stays as he leaves it, until he clicks.
         show(player, page);
-    }
-
-    /**
-     * A new spot on Bedrock, with its windows: one window with all of it - the
-     * line for its name, the list of the icons, the switch that makes it
-     * public - and the button that saves it where he is then. A name that
-     * does not go brings the window back with what was filled in; an empty
-     * one, or closing it, calls it off.
-     *
-     * @return whether the window went out; if not, the name is asked as on Java
-     */
-    private boolean newSpotWindow(Player player, String name, String icon, boolean open) {
-        CamSpots spots = plugin.getSpots();
-        List<String> icons = spots.icons();
-        boolean sharing = settings.isViewpointsSharing();
-        List<BedrockForms.Field> fields = new ArrayList<>();
-        fields.add(new BedrockForms.Input(messages.getMessage("menu-new-spot-form-name"),
-                messages.getMessage("menu-form-placeholder"), name));
-        if (icons.size() > 1) {
-            List<String> names = new ArrayList<>();
-            for (String key : icons) {
-                names.add(ChatColor.stripColor(spots.iconName(key)));
-            }
-            fields.add(new BedrockForms.Dropdown(messages.getMessage("menu-new-spot-form-icon"), names,
-                    Math.max(0, icons.indexOf(icon))));
-        }
-        if (sharing) {
-            fields.add(new BedrockForms.Toggle(messages.getMessage("menu-new-spot-form-public"), open));
-        }
-        shown(player);
-        return plugin.getBedrock().forms().fill(player, ChatColor.stripColor(messages.getMessage("menu-new-spot-form")),
-                fields, values -> {
-                    String typed = String.valueOf(values.get(0)).trim();
-                    String chosen = spots.firstIcon();
-                    int next = 1;
-                    if (icons.size() > 1) {
-                        int at = values.get(next++) instanceof Integer picked ? picked : 0;
-                        chosen = icons.get(Math.max(0, Math.min(icons.size() - 1, at)));
-                    }
-                    boolean makePublic = sharing && Boolean.TRUE.equals(values.get(next));
-                    if (typed.isEmpty()) {
-                        messages.sendConfiguredMessage(player, "menu-answer-cancelled");
-                        return;
-                    }
-                    if (!spots.maySetHere(player)) {
-                        return;
-                    }
-                    if (spots.checkName(player, player.getUniqueId(), typed, null) == null) {
-                        newSpotWindow(player, typed, chosen, makePublic);
-                        return;
-                    }
-                    Spot spot = spots.save(player, typed, player.getLocation(), spots.lookOf(player), chosen);
-                    if (spot == null) {
-                        return;
-                    }
-                    if (makePublic) {
-                        spots.makePublic(player, spot, true);
-                    }
-                    openSpots(player, SpotTab.PRIVATE, 0);
-                }, () -> messages.sendConfiguredMessage(player, "menu-answer-cancelled"));
     }
 
     /**

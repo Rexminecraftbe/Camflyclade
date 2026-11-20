@@ -12429,7 +12429,10 @@ def spotoptionen_checks(env, bot):
     aus, dazu bedrock.map-icons: false da - nachgesehen in der Datei, die das
     Plugin mitbringt.
 
-    Ein neuer Punkt: das Buch fragt nach dem Namen, dann kommt seine Seite.
+    Ein neuer Punkt: das Buch fragt nach dem Namen. Einen, den er schon hat,
+    fragt der Chat gleich noch einmal ab - die naechste Zeile ist der naechste
+    Versuch -, dann kommt seine Seite; der Punkt oben zeigt "Views: 0" und,
+    oeffentlich gestellt, auch "Public, 0 likes".
     Umbenennen dort fragt im Chat; ein Name, den er schon hat (auch klein
     geschrieben), geht nicht, cancel ruft es ab - beide Male kommt die Seite
     mit dem alten Namen wieder -, ein neuer steht danach im Titel. Die Seite
@@ -12526,11 +12529,26 @@ def spotoptionen_checks(env, bot):
 
         # --- Ein neuer Punkt und seine Seite ---
         punkte()
+        seit = bot.mark()
         klick(53)
+        befehl(bot, "OPTALT")
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Ein Name, den er schon hat (gross geschrieben): der Hinweis, und der Chat fragt gleich noch "
+                  "einmal - keine Seite, kein neuer Klick noetig",
+                  gesagt(zeilen, r"You already have a spot called Optalt")
+                  and gesagt(zeilen, r"Type another name in chat") and not fenster().get("open"), zeige(zeilen))
         befehl(bot, "Optneu")
         f = fenster()
-        FIND.test("Der Name im Chat oeffnet die Seite des neuen Punkts", "New spot: Optneu" in titel(f),
-                  titel(f))
+        vorschau = item_text(item(f, 4))
+        FIND.test("Die naechste Zeile ist der naechste Versuch: die Seite des neuen Punkts, oben mit \"Views: 0\" "
+                  "und ohne Likes, solange er privat ist",
+                  "New spot: Optneu" in titel(f) and "Views: 0" in vorschau and "likes" not in vorschau,
+                  f"{titel(f)} / {vorschau}")
+        klick(15)
+        vorschau = item_text(item(fenster(), 4))
+        FIND.test("Oeffentlich gestellt zeigt die Vorschau auch die Likes, 0", "Public, 0 likes" in vorschau
+                  and "Views: 0" in vorschau, vorschau)
+        klick(15)
         seit = bot.mark()
         klick(11)
         befehl(bot, "optalt")

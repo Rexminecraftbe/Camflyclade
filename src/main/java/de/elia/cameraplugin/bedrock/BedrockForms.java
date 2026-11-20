@@ -5,7 +5,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -62,19 +61,12 @@ public final class BedrockForms {
         }
     }
 
-    /**
-     * The parts of Cumulus a window is built of, out of one class loader. The
-     * list to pick from and the switch of a window to fill in are only
-     * looked for, see {@link #optional}: without them every other window
-     * still goes.
-     */
+    /** The parts of Cumulus a window is built of, out of one class loader. */
     private record Cumulus(Method title, Method build, Method validHandler, Method closedHandler,
                            Method simpleBuilder, Method simpleContent, Method simpleButton, Method simpleClicked,
                            Method modalBuilder, Method modalContent, Method modalFirst, Method modalSecond,
                            Method modalClickedFirst,
-                           Method customBuilder, Method customInput, Method customAnswer,
-                           Method customDropdown, Method customDropdownAnswer,
-                           Method customToggle, Method customToggleAnswer) {
+                           Method customBuilder, Method customInput, Method customAnswer) {
 
         static Cumulus of(ClassLoader loader) throws ReflectiveOperationException {
             Class<?> builder = type(loader, "form.util.FormBuilder");
@@ -84,7 +76,6 @@ public final class BedrockForms {
             Class<?> modalBuilder = type(loader, "form.ModalForm$Builder");
             Class<?> custom = type(loader, "form.CustomForm");
             Class<?> customBuilder = type(loader, "form.CustomForm$Builder");
-            Class<?> customResponse = type(loader, "response.CustomFormResponse");
             return new Cumulus(
                     builder.getMethod("title", String.class),
                     builder.getMethod("build"),
@@ -101,31 +92,7 @@ public final class BedrockForms {
                     type(loader, "response.ModalFormResponse").getMethod("clickedFirst"),
                     custom.getMethod("builder"),
                     customBuilder.getMethod("input", String.class, String.class, String.class),
-                    customResponse.getMethod("asInput", int.class),
-                    optional(customBuilder, "dropdown", String.class, List.class, int.class),
-                    optional(customResponse, "asDropdown", int.class),
-                    optional(customBuilder, "toggle", String.class, boolean.class),
-                    optional(customResponse, "asToggle", int.class));
-        }
-
-        /** A method that an older or newer Cumulus may not have, or {@code null}. */
-        static Method optional(Class<?> type, String name, Class<?>... parameters) {
-            try {
-                return type.getMethod(name, parameters);
-            } catch (NoSuchMethodException ex) {
-                return null;
-            }
-        }
-
-        /** Whether a window with these fields can be built out of this copy. */
-        boolean builds(List<Field> fields) {
-            for (Field field : fields) {
-                if (field instanceof Dropdown && (customDropdown == null || customDropdownAnswer == null)
-                        || field instanceof Toggle && (customToggle == null || customToggleAnswer == null)) {
-                    return false;
-                }
-            }
-            return true;
+                    type(loader, "response.CustomFormResponse").getMethod("asInput", int.class));
         }
 
         static Class<?> type(ClassLoader loader, String name) throws ClassNotFoundException {
@@ -241,65 +208,6 @@ public final class BedrockForms {
                     Object text = cumulus.customAnswer().invoke(response, 0);
                     answer.accept(text == null ? "" : text.toString());
                 }, closed);
-    }
-
-    /** One field of a window to fill in, see {@link #fill}. */
-    public sealed interface Field permits Input, Dropdown, Toggle {
-    }
-
-    /** A line to type into, with what it holds already. */
-    public record Input(String label, String placeholder, String value) implements Field {
-    }
-
-    /** A list to pick one from, with the one picked already, from 0. */
-    public record Dropdown(String label, List<String> options, int chosen) implements Field {
-    }
-
-    /** A switch, on or off already. */
-    public record Toggle(String label, boolean on) implements Field {
-    }
-
-    /**
-     * A window of fields to fill in, one under the other, and the button that
-     * sends it: lines to type into, lists to pick from, switches.
-     *
-     * @param answer what was filled in, one value for each field in their
-     *               order: the text of a line as it was typed, the place of
-     *               the pick of a list from 0 ({@link Integer}), whether a
-     *               switch is on ({@link Boolean})
-     * @param closed what closing the window does; {@code null} for nothing
-     * @return whether it went out - not where the Cumulus there cannot build
-     *         such a field
-     */
-    public boolean fill(Player player, String title, List<Field> fields, Consumer<List<Object>> answer,
-                        Runnable closed) {
-        Api api = reaching(player);
-        if (api == null || !api.cumulus().builds(fields)) {
-            return false;
-        }
-        return send(player, (cumulus, form) -> {
-            for (Field field : fields) {
-                form = switch (field) {
-                    case Input input -> cumulus.customInput().invoke(form, input.label(), input.placeholder(),
-                            input.value());
-                    case Dropdown dropdown -> cumulus.customDropdown().invoke(form, dropdown.label(),
-                            dropdown.options(), dropdown.chosen());
-                    case Toggle toggle -> cumulus.customToggle().invoke(form, toggle.label(), toggle.on());
-                };
-            }
-            return form;
-        }, Cumulus::customBuilder, title, (cumulus, response) -> {
-            List<Object> values = new ArrayList<>(fields.size());
-            for (int index = 0; index < fields.size(); index++) {
-                Object value = switch (fields.get(index)) {
-                    case Input input -> cumulus.customAnswer().invoke(response, index);
-                    case Dropdown dropdown -> cumulus.customDropdownAnswer().invoke(response, index);
-                    case Toggle toggle -> cumulus.customToggleAnswer().invoke(response, index);
-                };
-                values.add(fields.get(index) instanceof Input && value == null ? "" : value);
-            }
-            answer.accept(values);
-        }, closed);
     }
 
     /** What fills a window in, between its title and its handlers. */

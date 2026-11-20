@@ -1019,8 +1019,9 @@ viewpoints:
   # Wie ein neuer Punkt im Menü entsteht:
   #   true  = Knopf "Neuer Punkt", dann den Namen in den Chat, dann eine Seite mit Symbol (icons), noch einmal
   #           Umbenennen, Privat/Öffentlich, Bestätigen und Abbrechen. Gespeichert wird die Stelle, an der man beim
-  #           Eintippen des Namens war. Bedrock-Spieler mit Fenstern (bedrock.menu: mixed oder forms) bekommen statt
-  #           Chat und Seite ein einziges Fenster mit Name, Symbol und Öffentlich.
+  #           Eintippen des Namens war. Gibt es den Namen schon (oder ist er zu lang), fragt der Chat gleich noch
+  #           einmal - die nächste Zeile ist der nächste Versuch. Bedrock-Spieler mit Fenstern (bedrock.menu: mixed
+  #           oder forms) tippen den Namen in ein Fenster statt in den Chat; die Seite danach ist dieselbe.
   #   false = wie früher: Der Name im Chat speichert den Punkt sofort (Linksklick privat, Rechtsklick öffentlich).
   create-page: true
   # Die Symbole, aus denen man für einen Punkt wählt (beim Erstellen und in den Optionen), als Item-Namen. Angeboten
