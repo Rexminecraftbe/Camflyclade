@@ -11177,10 +11177,10 @@ def menue_checks(env, bot):
         FIND.test("Die naechste Zeile im Chat ist der Name: die Seite des neuen Punkts kommt, gespeichert ist er "
                   "noch nicht",
                   f.get("open") and "New spot: Menue" in (f.get("title") or "")
-                  and "Save spot" in item_text(f.get("slots", {}).get("22"))
+                  and "Save spot" in item_text(f.get("slots", {}).get("26"))
                   and not gesagt(zeilen, r"Spot Menue saved"), f"{f.get('title')} / {zeige(zeilen)}")
         seit = bot.mark()
-        klick(22, warten=2.0)
+        klick(26, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
         f = fenster()
         FIND.test("Save spot speichert ihn, und die Seite der Punkte zeigt ihn",
@@ -11898,18 +11898,18 @@ def spotreiter_checks(env, bot):
         f = fenster(bot)
         knopf = f.get("slots", {})
         FIND.test("Das Buch fragt nach dem Namen, dann die Seite des neuen Punkts: oben der Punkt, Umbenennen (11), "
-                  "Symbol (13), Privat (15), Abbrechen (18) und Speichern (22)",
+                  "Symbol (13), Privat (15), Abbrechen (18) und Speichern (26, unten rechts)",
                   "New spot: Gamma" in (f.get("title") or "") and "Gamma" in item_text(knopf.get("4"))
                   and "Rename" in item_text(knopf.get("11")) and "Icon: Map" in item_text(knopf.get("13"))
                   and "Visibility: Private" in item_text(knopf.get("15"))
-                  and "Cancel" in item_text(knopf.get("18")) and "Save spot" in item_text(knopf.get("22")),
+                  and "Cancel" in item_text(knopf.get("18")) and "Save spot" in item_text(knopf.get("26")),
                   f"{f.get('title')} / {[(k, item_text(v).split(chr(10))[0]) for k, v in sorted(knopf.items())]}")
         klick(bot, 15)
         oeffentlich = fenster(bot).get("slots", {}).get("15") or {}
         FIND.test("Ein Klick auf Privat macht ihn oeffentlich, der Knopf glaenzt",
                   "Visibility: Public" in item_text(oeffentlich) and oeffentlich.get("glint") is True,
                   item_text(oeffentlich))
-        klick(bot, 22)
+        klick(bot, 26)
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Save spot: ein oeffentlicher Punkt",
                   gesagt(zeilen, r"Type the spot name in chat") and gesagt(zeilen, r"Spot Gamma saved\.")
@@ -12586,7 +12586,7 @@ def spotoptionen_checks(env, bot):
         klick(13)
         klick(1)
         seit = bot.mark()
-        klick(22, warten=2.0)
+        klick(26, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
         f = fenster()
         wo = platz_mit(f, "Optzwei")

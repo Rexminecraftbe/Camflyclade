@@ -1748,8 +1748,9 @@ public final class CamMenu implements Listener {
      * The page of a new spot before it is saved: the spot on top as it will
      * be - where it is, what it shows -, under it its name to change, its
      * icon to pick and whether it is to be public, each saying how it is
-     * now, and in the last row the buttons that call it off and that save
-     * it. Saved, his spots open, with it among them.
+     * now, and in the last row the buttons that call it off, on the left,
+     * and that save it, on the right. Saved, his spots open, with it among
+     * them.
      */
     private void openNewSpot(Player player) {
         UUID id = player.getUniqueId();
@@ -1815,7 +1816,7 @@ public final class CamMenu implements Listener {
                     messages.sendConfiguredMessage(player, "menu-answer-cancelled");
                     openSpots(player, SpotTab.PRIVATE, 0);
                 }));
-        put(page, 22, Material.EMERALD, messages.getMessage("menu-new-spot-confirm"),
+        put(page, 26, Material.EMERALD, messages.getMessage("menu-new-spot-confirm"),
                 lines(messages.getMessage(draft.open ? "menu-new-spot-confirm-public-lore"
                         : "menu-new-spot-confirm-lore").replace("{spot}", draft.name)), click -> later(() -> {
                     NewSpot now = newSpots.remove(id);
