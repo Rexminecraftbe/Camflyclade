@@ -619,6 +619,7 @@ messages:
   menu-sort-option: "&7   {sort}"
   menu-sort-option-current: "&a» {sort}"
   menu-sort-owner: "by player"
+  menu-sort-shared: "shared first"
   menu-sort-views: "most views first"
   menu-spot: "&f{spot}"
   menu-spot-actions: "&eLeft-click: jump there\n&cShift-click: delete"

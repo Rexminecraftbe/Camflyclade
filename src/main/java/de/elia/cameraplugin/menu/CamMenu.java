@@ -153,6 +153,8 @@ public final class CamMenu implements Listener {
     private static final int SLOT_SPOT_NEW = 53;
     /** The button that sorts a list of players on the admin pages. */
     private static final int SLOT_ADMIN_SORT = 53;
+    /** The button that sorts the players on the page that shares a spot: where it is on the pages of the spots. */
+    private static final int SLOT_SHARE_SORT = SLOT_SPOT_SORT;
     /**
      * The button that does something for everybody at once, a beacon in the
      * corner of the last row: on the page of the tour the one that invites
@@ -281,6 +283,15 @@ public final class CamMenu implements Listener {
     private final Map<UUID, SpotSort> adminSpotSorts = new HashMap<>();
 
     /**
+     * The orders of the page that shares a spot, the first being where it
+     * starts: those it is shared with first, by name, the nearest first.
+     */
+    private static final List<String> SHARE_SORTS = List.of("shared", "name", "near");
+
+    /** How each player has the page that shares a spot sorted, while he is online. */
+    private final Map<UUID, String> shareSorts = new HashMap<>();
+
+    /**
      * How often the menu has shown each player something since he joined - a
      * page, a question, a window of Bedrock - or closed for something a
      * button does, see {@link #afterwards}.
@@ -341,11 +352,11 @@ public final class CamMenu implements Listener {
         }
     }
 
-    /** The orders of the lists of players on the admin pages: by name, or the last flight first. */
+    /** The orders of the lists of players on the admin pages: by name, the last flight first, or the nearest first. */
     private enum PlayerSort {
-        NAME("name"), LAST_FLIGHT("last-flight");
+        NAME("name"), LAST_FLIGHT("last-flight"), NEAR("near");
 
-        static final List<String> KEYS = List.of("name", "last-flight");
+        static final List<String> KEYS = List.of("name", "last-flight", "near");
 
         final String key;
 
@@ -354,7 +365,12 @@ public final class CamMenu implements Listener {
         }
 
         static PlayerSort of(String key) {
-            return key.equals(LAST_FLIGHT.key) ? LAST_FLIGHT : NAME;
+            for (PlayerSort sort : values()) {
+                if (sort.key.equals(key)) {
+                    return sort;
+                }
+            }
+            return NAME;
         }
     }
 
@@ -1622,7 +1638,8 @@ public final class CamMenu implements Listener {
      * at a time, see {@link #sharePage}. A click on a player offers it to
      * him, or takes it back. The beacon in the corner of the last row, on
      * every page, makes it public, or private again - where the page of the
-     * tour has the button that invites everybody.
+     * tour has the button that invites everybody. The hopper sorts the
+     * players, see {@link #sharePage}.
      */
     private void openShare(Player player, String key, int pageNumber) {
         CamSpots spots = plugin.getSpots();
@@ -1688,7 +1705,9 @@ public final class CamMenu implements Listener {
      * {@link #openShare}, or a new one, see {@link #openNewShare}: a head for
      * each player, saying how it stands with him, a page of {@value #ENTRIES}
      * at a time; the beacon in the corner of the last row that makes it
-     * public or private; the way back.
+     * public or private; the hopper that sorts the players - those it is
+     * shared with first, then those it is offered to, each by name, until he
+     * picks another order: by name, or the nearest first -; the way back.
      *
      * @param state    how it stands with a player: {@code on} (he accepted it), {@code offered},
      *                 {@code invited} (a new spot: offered once it is saved) or {@code off}
@@ -1702,10 +1721,23 @@ public final class CamMenu implements Listener {
                            Consumer<Boolean> toPublic, String backKey, Runnable back, IntConsumer again,
                            int pageNumber) {
         Page page = page(player, LIST, messages.getMessage("menu-share-title").replace("{spot}", spot));
+        String sort = shareSort(player);
+        // Sorting is stable: whoever stands as far up as another stays by name.
+        List<Map.Entry<UUID, String>> ordered = new ArrayList<>(people.entrySet());
+        ordered.sort(Comparator.comparing(Map.Entry::getValue, String.CASE_INSENSITIVE_ORDER));
+        if (sort.equals("shared")) {
+            ordered.sort(Comparator.comparingInt(entry -> shareRank(state.apply(entry.getKey()))));
+        } else if (sort.equals("near")) {
+            Map<UUID, Double> far = new HashMap<>();
+            for (Map.Entry<UUID, String> entry : ordered) {
+                far.put(entry.getKey(), distance(player, Bukkit.getPlayer(entry.getKey())));
+            }
+            ordered.sort(Comparator.comparingDouble(entry -> far.get(entry.getKey())));
+        }
         // Filled in below, once the list knows which page of it is shown.
         int[] shown = new int[1];
         List<Row> entries = new ArrayList<>();
-        for (Map.Entry<UUID, String> entry : people.entrySet()) {
+        for (Map.Entry<UUID, String> entry : ordered) {
             String now = state.apply(entry.getKey());
             String name = now.equals("off") ? "menu-share-player"
                     : "menu-share-player-" + (now.equals("invited") ? "offered" : now);
@@ -1726,7 +1758,7 @@ public final class CamMenu implements Listener {
                 }));
             }));
         }
-        Listed listed = list(page, list, entries, pageNumber);
+        Listed listed = list(page, list + ":" + sort, entries, pageNumber);
         int number = listed.number();
         shown[0] = number;
         put(page, SLOT_EVERYBODY, shine(item(Material.BEACON, messages.getMessage("menu-share-everybody"),
@@ -1736,8 +1768,49 @@ public final class CamMenu implements Listener {
                     again.accept(number);
                 }));
         put(page, SLOT_BACK, Material.ARROW, backKey, click -> later(back));
+        putSort(player, page, SLOT_SHARE_SORT, sort, SHARE_SORTS, chosen -> {
+            shareSorts.put(player.getUniqueId(), chosen);
+            again.accept(0);
+        });
         paging(page, number, listed.pages(), again::accept);
         show(player, page, EVERY_SECOND, () -> again.accept(number));
+    }
+
+    /** How he has the page that shares a spot sorted: those it is shared with first, until he picks another order. */
+    private String shareSort(Player player) {
+        String sort = shareSorts.get(player.getUniqueId());
+        return sort != null && SHARE_SORTS.contains(sort) ? sort : SHARE_SORTS.get(0);
+    }
+
+    /**
+     * Where a player comes when those a spot is shared with come first: who
+     * accepted it, then who it is offered to - or, a new spot, to be offered
+     * once it is saved -, then the rest.
+     *
+     * @param state how it stands with him, as {@link #sharePage} has it
+     */
+    private static int shareRank(String state) {
+        return switch (state) {
+            case "on" -> 0;
+            case "offered", "invited" -> 1;
+            default -> 2;
+        };
+    }
+
+    /**
+     * How far another player is from him, squared - endlessly far while the
+     * other is offline, in another world or hidden from him. Each of them
+     * where he is - in camera mode where his camera is -, as on the page of
+     * the tour.
+     *
+     * @param other the other player, {@code null} while he is offline
+     */
+    private static double distance(Player viewer, Player other) {
+        if (other == null || !other.getWorld().equals(viewer.getWorld())
+                || !other.equals(viewer) && !viewer.canSee(other)) {
+            return Double.MAX_VALUE;
+        }
+        return other.getLocation().distanceSquared(viewer.getLocation());
     }
 
     // ------------------------------------------------------------ a new spot, its icon and its options
@@ -2526,12 +2599,12 @@ public final class CamMenu implements Listener {
         return cameras;
     }
 
-    /** How he has the lists of players sorted: by name, until he picks the last flight. */
+    /** How he has the lists of players sorted: by name, until he picks another order. */
     private PlayerSort playerSort(Player admin) {
         return playerSorts.getOrDefault(admin.getUniqueId(), PlayerSort.NAME);
     }
 
-    /** The button that sorts a list of players on the admin pages, by name or by the last flight. */
+    /** The button that sorts a list of players on the admin pages: by name, by the last flight or the nearest first. */
     private void playerSortButton(Player admin, Page page, Runnable reopen) {
         putSort(admin, page, SLOT_ADMIN_SORT, playerSort(admin).key, PlayerSort.KEYS, chosen -> {
             playerSorts.put(admin.getUniqueId(), PlayerSort.of(chosen));
@@ -2545,10 +2618,21 @@ public final class CamMenu implements Listener {
      * the one who started last at the top -, then the others by when their
      * last flight ended, as the statistics noted it - one too short to be
      * counted as well; whoever never flew, or only while the statistics were
-     * switched off, comes last.
+     * switched off, comes last. The nearest first, whoever is online in his
+     * world comes first, the closest to him at the top, see
+     * {@link #distance(Player, Player)}; the others after them by name.
      */
     private <T> void sortPlayers(Player admin, List<T> list, Function<T, String> name, Function<T, UUID> id) {
         list.sort(Comparator.comparing(name, String.CASE_INSENSITIVE_ORDER));
+        if (playerSort(admin) == PlayerSort.NEAR) {
+            // Sorting is stable: whoever is as far - offline, in another world - stays by name.
+            Map<UUID, Double> far = new HashMap<>();
+            for (T entry : list) {
+                far.put(id.apply(entry), distance(admin, Bukkit.getPlayer(id.apply(entry))));
+            }
+            list.sort(Comparator.comparingDouble((T entry) -> far.get(id.apply(entry))));
+            return;
+        }
         if (playerSort(admin) != PlayerSort.LAST_FLIGHT) {
             return;
         }
@@ -3647,6 +3731,13 @@ public final class CamMenu implements Listener {
                             && trail.flightsOf(name).get(0).flying()).reversed()
                     .thenComparing(Comparator.comparingLong((String name) -> trail.flightsOf(name).isEmpty() ? 0L
                             : trail.flightsOf(name).get(0).startedAt()).reversed()));
+        } else if (playerSort(player) == PlayerSort.NEAR) {
+            // As in the other lists of players: whoever is as far stays by name.
+            Map<String, Double> far = new HashMap<>();
+            for (String name : names) {
+                far.put(name, distance(player, Bukkit.getPlayerExact(name)));
+            }
+            names.sort(Comparator.comparingDouble(far::get));
         }
         Page page = page(player, LIST, messages.getMessage("menu-admin-trails-title"));
         List<Row> entries = new ArrayList<>();
@@ -3914,6 +4005,7 @@ public final class CamMenu implements Listener {
         adminSpotSorts.remove(event.getPlayer().getUniqueId());
         spotSorts.remove(event.getPlayer().getUniqueId());
         playerSorts.remove(event.getPlayer().getUniqueId());
+        shareSorts.remove(event.getPlayer().getUniqueId());
     }
 
     // ------------------------------------------------------------ clicks

@@ -642,7 +642,9 @@ camera-head:
 # Prüfungen und Meldungen; was in dieser Datei aus ist, fehlt im Menü. Listen haben einen Knopf zum Sortieren (ein
 # Trichter): die Aussichtspunkte nach Datum (die neuesten zuerst), Name oder Reichweite (die nächsten zuerst, gemessen
 # vom Körper - wie ein Sprung), die geteilten und öffentlichen auch nach dem Spieler, die öffentlichen auch nach
-# Likes; die Spieler auf der Admin-Seite nach Name oder dem letzten Flug. Den Namen eines neuen Aussichtspunkts schreibt
+# Likes; die Spieler auf der Admin-Seite nach Name, dem letzten Flug oder Nähe (die nächsten zuerst - wer offline oder
+# in einer anderen Welt ist, danach nach Name); die Spieler auf der Seite zum Teilen eines Punkts erst die, mit denen er
+# geteilt ist, dann die, denen er angeboten ist, oder nach Name oder Nähe. Den Namen eines neuen Aussichtspunkts schreibt
 # man nach dem Klick in den Chat (abbrechen mit cancel), lesen tut ihn niemand sonst. Im Menü landet nichts im Inventar
 # und nichts kommt heraus, auch nicht im Cam-Modus, wo sonst jedes Fenster zu bleibt. Texte: menu-... in der Sprachdatei.
 menu:
@@ -705,9 +707,10 @@ menu:
     # einer der eigenen und lässt sich auf der öffentlichen Seite mit Rechtsklick wieder offline nehmen, ohne ihn zu
     # löschen. Ein Linksklick auf einen Punkt springt hin, auf einen geteilten oder öffentlichen genauso wie auf einen
     # eigenen: nur, wohin die Kamera auch fliegen dürfte; ohne Cam-Modus startet er erst, wenn der Punkt nah genug ist
-    # (viewpoints.start-distance). Rechtsklick auf einen eigenen öffnet die Seite zum Teilen: die Spieler, und unten
-    # rechts das Leuchtfeuer, das ihn öffentlich macht (oder wieder privat) - am selben Platz wie das Leuchtfeuer, das
-    # beim Folgen alle einlädt.
+    # (viewpoints.start-distance). Rechtsklick auf einen eigenen öffnet die Seite zum Teilen: die Spieler, unten der
+    # Trichter wie auf den Reitern (zuerst, mit wem er geteilt ist, dann wem er angeboten ist; oder nach Name oder Nähe)
+    # und unten rechts das Leuchtfeuer, das ihn öffentlich macht (oder wieder privat) - am selben Platz wie das
+    # Leuchtfeuer, das beim Folgen alle einlädt.
     # Wartet ein Angebot, glänzt der Knopf.
     spots:
       item: filled_map
