@@ -154,11 +154,21 @@ public final class CamMenu implements Listener {
     /** The button that sorts a list of players on the admin pages. */
     private static final int SLOT_ADMIN_SORT = 53;
     /**
-     * The button that does something for everybody at once, a beacon in the
-     * corner of the last row: on the page of the tour the one that invites
-     * everybody he could invite, on the page that shares a spot the one that
-     * makes it public. Where the button for a new spot is on the pages of
-     * the spots.
+     * The last row of the page that shares a spot: the beacon that makes it
+     * public in the middle, between the pages before and after, and the
+     * button that sorts the players in the corner, as on the admin pages.
+     */
+    private static final int SLOT_SHARE_PUBLIC = 49;
+    private static final int SLOT_SHARE_SORT = 53;
+    /**
+     * Everybody on the admin pages of the players, the spots and the tours:
+     * a beacon in the middle of the last row, on every page of the list.
+     */
+    private static final int SLOT_ADMIN_EVERYBODY = 49;
+    /**
+     * The button on the page of the tour that invites everybody he could
+     * invite at once, a beacon in the corner of the last row. Where the
+     * button for a new spot is on the pages of the spots.
      */
     private static final int SLOT_EVERYBODY = 53;
     /** The button on the page of the tour that switches between the guide's view and looking round freely. */
@@ -281,6 +291,15 @@ public final class CamMenu implements Listener {
     private final Map<UUID, SpotSort> adminSpotSorts = new HashMap<>();
 
     /**
+     * The orders of the page that shares a spot, the first being where it
+     * starts: those it is shared with first, by name, the nearest first.
+     */
+    private static final List<String> SHARE_SORTS = List.of("shared", "name", "near");
+
+    /** How each player has the page that shares a spot sorted, while he is online. */
+    private final Map<UUID, String> shareSorts = new HashMap<>();
+
+    /**
      * How often the menu has shown each player something since he joined - a
      * page, a question, a window of Bedrock - or closed for something a
      * button does, see {@link #afterwards}.
@@ -341,11 +360,11 @@ public final class CamMenu implements Listener {
         }
     }
 
-    /** The orders of the lists of players on the admin pages: by name, or the last flight first. */
+    /** The orders of the lists of players on the admin pages: by name, the last flight first, or the nearest first. */
     private enum PlayerSort {
-        NAME("name"), LAST_FLIGHT("last-flight");
+        NAME("name"), LAST_FLIGHT("last-flight"), NEAR("near");
 
-        static final List<String> KEYS = List.of("name", "last-flight");
+        static final List<String> KEYS = List.of("name", "last-flight", "near");
 
         final String key;
 
@@ -354,7 +373,12 @@ public final class CamMenu implements Listener {
         }
 
         static PlayerSort of(String key) {
-            return key.equals(LAST_FLIGHT.key) ? LAST_FLIGHT : NAME;
+            for (PlayerSort sort : values()) {
+                if (sort.key.equals(key)) {
+                    return sort;
+                }
+            }
+            return NAME;
         }
     }
 
@@ -1620,9 +1644,9 @@ public final class CamMenu implements Listener {
      * Whom one of his spots is shared with: the players online and those it
      * is shared with or offered to who are not, a page of {@value #ENTRIES}
      * at a time, see {@link #sharePage}. A click on a player offers it to
-     * him, or takes it back. The beacon in the corner of the last row, on
-     * every page, makes it public, or private again - where the page of the
-     * tour has the button that invites everybody.
+     * him, or takes it back. The beacon in the middle of the last row, on
+     * every page, makes it public, or private again; the hopper in its
+     * corner sorts the players, see {@link #sharePage}.
      */
     private void openShare(Player player, String key, int pageNumber) {
         CamSpots spots = plugin.getSpots();
@@ -1687,8 +1711,11 @@ public final class CamMenu implements Listener {
      * The page of whom a spot is shared with - one that is saved, see
      * {@link #openShare}, or a new one, see {@link #openNewShare}: a head for
      * each player, saying how it stands with him, a page of {@value #ENTRIES}
-     * at a time; the beacon in the corner of the last row that makes it
-     * public or private; the way back.
+     * at a time; the beacon in the middle of the last row that makes it
+     * public or private; the hopper in its corner that sorts the players -
+     * those it is shared with first, then those it is offered to, each by
+     * name, until he picks another order: by name, or the nearest first -;
+     * the way back.
      *
      * @param state    how it stands with a player: {@code on} (he accepted it), {@code offered},
      *                 {@code invited} (a new spot: offered once it is saved) or {@code off}
@@ -1702,10 +1729,23 @@ public final class CamMenu implements Listener {
                            Consumer<Boolean> toPublic, String backKey, Runnable back, IntConsumer again,
                            int pageNumber) {
         Page page = page(player, LIST, messages.getMessage("menu-share-title").replace("{spot}", spot));
+        String sort = shareSort(player);
+        // Sorting is stable: whoever stands as far up as another stays by name.
+        List<Map.Entry<UUID, String>> ordered = new ArrayList<>(people.entrySet());
+        ordered.sort(Comparator.comparing(Map.Entry::getValue, String.CASE_INSENSITIVE_ORDER));
+        if (sort.equals("shared")) {
+            ordered.sort(Comparator.comparingInt(entry -> shareRank(state.apply(entry.getKey()))));
+        } else if (sort.equals("near")) {
+            Map<UUID, Double> far = new HashMap<>();
+            for (Map.Entry<UUID, String> entry : ordered) {
+                far.put(entry.getKey(), distance(player, Bukkit.getPlayer(entry.getKey())));
+            }
+            ordered.sort(Comparator.comparingDouble(entry -> far.get(entry.getKey())));
+        }
         // Filled in below, once the list knows which page of it is shown.
         int[] shown = new int[1];
         List<Row> entries = new ArrayList<>();
-        for (Map.Entry<UUID, String> entry : people.entrySet()) {
+        for (Map.Entry<UUID, String> entry : ordered) {
             String now = state.apply(entry.getKey());
             String name = now.equals("off") ? "menu-share-player"
                     : "menu-share-player-" + (now.equals("invited") ? "offered" : now);
@@ -1726,18 +1766,59 @@ public final class CamMenu implements Listener {
                 }));
             }));
         }
-        Listed listed = list(page, list, entries, pageNumber);
+        Listed listed = list(page, list + ":" + sort, entries, pageNumber);
         int number = listed.number();
         shown[0] = number;
-        put(page, SLOT_EVERYBODY, shine(item(Material.BEACON, messages.getMessage("menu-share-everybody"),
+        put(page, SLOT_SHARE_PUBLIC, shine(item(Material.BEACON, messages.getMessage("menu-share-everybody"),
                 lines(text(player, everybody ? "menu-share-public-lore" : "menu-share-private-lore"))),
                 everybody), click -> later(() -> {
                     toPublic.accept(!everybody);
                     again.accept(number);
                 }));
         put(page, SLOT_BACK, Material.ARROW, backKey, click -> later(back));
+        putSort(player, page, SLOT_SHARE_SORT, sort, SHARE_SORTS, chosen -> {
+            shareSorts.put(player.getUniqueId(), chosen);
+            again.accept(0);
+        });
         paging(page, number, listed.pages(), again::accept);
         show(player, page, EVERY_SECOND, () -> again.accept(number));
+    }
+
+    /** How he has the page that shares a spot sorted: those it is shared with first, until he picks another order. */
+    private String shareSort(Player player) {
+        String sort = shareSorts.get(player.getUniqueId());
+        return sort != null && SHARE_SORTS.contains(sort) ? sort : SHARE_SORTS.get(0);
+    }
+
+    /**
+     * Where a player comes when those a spot is shared with come first: who
+     * accepted it, then who it is offered to - or, a new spot, to be offered
+     * once it is saved -, then the rest.
+     *
+     * @param state how it stands with him, as {@link #sharePage} has it
+     */
+    private static int shareRank(String state) {
+        return switch (state) {
+            case "on" -> 0;
+            case "offered", "invited" -> 1;
+            default -> 2;
+        };
+    }
+
+    /**
+     * How far another player is from him, squared - endlessly far while the
+     * other is offline, in another world or hidden from him. Each of them
+     * where he is - in camera mode where his camera is -, as on the page of
+     * the tour.
+     *
+     * @param other the other player, {@code null} while he is offline
+     */
+    private static double distance(Player viewer, Player other) {
+        if (other == null || !other.getWorld().equals(viewer.getWorld())
+                || !other.equals(viewer) && !viewer.canSee(other)) {
+            return Double.MAX_VALUE;
+        }
+        return other.getLocation().distanceSquared(viewer.getLocation());
     }
 
     // ------------------------------------------------------------ a new spot, its icon and its options
@@ -2526,12 +2607,12 @@ public final class CamMenu implements Listener {
         return cameras;
     }
 
-    /** How he has the lists of players sorted: by name, until he picks the last flight. */
+    /** How he has the lists of players sorted: by name, until he picks another order. */
     private PlayerSort playerSort(Player admin) {
         return playerSorts.getOrDefault(admin.getUniqueId(), PlayerSort.NAME);
     }
 
-    /** The button that sorts a list of players on the admin pages, by name or by the last flight. */
+    /** The button that sorts a list of players on the admin pages: by name, by the last flight or the nearest first. */
     private void playerSortButton(Player admin, Page page, Runnable reopen) {
         putSort(admin, page, SLOT_ADMIN_SORT, playerSort(admin).key, PlayerSort.KEYS, chosen -> {
             playerSorts.put(admin.getUniqueId(), PlayerSort.of(chosen));
@@ -2545,10 +2626,21 @@ public final class CamMenu implements Listener {
      * the one who started last at the top -, then the others by when their
      * last flight ended, as the statistics noted it - one too short to be
      * counted as well; whoever never flew, or only while the statistics were
-     * switched off, comes last.
+     * switched off, comes last. The nearest first, whoever is online in his
+     * world comes first, the closest to him at the top, see
+     * {@link #distance(Player, Player)}; the others after them by name.
      */
     private <T> void sortPlayers(Player admin, List<T> list, Function<T, String> name, Function<T, UUID> id) {
         list.sort(Comparator.comparing(name, String.CASE_INSENSITIVE_ORDER));
+        if (playerSort(admin) == PlayerSort.NEAR) {
+            // Sorting is stable: whoever is as far - offline, in another world - stays by name.
+            Map<UUID, Double> far = new HashMap<>();
+            for (T entry : list) {
+                far.put(id.apply(entry), distance(admin, Bukkit.getPlayer(id.apply(entry))));
+            }
+            list.sort(Comparator.comparingDouble((T entry) -> far.get(id.apply(entry))));
+            return;
+        }
         if (playerSort(admin) != PlayerSort.LAST_FLIGHT) {
             return;
         }
@@ -2627,10 +2719,10 @@ public final class CamMenu implements Listener {
     }
 
     /**
-     * The players, to end their camera mode and to ban them: first
-     * everybody, then the players online, and those banned who are not. Under
-     * each whether he is in camera mode and whether he is banned. A click
-     * opens what can be done to him.
+     * The players, to end their camera mode and to ban them: the players
+     * online, and those banned who are not. Under each whether he is in
+     * camera mode and whether he is banned. A click opens what can be done to
+     * him. Everybody is the beacon in the middle of the last row.
      */
     private void openPlayers(Player player, int pageNumber) {
         if (!managesPlayers(player)) {
@@ -2653,27 +2745,31 @@ public final class CamMenu implements Listener {
         List<Map.Entry<UUID, String>> list = new ArrayList<>(people.entrySet());
         sortPlayers(player, list, Map.Entry::getValue, Map.Entry::getKey);
         Page page = page(player, LIST, messages.getMessage("menu-admin-players-title"));
-        // The first slot of the first page is for everybody.
-        List<Target> targets = new ArrayList<>();
-        targets.add(Target.everybody(messages.getMessage("menu-admin-everybody-name")));
-        for (Map.Entry<UUID, String> entry : list) {
-            targets.add(new Target(entry.getKey(), entry.getValue()));
-        }
         List<Row> entries = new ArrayList<>();
-        for (Target target : targets) {
-            entries.add(new Row(target.everybody() ? "everybody" : target.id(), slot -> {
-                List<String> lore = new ArrayList<>(targetLines(player, target));
-                lore.addAll(lines(text(player, "menu-admin-players-actions")));
-                put(page, slot, targetItem(target, lore), click -> later(() -> openTarget(player, target)));
-            }));
+        for (Map.Entry<UUID, String> entry : list) {
+            Target target = new Target(entry.getKey(), entry.getValue());
+            entries.add(new Row(target.id(), slot -> putTarget(player, page, slot, target)));
         }
         Listed listed = list(page, "players:" + playerSort(player).key, entries, pageNumber);
         int number = listed.number();
+        putTarget(player, page, SLOT_ADMIN_EVERYBODY,
+                Target.everybody(messages.getMessage("menu-admin-everybody-name")));
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
         playerSortButton(player, page, () -> openPlayers(player, 0));
         paging(page, number, listed.pages(), n -> openPlayers(player, n));
         // It looks the players banned up among all who ever played: not every second.
         show(player, page, EVERY_FIVE_SECONDS, () -> openPlayers(player, number));
+    }
+
+    /**
+     * One player, or everybody, on the page of the players: whether he is in
+     * camera mode and whether he is banned; a click opens what can be done to
+     * him.
+     */
+    private void putTarget(Player player, Page page, int slot, Target target) {
+        List<String> lore = new ArrayList<>(targetLines(player, target));
+        lore.addAll(lines(text(player, "menu-admin-players-actions")));
+        put(page, slot, targetItem(target, lore), click -> later(() -> openTarget(player, target)));
     }
 
     /**
@@ -2915,11 +3011,11 @@ public final class CamMenu implements Listener {
     // ------------------------------------------------------------ admin: the spots of everybody
 
     /**
-     * First everybody, then the players who have spots - and those kept from
-     * something with spots who have none -, online or not: under each how
-     * many he has, how many of them are public or shared, and what keeps
-     * him. A click shows his spots; on everybody, it opens the restriction of
-     * everybody.
+     * The players who have spots - and those kept from something with spots
+     * who have none -, online or not: under each how many he has, how many of
+     * them are public or shared, and what keeps him. A click shows his spots.
+     * Everybody is the beacon in the middle of the last row; a click on it
+     * opens the restriction of everybody.
      */
     private void openSpotOwners(Player player, int pageNumber) {
         SpotModeration moderation = plugin.getSpotModeration();
@@ -2946,21 +3042,7 @@ public final class CamMenu implements Listener {
         }
         List<Map.Entry<UUID, String>> list = new ArrayList<>(names.entrySet());
         sortPlayers(player, list, Map.Entry::getValue, Map.Entry::getKey);
-        // The first slot of the first page is for everybody.
         List<Row> entries = new ArrayList<>();
-        entries.add(new Row("everybody", slot -> {
-            String everybody = messages.getMessage("menu-admin-everybody-name");
-            boolean restricted = moderation.everybodyBan() != null;
-            List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-spots-everybody-lore")));
-            lore.addAll(restrictionLines(moderation.everybodyText()));
-            // A click opens the page that changes or lifts a restriction that holds already.
-            lore.addAll(lines(text(player, restricted ? "menu-admin-spots-everybody-actions-change"
-                    : "menu-admin-spots-everybody-actions")));
-            put(page, slot, everybodyItem(lore, restricted), click -> later(() -> {
-                spotDrafts.put(player.getUniqueId(), spotDraft(null, everybody));
-                openSpotBan(player);
-            }));
-        }));
         for (Map.Entry<UUID, String> entry : list) {
             UUID id = entry.getKey();
             String name = entry.getValue();
@@ -2973,10 +3055,20 @@ public final class CamMenu implements Listener {
         }
         Listed listed = list(page, "spot-owners:" + playerSort(player).key, entries, pageNumber);
         int number = listed.number();
-        if (page.listing.order().size() == 1) {
-            // Everybody alone, and nobody gone either.
+        if (listed.empty()) {
             put(page, 22, Material.GRAY_DYE, "menu-admin-spots-empty", NOTHING);
         }
+        String everybody = messages.getMessage("menu-admin-everybody-name");
+        boolean restricted = moderation.everybodyBan() != null;
+        List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-spots-everybody-lore")));
+        lore.addAll(restrictionLines(moderation.everybodyText()));
+        // A click opens the page that changes or lifts a restriction that holds already.
+        lore.addAll(lines(text(player, restricted ? "menu-admin-spots-everybody-actions-change"
+                : "menu-admin-spots-everybody-actions")));
+        put(page, SLOT_ADMIN_EVERYBODY, everybodyItem(lore, restricted), click -> later(() -> {
+            spotDrafts.put(player.getUniqueId(), spotDraft(null, everybody));
+            openSpotBan(player);
+        }));
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
         playerSortButton(player, page, () -> openSpotOwners(player, 0));
         paging(page, number, listed.pages(), n -> openSpotOwners(player, n));
@@ -3381,9 +3473,11 @@ public final class CamMenu implements Listener {
     // ------------------------------------------------------------ admin: the tours
 
     /**
-     * First everybody, then the players online and those kept from tours who
-     * are not: under each whether he shows others round or follows a tour,
-     * and what keeps him. A click opens what keeps him, to set or change it.
+     * The players online and those kept from tours who are not: under each
+     * whether he shows others round or follows a tour, and what keeps him. A
+     * click opens what keeps him, to set or change it. Everybody is the
+     * beacon in the middle of the last row; a click on it switches tours on
+     * or off for everybody.
      */
     private void openTourPlayers(Player player, int pageNumber) {
         TourModeration moderation = plugin.getTourModeration();
@@ -3402,46 +3496,50 @@ public final class CamMenu implements Listener {
         List<Map.Entry<UUID, String>> list = new ArrayList<>(people.entrySet());
         sortPlayers(player, list, Map.Entry::getValue, Map.Entry::getKey);
         Page page = page(player, LIST, messages.getMessage("menu-admin-tours-title"));
-        // The first slot of the first page is for everybody, null.
-        List<UUID> ids = new ArrayList<>();
-        Map<UUID, String> names = new HashMap<>();
-        ids.add(null);
-        for (Map.Entry<UUID, String> entry : list) {
-            ids.add(entry.getKey());
-            names.put(entry.getKey(), entry.getValue());
-        }
         List<Row> entries = new ArrayList<>();
-        for (UUID id : ids) {
-            String name = id == null ? messages.getMessage("menu-admin-everybody-name") : names.get(id);
-            entries.add(new Row(id == null ? "everybody" : id, slot -> {
-                List<String> lore = new ArrayList<>(id == null
-                        ? lines(messages.getMessage("menu-admin-tours-everybody-lore")) : tourLines(id));
-                lore.addAll(id == null ? switchLines(moderation.offText())
-                        : restrictionLines(moderation.banText(id)));
-                // A click opens the page that changes or lifts what holds already.
-                boolean kept = id == null ? moderation.everybodyBan() != null : moderation.banOf(id) != null;
-                lore.addAll(lines(text(player, id == null
-                        ? kept ? "menu-admin-tours-everybody-actions-off" : "menu-admin-tours-everybody-actions"
-                        : kept ? "menu-admin-tours-actions-change" : "menu-admin-tours-actions")));
-                ItemStack item = id == null ? everybodyItem(lore, moderation.everybodyBan() != null)
-                        : playerItem(id, name, lore, moderation.banOf(id) != null);
-                put(page, slot, item, click -> later(() -> {
-                    tourDrafts.put(player.getUniqueId(), tourDraft(id, name));
-                    if (id == null) {
-                        openTourSwitch(player);
-                    } else {
-                        openTourBan(player);
-                    }
-                }));
-            }));
+        for (Map.Entry<UUID, String> entry : list) {
+            entries.add(new Row(entry.getKey(),
+                    slot -> putTourPlayer(player, page, slot, entry.getKey(), entry.getValue())));
         }
         Listed listed = list(page, "tour-players:" + playerSort(player).key, entries, pageNumber);
         int number = listed.number();
+        putTourPlayer(player, page, SLOT_ADMIN_EVERYBODY, null, messages.getMessage("menu-admin-everybody-name"));
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
         playerSortButton(player, page, () -> openTourPlayers(player, 0));
         paging(page, number, listed.pages(), n -> openTourPlayers(player, n));
         // It reads the files of the players offline, to sort them by their last flight: not every second.
         show(player, page, EVERY_FIVE_SECONDS, () -> openTourPlayers(player, number));
+    }
+
+    /**
+     * One player, or everybody, on the admin page of the tours: whether he
+     * shows others round or follows a tour, and what keeps him - for
+     * everybody, whether tours are on. A click opens what keeps him, or
+     * switches tours for everybody.
+     *
+     * @param id the player, {@code null} for everybody
+     */
+    private void putTourPlayer(Player player, Page page, int slot, UUID id, String name) {
+        TourModeration moderation = plugin.getTourModeration();
+        List<String> lore = new ArrayList<>(id == null
+                ? lines(messages.getMessage("menu-admin-tours-everybody-lore")) : tourLines(id));
+        lore.addAll(id == null ? switchLines(moderation.offText())
+                : restrictionLines(moderation.banText(id)));
+        // A click opens the page that changes or lifts what holds already.
+        boolean kept = id == null ? moderation.everybodyBan() != null : moderation.banOf(id) != null;
+        lore.addAll(lines(text(player, id == null
+                ? kept ? "menu-admin-tours-everybody-actions-off" : "menu-admin-tours-everybody-actions"
+                : kept ? "menu-admin-tours-actions-change" : "menu-admin-tours-actions")));
+        ItemStack item = id == null ? everybodyItem(lore, moderation.everybodyBan() != null)
+                : playerItem(id, name, lore, moderation.banOf(id) != null);
+        put(page, slot, item, click -> later(() -> {
+            tourDrafts.put(player.getUniqueId(), tourDraft(id, name));
+            if (id == null) {
+                openTourSwitch(player);
+            } else {
+                openTourBan(player);
+            }
+        }));
     }
 
     /** Whether he shows others round or follows a tour - or that he is not online -, as lines under him. */
@@ -3647,6 +3745,13 @@ public final class CamMenu implements Listener {
                             && trail.flightsOf(name).get(0).flying()).reversed()
                     .thenComparing(Comparator.comparingLong((String name) -> trail.flightsOf(name).isEmpty() ? 0L
                             : trail.flightsOf(name).get(0).startedAt()).reversed()));
+        } else if (playerSort(player) == PlayerSort.NEAR) {
+            // As in the other lists of players: whoever is as far stays by name.
+            Map<String, Double> far = new HashMap<>();
+            for (String name : names) {
+                far.put(name, distance(player, Bukkit.getPlayerExact(name)));
+            }
+            names.sort(Comparator.comparingDouble(far::get));
         }
         Page page = page(player, LIST, messages.getMessage("menu-admin-trails-title"));
         List<Row> entries = new ArrayList<>();
@@ -3914,6 +4019,7 @@ public final class CamMenu implements Listener {
         adminSpotSorts.remove(event.getPlayer().getUniqueId());
         spotSorts.remove(event.getPlayer().getUniqueId());
         playerSorts.remove(event.getPlayer().getUniqueId());
+        shareSorts.remove(event.getPlayer().getUniqueId());
     }
 
     // ------------------------------------------------------------ clicks

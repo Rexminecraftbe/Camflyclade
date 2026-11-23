@@ -642,7 +642,9 @@ camera-head:
 # Prüfungen und Meldungen; was in dieser Datei aus ist, fehlt im Menü. Listen haben einen Knopf zum Sortieren (ein
 # Trichter): die Aussichtspunkte nach Datum (die neuesten zuerst), Name oder Reichweite (die nächsten zuerst, gemessen
 # vom Körper - wie ein Sprung), die geteilten und öffentlichen auch nach dem Spieler, die öffentlichen auch nach
-# Likes; die Spieler auf der Admin-Seite nach Name oder dem letzten Flug. Den Namen eines neuen Aussichtspunkts schreibt
+# Likes; die Spieler auf der Admin-Seite nach Name, dem letzten Flug oder Nähe (die nächsten zuerst - wer offline oder
+# in einer anderen Welt ist, danach nach Name); die Spieler auf der Seite zum Teilen eines Punkts erst die, mit denen er
+# geteilt ist, dann die, denen er angeboten ist, oder nach Name oder Nähe. Den Namen eines neuen Aussichtspunkts schreibt
 # man nach dem Klick in den Chat (abbrechen mit cancel), lesen tut ihn niemand sonst. Im Menü landet nichts im Inventar
 # und nichts kommt heraus, auch nicht im Cam-Modus, wo sonst jedes Fenster zu bleibt. Texte: menu-... in der Sprachdatei.
 menu:
@@ -705,9 +707,9 @@ menu:
     # einer der eigenen und lässt sich auf der öffentlichen Seite mit Rechtsklick wieder offline nehmen, ohne ihn zu
     # löschen. Ein Linksklick auf einen Punkt springt hin, auf einen geteilten oder öffentlichen genauso wie auf einen
     # eigenen: nur, wohin die Kamera auch fliegen dürfte; ohne Cam-Modus startet er erst, wenn der Punkt nah genug ist
-    # (viewpoints.start-distance). Rechtsklick auf einen eigenen öffnet die Seite zum Teilen: die Spieler, und unten
-    # rechts das Leuchtfeuer, das ihn öffentlich macht (oder wieder privat) - am selben Platz wie das Leuchtfeuer, das
-    # beim Folgen alle einlädt.
+    # (viewpoints.start-distance). Rechtsklick auf einen eigenen öffnet die Seite zum Teilen: die Spieler, unten in der
+    # Mitte das Leuchtfeuer, das ihn öffentlich macht (oder wieder privat), und ganz rechts der Trichter (zuerst, mit
+    # wem er geteilt ist, dann wem er angeboten ist; oder nach Name oder Nähe).
     # Wartet ein Angebot, glänzt der Knopf.
     spots:
       item: filled_map
@@ -748,12 +750,12 @@ menu:
     list:
       item: spyglass
       slot: 10
-    # Spieler stoppen und sperren: ein Klick auf einen Kopf - oder auf "Everybody" für alle - zeigt, was geht: den
-    # Cam-Modus beenden (stop-command, camplugin.stop) und sperren (cam-ban, camplugin.ban). Ist er gesperrt, glänzt
-    # der Knopf zum Sperren (einen Kopf zeichnet Minecraft nie glänzend) und führt dahin, wo man seine Sperre ändert
-    # oder aufhebt. Die Dauer einer Sperre: für immer, oder Tage, Stunden und Minuten - Linksklick eins dazu,
-    # Rechtsklick eins weg, mit Umschalt so viele wie ban-shift-step unten. Bei einem Gesperrten steht da, was seine
-    # Sperre noch hat.
+    # Spieler stoppen und sperren: ein Klick auf einen Kopf - oder unten in der Mitte auf "Everybody" für alle - zeigt,
+    # was geht: den Cam-Modus beenden (stop-command, camplugin.stop) und sperren (cam-ban, camplugin.ban). Ist er
+    # gesperrt, glänzt der Knopf zum Sperren (einen Kopf zeichnet Minecraft nie glänzend) und führt dahin, wo man seine
+    # Sperre ändert oder aufhebt. Die Dauer einer Sperre: für immer, oder Tage, Stunden und Minuten - Linksklick eins
+    # dazu, Rechtsklick eins weg, mit Umschalt so viele wie ban-shift-step unten. Bei einem Gesperrten steht da, was
+    # seine Sperre noch hat.
     players:
       item: iron_bars
       slot: 12
@@ -777,19 +779,19 @@ menu:
     # öffentlichen oder geteilten; der Reiter im Spot-Menü zeigt ihm dann nur, dass er gesperrt
     # ist). Für immer oder Tage, Stunden und Minuten wie bei einer Sperre, mit Grund; steht schon etwas, ändert oder
     # hebt man es dort auf. Er erfährt alles davon, wenn er online ist, und jedes Mal, wenn ihn eine Einschränkung
-    # aufhält, was, wie lange noch und warum (in plugins/CamFly/playerdata/spot-bans.yml). "Alle" ganz vorn in der
-    # Liste schränkt alle auf einmal genauso ein, außer wer camplugin.spotadmin.bypass hat; ihnen steht dann, dass es
+    # aufhält, was, wie lange noch und warum (in plugins/CamFly/playerdata/spot-bans.yml). "Alle" unten in der Mitte
+    # schränkt alle auf einmal genauso ein, außer wer camplugin.spotadmin.bypass hat; ihnen steht dann, dass es
     # gerade abgeschaltet ist.
     spots:
       item: filled_map
       slot: 20
-    # Folgen (camplugin.followadmin, nur mit follow.enabled): zuerst "Alle", dann die Spieler - wer online ist
-    # und wer eingeschränkt ist, auch offline -, darunter, ob er gerade führt (Leader) oder folgt. Ein Klick auf einen
-    # Spieler öffnet seine Einschränkung: führen (einladen, also Leader werden) und folgen (Einladungen annehmen), je
-    # ein Knopf zum Umschalten; ein Klick auf "Alle" schaltet das Folgen für alle an oder aus - aus heißt weder führen
-    # noch folgen, außer wer camplugin.followadmin.bypass hat. Beides für immer oder Tage, Stunden und Minuten wie bei
-    # einer Sperre, mit Grund; steht schon etwas, ändert oder hebt man es dort auf. Es gilt sofort: wer nicht mehr
-    # führen darf, dessen Follower gehen ihrer Wege, wer nicht mehr folgen darf, hört damit auf. Im Menü steht ihm
+    # Folgen (camplugin.followadmin, nur mit follow.enabled): die Spieler - wer online ist und wer eingeschränkt ist,
+    # auch offline -, darunter, ob er gerade führt (Leader) oder folgt, und unten in der Mitte "Alle". Ein Klick auf
+    # einen Spieler öffnet seine Einschränkung: führen (einladen, also Leader werden) und folgen (Einladungen annehmen),
+    # je ein Knopf zum Umschalten; ein Klick auf "Alle" schaltet das Folgen für alle an oder aus - aus heißt weder
+    # führen noch folgen, außer wer camplugin.followadmin.bypass hat. Beides für immer oder Tage, Stunden und Minuten
+    # wie bei einer Sperre, mit Grund; steht schon etwas, ändert oder hebt man es dort auf. Es gilt sofort: wer nicht
+    # mehr führen darf, dessen Follower gehen ihrer Wege, wer nicht mehr folgen darf, hört damit auf. Im Menü steht ihm
     # dann "darfst du nicht" (bei "Alle": "gerade abgeschaltet"), und wer nicht folgen darf, steht in der Liste zum
     # Einladen mit dem Hinweis, dass man ihn nicht einladen kann (in plugins/CamFly/playerdata/tour-bans.yml).
     # Die alten Rechte camplugin.touradmin und camplugin.touradmin.bypass gelten weiter. Hieß früher tours.

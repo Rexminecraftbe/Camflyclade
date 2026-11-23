@@ -334,9 +334,9 @@ messages:
   menu-admin-restrict-switch-bedrock: "&eTap: switch"
   menu-admin-restricted: "&cRestricted: {ban}"
   # The admin page of the spots (camplugin.spotadmin): menu-admin-spots-... is the list of the players who have spots
-  # ({count} spots, {public} of them public, {shared} shared by name), everybody first (-everybody-..., with
-  # -actions-change in place of -actions while a restriction holds); menu-admin-spot-... the page of one player's
-  # spots and the page that restricts them, with a button for each kind of spots (-private, -public, -shared).
+  # ({count} spots, {public} of them public, {shared} shared by name), everybody in the middle of the last row
+  # (-everybody-..., with -actions-change in place of -actions while a restriction holds); menu-admin-spot-... the
+  # page of one player's spots and the page that restricts them, with a button for each kind of spots (-private, -public, -shared).
   menu-admin-spot-actions: "&bRight-click: go there\n&cShift-click: delete"
   menu-admin-spot-actions-bedrock: "&eTap: go there or delete"
   menu-admin-spot-actions-options: "&bLeft-click: go there\n&aRight-click: options"
@@ -398,9 +398,9 @@ messages:
   menu-admin-stop-none-lore: ""
   menu-admin-target-title: "&8{player}"
   menu-admin-title: "&8Cam admin"
-  # The admin page of /cam follow (camplugin.followadmin): menu-admin-tours-... the list of the players, everybody first
-  # (-everybody-..., with -on or -off: {ban} for how long and why), under each player whether he leads ({count}
-  # followers) or follows somebody ({player} is the leader). menu-admin-tour-off-... is the page that switches following
+  # The admin page of /cam follow (camplugin.followadmin): menu-admin-tours-... the list of the players, everybody in
+  # the middle of the last row (-everybody-..., with -on or -off: {ban} for how long and why), under each player
+  # whether he leads ({count} followers) or follows somebody ({player} is the leader). menu-admin-tour-off-... is the page that switches following
   # off for everybody, with the button -switch (-switch-on or -switch-off) and menu-admin-tour-on, which switches it
   # on again; menu-admin-tour-restrict-... the page that restricts one player, with the buttons -lead and -join.
   # While something holds already, menu-admin-tours-actions-change (a player) and -everybody-actions-off (everybody)
@@ -619,6 +619,7 @@ messages:
   menu-sort-option: "&7   {sort}"
   menu-sort-option-current: "&a» {sort}"
   menu-sort-owner: "by player"
+  menu-sort-shared: "shared first"
   menu-sort-views: "most views first"
   menu-spot: "&f{spot}"
   menu-spot-actions: "&eLeft-click: jump there\n&cShift-click: delete"

@@ -10984,9 +10984,9 @@ def menue_checks(env, bot):
     anderer, Sperren und Flugspuren nicht, solange sie aus sind. Die Liste
     zeigt den Bot im Cam-Modus, zum Hinteleportieren. Mit admin-access: menu
     verweist /cam list auf das Menue, die Konsole darf es weiter. Mit
-    cam-ban und stop-command an steht auf der Seite der Spieler vorn
-    Everybody mit einem im Cam-Modus, dahinter der Bot; ein Klick darauf
-    bietet Beenden und Sperren an. Beenden beendet den Cam-Modus aller.
+    cam-ban und stop-command an steht auf der Seite der Spieler unten in der
+    Mitte (49) Everybody mit einem im Cam-Modus, vorn in der Liste der Bot;
+    ein Klick darauf bietet Beenden und Sperren an. Beenden beendet den Cam-Modus aller.
     Sperren steht auf fuer immer; Tage, Stunden und Minuten - alle mit der
     Uhr - kommen mit einem Linksklick dazu, mit Umschalt so viele wie
     menu.ban-shift-step (voreingestellt 10, im Test 5), und mit einem
@@ -11261,11 +11261,11 @@ def menue_checks(env, bot):
         klick(12)
         f = fenster()
         knopf = f.get("slots", {})
-        FIND.test("Spieler: vorn Everybody mit einem im Cam-Modus, dahinter der Bot",
-                  "Players" in (f.get("title") or "") and "Everybody" in item_text(knopf.get("0"))
-                  and "1 in cam mode" in item_text(knopf.get("0")) and BOT_NAME in item_text(knopf.get("1")),
-                  f"{item_text(knopf.get('0'))} / {item_text(knopf.get('1'))}")
-        klick(0)
+        FIND.test("Spieler: unten in der Mitte (49) Everybody mit einem im Cam-Modus, vorn in der Liste der Bot",
+                  "Players" in (f.get("title") or "") and "Everybody" in item_text(knopf.get("49"))
+                  and "1 in cam mode" in item_text(knopf.get("49")) and BOT_NAME in item_text(knopf.get("0")),
+                  f"{item_text(knopf.get('49'))} / {item_text(knopf.get('0'))}")
+        klick(49)
         f = fenster()
         knopf = f.get("slots", {})
         FIND.test("Ein Klick auf Everybody: beenden, der Kopf und sperren - kein eigener Knopf zum Aufheben",
@@ -11282,7 +11282,7 @@ def menue_checks(env, bot):
         menue()
         klick(23)
         klick(12)
-        klick(0)
+        klick(49)
         klick(15)
         f = fenster()
         knopf = f.get("slots", {})
@@ -11781,6 +11781,15 @@ def spotreiter_checks(env, bot):
     deren Leuchtfeuer ihn privat und wieder oeffentlich macht; zurueck geht
     es zu den Optionen.
 
+    Auf der Seite zum Teilen steht das Leuchtfeuer unten in der Mitte (49)
+    und der Trichter ganz rechts (53), wie auf der Admin-Seite: erst die,
+    mit denen er geteilt ist, dann nach dem Namen, dann die naechsten
+    zuerst. Ein dritter Spieler steht weit weg; geteilt ist Gamma
+    noch mit keinem, also stehen beide nach dem Namen da. Ein Klick bietet
+    ihn dem zweiten an, der bleibt an seinem Platz. Nach dem Namen steht
+    der dritte vorn, die naechsten zuerst der zweite, und geteilt zuerst
+    auch - ihm ist er angeboten. Ein Klick nimmt das Angebot zurueck.
+
     Bietet der Bot Alpha an, glaenzt beim anderen der Knopf der Punkte und
     sagt, dass einer wartet, und er oeffnet auf dem Reiter der geteilten: vorn
     das Angebot, ein Linksklick nimmt es an, danach steht der Punkt dort, und
@@ -11790,7 +11799,9 @@ def spotreiter_checks(env, bot):
     dem Namen oder dem letzten Flug: der zweite Spieler, der gerade geflogen
     ist, steht dann vorn. Unter seinem Kopf steht der Umschalt-Klick zum
     Zuruecksetzen (der Bot ist op), und der setzt seine Statistik auf null -
-    er erfaehrt, wer es war.
+    er erfaehrt, wer es war. Noch ein Klick auf den Trichter sortiert nach
+    der Naehe: der Bot selbst, der zweite Spieler neben ihm, der dritte weit
+    weg.
 
     viewpoints.views-cooldown-minutes steht voreingestellt auf 10: springt
     der Bot zweimal gleich hintereinander zu Beta, zaehlt das einmal; mit 0
@@ -11839,15 +11850,23 @@ def spotreiter_checks(env, bot):
     # So heisst der oeffentliche Punkt des Bots beim anderen, im Menue und in den Meldungen.
     anzeige = f"Gamma ({BOT_NAME})"
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
+    # Weit weg, fuer die Naehe: auf der Seite zum Teilen und bei den Spielern der Admin-Seite.
+    dritter = BotClient(env, name=DRITTER_NAME)
     try:
         spots_loeschen(bot, "Alpha", "Beta", "Cee", "Gamma")
         zuschauer.start()
-        if not FIND.test("Zweiter Spieler fuer die Reiter kommt herein",
-                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
+        dritter.start()
+        if not FIND.test("Zweiter und dritter Spieler fuer die Reiter kommen herein",
+                         zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned")
+                         and dritter.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
             return
         time.sleep(1.5)
         cam_off(zuschauer)
+        cam_off(dritter)
         console(env, f"tp {ZUSCHAUER_NAME} {x + 3} {y} {z + 1}", pause=1.0)
+        console(env, f"fill {_floor(x) + 28} {y} {_floor(z) - 1} {_floor(x) + 32} {y + 3} {_floor(z) + 1} "
+                     f"minecraft:air", pause=0.5)
+        console(env, f"tp {DRITTER_NAME} {x + 30} {y} {z}", pause=1.0)
         for name, dx in (("Alpha", 2), ("Beta", 0), ("Cee", 6)):
             hinstellen(bot, x + dx, y, z)
             befehl(bot, f"/cam spot set {name}")
@@ -11907,12 +11926,13 @@ def spotreiter_checks(env, bot):
                   f"{f.get('title')} / {[(k, item_text(v).split(chr(10))[0]) for k, v in sorted(knopf.items())]}")
         klick(bot, 15)
         f = fenster(bot)
-        FIND.test("Teilen oeffnet dieselbe Seite wie bei einem gespeicherten: die Spieler, unten rechts (53) der "
-                  "Knopf, der ihn oeffentlich macht",
+        FIND.test("Teilen oeffnet dieselbe Seite wie bei einem gespeicherten: die Spieler, unten in der Mitte (49) der "
+                  "Knopf, der ihn oeffentlich macht, ganz rechts (53) der Trichter",
                   "Share Gamma" in (f.get("title") or "") and any(ZUSCHAUER_NAME in n for n in namen(f))
-                  and "Click: make public" in item_text(f.get("slots", {}).get("53")),
-                  f"{f.get('title')} / {namen(f)} / {item_text(f.get('slots', {}).get('53'))}")
-        klick(bot, 53)
+                  and "Click: make public" in item_text(f.get("slots", {}).get("49"))
+                  and "Order:" in item_text(f.get("slots", {}).get("53")),
+                  f"{f.get('title')} / {namen(f)} / {item_text(f.get('slots', {}).get('49'))}")
+        klick(bot, 49)
         klick(bot, 45)
         f = fenster(bot)
         knopf = f.get("slots", {})
@@ -11996,30 +12016,62 @@ def spotreiter_checks(env, bot):
                   f"{f.get('title')} / {[(k, item_text(v).split(chr(10))[0]) for k, v in sorted(knopf.items())]}")
         klick(bot, 14)
         f = fenster(bot)
-        oeffentlich = item_text(f.get("slots", {}).get("53"))
-        FIND.test("Teilen oeffnet die Seite zum Teilen: die Spieler ab Platz 0, unten rechts (53) der Knopf, der ihn "
-                  "privat oder oeffentlich macht - er ist oeffentlich",
+        oeffentlich = item_text(f.get("slots", {}).get("49"))
+        FIND.test("Teilen oeffnet die Seite zum Teilen: die Spieler ab Platz 0, unten in der Mitte (49) der Knopf, der "
+                  "ihn privat oder oeffentlich macht - er ist oeffentlich",
                   "Share Gamma" in (f.get("title") or "") and any(ZUSCHAUER_NAME in n for n in namen(f))
                   and "Public" in oeffentlich and "Click: make private" in oeffentlich,
                   f"{f.get('title')} / {namen(f)} / {oeffentlich}")
         seit = bot.mark()
-        klick(bot, 53)
+        klick(bot, 49)
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Ein Klick darauf macht ihn privat", gesagt(zeilen, r"Spot Gamma is private again")
-                  and "Click: make public" in item_text(fenster(bot).get("slots", {}).get("53")), zeige(zeilen))
+                  and "Click: make public" in item_text(fenster(bot).get("slots", {}).get("49")), zeige(zeilen))
         seit = bot.mark()
-        klick(bot, 53)
+        klick(bot, 49)
         zeilen = zeilen_seit(bot, seit)
         f = fenster(bot)
-        oeffentlich = f.get("slots", {}).get("53") or {}
+        oeffentlich = f.get("slots", {}).get("49") or {}
         FIND.test("Noch ein Klick macht ihn oeffentlich, der Knopf glaenzt und bleibt auf seinem Platz",
                   gesagt(zeilen, r"Spot Gamma is public now") and "Click: make private" in item_text(oeffentlich)
                   and oeffentlich.get("glint") is True, f"{zeige(zeilen)} / {item_text(oeffentlich)}")
         seit = bot.mark()
-        klick(bot, 53)
+        klick(bot, 49)
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Noch ein Klick macht ihn wieder privat", gesagt(zeilen, r"Spot Gamma is private again"),
                   zeige(zeilen))
+        f = fenster(bot)
+        trichter = item_text(f.get("slots", {}).get("53"))
+        FIND.test("Seite zum Teilen: der Trichter (53) zeigt alle Sortierungen, erst die, mit denen er geteilt ist - "
+                  "geteilt ist er mit keinem, also nach dem Namen",
+                  "» shared first" in trichter and "by name" in trichter and "nearest first" in trichter
+                  and "» by name" not in trichter and namen(f)[:2] == [DRITTER_NAME, ZUSCHAUER_NAME],
+                  f"{namen(f)} / {trichter}")
+        klick(bot, 1)
+        f = fenster(bot)
+        FIND.test("Ein Klick bietet ihn dem zweiten an, und der bleibt an seinem Platz",
+                  namen(f)[:2] == [DRITTER_NAME, ZUSCHAUER_NAME]
+                  and "Offered, not accepted yet" in item_text(f.get("slots", {}).get("1")),
+                  f"{namen(f)} / {item_text(f.get('slots', {}).get('1'))}")
+        klick(bot, 53)
+        f = fenster(bot)
+        FIND.test("Der Trichter: nach dem Namen - der dritte vorn",
+                  "» by name" in item_text(f.get("slots", {}).get("53"))
+                  and namen(f)[:2] == [DRITTER_NAME, ZUSCHAUER_NAME], str(namen(f)))
+        klick(bot, 53)
+        f = fenster(bot)
+        FIND.test("Noch ein Klick: die naechsten zuerst - der zweite steht neben ihm, der dritte weit weg",
+                  "» nearest first" in item_text(f.get("slots", {}).get("53"))
+                  and namen(f)[:2] == [ZUSCHAUER_NAME, DRITTER_NAME], str(namen(f)))
+        klick(bot, 53)
+        f = fenster(bot)
+        FIND.test("Noch ein Klick: wieder geteilt zuerst - dem zweiten ist er angeboten, er steht vorn",
+                  "» shared first" in item_text(f.get("slots", {}).get("53"))
+                  and namen(f)[:2] == [ZUSCHAUER_NAME, DRITTER_NAME], str(namen(f)))
+        klick(bot, 0)
+        FIND.test("Ein Klick auf ihn nimmt das Angebot zurueck",
+                  "Not shared" in item_text(fenster(bot).get("slots", {}).get("0")),
+                  item_text(fenster(bot).get("slots", {}).get("0")))
         klick(bot, 45)
         f = fenster(bot)
         FIND.test("Zurueck fuehrt von der Seite zum Teilen zu seinen Optionen", "Options: Gamma" in (f.get("title") or ""),
@@ -12061,7 +12113,8 @@ def spotreiter_checks(env, bot):
         klick(bot, 23)
         klick(bot, 14)
         f = fenster(bot)
-        FIND.test("Admin-Seite, Statistik: nach dem Namen", namen(f)[:2] == [BOT_NAME, ZUSCHAUER_NAME]
+        FIND.test("Admin-Seite, Statistik: nach dem Namen",
+                  namen(f)[:3] == [DRITTER_NAME, BOT_NAME, ZUSCHAUER_NAME]
                   and "» by name" in item_text(f.get("slots", {}).get("53")), str(namen(f)))
         klick(bot, 53)
         f = fenster(bot)
@@ -12080,6 +12133,22 @@ def spotreiter_checks(env, bot):
                   and gesagt(beim_zuschauer, rf"{BOT_NAME} reset your statistics")
                   and gesagt(z, rf"{ZUSCHAUER_NAME} has not been in cam mode yet"),
                   f"{kopf} / {zeige(beim_bot)} / {zeige(beim_zuschauer)} / {zeige(z)}")
+        # Das Zuruecksetzen schliesst das Menue; der Trichter bleibt, wie er war.
+        befehl(bot, "/cam menu", warten=1.0)
+        klick(bot, 23)
+        klick(bot, 14)
+        klick(bot, 53)
+        f = fenster(bot)
+        FIND.test("Noch ein Klick auf den Trichter: die naechsten zuerst - der Bot selbst, der zweite neben ihm, "
+                  "der dritte weit weg",
+                  namen(f)[:3] == [BOT_NAME, ZUSCHAUER_NAME, DRITTER_NAME]
+                  and "» nearest first" in item_text(f.get("slots", {}).get("53")),
+                  f"{namen(f)} / {item_text(f.get('slots', {}).get('53'))}")
+        # Wieder nach dem Namen, wie die anderen Abschnitte die Listen der Admin-Seite erwarten.
+        klick(bot, 53)
+        FIND.test("Noch ein Klick: wieder nach dem Namen",
+                  "» by name" in item_text(fenster(bot).get("slots", {}).get("53")),
+                  item_text(fenster(bot).get("slots", {}).get("53")))
         bot.call("close_window", wait=10)
 
         FIND.test("Voreingestellt steht viewpoints.views-cooldown-minutes: 10 da",
@@ -12104,6 +12173,7 @@ def spotreiter_checks(env, bot):
             if zuschauer.proc is not None:
                 cam_off(zuschauer)
                 zuschauer.stop()
+            dritter.stop()
             cam_off(bot)
             spots_loeschen(bot, "Alpha", "Beta", "Cee", "Gamma")
             hinstellen(bot, heim[0], heim[1], heim[2])
@@ -12336,14 +12406,14 @@ def spotmoderation_checks(env, bot):
                   gesagt(dort, rf"{BOT_NAME} lifted your spot restriction")
                   and gesagt(zeilen, r"Spot ModD saved"), f"{zeige(dort)} / {zeige(zeilen)}")
 
-        # Alle auf einmal: vorn in der Liste der Spieler.
+        # Alle auf einmal: unten in der Mitte der Liste der Spieler.
         befehl(bot, "/cam menu", warten=1.0)
         klick(bot, 23)
         klick(bot, 20)
-        alle = texte(fenster(bot)).get(0, "")
-        FIND.test("Vorn in der Liste der Punkte steht \"Everybody\", ohne Einschraenkung",
+        alle = item_text(fenster(bot).get("slots", {}).get("49"))
+        FIND.test("Unten in der Mitte (49) der Liste der Punkte steht \"Everybody\", ohne Einschraenkung",
                   alle.startswith("Everybody") and "No restrictions" in alle, alle)
-        klick(bot, 0)
+        klick(bot, 49)
         f = fenster(bot)
         FIND.test("Ein Klick oeffnet die Einschraenkung von allen, mit denselben Knoepfen",
                   "Restrict spots: Everybody" in (f.get("title") or "")
@@ -12383,8 +12453,8 @@ def spotmoderation_checks(env, bot):
         befehl(bot, "/cam menu", warten=1.0)
         klick(bot, 23)
         klick(bot, 20)
-        alle = texte(fenster(bot)).get(0, "")
-        klick(bot, 0)
+        alle = item_text(fenster(bot).get("slots", {}).get("49"))
+        klick(bot, 49)
         seit = zuschauer.mark()
         klick(bot, 35)
         dort = zeilen_seit(zuschauer, seit)
@@ -12569,15 +12639,15 @@ def spotoptionen_checks(env, bot):
                   "und ohne Likes, solange er privat ist",
                   "New spot: Optneu" in titel(f) and "Views: 0" in vorschau and "likes" not in vorschau,
                   f"{titel(f)} / {vorschau}")
-        # Ueber die Seite zum Teilen oeffentlich und wieder privat.
+        # Ueber die Seite zum Teilen oeffentlich und wieder privat: das Leuchtfeuer unten in der Mitte.
         klick(15)
-        klick(53)
+        klick(49)
         klick(45)
         vorschau = item_text(item(fenster(), 4))
         FIND.test("Oeffentlich gestellt zeigt die Vorschau auch die Likes, 0", "Public, 0 likes" in vorschau
                   and "Views: 0" in vorschau, vorschau)
         klick(15)
-        klick(53)
+        klick(49)
         klick(45)
         seit = bot.mark()
         klick(11)
@@ -12845,8 +12915,8 @@ def tourmoderation_checks(env, bot):
     """menu: die Seite der Fuehrungen auf der Admin-Seite (camplugin.followadmin).
 
     Der zweite Spieler folgt der Fuehrung des Bots. Auf der Admin-Seite
-    oeffnet der Knopf der Fuehrungen (24) die Liste: vorn "Everybody", dann
-    die Spieler, unter dem zweiten, wem er folgt, und dass nichts ihn
+    oeffnet der Knopf der Fuehrungen (24) die Liste: die Spieler, unten in
+    der Mitte (49) "Everybody"; unter dem zweiten steht, wem er folgt, und dass nichts ihn
     einschraenkt. Ein Klick oeffnet seine Einschraenkung: fuehren (12) und
     teilnehmen (14), beide erlaubt. Teilnehmen verboten, fuer immer,
     bestaetigt: er erfaehrt es, ist von der Fuehrung, und der Bot erfaehrt
@@ -12924,9 +12994,10 @@ def tourmoderation_checks(env, bot):
             return
 
         f = liste()
-        alle = texte(f).get(0, "")
+        alle = texte(f).get(49, "")
         er = texte(f).get(platz(f, ZUSCHAUER_NAME), "")
-        FIND.test("Admin-Seite, Fuehrungen (24): vorn Everybody, dann er - wem er folgt, ohne Einschraenkung",
+        FIND.test("Admin-Seite, Fuehrungen (24): unten in der Mitte (49) Everybody, in der Liste er - wem er folgt, "
+                  "ohne Einschraenkung",
                   "Follow: players" in (f.get("title") or "") and alle.startswith("Everybody")
                   and "Following is on" in alle and "Click: switch off" in alle and "camplugin." not in alle
                   and f"Follows {BOT_NAME}" in er and "No restrictions" in er and "Click: restrict" in er,
@@ -12993,7 +13064,7 @@ def tourmoderation_checks(env, bot):
                   zeige(dort))
 
         liste()
-        klick(bot, 0)
+        klick(bot, 49)
         f = fenster(bot)
         schalter = item_text(f.get("slots", {}).get("13"))
         FIND.test("Everybody oeffnet den Schalter fuer alle: ein Knopf (13), an",
@@ -13034,11 +13105,11 @@ def tourmoderation_checks(env, bot):
                   and "Following is switched off" not in item_text(f.get("slots", {}).get("22")),
                   f"{zeige(zeilen)} / {er}")
         liste()
-        klick(bot, 0)
+        klick(bot, 49)
         seit = zuschauer.mark()
         klick(bot, 35)
         dort = zeilen_seit(zuschauer, seit)
-        alle = texte(liste()).get(0, "")
+        alle = texte(liste()).get(49, "")
         bot.call("close_window", wait=10)
         zeilen = befehl(bot, f"/cam follow invite {ZUSCHAUER_NAME}")
         FIND.test("Der Milcheimer schaltet sie fuer alle wieder an: er hoert es, unter Everybody steht \"on\", "
@@ -21633,7 +21704,8 @@ def bedrock_checks(env, bot):
         menue()
         klick(gross(23), warten=2.0)
         klick(gross(24), warten=2.0)
-        klick(0, warten=2.0)
+        # Everybody: das Leuchtfeuer unten in der Mitte der Liste.
+        klick(49, warten=2.0)
         f = fenster()
         FIND.test("apply-to: all - die Seite, die Fuehrungen fuer alle abschaltet, hat sechs Reihen statt vier, "
                   "verteilt: oben wer, der Schalter in der dritten Reihe, zurueck ganz unten links",
@@ -22975,7 +23047,7 @@ DAUER_VORGABE = {
     "zeit_wetter": 46, "nachtsicht_wahl": 66, "naehe": 60, "einstellungen": 89, "teilen": 92,
     "fuehrung": 199, "fuehrung_ohne_cam": 148, "herzen_folgen": 60, "gaestebuch": 178, "weiter": 34,
     "weiter_himmel": 45, "alle_einladen": 70, "fuehrung_himmel": 80, "ausspaehen": 50,
-    "menue": 163, "menue_live": 95, "bedrock": 90, "spotreiter": 112, "spotmoderation": 130, "spotoptionen": 150,
+    "menue": 163, "menue_live": 95, "bedrock": 90, "spotreiter": 125, "spotmoderation": 130, "spotoptionen": 150,
     "tourmoderation": 99,
     "spot_nur_im_cam": 28, "spot_ansicht": 91, "webkarte": 75, "erze": 69, "anstupsen": 81,
     "funk": 77, "traenke": 58, "treffergrund": 77, "anfassen": 79, "sulfur_cube": 59,
