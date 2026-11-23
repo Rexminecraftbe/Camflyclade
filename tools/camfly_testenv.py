@@ -21704,7 +21704,8 @@ def bedrock_checks(env, bot):
         menue()
         klick(gross(23), warten=2.0)
         klick(gross(24), warten=2.0)
-        klick(0, warten=2.0)
+        # Everybody: das Leuchtfeuer unten in der Mitte der Liste.
+        klick(49, warten=2.0)
         f = fenster()
         FIND.test("apply-to: all - die Seite, die Fuehrungen fuer alle abschaltet, hat sechs Reihen statt vier, "
                   "verteilt: oben wer, der Schalter in der dritten Reihe, zurueck ganz unten links",
