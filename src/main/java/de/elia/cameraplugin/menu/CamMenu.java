@@ -3728,7 +3728,9 @@ public final class CamMenu implements Listener {
 
     /**
      * The players whose flights {@code /cam trail} keeps: a click shows his
-     * flights. The last button hides a line that is shown.
+     * flights. The last button hides a line that is shown: a water bucket
+     * then, with which flight it is and how long it stays yet - or that it
+     * stays until it is hidden -, an empty one while none is shown.
      */
     private void openTrails(Player player, int pageNumber) {
         CamTrail trail = plugin.getTrail();
@@ -3774,8 +3776,26 @@ public final class CamMenu implements Listener {
         Listed listed = list(page, "trails:" + playerSort(player).key, entries, pageNumber);
         int number = listed.number();
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
-        put(page, SLOT_NEW, Material.BUCKET, "menu-admin-trails-hide",
-                click -> act(player, () -> trail.command(player, new String[0])));
+        CamTrail.Shown shown = trail.shownTo(player);
+        List<String> hideLore = new ArrayList<>();
+        if (shown == null) {
+            hideLore.addAll(lines(messages.getMessage("menu-admin-trails-hide-none")));
+        } else {
+            if (shown.all()) {
+                hideLore.addAll(lines(messages.getMessage("menu-admin-trails-hide-all")
+                        .replace("{player}", shown.player())));
+            } else if (shown.number() > 0) {
+                hideLore.addAll(lines(messages.getMessage("menu-admin-trails-hide-flight")
+                        .replace("{number}", String.valueOf(shown.number())).replace("{player}", shown.player())));
+            }
+            hideLore.addAll(lines(shown.untilHidden() ? messages.getMessage("menu-admin-trails-hide-forever")
+                    : messages.getMessage("menu-admin-trails-hide-left")
+                            .replace("{time}", CamTimeLimit.formatDuration(shown.secondsLeft()))));
+        }
+        // The page is drawn anew every second: the bucket empties by itself once the line is gone.
+        put(page, SLOT_NEW, shown == null ? Material.BUCKET : Material.WATER_BUCKET,
+                messages.getMessage("menu-admin-trails-hide"), hideLore,
+                click -> act(player, () -> trail.hideFromMenu(player)));
         playerSortButton(player, page, () -> openTrails(player, 0));
         paging(page, number, listed.pages(), n -> openTrails(player, n));
         show(player, page, EVERY_SECOND, () -> openTrails(player, number));

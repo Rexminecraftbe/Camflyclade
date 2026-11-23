@@ -35,6 +35,7 @@ import de.elia.cameraplugin.spawning.SpawnMode;
 import de.elia.cameraplugin.start.EffectStart;
 import de.elia.cameraplugin.storage.StorageMode;
 import de.elia.cameraplugin.timelimit.FlightLimit;
+import de.elia.cameraplugin.trail.TrailShowMode;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -128,8 +129,14 @@ public final class CamSettings {
      */
     private static final double MAX_EXIT_CLICK_GUARD_SECONDS = 5.0;
 
-    /** The longest {@code cam-trail.show-seconds} accepts: ten minutes. */
+    /**
+     * The longest {@code cam-trail.show-seconds}, {@code show-min-seconds}
+     * and {@code show-max-seconds} accept: ten minutes.
+     */
     private static final int MAX_TRAIL_SHOW_SECONDS = 600;
+
+    /** The most {@code cam-trail.show-min-blocks} and {@code show-max-blocks} accept. */
+    private static final int MAX_TRAIL_SHOW_BLOCKS = 100_000;
 
     /** The most flights {@code cam-trail.flights} keeps of each player. */
     private static final int MAX_TRAIL_FLIGHTS = 20;
@@ -607,8 +614,18 @@ public final class CamSettings {
 
     /** Whether flights are recorded for {@code /cam trail}, {@code cam-trail.enabled}. */
     private boolean trailEnabled;
-    /** How long {@code /cam trail} shows a flight, in seconds, {@code cam-trail.show-seconds}. */
+    /** What decides how long {@code /cam trail} shows a flight, {@code cam-trail.show-mode}. */
+    private TrailShowMode trailShowMode;
+    /** How long {@code fixed} shows every flight, in seconds, {@code cam-trail.show-seconds}. */
     private int trailShowSeconds;
+    /** Up to how many blocks {@code dynamic} shows a flight the shortest, {@code cam-trail.show-min-blocks}. */
+    private int trailShowMinBlocks;
+    /** How long {@code dynamic} shows a flight at least, in seconds, {@code cam-trail.show-min-seconds}. */
+    private int trailShowMinSeconds;
+    /** From how many blocks on {@code dynamic} shows a flight the longest, {@code cam-trail.show-max-blocks}. */
+    private int trailShowMaxBlocks;
+    /** How long {@code dynamic} shows a flight at most, in seconds, {@code cam-trail.show-max-seconds}. */
+    private int trailShowMaxSeconds;
     /** How many of his last flights are kept of each player, {@code cam-trail.flights}. */
     private int trailFlights;
 
@@ -1038,7 +1055,18 @@ public final class CamSettings {
         startDelayEnabled = config.getBoolean("start-delay.enabled", false);
         startDelaySeconds = config.getInt("start-delay.seconds", 3, 1, MAX_START_DELAY_SECONDS);
         trailEnabled = config.getBoolean("cam-trail.enabled", true);
+        // An older file, without the switch but with show-seconds, goes on as
+        // it was written: every line as long as that, whatever the flight.
+        trailShowMode = !config.has("cam-trail.show-mode") && config.has("cam-trail.show-seconds")
+                ? TrailShowMode.FIXED
+                : config.getEnum("cam-trail.show-mode", TrailShowMode.class, TrailShowMode.DYNAMIC);
         trailShowSeconds = config.getInt("cam-trail.show-seconds", 30, 1, MAX_TRAIL_SHOW_SECONDS);
+        trailShowMinBlocks = config.getInt("cam-trail.show-min-blocks", 50, 0, MAX_TRAIL_SHOW_BLOCKS - 1);
+        trailShowMinSeconds = config.getInt("cam-trail.show-min-seconds", 10, 1, MAX_TRAIL_SHOW_SECONDS);
+        trailShowMaxBlocks = config.getInt("cam-trail.show-max-blocks", 1500, trailShowMinBlocks + 1,
+                MAX_TRAIL_SHOW_BLOCKS);
+        trailShowMaxSeconds = config.getInt("cam-trail.show-max-seconds", 300, trailShowMinSeconds,
+                MAX_TRAIL_SHOW_SECONDS);
         trailFlights = config.getInt("cam-trail.flights", 5, 1, MAX_TRAIL_FLIGHTS);
         endWarningEnabled = config.getBoolean("end-warning.enabled", true);
         endWarningSeconds = readSeconds(config, "end-warning.seconds", List.of(30, 10));
@@ -2547,8 +2575,28 @@ public final class CamSettings {
         return trailEnabled;
     }
 
+    public TrailShowMode getTrailShowMode() {
+        return trailShowMode;
+    }
+
     public int getTrailShowSeconds() {
         return trailShowSeconds;
+    }
+
+    public int getTrailShowMinBlocks() {
+        return trailShowMinBlocks;
+    }
+
+    public int getTrailShowMinSeconds() {
+        return trailShowMinSeconds;
+    }
+
+    public int getTrailShowMaxBlocks() {
+        return trailShowMaxBlocks;
+    }
+
+    public int getTrailShowMaxSeconds() {
+        return trailShowMaxSeconds;
     }
 
     public int getTrailFlights() {

@@ -7297,7 +7297,13 @@ def flugspur_checks(env, bot):
     Kamera. Der Bot selbst bekommt die Linie als Partikel, alle mit dem Flag
     fuer die Sichtweite und alle auf dem geflogenen Weg - keiner auf der Linie
     quer zurueck, die /cam back nicht geflogen ist. /cam trail ohne Namen
-    blendet sie aus, und nach show-seconds hoert sie von selbst auf.
+    blendet sie aus, und mit show-mode: fixed hoert sie nach show-seconds
+    von selbst auf. Mit dynamic steht ein Flug bis show-min-blocks
+    show-min-seconds da, ab show-max-blocks show-max-seconds, dazwischen
+    entsprechend; ist show-max-seconds kleiner, gilt show-min-seconds, und ein
+    Flug, der noch laeuft, steht show-max-seconds da. Mit forever steht sie,
+    bis /cam trail sie ausblendet. Eine aeltere Datei ohne show-mode, aber mit
+    show-seconds, geht mit fixed weiter, ohne Warnung.
 
     Nach einem zweiten Flug zeigt /cam trail <Name> nur den neuen, mit Knoepfen
     fuer [1], [2] und [all], /cam trail <Name> 2 nur den alten, all beide; #3
@@ -7328,7 +7334,14 @@ def flugspur_checks(env, bot):
         FIND.test("cam-trail.enabled: false - /cam trail ist abgeschaltet",
                   gesagt(z, r"/cam trail is switched off"), zeige(z))
 
-        set_options(env, [("enabled", "true", "cam-trail"), ("show-seconds", "4", "cam-trail")])
+        quelle = quelle_config(env)
+        voreinstellung = (("show-mode", "dynamic"), ("show-seconds", "30"), ("show-min-blocks", "50"),
+                          ("show-min-seconds", "10"), ("show-max-blocks", "1500"), ("show-max-seconds", "300"))
+        FIND.test("Voreingestellt steht cam-trail.show-mode: dynamic da, mit show-seconds: 30, show-min-blocks: 50, "
+                  "show-min-seconds: 10, show-max-blocks: 1500 und show-max-seconds: 300",
+                  all(re.search(rf"(?m)^  {k}:\s*{v}\s*$", quelle) for k, v in voreinstellung), "")
+        set_options(env, [("enabled", "true", "cam-trail"), ("show-mode", "fixed", "cam-trail"),
+                          ("show-seconds", "4", "cam-trail")])
         heim = bot.server_pos()
         if not FIND.test("Cam-Modus fuer die Flugspur gestartet", heim is not None and cam_on(bot), ""):
             return
@@ -7390,16 +7403,97 @@ def flugspur_checks(env, bot):
         time.sleep(4.5)
         seit = partikel_marke(bot)
         time.sleep(1.5)
-        FIND.test("cam-trail.show-seconds: 4 - danach kommen keine Partikel mehr",
+        FIND.test("cam-trail.show-mode: fixed, show-seconds: 4 - danach kommen keine Partikel mehr",
                   not partikel_seit(bot, seit), "")
 
+        def gezeigt_fuer(sekunden):
+            return rf"Shown for {sekunden} seconds?:"
+
+        # show-mode: dynamic. Die Konsole nannte die Strecke gerundet,
+        # gerechnet wird mit der genauen: Es passt, was fuer eine Strecke
+        # einen halben Block darunter oder darueber herauskaeme.
+        bloecke = int(strecke.group(1)) if strecke else 0
+
+        def nach_strecke(min_b, min_s, max_b, max_s):
+            """/cam trail mit dynamic und diesen Werten: was kam, und welche
+            Zeiten zu der Strecke passen."""
+            set_options(env, [("show-mode", "dynamic", "cam-trail"), ("show-min-blocks", str(min_b), "cam-trail"),
+                              ("show-min-seconds", str(min_s), "cam-trail"),
+                              ("show-max-blocks", str(max_b), "cam-trail"),
+                              ("show-max-seconds", str(max_s), "cam-trail")])
+            z = befehl(bot, f"/cam trail {BOT_NAME}")
+            befehl(bot, "/cam trail", warten=0.5)
+            max_s = max(max_s, min_s)
+
+            def sekunden(b):
+                if b <= min_b:
+                    return min_s
+                if b >= max_b:
+                    return max_s
+                return math.floor(min_s + (b - min_b) / (max_b - min_b) * (max_s - min_s) + 0.5)
+
+            moeglich = sorted({sekunden(b) for b in (bloecke - 0.5, bloecke + 0.5)})
+            passt = any(gesagt(z, gezeigt_fuer(n)) for n in moeglich)
+            return passt, f"{bloecke} Bloecke, erwartet {moeglich}: {zeige(z)}"
+
+        FIND.test("show-mode: dynamic - zwischen show-min-blocks (0, 1 s) und show-max-blocks (100, 21 s) entsprechend",
+                  *nach_strecke(0, 1, 100, 21))
+        FIND.test("show-mode: dynamic - unter show-min-blocks (50) steht er show-min-seconds (9) da",
+                  *nach_strecke(50, 9, 1500, 300))
+        FIND.test("show-mode: dynamic - ueber show-max-blocks (10) steht er show-max-seconds (2) da",
+                  *nach_strecke(0, 1, 10, 2))
+        FIND.test("show-mode: dynamic - ist show-max-seconds kleiner als show-min-seconds, gilt show-min-seconds",
+                  *nach_strecke(0, 8, 10, 3))
+
+        # Eine aeltere Datei hat kein show-mode, nur show-seconds.
+        datei = env.server / "plugins" / "CamFly" / "config.yml"
+        vorher_text = datei.read_text(encoding="utf-8")
+        alt, n = re.subn(r"(?m)^  show-mode:.*\n", "", vorher_text)
+        alt, m = re.subn(r"(?m)^(  show-seconds:\s*).*$", r"\g<1>7", alt)
+        datei.write_text(alt, encoding="utf-8")
+        vorher = len(server_log(env))
+        neu_laden(env)
+        log = strip_colors(server_log(env)[vorher:])
+        z = befehl(bot, f"/cam trail {BOT_NAME}")
+        befehl(bot, "/cam trail", warten=0.5)
+        datei.write_text(vorher_text, encoding="utf-8")
+        set_options(env, [("show-mode", "fixed", "cam-trail"), ("show-seconds", "4", "cam-trail")])
+        FIND.test("Eine aeltere config.yml ohne show-mode, mit show-seconds: 7, zeigt jede Linie 7 Sekunden, "
+                  "ohne Warnung",
+                  n == 1 and m == 1 and gesagt(z, gezeigt_fuer(7)) and "Unknown setting" not in log
+                  and "show-mode" not in log, f"{n} {m} / {zeige(z)} / {log.strip()[-200:]}")
+
+        # show-mode: forever - laenger als die 4 Sekunden von eben, und weg
+        # erst mit /cam trail.
+        set_option(env, "show-mode", "forever", "cam-trail")
+        z = befehl(bot, f"/cam trail {BOT_NAME}", warten=0.5)
+        time.sleep(5.0)
+        seit = partikel_marke(bot)
+        time.sleep(1.5)
+        noch = partikel_seit(bot, seit)
+        weg = befehl(bot, "/cam trail", warten=0.5)
+        seit = partikel_marke(bot)
+        time.sleep(1.5)
+        FIND.test("show-mode: forever - die Linie bleibt, auch nach 5 Sekunden kommen noch Partikel",
+                  gesagt(z, r"Shown until you hide it") and len(noch) > 0, f"{zeige(z)} - {len(noch)} Partikel")
+        FIND.test("show-mode: forever - /cam trail blendet sie aus",
+                  gesagt(weg, r"Flight hidden") and not partikel_seit(bot, seit), zeige(weg))
+
         # Ein zweiter Flug, schraeg hoch nach Norden: Seine Linie liegt weit
-        # weg von der Ecke des ersten.
+        # weg von der Ecke des ersten. Fertige Fluege stehen 4 Sekunden da,
+        # einer, der noch laeuft, 9.
+        set_options(env, [("show-mode", "dynamic", "cam-trail"), ("show-min-blocks", "0", "cam-trail"),
+                          ("show-min-seconds", "4", "cam-trail"), ("show-max-blocks", "1000", "cam-trail"),
+                          ("show-max-seconds", "9", "cam-trail")])
         if not FIND.test("Zweiter Cam-Modus fuer die Flugspur gestartet", cam_on(bot), ""):
             return
         bot.call("fly", wait=30, dy=3, dz=-5, timeout=15000)
         time.sleep(0.5)
         nord = bot.server_pos()
+        z = befehl(bot, f"/cam trail {BOT_NAME}")
+        befehl(bot, "/cam trail", warten=0.5)
+        FIND.test("Ein Flug, der noch laeuft, steht show-max-seconds da (9 Sekunden), seine Linie waechst noch",
+                  gesagt(z, gezeigt_fuer(9)), zeige(z))
         cam_off(bot)
         if nord is None:
             FIND.test("Position nach dem zweiten Flug lesbar", False, "")
@@ -7464,8 +7558,10 @@ def flugspur_checks(env, bot):
     finally:
         console(env, f"op {BOT_NAME}", pause=1.0)
         cam_off(bot)
-        set_options(env, [("enabled", "false", "cam-trail"), ("show-seconds", "30", "cam-trail"),
-                          ("flights", "5", "cam-trail")])
+        set_options(env, [("enabled", "false", "cam-trail"), ("show-mode", "dynamic", "cam-trail"),
+                          ("show-seconds", "30", "cam-trail"), ("show-min-blocks", "50", "cam-trail"),
+                          ("show-min-seconds", "10", "cam-trail"), ("show-max-blocks", "1500", "cam-trail"),
+                          ("show-max-seconds", "300", "cam-trail"), ("flights", "5", "cam-trail")])
 
 
 def vorschlag_checks(env, bot):
@@ -11002,7 +11098,10 @@ def menue_checks(env, bot):
     Seite der Flugspuren, dass zwei gemerkt sind; ein Klick zeigt sie, den
     neuesten zuerst, mit Datum, Dauer, Strecke, Start und Ende. Linksklick
     zeigt einen, Rechtsklick zeigt ihn und bringt den Bot an seinen Start, der
-    letzte Knopf zeigt alle.
+    letzte Knopf zeigt alle. Der Eimer auf der Seite der Flugspuren ist dann
+    ein Wassereimer mit dem Flug und der Zeit, die bleibt, und blendet die
+    Linie aus; danach ist er leer, und ein Klick sagt, dass keine zu sehen ist,
+    statt wie der Befehl geht.
 
     Der Foto-Modus sagt unter seinem Namen, wie er steht: off und nach einem
     Klick on. Die Zeit sagt es in ihrem Namen:
@@ -11362,7 +11461,7 @@ def menue_checks(env, bot):
         bot.call("close_window", wait=10)
         set_options(env, [("enabled", "false", "cam-ban"), ("enabled", "false", "stop-command"),
                           ("admin-access", "both", "menu"), ("enabled", "true", "cam-trail"),
-                          ("ban-shift-step", "10", "menu")])
+                          ("show-min-seconds", "60", "cam-trail"), ("ban-shift-step", "10", "menu")])
 
         # Zwei Fluege vom selben Platz, dann ein Stueck daneben.
         for weg in ({"dy": 3}, {"dx": -3, "dy": 2}):
@@ -11413,7 +11512,51 @@ def menue_checks(env, bot):
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Der letzte Knopf zeigt alle Fluege", gesagt(zeilen, rf"Last 2 flights of {BOT_NAME}"),
                   zeige(zeilen))
-        set_option(env, "enabled", "false", "cam-trail")
+        menue()
+        klick(23)
+        klick(16)
+        # Welches Item es ist, sagt der Bot nicht verlaesslich: Er kennt die
+        # IDs von 26.2 nicht und nennt die Eimer Buendel. Verglichen wird
+        # deshalb nur, dass der leere ein anderes Item ist als der volle.
+        voll = fenster().get("slots", {}).get("49") or {}
+        FIND.test("Flugspuren: solange eine Linie steht, sagt der Eimer, welcher Flug es ist und wie lange noch",
+                  f"Shown: all flights of {BOT_NAME}" in item_text(voll)
+                  and re.search(r"\d+ seconds left", item_text(voll)) is not None,
+                  item_text(voll).replace("\n", " / "))
+        seit = bot.mark()
+        klick(49, warten=2.0)
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Flugspuren: der Eimer blendet die Linie aus", gesagt(zeilen, r"Flight hidden"), zeige(zeilen))
+        menue()
+        klick(23)
+        klick(16)
+        leer = fenster().get("slots", {}).get("49") or {}
+        FIND.test("Flugspuren: ohne Linie ist der Eimer ein anderes Item (leer) und sagt, dass keine zu sehen ist",
+                  "No flight is shown right now" in item_text(leer) and "Shown:" not in item_text(leer)
+                  and leer.get("name") is not None and leer.get("name") != voll.get("name"),
+                  f"{voll.get('name')} -> {leer.get('name')} / " + item_text(leer).replace("\n", " / "))
+        seit = bot.mark()
+        klick(49, warten=2.0)
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Flugspuren: der Eimer ohne Linie sagt, dass keine zu sehen ist - nicht, wie der Befehl geht",
+                  gesagt(zeilen, r"No flight is shown right now") and not gesagt(zeilen, r"Use /cam trail"),
+                  zeige(zeilen))
+        set_option(env, "show-mode", "forever", "cam-trail")
+        menue()
+        klick(23)
+        klick(16)
+        klick(0)
+        klick(0, warten=2.0)
+        menue()
+        klick(23)
+        klick(16)
+        voll = fenster().get("slots", {}).get("49") or {}
+        FIND.test("show-mode: forever - unter dem Eimer steht der Flug und dass er bleibt, bis man ihn ausblendet",
+                  f"Shown: flight #1 of {BOT_NAME}" in item_text(voll) and "Until you hide it" in item_text(voll)
+                  and " left" not in item_text(voll), item_text(voll).replace("\n", " / "))
+        klick(49, warten=2.0)
+        set_options(env, [("enabled", "false", "cam-trail"), ("show-mode", "dynamic", "cam-trail"),
+                          ("show-min-seconds", "10", "cam-trail")])
 
         original = datei.read_text(encoding="utf-8")
         text = menue_knopf(original, "start", slot=4)
@@ -11487,6 +11630,7 @@ def menue_checks(env, bot):
             # Wie der Testserver es fuer alle anderen Abschnitte hat.
             set_options(env, [("access", "both", "menu"), ("admin-access", "both", "menu"),
                               ("enabled", "false", "cam-ban"), ("enabled", "false", "cam-trail"),
+                              ("show-mode", "dynamic", "cam-trail"), ("show-min-seconds", "10", "cam-trail"),
                               ("enabled", "false", "stop-command")])
             console(env, "cam unban all", pause=0.5)
             spots_loeschen(bot, "Menue")
