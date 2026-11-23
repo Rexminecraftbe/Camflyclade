@@ -1,0 +1,66 @@
+# Bei jedem Pull Request und jedem Push auf master: bauen, die schnellen Tests
+# (JUnit, src/test/java) und die Prüfungen ohne Server aus tools/camfly_testenv.py.
+# Die Tests im laufenden Spiel laufen hier nicht - dafür siehe tools/TESTUMGEBUNG.md.
+name: Bauen und schnelle Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bauen:
+    name: Bauen, JUnit, gegen paper-api prüfen
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Bauen mit den schnellen Tests (mvn package)
+        run: mvn -B package
+
+      - name: Berichte der Tests aufheben
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: testberichte
+          path: target/surefire-reports/
+          retention-days: 14
+
+      - name: Plugin-Jar aufheben
+        uses: actions/upload-artifact@v7
+        with:
+          name: CamFly-jar
+          path: target/CamFly-*.jar
+          retention-days: 14
+
+      # paper-api, der Paper-Server für die Namen und was sonst geladen wird
+      - name: Downloads der Testumgebung aus dem Cache
+        uses: actions/cache@v6
+        with:
+          path: ~/camfly-testenv/cache
+          key: camfly-testenv-${{ hashFiles('tools/camfly_testenv.py') }}
+          restore-keys: camfly-testenv-
+
+      # Das JDK von setup-java statt eines zweiten Downloads; der Schritt jdk prüft dann nur, ob es 25 ist.
+      # target/classes kommt aus mvn package, deshalb ohne den Schritt build.
+      - name: Gegen paper-api übersetzen, Aufrufe prüfen, Namen der Sprachdatei prüfen
+        run: |
+          mkdir -p ~/camfly-testenv
+          ln -sfn "$JAVA_HOME" ~/camfly-testenv/jdk25
+          python3 tools/camfly_testenv.py --steps jdk,paperapi,crosscheck,apicheck,names

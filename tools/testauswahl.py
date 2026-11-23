@@ -64,10 +64,13 @@ REGISTER = {"config/CamSettings", "camfly2/CameraPlugin"}
 # ueber die Zeile, in der es steht: plugin.getMessages() oder settings.
 ALLGEMEIN_AB = 8
 
-# Dateien, die an den Tests nichts aendern.
+# Dateien, die an den Tests nichts aendern. Die schnellen Tests unter
+# src/test laufen bei jedem Bauen mit, die Workflows unter .github auf GitHub:
+# Beide aendern nichts an dem, was das Plugin im Spiel tut.
 EGAL = (re.compile(r"\.md$"), re.compile(r"^\.idea/"), re.compile(r"^\.vscode/"),
         re.compile(r"(^|/)\.gitignore$"), re.compile(r"\.iml$"),
-        re.compile(r"^tools/testauswahl\.py$"))
+        re.compile(r"^tools/testauswahl\.py$"), re.compile(r"^src/test/"),
+        re.compile(r"^\.github/"))
 
 # Namen im Testskript, die an keinem Abschnitt etwas aendern: die Schritte
 # vor dem Server, die Zusammenfassung und die Auswahl selbst. Was sonst
