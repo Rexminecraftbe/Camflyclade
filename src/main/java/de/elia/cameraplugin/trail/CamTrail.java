@@ -232,6 +232,23 @@ public final class CamTrail implements Listener {
     }
 
     /**
+     * The button of the admin page of the flights that hides the line: like
+     * {@code /cam trail} on its own, but with no line shown it says so rather
+     * than how the command goes - in the menu the command may well be off.
+     */
+    public void hideFromMenu(Player viewer) {
+        if (!settings.isTrailEnabled()) {
+            messages.sendConfiguredMessage(viewer, "trail-off");
+            return;
+        }
+        if (!mayUse(viewer)) {
+            messages.sendConfiguredMessage(viewer, "no-permission");
+            return;
+        }
+        messages.sendConfiguredMessage(viewer, hide(viewer) ? "trail-hidden" : "trail-nothing-shown");
+    }
+
+    /**
      * One kept flight, as the menu shows it.
      *
      * @param number    which one: 1 for the newest, as {@code /cam trail} counts

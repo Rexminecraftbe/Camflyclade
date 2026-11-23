@@ -3775,7 +3775,7 @@ public final class CamMenu implements Listener {
         int number = listed.number();
         put(page, SLOT_BACK, Material.ARROW, "menu-to-admin", click -> later(() -> openAdmin(player)));
         put(page, SLOT_NEW, Material.BUCKET, "menu-admin-trails-hide",
-                click -> act(player, () -> trail.command(player, new String[0])));
+                click -> act(player, () -> trail.hideFromMenu(player)));
         playerSortButton(player, page, () -> openTrails(player, 0));
         paging(page, number, listed.pages(), n -> openTrails(player, n));
         show(player, page, EVERY_SECOND, () -> openTrails(player, number));

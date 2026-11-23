@@ -1249,6 +1249,7 @@ messages:
   trail-gone: "&eThat flight of {player} is no longer kept."
   trail-header: "&eFlight #{number} of {player}: {distance} blocks in {time}, {when}"
   trail-hidden: "&aFlight hidden."
+  trail-nothing-shown: "&eNo flight is shown right now, so there is nothing to hide."
   trail-no-such: "&eNo flight #{number}: {player} has only {count}."
   trail-none: "&e{player} has no recorded flights."
   trail-off: "&c/cam trail is switched off."
@@ -1968,6 +1969,7 @@ message-settings:
   trail-gone: true
   trail-header: true
   trail-hidden: actionbar
+  trail-nothing-shown: actionbar
   trail-no-such: true
   trail-none: true
   trail-off: true

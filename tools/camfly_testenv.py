@@ -11002,7 +11002,8 @@ def menue_checks(env, bot):
     Seite der Flugspuren, dass zwei gemerkt sind; ein Klick zeigt sie, den
     neuesten zuerst, mit Datum, Dauer, Strecke, Start und Ende. Linksklick
     zeigt einen, Rechtsklick zeigt ihn und bringt den Bot an seinen Start, der
-    letzte Knopf zeigt alle.
+    letzte Knopf zeigt alle. Der Eimer auf der Seite der Flugspuren blendet
+    die Linie aus; ist keine zu sehen, sagt er das, statt wie der Befehl geht.
 
     Der Foto-Modus sagt unter seinem Namen, wie er steht: off und nach einem
     Klick on. Die Zeit sagt es in ihrem Namen:
@@ -11412,6 +11413,22 @@ def menue_checks(env, bot):
         klick(49, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Der letzte Knopf zeigt alle Fluege", gesagt(zeilen, rf"Last 2 flights of {BOT_NAME}"),
+                  zeige(zeilen))
+        menue()
+        klick(23)
+        klick(16)
+        seit = bot.mark()
+        klick(49, warten=2.0)
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Flugspuren: der Eimer blendet die Linie aus", gesagt(zeilen, r"Flight hidden"), zeige(zeilen))
+        menue()
+        klick(23)
+        klick(16)
+        seit = bot.mark()
+        klick(49, warten=2.0)
+        zeilen = zeilen_seit(bot, seit)
+        FIND.test("Flugspuren: der Eimer ohne Linie sagt, dass keine zu sehen ist - nicht, wie der Befehl geht",
+                  gesagt(zeilen, r"No flight is shown right now") and not gesagt(zeilen, r"Use /cam trail"),
                   zeige(zeilen))
         set_option(env, "enabled", "false", "cam-trail")
 
