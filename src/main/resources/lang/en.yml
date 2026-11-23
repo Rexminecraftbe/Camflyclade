@@ -456,7 +456,13 @@ messages:
   menu-admin-trails-actions: "&eClick: their flights"
   menu-admin-trails-actions-bedrock: "&eTap: their flights"
   menu-admin-trails-count: "&7{count} flights, last: {date}"
-  menu-admin-trails-hide: "&7Hide the line"
+  menu-admin-trails-hide: "&bHide the line"
+  # Under the bucket: while a line is shown which flight it is ({number}, or all of them) and how long it stays yet
+  # ({time}), otherwise menu-admin-trails-hide-none.
+  menu-admin-trails-hide-all: "&7Shown: all flights of {player}"
+  menu-admin-trails-hide-flight: "&7Shown: flight #{number} of {player}"
+  menu-admin-trails-hide-left: "&7{time} left"
+  menu-admin-trails-hide-none: "&7No flight is shown right now."
   menu-admin-trails-lore: "&7Where the cameras flew."
   menu-admin-trails-title: "&8Flights"
   menu-admin-unban: "&aUnban"

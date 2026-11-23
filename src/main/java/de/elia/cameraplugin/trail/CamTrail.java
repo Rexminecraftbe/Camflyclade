@@ -46,7 +46,14 @@ import java.util.function.Supplier;
  * grows as he flies on, and one he starts while it is shown takes its place.
  * A number picks one of the last {@code cam-trail.flights}, 1 being the
  * newest, and {@code all} shows all of them at once. {@code /cam trail} on its
- * own hides the line again.</p>
+ * own hides the line again, as does the bucket on the page of the flights in
+ * the menu - a water bucket while a line is shown, an empty one otherwise.</p>
+ *
+ * <p>How long the line stays goes by how far the camera flew: a second for
+ * every {@link #BLOCKS_PER_SECOND} blocks, between
+ * {@code cam-trail.show-min-seconds} and {@code show-max-seconds}. A long
+ * line needs the time: it is drawn only within {@link #REACH} of the viewer,
+ * who has to fly along it to see it all.</p>
  *
  * <p>The flights are kept in memory only, the last few of each player, until
  * the server stops - and only while {@code cam-trail} is on.</p>
@@ -68,6 +75,12 @@ public final class CamTrail implements Listener {
      * server keeps to 512 blocks.
      */
     private static final double REACH = 128.0;
+
+    /**
+     * How many blocks of a flight keep its line a second longer on screen,
+     * between {@code cam-trail.show-min-seconds} and {@code show-max-seconds}.
+     */
+    private static final double BLOCKS_PER_SECOND = 5.0;
 
     /** How far apart the specks are at most, in blocks. */
     private static final double SPACING = 0.5;
@@ -95,8 +108,8 @@ public final class CamTrail implements Listener {
     private final Messages messages;
     /** The last flights of each player, the newest first - the one under way among them. */
     private final Map<UUID, Deque<FlightTrail>> flights = new HashMap<>();
-    /** Who is being shown flights: the viewer, and the task drawing them for him. */
-    private final Map<UUID, BukkitRunnable> viewers = new HashMap<>();
+    /** Who is being shown flights: the viewer, and what draws them for him. */
+    private final Map<UUID, Drawing> viewers = new HashMap<>();
 
     public CamTrail(CameraPlugin plugin) {
         this.plugin = plugin;
@@ -201,7 +214,7 @@ public final class CamTrail implements Listener {
             List<FlightTrail> all = new ArrayList<>(kept);
             describeAll(sender, name, all);
             if (sender instanceof Player viewer) {
-                show(viewer, () -> keptOf(owner), all);
+                show(viewer, () -> keptOf(owner), all, true);
             }
             return;
         }
@@ -227,7 +240,7 @@ public final class CamTrail implements Listener {
             // one the flight it named, even once a newer one moves it back.
             Supplier<List<FlightTrail>> shown = args.length == 1
                     ? () -> newestOf(owner) : () -> List.of(trail);
-            show(viewer, shown, List.of(trail));
+            show(viewer, shown, List.of(trail), false);
         }
     }
 
@@ -246,6 +259,48 @@ public final class CamTrail implements Listener {
             return;
         }
         messages.sendConfiguredMessage(viewer, hide(viewer) ? "trail-hidden" : "trail-nothing-shown");
+    }
+
+    /**
+     * What a viewer is being shown, as the bucket of the menu tells it.
+     *
+     * @param player      whose flights they are
+     * @param number      which one, 1 for the newest as {@code /cam trail}
+     *                    counts; 0 for all of them, and for one no longer kept
+     * @param all         whether all his kept flights are shown
+     * @param secondsLeft how long the line stays yet
+     */
+    public record Shown(String player, int number, boolean all, long secondsLeft) {
+    }
+
+    /** What this viewer is being shown right now, or {@code null} while he is shown no line. */
+    public Shown shownTo(Player viewer) {
+        Drawing drawing = viewers.get(viewer.getUniqueId());
+        if (drawing == null) {
+            return null;
+        }
+        int number = 0;
+        List<FlightTrail> now = drawing.shown.get();
+        if (!drawing.all && now.size() == 1) {
+            number = numberOf(now.get(0));
+        }
+        return new Shown(drawing.player, number, drawing.all, drawing.secondsLeft());
+    }
+
+    /** Which of the kept flights of its player this is, 1 for the newest; 0 once it is no longer kept. */
+    private int numberOf(FlightTrail trail) {
+        Deque<FlightTrail> kept = flights.get(trail.playerId());
+        if (kept == null) {
+            return 0;
+        }
+        int number = 1;
+        for (FlightTrail each : kept) {
+            if (each == trail) {
+                return number;
+            }
+            number++;
+        }
+        return 0;
     }
 
     /**
@@ -330,7 +385,7 @@ public final class CamTrail implements Listener {
         }
         describe(viewer, trail, number);
         FlightTrail shown = trail;
-        show(viewer, () -> List.of(shown), List.of(shown));
+        show(viewer, () -> List.of(shown), List.of(shown), false);
     }
 
     /** The names of the players flights are kept of, for the tab completion. */
@@ -480,34 +535,21 @@ public final class CamTrail implements Listener {
     // ------------------------------------------------------------------------
 
     /**
-     * Draws flights for the viewer, again and again for
-     * {@code show-seconds}.
+     * Draws flights for the viewer, again and again for as long as
+     * {@link #showSeconds} says.
      *
      * @param shown which flights to draw, asked anew each time
      * @param now   the flights shown right now, to tell the viewer when none
-     *              of them is in his world
+     *              of them is in his world; never none
+     * @param all   whether they are all the kept flights of their player
      */
-    private void show(Player viewer, Supplier<List<FlightTrail>> shown, List<FlightTrail> now) {
+    private void show(Player viewer, Supplier<List<FlightTrail>> shown, List<FlightTrail> now, boolean all) {
         hide(viewer);
-        long total = settings.getTrailShowSeconds() * 20L;
-        BukkitRunnable task = new BukkitRunnable() {
-            private long ticks;
-
-            @Override
-            public void run() {
-                if (!viewer.isOnline() || ticks >= total) {
-                    cancel();
-                    viewers.remove(viewer.getUniqueId(), this);
-                    return;
-                }
-                draw(viewer, shown.get());
-                ticks += INTERVAL;
-            }
-        };
+        int seconds = showSeconds(now);
+        Drawing task = new Drawing(viewer, shown, now.get(0).playerName(), all, seconds * 20L);
         viewers.put(viewer.getUniqueId(), task);
         task.runTaskTimer(plugin, 0L, INTERVAL);
-        messages.sendConfiguredMessage(viewer, "trail-shown",
-                "{time}", CamTimeLimit.formatDuration(settings.getTrailShowSeconds()));
+        messages.sendConfiguredMessage(viewer, "trail-shown", "{time}", CamTimeLimit.formatDuration(seconds));
         Set<String> worlds = new LinkedHashSet<>();
         for (FlightTrail trail : now) {
             for (FlightTrail.Piece piece : trail.pieces()) {
@@ -521,12 +563,70 @@ public final class CamTrail implements Listener {
     }
 
     /**
+     * How long the line of these flights stays, in seconds: a second for
+     * every {@link #BLOCKS_PER_SECOND} blocks of the longest of them, but at
+     * least {@code show-min-seconds} and at most {@code show-max-seconds} -
+     * the most while one of them is still under way, as its line grows.
+     */
+    private int showSeconds(List<FlightTrail> now) {
+        int min = settings.getTrailShowMinSeconds();
+        int max = settings.getTrailShowMaxSeconds();
+        double longest = 0.0;
+        for (FlightTrail trail : now) {
+            if (trail.isFlying()) {
+                return max;
+            }
+            longest = Math.max(longest, trail.distanceFlown());
+        }
+        return (int) Math.max(min, Math.min(max, Math.round(longest / BLOCKS_PER_SECOND)));
+    }
+
+    /** What draws the flights for one viewer, and what the menu tells of it. */
+    private final class Drawing extends BukkitRunnable {
+
+        private final Player viewer;
+        /** Which flights to draw, asked anew each time. */
+        private final Supplier<List<FlightTrail>> shown;
+        /** Whose flights they are. */
+        private final String player;
+        /** Whether they are all his kept flights. */
+        private final boolean all;
+        /** How long the line stays, in ticks. */
+        private final long total;
+        private long ticks;
+
+        Drawing(Player viewer, Supplier<List<FlightTrail>> shown, String player, boolean all, long total) {
+            this.viewer = viewer;
+            this.shown = shown;
+            this.player = player;
+            this.all = all;
+            this.total = total;
+        }
+
+        @Override
+        public void run() {
+            if (!viewer.isOnline() || ticks >= total) {
+                cancel();
+                viewers.remove(viewer.getUniqueId(), this);
+                return;
+            }
+            draw(viewer, shown.get());
+            ticks += INTERVAL;
+        }
+
+        /** How long the line stays yet, in whole seconds, rounded up. */
+        long secondsLeft() {
+            return Math.max(0L, (total - ticks + 19L) / 20L);
+        }
+    }
+
+    /**
      * Stops showing flights to the viewer.
      *
      * @return whether any were shown
      */
     private boolean hide(Player viewer) {
-        BukkitRunnable task = viewers.remove(viewer.getUniqueId());
+        Drawing task = viewers.remove(viewer.getUniqueId());
         if (task == null) {
             return false;
         }
@@ -664,7 +764,7 @@ public final class CamTrail implements Listener {
 
     /** Stops every line and forgets every flight. */
     public void onDisable() {
-        for (BukkitRunnable task : viewers.values()) {
+        for (Drawing task : viewers.values()) {
             task.cancel();
         }
         viewers.clear();

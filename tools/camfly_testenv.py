@@ -7297,7 +7297,12 @@ def flugspur_checks(env, bot):
     Kamera. Der Bot selbst bekommt die Linie als Partikel, alle mit dem Flag
     fuer die Sichtweite und alle auf dem geflogenen Weg - keiner auf der Linie
     quer zurueck, die /cam back nicht geflogen ist. /cam trail ohne Namen
-    blendet sie aus, und nach show-seconds hoert sie von selbst auf.
+    blendet sie aus, und nach show-min-seconds = show-max-seconds hoert sie
+    von selbst auf. Dazwischen steht sie eine Sekunde fuer je 5 Bloecke der
+    Strecke, beschnitten auf show-min-seconds und show-max-seconds; ist
+    show-max-seconds kleiner, gilt show-min-seconds. Eine aeltere Datei mit
+    show-seconds statt der beiden geht weiter, mit dieser festen Zeit und
+    ohne Warnung. Ein Flug, der noch laeuft, steht show-max-seconds da.
 
     Nach einem zweiten Flug zeigt /cam trail <Name> nur den neuen, mit Knoepfen
     fuer [1], [2] und [all], /cam trail <Name> 2 nur den alten, all beide; #3
@@ -7328,7 +7333,11 @@ def flugspur_checks(env, bot):
         FIND.test("cam-trail.enabled: false - /cam trail ist abgeschaltet",
                   gesagt(z, r"/cam trail is switched off"), zeige(z))
 
-        set_options(env, [("enabled", "true", "cam-trail"), ("show-seconds", "4", "cam-trail")])
+        FIND.test("Voreingestellt steht cam-trail.show-min-seconds: 10 und show-max-seconds: 300 da",
+                  re.search(r"(?m)^  show-min-seconds:\s*10\s*\n  show-max-seconds:\s*300\s*$",
+                            quelle_config(env)) is not None, "")
+        set_options(env, [("enabled", "true", "cam-trail"), ("show-min-seconds", "4", "cam-trail"),
+                          ("show-max-seconds", "4", "cam-trail")])
         heim = bot.server_pos()
         if not FIND.test("Cam-Modus fuer die Flugspur gestartet", heim is not None and cam_on(bot), ""):
             return
@@ -7390,16 +7399,66 @@ def flugspur_checks(env, bot):
         time.sleep(4.5)
         seit = partikel_marke(bot)
         time.sleep(1.5)
-        FIND.test("cam-trail.show-seconds: 4 - danach kommen keine Partikel mehr",
+        FIND.test("cam-trail.show-min-seconds und show-max-seconds: 4 - danach kommen keine Partikel mehr",
                   not partikel_seit(bot, seit), "")
+
+        # Die Zeit nach der Strecke: eine Sekunde fuer je 5 Bloecke. Die
+        # Konsole nannte sie gerundet, gezeigt wird nach der genauen.
+        def gezeigt_fuer(sekunden):
+            return rf"Shown for {sekunden} seconds?:"
+
+        bloecke = int(strecke.group(1)) if strecke else 0
+        moeglich = sorted({max(1, math.floor(b / 5 + 0.5)) for b in (bloecke - 0.5, bloecke + 0.5)})
+        set_options(env, [("show-min-seconds", "1", "cam-trail"), ("show-max-seconds", "600", "cam-trail")])
+        z = befehl(bot, f"/cam trail {BOT_NAME}")
+        befehl(bot, "/cam trail", warten=0.5)
+        FIND.test("cam-trail: die Linie steht eine Sekunde fuer je 5 Bloecke der Strecke",
+                  any(gesagt(z, gezeigt_fuer(n)) for n in moeglich),
+                  f"{bloecke} Bloecke, erwartet {moeglich} Sekunden: {zeige(z)}")
+        set_options(env, [("show-min-seconds", "9", "cam-trail"), ("show-max-seconds", "600", "cam-trail")])
+        z = befehl(bot, f"/cam trail {BOT_NAME}")
+        befehl(bot, "/cam trail", warten=0.5)
+        FIND.test("cam-trail.show-min-seconds: 9 - ein kurzer Flug steht trotzdem 9 Sekunden da",
+                  gesagt(z, gezeigt_fuer(9)), zeige(z))
+        set_options(env, [("show-min-seconds", "1", "cam-trail"), ("show-max-seconds", "2", "cam-trail")])
+        z = befehl(bot, f"/cam trail {BOT_NAME}")
+        befehl(bot, "/cam trail", warten=0.5)
+        FIND.test("cam-trail.show-max-seconds: 2 - laenger steht er nicht da",
+                  gesagt(z, gezeigt_fuer(2)), zeige(z))
+        set_options(env, [("show-min-seconds", "8", "cam-trail"), ("show-max-seconds", "3", "cam-trail")])
+        z = befehl(bot, f"/cam trail {BOT_NAME}")
+        befehl(bot, "/cam trail", warten=0.5)
+        FIND.test("cam-trail.show-max-seconds kleiner als show-min-seconds: es gilt show-min-seconds",
+                  gesagt(z, gezeigt_fuer(8)), zeige(z))
+
+        # Eine aeltere Datei hat show-seconds statt der beiden.
+        datei = env.server / "plugins" / "CamFly" / "config.yml"
+        vorher_text = datei.read_text(encoding="utf-8")
+        alt, n = re.subn(r"(?m)^  show-min-seconds:.*\n  show-max-seconds:.*$", "  show-seconds: 7", vorher_text)
+        datei.write_text(alt, encoding="utf-8")
+        vorher = len(server_log(env))
+        neu_laden(env)
+        log = strip_colors(server_log(env)[vorher:])
+        z = befehl(bot, f"/cam trail {BOT_NAME}")
+        befehl(bot, "/cam trail", warten=0.5)
+        datei.write_text(vorher_text, encoding="utf-8")
+        set_options(env, [("show-min-seconds", "4", "cam-trail"), ("show-max-seconds", "4", "cam-trail")])
+        FIND.test("Eine aeltere config.yml mit show-seconds: 7 zeigt jede Linie 7 Sekunden, ohne Warnung",
+                  n == 1 and gesagt(z, gezeigt_fuer(7)) and "show-seconds" not in log,
+                  f"{n} / {zeige(z)} / {log.strip()[-200:]}")
 
         # Ein zweiter Flug, schraeg hoch nach Norden: Seine Linie liegt weit
         # weg von der Ecke des ersten.
+        set_options(env, [("show-min-seconds", "4", "cam-trail"), ("show-max-seconds", "9", "cam-trail")])
         if not FIND.test("Zweiter Cam-Modus fuer die Flugspur gestartet", cam_on(bot), ""):
             return
         bot.call("fly", wait=30, dy=3, dz=-5, timeout=15000)
         time.sleep(0.5)
         nord = bot.server_pos()
+        z = befehl(bot, f"/cam trail {BOT_NAME}")
+        befehl(bot, "/cam trail", warten=0.5)
+        FIND.test("Ein Flug, der noch laeuft, steht show-max-seconds da (9 Sekunden), seine Linie waechst noch",
+                  gesagt(z, gezeigt_fuer(9)), zeige(z))
         cam_off(bot)
         if nord is None:
             FIND.test("Position nach dem zweiten Flug lesbar", False, "")
@@ -7464,8 +7523,8 @@ def flugspur_checks(env, bot):
     finally:
         console(env, f"op {BOT_NAME}", pause=1.0)
         cam_off(bot)
-        set_options(env, [("enabled", "false", "cam-trail"), ("show-seconds", "30", "cam-trail"),
-                          ("flights", "5", "cam-trail")])
+        set_options(env, [("enabled", "false", "cam-trail"), ("show-min-seconds", "10", "cam-trail"),
+                          ("show-max-seconds", "300", "cam-trail"), ("flights", "5", "cam-trail")])
 
 
 def vorschlag_checks(env, bot):
@@ -11002,8 +11061,10 @@ def menue_checks(env, bot):
     Seite der Flugspuren, dass zwei gemerkt sind; ein Klick zeigt sie, den
     neuesten zuerst, mit Datum, Dauer, Strecke, Start und Ende. Linksklick
     zeigt einen, Rechtsklick zeigt ihn und bringt den Bot an seinen Start, der
-    letzte Knopf zeigt alle. Der Eimer auf der Seite der Flugspuren blendet
-    die Linie aus; ist keine zu sehen, sagt er das, statt wie der Befehl geht.
+    letzte Knopf zeigt alle. Der Eimer auf der Seite der Flugspuren ist dann
+    ein Wassereimer mit dem Flug und der Zeit, die bleibt, und blendet die
+    Linie aus; danach ist er leer, und ein Klick sagt, dass keine zu sehen ist,
+    statt wie der Befehl geht.
 
     Der Foto-Modus sagt unter seinem Namen, wie er steht: off und nach einem
     Klick on. Die Zeit sagt es in ihrem Namen:
@@ -11363,7 +11424,7 @@ def menue_checks(env, bot):
         bot.call("close_window", wait=10)
         set_options(env, [("enabled", "false", "cam-ban"), ("enabled", "false", "stop-command"),
                           ("admin-access", "both", "menu"), ("enabled", "true", "cam-trail"),
-                          ("ban-shift-step", "10", "menu")])
+                          ("show-min-seconds", "60", "cam-trail"), ("ban-shift-step", "10", "menu")])
 
         # Zwei Fluege vom selben Platz, dann ein Stueck daneben.
         for weg in ({"dy": 3}, {"dx": -3, "dy": 2}):
@@ -11417,6 +11478,10 @@ def menue_checks(env, bot):
         menue()
         klick(23)
         klick(16)
+        eimer = fenster().get("slots", {}).get("49") or {}
+        FIND.test("Flugspuren: solange eine Linie steht, ist der Eimer ein Wassereimer mit dem Flug und der Zeit",
+                  eimer.get("name") == "water_bucket" and f"Shown: all flights of {BOT_NAME}" in item_text(eimer)
+                  and " left" in item_text(eimer), f"{eimer.get('name')} / {item_text(eimer)}")
         seit = bot.mark()
         klick(49, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
@@ -11424,13 +11489,17 @@ def menue_checks(env, bot):
         menue()
         klick(23)
         klick(16)
+        eimer = fenster().get("slots", {}).get("49") or {}
+        FIND.test("Flugspuren: ohne Linie ist der Eimer leer und sagt das",
+                  eimer.get("name") == "bucket" and "No flight is shown right now" in item_text(eimer),
+                  f"{eimer.get('name')} / {item_text(eimer)}")
         seit = bot.mark()
         klick(49, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
         FIND.test("Flugspuren: der Eimer ohne Linie sagt, dass keine zu sehen ist - nicht, wie der Befehl geht",
                   gesagt(zeilen, r"No flight is shown right now") and not gesagt(zeilen, r"Use /cam trail"),
                   zeige(zeilen))
-        set_option(env, "enabled", "false", "cam-trail")
+        set_options(env, [("enabled", "false", "cam-trail"), ("show-min-seconds", "10", "cam-trail")])
 
         original = datei.read_text(encoding="utf-8")
         text = menue_knopf(original, "start", slot=4)
@@ -11504,7 +11573,7 @@ def menue_checks(env, bot):
             # Wie der Testserver es fuer alle anderen Abschnitte hat.
             set_options(env, [("access", "both", "menu"), ("admin-access", "both", "menu"),
                               ("enabled", "false", "cam-ban"), ("enabled", "false", "cam-trail"),
-                              ("enabled", "false", "stop-command")])
+                              ("show-min-seconds", "10", "cam-trail"), ("enabled", "false", "stop-command")])
             console(env, "cam unban all", pause=0.5)
             spots_loeschen(bot, "Menue")
             befehl(bot, "/cam time reset")

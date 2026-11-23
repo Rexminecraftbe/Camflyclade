@@ -1456,6 +1456,8 @@ cam-ban:
 # Im Menü (Admin-Seite, Flugspuren): ein Klick auf einen Kopf zeigt seine Flüge, der neueste zuerst, mit Datum und
 # Uhrzeit, Dauer, Strecke, Start und Ende beim Drüberfahren. Linksklick zeigt einen Flug, Rechtsklick zeigt ihn und
 # bringt einen zu seinem Start (aus dem Cam-Modus heraus, wenn man darin ist); ein Knopf zeigt alle auf einmal.
+# Der Eimer auf der Seite der Flugspuren blendet die Linie aus: ein Wassereimer, solange eine zu sehen ist (darunter
+# welcher Flug und wie lange noch), ein leerer, wenn keine zu sehen ist.
 # Wo die Kamera versetzt wurde (/cam back, Portal, Teleport), hat die Linie eine Lücke.
 # Gezeichnet wird bis 128 Blöcke um den, der zusieht.
 # Aufgezeichnet wird nur, solange enabled an ist, und nur im Arbeitsspeicher, bis zum Neustart
@@ -1465,8 +1467,14 @@ cam-trail:
   enabled: true
   # Wie viele seiner letzten Flüge von jedem Spieler gemerkt werden (1 bis 20)
   flights: 5
-  # Wie lange die Linie zu sehen ist, in Sekunden (1 bis 600)
-  show-seconds: 30
+  # Wie lange die Linie zu sehen ist, richtet sich nach der Strecke des Flugs: eine Sekunde für je 5 Blöcke, aber nie
+  # kürzer als show-min-seconds und nie länger als show-max-seconds (beide 1 bis 600). Bei all zählt der längste Flug,
+  # und ein Flug, der noch läuft, steht show-max-seconds lang da, weil seine Linie noch wächst.
+  # Beispiele mit 10 und 300: bis 50 Blöcke 10 Sekunden, 300 Blöcke 1 Minute, ab 1500 Blöcken 5 Minuten.
+  # Sind beide gleich, steht jede Linie so lange da. Eine ältere Datei mit show-seconds statt dieser beiden geht
+  # weiter so, mit einer festen Zeit für jeden Flug.
+  show-min-seconds: 10
+  show-max-seconds: 300
 
 # Der Cam-Modus endet, wenn der Spieler eine Weile gar nichts tut: nicht fliegt, sich nicht umsieht und nicht
 # am Mausrad dreht. So steht kein Körper stundenlang herum, und der Akku läuft nicht leer, während niemand fliegt.
