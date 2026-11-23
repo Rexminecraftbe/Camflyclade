@@ -305,7 +305,7 @@ public final class CamTour implements Listener {
 
     /** Whether {@code /cam follow} is there at all. */
     public boolean isEnabled() {
-        return settings.isTourEnabled();
+        return settings.follow().enabled();
     }
 
     /**
@@ -313,17 +313,18 @@ public final class CamTour implements Listener {
      * Where it is switched on and does not work, the console hears why.
      */
     public void load(ConsoleLog log) {
-        view.load(settings.isTourEnabled() && settings.isTourGuideView() ? log : null);
-        outOfSight.load(settings.isTourEnabled() ? log : null);
-        swing.load(settings.isTourEnabled() && settings.isTourMirrorSwing() ? log : null);
-        fineHold.load(settings.isTourEnabled() && settings.isTourGuideView() && settings.isTourFineHold() ? log : null);
-        frost.load(settings.isTourEnabled() && settings.isTourMirrorFrost() ? log : null);
-        quietHearts.load(settings.isTourEnabled() && settings.isTourMirrorHealth() ? log : null);
-        slots.load(settings.isTourEnabled() && (settings.isTourMirrorMainHand() || settings.isTourMirrorOffHand())
+        view.load(settings.follow().enabled() && settings.follow().guideView() ? log : null);
+        outOfSight.load(settings.follow().enabled() ? log : null);
+        swing.load(settings.follow().enabled() && settings.follow().mirrorSwing() ? log : null);
+        fineHold.load(settings.follow().enabled() && settings.follow().guideView() && settings.follow().fineHold()
                 ? log : null);
-        boolean hides = !settings.isTourMirrorCount() || !settings.isTourMirrorEnchantments()
-                || !settings.isTourMirrorDurability() || !settings.isTourMirrorName();
-        hands.load(settings.isTourEnabled() && hides ? log : null);
+        frost.load(settings.follow().enabled() && settings.follow().mirrorFrost() ? log : null);
+        quietHearts.load(settings.follow().enabled() && settings.follow().mirrorHealth() ? log : null);
+        slots.load(settings.follow().enabled()
+                && (settings.follow().mirrorMainHand() || settings.follow().mirrorOffHand()) ? log : null);
+        boolean hides = !settings.follow().mirrorCount() || !settings.follow().mirrorEnchantments()
+                || !settings.follow().mirrorDurability() || !settings.follow().mirrorName();
+        hands.load(settings.follow().enabled() && hides ? log : null);
     }
 
     /**
@@ -354,7 +355,7 @@ public final class CamTour implements Listener {
 
     /** Whether a guest can see through the eyes of his guide here: switched on, and on a server it works on. */
     public boolean viewWorks() {
-        return settings.isTourGuideView() && view.isAvailable();
+        return settings.follow().guideView() && view.isAvailable();
     }
 
     /** Whether he sees through the eyes of his guide on tours, rather than looking round freely. */
@@ -371,7 +372,7 @@ public final class CamTour implements Listener {
      * hands.
      */
     private boolean turnsAlong(Player guest) {
-        return seesThroughGuide(guest) && plugin.getBedrock().adapts(guest) && settings.isBedrockFollowTurn();
+        return seesThroughGuide(guest) && plugin.getBedrock().adapts(guest) && settings.bedrock().followTurn();
     }
 
     /**
@@ -381,7 +382,7 @@ public final class CamTour implements Listener {
      * items in his hotbar alone, see {@link GuideMirror}, and nothing swings.
      */
     private boolean geyserCamera(Player guest) {
-        return seesThroughGuide(guest) && plugin.getBedrock().adapts(guest) && !settings.isBedrockFollowTurn();
+        return seesThroughGuide(guest) && plugin.getBedrock().adapts(guest) && !settings.bedrock().followTurn();
     }
 
     /**
@@ -638,7 +639,7 @@ public final class CamTour implements Listener {
         if (cameraPlayers.contains(player.getUniqueId())) {
             return true;
         }
-        return settings.isTourLeadWithoutCam() && !player.isDead() && player.getGameMode() != GameMode.SPECTATOR;
+        return settings.follow().leadWithoutCam() && !player.isDead() && player.getGameMode() != GameMode.SPECTATOR;
     }
 
     /** Whether he shows others round right now out of camera mode, while he walks round and builds, say. */
@@ -691,7 +692,7 @@ public final class CamTour implements Listener {
     /** Whether his tour takes no more guests: {@code follow.max-guests}, 0 for no limit. */
     public boolean isFull(Player guide) {
         Tour tour = tours.get(guide.getUniqueId());
-        int max = settings.getTourMaxGuests();
+        int max = settings.follow().maxGuests();
         return max > 0 && tour != null && tour.guests.size() >= max;
     }
 
@@ -769,7 +770,7 @@ public final class CamTour implements Listener {
         Map<UUID, Long> own = lastInvited.get(other.getUniqueId());
         Long at = own == null ? null : own.get(guide.getUniqueId());
         return at == null ? 0L
-                : seconds(at + settings.getTourInviteCooldownSeconds() * 1000L - System.currentTimeMillis());
+                : seconds(at + settings.follow().inviteCooldownSeconds() * 1000L - System.currentTimeMillis());
     }
 
     /** Milliseconds left as whole seconds, rounded up; 0 for none left. */
@@ -811,7 +812,7 @@ public final class CamTour implements Listener {
             return free(other) && near(guide, other)
                     && inReach(other, cameraPlayers.get(other.getUniqueId()), guide.getLocation());
         }
-        return !busy(other) && distanceOutside(guide, other) <= settings.getTourStartDistance()
+        return !busy(other) && distanceOutside(guide, other) <= settings.follow().startDistance()
                 && reachableFrom(other, guide);
     }
 
@@ -836,11 +837,11 @@ public final class CamTour implements Listener {
         if (!where.getWorld().equals(body.getWorld())) {
             return false;
         }
-        double max = settings.getMaxDistance();
-        if (settings.limitsDistance() && where.distanceSquared(body) > max * max) {
+        double max = settings.cameraMode().maxDistance();
+        if (settings.cameraMode().limitsDistance() && where.distanceSquared(body) > max * max) {
             return false;
         }
-        return !settings.usesSignal() || plugin.getSignal().reaches(other, other.getEyeLocation(), where);
+        return !settings.cameraMode().usesSignal() || plugin.getSignal().reaches(other, other.getEyeLocation(), where);
     }
 
     /** Whether he is in camera mode and on no tour: neither following one nor showing one. */
@@ -861,7 +862,7 @@ public final class CamTour implements Listener {
     private boolean near(Player guide, Player other) {
         Location a = guide.getLocation();
         Location b = other.getLocation();
-        double radius = settings.getTourRadius();
+        double radius = settings.follow().radius();
         return a.getWorld() != null && a.getWorld().equals(b.getWorld()) && a.distanceSquared(b) <= radius * radius;
     }
 
@@ -874,7 +875,7 @@ public final class CamTour implements Listener {
     private boolean seen(Player guide, Player other) {
         return guide.canSee(other) || plugin.getPhotoMode().hides(guide, other)
                 || plugin.getScoutGuard().hides(guide, other)
-                || settings.getPlayerVisibilityMode() == VisibilityMode.CAM
+                || settings.cameraMode().visibilityMode() == VisibilityMode.CAM
                 && cameraPlayers.contains(other.getUniqueId()) && !cameraPlayers.contains(guide.getUniqueId());
     }
 
@@ -893,11 +894,11 @@ public final class CamTour implements Listener {
         if (anchor == null) {
             return false;
         }
-        double max = settings.getMaxDistance();
-        if (settings.limitsDistance() && where.distanceSquared(anchor) > max * max) {
+        double max = settings.cameraMode().maxDistance();
+        if (settings.cameraMode().limitsDistance() && where.distanceSquared(anchor) > max * max) {
             return false;
         }
-        if (settings.usesSignal()) {
+        if (settings.cameraMode().usesSignal()) {
             Location from = anchor.getWorld().equals(data.getBody().getWorld()) ? guard.homeEyes(guest, data)
                     : anchor.clone().add(0.0, guest.getEyeHeight(), 0.0);
             return plugin.getSignal().reaches(guest, from, where);
@@ -915,7 +916,7 @@ public final class CamTour implements Listener {
         }
         String word = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
         if (args.length == 2 && word.equals("invite") && args[1].equalsIgnoreCase(ALL)
-                && settings.isTourInviteAll()) {
+                && settings.follow().inviteAll()) {
             inviteAll(player);
         } else if (args.length == 2 && word.equals("invite")) {
             invite(player, Bukkit.getPlayerExact(args[1]), args[1]);
@@ -973,11 +974,11 @@ public final class CamTour implements Listener {
         }
         if (isFull(guide)) {
             messages.sendConfiguredMessage(guide, "tour-full-guide", "{max}",
-                    String.valueOf(settings.getTourMaxGuests()));
+                    String.valueOf(settings.follow().maxGuests()));
             return;
         }
         boolean inCam = cameraPlayers.contains(other.getUniqueId());
-        if (!inCam && settings.getTourStartDistance() <= 0.0) {
+        if (!inCam && settings.follow().startDistance() <= 0.0) {
             messages.sendConfiguredMessage(guide, "tour-other-not-in-cam", "{player}", other.getName());
             return;
         }
@@ -987,7 +988,7 @@ public final class CamTour implements Listener {
             messages.sendConfiguredMessage(guide, "tour-other-busy", "{player}", other.getName());
             return;
         }
-        if (inCam ? !near(guide, other) : distanceOutside(guide, other) > settings.getTourStartDistance()) {
+        if (inCam ? !near(guide, other) : distanceOutside(guide, other) > settings.follow().startDistance()) {
             messages.sendConfiguredMessage(guide, "tour-too-far", "{player}", other.getName());
             return;
         }
@@ -998,8 +999,8 @@ public final class CamTour implements Listener {
         }
         sendInvitation(guide, other);
         messages.sendConfiguredMessage(guide, "tour-invited", "{player}", other.getName(),
-                "{seconds}", String.valueOf(settings.getTourInvitationSeconds()),
-                "{time}", CamTimeLimit.formatSeconds(settings.getTourInvitationSeconds()));
+                "{seconds}", String.valueOf(settings.follow().invitationSeconds()),
+                "{time}", CamTimeLimit.formatSeconds(settings.follow().invitationSeconds()));
     }
 
     /**
@@ -1011,7 +1012,7 @@ public final class CamTour implements Listener {
      * that there was nobody, and how close they would have to be.
      */
     public void inviteAll(Player guide) {
-        if (!settings.isTourInviteAll()) {
+        if (!settings.follow().inviteAll()) {
             messages.sendConfiguredMessage(guide, "tour-invite-all-off");
             return;
         }
@@ -1020,7 +1021,7 @@ public final class CamTour implements Listener {
         }
         if (isFull(guide)) {
             messages.sendConfiguredMessage(guide, "tour-full-guide", "{max}",
-                    String.valueOf(settings.getTourMaxGuests()));
+                    String.valueOf(settings.follow().maxGuests()));
             return;
         }
         List<String> invited = new ArrayList<>();
@@ -1031,16 +1032,16 @@ public final class CamTour implements Listener {
         if (invited.isEmpty()) {
             // How close they would have to be: out of camera mode to him,
             // in camera mode camera to camera.
-            double start = settings.getTourStartDistance();
+            double start = settings.follow().startDistance();
             messages.sendConfiguredMessage(guide, start > 0.0 ? "tour-invite-all-none" : "tour-invite-all-none-cam-only",
                     "{start}", String.valueOf(Math.round(start)),
-                    "{radius}", String.valueOf(Math.round(settings.getTourRadius())));
+                    "{radius}", String.valueOf(Math.round(settings.follow().radius())));
             return;
         }
         messages.sendConfiguredMessage(guide, "tour-invited-all", "{count}", String.valueOf(invited.size()),
                 "{players}", String.join(", ", invited),
-                "{seconds}", String.valueOf(settings.getTourInvitationSeconds()),
-                "{time}", CamTimeLimit.formatSeconds(settings.getTourInvitationSeconds()));
+                "{seconds}", String.valueOf(settings.follow().invitationSeconds()),
+                "{time}", CamTimeLimit.formatSeconds(settings.follow().invitationSeconds()));
     }
 
     /**
@@ -1057,7 +1058,7 @@ public final class CamTour implements Listener {
         for (Player other : candidates(guide)) {
             if (hasInvited(guide, other) || inviteWait(guide, other) > 0L
                     || !plugin.getTourModeration().may(other, TourBans.What.JOIN)
-                    || !cameraPlayers.contains(other.getUniqueId()) && settings.getTourStartDistance() <= 0.0) {
+                    || !cameraPlayers.contains(other.getUniqueId()) && settings.follow().startDistance() <= 0.0) {
                 continue;
             }
             found.add(other);
@@ -1072,13 +1073,13 @@ public final class CamTour implements Listener {
      */
     private void sendInvitation(Player guide, Player other) {
         long now = System.currentTimeMillis();
-        int holds = settings.getTourInvitationSeconds();
+        int holds = settings.follow().invitationSeconds();
         invitations.computeIfAbsent(other.getUniqueId(), id -> new HashMap<>())
                 .put(guide.getUniqueId(), now + holds * 1000L);
         forgetWaits(now);
         lastInvited.computeIfAbsent(other.getUniqueId(), id -> new HashMap<>()).put(guide.getUniqueId(), now);
         tellInvited(other, guide, holds);
-        settings.getTourInviteSound().play(other);
+        settings.sounds().followInvite().play(other);
     }
 
     /**
@@ -1096,7 +1097,7 @@ public final class CamTour implements Listener {
             return false;
         }
         if (!canLead(guide)) {
-            messages.sendConfiguredMessage(guide, settings.isTourLeadWithoutCam() ? "tour-guide-spectator"
+            messages.sendConfiguredMessage(guide, settings.follow().leadWithoutCam() ? "tour-guide-spectator"
                     : "tour-not-in-cam");
             return false;
         }
@@ -1112,7 +1113,7 @@ public final class CamTour implements Listener {
      * anyway: kept no longer than needed, even of players long gone.
      */
     private void forgetWaits(long now) {
-        long cooldown = settings.getTourInviteCooldownSeconds() * 1000L;
+        long cooldown = settings.follow().inviteCooldownSeconds() * 1000L;
         for (Map<UUID, Long> own : lastInvited.values()) {
             own.values().removeIf(at -> at + cooldown <= now);
         }
@@ -1164,7 +1165,7 @@ public final class CamTour implements Listener {
      * invitation needs no menu.
      */
     private boolean answerable() {
-        return settings.getMenuAccess().allowsMenu() || settings.getMenuAccess().allowsCommands();
+        return settings.menu().access().allowsMenu() || settings.menu().access().allowsCommands();
     }
 
     /**
@@ -1208,7 +1209,7 @@ public final class CamTour implements Listener {
         }
         if (!canLead(guide) || guideOf.containsKey(guide.getUniqueId())) {
             invitations.get(guest.getUniqueId()).remove(guide.getUniqueId());
-            messages.sendConfiguredMessage(guest, settings.isTourLeadWithoutCam() ? "tour-guide-cannot-lead"
+            messages.sendConfiguredMessage(guest, settings.follow().leadWithoutCam() ? "tour-guide-cannot-lead"
                     : "tour-guide-gone", "{player}", guide.getName());
             return;
         }
@@ -1241,7 +1242,7 @@ public final class CamTour implements Listener {
      * joins once it has.
      */
     private void startThenJoin(Player guest, Player guide) {
-        double reach = settings.getTourStartDistance();
+        double reach = settings.follow().startDistance();
         if (reach <= 0.0) {
             messages.sendConfiguredMessage(guest, "tour-not-in-cam");
             return;
@@ -1307,7 +1308,7 @@ public final class CamTour implements Listener {
         takeLook(guide, guest);
         syncVisibility();
         // How to stop: with the command, or while only the menu goes, there.
-        messages.sendConfiguredMessage(guest, settings.getMenuAccess().allowsCommands() ? "tour-joined"
+        messages.sendConfiguredMessage(guest, settings.menu().access().allowsCommands() ? "tour-joined"
                 : "tour-joined-menu", "{player}", guide.getName());
         messages.sendConfiguredMessage(guide, "tour-joined-guide", "{player}", guest.getName());
         startTask();
@@ -1529,7 +1530,7 @@ public final class CamTour implements Listener {
     public void onGuidePlace(BlockPlaceEvent event) {
         Player guide = event.getPlayer();
         boolean offHand = event.getHand() == EquipmentSlot.OFF_HAND;
-        boolean swings = settings.isTourMirrorSwing() && swing.serverSwingsOnUse();
+        boolean swings = settings.follow().mirrorSwing() && swing.serverSwingsOnUse();
         for (Player guest : shownGuests(guide)) {
             mirror.placed(guest.getUniqueId(), offHand);
             if (swings && !geyserCamera(guest)) {
@@ -1543,7 +1544,7 @@ public final class CamTour implements Listener {
      * the guide's swung: at a hit, or at a use of the item.
      */
     private void swingGuests(Player guide, boolean offHand, boolean use) {
-        if (settings.isTourMirrorSwing()) {
+        if (settings.follow().mirrorSwing()) {
             for (Player guest : shownGuests(guide)) {
                 // Geyser's camera on Bedrock draws no hands, see GuideMirror: nothing to swing.
                 if (!geyserCamera(guest)) {
@@ -1820,10 +1821,10 @@ public final class CamTour implements Listener {
                 // Back to his own camera, which stands at its border: he sees
                 // no further than he could fly himself.
                 unview(guest, state);
-                settings.getTourReachSound().play(guest);
-                settings.getTourReachSound().play(guide);
+                settings.sounds().followReach().play(guest);
+                settings.sounds().followReach().play(guide);
             }
-            long left = settings.getTourOutOfReachSeconds() * 1000L - (now - state.outSince);
+            long left = settings.follow().outOfReachSeconds() * 1000L - (now - state.outSince);
             if (left <= 0L) {
                 drop(guide.getUniqueId(), guest.getUniqueId());
                 plugin.getActionBar().clear(guest);
@@ -1848,7 +1849,7 @@ public final class CamTour implements Listener {
                 plugin.getActionBar().clear(guest);
             }
             state.shownSeconds = -1L;
-            settings.getSignalBackSound().play(guest);
+            settings.sounds().signalBack().play(guest);
         }
         Location from = guest.getLocation();
         Vector gap = behind.clone().subtract(from.toVector()).subtract(ahead(guest, state));
@@ -1888,7 +1889,7 @@ public final class CamTour implements Listener {
         // He watches what the guide shows him, even while his own keys do
         // nothing - and through the guide's eyes his client sends no steps:
         // no time without doing anything, for statistics.skip-afk-time.
-        data.noteActive(now, settings.getStatsAfkMillis());
+        data.noteActive(now, settings.statistics().afkMillis());
         updateView(guide, guest, state);
         return null;
     }
@@ -1911,7 +1912,7 @@ public final class CamTour implements Listener {
      * @param pace   how far it goes on from there this tick
      */
     private void countWay(CameraData data, Location at, Vector behind, Vector pace) {
-        if (!settings.isStatsCountFollowDistance()) {
+        if (!settings.statistics().countFollowDistance()) {
             return;
         }
         data.addDistanceCounted(pace.length());
@@ -2023,7 +2024,7 @@ public final class CamTour implements Listener {
             return;
         }
         guest.setRotation(state.yaw, state.pitch);
-        if (state.viewing && settings.isTourFineHold()) {
+        if (state.viewing && settings.follow().fineHold()) {
             fineHold.hold(guest, state.yaw, state.pitch);
         }
     }

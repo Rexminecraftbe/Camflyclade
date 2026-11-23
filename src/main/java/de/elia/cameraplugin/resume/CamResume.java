@@ -60,12 +60,12 @@ public final class CamResume {
     }
 
     private boolean inFile() {
-        return settings.getResumeStorage() == StorageMode.FILE;
+        return settings.resume().storage() == StorageMode.FILE;
     }
 
     /** Whether {@code /cam resume} has somewhere to go for this player. */
     public boolean hasFlight(Player player) {
-        return settings.isResumeEnabled() && lastFlight(player) != null;
+        return settings.resume().enabled() && lastFlight(player) != null;
     }
 
     private LastFlight lastFlight(Player player) {
@@ -80,7 +80,7 @@ public final class CamResume {
      * @param look     the time, weather and night vision the flight had at its end
      */
     public void remember(Player player, CameraData data, Location cameraAt, SpotLook look) {
-        if (!settings.isResumeEnabled() || cameraAt.getWorld() == null) {
+        if (!settings.resume().enabled() || cameraAt.getWorld() == null) {
             return;
         }
         LastFlight flight = LastFlight.at(cameraAt, look);
@@ -93,7 +93,7 @@ public final class CamResume {
 
     /** {@code /cam resume}: in camera mode at once, otherwise camera mode starts first. */
     public void command(Player player) {
-        if (!settings.isResumeEnabled()) {
+        if (!settings.resume().enabled()) {
             messages.sendConfiguredMessage(player, "resume-off");
             return;
         }
@@ -155,7 +155,7 @@ public final class CamResume {
         // What the flight showed there stands in for his own again, as far
         // as resume-command lets it; what it leaves out is his own.
         plugin.getSpots().showLook(player, lookToShow(flight.look()));
-        settings.getSpotSound().play(player);
+        settings.sounds().spot().play(player);
         if (messages.isMessageEnabled("resume-jumped")) {
             plugin.getActionBar().flash(player, messages.getMessage("resume-jumped"));
         }
@@ -167,9 +167,9 @@ public final class CamResume {
      * let through.
      */
     private SpotLook lookToShow(SpotLook look) {
-        return new SpotLook(settings.isResumeTime() ? look.time() : null,
-                settings.isResumeWeather() ? look.weather() : null,
-                settings.isResumeNightVision() ? look.nightVision() : null);
+        return new SpotLook(settings.resume().time() ? look.time() : null,
+                settings.resume().weather() ? look.weather() : null,
+                settings.resume().nightVision() ? look.nightVision() : null);
     }
 
     /** Forgets every flight kept in memory, when the plugin is switched off. */

@@ -1,8 +1,10 @@
 package de.elia.cameraplugin.fire;
 
+import de.elia.cameraplugin.config.ConfigReader;
+import de.elia.cameraplugin.session.SessionTask;
+import de.elia.cameraplugin.session.SessionTicker;
 import org.bukkit.*;
 import org.bukkit.block.Block;
-import de.elia.cameraplugin.config.ConfigReader;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -10,7 +12,6 @@ import org.bukkit.event.block.BlockIgniteEvent;
 import org.bukkit.event.entity.EntityCombustEvent;
 import org.bukkit.event.block.BlockSpreadEvent;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.*;
 
@@ -30,6 +31,8 @@ public class CamFireGuard implements Listener {
     private static final int MAX_RADIUS = 8;
 
     private final JavaPlugin plugin;
+    /** The tick of each camera mode, which the watching here runs on. */
+    private final SessionTicker sessions;
 
     // configuration values
     private boolean enabled;
@@ -41,10 +44,11 @@ public class CamFireGuard implements Listener {
     private double radiusH2;
     private int rangeXZ;
 
-    private final Map<UUID, BukkitRunnable> tasks = new HashMap<>();
+    private final Map<UUID, SessionTask> tasks = new HashMap<>();
     private final Map<UUID, Set<Block>> hiddenMap = new HashMap<>();
 
-    public CamFireGuard(JavaPlugin plugin) {
+    public CamFireGuard(JavaPlugin plugin, SessionTicker sessions) {
+        this.sessions = sessions;
         this.plugin = plugin;
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
     }
@@ -66,7 +70,7 @@ public class CamFireGuard implements Listener {
         if (!enabled || tasks.containsKey(player.getUniqueId())) return;
 
         hiddenMap.put(player.getUniqueId(), new HashSet<>());
-        BukkitRunnable task = new BukkitRunnable() {
+        SessionTask task = new SessionTask() {
             @Override
             public void run() {
                 if (!player.isOnline()) {
@@ -81,7 +85,7 @@ public class CamFireGuard implements Listener {
                 }
             }
         };
-        task.runTaskTimer(plugin, 0L, tickInterval);
+        task.runTaskTimer(sessions, player, 0L, tickInterval);
         tasks.put(player.getUniqueId(), task);
     }
 
@@ -91,7 +95,7 @@ public class CamFireGuard implements Listener {
      */
     public boolean stopFor(Player player) {
         UUID id = player.getUniqueId();
-        BukkitRunnable task = tasks.remove(id);
+        SessionTask task = tasks.remove(id);
         if (task != null) task.cancel();
         restoreAllHidden(player);
         hiddenMap.remove(id);

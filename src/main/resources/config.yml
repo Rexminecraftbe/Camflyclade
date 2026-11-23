@@ -2,6 +2,14 @@
 # Neu laden mit /cam reload.
 # Ungültige Werte werden in der Konsole gemeldet und ersetzt.
 
+# Version des Aufbaus dieser Datei - nicht ändern.
+# Fehlt der Datei eine Einstellung, die das Plugin kennt (neu in einer neueren Version oder versehentlich gelöscht),
+# trägt es sie beim Start und bei /cam reload hier ein: an ihrer Stelle, mit ihrem Kommentar und dem voreingestellten
+# Wert. Ebenso eine, die umbenannt wurde. Sonst bleibt alles, wie es ist, auch jeder eigene Kommentar. Die Datei davor
+# liegt danach als config.yml.bak daneben, und in der Konsole steht, was dazukam.
+# Dasselbe gilt für lang/en.yml. Eine Datei einer anderen Sprache bleibt, wie sie ist: Was ihr fehlt, kommt aus en.
+config-version: 1
+
 # Sprache der Texte, die das Plugin ausgibt: der Name einer Datei im Ordner lang, ohne .yml.
 # Mitgeliefert wird nur en (lang/en.yml). Für eine andere Sprache lang/en.yml kopieren,
 # z. B. als lang/de.yml, die Texte darin übersetzen und hier de eintragen.

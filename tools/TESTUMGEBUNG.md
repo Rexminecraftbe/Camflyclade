@@ -90,8 +90,12 @@ und wählt die Abschnitte, die etwas davon betrifft:
 * **Die Sammeldateien** unter `camfly2` und `config` - `CameraPlugin`,
   `CamCommand`, `CamTabCompleter`, `CamSettings`, `Messages` …: Was in den
   geänderten Zeilen steht. Eine Zeile in `CamSettings.load`, die
-  `cam-trail.flights` liest, führt über das Feld und seinen Getter zu
-  `CamTrail` und `CamMenu`; `case "trail"` in `CamCommand` zum Paket `trail`.
+  `start-delay.seconds` liest, führt über das Feld und seinen Getter zu
+  `StartDelay`; `case "trail"` in `CamCommand` zum Paket `trail`. Die
+  größeren Abschnitte der `config.yml` lesen eigene Klassen in ihrem Paket -
+  `trail/TrailSettings`, `tour/FollowSettings` …: Eine Änderung darin zählt
+  wie jede andere Java-Änderung, `TrailSettings.flights` führt zu `trail` und
+  zu den Seiten des Menüs, die es aufrufen.
 * **`config.yml`, `lang/en.yml`, `plugin.yml`**: die Schlüssel der geänderten
   Zeilen, über die Stellen im Code, die sie lesen. Ein Abschnitt, der einen
   geänderten Schlüssel mit `set_option` setzt, läuft auch.
@@ -1547,7 +1551,16 @@ Texte stehen - und auch die `config.yml` aus derselben Runde · eine Sprache
 ohne Datei wird gemeldet und fällt auf Englisch zurück · ein vertippter
 Schlüssel in der `config.yml` wird gemeldet, ebenso Texte, die noch dort
 stehen, als ein unbekannter Abschnitt mit nur einer Meldung ·
-`mirror-damage.debug` gilt nicht als unbekannt · ein offenes
+`mirror-damage.debug` gilt nicht als unbekannt · fehlen der `config.yml` eine
+Zeile, deren Kommentar stehen blieb, ein Schlüssel mit Kommentar und ein ganzer
+Abschnitt, trägt der Reload sie wieder ein, Zeichen für Zeichen wie in der
+mitgelieferten und an ihrer Stelle, während eigene Kommentare und Werte bleiben
+· die Datei davor liegt als `config.yml.bak` daneben, Konsole und Chat nennen
+die Schlüssel, ein zweiter Reload ändert nichts · ebenso ein Text in
+`lang/en.yml` · eine Datei, die nicht als UTF-8 gespeichert ist, bleibt Byte
+für Byte, mit Meldung · eine eigene Sprachdatei mit einem Text bleibt, wie sie
+ist · eine ältere Datei ohne `config-version` und `show-mode` bekommt
+`show-mode: fixed` · `tour:` heißt danach `follow:` · ein offenes
 Portal trägt den Kamera-Spieler in den Nether · ein verbotenes Biom dahinter
 holt ihn zurück · danach lässt
 dasselbe Portal ihn gar nicht mehr durch · ein drüben neu gebautes Portal gibt

@@ -88,9 +88,9 @@ public enum FlightMedium {
     /** Whether its switch keeps camera mode out of it. */
     public boolean isClosed(CamSettings settings) {
         return switch (this) {
-            case LAVA -> !settings.allowsLavaFlight();
-            case WATER -> !settings.allowsWaterFlight();
-            case POWDER_SNOW -> !settings.allowsPowderSnowFlight();
+            case LAVA -> !settings.cameraMode().allowsLavaFlight();
+            case WATER -> !settings.cameraMode().allowsWaterFlight();
+            case POWDER_SNOW -> !settings.cameraMode().allowsPowderSnowFlight();
         };
     }
 

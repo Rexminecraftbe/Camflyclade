@@ -271,11 +271,11 @@ final class GuideMirror {
         state.offHandUsed = false;
         // With Geyser's camera, which draws no hands, the guide's items go into his hotbar alone.
         boolean hotbarOnly = handless.test(guest);
-        state.mainHand = mirror(guest, EquipmentSlot.HAND, settings.isTourMirrorMainHand(), hotbarOnly, mainHand,
+        state.mainHand = mirror(guest, EquipmentSlot.HAND, settings.follow().mirrorMainHand(), hotbarOnly, mainHand,
                 guest.getInventory().getItemInMainHand(), state.mainHand, mainHandMarked, refresh || mainHandAgain);
-        state.offHand = mirror(guest, EquipmentSlot.OFF_HAND, settings.isTourMirrorOffHand(), hotbarOnly, offHand,
+        state.offHand = mirror(guest, EquipmentSlot.OFF_HAND, settings.follow().mirrorOffHand(), hotbarOnly, offHand,
                 guest.getInventory().getItemInOffHand(), state.offHand, offHandMarked, refresh || offHandAgain);
-        state.head = mirror(guest, EquipmentSlot.HEAD, settings.isTourMirrorHead(), false,
+        state.head = mirror(guest, EquipmentSlot.HEAD, settings.follow().mirrorHead(), false,
                 guide.getInventory().getHelmet(), guest.getInventory().getHelmet(), state.head, false, refresh);
     }
 
@@ -363,13 +363,13 @@ final class GuideMirror {
         if (item.getType().isAir()) {
             return item;
         }
-        boolean asOne = !settings.isTourMirrorCount() && item.getAmount() != 1;
+        boolean asOne = !settings.follow().mirrorCount() && item.getAmount() != 1;
         ItemMeta meta = item.hasItemMeta() ? item.getItemMeta() : null;
-        boolean enchanted = !settings.isTourMirrorEnchantments() && meta != null
+        boolean enchanted = !settings.follow().mirrorEnchantments() && meta != null
                 && (meta.hasEnchants() || meta instanceof EnchantmentStorageMeta stored && stored.hasStoredEnchants());
-        boolean worn = !settings.isTourMirrorDurability() && meta instanceof Damageable damageable
+        boolean worn = !settings.follow().mirrorDurability() && meta instanceof Damageable damageable
                 && damageable.hasDamage();
-        boolean named = !settings.isTourMirrorName() && meta != null && meta.hasDisplayName();
+        boolean named = !settings.follow().mirrorName() && meta != null && meta.hasDisplayName();
         if (!marked && !asOne && !enchanted && !worn && !named) {
             return item;
         }
@@ -480,7 +480,7 @@ final class GuideMirror {
      * nothing.</p>
      */
     private void hearts(Player guide, Player guest, Shown state, boolean refresh) {
-        if (!settings.isTourMirrorHealth()) {
+        if (!settings.follow().mirrorHealth()) {
             if (state.heartsShown) {
                 ownHearts(guest);
                 state.heartsShown = false;
@@ -528,7 +528,7 @@ final class GuideMirror {
 
     /** Sends the guest the guide's experience bar and level, if it or his own changed, or now and then. */
     private void experience(Player guide, Player guest, Shown state, boolean refresh) {
-        if (!settings.isTourMirrorExperience()) {
+        if (!settings.follow().mirrorExperience()) {
             if (state.experienceShown) {
                 guest.sendExperienceChange(guest.getExp(), guest.getLevel());
                 state.experienceShown = false;
@@ -593,7 +593,7 @@ final class GuideMirror {
     /** Sends the guest the guide's effects that changed, or all of them now and then. */
     private void effects(Player guide, Player guest, Shown state, boolean refresh) {
         Map<PotionEffectType, PotionEffect> now = new HashMap<>();
-        if (settings.isTourMirrorEffects()) {
+        if (settings.follow().mirrorEffects()) {
             for (PotionEffect effect : guide.getActivePotionEffects()) {
                 now.put(effect.getType(), effect);
             }
@@ -649,7 +649,7 @@ final class GuideMirror {
      * counted some up by itself, see {@link ClientFrost}.
      */
     private void frost(Player guide, Player guest, Shown state) {
-        if (!settings.isTourMirrorFrost() || !frost.isAvailable()) {
+        if (!settings.follow().mirrorFrost() || !frost.isAvailable()) {
             if (state.frost >= 0) {
                 ClientFrost.resend(guest);
                 state.frost = -1;
@@ -764,9 +764,10 @@ final class GuideMirror {
      * switched on, or the guide's hands without what the guests do not see.
      */
     boolean isOn() {
-        return settings.isTourMirrorHealth() || settings.isTourMirrorMainHand() || settings.isTourMirrorOffHand()
-                || settings.isTourMirrorHead() || settings.isTourMirrorEffects() || settings.isTourMirrorFrost()
-                || settings.isTourMirrorExperience() || hides();
+        FollowSettings follow = settings.follow();
+        return follow.mirrorHealth() || follow.mirrorMainHand() || follow.mirrorOffHand()
+                || follow.mirrorHead() || follow.mirrorEffects() || follow.mirrorFrost()
+                || follow.mirrorExperience() || hides();
     }
 
     /**
@@ -791,7 +792,7 @@ final class GuideMirror {
 
     /** Whether the guests do not see all of the guide's items: their count, enchantments, wear or name. */
     private boolean hides() {
-        return !settings.isTourMirrorCount() || !settings.isTourMirrorEnchantments()
-                || !settings.isTourMirrorDurability() || !settings.isTourMirrorName();
+        return !settings.follow().mirrorCount() || !settings.follow().mirrorEnchantments()
+                || !settings.follow().mirrorDurability() || !settings.follow().mirrorName();
     }
 }

@@ -10,12 +10,12 @@ import de.elia.cameraplugin.bedrock.BedrockPlayers;
 import de.elia.cameraplugin.body.BodyAlarm;
 import de.elia.cameraplugin.body.BodySpawner;
 import de.elia.cameraplugin.body.BodyWatch;
+import de.elia.cameraplugin.command.CamCommandFilter;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.ConfigFile;
 import de.elia.cameraplugin.config.ConfigIssue;
 import de.elia.cameraplugin.config.ConfigReader;
 import de.elia.cameraplugin.config.Messages;
-import de.elia.cameraplugin.command.CamCommandFilter;
 import de.elia.cameraplugin.cost.StartCost;
 import de.elia.cameraplugin.crash.CamCrashGuard;
 import de.elia.cameraplugin.crash.GlowMark;
@@ -63,6 +63,7 @@ import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.session.EndReason;
 import de.elia.cameraplugin.session.ExitKey;
 import de.elia.cameraplugin.session.SessionListener;
+import de.elia.cameraplugin.session.SessionTicker;
 import de.elia.cameraplugin.session.SessionTracker;
 import de.elia.cameraplugin.signal.CamSignal;
 import de.elia.cameraplugin.sky.CamSky;
@@ -86,10 +87,10 @@ import de.elia.cameraplugin.sulfurcube.CamSulfurCubeGuard;
 import de.elia.cameraplugin.teleport.CamTeleportGuard;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import de.elia.cameraplugin.timelimit.EndWarning;
-import de.elia.cameraplugin.trail.CamTrail;
 import de.elia.cameraplugin.tour.CamTour;
 import de.elia.cameraplugin.tour.TourBans;
 import de.elia.cameraplugin.tour.TourModeration;
+import de.elia.cameraplugin.trail.CamTrail;
 import de.elia.cameraplugin.visibility.CamVisibility;
 import de.elia.cameraplugin.webmap.CamWebMap;
 import org.bukkit.Bukkit;
@@ -122,6 +123,8 @@ public final class CameraPlugin extends JavaPlugin {
     private final ConfigFile configFile = new ConfigFile(this, log, messages);
     private final CamSettings settings = new CamSettings(this, messages);
     private final CameraPlayers cameraPlayers = new CameraPlayers();
+    /** The tick of each camera mode, which what watches over it runs on. */
+    private final SessionTicker sessionTicker = new SessionTicker(this);
     /** Who plays on Bedrock, and what is offered them in place of what Bedrock cannot do. */
     private final BedrockPlayers bedrock = new BedrockPlayers(this);
     private final BedrockGlow bedrockGlow = new BedrockGlow(this);
@@ -139,8 +142,8 @@ public final class CameraPlugin extends JavaPlugin {
     private final BackgroundWriter writer = new BackgroundWriter(this, log);
     private final PlayerStore playerStore = new PlayerStore(this, log, writer);
     private final CamPreferences preferences = new CamPreferences(settings, playerStore);
-    private final CamNightVision nightVision = new CamNightVision(this, settings, messages, cameraPlayers,
-            preferences);
+    private final CamNightVision nightVision = new CamNightVision(this, sessionTicker, settings, messages,
+            cameraPlayers, preferences);
     private final CamList camList = new CamList(settings, messages, cameraPlayers, bedrock);
     private final CamListTeleport listTeleport = new CamListTeleport(this);
     private final CamStop stop = new CamStop(this);
@@ -154,7 +157,7 @@ public final class CameraPlugin extends JavaPlugin {
             cameraPlayers);
     private final CamLog camLog = new CamLog(this, settings, log, writer);
     private final StartCost startCost = new StartCost(settings, messages, log);
-    private final MobTargeting mobTargeting = new MobTargeting(this, settings, cameraPlayers);
+    private final MobTargeting mobTargeting = new MobTargeting(this, sessionTicker, settings, cameraPlayers);
     private final MobGaze mobGaze = new MobGaze(this, settings, cameraPlayers);
     private final CamOrbGuard orbGuard = new CamOrbGuard(this, cameraPlayers);
     private final BodyWatch bodyWatch = new BodyWatch(this);
@@ -225,10 +228,10 @@ public final class CameraPlugin extends JavaPlugin {
         camHungerGuard = new CamHungerGuard(this);
         // Created before the values are read, so its own go through the same
         // load and its notes end up in the same report.
-        camFireGuard = new CamFireGuard(this);
+        camFireGuard = new CamFireGuard(this, sessionTicker);
         camGhastGuard = new CamGhastGuard(this);
-        camSulfurCubeGuard = new CamSulfurCubeGuard(this);
-        camInventoryGuard = new CamInventoryGuard(this, this::isInCameraMode);
+        camSulfurCubeGuard = new CamSulfurCubeGuard(this, sessionTicker);
+        camInventoryGuard = new CamInventoryGuard(this, sessionTicker, this::isInCameraMode);
         configFile.reportConfigWarnings(loadConfigValues(), null);
         // Geyser and Floodgate are started by now: both come before, see softdepend.
         bedrock.reload();
@@ -443,6 +446,9 @@ public final class CameraPlugin extends JavaPlugin {
         noCollisionTeam.deleteNoCollisionTeam();
         guideTeam.delete();
         bodySpawner.removeLeftoverEntities();
+        // Whatever of a camera mode is still running: the parts above have
+        // stopped their own already.
+        sessionTicker.shutdown();
         // Last: everything above may still have handed over a file, and the
         // server must not go down before it is on the disk.
         writer.finish();
@@ -627,6 +633,11 @@ public final class CameraPlugin extends JavaPlugin {
 
     public CameraPlayers getCameraPlayers() {
         return cameraPlayers;
+    }
+
+    /** The tick of each camera mode, see {@link SessionTicker}. */
+    public SessionTicker getSessionTicker() {
+        return sessionTicker;
     }
 
     public BodySpawner getBodySpawner() {

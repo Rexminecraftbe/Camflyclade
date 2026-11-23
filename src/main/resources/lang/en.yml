@@ -2,6 +2,8 @@
 # Which language file is used is set in config.yml under language.
 # For another language copy this file, e.g. as de.yml, translate it and set language: de there.
 # Whatever a language file leaves out comes from the English one built into the plugin.
+# This file, en.yml, gets every text it lacks written into it at the start and with /cam reload (the file as it was
+# is kept as en.yml.bak). The file of another language is left as it is, a few texts in it are enough.
 # Reload with /cam reload.
 
 # Texts the plugin sends (colour codes with &)
@@ -187,6 +189,20 @@ messages:
   config-unknown-entry: "&cUnknown entry in {path}: '{value}'. It is ignored."
   config-unknown-key: "&cUnknown setting {path}. It is ignored, check its spelling and indentation."
   config-unknown-value: "&cUnknown value for {path}: '{value}'. Allowed: {allowed}. Using {used} instead."
+  # config.yml or lang/en.yml lacked entries that the same file in the plugin has - from a newer version of the plugin,
+  # or deleted by mistake. They were added, each with its comment, at the place where it stands in the plugin's file.
+  # {keys} lists them, a section added whole as one; {backup} is the file as it was before.
+  config-updated: "&e{file} lacked {count} entries, now added with their default values: {keys}. The file as it was is kept as {backup}."
+  config-updated-single: "&e{file} lacked {keys}, now added with its default value. The file as it was is kept as {backup}."
+  # A setting that has a new name since the file was written, renamed in the file. Its value stays.
+  config-renamed: "&e{file}: {old} is called {new} now and was renamed. The file as it was is kept as {backup}."
+  # The file lacks entries but could not be completed; {error} is one of the three below.
+  config-update-failed: "&e{file} lacks entries of this version of the plugin but was left as it is ({error}). Their default values apply all the same."
+  config-update-encoding: "it is not saved as UTF-8"
+  config-update-layout: "it is written in a way the plugin cannot add to"
+  # {path} is where the completed file would no longer have said the same as before.
+  config-update-check: "it would have changed at {path}"
+  config-update-write: "it could not be written: {error}"
   # Who {player} in stopped-by, banned-now and banlist is when the command comes from the console.
   console-name: "the server"
   cooldown-available: "&aCam mode available again"
@@ -1695,6 +1711,9 @@ message-settings:
   cant-fly-in-powder-snow: actionbar
   cant-fly-in-water: actionbar
   config-errors: true
+  # The notes when config.yml or lang/en.yml was completed or a setting in it renamed (config-updated and
+  # those after it), in the chat of who reloaded. In the console they always stand.
+  config-updated: true
   cooldown-available: actionbar
   cooldown-bossbar: true
   crash-restored: true

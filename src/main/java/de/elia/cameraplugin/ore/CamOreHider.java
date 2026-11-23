@@ -248,8 +248,8 @@ public final class CamOreHider implements Listener {
      */
     public void reload() {
         found.clear();
-        covers = Map.copyOf(settings.getOreCovers());
-        biomes = settings.getOreBiomes() == null ? null : Set.copyOf(settings.getOreBiomes());
+        covers = Map.copyOf(settings.hideOres().covers());
+        biomes = settings.hideOres().biomes() == null ? null : Set.copyOf(settings.hideOres().biomes());
         Set<Material> through = EnumSet.noneOf(Material.class);
         for (Material material : Material.values()) {
             try {
@@ -265,7 +265,7 @@ public final class CamOreHider implements Listener {
 
     /** Whether ores are hidden at all. */
     private boolean active() {
-        return settings.isHideOres() && !covers.isEmpty();
+        return settings.hideOres().enabled() && !covers.isEmpty();
     }
 
     /**
@@ -492,7 +492,7 @@ public final class CamOreHider implements Listener {
             int minY = world.getMinHeight();
             int maxY = world.getMaxHeight();
             int maxSky = maxSkyLight(world);
-            int highestOre = settings.getOreMaxY();
+            int highestOre = settings.hideOres().maxY();
             int change = changes.getOrDefault(id, 0);
             long taken = System.currentTimeMillis();
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
@@ -591,7 +591,7 @@ public final class CamOreHider implements Listener {
      * the biomes of {@code hide-ores.biomes} are hidden.
      */
     private int maxSkyLight(World world) {
-        return biomes == null && world.hasSkyLight() ? settings.getOreMaxSkyLight() : -1;
+        return biomes == null && world.hasSkyLight() ? settings.hideOres().maxSkyLight() : -1;
     }
 
     /**

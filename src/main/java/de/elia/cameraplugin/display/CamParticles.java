@@ -3,10 +3,10 @@ package de.elia.cameraplugin.display;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.SessionTask;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -21,7 +21,7 @@ public final class CamParticles {
     private final CameraPlugin plugin;
     private final CamSettings settings;
     private final CameraPlayers cameraPlayers;
-    private final Map<UUID, BukkitRunnable> particleTasks = new HashMap<>();
+    private final Map<UUID, SessionTask> particleTasks = new HashMap<>();
 
     public CamParticles(CameraPlugin plugin, CamSettings settings, CameraPlayers cameraPlayers) {
         this.plugin = plugin;
@@ -40,10 +40,10 @@ public final class CamParticles {
      * 0.25 sends one particle every fourth tick.</p>
      */
     public void startCameraParticles(Player player) {
-        if (!settings.areParticlesEnabled()) {
+        if (!settings.particles().enabled()) {
             return;
         }
-        BukkitRunnable task = new BukkitRunnable() {
+        SessionTask task = new SessionTask() {
             /** Particles owed from the ticks before, not yet a whole one. */
             private double owed;
 
@@ -53,24 +53,24 @@ public final class CamParticles {
                     this.cancel();
                     return;
                 }
-                owed += settings.getParticlesPerTick();
+                owed += settings.particles().perTick();
                 int count = (int) owed;
                 if (count == 0) {
                     return;
                 }
                 owed -= count;
-                Location particleLoc = player.getLocation().add(0, settings.getParticleHeight(), 0);
-                double spread = settings.getParticleSpread();
+                Location particleLoc = player.getLocation().add(0, settings.particles().height(), 0);
+                double spread = settings.particles().spread();
                 for (Player viewer : Bukkit.getOnlinePlayers()) {
                     if (viewer.equals(player)) continue;
                     if (shouldShowParticlesTo(viewer, player, particleLoc)) {
-                        viewer.spawnParticle(settings.getParticleType(), particleLoc,
+                        viewer.spawnParticle(settings.particles().type(), particleLoc,
                                 count, spread, spread, spread, 0);
                     }
                 }
             }
         };
-        task.runTaskTimer(plugin, 0L, 1L);
+        task.runTaskTimer(plugin.getSessionTicker(), player, 0L, 1L);
         particleTasks.put(player.getUniqueId(), task);
     }
 
@@ -91,7 +91,7 @@ public final class CamParticles {
                 || plugin.getTour().hidesCamera(viewer, camPlayer)) {
             return false;
         }
-        return switch (settings.getPlayerVisibilityMode()) {
+        return switch (settings.cameraMode().visibilityMode()) {
             case ALL -> true;
             case CAM -> cameraPlayers.contains(viewer.getUniqueId());
             case NONE -> false;
@@ -99,14 +99,14 @@ public final class CamParticles {
     }
 
     public void stopCameraParticles(Player player) {
-        BukkitRunnable task = particleTasks.remove(player.getUniqueId());
+        SessionTask task = particleTasks.remove(player.getUniqueId());
         if (task != null) {
             task.cancel();
         }
     }
 
     public void onDisable() {
-        for (BukkitRunnable task : particleTasks.values()) {
+        for (SessionTask task : particleTasks.values()) {
             task.cancel();
         }
         particleTasks.clear();

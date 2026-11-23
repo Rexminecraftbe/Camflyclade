@@ -57,13 +57,13 @@ public final class JumpCheck {
      */
     public boolean mayGo(Player player, Location anchor, Location signalFrom, Location target, String prefix,
                          String... fills) {
-        double max = settings.getMaxDistance();
-        if (settings.limitsDistance() && target.distanceSquared(anchor) > max * max) {
+        double max = settings.cameraMode().maxDistance();
+        if (settings.cameraMode().limitsDistance() && target.distanceSquared(anchor) > max * max) {
             messages.sendConfiguredMessage(player, prefix + "-too-far",
                     with(fills, "{distance}", String.valueOf(max)));
             return false;
         }
-        if (settings.usesSignal() && !plugin.getSignal().reaches(player, signalFrom, target)) {
+        if (settings.cameraMode().usesSignal() && !plugin.getSignal().reaches(player, signalFrom, target)) {
             messages.sendConfiguredMessage(player, prefix + "-no-signal", fills);
             return false;
         }

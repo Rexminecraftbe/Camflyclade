@@ -101,7 +101,7 @@ public final class CamMovementGuard implements Listener {
         }
 
         CameraData data = cameraPlayers.get(player.getUniqueId());
-        if (!settings.limitsDistance() || !beyondMaxDistance(data, to)) {
+        if (!settings.cameraMode().limitsDistance() || !beyondMaxDistance(data, to)) {
             return;
         }
         if (beyondMaxDistance(data, event.getFrom())) {
@@ -172,11 +172,11 @@ public final class CamMovementGuard implements Listener {
      *              {@code {from}} names
      */
     private void warnDistanceLimit(Player player, String key, CameraData data, Location where) {
-        if (!mayWarn(distanceMessageCooldown, player, settings.getDistanceWarningCooldown())) {
+        if (!mayWarn(distanceMessageCooldown, player, settings.cameraMode().distanceWarningCooldown())) {
             return;
         }
-        settings.getBorderSound().play(player);
-        messages.sendMessage(player, key, "{distance}", String.valueOf(settings.getMaxDistance()),
+        settings.sounds().border().play(player);
+        messages.sendMessage(player, key, "{distance}", String.valueOf(settings.cameraMode().maxDistance()),
                 "{from}", distanceAnchorName(data, where));
     }
 
@@ -346,7 +346,7 @@ public final class CamMovementGuard implements Listener {
         if (!mayWarn(portalMessageCooldown, player, settings.getPortalRules().getWarningCooldown())) {
             return;
         }
-        settings.getBorderSound().play(player);
+        settings.sounds().border().play(player);
         if (area != null) {
             messages.sendMessage(player, "cam-area-limit", "{area}", area);
         } else {
@@ -393,15 +393,15 @@ public final class CamMovementGuard implements Listener {
             // player would be sent over and straight back again on every
             // trip through it.
             settings.getPortalRules().rememberForbiddenArea(entry, area, arrival);
-            settings.getBorderSound().play(player);
+            settings.sounds().border().play(player);
             messages.sendMessage(player, "portal-return-area", "{area}", area);
             bringBack(player, data);
             return;
         }
-        if (settings.limitsDistance() && beyondMaxDistance(data, arrival)) {
-            settings.getBorderSound().play(player);
+        if (settings.cameraMode().limitsDistance() && beyondMaxDistance(data, arrival)) {
+            settings.sounds().border().play(player);
             messages.sendMessage(player, "portal-return-distance", "{distance}",
-                    String.valueOf(settings.getMaxDistance()), "{from}", distanceAnchorName(data, arrival));
+                    String.valueOf(settings.cameraMode().maxDistance()), "{from}", distanceAnchorName(data, arrival));
             bringBack(player, data);
             return;
         }
@@ -491,7 +491,7 @@ public final class CamMovementGuard implements Listener {
      * of {@code /cam spot} in the world of the body.
      */
     public boolean beyondFlightDistance(CameraData data, Location location) {
-        return settings.limitsDistance() && beyondMaxDistance(data, location);
+        return settings.cameraMode().limitsDistance() && beyondMaxDistance(data, location);
     }
 
     /**
@@ -524,7 +524,7 @@ public final class CamMovementGuard implements Listener {
     private Location returnTarget(CameraData data, Location entry) {
         if (settings.getPortalRules().getReturnTo() == PortalReturn.PORTAL && entry != null
                 && entry.getWorld().equals(data.getBody().getWorld())
-                && (!settings.limitsDistance() || !beyondMaxDistance(data, entry))) {
+                && (!settings.cameraMode().limitsDistance() || !beyondMaxDistance(data, entry))) {
             return entry;
         }
         return home(data);
@@ -612,7 +612,8 @@ public final class CamMovementGuard implements Listener {
      */
     private boolean beyondMaxDistance(CameraData data, Location location) {
         Location anchor = distanceAnchor(data, location);
-        return anchor == null || location.distanceSquared(anchor) > settings.getMaxDistance() * settings.getMaxDistance();
+        double max = settings.cameraMode().maxDistance();
+        return anchor == null || location.distanceSquared(anchor) > max * max;
     }
 
     /**
@@ -665,8 +666,8 @@ public final class CamMovementGuard implements Listener {
      * seconds.
      */
     private void warnMedium(Player player, FlightMedium medium) {
-        if (mayWarn(mediumMessageCooldown, player, settings.getDistanceWarningCooldown())) {
-            settings.getBorderSound().play(player);
+        if (mayWarn(mediumMessageCooldown, player, settings.cameraMode().distanceWarningCooldown())) {
+            settings.sounds().border().play(player);
             messages.sendMessage(player, medium.getFlightMessage());
         }
     }
@@ -706,7 +707,7 @@ public final class CamMovementGuard implements Listener {
      */
     private void warnAreaLimit(Player player, String area) {
         if (mayWarn(areaMessageCooldown, player, settings.getCamAreaRules().getWarningCooldown())) {
-            settings.getBorderSound().play(player);
+            settings.sounds().border().play(player);
             messages.sendMessage(player, "cam-area-limit", "{area}", area);
         }
     }

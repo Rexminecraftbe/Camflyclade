@@ -1,11 +1,12 @@
 package de.elia.cameraplugin.inventory;
 
+import de.elia.cameraplugin.session.SessionTask;
+import de.elia.cameraplugin.session.SessionTicker;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -55,6 +56,8 @@ public class CamInventoryGuard {
     private static final long INTERVAL = 1L;
 
     private final JavaPlugin plugin;
+    /** The tick of each camera mode, which the watching here runs on. */
+    private final SessionTicker sessions;
     /**
      * Whether that player is still in camera mode.
      *
@@ -66,9 +69,10 @@ public class CamInventoryGuard {
      */
     private final Predicate<Player> inCameraMode;
     /** The sweep of every player currently in camera mode, by player id. */
-    private final Map<UUID, BukkitRunnable> tasks = new HashMap<>();
+    private final Map<UUID, SessionTask> tasks = new HashMap<>();
 
-    public CamInventoryGuard(JavaPlugin plugin, Predicate<Player> inCameraMode) {
+    public CamInventoryGuard(JavaPlugin plugin, SessionTicker sessions, Predicate<Player> inCameraMode) {
+        this.sessions = sessions;
         this.plugin = plugin;
         this.inCameraMode = inCameraMode;
     }
@@ -93,7 +97,7 @@ public class CamInventoryGuard {
         if (tasks.containsKey(player.getUniqueId())) {
             return;
         }
-        BukkitRunnable task = new BukkitRunnable() {
+        SessionTask task = new SessionTask() {
             @Override
             public void run() {
                 if (!player.isOnline() || !inCameraMode.test(player)) {
@@ -103,7 +107,7 @@ public class CamInventoryGuard {
                 sweep(player);
             }
         };
-        task.runTaskTimer(plugin, INTERVAL, INTERVAL);
+        task.runTaskTimer(sessions, player, INTERVAL, INTERVAL);
         tasks.put(player.getUniqueId(), task);
     }
 
@@ -112,7 +116,7 @@ public class CamInventoryGuard {
      * inventory is handed back, so that nothing sweeps that away.
      */
     public void stopFor(Player player) {
-        BukkitRunnable task = tasks.remove(player.getUniqueId());
+        SessionTask task = tasks.remove(player.getUniqueId());
         if (task != null) {
             task.cancel();
             // Orbs reach him again, the way they would have without camera mode.
@@ -121,7 +125,7 @@ public class CamInventoryGuard {
     }
 
     public void onDisable() {
-        for (BukkitRunnable task : tasks.values()) {
+        for (SessionTask task : tasks.values()) {
             task.cancel();
         }
         tasks.clear();

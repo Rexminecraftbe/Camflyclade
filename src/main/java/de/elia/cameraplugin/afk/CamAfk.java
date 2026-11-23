@@ -5,6 +5,7 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.EndReason;
+import de.elia.cameraplugin.session.SessionTask;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -13,7 +14,6 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -46,7 +46,7 @@ public final class CamAfk implements Listener {
     private final Messages messages;
     /** When each camera player last did something, as {@link System#currentTimeMillis()} counts. */
     private final Map<UUID, Long> lastActive = new HashMap<>();
-    private final Map<UUID, BukkitRunnable> tasks = new HashMap<>();
+    private final Map<UUID, SessionTask> tasks = new HashMap<>();
 
     public CamAfk(CameraPlugin plugin) {
         this.plugin = plugin;
@@ -65,7 +65,7 @@ public final class CamAfk implements Listener {
         long limit = settings.getAfkEndSeconds() * 1000L;
         int percent = settings.getAfkWarningPercent();
         long warnAt = limit * percent / 100L;
-        BukkitRunnable task = new BukkitRunnable() {
+        SessionTask task = new SessionTask() {
             /** Whether he has been warned since he last did something. */
             private boolean warned;
 
@@ -91,7 +91,7 @@ public final class CamAfk implements Listener {
                 }
             }
         };
-        task.runTaskTimer(plugin, INTERVAL, INTERVAL);
+        task.runTaskTimer(plugin.getSessionTicker(), player, INTERVAL, INTERVAL);
         tasks.put(id, task);
     }
 
@@ -99,7 +99,7 @@ public final class CamAfk implements Listener {
     public void stopFor(Player player) {
         UUID id = player.getUniqueId();
         lastActive.remove(id);
-        BukkitRunnable task = tasks.remove(id);
+        SessionTask task = tasks.remove(id);
         if (task != null) {
             task.cancel();
         }
@@ -131,13 +131,13 @@ public final class CamAfk implements Listener {
         lastActive.computeIfPresent(player.getUniqueId(), (id, last) -> now);
         CameraData data = plugin.getCameraPlayers().get(player.getUniqueId());
         if (data != null) {
-            data.noteActive(now, settings.getStatsAfkMillis());
+            data.noteActive(now, settings.statistics().afkMillis());
         }
     }
 
     /** Stops every clock, when the plugin is switched off. */
     public void onDisable() {
-        for (BukkitRunnable task : tasks.values()) {
+        for (SessionTask task : tasks.values()) {
             task.cancel();
         }
         tasks.clear();

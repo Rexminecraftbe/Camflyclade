@@ -64,7 +64,7 @@ public final class CameraMode {
      *                  overwrites it
      */
     private GameMode cameraGameMode(GameMode startMode) {
-        return switch (settings.getCamGameMode()) {
+        return switch (settings.cameraMode().gameMode()) {
             case SURVIVAL -> GameMode.SURVIVAL;
             case CREATIVE -> GameMode.CREATIVE;
             case KEEP -> startMode == GameMode.SPECTATOR ? GameMode.ADVENTURE : startMode;
@@ -229,12 +229,14 @@ public final class CameraMode {
         ItemStack[] heldForMode = switchGameMode(player, null, GameMode.CREATIVE);
         player.setAllowFlight(true);
         player.setFlying(true);
-        if (settings.getGlowMode() != GlowMode.OFF && settings.getPlayerVisibilityMode() != VisibilityMode.NONE) {
+        if (settings.cameraMode().glowMode() != GlowMode.OFF
+                && settings.cameraMode().visibilityMode() != VisibilityMode.NONE) {
             // Before the outline goes on, here or in startSightGlow: the
             // world keeps it on him over a crash, see GlowMark.
             plugin.getGlowMark().mark(player, originalGlowing);
         }
-        if (settings.getGlowMode() == GlowMode.ALWAYS && settings.getPlayerVisibilityMode() != VisibilityMode.NONE) {
+        if (settings.cameraMode().glowMode() == GlowMode.ALWAYS
+                && settings.cameraMode().visibilityMode() != VisibilityMode.NONE) {
             // The invisibility takes the body away, the outline puts a visible
             // shape back - that is what everyone else sees of the camera player.
             // In mode NONE nobody is meant to see him, so an outline would give
@@ -342,7 +344,7 @@ public final class CameraMode {
         plugin.getAfk().startFor(player);
         plugin.getCamLog().started(player, cameraData);
         plugin.getTrail().startFor(player, playerLocation);
-        settings.getStartSound().play(player);
+        settings.sounds().start().play(player);
     }
 
     /**
@@ -587,7 +589,7 @@ public final class CameraMode {
         plugin.getPlayerStore().save(player.getUniqueId());
         if (!plugin.isShuttingDown()) {
             // Last, at his body: the sound says he is back, and why.
-            settings.getEndSound(reason).play(player);
+            settings.sounds().end(reason).play(player);
         }
     }
 }

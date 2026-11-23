@@ -6,12 +6,12 @@ import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.session.EndReason;
+import de.elia.cameraplugin.session.SessionTask;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -68,7 +68,7 @@ public final class CamSignal {
 
     /** What is known about the signal of one camera player. */
     private static final class Link {
-        BukkitRunnable task;
+        SessionTask task;
         /** How strong it was last measured, 0 to 1. */
         double strength = 1.0;
         /** Since when it is gone, as {@link System#currentTimeMillis()} counts, 0 while it is there. */
@@ -87,12 +87,12 @@ public final class CamSignal {
     /** Starts measuring the signal of a player who has just entered camera mode. */
     public void startFor(Player player) {
         stopFor(player);
-        if (!settings.usesSignal()) {
+        if (!settings.cameraMode().usesSignal()) {
             return;
         }
         UUID id = player.getUniqueId();
         Link link = new Link();
-        link.task = new BukkitRunnable() {
+        link.task = new SessionTask() {
             @Override
             public void run() {
                 CameraData data = cameraPlayers.get(id);
@@ -105,7 +105,7 @@ public final class CamSignal {
             }
         };
         links.put(id, link);
-        link.task.runTaskTimer(plugin, INTERVAL, INTERVAL);
+        link.task.runTaskTimer(plugin.getSessionTicker(), player, INTERVAL, INTERVAL);
     }
 
     /** Stops measuring for a player leaving camera mode. */
@@ -175,7 +175,7 @@ public final class CamSignal {
             return 0;
         }
         int percent = percent(strength);
-        double[] levels = settings.getSignalLevels();
+        double[] levels = settings.signal().levels();
         for (int i = 0; i < levels.length; i++) {
             if (percent >= levels[i]) {
                 return ICONS.length - 1 - i;
@@ -208,7 +208,7 @@ public final class CamSignal {
                 // Back in the signal within lost-seconds. Not after going
                 // back to the body, which starts afresh, see lose().
                 link.lostSince = 0L;
-                settings.getSignalBackSound().play(player);
+                settings.sounds().signalBack().play(player);
                 if (link.shownSeconds >= 0L) {
                     // The countdown would otherwise stand for its three
                     // seconds next to a signal that is back.
@@ -221,9 +221,9 @@ public final class CamSignal {
         if (link.lostSince == 0L) {
             link.lostSince = now;
             link.shownSeconds = -1L;
-            settings.getSignalLostSound().play(player);
+            settings.sounds().signalLost().play(player);
         }
-        long left = settings.getSignalLostSeconds() * 1000L - (now - link.lostSince);
+        long left = settings.signal().lostSeconds() * 1000L - (now - link.lostSince);
         if (left <= 0L) {
             lose(player, data, link);
             return;
@@ -255,7 +255,7 @@ public final class CamSignal {
         Location from = body.getWorld().equals(eyes.getWorld())
                 ? plugin.getMovementGuard().homeEyes(player, data)
                 : anchor.clone().add(0.0, player.getEyeHeight(), 0.0);
-        return SignalPath.strength(from, eyes, settings.getMaxDistance(), settings.getSignalCosts());
+        return SignalPath.strength(from, eyes, settings.cameraMode().maxDistance(), settings.signal().costs());
     }
 
     /**
@@ -272,7 +272,7 @@ public final class CamSignal {
             return false;
         }
         Location eyes = feet.clone().add(0.0, player.getEyeHeight(), 0.0);
-        return SignalPath.strength(from, eyes, settings.getMaxDistance(), settings.getSignalCosts()) > 0.0;
+        return SignalPath.strength(from, eyes, settings.cameraMode().maxDistance(), settings.signal().costs()) > 0.0;
     }
 
     /**
@@ -282,8 +282,8 @@ public final class CamSignal {
     private void lose(Player player, CameraData data, Link link) {
         link.lostSince = 0L;
         String back = "signal-back-to-body";
-        if (settings.getSignalLoss() == SignalLoss.BACK && plugin.getMovementGuard().returnHome(player, data)) {
-            settings.getBackSound().play(player);
+        if (settings.signal().loss() == SignalLoss.BACK && plugin.getMovementGuard().returnHome(player, data)) {
+            settings.sounds().back().play(player);
             if (messages.isMessageEnabled(back)) {
                 plugin.getActionBar().flash(player, messages.getMessage(back));
             }

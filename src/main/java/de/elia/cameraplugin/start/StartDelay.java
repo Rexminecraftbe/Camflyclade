@@ -148,7 +148,7 @@ public final class StartDelay implements Listener {
 
     /** The seconds left, in the action bar and with the sound of {@code sounds.start-delay}. */
     private void countDown(Player player, long left) {
-        settings.getStartDelaySound().play(player);
+        settings.sounds().startDelay().play(player);
         if (!messages.isMessageEnabled("start-delay-countdown")) {
             return;
         }

@@ -4,11 +4,11 @@ import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.SessionTask;
 import de.elia.cameraplugin.visibility.VisibilityMode;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,7 +26,7 @@ public final class SightGlow {
     private final CameraPlugin plugin;
     private final CamSettings settings;
     private final CameraPlayers cameraPlayers;
-    private final Map<UUID, BukkitRunnable> sightGlowTasks = new HashMap<>();
+    private final Map<UUID, SessionTask> sightGlowTasks = new HashMap<>();
 
     public SightGlow(CameraPlugin plugin, CamSettings settings, CameraPlayers cameraPlayers) {
         this.plugin = plugin;
@@ -44,11 +44,12 @@ public final class SightGlow {
      * does prevent is the outline giving him away while nobody sees him.</p>
      */
     public void startSightGlow(Player player) {
-        if (settings.getGlowMode() != GlowMode.SIGHT || settings.getPlayerVisibilityMode() == VisibilityMode.NONE) {
+        if (settings.cameraMode().glowMode() != GlowMode.SIGHT
+                || settings.cameraMode().visibilityMode() == VisibilityMode.NONE) {
             return;
         }
         stopSightGlow(player);
-        BukkitRunnable task = new BukkitRunnable() {
+        SessionTask task = new SessionTask() {
             @Override
             public void run() {
                 CameraData data = cameraPlayers.get(player.getUniqueId());
@@ -64,7 +65,7 @@ public final class SightGlow {
                 }
             }
         };
-        task.runTaskTimer(plugin, 0L, SIGHT_GLOW_INTERVAL);
+        task.runTaskTimer(plugin.getSessionTicker(), player, 0L, SIGHT_GLOW_INTERVAL);
         sightGlowTasks.put(player.getUniqueId(), task);
     }
 
@@ -93,14 +94,14 @@ public final class SightGlow {
     }
 
     public void stopSightGlow(Player player) {
-        BukkitRunnable task = sightGlowTasks.remove(player.getUniqueId());
+        SessionTask task = sightGlowTasks.remove(player.getUniqueId());
         if (task != null) {
             task.cancel();
         }
     }
 
     public void onDisable() {
-        for (BukkitRunnable task : sightGlowTasks.values()) {
+        for (SessionTask task : sightGlowTasks.values()) {
             task.cancel();
         }
         sightGlowTasks.clear();

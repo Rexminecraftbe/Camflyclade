@@ -57,8 +57,8 @@ public class CamTabCompleter implements TabCompleter {
         // A player is offered the commands for admins only while
         // menu.admin-access lets them through as commands; the console always.
         boolean adminCommands = !(sender instanceof Player)
-                || plugin.getSettings().getAdminAccess().allowsCommands();
-        boolean ownCommands = !(sender instanceof Player) || plugin.getSettings().getMenuAccess().allowsCommands();
+                || plugin.getSettings().menu().adminAccess().allowsCommands();
+        boolean ownCommands = !(sender instanceof Player) || plugin.getSettings().menu().access().allowsCommands();
         boolean statsCommand = args.length > 1 && args[0].equalsIgnoreCase("stats") && (ownCommands || adminCommands);
         if (statsCommand && args.length == 2) {
             return statsWords(sender, args[1].toLowerCase(Locale.ROOT));
@@ -134,8 +134,8 @@ public class CamTabCompleter implements TabCompleter {
         Player player = sender instanceof Player p && p.hasPermission("camplugin.use") ? p : null;
         // What the menu offers as well is only offered as a command while
         // menu.access lets the commands through.
-        Player own = player != null && plugin.getSettings().getMenuAccess().allowsCommands() ? player : null;
-        boolean sharing = plugin.getSettings().isViewpointsSharing();
+        Player own = player != null && plugin.getSettings().menu().access().allowsCommands() ? player : null;
+        boolean sharing = plugin.getSettings().spots().sharing();
         boolean spotCommand = args.length > 1 && args[0].equalsIgnoreCase("spot") && own != null && spots.isEnabled();
         // A name of a spot may have spaces: what he has typed of it, over
         // several words, is matched as one, see restOf.
@@ -227,7 +227,7 @@ public class CamTabCompleter implements TabCompleter {
             };
             List<String> names = new ArrayList<>();
             // Everybody at once, while there is anybody to invite that way.
-            if (args[1].equalsIgnoreCase("invite") && plugin.getSettings().isTourInviteAll()
+            if (args[1].equalsIgnoreCase("invite") && plugin.getSettings().follow().inviteAll()
                     && !tour.invitable(own).isEmpty()) {
                 names.add(CamTour.ALL);
             }
@@ -383,13 +383,14 @@ public class CamTabCompleter implements TabCompleter {
     private List<String> statsWords(CommandSender sender, String partial) {
         List<String> words = new ArrayList<>();
         boolean player = sender instanceof Player;
-        if ((!player || plugin.getSettings().getAdminAccess().allowsCommands())
+        if ((!player || plugin.getSettings().menu().adminAccess().allowsCommands())
                 && stats.showsAnything() && stats.mayViewOthers(sender) && "player".startsWith(partial)) {
             words.add("player");
         }
-        boolean own = player && plugin.getSettings().getMenuAccess().allowsCommands()
-                && plugin.getSettings().isStatsEnabled();
-        boolean others = (!player || plugin.getSettings().getAdminAccess().allowsCommands()) && resetsOthers(sender);
+        boolean own = player && plugin.getSettings().menu().access().allowsCommands()
+                && plugin.getSettings().statistics().enabled();
+        boolean others = (!player || plugin.getSettings().menu().adminAccess().allowsCommands())
+                && resetsOthers(sender);
         if ((own || others) && "reset".startsWith(partial)) {
             words.add("reset");
         }
@@ -401,7 +402,7 @@ public class CamTabCompleter implements TabCompleter {
      * the statistics on and the right to reset those of others.
      */
     private boolean resetsOthers(CommandSender sender) {
-        return plugin.getSettings().isStatsEnabled() && stats.mayResetOthers(sender);
+        return plugin.getSettings().statistics().enabled() && stats.mayResetOthers(sender);
     }
 
     /**

@@ -228,7 +228,7 @@ public final class BodySpawner implements Listener {
      */
     private Mannequin spawnMannequinBody(Player player, Location location) {
         Mannequin mannequin = (Mannequin) location.getWorld().spawnEntity(location, EntityType.MANNEQUIN);
-        if (!settings.isBodyVisible()) {
+        if (!settings.body().visible()) {
             hideMannequin(mannequin);
             mannequin.setSilent(true);
         } else if (!MannequinSkin.apply(mannequin, player)) {
@@ -268,7 +268,7 @@ public final class BodySpawner implements Listener {
      * where the player himself would be hit.</p>
      */
     public boolean usesMannequinBody() {
-        return settings.getBodyType().isMannequinBody(settings.isBodyVisible());
+        return settings.body().type().isMannequinBody(settings.body().visible());
     }
 
     /**
@@ -285,7 +285,7 @@ public final class BodySpawner implements Listener {
      * {@link de.elia.cameraplugin.mirrordamage.DamageMirror#onBodyDamage}.</p>
      */
     public boolean showsBodyArmor() {
-        return settings.isBodyArmorVisible() && settings.isBodyVisible();
+        return settings.body().armorVisible() && settings.body().visible();
     }
 
     /**
@@ -304,10 +304,10 @@ public final class BodySpawner implements Listener {
      * @return the name, or {@code null} when the body carries none
      */
     public TextDisplay spawnNameDisplay(Player player, LivingEntity body, double absorption) {
-        if (!settings.isBodyNameVisible() && !settings.isBodyHealthVisible()) {
+        if (!settings.body().nameVisible() && !settings.body().healthVisible()) {
             return null;
         }
-        return NameDisplay.spawnStyled(nameLocation(body), nameText(player, absorption), settings.getBodyNameStyle(),
+        return NameDisplay.spawnStyled(nameLocation(body), nameText(player, absorption), settings.body().nameStyle(),
                 nameKey, display -> writeHearts(display, player, absorption, layered() ? Layer.BACK : Layer.ONLY));
     }
 
@@ -323,9 +323,9 @@ public final class BodySpawner implements Listener {
         if (!layered()) {
             return null;
         }
-        return NameDisplay.spawnStyled(nameLocation(body), nameText(player, absorption), settings.getBodyNameStyle(),
+        return NameDisplay.spawnStyled(nameLocation(body), nameText(player, absorption), settings.body().nameStyle(),
                 nameKey, display -> {
-                    NameDisplay.putInFront(display, settings.getBodyNameStyle());
+                    NameDisplay.putInFront(display, settings.body().nameStyle());
                     writeHearts(display, player, absorption, Layer.FRONT);
                 });
     }
@@ -354,7 +354,7 @@ public final class BodySpawner implements Listener {
      * one in front of it. Only with pictures, see {@link SpriteText}.
      */
     private boolean layered() {
-        return settings.isBodyHealthVisible() && settings.isBodyHealthShowMissing() && SpriteText.available();
+        return settings.body().healthVisible() && settings.body().healthShowMissing() && SpriteText.available();
     }
 
     /** Which of the texts a display holds, see {@link #layered()}. */
@@ -385,7 +385,7 @@ public final class BodySpawner implements Listener {
     private List<Heart> hearts(Player player, double absorption) {
         int halves = (int) Math.ceil(player.getHealth());
         int count = (halves + 1) / 2;
-        if (settings.isBodyHealthShowMissing()) {
+        if (settings.body().healthShowMissing()) {
             AttributeInstance max = player.getAttribute(Attribute.MAX_HEALTH);
             count = Math.max(count, (int) Math.ceil((max != null ? max.getValue() : DEFAULT_MAX_HEALTH) / 2.0));
         }
@@ -394,7 +394,7 @@ public final class BodySpawner implements Listener {
             int upTo = 2 * heart + 2;
             all.add(upTo <= halves ? Heart.FULL : upTo - 1 <= halves ? Heart.HALF : Heart.EMPTY);
         }
-        int yellow = settings.isBodyHealthShowAbsorption() ? (int) Math.ceil(absorption) : 0;
+        int yellow = settings.body().healthShowAbsorption() ? (int) Math.ceil(absorption) : 0;
         for (int heart = 0; 2 * heart < yellow; heart++) {
             all.add(2 * heart + 2 <= yellow ? Heart.ABSORBING_FULL : Heart.ABSORBING_HALF);
         }
@@ -402,7 +402,7 @@ public final class BodySpawner implements Listener {
         for (int from = 0; from < all.size(); from += HEARTS_PER_LINE) {
             lines.add(all.subList(from, Math.min(all.size(), from + HEARTS_PER_LINE)));
         }
-        if (settings.isBodyHealthRowsUpward()) {
+        if (settings.body().healthRowsUpward()) {
             Collections.reverse(lines);
         }
         List<Heart> hearts = new ArrayList<>();
@@ -426,7 +426,7 @@ public final class BodySpawner implements Listener {
      */
     private String nameText(Player player, double absorption) {
         String name = styledName(player);
-        if (!settings.isBodyHealthVisible()) {
+        if (!settings.body().healthVisible()) {
             return name;
         }
         StringBuilder hearts = new StringBuilder();
@@ -442,7 +442,7 @@ public final class BodySpawner implements Listener {
         if (name.isEmpty()) {
             return hearts.toString();
         }
-        return settings.isBodyHealthAbove() ? hearts + "\n" + name : name + "\n" + hearts;
+        return settings.body().healthAbove() ? hearts + "\n" + name : name + "\n" + hearts;
     }
 
     /**
@@ -450,10 +450,10 @@ public final class BodySpawner implements Listener {
      * or nothing with {@code name-visible: false}.
      */
     private String styledName(Player player) {
-        String format = settings.isBodyNameVisible()
+        String format = settings.body().nameVisible()
                 ? messages.getMessage("armorstand.name-format").replace("{player}", player.getName())
                 : "";
-        return format.isEmpty() ? "" : NameDisplay.styled(format, settings.getBodyNameStyle());
+        return format.isEmpty() ? "" : NameDisplay.styled(format, settings.body().nameStyle());
     }
 
     /**
@@ -472,12 +472,12 @@ public final class BodySpawner implements Listener {
      *         there
      */
     private boolean writeHearts(TextDisplay display, Player player, double absorption, Layer layer) {
-        if (!settings.isBodyHealthVisible() || !SpriteText.available()) {
+        if (!settings.body().healthVisible() || !SpriteText.available()) {
             return false;
         }
         String name = styledName(player);
         SpriteText text = new SpriteText();
-        if (!name.isEmpty() && !settings.isBodyHealthAbove() && layer != Layer.FRONT) {
+        if (!name.isEmpty() && !settings.body().healthAbove() && layer != Layer.FRONT) {
             text.text(name).line();
         }
         for (Heart heart : hearts(player, absorption)) {
@@ -494,7 +494,7 @@ public final class BodySpawner implements Listener {
             };
             text.sprite(SpriteText.GUI_ATLAS, "minecraft:hud/heart/" + sprite);
         }
-        if (!name.isEmpty() && settings.isBodyHealthAbove()) {
+        if (!name.isEmpty() && settings.body().healthAbove()) {
             if (layer == Layer.FRONT) {
                 for (int line = name.split("\n", -1).length; line > 0; line--) {
                     text.line().text(" ");
@@ -545,7 +545,7 @@ public final class BodySpawner implements Listener {
      * nobody ever pushes the hitbox standing in that body.</p>
      */
     private void applyMovementSensitivity(Mannequin mannequin) {
-        mannequin.setImmovable(settings.getMovementSensitivity().isFixed());
+        mannequin.setImmovable(settings.body().movementSensitivity().isFixed());
     }
 
     /**
@@ -554,7 +554,7 @@ public final class BodySpawner implements Listener {
      * spot, every level above it lets the body fall.
      */
     private boolean useBodyGravity() {
-        return !settings.getMovementSensitivity().isFixed();
+        return !settings.body().movementSensitivity().isFixed();
     }
 
     /**

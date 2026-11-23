@@ -5,13 +5,13 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.session.EndReason;
+import de.elia.cameraplugin.session.SessionTask;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mannequin;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
 /**
@@ -58,12 +58,12 @@ public final class BodyWatch {
      * in the middle of the flight.</p>
      */
     public void startBodyMovementCheck(Player player, LivingEntity mannequin) {
-        if (settings.getMovementSensitivity().isFixed()) {
+        if (settings.body().movementSensitivity().isFixed()) {
             // Nothing can move the body on this level, so the check would only
             // compare a location with itself every tick.
             return;
         }
-        new BukkitRunnable() {
+        new SessionTask() {
             /**
              * The spot the body is compared against. Taken at the first run and
              * not when it is spawned, so that settling onto the ground right
@@ -90,7 +90,7 @@ public final class BodyWatch {
                     this.cancel();
                 }
             }
-        }.runTaskTimer(plugin, 20L, 1L);
+        }.runTaskTimer(plugin.getSessionTicker(), player, 20L, 1L);
     }
 
     /**
@@ -103,11 +103,11 @@ public final class BodyWatch {
      * undone here.</p>
      */
     public void startBodyPin(Player player, LivingEntity body, Mannequin hitbox) {
-        if (!settings.getMovementSensitivity().isFixed()) {
+        if (!settings.body().movementSensitivity().isFixed()) {
             return;
         }
         final Location anchor = body.getLocation().clone();
-        new BukkitRunnable() {
+        new SessionTask() {
             @Override
             public void run() {
                 if (!cameraPlayers.contains(player.getUniqueId()) || !player.isOnline() || body.isDead()) {
@@ -119,7 +119,7 @@ public final class BodyWatch {
                     pinToSpot(hitbox, anchor);
                 }
             }
-        }.runTaskTimer(plugin, 1L, 1L);
+        }.runTaskTimer(plugin.getSessionTicker(), player, 1L, 1L);
     }
 
     /**
@@ -141,7 +141,7 @@ public final class BodyWatch {
      * a loaded chunk.</p>
      */
     public void endWhenBodyGone(Player player, CameraData data) {
-        new BukkitRunnable() {
+        new SessionTask() {
             @Override
             public void run() {
                 if (!player.isOnline() || cameraPlayers.get(player.getUniqueId()) != data) {
@@ -156,7 +156,7 @@ public final class BodyWatch {
                 plugin.exitCameraMode(player, EndReason.BODY);
                 plugin.getMessages().sendMessage(player, "body-gone");
             }
-        }.runTaskTimer(plugin, 1L, 1L);
+        }.runTaskTimer(plugin.getSessionTicker(), player, 1L, 1L);
     }
 
     /**
@@ -185,8 +185,8 @@ public final class BodyWatch {
             return;
         }
         BodySpawner bodies = plugin.getBodySpawner();
-        boolean showsHealth = settings.isBodyHealthVisible();
-        new BukkitRunnable() {
+        boolean showsHealth = settings.body().healthVisible();
+        new SessionTask() {
             /** The health the name shows. */
             private double health = player.getHealth();
 
@@ -199,8 +199,8 @@ public final class BodyWatch {
                 }
                 Location target = bodies.nameLocation(body);
                 Location current = name.getLocation();
-                if (!current.getWorld().equals(target.getWorld())
-                        || current.distanceSquared(target) > CamSettings.MIN_MOVE_THRESHOLD * CamSettings.MIN_MOVE_THRESHOLD) {
+                if (!current.getWorld().equals(target.getWorld()) || current.distanceSquared(target)
+                        > BodySettings.MIN_MOVE_THRESHOLD * BodySettings.MIN_MOVE_THRESHOLD) {
                     name.teleport(target);
                     if (front != null && front.isValid()) {
                         front.teleport(target);
@@ -211,14 +211,14 @@ public final class BodyWatch {
                     bodies.refreshName(player, name, front != null && front.isValid() ? front : null, absorption);
                 }
             }
-        }.runTaskTimer(plugin, 1L, 1L);
+        }.runTaskTimer(plugin.getSessionTicker(), player, 1L, 1L);
     }
 
     /** Teleports the entity back to its spot when something pushed it away. */
     private void pinToSpot(Entity entity, Location anchor) {
         Location current = entity.getLocation();
-        if (!current.getWorld().equals(anchor.getWorld())
-                || current.distanceSquared(anchor) > CamSettings.MIN_MOVE_THRESHOLD * CamSettings.MIN_MOVE_THRESHOLD) {
+        if (!current.getWorld().equals(anchor.getWorld()) || current.distanceSquared(anchor)
+                > BodySettings.MIN_MOVE_THRESHOLD * BodySettings.MIN_MOVE_THRESHOLD) {
             entity.teleport(anchor);
             entity.setVelocity(new Vector());
         }
@@ -229,6 +229,6 @@ public final class BodyWatch {
         if (!current.getWorld().equals(reference.getWorld())) {
             return true;
         }
-        return current.distanceSquared(reference) > settings.getMoveThresholdSquared();
+        return current.distanceSquared(reference) > settings.body().moveThresholdSquared();
     }
 }

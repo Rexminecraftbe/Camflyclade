@@ -159,7 +159,7 @@ public final class DamageMirror implements Listener {
         }
 
         double applyDamage;
-        switch (settings.getDamageMode()) {
+        switch (settings.mirrorDamage().damageMode()) {
             // The damage the hit started with, before anything reduced it.
             // Armour, armour toughness, protection enchantments, resistance and
             // absorption all belong to the player: the server applies them once,
@@ -168,7 +168,7 @@ public final class DamageMirror implements Listener {
             // falling anvils need no special case any more.
             case MIRROR -> applyDamage = event.getDamage();
             case CUSTOM -> {
-                applyDamage = settings.getCustomDamageHearts() * 2.0;
+                applyDamage = settings.mirrorDamage().customDamageHearts() * 2.0;
                 // At zero hearts the mode is meant to cost nothing at all, so
                 // no enchantment puts anything on top of it either.
                 if (applyDamage > 0 && event instanceof EntityDamageByEntityEvent ede) {
@@ -217,7 +217,7 @@ public final class DamageMirror implements Listener {
 
         sendDamageMessage(owner, event);
 
-        if (settings.isMirrorDebug()) {
+        if (settings.mirrorDamage().debug()) {
             sendMirrorDebug(owner, String.format(Locale.ROOT,
                     "body hit: raw %.3f | after body armour %.3f | %s",
                     event.getDamage(), event.getFinalDamage(), event.getCause()));
@@ -376,7 +376,7 @@ public final class DamageMirror implements Listener {
             // it out only together with damage, so here it has to be handed
             // out by hand, by the same rules.
             Vector pushed = null;
-            if (settings.isMirrorKnockback()) {
+            if (settings.mirrorDamage().knockback()) {
                 pushed = push.standstill(owner);
                 if (HitPush.takesHits(owner)) {
                     pushed = push.knock(owner, pushed, true, true);
@@ -401,8 +401,8 @@ public final class DamageMirror implements Listener {
         // real hit, mirrored, with the Unbreaking enchantment counting. In every
         // other case the armour is swapped for copies, the server wears those
         // out, and the real pieces get the wear their own mode asks for.
-        boolean serverWearsArmor = settings.getArmorDamageMode() == ArmorDamageMode.MIRROR
-                && settings.respectsUnbreaking() && amount == rawDamage;
+        boolean serverWearsArmor = settings.mirrorDamage().armorDamageMode() == ArmorDamageMode.MIRROR
+                && settings.mirrorDamage().respectsUnbreaking() && amount == rawDamage;
         ItemStack[] saved = null;
         if (!serverWearsArmor) {
             // Copies protect exactly like the originals, so the player takes
@@ -442,11 +442,11 @@ public final class DamageMirror implements Listener {
         // of an earlier hit, too weak to count: it is his last damage now.
         boolean gotThrough = !turnedAway && owner.getLastDamageCause() != causeBefore;
         boolean landed = landedInFull(owner, framesBefore, causeBefore);
-        if (!settings.damageCountsArmor()) {
+        if (!settings.mirrorDamage().damageCountsArmor()) {
             takeWhatTheArmorKeptAway(owner, amount, healthBefore + absorptionBefore, framesBefore);
         }
         Vector pushed = null;
-        if (settings.isMirrorKnockback()) {
+        if (settings.mirrorDamage().knockback()) {
             // Which way and how hard is taken from the moment the body was hit,
             // not from the server: it would push along the bounce of an arrow.
             // The push of an explosion comes on top - its damage carries none,
@@ -586,7 +586,7 @@ public final class DamageMirror implements Listener {
      * out in its stead.
      */
     private int wearWornArmor(Player owner, double rawDamage, org.bukkit.damage.DamageSource source) {
-        if (settings.getArmorDamageMode() == ArmorDamageMode.OFF) {
+        if (settings.mirrorDamage().armorDamageMode() == ArmorDamageMode.OFF) {
             return 0;
         }
         ItemStack[] worn = owner.getInventory().getArmorContents();
@@ -607,9 +607,11 @@ public final class DamageMirror implements Listener {
      */
     private int wearArmor(Player owner, ItemStack[] armor, double rawDamage,
                           org.bukkit.damage.DamageSource source) {
-        return switch (settings.getArmorDamageMode()) {
-            case MIRROR -> ArmorWear.wearMirrored(owner, armor, rawDamage, source, settings.respectsUnbreaking());
-            case CUSTOM -> ArmorWear.wearFixed(owner, armor, settings.getCustomArmorDamage(), source, settings.respectsUnbreaking());
+        return switch (settings.mirrorDamage().armorDamageMode()) {
+            case MIRROR -> ArmorWear.wearMirrored(owner, armor, rawDamage, source,
+                    settings.mirrorDamage().respectsUnbreaking());
+            case CUSTOM -> ArmorWear.wearFixed(owner, armor, settings.mirrorDamage().customArmorDamage(), source,
+                    settings.mirrorDamage().respectsUnbreaking());
             case OFF -> 0;
         };
     }
@@ -662,7 +664,7 @@ public final class DamageMirror implements Listener {
         if (serverWears) {
             return "mirror, by the server";
         }
-        return switch (settings.getArmorDamageMode()) {
+        return switch (settings.mirrorDamage().armorDamageMode()) {
             case MIRROR -> "mirror, " + points + " points";
             case CUSTOM -> "custom, " + points + " points";
             case OFF -> "false";
@@ -680,7 +682,7 @@ public final class DamageMirror implements Listener {
                                    double healthBefore, double speed, int waitedTicks,
                                    int framesBefore, double lastBefore, int fireBefore,
                                    Vector pushed, String armorNote) {
-        if (!settings.isMirrorDebug()) {
+        if (!settings.mirrorDamage().debug()) {
             return;
         }
         String knockback = pushed == null ? "off" : String.format(Locale.ROOT, "%.4f %.4f %.4f",
@@ -690,7 +692,7 @@ public final class DamageMirror implements Listener {
                         + " | health %.2f -> %.2f (-%.3f) | speed %.3f | waited %d ticks"
                         + " | invulnerable %d, last hit %.2f, fire %d | knockback %s"
                         + " | wear %s",
-                amount, damageTypeName(source), armor, settings.damageCountsArmor() ? "on" : "off",
+                amount, damageTypeName(source), armor, settings.mirrorDamage().damageCountsArmor() ? "on" : "off",
                 toughness, knockbackResistance,
                 healthBefore, owner.getHealth(), healthBefore - owner.getHealth(), speed, waitedTicks,
                 framesBefore, lastBefore, fireBefore, knockback, armorNote));

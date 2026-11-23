@@ -55,7 +55,7 @@ public final class BedrockGlow {
 
     /** Draws the outline of every camera player who glows, for every player on Bedrock who sees him. */
     private void draw() {
-        Particle particle = plugin.getSettings().getBedrockGlowParticle();
+        Particle particle = plugin.getSettings().bedrock().glowParticle();
         if (particle == null) {
             return;
         }

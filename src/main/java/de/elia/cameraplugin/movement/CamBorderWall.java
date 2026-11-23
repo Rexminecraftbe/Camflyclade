@@ -5,6 +5,7 @@ import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.SessionTask;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -23,7 +24,6 @@ import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.BoundingBox;
 
 import java.util.ArrayList;
@@ -185,7 +185,7 @@ public final class CamBorderWall implements Listener {
         private final Map<FlightMedium, BlockData> media;
         /** Whether the forbidden areas counted at the last look, which they do not for a player standing in one. */
         private boolean areasCounted;
-        private BukkitRunnable task;
+        private SessionTask task;
         /** How many ticks the task has run so far. */
         private long ticks;
         /** The blocks to be checked until the next look, and how many of them are done. */
@@ -221,14 +221,14 @@ public final class CamBorderWall implements Listener {
      */
     public void startFor(Player player) {
         UUID id = player.getUniqueId();
-        if (walls.containsKey(id) || !settings.buildsBorderWall()
-                || (!settings.limitsDistance() && !settings.keepsOutOfAreas()
+        if (walls.containsKey(id) || !settings.cameraMode().buildsBorderWall()
+                || (!settings.cameraMode().limitsDistance() && !settings.keepsOutOfAreas()
                     && shutMedia().isEmpty())) {
             return;
         }
         Map<FlightMedium, BlockData> media = new EnumMap<>(FlightMedium.class);
         for (FlightMedium medium : FlightMedium.values()) {
-            BlockData shown = settings.getBorderBlock(medium);
+            BlockData shown = settings.cameraMode().borderBlock(medium);
             if (medium == FlightMedium.WATER && shown instanceof Waterlogged inWater) {
                 // A barrier or a pane stands in water like a fence does.
                 // Without this the water would drain out of every block the
@@ -237,8 +237,9 @@ public final class CamBorderWall implements Listener {
             }
             media.put(medium, shown);
         }
-        Wall wall = new Wall(player.getWorld(), settings.getBorderBlock(), media, sectionsIn(player.getWorld()));
-        wall.task = new BukkitRunnable() {
+        Wall wall = new Wall(player.getWorld(), settings.cameraMode().borderBlock(), media,
+                sectionsIn(player.getWorld()));
+        wall.task = new SessionTask() {
             @Override
             public void run() {
                 if (!player.isOnline()) {
@@ -249,7 +250,7 @@ public final class CamBorderWall implements Listener {
             }
         };
         walls.put(id, wall);
-        wall.task.runTaskTimer(plugin, 1L, 1L);
+        wall.task.runTaskTimer(plugin.getSessionTicker(), player, 1L, 1L);
     }
 
     /**
@@ -575,7 +576,7 @@ public final class CamBorderWall implements Listener {
             BoundingBox body = new BoundingBox(at.getX() - half, at.getY(), at.getZ() - half,
                     at.getX() + half, at.getY() + player.getHeight(), at.getZ() + half);
             double reach = reachIn(world);
-            wall.sections.prepare(anchor, settings.getMaxDistance(), wall.areasCounted);
+            wall.sections.prepare(anchor, settings.cameraMode().maxDistance(), wall.areasCounted);
             wall.sections.update(body, reach, wall.ticks, READ_BUDGET_NANOS, look);
             CamAreaRules.BlockLookup names = wall.areasCounted ? rules.blockLookup(world) : null;
             wall.sections.forEachChange(reach, new WallSections.Changes() {
@@ -662,7 +663,7 @@ public final class CamBorderWall implements Listener {
      * away by it.
      */
     private double reachIn(World world) {
-        return Math.min(settings.getBorderRadius(), world.getViewDistance() * 16.0);
+        return Math.min(settings.cameraMode().borderRadius(), world.getViewDistance() * 16.0);
     }
 
     /** What keeps the camera out of this world: the sections around one player start out empty. */
@@ -684,11 +685,11 @@ public final class CamBorderWall implements Listener {
      * {@link CamMovementGuard} brings the player back with the next step.</p>
      */
     private Location distanceAnchor(CameraData data, Location at) {
-        if (!settings.limitsDistance()) {
+        if (!settings.cameraMode().limitsDistance()) {
             return null;
         }
         Location anchor = plugin.getMovementGuard().distanceAnchor(data, at);
-        if (anchor == null || at.distance(anchor) > settings.getMaxDistance()) {
+        if (anchor == null || at.distance(anchor) > settings.cameraMode().maxDistance()) {
             return null;
         }
         return anchor;

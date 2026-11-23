@@ -165,7 +165,7 @@ public final class MobGaze {
      * them lose it.
      */
     private void scan() {
-        if (broken || settings.mobsLookAtPlayer() || cameraPlayers.isEmpty()) {
+        if (broken || settings.cameraMode().mobsLookAtPlayer() || cameraPlayers.isEmpty()) {
             releaseAll();
             return;
         }
@@ -411,7 +411,7 @@ public final class MobGaze {
          * being looked at.</p>
          */
         private boolean takesOver() {
-            if (broken || settings.mobsLookAtPlayer() || !cameraNear(mob, MAX_LOOK_RANGE)) {
+            if (broken || settings.cameraMode().mobsLookAtPlayer() || !cameraNear(mob, MAX_LOOK_RANGE)) {
                 forget();
                 return false;
             }

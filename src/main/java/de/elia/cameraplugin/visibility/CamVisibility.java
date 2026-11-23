@@ -29,7 +29,8 @@ public final class CamVisibility {
      * so there it is applied even when the option is switched off.
      */
     public boolean needsInvisibility() {
-        return settings.allowsInvisibilityPotion() || settings.getPlayerVisibilityMode() == VisibilityMode.NONE;
+        return settings.cameraMode().allowsInvisibilityPotion()
+                || settings.cameraMode().visibilityMode() == VisibilityMode.NONE;
     }
 
     /**
@@ -58,7 +59,7 @@ public final class CamVisibility {
         if (plugin.getPhotoMode().hidesPlayersFrom(viewer)) return;
         if (plugin.getScoutGuard().hides(viewer, camPlayer)) return;
         if (plugin.getTour().hidesPlayer(viewer, camPlayer)) return;
-        switch (settings.getPlayerVisibilityMode()) {
+        switch (settings.cameraMode().visibilityMode()) {
             case CAM -> {
                 if (cameraPlayers.contains(viewer.getUniqueId())) {
                     viewer.showPlayer(plugin, camPlayer);

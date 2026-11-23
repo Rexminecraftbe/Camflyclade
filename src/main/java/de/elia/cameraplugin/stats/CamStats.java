@@ -91,7 +91,7 @@ public final class CamStats {
      * the battery.
      */
     public void record(Player player, CameraData data) {
-        if (!settings.isStatsEnabled()) {
+        if (!settings.statistics().enabled()) {
             return;
         }
         long seconds = seconds(data);
@@ -122,15 +122,15 @@ public final class CamStats {
     private long countedSeconds(CameraData data) {
         long now = System.currentTimeMillis();
         long millis = now - data.getStartedAt();
-        if (settings.isStatsSkipAfkTime()) {
-            millis -= data.idleMillis(now, settings.getStatsAfkMillis());
+        if (settings.statistics().skipAfkTime()) {
+            millis -= data.idleMillis(now, settings.statistics().afkMillis());
         }
         return TimeUnit.MILLISECONDS.toSeconds(Math.max(0L, millis));
     }
 
     /** Whether a camera mode of so many seconds is long enough to be counted, {@code statistics.min-seconds}. */
     private boolean counts(long seconds) {
-        return seconds >= settings.getStatsMinSeconds();
+        return seconds >= settings.statistics().minSeconds();
     }
 
     /**
@@ -140,7 +140,7 @@ public final class CamStats {
      * switched off.
      */
     public boolean showsAnything() {
-        return settings.isStatsEnabled() || settings.isBatteryEnabled();
+        return settings.statistics().enabled() || settings.battery().enabled();
     }
 
     /**
@@ -152,7 +152,7 @@ public final class CamStats {
         if (!(sender instanceof Player player)) {
             return true;
         }
-        return switch (settings.getStatsViewOthers()) {
+        return switch (settings.statistics().viewOthers()) {
             case ADMIN -> player.hasPermission(PERMISSION_OTHERS);
             case ALL -> player.hasPermission("camplugin.use");
             case OFF -> false;
@@ -228,7 +228,7 @@ public final class CamStats {
             reset(sender);
             return;
         }
-        if (!settings.isStatsEnabled()) {
+        if (!settings.statistics().enabled()) {
             messages.sendConfiguredMessage(sender, "stats-off");
             return;
         }
@@ -265,7 +265,7 @@ public final class CamStats {
             messages.sendConfiguredMessage(sender, "no-player");
             return;
         }
-        if (!settings.isStatsEnabled()) {
+        if (!settings.statistics().enabled()) {
             messages.sendConfiguredMessage(sender, "stats-off");
             return;
         }
@@ -318,7 +318,7 @@ public final class CamStats {
     public List<Line> lines(UUID id, String name) {
         List<Line> lines = new ArrayList<>();
         // With the statistics switched off the battery is still worth a look.
-        if (!settings.isStatsEnabled() && !settings.isBatteryEnabled()) {
+        if (!settings.statistics().enabled() && !settings.battery().enabled()) {
             lines.add(new Line("stats-off"));
             return lines;
         }
@@ -329,7 +329,7 @@ public final class CamStats {
         // at all while it is shorter than min-seconds.
         CameraData counted = flight != null && counts(now) ? flight : null;
         long sessions = record.getSessions() + (counted == null ? 0L : 1L);
-        if (!settings.isStatsEnabled()) {
+        if (!settings.statistics().enabled()) {
             // Only the battery is left to show.
             lines.add(new Line("stats-header", "{player}", name));
         } else if (sessions == 0 && flight == null) {
@@ -340,22 +340,22 @@ public final class CamStats {
                 lines.add(new Line("stats-flying", "{time}", CamTimeLimit.formatDuration(now)));
             } else if (flight != null) {
                 lines.add(new Line("stats-flying-uncounted", "{time}", CamTimeLimit.formatDuration(now),
-                        "{min}", CamTimeLimit.formatDuration(settings.getStatsMinSeconds())));
+                        "{min}", CamTimeLimit.formatDuration(settings.statistics().minSeconds())));
             }
             if (sessions > 0) {
                 addNumbers(lines, record, counted, counted == null ? 0L : countedSeconds(counted), sessions);
             }
         }
         long cooldown = timeLimit.getCooldownRemaining(id);
-        if (settings.isStatsEnabled() && (settings.isBatteryEnabled() || cooldown > 0)) {
+        if (settings.statistics().enabled() && (settings.battery().enabled() || cooldown > 0)) {
             // Only under the numbers: with the statistics switched off, the
             // battery stands under the header alone.
             lines.add(new Line("stats-gap"));
         }
-        if (settings.isBatteryEnabled()) {
+        if (settings.battery().enabled()) {
             lines.add(new Line("stats-battery",
                     "{charge}", CamTimeLimit.formatDuration((long) Math.floor(battery.charge(id))),
-                    "{capacity}", CamTimeLimit.formatDuration(settings.getBatteryCapacity())));
+                    "{capacity}", CamTimeLimit.formatDuration(settings.battery().capacity())));
         }
         if (cooldown > 0) {
             lines.add(new Line("stats-cooldown", "{time}", CamTimeLimit.formatDuration(cooldown)));
@@ -390,7 +390,7 @@ public final class CamStats {
         // just the same: in the open air it reaches max-distance, and beyond
         // it only the few seconds of signal.lost-seconds - all would have
         // about max-distance. It is still counted, for when the limit goes.
-        if (!settings.limitsDistance() && !settings.usesSignal()) {
+        if (!settings.cameraMode().limitsDistance() && !settings.cameraMode().usesSignal()) {
             double farthest = Math.max(record.getFarthestFromBody(),
                     counted == null ? 0.0 : counted.getFarthestFlownFromBody());
             lines.add(new Line("stats-farthest", "{distance}", blocks(farthest)));

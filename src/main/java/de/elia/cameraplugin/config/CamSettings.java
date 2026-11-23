@@ -1,64 +1,45 @@
 package de.elia.cameraplugin.config;
 
 import de.elia.cameraplugin.area.CamAreaRules;
-import de.elia.cameraplugin.bedrock.BedrockMenu;
-import de.elia.cameraplugin.bedrock.BedrockScope;
-import de.elia.cameraplugin.body.BodyType;
+import de.elia.cameraplugin.battery.BatterySettings;
+import de.elia.cameraplugin.bedrock.BedrockSettings;
+import de.elia.cameraplugin.body.BodyAlarmSettings;
+import de.elia.cameraplugin.body.BodySettings;
 import de.elia.cameraplugin.command.CamCommandFilter;
 import de.elia.cameraplugin.command.CommandMode;
-import de.elia.cameraplugin.body.MobTargetMode;
-import de.elia.cameraplugin.body.MovementSensitivity;
-import de.elia.cameraplugin.display.ActionBarDisplay;
-import de.elia.cameraplugin.display.GlowMode;
-import de.elia.cameraplugin.display.NameMode;
+import de.elia.cameraplugin.cost.StartCostSettings;
+import de.elia.cameraplugin.display.ActionBarSettings;
+import de.elia.cameraplugin.display.ParticleSettings;
 import de.elia.cameraplugin.list.ListAccess;
-import de.elia.cameraplugin.menu.AdminButton;
-import de.elia.cameraplugin.menu.MenuAccess;
-import de.elia.cameraplugin.menu.MenuButton;
-import de.elia.cameraplugin.menu.MenuIcon;
-import de.elia.cameraplugin.menu.MenuSlot;
-import de.elia.cameraplugin.mirrordamage.ArmorDamageMode;
-import de.elia.cameraplugin.mirrordamage.DamageMode;
-import de.elia.cameraplugin.mob.MobTargeting;
-import de.elia.cameraplugin.movement.BorderMode;
-import de.elia.cameraplugin.movement.DistanceMode;
-import de.elia.cameraplugin.movement.FlightMedium;
+import de.elia.cameraplugin.menu.MenuSettings;
+import de.elia.cameraplugin.mirrordamage.MirrorDamageSettings;
 import de.elia.cameraplugin.nightvision.NightVisionMode;
+import de.elia.cameraplugin.ore.OreSettings;
+import de.elia.cameraplugin.photo.PhotoSettings;
 import de.elia.cameraplugin.portal.PortalRules;
+import de.elia.cameraplugin.resume.ResumeSettings;
 import de.elia.cameraplugin.scout.ScoutAnchor;
-import de.elia.cameraplugin.session.CamGameMode;
-import de.elia.cameraplugin.session.EndReason;
-import de.elia.cameraplugin.signal.SignalCosts;
-import de.elia.cameraplugin.signal.SignalLoss;
-import de.elia.cameraplugin.sound.CamSound;
+import de.elia.cameraplugin.session.CameraModeSettings;
+import de.elia.cameraplugin.signal.SignalSettings;
+import de.elia.cameraplugin.sound.SoundSettings;
 import de.elia.cameraplugin.spawning.SpawnMode;
-import de.elia.cameraplugin.start.EffectStart;
+import de.elia.cameraplugin.speed.FlightSpeedSettings;
+import de.elia.cameraplugin.spot.SpotSettings;
+import de.elia.cameraplugin.start.CamSafetySettings;
+import de.elia.cameraplugin.stats.StatsSettings;
 import de.elia.cameraplugin.storage.StorageMode;
 import de.elia.cameraplugin.timelimit.FlightLimit;
-import de.elia.cameraplugin.trail.TrailShowMode;
-import de.elia.cameraplugin.visibility.VisibilityMode;
-import org.bukkit.ChatColor;
-import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
-import org.bukkit.Registry;
-import org.bukkit.Particle;
-import org.bukkit.block.BlockFace;
-import org.bukkit.block.data.BlockData;
-import org.bukkit.block.data.MultipleFacing;
-import org.bukkit.boss.BarColor;
-import org.bukkit.boss.BarStyle;
+import de.elia.cameraplugin.timelimit.TimeLimitSettings;
+import de.elia.cameraplugin.tour.FollowSettings;
+import de.elia.cameraplugin.trail.TrailSettings;
+import de.elia.cameraplugin.webmap.WebMapSettings;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
-import java.util.EnumMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -67,30 +48,9 @@ import java.util.Set;
  */
 public final class CamSettings {
 
-    /**
-     * Smallest threshold that is accepted for {@code body.move-threshold}, in
-     * blocks. Anything below is raised to this value.
-     */
-    public static final double MIN_MOVE_THRESHOLD = 0.01;
 
-    /**
-     * Largest value that is accepted for
-     * {@code camera-particles.particles-per-tick}. Every player who sees the
-     * camera player gets that many each tick, and the client has to draw all
-     * of them.
-     */
-    private static final double MAX_PARTICLES_PER_TICK = 100.0;
 
-    /**
-     * Fastest speed {@code flight-speed} accepts, 1 being the speed of the
-     * game. Sprinting at it the camera covers more than five blocks a tick:
-     * any faster and the world does not load in time ahead of it, nor does
-     * the wall of {@code border-mode: barrier} get built.
-     */
-    public static final double MAX_FLIGHT_SPEED = 5.0;
 
-    /** Slowest speed {@code flight-speed} accepts: slower than that hardly moves at all. */
-    private static final double MIN_FLIGHT_SPEED = 0.1;
 
     /** The brightest light level there is, {@code night-vision.light-level} going up to it. */
     private static final int MAX_LIGHT_LEVEL = 15;
@@ -100,7 +60,7 @@ public final class CamSettings {
      * would take camera mode off a player who only stops to look at
      * something for a moment.
      */
-    private static final int MIN_AFK_SECONDS = 10;
+    public static final int MIN_AFK_SECONDS = 10;
 
     /**
      * The longest wait {@code start-delay.seconds} accepts. Longer than a
@@ -129,56 +89,16 @@ public final class CamSettings {
      */
     private static final double MAX_EXIT_CLICK_GUARD_SECONDS = 5.0;
 
-    /**
-     * The longest {@code cam-trail.show-seconds}, {@code show-min-seconds}
-     * and {@code show-max-seconds} accept: ten minutes.
-     */
-    private static final int MAX_TRAIL_SHOW_SECONDS = 600;
-
-    /** The most {@code cam-trail.show-min-blocks} and {@code show-max-blocks} accept. */
-    private static final int MAX_TRAIL_SHOW_BLOCKS = 100_000;
-
-    /** The most flights {@code cam-trail.flights} keeps of each player. */
-    private static final int MAX_TRAIL_FLIGHTS = 20;
-
-    /**
-     * The most spots {@code viewpoints.max-per-player} lets each player keep,
-     * short of no limit at all, 0. {@code /cam spot list} sends a line for
-     * each of them, and more than this no longer fits into the chat a player
-     * scrolls back through.
-     */
-    private static final int MAX_VIEWPOINTS = 100;
-
-    /** The longest {@code viewpoints.views-cooldown-minutes} accepts: a day. */
-    private static final int MAX_VIEWS_COOLDOWN_MINUTES = 1440;
-
-    /**
-     * What {@code viewpoints.icons} offers when the file lists nothing: the
-     * filled map and the empty one, and the maps 26.3 brings - each as its
-     * own item -, by their keys there. A server offers only what it knows.
-     */
-    private static final List<String> DEFAULT_SPOT_ICONS = List.of("filled_map", "map", "ocean_monument_map",
-            "woodland_mansion_map", "buried_trial_chambers_map", "jungle_pyramid_map", "swamp_hut_map",
-            "desert_village_map", "plains_village_map", "savanna_village_map", "snowy_village_map",
-            "taiga_village_map", "buried_treasure_map", "buried_ancient_city_map", "buried_mineshaft_map",
-            "desert_pyramid_map", "abandoned_camp_map", "warm_ocean_ruins_map");
-
-    /** The longest {@code viewpoints.guestbook-interval-minutes} accepts: a day. */
-    private static final int MAX_GUESTBOOK_INTERVAL_MINUTES = 1440;
 
 
-    /** The levels of {@code signal.levels}, from the most bars down, as the config file names them. */
-    private static final String[] SIGNAL_LEVEL_NAMES = {"excellent", "good", "medium", "weak"};
 
-    /** From how many percent each of {@link #SIGNAL_LEVEL_NAMES} counts out of the box. */
-    private static final double[] DEFAULT_SIGNAL_LEVELS = {80.0, 60.0, 40.0, 20.0};
 
-    /**
-     * The longest {@code signal.lost-seconds} accepts. Longer than a minute,
-     * a camera without a signal is no longer looking for it but flying on
-     * without one.
-     */
-    private static final int MAX_SIGNAL_LOST_SECONDS = 60;
+
+
+
+
+
+
 
     /**
      * The shortest wait {@code nudge.cooldown} accepts. One click sets off
@@ -194,45 +114,27 @@ public final class CamSettings {
      */
     private static final double MAX_SCOUT_RADIUS = 256.0;
 
-    /** The most {@code menu.ban-shift-step} takes. */
-    private static final int MAX_BAN_SHIFT_STEP = 100;
 
-    /**
-     * The widest {@code follow.radius}: about as far as the server sends other
-     * players to a client, and a guest is to be seen close by anyway.
-     */
-    private static final double MAX_TOUR_RADIUS = 128.0;
 
     /**
      * The farthest {@code viewpoints.start-distance} and
      * {@code follow.start-distance} reach: as far as a tour invites.
      */
-    private static final double MAX_START_DISTANCE = 128.0;
+    public static final double MAX_START_DISTANCE = 128.0;
 
-    /** The longest {@code follow.out-of-reach-seconds} accepts, like {@code signal.lost-seconds}. */
-    private static final int MAX_TOUR_OUT_OF_REACH_SECONDS = 60;
 
-    /** The most guests {@code follow.max-guests} lets one tour take. */
-    private static final int MAX_TOUR_GUESTS = 100;
 
-    /**
-     * The longest {@code follow.invitation-seconds} and
-     * {@code follow.invite-cooldown-seconds} accept: an hour.
-     */
-    private static final int MAX_TOUR_INVITATION_SECONDS = 3600;
 
-    /** The shortest {@code follow.invitation-seconds} accepts: time enough to read it and click. */
-    private static final int MIN_TOUR_INVITATION_SECONDS = 5;
 
     /** The section of {@code /cam follow}. */
-    private static final String FOLLOW_SECTION = "follow";
+    public static final String FOLLOW_SECTION = "follow";
 
     /**
      * What the section of {@code /cam follow} was called while it was
      * {@code /cam follow}: an older file is read as it was written, see
      * {@link ConfigReader#renamed}.
      */
-    private static final String OLD_FOLLOW_SECTION = "tour";
+    public static final String OLD_FOLLOW_SECTION = "tour";
 
     /**
      * Keys that are read although the config file built into the jar leaves
@@ -247,72 +149,10 @@ public final class CamSettings {
             "signal.block-costs", "hide-ores.blocks", "visitor-camera", OLD_FOLLOW_SECTION, "sounds.tour-invite", "sounds.tour-reach",
             "menu.buttons.tour", "menu.admin-buttons.tours");
 
-    /**
-     * The most of one item {@code start-cost.items} accepts: a full inventory
-     * of it. More could never be paid.
-     */
-    private static final int MAX_COST_ITEMS = 36 * 64;
 
     private final JavaPlugin plugin;
     private final Messages messages;
 
-    // Configurable values
-    private boolean maxDistanceEnabled;
-    private double maxDistance;
-    /** How max-distance holds the camera, {@code camera-mode.max-distance-mode}. */
-    private DistanceMode distanceMode;
-    private int distanceWarningCooldown;
-    /** What happens at the border of camera mode, {@code camera-mode.border-mode}. */
-    private BorderMode borderMode;
-    /** What the wall of the mode barrier is made of, {@code camera-mode.border-block}. */
-    private BlockData borderBlock;
-    /**
-     * What the wall shows in place of water, lava and powder snow,
-     * {@code camera-mode.border-block-water}, {@code -lava} and
-     * {@code -powder-snow}.
-     */
-    private final Map<FlightMedium, BlockData> mediumBorderBlocks = new EnumMap<>(FlightMedium.class);
-    /** How far around the player that wall is built, {@code camera-mode.border-radius}. */
-    private double borderRadius;
-    /**
-     * Whether the border of {@code max-distance} and {@code cam-area} holds
-     * the camera back at all.
-     *
-     * <p>{@code push-back} does, and {@code barrier} does with a wall that
-     * stops somebody: made of a block that cannot be walked through, and
-     * built at least a little way around the player. Air, water, grass or a
-     * radius of 0 leave the camera exactly as free as {@code false} does - in
-     * flight and behind portals alike.</p>
-     */
-    private boolean bordersHold;
-    private boolean bodyNameVisible;
-    /** Whether the name over the body shows the hearts of the player, {@code body.health-visible}. */
-    private boolean bodyHealthVisible;
-    /** Whether they stand over the name rather than under it, {@code body.health-position}. */
-    private boolean bodyHealthAbove;
-    /** Whether the hearts he is missing stand there as empty ones, {@code body.health-show-missing}. */
-    private boolean bodyHealthShowMissing;
-    /** Whether the yellow hearts of absorption stand there as well, {@code body.health-show-absorption}. */
-    private boolean bodyHealthShowAbsorption;
-    /** Whether every further line of hearts stands above the one before, {@code body.health-rows-upward}. */
-    private boolean bodyHealthRowsUpward;
-    /** How the name over the body looks, the section {@code body.name}. */
-    private NameStyle bodyNameStyle;
-    private boolean bodyVisible;
-    /** Whether the armour the body wears is drawn, {@code body.armor-visible}. */
-    private boolean bodyArmorVisible;
-    /** Whether the locator bar points at the body instead of the camera, {@code body.locator-bar}. */
-    private boolean bodyOnLocatorBar;
-    private BodyType bodyType;
-    private MovementSensitivity movementSensitivity;
-    /** {@code body.move-threshold} squared, so the square root can be skipped. */
-    private double moveThresholdSquared;
-    /** Which range decides whether a mob notices the body. */
-    private MobTargetMode mobTargetMode;
-    /** The range of the mode {@code custom}, in blocks. */
-    private double mobTargetRadius;
-    /** Whether a mob head on the body halves the range of that kind of mob. */
-    private boolean mobTargetHeads;
     /** Where camera mode may be started and flown, the section {@code cam-area}. */
     private final CamAreaRules camAreaRules;
     /** Whether a portal lets a camera player through, the section {@code portals}. */
@@ -333,52 +173,9 @@ public final class CamSettings {
     private boolean advancementsBlocked;
     /** Whether a camera player's movement counts for no statistic, {@code progress-guard.statistics}. */
     private boolean statisticsBlocked;
-    private VisibilityMode playerVisibilityMode;
-    private boolean allowInvisibilityPotion;
-    private GlowMode glowMode;
-    /** Whether the camera player carries a name of the plugin, {@code camera-mode.name-visible}. */
-    private boolean playerNameVisible;
-    /** How that name keeps to him, {@code camera-mode.name-mode}. */
-    private NameMode playerNameMode;
-    /** How the name over the camera player looks, the section {@code camera-mode.name}. */
-    private NameStyle playerNameStyle;
-    /** Whether the camera may fly into lava, {@code camera-mode.allow_lava_flight}. */
-    private boolean allowLavaFlight;
-    /** Whether the camera may fly into water, {@code camera-mode.allow_water_flight}. */
-    private boolean allowWaterFlight;
-    /** Whether the camera may fly into powder snow, {@code camera-mode.allow_powder_snow_flight}. */
-    private boolean allowPowderSnowFlight;
-    /** The mode the camera player flies in, {@code camera-mode.gamemode}. */
-    private CamGameMode camGameMode;
-    /** Whether mobs look at a camera player, {@code camera-mode.mobs-look-at-player}. */
-    private boolean mobsLookAtPlayer;
-    /** What {@code camera-mode.start-with-effects} allows him to start with. */
-    private EffectStart startWithEffects;
 
-    /** Whether the particles are switched on, {@code camera-particles.enabled}. */
-    private boolean particlesEnabled;
-    /** Which particle it is, {@code camera-particles.particle}. */
-    private Particle particleType;
-    private double particleHeight;
-    /** Particles per tick, below one meaning one every few ticks. */
-    private double particlesPerTick;
-    /** How far they scatter around the spot, {@code camera-particles.spread}. */
-    private double particleSpread;
 
-    private boolean actionBarEnabled;
-    private int actionBarOffDuration;
-    /** How long {@code actionbar-on} stands at the start before the distance, in ticks, {@code action-bar.on-duration}. */
-    private int actionBarOnDuration;
-    /** What the action bar shows while camera mode runs, {@code action-bar.display}. */
-    private ActionBarDisplay actionBarDisplay;
 
-    /** Whether the mouse wheel changes the speed, {@code flight-speed.mouse-wheel}. */
-    private boolean flightSpeedWheel;
-    /** The speeds of {@code flight-speed}, 1 being the speed of the game. */
-    private double flightSpeedStart;
-    private double flightSpeedMin;
-    private double flightSpeedMax;
-    private double flightSpeedStep;
 
     /** When the camera player sees in the dark, {@code night-vision.mode}. */
     private NightVisionMode nightVisionMode;
@@ -387,22 +184,6 @@ public final class CamSettings {
     /** Whether each player picks his own with {@code /cam nightvision}, {@code night-vision.player-choice}. */
     private boolean nightVisionPlayerChoice;
 
-    /** The sounds of {@code sounds}, {@link CamSound#OFF} for one that is switched off. */
-    private CamSound startSound;
-    private CamSound endSound;
-    private CamSound endBodySound;
-    private CamSound endForcedSound;
-    private CamSound borderSound;
-    private CamSound backSound;
-    private CamSound endWarningSound;
-    private CamSound bodyAlarmSound;
-    private CamSound startDelaySound;
-    private CamSound nudgeSound;
-    private CamSound signalLostSound;
-    private CamSound signalBackSound;
-    private CamSound spotSound;
-    private CamSound tourInviteSound;
-    private CamSound tourReachSound;
 
     /** Whether camera mode leaves a file to recover from a crash, {@code crash-protection.enabled}. */
     private boolean crashProtectionEnabled;
@@ -430,135 +211,9 @@ public final class CamSettings {
     /** Whether {@code /cam back} takes the camera back to its body, {@code back-command.enabled}. */
     private boolean backCommandEnabled;
 
-    /** Whether {@code /cam spot} keeps spots to jump to, {@code viewpoints.enabled}. */
-    private boolean viewpointsEnabled;
-    /** How many spots each player may keep, {@code viewpoints.max-per-player}. */
-    private int viewpointsMax;
-    /** Where the spots are kept, {@code viewpoints.storage}. */
-    private StorageMode viewpointsStorage;
-    /** Whether a player may share his spots with others, {@code viewpoints.sharing}. */
-    private boolean viewpointsSharing;
-    /** Whether {@code /cam follow} lets a camera player show others round, {@code follow.enabled}. */
-    private boolean tourEnabled;
-    /** How close a camera has to be to be invited, {@code follow.radius}. */
-    private double tourRadius;
-    /** How long a guest may be out of reach before his tour ends, {@code follow.out-of-reach-seconds}. */
-    private int tourOutOfReachSeconds;
-    /** Whether a guest sees through the eyes of his guide, {@code follow.guide-view}. */
-    private boolean tourGuideView;
-    /** How close a player out of camera mode has to be to the guide to come along, {@code follow.start-distance}. */
-    private double tourStartDistance;
-    /** How many guests one tour takes at once, {@code follow.max-guests}; 0 for no limit. */
-    private int tourMaxGuests;
-    /** How long an invitation holds, {@code follow.invitation-seconds}. */
-    private int tourInvitationSeconds;
-    /** How long before a guide may invite the same player again, {@code follow.invite-cooldown-seconds}. */
-    private int tourInviteCooldownSeconds;
-    /** Whether a player out of camera mode may show others round as well, {@code follow.lead-without-cam}. */
-    private boolean tourLeadWithoutCam;
-    /**
-     * Whether the names of a tour take the place of the name tag of a guide
-     * out of camera mode, {@code follow.guide-name: replace}, rather than
-     * standing over it, {@code above}.
-     */
-    private boolean tourGuideNameReplaces;
-    /** Whether the guests of a guide out of camera mode see his hearts as theirs, {@code follow.mirror-health}. */
-    private boolean tourMirrorHealth;
-    /** Whether they see the item in his hand in theirs, {@code follow.mirror-main-hand}. */
-    private boolean tourMirrorMainHand;
-    /** Whether they see the item in his off hand in theirs, {@code follow.mirror-off-hand}. */
-    private boolean tourMirrorOffHand;
-    /** Whether their arm with his item swings when his does, {@code follow.mirror-swing}. */
-    private boolean tourMirrorSwing;
-    /** Whether they see the item on his head on theirs, {@code follow.mirror-head}. */
-    private boolean tourMirrorHead;
-    /** Whether they see his effects as theirs, {@code follow.mirror-effects}. */
-    private boolean tourMirrorEffects;
-    /** Whether they see his frost as theirs, {@code follow.mirror-frost}. */
-    private boolean tourMirrorFrost;
-    /** Whether they see his experience bar and level as theirs, {@code follow.mirror-experience}. */
-    private boolean tourMirrorExperience;
-    /** Whether they see how many of his items are in a stack, {@code follow.mirror-count}. */
-    private boolean tourMirrorCount;
-    /** Whether they see which enchantments his items have, {@code follow.mirror-enchantments}. */
-    private boolean tourMirrorEnchantments;
-    /** Whether they see how worn his items are, {@code follow.mirror-durability}. */
-    private boolean tourMirrorDurability;
-    /** Whether they see the names he gave his items, at an anvil say, {@code follow.mirror-name}. */
-    private boolean tourMirrorName;
-    /** Whether guests in the guide's view are held turned between the ticks too, {@code follow.fine-hold}. */
-    private boolean tourFineHold;
-    /** Whether a guide may invite everybody he could invite at once, {@code follow.invite-all}. */
-    private boolean tourInviteAll;
-    /** Whether the guests see the guide's time of day, {@code follow.guide-time}. */
-    private boolean tourGuideTime;
-    /** Whether the guests see the guide's weather, {@code follow.guide-weather}. */
-    private boolean tourGuideWeather;
-    /** Whether the guests have the guide's night vision, {@code follow.guide-night-vision}. */
-    private boolean tourGuideNightVision;
-    /** Whether the owner of a spot hears how often it was looked at and liked, {@code viewpoints.guestbook}. */
-    private boolean viewpointsGuestbook;
-    /** How often the guestbook tells the owners online what came, {@code viewpoints.guestbook-interval-minutes}. */
-    private int guestbookIntervalMinutes;
-    /** How close a player out of camera mode has to be to a spot to jump there, {@code viewpoints.start-distance}. */
-    private double viewpointsStartDistance;
-    /** Whether a spot is saved only in camera mode, {@code viewpoints.set-in-cam-only}. */
-    private boolean viewpointsSetInCamOnly;
-    /** Whether a new spot of the menu gets its page before it is saved, {@code viewpoints.create-page}. */
-    private boolean viewpointsCreatePage;
-    /** The icons a spot may have, {@code viewpoints.icons}: keys of items without the namespace. */
-    private List<String> viewpointsIcons = DEFAULT_SPOT_ICONS;
-    /** Whether a spot of the menu has its page of options, {@code viewpoints.options.enabled}. */
-    private boolean spotOptionsEnabled;
-    /** What the owner may do on the page of the options, {@code viewpoints.options.<what>}. */
-    private boolean spotOptionRename;
-    private boolean spotOptionIcon;
-    private boolean spotOptionShare;
-    private boolean spotOptionDelete;
-    private boolean spotOptionMove;
-    /** How long the same player at the same spot is no new view, {@code viewpoints.views-cooldown-minutes}. */
-    private int viewsCooldownMinutes;
 
-    /** Whether a camera player sees the ores of caves as stone, {@code hide-ores.enabled}. */
-    private boolean hideOres;
-    /** What each ore looks like for him, {@code hide-ores.blocks}, in the order of the file. */
-    private final Map<Material, BlockData> oreCovers = new LinkedHashMap<>();
-    /** Whether only the ores of the biomes of {@code hide-ores.biomes} are hidden, {@code hide-ores.where: biomes}. */
-    private boolean oreBiomesOnly;
-    /** The biomes whose ores are hidden under {@code hide-ores.where: biomes}. */
-    private final Set<NamespacedKey> oreBiomes = new HashSet<>();
-    /** The most sky light an ore may have at its open side and still count as one of a cave, {@code hide-ores.max-sky-light}. */
-    private int oreMaxSkyLight;
-    /** The highest ore that is hidden, {@code hide-ores.max-y}; {@link Integer#MAX_VALUE} for no limit. */
-    private int oreMaxY;
 
-    /** Whether the public spots go on the web maps of the server, {@code web-map.enabled}. */
-    private boolean webMapEnabled;
-    /** Whether on BlueMap, {@code web-map.bluemap}. */
-    private boolean webMapBlueMap;
-    /** Whether on Dynmap, {@code web-map.dynmap}. */
-    private boolean webMapDynmap;
-    /** Whether on squaremap, {@code web-map.squaremap}. */
-    private boolean webMapSquaremap;
-    /** Whether the layer of the spots is switched off on the page until a visitor switches it on, {@code web-map.hidden}. */
-    private boolean webMapHidden;
-    /** How many likes a public spot needs to get onto the map, {@code web-map.min-likes}. */
-    private int webMapMinLikes;
-    /** How many views a public spot needs to get onto the map, {@code web-map.min-views}. */
-    private int webMapMinViews;
-    /** The address of a spot on the web map, with its placeholders, {@code web-map.link}; empty for none. */
-    private String webMapLink;
 
-    /** Whether {@code /cam resume} goes on where the last flight ended, {@code resume-command.enabled}. */
-    private boolean resumeEnabled;
-    /** Where the end of the last flight is kept, {@code resume-command.storage}. */
-    private StorageMode resumeStorage;
-    /** Whether {@code /cam resume} shows the time of day of the last flight again, {@code resume-command.time}. */
-    private boolean resumeTime;
-    /** Whether it shows the weather of the last flight again, {@code resume-command.weather}. */
-    private boolean resumeWeather;
-    /** Whether it gives the night vision of the last flight again, {@code resume-command.night-vision}. */
-    private boolean resumeNightVision;
 
     /** Where the settings players pick for themselves are kept, {@code player-settings.storage}. */
     private StorageMode playerSettingsStorage;
@@ -572,35 +227,7 @@ public final class CamSettings {
     /** Where that is measured from, {@code anti-scouting.measured-from}. */
     private ScoutAnchor antiScoutingFrom;
 
-    /** How the players get at back, spot, photo and the rest, {@code menu.access}. */
-    private MenuAccess menuAccess;
-    /** How admins get at list, stop, ban, trail and the rest, {@code menu.admin-access}. */
-    private MenuAccess adminAccess;
-    /** What each button of the main page of the menu shows, {@code menu.buttons.<button>.item}. */
-    private final Map<MenuButton, MenuIcon> menuIcons = new EnumMap<>(MenuButton.class);
-    /** Where it stands, {@code menu.buttons.<button>.slot}. */
-    private final Map<MenuButton, Integer> menuSlots = new EnumMap<>(MenuButton.class);
-    /** The same for the admin page, {@code menu.admin-buttons}. */
-    private final Map<AdminButton, MenuIcon> adminIcons = new EnumMap<>(AdminButton.class);
-    /**
-     * How many days, hours or minutes a click with shift adds to a ban on its
-     * page or takes away, {@code menu.ban-shift-step}.
-     */
-    private int banShiftStep;
-    /** Whether the pages of the menu that are open are drawn anew by themselves, {@code menu.live-update}. */
-    private boolean menuLiveUpdate;
-    private final Map<AdminButton, Integer> adminSlots = new EnumMap<>(AdminButton.class);
 
-    /** Whether {@code /cam photo} is there, {@code photo-mode.enabled}. */
-    private boolean photoModeEnabled;
-    /** Whether it hides the other players, {@code photo-mode.hide-players}. */
-    private boolean photoHidePlayers;
-    /** Whether it hides the bodies, {@code photo-mode.hide-bodies}. */
-    private boolean photoHideBodies;
-    /** Whether it hides the mobs and animals, {@code photo-mode.hide-mobs}. */
-    private boolean photoHideMobs;
-    /** Whether it hides items lying about and experience orbs, {@code photo-mode.hide-items}. */
-    private boolean photoHideItems;
 
     /** Whether {@code /cam time} gives the camera player a time of his own, {@code cam-time.enabled}. */
     private boolean camTimeEnabled;
@@ -612,99 +239,24 @@ public final class CamSettings {
     /** How long, in seconds, {@code start-delay.seconds}. */
     private int startDelaySeconds;
 
-    /** Whether flights are recorded for {@code /cam trail}, {@code cam-trail.enabled}. */
-    private boolean trailEnabled;
-    /** What decides how long {@code /cam trail} shows a flight, {@code cam-trail.show-mode}. */
-    private TrailShowMode trailShowMode;
-    /** How long {@code fixed} shows every flight, in seconds, {@code cam-trail.show-seconds}. */
-    private int trailShowSeconds;
-    /** Up to how many blocks {@code dynamic} shows a flight the shortest, {@code cam-trail.show-min-blocks}. */
-    private int trailShowMinBlocks;
-    /** How long {@code dynamic} shows a flight at least, in seconds, {@code cam-trail.show-min-seconds}. */
-    private int trailShowMinSeconds;
-    /** From how many blocks on {@code dynamic} shows a flight the longest, {@code cam-trail.show-max-blocks}. */
-    private int trailShowMaxBlocks;
-    /** How long {@code dynamic} shows a flight at most, in seconds, {@code cam-trail.show-max-seconds}. */
-    private int trailShowMaxSeconds;
-    /** How many of his last flights are kept of each player, {@code cam-trail.flights}. */
-    private int trailFlights;
 
     /** Whether the end of a time limit or a battery is announced, {@code end-warning.enabled}. */
     private boolean endWarningEnabled;
     /** At how many seconds left it is announced, the most first, {@code end-warning.seconds}. */
     private List<Integer> endWarningSeconds = List.of();
 
-    /** Whether a mob after the body sets off the alarm, {@code body-alarm.mobs}. */
-    private boolean bodyAlarmMobs;
-    /** Whether a player close to the body sets it off, {@code body-alarm.players}. */
-    private boolean bodyAlarmPlayers;
-    /** How close a player has to come for that, in blocks, {@code body-alarm.player-radius}. */
-    private double bodyAlarmPlayerRadius;
-    /** Seconds before the next alarm, {@code body-alarm.cooldown}. */
-    private int bodyAlarmCooldown;
 
     /** Whether a click on the body nudges its camera player, {@code nudge.enabled}. */
     private boolean nudgeEnabled;
     /** Seconds before the same camera player can be nudged again, {@code nudge.cooldown}. */
     private int nudgeCooldown;
 
-    /** Blocks of range each block in the way takes off the signal, {@code signal.block-cost} and {@code -costs}. */
-    private SignalCosts signalCosts;
-    /**
-     * From how many percent each level of the signal display counts,
-     * {@code signal.levels}: excellent, good, medium and weak, going down.
-     */
-    private double[] signalLevels;
-    /** What happens once the signal is lost, {@code signal.lost}. */
-    private SignalLoss signalLoss;
-    /** How long the camera has to fly back into the signal, in seconds, {@code signal.lost-seconds}. */
-    private int signalLostSeconds;
 
-    // Damage transfer settings
-    private DamageMode damageMode;
-    /** How hard the transferred hit wears down the player's armour. */
-    private ArmorDamageMode armorDamageMode;
-    /** Durability points per hit in the armour mode "custom". */
-    private int customArmorDamage;
-    /** Whether the Unbreaking enchantment counts against that wear. */
-    private boolean respectUnbreaking;
-    /** Whether the player's armour still takes its share off the damage. */
-    private boolean damageCountsArmor;
-    /** Whether the transferred hit pushes the player back. */
-    private boolean mirrorKnockback;
-    /** Whether every transferred hit reports its numbers, for measuring. */
-    private boolean mirrorDebug;
-    private double customDamageHearts;
 
     private boolean cameraHeadEnabled;
     /** What holds camera mode to a time, {@code flight-limit}. */
     private FlightLimit flightLimit;
-    // Time limit and cooldown settings
-    private boolean cooldownsEnabled;
-    private int durationSeconds;
-    private int cooldownSeconds;
-    private boolean showBossbar;
-    /** Whether the cooldown shows as a bossbar until it is over, {@code time-limit.show-bossbar-cooldown}. */
-    private boolean cooldownBossbar;
-    private BarColor bossbarColor;
-    /** The notches of both bossbars of the time limit, {@code time-limit.bossbar-notches}. */
-    private BarStyle bossbarStyle;
-    /** Where the cooldowns are kept, {@code time-limit.storage}. */
-    private StorageMode cooldownStorage;
 
-    // Camera safety settings
-    private boolean camSafetyEnabled;
-    private int camSafetyDelay;
-    /** Whether a hit on another player makes him wait as well, {@code cam-safety.after-attack.players}. */
-    private boolean camSafetyAfterPlayers;
-    /** The same for a hit on a hostile mob, {@code cam-safety.after-attack.mobs}. */
-    private boolean camSafetyAfterMobs;
-    /** The same for a hit on anything friendly, {@code cam-safety.after-attack.friendly}. */
-    private boolean camSafetyAfterFriendly;
-    /** Whether another player close by keeps camera mode from starting, {@code cam-safety.nearby-players}. */
-    private boolean camSafetyNearbyPlayers;
-    /** How close he has to be for that, in blocks, {@code cam-safety.nearby-radius}. */
-    private double camSafetyNearbyRadius;
 
     /** Whether the key that swaps the hands ends camera mode, {@code exit-key.enabled}. */
     private boolean exitKeyEnabled;
@@ -717,74 +269,9 @@ public final class CamSettings {
     /** For how long, in milliseconds, {@code exit-click-guard.seconds}. */
     private long exitClickGuardMillis;
 
-    /** For whom the adjustments for Bedrock hold, {@code bedrock.apply-to}. */
-    private BedrockScope bedrockScope;
-    /** The start of a name that marks a player on Bedrock, {@code bedrock.name-prefix}; empty for none. */
-    private String bedrockNamePrefix;
-    /** How {@code /cam menu} comes to Bedrock players, {@code bedrock.menu}. */
-    private BedrockMenu bedrockMenu;
-    /** Whether an invitation comes to them as a window as well, {@code bedrock.invitation-forms}. */
-    private boolean bedrockInvitationForms;
-    /** Whether the buttons in the chat say the command they run, {@code bedrock.chat-commands}. */
-    private boolean bedrockChatCommands;
-    /** Whether Bedrock is shown the maps of 26.3 as themselves, {@code bedrock.map-icons}. */
-    private boolean bedrockMapIcons;
-    /**
-     * Whether a guest on Bedrock who sees through the eyes of his guide is
-     * turned along with him rather than shown Geyser's camera,
-     * {@code bedrock.follow-view: turn}.
-     */
-    private boolean bedrockFollowTurn;
-    /**
-     * The particle of the outline Bedrock players see of a camera player in
-     * place of the glowing one, {@code bedrock.glow-particle}; {@code null}
-     * for none.
-     */
-    private Particle bedrockGlowParticle;
 
-    /** A full battery, in seconds of flight. */
-    private int batteryCapacity;
-    /** Seconds of flight that come back for every second outside camera mode. */
-    private double batteryRecharge;
-    /** The charge a start needs at least, in seconds of flight. */
-    private int batteryMinStart;
-    /** Whether the battery charges while the player is not on the server. */
-    private boolean batteryRechargeOffline;
-    private boolean batteryBossbar;
-    /** Whether the bossbar stays after camera mode until the battery is full, {@code show-bossbar-charging}. */
-    private boolean batteryBossbarCharging;
-    private BarColor batteryBossbarColor;
-    /** The notches of both bossbars of the battery, {@code battery.bossbar-notches}. */
-    private BarStyle batteryBossbarStyle;
-    /** Where the charge is kept, {@code battery.storage}. */
-    private StorageMode batteryStorage;
 
-    /** Whether a start costs something, the section {@code start-cost}. */
-    private boolean startCostEnabled;
-    /** Experience a start costs, in levels or points. */
-    private int startCostXp;
-    /** Whether {@link #startCostXp} counts points rather than levels, {@code start-cost.xp-type}. */
-    private boolean startCostXpPoints;
-    /** Money a start costs, through Vault. */
-    private double startCostMoney;
-    /** Items a start costs, and how many of each, in the order of the file. */
-    private final Map<Material, Integer> startCostItems = new LinkedHashMap<>();
 
-    /** Whether camera mode is counted for {@code /cam stats}, {@code statistics.enabled}. */
-    private boolean statsEnabled;
-    /** Who may look at the statistics of somebody else, {@code statistics.view-others}. */
-    private ListAccess statsViewOthers;
-    /** How long a camera mode has to run to be counted, in seconds, {@code statistics.min-seconds}. */
-    private int statsMinSeconds;
-    /**
-     * Whether the way a tour takes the camera of a guest along counts for his
-     * statistics, {@code statistics.count-follow-distance}.
-     */
-    private boolean statsCountFollowDistance;
-    /** Whether time without doing anything is left out of the statistics, {@code statistics.skip-afk-time}. */
-    private boolean statsSkipAfkTime;
-    /** After how many seconds without doing anything it is, {@code statistics.afk-seconds}. */
-    private int statsAfkSeconds;
 
     /** Whether start and end of camera mode are written down, the section {@code cam-log}. */
     private boolean camLogEnabled;
@@ -792,6 +279,56 @@ public final class CamSettings {
     private boolean camLogConsole;
     /** How many days of log files are kept, 0 for all of them. */
     private int camLogKeepDays;
+
+    // The sections that have a class of their own, read anew with every load
+    /** The section {@code camera-mode}, see {@link #cameraMode()}. */
+    private CameraModeSettings cameraMode;
+    /** The section {@code signal}, see {@link #signal()}. */
+    private SignalSettings signal;
+    /** The section {@code body}, see {@link #body()}. */
+    private BodySettings body;
+    /** The section {@code camera-particles}, see {@link #particles()}. */
+    private ParticleSettings particles;
+    /** The section {@code action-bar}, see {@link #actionBar()}. */
+    private ActionBarSettings actionBar;
+    /** The section {@code flight-speed}, see {@link #flightSpeed()}. */
+    private FlightSpeedSettings flightSpeed;
+    /** The section {@code sounds}, see {@link #sounds()}. */
+    private SoundSettings sounds;
+    /** The section {@code viewpoints}, see {@link #spots()}. */
+    private SpotSettings spots;
+    /** The section {@code follow}, see {@link #follow()}. */
+    private FollowSettings follow;
+    /** The section {@code hide-ores}, see {@link #hideOres()}. */
+    private OreSettings hideOres;
+    /** The section {@code web-map}, see {@link #webMap()}. */
+    private WebMapSettings webMap;
+    /** The section {@code resume-command}, see {@link #resume()}. */
+    private ResumeSettings resume;
+    /** The section {@code menu}, see {@link #menu()}. */
+    private MenuSettings menu;
+    /** The section {@code photo-mode}, see {@link #photo()}. */
+    private PhotoSettings photo;
+    /** The section {@code cam-trail}, see {@link #trail()}. */
+    private TrailSettings trail;
+    /** The section {@code body-alarm}, see {@link #bodyAlarm()}. */
+    private BodyAlarmSettings bodyAlarm;
+    /** The section {@code time-limit}, see {@link #timeLimit()}. */
+    private TimeLimitSettings timeLimit;
+    /** The section {@code cam-safety}, see {@link #camSafety()}. */
+    private CamSafetySettings camSafety;
+    /** The section {@code bedrock}, see {@link #bedrock()}. */
+    private BedrockSettings bedrock;
+    /** The section {@code battery}, see {@link #battery()}. */
+    private BatterySettings battery;
+    /** The section {@code start-cost}, see {@link #startCost()}. */
+    private StartCostSettings startCost;
+    /** The section {@code statistics}, see {@link #statistics()}. */
+    private StatsSettings statistics;
+    /** The section {@code mirror-damage}, see {@link #mirrorDamage()}. */
+    private MirrorDamageSettings mirrorDamage;
+
+    // The values of the smaller sections
 
     public CamSettings(JavaPlugin plugin, Messages messages) {
         this.plugin = plugin;
@@ -804,119 +341,16 @@ public final class CamSettings {
      * and noted in the reader, see {@link ConfigReader#getWarnings()}.
      */
     public void load(ConfigReader config) {
-        maxDistanceEnabled = config.getBoolean("camera-mode.max-distance-enabled", true);
-        maxDistance = config.getDouble("camera-mode.max-distance", 100.0, 0.0);
-        distanceMode = config.getChoice("camera-mode.max-distance-mode", "fixed", "fixed", "signal")
-                .equalsIgnoreCase("signal") ? DistanceMode.SIGNAL : DistanceMode.FIXED;
-        readSignal(config);
-        distanceWarningCooldown = config.getInt("camera-mode.distance-warning-cooldown", 3, 0);
-        String border = config.getChoice("camera-mode.border-mode", "barrier", "barrier", "push-back", "false")
-                .toLowerCase(Locale.ROOT);
-        borderMode = switch (border) {
-            case "push-back" -> BorderMode.PUSH_BACK;
-            case "false" -> BorderMode.OFF;
-            default -> BorderMode.BARRIER;
-        };
-        borderBlock = resolveBlock(config, "camera-mode.border-block", "barrier");
-        mediumBorderBlocks.clear();
-        readMediumBorderBlock(config, FlightMedium.WATER, "camera-mode.border-block-water", "blue_stained_glass");
-        readMediumBorderBlock(config, FlightMedium.LAVA, "camera-mode.border-block-lava", "magma_block");
-        readMediumBorderBlock(config, FlightMedium.POWDER_SNOW, "camera-mode.border-block-powder-snow",
-                "snow_block");
-        // No further than the server sends the world to a client, sixteen
-        // blocks for each chunk of its view-distance: the client throws away
-        // every block beyond that. A world with a smaller view-distance of
-        // its own cuts it back further, see CamBorderWall.
-        borderRadius = config.getDouble("camera-mode.border-radius", 5.0, 0.0,
-                plugin.getServer().getViewDistance() * 16.0);
-        // A wall that nobody runs into holds nobody back: made of something
-        // that can be walked through, or not built anywhere around the player.
-        // Stopping the camera some other way would say the opposite of what
-        // the file says, so there is simply no border then, as with "false".
-        bordersHold = borderMode == BorderMode.PUSH_BACK
-                || (borderMode == BorderMode.BARRIER && borderRadius > 0.0
-                        && borderBlock.getMaterial().isSolid());
-        String visibility = config.getChoice("camera-mode.player_visibility_mode", "cam", "cam", "true", "false")
-                .toLowerCase();
-        playerVisibilityMode = switch (visibility) {
-            case "true" -> VisibilityMode.ALL;
-            case "false" -> VisibilityMode.NONE;
-            default -> VisibilityMode.CAM;
-        };
-        allowInvisibilityPotion = config.getBoolean("camera-mode.allow_invisibility_potion", true);
-        String glow = config.getChoice("camera-mode.glowing-outline", "true", "true", "false", "sight")
-                .toLowerCase();
-        glowMode = switch (glow) {
-            case "false" -> GlowMode.OFF;
-            case "sight" -> GlowMode.SIGHT;
-            default -> GlowMode.ALWAYS;
-        };
-        playerNameVisible = config.getBoolean("camera-mode.name-visible", true);
-        playerNameMode = resolveNameMode(config, config.getInt("camera-mode.name-mode", NameMode.FOLLOW.getId()));
-        playerNameStyle = NameStyle.read(config, "camera-mode.name", ChatColor.WHITE);
-        allowLavaFlight = config.getBoolean("camera-mode.allow_lava_flight", true);
-        allowWaterFlight = config.getBoolean("camera-mode.allow_water_flight", true);
-        allowPowderSnowFlight = config.getBoolean("camera-mode.allow_powder_snow_flight", true);
-        String camMode = config.getChoice("camera-mode.gamemode",
-                "adventure", "adventure", "survival", "creative", "keep").toLowerCase();
-        camGameMode = switch (camMode) {
-            case "survival" -> CamGameMode.SURVIVAL;
-            case "creative" -> CamGameMode.CREATIVE;
-            case "keep" -> CamGameMode.KEEP;
-            default -> CamGameMode.ADVENTURE;
-        };
-        mobsLookAtPlayer = config.getBoolean("camera-mode.mobs-look-at-player", false);
-        String effects = config.getChoice("camera-mode.start-with-effects",
-                "positive", "true", "false", "positive").toLowerCase();
-        startWithEffects = switch (effects) {
-            case "true" -> EffectStart.ANY;
-            case "false" -> EffectStart.NONE;
-            default -> EffectStart.POSITIVE;
-        };
+        // First: /cam follow and /cam resume show the time and the weather only where these let them.
+        camTimeEnabled = config.getBoolean("cam-time.enabled", true);
+        camWeatherEnabled = config.getBoolean("cam-weather.enabled", true);
+        cameraMode = new CameraModeSettings(config, messages, plugin);
+        signal = new SignalSettings(config, messages);
         cameraHeadEnabled = config.getBoolean("camera-head.enabled", false);
-        bodyType = resolveBodyType(config, config.getString("body.type", BodyType.ARMOR_STAND.getConfigName()));
-        bodyNameVisible = config.getBoolean("body.name-visible", true);
-        bodyHealthVisible = config.getBoolean("body.health-visible", false);
-        bodyHealthAbove = config.getChoice("body.health-position", "above", "above", "below")
-                .equalsIgnoreCase("above");
-        bodyHealthShowMissing = config.getBoolean("body.health-show-missing", false);
-        bodyHealthShowAbsorption = config.getBoolean("body.health-show-absorption", true);
-        bodyHealthRowsUpward = config.getBoolean("body.health-rows-upward", true);
-        bodyNameStyle = NameStyle.read(config, "body.name", ChatColor.YELLOW);
-        bodyVisible = config.getBoolean("body.visible", true);
-        bodyArmorVisible = config.getBoolean("body.armor-visible", true);
-        bodyOnLocatorBar = config.getBoolean("body.locator-bar", true);
-        movementSensitivity = resolveMovementSensitivity(config,
-                config.getInt("body.movement-sensitivity", MovementSensitivity.NORMAL.getId()));
-        double moveThreshold = config.getDouble("body.move-threshold", 0.05, MIN_MOVE_THRESHOLD);
-        moveThresholdSquared = moveThreshold * moveThreshold;
-        String mobTarget = config.getChoice("body.mob-target", "false", "vanilla", "custom", "false")
-                .toLowerCase(Locale.ROOT);
-        mobTargetMode = switch (mobTarget) {
-            case "vanilla" -> MobTargetMode.VANILLA;
-            case "custom" -> MobTargetMode.CUSTOM;
-            default -> MobTargetMode.OFF;
-        };
-        mobTargetRadius = config.getDouble("body.mob-target-radius", 16.0, 0.0,
-                MobTargeting.MAX_MOB_TARGET_RANGE);
-        mobTargetHeads = config.getBoolean("body.mob-target-heads", true);
-        particlesEnabled = config.getBoolean("camera-particles.enabled", true);
-        particleType = resolveParticle(config, "camera-particles.particle", Particle.SOUL_FIRE_FLAME);
-        particleHeight = config.getDouble("camera-particles.height", 1.0);
-        particlesPerTick = config.getDouble("camera-particles.particles-per-tick", 1.0, 0.0,
-                MAX_PARTICLES_PER_TICK);
-        particleSpread = config.getDouble("camera-particles.spread", 0.0, 0.0);
-        actionBarEnabled = config.getBoolean("action-bar.enabled", true);
-        actionBarOffDuration = config.getInt("action-bar.off-duration", 10, 0);
-        actionBarOnDuration = config.getInt("action-bar.on-duration", 60, 0);
-        String display = config.getChoice("action-bar.display", "distance", "distance", "text", "false")
-                .toLowerCase(Locale.ROOT);
-        actionBarDisplay = switch (display) {
-            case "text" -> ActionBarDisplay.TEXT;
-            case "false" -> ActionBarDisplay.START;
-            default -> ActionBarDisplay.DISTANCE;
-        };
-        readFlightSpeed(config);
+        body = new BodySettings(config);
+        particles = new ParticleSettings(config, messages);
+        actionBar = new ActionBarSettings(config);
+        flightSpeed = new FlightSpeedSettings(config);
         String nightVision = config.getChoice("night-vision.mode", "dark", "true", "false", "dark")
                 .toLowerCase(Locale.ROOT);
         nightVisionMode = switch (nightVision) {
@@ -926,33 +360,9 @@ public final class CamSettings {
         };
         nightVisionLightLevel = config.getInt("night-vision.light-level", 7, 0, MAX_LIGHT_LEVEL);
         nightVisionPlayerChoice = config.getBoolean("night-vision.player-choice", true);
-        String allowedSounds = messages.configMessage("config-allowed-sounds");
-        startSound = CamSound.read(config, "sounds.start", allowedSounds, "block.beacon.activate", 1.0);
-        endSound = CamSound.read(config, "sounds.end", allowedSounds, "block.beacon.deactivate", 1.0);
-        endBodySound = CamSound.read(config, "sounds.end-body", allowedSounds,
-                "entity.illusioner.mirror_move", 1.0);
-        endForcedSound = CamSound.read(config, "sounds.end-forced", allowedSounds,
-                "block.respawn_anchor.deplete", 1.0);
-        borderSound = CamSound.read(config, "sounds.border", allowedSounds, "block.note_block.bass", 0.5);
-        backSound = CamSound.read(config, "sounds.back", allowedSounds, "entity.enderman.teleport", 1.0);
-        endWarningSound = CamSound.read(config, "sounds.end-warning", allowedSounds,
-                "item.lodestone_compass.lock", 1.0);
-        bodyAlarmSound = CamSound.read(config, "sounds.body-alarm", allowedSounds,
-                "entity.warden.nearby_close", 1.0);
-        startDelaySound = CamSound.read(config, "sounds.start-delay", allowedSounds, "block.note_block.hat", 1.0);
-        nudgeSound = CamSound.read(config, "sounds.nudge", allowedSounds, "block.note_block.chime", 1.0);
-        signalLostSound = CamSound.read(config, "sounds.signal-lost", allowedSounds,
-                "block.conduit.deactivate", 1.0);
-        signalBackSound = CamSound.read(config, "sounds.signal-back", allowedSounds,
-                "block.conduit.activate", 1.0);
-        spotSound = CamSound.read(config, "sounds.spot", allowedSounds, "item.chorus_fruit.teleport", 1.0);
-        // Called tour-invite and tour-reach before /cam tour became /cam follow.
-        tourInviteSound = CamSound.read(config, config.renamed("sounds.follow-invite", "sounds.tour-invite"),
-                allowedSounds, "block.note_block.bell", 1.0);
-        tourReachSound = CamSound.read(config, config.renamed("sounds.follow-reach", "sounds.tour-reach"),
-                allowedSounds, "block.conduit.deactivate", 1.0);
+        sounds = new SoundSettings(config, messages);
         crashProtectionEnabled = config.getBoolean("crash-protection.enabled", true);
-        camListAccess = readAccess(config, "cam-list.access");
+        camListAccess = SettingValues.access(config, "cam-list.access");
         camListTeleport = config.getBoolean("cam-list.teleport", true);
         camListStop = config.getBoolean("cam-list.stop", true);
         stopCommandEnabled = config.getBoolean("stop-command.enabled", true);
@@ -961,120 +371,25 @@ public final class CamSettings {
         afkEndSeconds = config.getInt("afk-end.seconds", 300, MIN_AFK_SECONDS);
         afkWarningPercent = config.getInt("afk-end.warning-percent", 80, 0, 99);
         backCommandEnabled = config.getBoolean("back-command.enabled", true);
-        viewpointsEnabled = config.getBoolean("viewpoints.enabled", true);
-        viewpointsMax = config.getInt("viewpoints.max-per-player", 10, 0, MAX_VIEWPOINTS);
-        viewpointsStorage = readStorage(config, "viewpoints.storage");
-        viewpointsSharing = config.getBoolean("viewpoints.sharing", true);
-        // The section of /cam follow, which was called tour before: an older
-        // file is read as it was written.
-        String follow = config.renamed(FOLLOW_SECTION, OLD_FOLLOW_SECTION);
-        tourEnabled = config.getBoolean(follow + ".enabled", true);
-        tourRadius = config.getDouble(follow + ".radius", 16.0, 1.0, MAX_TOUR_RADIUS);
-        tourOutOfReachSeconds = config.getInt(follow + ".out-of-reach-seconds", 5, 1,
-                MAX_TOUR_OUT_OF_REACH_SECONDS);
-        tourGuideView = config.getBoolean(follow + ".guide-view", true);
-        tourStartDistance = config.getDouble(follow + ".start-distance", 16.0, 0.0, MAX_START_DISTANCE);
-        tourMaxGuests = config.getInt(follow + ".max-guests", 5, 0, MAX_TOUR_GUESTS);
-        tourInvitationSeconds = config.getInt(follow + ".invitation-seconds", 60, MIN_TOUR_INVITATION_SECONDS,
-                MAX_TOUR_INVITATION_SECONDS);
-        tourInviteCooldownSeconds = config.getInt(follow + ".invite-cooldown-seconds", 60, 0,
-                MAX_TOUR_INVITATION_SECONDS);
-        tourLeadWithoutCam = config.getBoolean(follow + ".lead-without-cam", true);
-        tourGuideNameReplaces = config.getChoice(follow + ".guide-name", "replace", "replace", "above")
-                .equalsIgnoreCase("replace");
-        tourMirrorHealth = config.getBoolean(follow + ".mirror-health", true);
-        tourMirrorMainHand = config.getBoolean(follow + ".mirror-main-hand", true);
-        tourMirrorOffHand = config.getBoolean(follow + ".mirror-off-hand", true);
-        tourMirrorSwing = config.getBoolean(follow + ".mirror-swing", true);
-        tourMirrorHead = config.getBoolean(follow + ".mirror-head", true);
-        tourMirrorEffects = config.getBoolean(follow + ".mirror-effects", true);
-        tourMirrorFrost = config.getBoolean(follow + ".mirror-frost", true);
-        tourMirrorExperience = config.getBoolean(follow + ".mirror-experience", false);
-        tourMirrorCount = config.getBoolean(follow + ".mirror-count", false);
-        tourMirrorEnchantments = config.getBoolean(follow + ".mirror-enchantments", false);
-        tourMirrorDurability = config.getBoolean(follow + ".mirror-durability", false);
-        tourMirrorName = config.getBoolean(follow + ".mirror-name", false);
-        tourFineHold = config.getBoolean(follow + ".fine-hold", true);
-        tourInviteAll = config.getBoolean(follow + ".invite-all", true);
-        tourGuideTime = config.getBoolean(follow + ".guide-time", true);
-        tourGuideWeather = config.getBoolean(follow + ".guide-weather", true);
-        tourGuideNightVision = config.getBoolean(follow + ".guide-night-vision", true);
-        viewpointsGuestbook = config.getBoolean("viewpoints.guestbook", true);
-        guestbookIntervalMinutes = config.getInt("viewpoints.guestbook-interval-minutes", 10, 1,
-                MAX_GUESTBOOK_INTERVAL_MINUTES);
-        viewpointsStartDistance = config.getDouble("viewpoints.start-distance", 16.0, 0.0, MAX_START_DISTANCE);
-        viewpointsSetInCamOnly = config.getBoolean("viewpoints.set-in-cam-only", true);
-        viewpointsCreatePage = config.getBoolean("viewpoints.create-page", true);
-        viewpointsIcons = readSpotIcons(config);
-        spotOptionsEnabled = config.getBoolean("viewpoints.options.enabled", true);
-        spotOptionRename = config.getBoolean("viewpoints.options.rename", true);
-        spotOptionIcon = config.getBoolean("viewpoints.options.icon", true);
-        spotOptionShare = config.getBoolean("viewpoints.options.share", true);
-        spotOptionDelete = config.getBoolean("viewpoints.options.delete", true);
-        spotOptionMove = config.getBoolean("viewpoints.options.move", false);
-        viewsCooldownMinutes = config.getInt("viewpoints.views-cooldown-minutes", 10, 0, MAX_VIEWS_COOLDOWN_MINUTES);
-        hideOres = config.getBoolean("hide-ores.enabled", true);
-        readOreCovers(config);
-        oreBiomesOnly = config.getChoice("hide-ores.where", "caves", "caves", "biomes")
-                .equalsIgnoreCase("biomes");
-        readOreBiomes(config);
-        oreMaxSkyLight = config.getInt("hide-ores.max-sky-light", 0, 0, MAX_LIGHT);
-        oreMaxY = readOreMaxY(config);
-        webMapEnabled = config.getBoolean("web-map.enabled", true);
-        webMapBlueMap = config.getBoolean("web-map.bluemap", true);
-        webMapDynmap = config.getBoolean("web-map.dynmap", true);
-        webMapSquaremap = config.getBoolean("web-map.squaremap", true);
-        webMapHidden = config.getBoolean("web-map.hidden", false);
-        webMapMinLikes = config.getInt("web-map.min-likes", 0, 0);
-        webMapMinViews = config.getInt("web-map.min-views", 0, 0);
-        webMapLink = config.getString("web-map.link", "").trim();
-        resumeEnabled = config.getBoolean("resume-command.enabled", true);
-        resumeStorage = readStorage(config, "resume-command.storage");
-        resumeTime = config.getBoolean("resume-command.time", true);
-        resumeWeather = config.getBoolean("resume-command.weather", true);
-        resumeNightVision = config.getBoolean("resume-command.night-vision", true);
-        playerSettingsStorage = readStorage(config, "player-settings.storage");
+        spots = new SpotSettings(config);
+        follow = new FollowSettings(config, camTimeEnabled, camWeatherEnabled);
+        hideOres = new OreSettings(config, messages);
+        webMap = new WebMapSettings(config, spots.sharing());
+        resume = new ResumeSettings(config, camTimeEnabled, camWeatherEnabled, nightVisionPlayerChoice);
+        playerSettingsStorage = SettingValues.storage(config, "player-settings.storage");
         playerSettingsFlightSpeed = config.getBoolean("player-settings.flight-speed", true);
         antiScoutingEnabled = config.getBoolean("anti-scouting.enabled", false);
         antiScoutingRadius = config.getDouble("anti-scouting.radius", 32.0, 0.0, MAX_SCOUT_RADIUS);
         antiScoutingFrom = config.getChoice("anti-scouting.measured-from", "body", "body", "camera")
                 .equalsIgnoreCase("camera") ? ScoutAnchor.CAMERA : ScoutAnchor.BODY;
-        menuAccess = readMenuAccess(config, "menu.access");
-        adminAccess = readMenuAccess(config, "menu.admin-access");
-        readButtons(config, "menu.buttons", MenuButton.values(), menuIcons, menuSlots);
-        readButtons(config, "menu.admin-buttons", AdminButton.values(), adminIcons, adminSlots);
-        banShiftStep = config.getInt("menu.ban-shift-step", 10, 1, MAX_BAN_SHIFT_STEP);
-        menuLiveUpdate = config.getBoolean("menu.live-update", true);
-        photoModeEnabled = config.getBoolean("photo-mode.enabled", true);
-        photoHidePlayers = config.getBoolean("photo-mode.hide-players", true);
-        photoHideBodies = config.getBoolean("photo-mode.hide-bodies", true);
-        photoHideMobs = config.getBoolean("photo-mode.hide-mobs", true);
-        photoHideItems = config.getBoolean("photo-mode.hide-items", true);
-        camTimeEnabled = config.getBoolean("cam-time.enabled", true);
-        camWeatherEnabled = config.getBoolean("cam-weather.enabled", true);
+        menu = new MenuSettings(config, messages);
+        photo = new PhotoSettings(config);
         startDelayEnabled = config.getBoolean("start-delay.enabled", false);
         startDelaySeconds = config.getInt("start-delay.seconds", 3, 1, MAX_START_DELAY_SECONDS);
-        trailEnabled = config.getBoolean("cam-trail.enabled", true);
-        // An older file, without the switch but with show-seconds, goes on as
-        // it was written: every line as long as that, whatever the flight.
-        trailShowMode = !config.has("cam-trail.show-mode") && config.has("cam-trail.show-seconds")
-                ? TrailShowMode.FIXED
-                : config.getEnum("cam-trail.show-mode", TrailShowMode.class, TrailShowMode.DYNAMIC);
-        trailShowSeconds = config.getInt("cam-trail.show-seconds", 30, 1, MAX_TRAIL_SHOW_SECONDS);
-        trailShowMinBlocks = config.getInt("cam-trail.show-min-blocks", 50, 0, MAX_TRAIL_SHOW_BLOCKS - 1);
-        trailShowMinSeconds = config.getInt("cam-trail.show-min-seconds", 10, 1, MAX_TRAIL_SHOW_SECONDS);
-        trailShowMaxBlocks = config.getInt("cam-trail.show-max-blocks", 1500, trailShowMinBlocks + 1,
-                MAX_TRAIL_SHOW_BLOCKS);
-        trailShowMaxSeconds = config.getInt("cam-trail.show-max-seconds", 300, trailShowMinSeconds,
-                MAX_TRAIL_SHOW_SECONDS);
-        trailFlights = config.getInt("cam-trail.flights", 5, 1, MAX_TRAIL_FLIGHTS);
+        trail = new TrailSettings(config);
         endWarningEnabled = config.getBoolean("end-warning.enabled", true);
         endWarningSeconds = readSeconds(config, "end-warning.seconds", List.of(30, 10));
-        bodyAlarmMobs = config.getBoolean("body-alarm.mobs", true);
-        bodyAlarmPlayers = config.getBoolean("body-alarm.players", false);
-        bodyAlarmPlayerRadius = config.getDouble("body-alarm.player-radius", 10.0, 0.0,
-                MobTargeting.MAX_MOB_TARGET_RANGE);
-        bodyAlarmCooldown = config.getInt("body-alarm.cooldown", 5, 0);
+        bodyAlarm = new BodyAlarmSettings(config, body.mobTargetMode());
         nudgeEnabled = config.getBoolean("nudge.enabled", true);
         nudgeCooldown = config.getInt("nudge.cooldown", 5, MIN_NUDGE_COOLDOWN);
         String limit = config.getChoice("flight-limit", "false", "false", "time-limit", "battery")
@@ -1084,35 +399,16 @@ public final class CamSettings {
             case "battery" -> FlightLimit.BATTERY;
             default -> FlightLimit.OFF;
         };
-        cooldownsEnabled = config.getBoolean("time-limit.cooldowns-enabled", false);
-        durationSeconds = config.getInt("time-limit.duration-seconds", 300, 1);
-        cooldownSeconds = config.getInt("time-limit.cooldown-seconds", 120, 0);
-        showBossbar = config.getBoolean("time-limit.show-bossbar", true);
-        cooldownBossbar = config.getBoolean("time-limit.show-bossbar-cooldown", true);
-        bossbarColor = config.getEnum("time-limit.bossbar-color", BarColor.class, BarColor.BLUE);
-        bossbarStyle = readNotches(config, "time-limit.bossbar-notches", 0);
-        cooldownStorage = readStorage(config, "time-limit.storage");
-        camSafetyEnabled = config.getBoolean("cam-safety.enabled", true);
-        camSafetyDelay = config.getInt("cam-safety.delay", 5, 0);
-        camSafetyAfterPlayers = config.getBoolean("cam-safety.after-attack.players", false);
-        camSafetyAfterMobs = config.getBoolean("cam-safety.after-attack.mobs", false);
-        camSafetyAfterFriendly = config.getBoolean("cam-safety.after-attack.friendly", false);
-        camSafetyNearbyPlayers = config.getBoolean("cam-safety.nearby-players", false);
-        camSafetyNearbyRadius = config.getDouble("cam-safety.nearby-radius", 16.0, 0.0,
-                MobTargeting.MAX_MOB_TARGET_RANGE);
+        timeLimit = new TimeLimitSettings(config, flightLimit);
+        camSafety = new CamSafetySettings(config);
         exitKeyEnabled = config.getBoolean("exit-key.enabled", true);
         exitClickGuardEnabled = config.getBoolean("exit-click-guard.enabled", true);
         exitClickGuardMillis = Math.round(1000.0 * config.getDouble("exit-click-guard.seconds", DEFAULT_EXIT_CLICK_GUARD_SECONDS,
                 MIN_EXIT_CLICK_GUARD_SECONDS, MAX_EXIT_CLICK_GUARD_SECONDS));
-        readBedrock(config);
-        readBattery(config);
-        readStartCost(config);
-        statsEnabled = config.getBoolean("statistics.enabled", true);
-        statsViewOthers = readAccess(config, "statistics.view-others");
-        statsMinSeconds = config.getInt("statistics.min-seconds", 5, 0);
-        statsCountFollowDistance = config.getBoolean("statistics.count-follow-distance", true);
-        statsSkipAfkTime = config.getBoolean("statistics.skip-afk-time", false);
-        statsAfkSeconds = config.getInt("statistics.afk-seconds", 60, MIN_AFK_SECONDS);
+        bedrock = new BedrockSettings(config, messages);
+        battery = new BatterySettings(config, flightLimit);
+        startCost = new StartCostSettings(config);
+        statistics = new StatsSettings(config);
         camLogEnabled = config.getBoolean("cam-log.enabled", false);
         camLogConsole = config.getBoolean("cam-log.console", false);
         camLogKeepDays = config.getInt("cam-log.keep-days", 30, 0);
@@ -1132,94 +428,12 @@ public final class CamSettings {
         advancementsBlocked = config.getBoolean("progress-guard.advancements", true);
         statisticsBlocked = config.getBoolean("progress-guard.statistics", true);
 
-        mirrorKnockback = config.getBoolean("mirror-damage.knockback", true);
-        // Only for measuring, so left out of config.yml on purpose: whoever
-        // needs it adds "debug: true" under mirror-damage by hand. That is
-        // why it is one of the UNLISTED_KEYS.
-        mirrorDebug = config.getBoolean("mirror-damage.debug", false);
-        String mode = config.getChoice("mirror-damage.damage-mode", "mirror", "mirror", "custom", "false")
-                .toLowerCase(Locale.ROOT);
-        damageMode = switch (mode) {
-            case "custom" -> DamageMode.CUSTOM;
-            case "false" -> DamageMode.OFF;
-            default -> DamageMode.MIRROR;
-        };
-        customDamageHearts = config.getDouble("mirror-damage.custom-damage-hearts", 0.5, 0.0);
-        damageCountsArmor = config.getBoolean("mirror-damage.damage-counts-armor", true);
-        String armorMode = config.getChoice("mirror-damage.damage-armor-mode", "mirror", "mirror", "custom", "false")
-                .toLowerCase(Locale.ROOT);
-        armorDamageMode = switch (armorMode) {
-            case "custom" -> ArmorDamageMode.CUSTOM;
-            case "false" -> ArmorDamageMode.OFF;
-            default -> ArmorDamageMode.MIRROR;
-        };
-        customArmorDamage = config.getInt("mirror-damage.custom-armor-damage", 1, 0);
-        respectUnbreaking = config.getBoolean("mirror-damage.respect-unbreaking", true);
+        mirrorDamage = new MirrorDamageSettings(config);
     }
 
-    /**
-     * Reads the section {@code flight-speed}. The slowest speed is read first,
-     * the others are held to it: the fastest is no slower, and the one at the
-     * start lies between the two. Their defaults follow along, so that a
-     * slowest speed above 3 does not set off a note about a fastest speed that
-     * is not even in the file.
-     */
-    private void readFlightSpeed(ConfigReader config) {
-        flightSpeedWheel = config.getBoolean("flight-speed.mouse-wheel", true);
-        flightSpeedMin = config.getDouble("flight-speed.min", 0.5, MIN_FLIGHT_SPEED, MAX_FLIGHT_SPEED);
-        flightSpeedMax = config.getDouble("flight-speed.max", Math.max(3.0, flightSpeedMin),
-                flightSpeedMin, MAX_FLIGHT_SPEED);
-        flightSpeedStart = config.getDouble("flight-speed.start",
-                Math.min(Math.max(1.0, flightSpeedMin), flightSpeedMax), flightSpeedMin, flightSpeedMax);
-        flightSpeedStep = config.getDouble("flight-speed.step", 0.5, 0.05, MAX_FLIGHT_SPEED);
-    }
 
-    /**
-     * Reads the section {@code signal}, for {@code max-distance-mode: signal}.
-     * Read whatever the mode, so that a value that does not fit is reported
-     * now and not only once somebody switches the signal on.
-     */
-    private void readSignal(ConfigReader config) {
-        signalCosts = SignalCosts.read(config, messages.configMessage("config-allowed-signal-costs"));
-        readSignalLevels(config);
-        signalLoss = config.getChoice("signal.lost", "back", "back", "end").equalsIgnoreCase("end")
-                ? SignalLoss.END
-                : SignalLoss.BACK;
-        signalLostSeconds = config.getInt("signal.lost-seconds", 3, 0, MAX_SIGNAL_LOST_SECONDS);
-    }
 
-    /**
-     * Reads {@code signal.levels}: from how many percent the signal display
-     * shows which level. Each has to be lower than the one before; if one is
-     * not, they are reported together and all of them keep their defaults.
-     */
-    private void readSignalLevels(ConfigReader config) {
-        double[] levels = new double[SIGNAL_LEVEL_NAMES.length];
-        for (int i = 0; i < levels.length; i++) {
-            levels[i] = config.getDouble("signal.levels." + SIGNAL_LEVEL_NAMES[i], DEFAULT_SIGNAL_LEVELS[i],
-                    0.0, 100.0);
-        }
-        for (int i = 1; i < levels.length; i++) {
-            if (levels[i] >= levels[i - 1]) {
-                config.warnNotDescending("signal.levels", signalLevelsText(levels),
-                        signalLevelsText(DEFAULT_SIGNAL_LEVELS));
-                levels = DEFAULT_SIGNAL_LEVELS.clone();
-                break;
-            }
-        }
-        signalLevels = levels;
-    }
 
-    /** The levels as the note names them, e.g. {@code excellent 80, good 60, medium 40, weak 20}. */
-    private static String signalLevelsText(double[] levels) {
-        List<String> parts = new ArrayList<>();
-        for (int i = 0; i < levels.length; i++) {
-            double level = levels[i];
-            parts.add(SIGNAL_LEVEL_NAMES[i] + " "
-                    + (level == Math.rint(level) ? String.valueOf((long) level) : String.valueOf(level)));
-        }
-        return String.join(", ", parts);
-    }
 
     /**
      * Reads a list of seconds, such as {@code end-warning.seconds}: whole
@@ -1249,264 +463,17 @@ public final class CamSettings {
         return List.copyOf(seconds);
     }
 
-    /**
-     * Reads how many notches a bossbar is divided into, such as
-     * {@code time-limit.bossbar-notches}: 0 for none, or 6, 10, 12 or 20 -
-     * the ones the game can draw, as {@code /bossbar} has them.
-     */
-    private static BarStyle readNotches(ConfigReader config, String path, int def) {
-        int notches = config.getInt(path, def);
-        BarStyle style = notchStyle(notches);
-        if (style == null) {
-            config.warnUnknownValue(path, notches, "0, 6, 10, 12, 20", String.valueOf(def));
-            return notchStyle(def);
-        }
-        return style;
-    }
 
-    /** The bossbar with this many notches, or {@code null} when the game has none. */
-    private static BarStyle notchStyle(int notches) {
-        return switch (notches) {
-            case 0 -> BarStyle.SOLID;
-            case 6 -> BarStyle.SEGMENTED_6;
-            case 10 -> BarStyle.SEGMENTED_10;
-            case 12 -> BarStyle.SEGMENTED_12;
-            case 20 -> BarStyle.SEGMENTED_20;
-            default -> null;
-        };
-    }
 
-    /** Reads where something is kept, the values file and memory. */
-    private static StorageMode readStorage(ConfigReader config, String path) {
-        return config.getChoice(path, "file", "file", "memory").equalsIgnoreCase("memory")
-                ? StorageMode.MEMORY
-                : StorageMode.FILE;
-    }
 
-    /** Reads who may use something, the values admin, all and false. */
-    private static ListAccess readAccess(ConfigReader config, String path) {
-        String access = config.getChoice(path, "admin", "admin", "all", "false").toLowerCase(Locale.ROOT);
-        return switch (access) {
-            case "all" -> ListAccess.ALL;
-            case "false" -> ListAccess.OFF;
-            default -> ListAccess.ADMIN;
-        };
-    }
 
-    /** Reads how something is got at, the values menu, both, command and false. */
-    private static MenuAccess readMenuAccess(ConfigReader config, String path) {
-        String access = config.getChoice(path, "menu", "menu", "both", "command", "false").toLowerCase(Locale.ROOT);
-        return switch (access) {
-            case "both" -> MenuAccess.BOTH;
-            case "command" -> MenuAccess.COMMAND;
-            case "false" -> MenuAccess.OFF;
-            default -> MenuAccess.MENU;
-        };
-    }
 
-    /**
-     * Reads a section of buttons, {@code menu.buttons} or
-     * {@code menu.admin-buttons}: the item and the slot of each. A slot that
-     * another button of the same page has taken already - other than start
-     * and end, which are never there together - is noted, and the button goes
-     * to its own slot of out of the box, or the first one free.
-     */
-    private <B extends MenuSlot> void readButtons(ConfigReader config, String section, B[] buttons,
-                                                  Map<B, MenuIcon> icons, Map<B, Integer> slots) {
-        icons.clear();
-        slots.clear();
-        String allowed = messages.configMessage("config-allowed-menu-items");
-        for (B button : buttons) {
-            String path = button.oldKey() == null ? section + "." + button.key()
-                    : config.renamed(section + "." + button.key(), section + "." + button.oldKey());
-            String raw = config.getString(path + ".item", button.defaultItem());
-            MenuIcon icon = MenuIcon.parse(raw);
-            if (icon == null) {
-                config.warnUnknownValue(path + ".item", raw, allowed, button.defaultItem());
-                icon = MenuIcon.parse(button.defaultItem());
-            }
-            icons.put(button, icon);
-            int slot = config.getInt(path + ".slot", button.defaultSlot(), 0, MenuButton.SLOTS - 1);
-            B other = slotTakenBy(slots, button, slot);
-            if (other != null) {
-                int free = slotTakenBy(slots, button, button.defaultSlot()) == null ? button.defaultSlot() : 0;
-                while (slotTakenBy(slots, button, free) != null) {
-                    free++;
-                }
-                config.warnSlotTaken(path + ".slot", slot, section + "." + other.key() + ".slot", free);
-                slot = free;
-            }
-            slots.put(button, slot);
-        }
-    }
 
-    /** The button that has this slot already and may not share it with this one, or {@code null}. */
-    private static <B extends MenuSlot> B slotTakenBy(Map<B, Integer> slots, B button, int slot) {
-        for (Map.Entry<B, Integer> entry : slots.entrySet()) {
-            if (entry.getValue() == slot && !button.mayShareWith(entry.getKey())) {
-                return entry.getKey();
-            }
-        }
-        return null;
-    }
 
-    /**
-     * Reads the section {@code battery}. The charge a start needs is held to
-     * the capacity: more than a full battery would let nobody start at all.
-     */
-    private void readBattery(ConfigReader config) {
-        batteryCapacity = config.getInt("battery.capacity", 300, 1);
-        // Without any charging an empty battery would stay empty for good.
-        batteryRecharge = config.getDouble("battery.recharge-per-second", 0.5, 0.01);
-        batteryMinStart = config.getInt("battery.min-start", Math.min(10, batteryCapacity), 0, batteryCapacity);
-        batteryRechargeOffline = config.getBoolean("battery.recharge-offline", true);
-        batteryBossbar = config.getBoolean("battery.show-bossbar", true);
-        batteryBossbarCharging = config.getBoolean("battery.show-bossbar-charging", true);
-        batteryBossbarColor = config.getEnum("battery.bossbar-color", BarColor.class, BarColor.GREEN);
-        batteryBossbarStyle = readNotches(config, "battery.bossbar-notches", 10);
-        batteryStorage = readStorage(config, "battery.storage");
-    }
 
-    /**
-     * Reads the section {@code start-cost}. An item the game does not have, or
-     * that cannot be carried, is reported and left out of the cost.
-     */
-    private void readStartCost(ConfigReader config) {
-        startCostEnabled = config.getBoolean("start-cost.enabled", false);
-        startCostXp = config.getInt("start-cost.xp", 0, 0);
-        startCostXpPoints = config.getChoice("start-cost.xp-type", "levels", "levels", "points")
-                .equalsIgnoreCase("points");
-        startCostMoney = config.getDouble("start-cost.money", 0.0, 0.0);
-        startCostItems.clear();
-        for (Map.Entry<String, Integer> entry
-                : config.getAmounts("start-cost.items", 0, MAX_COST_ITEMS).entrySet()) {
-            Material material = parseItem(entry.getKey().trim().toLowerCase(Locale.ROOT).replace(' ', '_'));
-            if (material == null) {
-                config.warnUnknownEntry("start-cost.items", entry.getKey());
-            } else if (entry.getValue() > 0) {
-                startCostItems.merge(material, entry.getValue(), Integer::sum);
-            }
-        }
-    }
 
-    /** The item a name stands for, or {@code null} when it is none a player can carry. */
-    private static Material parseItem(String name) {
-        Material material = name.isEmpty() ? null : Material.matchMaterial(name);
-        if (material == null || !material.isItem() || material.isAir()) {
-            return null;
-        }
-        return material;
-    }
 
-    /**
-     * Reads one of the blocks of the wall, {@code camera-mode.border-block}
-     * and its three companions: the name of a block, with or without
-     * {@code minecraft:} in front, capitals and spaces not counting -
-     * {@code light_blue_stained_glass} and {@code Light Blue Stained Glass}
-     * are the same block. Its states may follow in square brackets, the way
-     * the game writes them, e.g. {@code glass_pane[north=true,south=true]}.
-     * Anything that is no block falls back to {@code def}.
-     *
-     * <p>Fences, panes and iron bars given without states are joined on every
-     * side. Standing on its own, each of them is only a thin post, and a wall
-     * of posts has gaps wide enough to slip through.</p>
-     */
-    private BlockData resolveBlock(ConfigReader config, String path, String def) {
-        String raw = config.getString(path, def);
-        BlockData block = parseBlock(raw);
-        if (block == null) {
-            config.warnUnknownValue(path, raw, messages.configMessage("config-allowed-blocks"), def);
-            return parseBlock(def);
-        }
-        return block;
-    }
 
-    /**
-     * Reads what the wall shows in place of water, lava or powder snow.
-     *
-     * <p>A block that can be walked through would leave a hole in the wall
-     * right there - and would say nothing about how the border holds, which
-     * {@code border-block} alone decides. The wall takes its own block in
-     * such a place instead. A barrier stands under water, so with the barrier
-     * as {@code border-block} an entry of {@code water} keeps the water as it
-     * looks.</p>
-     */
-    private void readMediumBorderBlock(ConfigReader config, FlightMedium medium, String path, String def) {
-        BlockData block = resolveBlock(config, path, def);
-        mediumBorderBlocks.put(medium, block.getMaterial().isSolid() ? block : borderBlock.clone());
-    }
-
-    /**
-     * Reads {@code hide-ores.blocks}: each ore with the block it looks like
-     * for a camera player. An ore or a block that is none - mistyped, an
-     * item, a block of a newer version - is reported, and the entry left
-     * out. Without the section at all, the ores of the game as the file
-     * built into the jar has them.
-     */
-    private void readOreCovers(ConfigReader config) {
-        oreCovers.clear();
-        String path = "hide-ores.blocks";
-        Map<String, String> entries = config.getNames(path);
-        if (!config.has(path)) {
-            entries = DEFAULT_ORE_COVERS;
-        }
-        String allowed = messages.configMessage("config-allowed-blocks");
-        for (Map.Entry<String, String> entry : entries.entrySet()) {
-            Material ore = Material.matchMaterial(entry.getKey().trim());
-            if (ore == null || !ore.isBlock() || ore.isAir()) {
-                config.warnUnknownEntry(path, entry.getKey());
-                continue;
-            }
-            BlockData cover = parseBlock(entry.getValue());
-            if (cover == null) {
-                config.warnUnknownValue(path + "." + entry.getKey(), entry.getValue(), allowed, "-");
-                continue;
-            }
-            oreCovers.put(ore, cover);
-        }
-    }
-
-    /**
-     * Reads {@code hide-ores.biomes}, the way {@code cam-area.forbidden-biomes}
-     * is read: a name the server does not know is reported and left out.
-     */
-    private void readOreBiomes(ConfigReader config) {
-        oreBiomes.clear();
-        String path = "hide-ores.biomes";
-        for (String entry : config.getStringList(path, DEFAULT_ORE_BIOMES)) {
-            NamespacedKey key = CamAreaRules.toKey(entry, Registry.BIOME);
-            if (key == null) {
-                config.warnUnknownEntry(path, entry);
-            } else {
-                oreBiomes.add(key);
-            }
-        }
-    }
-
-    /** The brightest light the game has, sky or block. */
-    private static final int MAX_LIGHT = 15;
-
-    /** The word of {@code hide-ores.max-y} for no limit at all. */
-    private static final String NO_LIMIT = "off";
-
-    /**
-     * Reads {@code hide-ores.max-y}: the height of the highest ore that is
-     * hidden, out of the box 15 - where the diamonds begin -, or
-     * {@code off} for ores of every height.
-     */
-    private int readOreMaxY(ConfigReader config) {
-        String path = "hide-ores.max-y";
-        String raw = config.getString(path, "15").trim();
-        if (raw.equalsIgnoreCase(NO_LIMIT)) {
-            return Integer.MAX_VALUE;
-        }
-        try {
-            return Integer.parseInt(raw);
-        } catch (NumberFormatException ex) {
-            config.warnUnknownValue(path, raw, messages.configMessage("config-allowed-height"), "15");
-            return 15;
-        }
-    }
 
     /** The commands of {@code cam-commands.list} out of the box, as the file built into the jar has them. */
     private static final List<String> DEFAULT_CAM_COMMANDS = List.of("sethome", "setwarp", "setspawn", "setjail",
@@ -1531,224 +498,26 @@ public final class CamSettings {
         camCommands = List.copyOf(commands);
     }
 
-    /** The biomes of {@code hide-ores.biomes} out of the box: the caves the game has as biomes of their own. */
-    private static final List<String> DEFAULT_ORE_BIOMES =
-            List.of("lush_caves", "dripstone_caves", "deep_dark", "sulfur_caves");
 
-    /** The ores of the game and what they look like for a camera player, as the file built into the jar has them. */
-    private static final Map<String, String> DEFAULT_ORE_COVERS = defaultOreCovers();
 
-    private static Map<String, String> defaultOreCovers() {
-        Map<String, String> covers = new LinkedHashMap<>();
-        for (String ore : List.of("coal", "iron", "copper", "gold", "redstone", "lapis", "emerald", "diamond")) {
-            covers.put(ore + "_ore", "stone");
-            covers.put("deepslate_" + ore + "_ore", "deepslate");
-        }
-        covers.put("raw_iron_block", "tuff");
-        covers.put("raw_copper_block", "granite");
-        covers.put("ancient_debris", "netherrack");
-        return Collections.unmodifiableMap(covers);
-    }
 
-    /** The block a {@code border-block} entry names, or {@code null} for none. */
-    private static BlockData parseBlock(String raw) {
-        String text = raw.trim().toLowerCase(Locale.ROOT);
-        int states = text.indexOf('[');
-        String name = (states < 0 ? text : text.substring(0, states)).trim().replace(' ', '_');
-        Material material = name.isEmpty() ? null : Material.matchMaterial(name);
-        if (material == null || !material.isBlock()) {
-            return null;
-        }
-        if (states >= 0) {
-            try {
-                return material.createBlockData(text.substring(states));
-            } catch (IllegalArgumentException ex) {
-                return null;
-            }
-        }
-        BlockData block = material.createBlockData();
-        if (block instanceof MultipleFacing sides) {
-            for (BlockFace face : sides.getAllowedFaces()) {
-                sides.setFace(face, true);
-            }
-        }
-        return block;
-    }
 
-    /**
-     * Reads {@code bedrock}: for whom its adjustments hold, how a Bedrock
-     * player is told apart by his name, and each adjustment that can be
-     * switched off. {@code glow-particle: false} is no outline at all, any
-     * other value a particle as {@code camera-particles.particle} takes it.
-     */
-    private void readBedrock(ConfigReader config) {
-        String scope = config.getChoice("bedrock.apply-to", "bedrock", "bedrock", "all", "false");
-        bedrockScope = scope.equalsIgnoreCase("all") ? BedrockScope.ALL
-                : scope.equalsIgnoreCase("false") ? BedrockScope.OFF : BedrockScope.BEDROCK;
-        bedrockNamePrefix = config.getString("bedrock.name-prefix", ".").trim();
-        String menu = config.getChoice("bedrock.menu", "mixed", "forms", "mixed", "chest");
-        bedrockMenu = menu.equalsIgnoreCase("forms") ? BedrockMenu.FORMS
-                : menu.equalsIgnoreCase("chest") ? BedrockMenu.CHEST : BedrockMenu.MIXED;
-        bedrockInvitationForms = config.getBoolean("bedrock.invitation-forms", true);
-        bedrockChatCommands = config.getBoolean("bedrock.chat-commands", true);
-        bedrockMapIcons = config.getBoolean("bedrock.map-icons", false);
-        bedrockFollowTurn = config.getChoice("bedrock.follow-view", "camera", "camera", "turn")
-                .equalsIgnoreCase("turn");
-        String glow = config.getString("bedrock.glow-particle", "end_rod");
-        bedrockGlowParticle = glow.trim().equalsIgnoreCase("false") ? null
-                : resolveParticle(config, "bedrock.glow-particle", Particle.END_ROD);
-    }
 
-    /**
-     * Reads {@code camera-particles.particle}: the name of a particle, with or
-     * without {@code minecraft:} in front, capitals and spaces not counting.
-     *
-     * <p>Only a particle that needs nothing but its name will do. A dust wants
-     * a colour and a block crack a block, and the server turns one away that
-     * comes without them - every tick, for every player who could see it.</p>
-     */
-    private Particle resolveParticle(ConfigReader config, String path, Particle def) {
-        String defName = def.name().toLowerCase(Locale.ROOT);
-        String raw = config.getString(path, defName);
-        Particle particle = parseParticle(raw);
-        if (particle == null || particle.getDataType() != Void.class) {
-            config.warnUnknownValue(path, raw, messages.configMessage("config-allowed-particles"), defName);
-            return def;
-        }
-        return particle;
-    }
 
-    private static Particle parseParticle(String raw) {
-        String name = raw.trim().toLowerCase(Locale.ROOT).replace(' ', '_');
-        if (name.startsWith("minecraft:")) {
-            name = name.substring("minecraft:".length());
-        }
-        try {
-            return Particle.valueOf(name.toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException ex) {
-            return null;
-        }
-    }
 
-    /**
-     * Turns the number configured in {@code camera-mode.name-mode} into a mode
-     * and falls back to 1 when the value is unknown.
-     */
-    private NameMode resolveNameMode(ConfigReader config, int configuredId) {
-        NameMode requested = NameMode.fromId(configuredId);
-        if (requested == null) {
-            config.warnUnknownValue("camera-mode.name-mode", configuredId, "1, 2",
-                    String.valueOf(NameMode.FOLLOW.getId()));
-            return NameMode.FOLLOW;
-        }
-        return requested;
-    }
+    // ------------------------------------------------- camera-mode, camera-head
 
-    /**
-     * Turns the value configured in {@code body.type} into a body type and
-     * falls back to the armour stand when the value is unknown.
-     */
-    private BodyType resolveBodyType(ConfigReader config, String configured) {
-        BodyType requested = BodyType.fromConfig(configured);
-        if (requested == null) {
-            config.warnUnknownValue("body.type", configured, BodyType.configNames(),
-                    BodyType.ARMOR_STAND.getConfigName());
-            return BodyType.ARMOR_STAND;
-        }
-        return requested;
-    }
 
-    /**
-     * Turns the number configured in {@code body.movement-sensitivity} into a
-     * level and falls back to 1 when the value is unknown.
-     *
-     * <p>Level 2 is cut back to level 1 for the visible armour stand of the
-     * armorstand body. That is a valid setting in the wrong combination and
-     * not a mistake, so it is described in the config file instead of being
-     * logged.</p>
-     */
-    private MovementSensitivity resolveMovementSensitivity(ConfigReader config, int configuredId) {
-        MovementSensitivity requested = MovementSensitivity.fromId(configuredId);
-        if (requested == null) {
-            config.warnUnknownValue("body.movement-sensitivity", configuredId, "0, 1, 2",
-                    String.valueOf(MovementSensitivity.NORMAL.getId()));
-            requested = MovementSensitivity.NORMAL;
-        }
-        return requested.forBody(bodyType.isMannequinBody(bodyVisible));
-    }
 
-    // ------------------------------------------------------------ camera-mode
 
-    public double getMaxDistance() {
-        return maxDistance;
-    }
 
-    public int getDistanceWarningCooldown() {
-        return distanceWarningCooldown;
-    }
 
-    /** A copy of the block the wall is made of, free to be changed by the caller. */
-    public BlockData getBorderBlock() {
-        return borderBlock.clone();
-    }
 
-    /** A copy of the block the wall shows in place of this medium, free to be changed by the caller. */
-    public BlockData getBorderBlock(FlightMedium medium) {
-        return mediumBorderBlocks.get(medium).clone();
-    }
 
-    public double getBorderRadius() {
-        return borderRadius;
-    }
 
-    /**
-     * Whether the wall of {@code border-mode: barrier} is built. Not when it
-     * would stop nobody, see {@link #bordersHold}.
-     */
-    public boolean buildsBorderWall() {
-        return borderMode == BorderMode.BARRIER && bordersHold;
-    }
 
-    /**
-     * Whether {@code max-distance} holds the camera back at a border: switched
-     * on, in the mode {@code fixed}, and a border that holds. Under
-     * {@code signal} it is the signal that holds it, see {@link #usesSignal()},
-     * and there is no border at the distance.
-     */
-    public boolean limitsDistance() {
-        return maxDistanceEnabled && distanceMode == DistanceMode.FIXED && bordersHold;
-    }
 
-    /**
-     * Whether the camera flies on a radio signal from its body,
-     * {@code max-distance-mode: signal} with {@code max-distance} switched on.
-     * Whatever {@code border-mode} says: the signal is no border, nothing is
-     * run into at its end.
-     */
-    public boolean usesSignal() {
-        return maxDistanceEnabled && distanceMode == DistanceMode.SIGNAL;
-    }
 
-    public SignalCosts getSignalCosts() {
-        return signalCosts;
-    }
-
-    /**
-     * From how many percent each level of the signal display counts,
-     * {@code signal.levels}: excellent, good, medium and weak, each lower
-     * than the one before. Not to be changed.
-     */
-    public double[] getSignalLevels() {
-        return signalLevels;
-    }
-
-    public SignalLoss getSignalLoss() {
-        return signalLoss;
-    }
-
-    public int getSignalLostSeconds() {
-        return signalLostSeconds;
-    }
 
     /**
      * Whether {@code cam-area} keeps the camera out of forbidden areas in
@@ -1756,197 +525,31 @@ public final class CamSettings {
      * is not part of this, level 1 and 2 turn it away whatever the border does.
      */
     public boolean keepsOutOfAreas() {
-        return camAreaRules.getLevel().blocksFlight() && bordersHold;
+        return camAreaRules.getLevel().blocksFlight() && cameraMode.bordersHold();
     }
 
-    public VisibilityMode getPlayerVisibilityMode() {
-        return playerVisibilityMode;
-    }
 
-    public boolean allowsInvisibilityPotion() {
-        return allowInvisibilityPotion;
-    }
 
-    public GlowMode getGlowMode() {
-        return glowMode;
-    }
 
-    /**
-     * Whether a camera player carries the name of {@code camera-mode.name} in
-     * place of his own name tag. Not in mode NONE: nobody is meant to see him
-     * there, and a name would give away where he is.
-     */
-    public boolean showsPlayerName() {
-        return playerNameVisible && playerVisibilityMode != VisibilityMode.NONE;
-    }
 
-    public NameMode getPlayerNameMode() {
-        return playerNameMode;
-    }
 
-    public NameStyle getPlayerNameStyle() {
-        return playerNameStyle;
-    }
 
-    public boolean allowsLavaFlight() {
-        return allowLavaFlight;
-    }
 
-    public boolean allowsWaterFlight() {
-        return allowWaterFlight;
-    }
 
-    public boolean allowsPowderSnowFlight() {
-        return allowPowderSnowFlight;
-    }
 
-    public CamGameMode getCamGameMode() {
-        return camGameMode;
-    }
 
-    public boolean mobsLookAtPlayer() {
-        return mobsLookAtPlayer;
-    }
 
-    public EffectStart getStartWithEffects() {
-        return startWithEffects;
-    }
 
     public boolean isCameraHeadEnabled() {
         return cameraHeadEnabled;
     }
 
-    // ------------------------------------------------------------------- body
+    // ------------------------------------------------------------- night-vision
 
-    public BodyType getBodyType() {
-        return bodyType;
-    }
 
-    public boolean isBodyNameVisible() {
-        return bodyNameVisible;
-    }
 
-    public boolean isBodyHealthVisible() {
-        return bodyHealthVisible;
-    }
 
-    public boolean isBodyHealthAbove() {
-        return bodyHealthAbove;
-    }
 
-    public boolean isBodyHealthShowMissing() {
-        return bodyHealthShowMissing;
-    }
-
-    public boolean isBodyHealthShowAbsorption() {
-        return bodyHealthShowAbsorption;
-    }
-
-    public boolean isBodyHealthRowsUpward() {
-        return bodyHealthRowsUpward;
-    }
-
-    public NameStyle getBodyNameStyle() {
-        return bodyNameStyle;
-    }
-
-    public boolean isBodyVisible() {
-        return bodyVisible;
-    }
-
-    public boolean isBodyArmorVisible() {
-        return bodyArmorVisible;
-    }
-
-    /** {@code body.locator-bar}, see {@link de.elia.cameraplugin.locator.CamLocatorBar}. */
-    public boolean isBodyOnLocatorBar() {
-        return bodyOnLocatorBar;
-    }
-
-    public MovementSensitivity getMovementSensitivity() {
-        return movementSensitivity;
-    }
-
-    public double getMoveThresholdSquared() {
-        return moveThresholdSquared;
-    }
-
-    public MobTargetMode getMobTargetMode() {
-        return mobTargetMode;
-    }
-
-    public double getMobTargetRadius() {
-        return mobTargetRadius;
-    }
-
-    public boolean isMobTargetHeads() {
-        return mobTargetHeads;
-    }
-
-    // ------------------------------------------------- particles and action bar
-
-    /**
-     * Whether a camera player gets particles at all: switched off by
-     * {@code camera-particles.enabled: false}, and just as well by
-     * {@code particles-per-tick: 0}.
-     */
-    public boolean areParticlesEnabled() {
-        return particlesEnabled && particlesPerTick > 0;
-    }
-
-    public Particle getParticleType() {
-        return particleType;
-    }
-
-    public double getParticleHeight() {
-        return particleHeight;
-    }
-
-    public double getParticlesPerTick() {
-        return particlesPerTick;
-    }
-
-    public double getParticleSpread() {
-        return particleSpread;
-    }
-
-    public boolean isActionBarEnabled() {
-        return actionBarEnabled;
-    }
-
-    public int getActionBarOffDuration() {
-        return actionBarOffDuration;
-    }
-
-    public int getActionBarOnDuration() {
-        return actionBarOnDuration;
-    }
-
-    public ActionBarDisplay getActionBarDisplay() {
-        return actionBarDisplay;
-    }
-
-    // ------------------------------------------- flight speed and night vision
-
-    public boolean isFlightSpeedWheel() {
-        return flightSpeedWheel;
-    }
-
-    public double getFlightSpeedStart() {
-        return flightSpeedStart;
-    }
-
-    public double getFlightSpeedMin() {
-        return flightSpeedMin;
-    }
-
-    public double getFlightSpeedMax() {
-        return flightSpeedMax;
-    }
-
-    public double getFlightSpeedStep() {
-        return flightSpeedStep;
-    }
 
     public NightVisionMode getNightVisionMode() {
         return nightVisionMode;
@@ -1961,69 +564,20 @@ public final class CamSettings {
         return nightVisionPlayerChoice;
     }
 
-    // ------------------------------------------------------- sounds, cam-list
+    // ----------------------------------------------------------------- cam-list
 
-    public CamSound getStartSound() {
-        return startSound;
-    }
 
-    /**
-     * The sound for an end of camera mode: {@code sounds.end},
-     * {@code end-body} or {@code end-forced}, and none for an end nobody
-     * would hear.
-     */
-    public CamSound getEndSound(EndReason reason) {
-        return switch (reason.getKind()) {
-            case SELF -> endSound;
-            case BODY -> endBodySound;
-            case FORCED -> endForcedSound;
-            case SILENT -> CamSound.OFF;
-        };
-    }
 
-    public CamSound getBorderSound() {
-        return borderSound;
-    }
 
-    public CamSound getBackSound() {
-        return backSound;
-    }
 
-    public CamSound getEndWarningSound() {
-        return endWarningSound;
-    }
 
-    public CamSound getBodyAlarmSound() {
-        return bodyAlarmSound;
-    }
 
-    public CamSound getStartDelaySound() {
-        return startDelaySound;
-    }
 
-    public CamSound getNudgeSound() {
-        return nudgeSound;
-    }
 
-    public CamSound getSignalLostSound() {
-        return signalLostSound;
-    }
 
-    public CamSound getSignalBackSound() {
-        return signalBackSound;
-    }
 
-    public CamSound getSpotSound() {
-        return spotSound;
-    }
 
-    public CamSound getTourInviteSound() {
-        return tourInviteSound;
-    }
 
-    public CamSound getTourReachSound() {
-        return tourReachSound;
-    }
 
     public ListAccess getCamListAccess() {
         return camListAccess;
@@ -2037,7 +591,7 @@ public final class CamSettings {
         return camListStop;
     }
 
-    // --------------------------------------------- stop-command, cam-ban, afk-end
+    // ------------------------------------------- stop-command, cam-ban, afk-end
 
     public boolean isStopCommandEnabled() {
         return stopCommandEnabled;
@@ -2059,421 +613,13 @@ public final class CamSettings {
         return afkWarningPercent;
     }
 
-    // ---------------------------------------------------------------- back-command
+    // ------------------------------------------------------------- back-command
 
     public boolean isBackCommandEnabled() {
         return backCommandEnabled;
     }
 
-    // ------------------------------------------- viewpoints, photo-mode, cam-time, cam-weather
-
-    public boolean isViewpointsEnabled() {
-        return viewpointsEnabled;
-    }
-
-    /** How many spots each player may keep, {@code viewpoints.max-per-player}; 0 for no limit. */
-    public int getViewpointsMax() {
-        return viewpointsMax;
-    }
-
-    /** Whether there is a limit to how many spots a player may keep. */
-    public boolean limitsViewpoints() {
-        return viewpointsMax > 0;
-    }
-
-    public StorageMode getViewpointsStorage() {
-        return viewpointsStorage;
-    }
-
-    /** Whether spots may be shared, which only goes while there are spots at all. */
-    public boolean isViewpointsSharing() {
-        return viewpointsEnabled && viewpointsSharing;
-    }
-
-    /** Whether {@code /cam follow} is there. */
-    public boolean isTourEnabled() {
-        return tourEnabled;
-    }
-
-    /** How close, camera to camera, a player has to be to be invited to a tour, in blocks. */
-    public double getTourRadius() {
-        return tourRadius;
-    }
-
-    /** How long the guide may be out of a guest's reach before the tour ends for him, in seconds. */
-    public int getTourOutOfReachSeconds() {
-        return tourOutOfReachSeconds;
-    }
-
-    /** Whether a guest may see through the eyes of his guide, where the server lets it. */
-    public boolean isTourGuideView() {
-        return tourGuideView;
-    }
-
-    /**
-     * How close, in blocks, a player out of camera mode has to be to the
-     * guide's camera to accept an invitation, which starts camera mode for
-     * him; 0 while only who is in camera mode may come along.
-     */
-    public double getTourStartDistance() {
-        return tourStartDistance;
-    }
-
-    /** How many guests one tour takes at once; 0 for no limit. */
-    public int getTourMaxGuests() {
-        return tourMaxGuests;
-    }
-
-    /** How long an invitation holds, in seconds. */
-    public int getTourInvitationSeconds() {
-        return tourInvitationSeconds;
-    }
-
-    /** How long after inviting a player a guide may not invite him again, in seconds; 0 at once. */
-    public int getTourInviteCooldownSeconds() {
-        return tourInviteCooldownSeconds;
-    }
-
-    /** Whether a player out of camera mode may show others round as well, while he builds, say. */
-    public boolean isTourLeadWithoutCam() {
-        return tourLeadWithoutCam;
-    }
-
-    /**
-     * Whether the names of a tour take the place of the name tag of a guide
-     * out of camera mode; otherwise they stand over it.
-     */
-    public boolean isTourGuideNameReplacing() {
-        return tourGuideNameReplaces;
-    }
-
-    /** Whether the guests of a guide out of camera mode see his hearts on their screen. */
-    public boolean isTourMirrorHealth() {
-        return tourMirrorHealth;
-    }
-
-    /** Whether they see the item in his hand in theirs. */
-    public boolean isTourMirrorMainHand() {
-        return tourMirrorMainHand;
-    }
-
-    /** Whether they see the item in his off hand in theirs. */
-    public boolean isTourMirrorOffHand() {
-        return tourMirrorOffHand;
-    }
-
-    /** Whether the guests' arm with the guide's item swings when the guide's does. */
-    public boolean isTourMirrorSwing() {
-        return tourMirrorSwing;
-    }
-
-    /** Whether the guests see the item on the guide's head - a carved pumpkin, say - on theirs. */
-    public boolean isTourMirrorHead() {
-        return tourMirrorHead;
-    }
-
-    /** Whether the guests see the guide's effects as theirs. */
-    public boolean isTourMirrorEffects() {
-        return tourMirrorEffects;
-    }
-
-    /** Whether the guests see the guide's frost as theirs. */
-    public boolean isTourMirrorFrost() {
-        return tourMirrorFrost;
-    }
-
-    /** Whether the guests see the guide's experience bar and level as theirs. */
-    public boolean isTourMirrorExperience() {
-        return tourMirrorExperience;
-    }
-
-    /**
-     * Whether the guests see how many items are in the stacks in the guide's
-     * hands - in their hotbar, and in his where they see through his eyes.
-     */
-    public boolean isTourMirrorCount() {
-        return tourMirrorCount;
-    }
-
-    /**
-     * Whether the guests see which enchantments the guide's items have -
-     * otherwise only that they have some, by their glint.
-     */
-    public boolean isTourMirrorEnchantments() {
-        return tourMirrorEnchantments;
-    }
-
-    /** Whether the guests see how worn the guide's items are: the bar under them, and the tooltip. */
-    public boolean isTourMirrorDurability() {
-        return tourMirrorDurability;
-    }
-
-    /**
-     * Whether the guests see the names the guide gave his items - at an anvil,
-     * say -, otherwise only the item's own name, as the game calls it.
-     */
-    public boolean isTourMirrorName() {
-        return tourMirrorName;
-    }
-
-    /** Whether guests who see through the guide's eyes are held turned between the ticks too. */
-    public boolean isTourFineHold() {
-        return tourFineHold;
-    }
-
-    /** Whether a guide may invite everybody he could invite at once, {@code /cam follow invite all}. */
-    public boolean isTourInviteAll() {
-        return tourInviteAll;
-    }
-
-    /**
-     * Whether the guests see the time of day of their guide: the one he
-     * sees in camera mode, the time of the world while he is out of it. Only
-     * while {@code cam-time} lets anybody have a time of his own.
-     */
-    public boolean isTourGuideTime() {
-        return tourGuideTime && camTimeEnabled;
-    }
-
-    /** Whether the guests see the weather of their guide, the way {@link #isTourGuideTime} has it. */
-    public boolean isTourGuideWeather() {
-        return tourGuideWeather && camWeatherEnabled;
-    }
-
-    /**
-     * Whether the guests have the night vision of their guide: the mode that
-     * holds for him in camera mode, none while he is out of it.
-     */
-    public boolean isTourGuideNightVision() {
-        return tourGuideNightVision;
-    }
-
-    /**
-     * Whether the owner of a spot hears who looked at it and liked it -
-     * which only others do, so only while spots may be shared.
-     */
-    public boolean isGuestbookEnabled() {
-        return isViewpointsSharing() && viewpointsGuestbook;
-    }
-
-    public int getGuestbookIntervalMinutes() {
-        return guestbookIntervalMinutes;
-    }
-
-    /**
-     * Whether a spot is saved only in camera mode, {@code viewpoints.set-in-cam-only}:
-     * where the camera is, not where the player stands.
-     */
-    public boolean isViewpointsSetInCamOnly() {
-        return viewpointsSetInCamOnly;
-    }
-
-    /**
-     * Whether a new spot of the menu - after its name - gets a page of its
-     * own, with its icon, its name once more and whether it is public, before
-     * it is saved, {@code viewpoints.create-page}; if not, the name saves it.
-     */
-    public boolean isViewpointsCreatePage() {
-        return viewpointsCreatePage;
-    }
-
-    /**
-     * The icons a spot may have, {@code viewpoints.icons}, in their order:
-     * keys of items without the namespace, in small letters - also those this
-     * server does not know, which {@link de.elia.cameraplugin.spot.CamSpots#icons}
-     * leaves out.
-     */
-    public List<String> getViewpointsIcons() {
-        return viewpointsIcons;
-    }
-
-    /**
-     * {@code viewpoints.icons}: the keys of items, with or without
-     * {@code minecraft:}. Whether the server knows one is not asked here - an
-     * item of a later version is no mistake on an earlier one.
-     */
-    private static List<String> readSpotIcons(ConfigReader config) {
-        List<String> icons = new ArrayList<>();
-        for (String entry : config.getStringList("viewpoints.icons", DEFAULT_SPOT_ICONS)) {
-            String key = entry.trim().toLowerCase(Locale.ROOT);
-            if (key.startsWith("minecraft:")) {
-                key = key.substring("minecraft:".length());
-            }
-            if (!key.isEmpty() && !icons.contains(key)) {
-                icons.add(key);
-            }
-        }
-        return Collections.unmodifiableList(icons);
-    }
-
-    /**
-     * Whether a spot of the menu has its page of options - a right-click on
-     * it -, {@code viewpoints.options.enabled}; if not, a right-click shares
-     * it and a click with shift deletes it, as before there was the page.
-     */
-    public boolean isSpotOptionsEnabled() {
-        return isViewpointsEnabled() && spotOptionsEnabled;
-    }
-
-    /** Whether the owner may rename a spot on its page of options, {@code viewpoints.options.rename}. */
-    public boolean isSpotOptionRename() {
-        return spotOptionRename;
-    }
-
-    /** Whether the owner may give a spot another icon there, {@code viewpoints.options.icon}. */
-    public boolean isSpotOptionIcon() {
-        return spotOptionIcon;
-    }
-
-    /** Whether the owner may share a spot there, or make it public, {@code viewpoints.options.share}. */
-    public boolean isSpotOptionShare() {
-        return spotOptionShare && isViewpointsSharing();
-    }
-
-    /** Whether the owner may delete a spot there, {@code viewpoints.options.delete}. */
-    public boolean isSpotOptionDelete() {
-        return spotOptionDelete;
-    }
-
-    /**
-     * Whether the owner may move a spot there, to where his camera is,
-     * {@code viewpoints.options.move} - off unless switched on.
-     */
-    public boolean isSpotOptionMove() {
-        return spotOptionMove;
-    }
-
-    /**
-     * How close, in blocks, a player out of camera mode has to be to a spot
-     * to jump there, which starts camera mode for him; 0 while only who is in
-     * camera mode may jump.
-     */
-    public double getViewpointsStartDistance() {
-        return viewpointsStartDistance;
-    }
-
-    /**
-     * How long, in minutes, the same player at the same spot does not count
-     * as a view again; 0 while every jump counts.
-     */
-    public int getViewsCooldownMinutes() {
-        return viewsCooldownMinutes;
-    }
-
-    /** Whether a camera player sees the ores of caves as stone, {@code hide-ores.enabled}. */
-    public boolean isHideOres() {
-        return hideOres && !oreCovers.isEmpty();
-    }
-
-    /** What each ore looks like for a camera player, {@code hide-ores.blocks}; not to be changed. */
-    public Map<Material, BlockData> getOreCovers() {
-        return Collections.unmodifiableMap(oreCovers);
-    }
-
-    /**
-     * The most sky light the open side of an ore may have for it to count
-     * as one of a cave, {@code hide-ores.max-sky-light}: 0 out of the box,
-     * the dark of a cave; at 15 the sky does not matter at all.
-     */
-    public int getOreMaxSkyLight() {
-        return oreMaxSkyLight;
-    }
-
-    /**
-     * The height of the highest ore that is hidden, {@code hide-ores.max-y};
-     * {@link Integer#MAX_VALUE} while every height is.
-     */
-    public int getOreMaxY() {
-        return oreMaxY;
-    }
-
-    /**
-     * The biomes whose ores alone are hidden, {@code hide-ores.biomes}, under
-     * {@code hide-ores.where: biomes}; {@code null} under {@code caves}, where
-     * the ores of every cave are. Not to be changed.
-     */
-    public Set<NamespacedKey> getOreBiomes() {
-        return oreBiomesOnly ? Collections.unmodifiableSet(oreBiomes) : null;
-    }
-
-    /**
-     * Whether the public spots go on the web maps of the server,
-     * {@code web-map.enabled}: only with sharing, which public spots need.
-     */
-    public boolean isWebMapEnabled() {
-        return webMapEnabled && isViewpointsSharing();
-    }
-
-    /** Whether the public spots go on BlueMap, while it is there, {@code web-map.bluemap}. */
-    public boolean isWebMapBlueMap() {
-        return webMapBlueMap;
-    }
-
-    /** Whether the public spots go on Dynmap, while it is there, {@code web-map.dynmap}. */
-    public boolean isWebMapDynmap() {
-        return webMapDynmap;
-    }
-
-    /** Whether the public spots go on squaremap, while it is there, {@code web-map.squaremap}. */
-    public boolean isWebMapSquaremap() {
-        return webMapSquaremap;
-    }
-
-    /** Whether the layer of the spots starts switched off on the page of the map, {@code web-map.hidden}. */
-    public boolean isWebMapHidden() {
-        return webMapHidden;
-    }
-
-    /** How many likes a public spot needs at least to get onto the map, {@code web-map.min-likes}. */
-    public int getWebMapMinLikes() {
-        return webMapMinLikes;
-    }
-
-    /**
-     * How many views a public spot needs at least to get onto the map,
-     * {@code web-map.min-views}: jumps to it, as the menu counts them.
-     */
-    public int getWebMapMinViews() {
-        return webMapMinViews;
-    }
-
-    /**
-     * The address of a spot on the web map, {@code web-map.link}, with
-     * {@code {world}}, {@code {x}}, {@code {y}} and {@code {z}} still in it;
-     * empty while there is none.
-     */
-    public String getWebMapLink() {
-        return webMapLink;
-    }
-
-    public boolean isResumeEnabled() {
-        return resumeEnabled;
-    }
-
-    public StorageMode getResumeStorage() {
-        return resumeStorage;
-    }
-
-    /** Whether {@code /cam resume} shows the time of day of the last flight again, while {@code cam-time} is on. */
-    public boolean isResumeTime() {
-        return resumeTime && camTimeEnabled;
-    }
-
-    /** Whether {@code /cam resume} shows the weather of the last flight again, while {@code cam-weather} is on. */
-    public boolean isResumeWeather() {
-        return resumeWeather && camWeatherEnabled;
-    }
-
-    /**
-     * Whether {@code /cam resume} gives the night vision of the last flight
-     * again, while {@code night-vision.player-choice} lets anybody have one of
-     * his own - as a spot gives its night vision.
-     */
-    public boolean isResumeNightVision() {
-        return resumeNightVision && nightVisionPlayerChoice;
-    }
-
-    // ------------------------------------------- player-settings, anti-scouting, menu
+    // -------------------- player-settings, anti-scouting, cam-time, cam-weather
 
     public StorageMode getPlayerSettingsStorage() {
         return playerSettingsStorage;
@@ -2495,63 +641,18 @@ public final class CamSettings {
         return antiScoutingFrom;
     }
 
-    public MenuAccess getMenuAccess() {
-        return menuAccess;
-    }
 
-    public MenuAccess getAdminAccess() {
-        return adminAccess;
-    }
 
-    /** How many days, hours or minutes a click with shift adds to a ban in the menu or takes away. */
-    public int getBanShiftStep() {
-        return banShiftStep;
-    }
 
-    /** Whether the pages of the menu that are open are drawn anew by themselves, as things change. */
-    public boolean isMenuLiveUpdate() {
-        return menuLiveUpdate;
-    }
 
-    /** What a button of the main page of the menu shows. */
-    public MenuIcon getMenuIcon(MenuButton button) {
-        return menuIcons.get(button);
-    }
 
-    /** Where a button of the main page of the menu stands, 0 being the top left. */
-    public int getMenuSlot(MenuButton button) {
-        return menuSlots.get(button);
-    }
 
-    /** What a button of the admin page of the menu shows. */
-    public MenuIcon getAdminIcon(AdminButton button) {
-        return adminIcons.get(button);
-    }
 
-    /** Where a button of the admin page of the menu stands. */
-    public int getAdminSlot(AdminButton button) {
-        return adminSlots.get(button);
-    }
 
-    public boolean isPhotoModeEnabled() {
-        return photoModeEnabled;
-    }
 
-    public boolean photoHidesPlayers() {
-        return photoHidePlayers;
-    }
 
-    public boolean photoHidesBodies() {
-        return photoHideBodies;
-    }
 
-    public boolean photoHidesMobs() {
-        return photoHideMobs;
-    }
 
-    public boolean photoHidesItems() {
-        return photoHideItems;
-    }
 
     public boolean isCamTimeEnabled() {
         return camTimeEnabled;
@@ -2561,7 +662,7 @@ public final class CamSettings {
         return camWeatherEnabled;
     }
 
-    // ------------------------------------------------------ start-delay, cam-trail
+    // -------------------------------------------------------------- start-delay
 
     public boolean isStartDelayEnabled() {
         return startDelayEnabled;
@@ -2571,39 +672,15 @@ public final class CamSettings {
         return startDelaySeconds;
     }
 
-    public boolean isTrailEnabled() {
-        return trailEnabled;
-    }
 
-    public TrailShowMode getTrailShowMode() {
-        return trailShowMode;
-    }
 
-    public int getTrailShowSeconds() {
-        return trailShowSeconds;
-    }
 
-    public int getTrailShowMinBlocks() {
-        return trailShowMinBlocks;
-    }
 
-    public int getTrailShowMinSeconds() {
-        return trailShowMinSeconds;
-    }
 
-    public int getTrailShowMaxBlocks() {
-        return trailShowMaxBlocks;
-    }
 
-    public int getTrailShowMaxSeconds() {
-        return trailShowMaxSeconds;
-    }
 
-    public int getTrailFlights() {
-        return trailFlights;
-    }
 
-    // ----------------------------------------------------- end-warning, body-alarm
+    // -------------------------------------------------------------- end-warning
 
     public boolean isEndWarningEnabled() {
         return endWarningEnabled;
@@ -2614,28 +691,11 @@ public final class CamSettings {
         return endWarningSeconds;
     }
 
-    /**
-     * Whether a mob after the body sets off the alarm. Only where a mob can
-     * be after it at all: in the mode {@code false} of {@code body.mob-target}
-     * none is.
-     */
-    public boolean alarmsForMobs() {
-        return bodyAlarmMobs && mobTargetMode.attractsMobs();
-    }
 
-    public boolean alarmsForPlayers() {
-        return bodyAlarmPlayers && bodyAlarmPlayerRadius > 0.0;
-    }
 
-    public double getBodyAlarmPlayerRadius() {
-        return bodyAlarmPlayerRadius;
-    }
 
-    public int getBodyAlarmCooldown() {
-        return bodyAlarmCooldown;
-    }
 
-    // ------------------------------------------------------------------- nudge
+    // -------------------------------------------------- nudge, crash-protection
 
     public boolean isNudgeEnabled() {
         return nudgeEnabled;
@@ -2649,87 +709,13 @@ public final class CamSettings {
         return crashProtectionEnabled;
     }
 
-    // --------------------------------------------------- time limit and cooldown
-
-    /** Whether {@code flight-limit} is {@code time-limit}. */
-    public boolean isTimeLimitEnabled() {
-        return flightLimit == FlightLimit.TIME_LIMIT;
-    }
-
-    public boolean isCooldownsEnabled() {
-        return cooldownsEnabled;
-    }
-
-    public int getDurationSeconds() {
-        return durationSeconds;
-    }
-
-    public int getCooldownSeconds() {
-        return cooldownSeconds;
-    }
-
-    public boolean showsBossbar() {
-        return showBossbar;
-    }
-
-    public BarColor getBossbarColor() {
-        return bossbarColor;
-    }
-
-    public boolean showsCooldownBossbar() {
-        return cooldownBossbar;
-    }
-
-    public BarStyle getBossbarStyle() {
-        return bossbarStyle;
-    }
-
-    public StorageMode getCooldownStorage() {
-        return cooldownStorage;
-    }
-
-    // --------------------------------------------------------------- cam-safety
-
-    public boolean isCamSafetyEnabled() {
-        return camSafetyEnabled;
-    }
-
-    public int getCamSafetyDelay() {
-        return camSafetyDelay;
-    }
-
-    public boolean waitsAfterHittingPlayers() {
-        return camSafetyAfterPlayers;
-    }
-
-    public boolean waitsAfterHittingMobs() {
-        return camSafetyAfterMobs;
-    }
-
-    public boolean waitsAfterHittingFriendly() {
-        return camSafetyAfterFriendly;
-    }
-
-    /**
-     * Whether another player close by keeps camera mode from starting: the
-     * safety switched on, {@code nearby-players} as well, and a radius anybody
-     * can stand inside of.
-     */
-    public boolean locksNearPlayers() {
-        return camSafetyEnabled && camSafetyNearbyPlayers && camSafetyNearbyRadius > 0.0;
-    }
-
-    public double getCamSafetyNearbyRadius() {
-        return camSafetyNearbyRadius;
-    }
-
-    // --------------------------------------------------------------- exit-key
+    // ----------------------------------------------------------------- exit-key
 
     public boolean isExitKeyEnabled() {
         return exitKeyEnabled;
     }
 
-    // ------------------------------------------------------- exit-click-guard
+    // --------------------------------------------------------- exit-click-guard
 
     public boolean isExitClickGuardEnabled() {
         return exitClickGuardEnabled;
@@ -2739,151 +725,13 @@ public final class CamSettings {
         return exitClickGuardMillis;
     }
 
-    // ---------------------------------------------------------------- bedrock
+    // ------------------------------------------------------------------ cam-log
 
-    public BedrockScope getBedrockScope() {
-        return bedrockScope;
-    }
 
-    public String getBedrockNamePrefix() {
-        return bedrockNamePrefix;
-    }
 
-    public BedrockMenu getBedrockMenu() {
-        return bedrockMenu;
-    }
 
-    public boolean isBedrockInvitationForms() {
-        return bedrockInvitationForms;
-    }
 
-    public boolean isBedrockChatCommands() {
-        return bedrockChatCommands;
-    }
 
-    /**
-     * Whether the menu shows Bedrock the maps 26.3 brings as themselves,
-     * {@code bedrock.map-icons}; if not, as an empty map, like the filled
-     * map, whose name Bedrock does not show.
-     */
-    public boolean isBedrockMapIcons() {
-        return bedrockMapIcons;
-    }
-
-    public boolean isBedrockFollowTurn() {
-        return bedrockFollowTurn;
-    }
-
-    /** The particle of the outline for Bedrock players, or {@code null} for none. */
-    public Particle getBedrockGlowParticle() {
-        return bedrockGlowParticle;
-    }
-
-    // ---------------------------------------------------------------- battery
-
-    /** Whether {@code flight-limit} is {@code battery}. */
-    public boolean isBatteryEnabled() {
-        return flightLimit == FlightLimit.BATTERY;
-    }
-
-    public int getBatteryCapacity() {
-        return batteryCapacity;
-    }
-
-    public double getBatteryRecharge() {
-        return batteryRecharge;
-    }
-
-    public int getBatteryMinStart() {
-        return batteryMinStart;
-    }
-
-    public boolean batteryRechargesOffline() {
-        return batteryRechargeOffline;
-    }
-
-    public boolean showsBatteryBossbar() {
-        return batteryBossbar;
-    }
-
-    public boolean showsBatteryBossbarCharging() {
-        return batteryBossbarCharging;
-    }
-
-    public BarColor getBatteryBossbarColor() {
-        return batteryBossbarColor;
-    }
-
-    public BarStyle getBatteryBossbarStyle() {
-        return batteryBossbarStyle;
-    }
-
-    public StorageMode getBatteryStorage() {
-        return batteryStorage;
-    }
-
-    // ------------------------------------------------------------- start-cost
-
-    /** Whether a start costs anything at all: switched on, and something to pay. */
-    public boolean hasStartCost() {
-        return startCostEnabled && (startCostXp > 0 || startCostMoney > 0.0 || !startCostItems.isEmpty());
-    }
-
-    /** The experience a start costs, in points or levels as {@link #costsXpPoints()} says. */
-    public int getStartCostXp() {
-        return startCostXp;
-    }
-
-    public boolean costsXpPoints() {
-        return startCostXpPoints;
-    }
-
-    public double getStartCostMoney() {
-        return startCostMoney;
-    }
-
-    /** The items a start costs and how many of each, not to be changed. */
-    public Map<Material, Integer> getStartCostItems() {
-        return Collections.unmodifiableMap(startCostItems);
-    }
-
-    // ---------------------------------------------------- statistics, cam-log
-
-    public boolean isStatsEnabled() {
-        return statsEnabled;
-    }
-
-    public ListAccess getStatsViewOthers() {
-        return statsViewOthers;
-    }
-
-    /** How long a camera mode has to run to be counted, in seconds; 0 counts every one. */
-    public int getStatsMinSeconds() {
-        return statsMinSeconds;
-    }
-
-    /**
-     * Whether the way the tour of {@code /cam follow} takes the camera of a
-     * guest along counts for his statistics: for the way flown and how far
-     * from the body. Otherwise only what he flies himself.
-     */
-    public boolean isStatsCountFollowDistance() {
-        return statsCountFollowDistance;
-    }
-
-    /**
-     * Whether time in camera mode without doing anything is left out of the
-     * statistics once it has gone on for {@link #getStatsAfkMillis()}:
-     * out of the time, the average and the longest flight.
-     */
-    public boolean isStatsSkipAfkTime() {
-        return statsSkipAfkTime;
-    }
-
-    /** After how long without doing anything time stops counting for the statistics, in milliseconds. */
-    public long getStatsAfkMillis() {
-        return statsAfkSeconds * 1000L;
-    }
 
     public boolean isCamLogEnabled() {
         return camLogEnabled;
@@ -2897,7 +745,7 @@ public final class CamSettings {
         return camLogKeepDays;
     }
 
-    // --------------------------------------------------------- cam-area, portals
+    // ----------------------------------------- cam-area, portals and the rest
 
     public CamAreaRules getCamAreaRules() {
         return camAreaRules;
@@ -2950,37 +798,120 @@ public final class CamSettings {
         return statisticsBlocked;
     }
 
-    // ----------------------------------------------------------- mirror-damage
+    // ----------------------------------- the sections with a class of their own
 
-    public DamageMode getDamageMode() {
-        return damageMode;
+    /** The section {@code camera-mode}, as last read. */
+    public CameraModeSettings cameraMode() {
+        return cameraMode;
     }
 
-    public ArmorDamageMode getArmorDamageMode() {
-        return armorDamageMode;
+    /** The section {@code signal}, as last read. */
+    public SignalSettings signal() {
+        return signal;
     }
 
-    public int getCustomArmorDamage() {
-        return customArmorDamage;
+    /** The section {@code body}, as last read. */
+    public BodySettings body() {
+        return body;
     }
 
-    public boolean respectsUnbreaking() {
-        return respectUnbreaking;
+    /** The section {@code camera-particles}, as last read. */
+    public ParticleSettings particles() {
+        return particles;
     }
 
-    public boolean damageCountsArmor() {
-        return damageCountsArmor;
+    /** The section {@code action-bar}, as last read. */
+    public ActionBarSettings actionBar() {
+        return actionBar;
     }
 
-    public boolean isMirrorKnockback() {
-        return mirrorKnockback;
+    /** The section {@code flight-speed}, as last read. */
+    public FlightSpeedSettings flightSpeed() {
+        return flightSpeed;
     }
 
-    public boolean isMirrorDebug() {
-        return mirrorDebug;
+    /** The section {@code sounds}, as last read. */
+    public SoundSettings sounds() {
+        return sounds;
     }
 
-    public double getCustomDamageHearts() {
-        return customDamageHearts;
+    /** The section {@code viewpoints}, as last read. */
+    public SpotSettings spots() {
+        return spots;
+    }
+
+    /** The section {@code follow}, as last read. */
+    public FollowSettings follow() {
+        return follow;
+    }
+
+    /** The section {@code hide-ores}, as last read. */
+    public OreSettings hideOres() {
+        return hideOres;
+    }
+
+    /** The section {@code web-map}, as last read. */
+    public WebMapSettings webMap() {
+        return webMap;
+    }
+
+    /** The section {@code resume-command}, as last read. */
+    public ResumeSettings resume() {
+        return resume;
+    }
+
+    /** The section {@code menu}, as last read. */
+    public MenuSettings menu() {
+        return menu;
+    }
+
+    /** The section {@code photo-mode}, as last read. */
+    public PhotoSettings photo() {
+        return photo;
+    }
+
+    /** The section {@code cam-trail}, as last read. */
+    public TrailSettings trail() {
+        return trail;
+    }
+
+    /** The section {@code body-alarm}, as last read. */
+    public BodyAlarmSettings bodyAlarm() {
+        return bodyAlarm;
+    }
+
+    /** The section {@code time-limit}, as last read. */
+    public TimeLimitSettings timeLimit() {
+        return timeLimit;
+    }
+
+    /** The section {@code cam-safety}, as last read. */
+    public CamSafetySettings camSafety() {
+        return camSafety;
+    }
+
+    /** The section {@code bedrock}, as last read. */
+    public BedrockSettings bedrock() {
+        return bedrock;
+    }
+
+    /** The section {@code battery}, as last read. */
+    public BatterySettings battery() {
+        return battery;
+    }
+
+    /** The section {@code start-cost}, as last read. */
+    public StartCostSettings startCost() {
+        return startCost;
+    }
+
+    /** The section {@code statistics}, as last read. */
+    public StatsSettings statistics() {
+        return statistics;
+    }
+
+    /** The section {@code mirror-damage}, as last read. */
+    public MirrorDamageSettings mirrorDamage() {
+        return mirrorDamage;
     }
 }
