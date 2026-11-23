@@ -34,6 +34,7 @@ Alles, was es herunterlaedt, liegt unter --workdir (Standard:
 
 import argparse
 import contextlib
+import difflib
 import gzip
 import hashlib
 import io
@@ -7445,23 +7446,31 @@ def flugspur_checks(env, bot):
         FIND.test("show-mode: dynamic - ist show-max-seconds kleiner als show-min-seconds, gilt show-min-seconds",
                   *nach_strecke(0, 8, 10, 3))
 
-        # Eine aeltere Datei hat kein show-mode, nur show-seconds.
+        # Eine aeltere Datei hat kein show-mode, nur show-seconds - und keine
+        # config-version, die kam spaeter. Der Config-Updater traegt show-mode
+        # mit fixed ein, so wie die Datei bisher gelesen wurde.
         datei = env.server / "plugins" / "CamFly" / "config.yml"
         vorher_text = datei.read_text(encoding="utf-8")
         alt, n = re.subn(r"(?m)^  show-mode:.*\n", "", vorher_text)
         alt, m = re.subn(r"(?m)^(  show-seconds:\s*).*$", r"\g<1>7", alt)
+        alt, v = re.subn(r"(?m)^config-version:.*\n", "", alt)
         datei.write_text(alt, encoding="utf-8")
         vorher = len(server_log(env))
         neu_laden(env)
         log = strip_colors(server_log(env)[vorher:])
+        ergaenzt = datei.read_text(encoding="utf-8")
         z = befehl(bot, f"/cam trail {BOT_NAME}")
         befehl(bot, "/cam trail", warten=0.5)
         datei.write_text(vorher_text, encoding="utf-8")
         set_options(env, [("show-mode", "fixed", "cam-trail"), ("show-seconds", "4", "cam-trail")])
-        FIND.test("Eine aeltere config.yml ohne show-mode, mit show-seconds: 7, zeigt jede Linie 7 Sekunden, "
-                  "ohne Warnung",
-                  n == 1 and m == 1 and gesagt(z, gezeigt_fuer(7)) and "Unknown setting" not in log
-                  and "show-mode" not in log, f"{n} {m} / {zeige(z)} / {log.strip()[-200:]}")
+        FIND.test("Eine aeltere config.yml ohne show-mode und config-version, mit show-seconds: 7, zeigt jede "
+                  "Linie 7 Sekunden, ohne Warnung",
+                  n == 1 and m == 1 and v == 1 and gesagt(z, gezeigt_fuer(7)) and "Unknown setting" not in log,
+                  f"{n} {m} {v} / {zeige(z)} / {log.strip()[-200:]}")
+        FIND.test("... und bekommt show-mode: fixed eingetragen, dort, wo es in der mitgelieferten steht",
+                  re.search(r"(?m)^  flights: \S+\n  # .*\n  show-mode: fixed\n", ergaenzt) is not None
+                  and "lacked 2 entries" in log and "cam-trail.show-mode" in log,
+                  log.strip()[-300:])
 
         # show-mode: forever - laenger als die 4 Sekunden von eben, und weg
         # erst mit /cam trail.
@@ -9584,6 +9593,10 @@ def fuehrung_checks(env, bot):
                       "auf eine unbekannte Einstellung",
                       umbenannt == 1 and gesetzt == 1 and gesagt(zeilen, r"/cam follow is switched off")
                       and not gesagt(neu_geladen, r"Unknown setting"), f"{zeige(neu_geladen)} / {zeige(zeilen)}")
+            nachher = datei.read_text(encoding="utf-8")
+            FIND.test("... und tour: heisst in der Datei danach follow:, mit enabled: false, alles andere wie vorher",
+                      nachher == replace_option(text, "enabled", "false", "follow")[0]
+                      and gesagt(neu_geladen, r"tour is called follow now"), zeige(neu_geladen))
         finally:
             datei.write_text(text, encoding="utf-8")
             console(env, "cam reload", pause=2)
@@ -14181,6 +14194,124 @@ def language_checks(env, bot):
         sprachdatei.unlink(missing_ok=True)
         config.write_text(config_vorher, encoding="utf-8")
         console(env, "cam reload", pause=2)
+
+
+def konfig_ergaenzen_checks(env, bot):
+    """Was config.yml und lang/en.yml fehlt, traegt das Plugin beim Reload
+    ein (config/ConfigUpdater).
+
+    Der config.yml fehlen drei Dinge: eine Zeile, deren Kommentar stehen
+    blieb, ein Schluessel mit seinem Kommentar und ein ganzer Abschnitt mit
+    seinem. Dazu hat sie zwei eigene Aenderungen, einen Kommentar und einen
+    Wert. Nach dem Reload muss sie Zeichen fuer Zeichen die sein, die sie
+    vorher war, mit den eigenen Aenderungen - die fehlenden Teile so, wie die
+    mitgelieferte sie hat. Die Datei davor liegt als config.yml.bak daneben,
+    und Konsole und Chat sagen, was dazukam. Ebenso ein Text in lang/en.yml.
+
+    Eine Datei, die nicht als UTF-8 gespeichert ist, bleibt Byte fuer Byte,
+    wie sie ist - sonst waeren ihre Umlaute weg -, mit einer Meldung. Eine
+    eigene Sprachdatei mit nur einem Text bleibt auch so: Was ihr fehlt, kommt
+    absichtlich aus der englischen.
+    """
+    data_dir = env.server / "plugins" / "CamFly"
+    config = data_dir / "config.yml"
+    sprache = data_dir / SPRACHDATEI
+    config_bak = data_dir / "config.yml.bak"
+    sprache_bak = data_dir / (SPRACHDATEI + ".bak")
+    eigene_sprache = data_dir / "lang" / f"{TESTSPRACHE}.yml"
+    config_vorher = config.read_text(encoding="utf-8")
+    sprache_vorher = sprache.read_text(encoding="utf-8")
+    mitgeliefert = quelle_config(env)
+    afk_abschnitt = r"(?m)^# Der Cam-Modus endet, wenn der Spieler eine Weile[^\n]*\n(?:#[^\n]*\n)*afk-end:\n(?:  [^\n]*\n)+"
+
+    def wie_mitgeliefert(text):
+        """Die Teile, die fehlen werden, so, wie die mitgelieferte sie hat:
+        Die Abschnitte davor koennen einen Wert anders gelassen haben."""
+        for schluessel in ("max-distance-enabled", "distance-warning-cooldown"):
+            zeile = re.search(rf"(?m)^  {schluessel}: .*$", mitgeliefert).group(0)
+            text = re.sub(rf"(?m)^  {schluessel}: .*$", lambda _: zeile, text)
+        block = re.search(afk_abschnitt, mitgeliefert).group(0)
+        return re.sub(afk_abschnitt, lambda _: block, text)
+
+    def laden():
+        stand = log_stand(env)
+        zeilen = befehl(bot, "/cam reload", warten=2.5)
+        return zeilen, strip_colors(log_seit(env, stand))
+
+    try:
+        config_bak.unlink(missing_ok=True)
+        sprache_bak.unlink(missing_ok=True)
+        eigen = config_vorher.replace("language: en\n", "# mein eigener Kommentar\nlanguage: en\n", 1)
+        eigen, n1 = replace_option(eigen, "border-radius", "7", "camera-mode")
+        gekuerzt, n2 = re.subn(r"(?m)^  max-distance-enabled: .*\n", "", eigen)
+        gekuerzt, n3 = re.subn(r"(?m)^  # Sekunden zwischen zwei Warnungen an der Grenze.*\n  distance-warning-cooldown: .*\n\n",
+                               "", gekuerzt)
+        gekuerzt, n4 = re.subn(afk_abschnitt, "", gekuerzt)
+        FIND.test("Testdatei: drei Stellen entfernt, zwei eigene Aenderungen",
+                  "# mein eigener Kommentar" in eigen and (n1, n2, n3, n4) == (1, 1, 1, 1), f"{n1} {n2} {n3} {n4}")
+        config.write_text(gekuerzt, encoding="utf-8")
+        text_vorher = re.search(r"(?m)^  # \{time\} is afk-end\.seconds\.\n  afk-ended: .*\n", sprache_vorher)
+        sprache.write_text(sprache_vorher.replace(text_vorher.group(0), "", 1) if text_vorher else sprache_vorher,
+                           encoding="utf-8")
+
+        zeilen, log = laden()
+        nachher = config.read_text(encoding="utf-8")
+        FIND.test("config.yml: die drei Stellen sind wieder da, alles andere wie vorher, eigene Aenderungen auch",
+                  nachher == wie_mitgeliefert(eigen),
+                  "" if nachher == wie_mitgeliefert(eigen) else diff_kurz(wie_mitgeliefert(eigen), nachher))
+        FIND.test("config.yml: die Konsole nennt sie, den ganzen Abschnitt als einen",
+                  "config.yml lacked 3 entries, now added with their default values: "
+                  "camera-mode.max-distance-enabled, camera-mode.distance-warning-cooldown, afk-end." in log,
+                  log.strip()[-400:])
+        FIND.test("config.yml: die Datei davor liegt als config.yml.bak daneben",
+                  config_bak.is_file() and config_bak.read_text(encoding="utf-8") == gekuerzt, "")
+        FIND.test("config.yml: wer neu geladen hat, liest es im Chat",
+                  gesagt(zeilen, r"config\.yml lacked 3 entries") and gesagt(zeilen, r"CamFly reloaded"),
+                  zeige(zeilen))
+        FIND.test("config.yml: keine Warnung, der Reload geht durch",
+                  "Unknown setting" not in log and "invalid entr" not in log, log.strip()[-300:])
+        sprache_nachher = sprache.read_text(encoding="utf-8")
+        FIND.test("lang/en.yml: der fehlende Text ist wieder da, mit seinem Kommentar, an seiner Stelle",
+                  text_vorher is not None and sprache_nachher == sprache_vorher
+                  and "lang/en.yml lacked messages.afk-ended, now added with its default value." in log,
+                  log.strip()[-300:])
+        FIND.test("lang/en.yml: die Datei davor liegt als en.yml.bak daneben", sprache_bak.is_file(), "")
+        zeilen, log = laden()
+        FIND.test("Ein zweiter Reload aendert nichts mehr und sagt nichts",
+                  config.read_text(encoding="utf-8") == nachher and "lacked" not in log, log.strip()[-200:])
+
+        # --- Eine Datei, die nicht UTF-8 ist ---
+        latin = gekuerzt.encode("latin-1", errors="replace")
+        config.write_bytes(latin)
+        zeilen, log = laden()
+        FIND.test("Nicht als UTF-8 gespeichert: die Datei bleibt Byte fuer Byte, wie sie ist",
+                  config.read_bytes() == latin, "")
+        FIND.test("... und die Konsole sagt, warum",
+                  "config.yml lacks entries of this version of the plugin but was left as it is "
+                  "(it is not saved as UTF-8)" in log and gesagt(zeilen, r"CamFly reloaded"), log.strip()[-300:])
+
+        # --- Eine eigene Sprache mit einem Text ---
+        config.write_text(config_vorher, encoding="utf-8")
+        eigene = 'messages:\n  actionbar-on: "&aKamera an"\n'
+        eigene_sprache.write_text(eigene, encoding="utf-8")
+        set_option(env, "language", TESTSPRACHE)
+        FIND.test(f"lang/{TESTSPRACHE}.yml mit einem Text bleibt, wie sie ist",
+                  eigene_sprache.read_text(encoding="utf-8") == eigene
+                  and not (data_dir / "lang" / f"{TESTSPRACHE}.yml.bak").exists(), "")
+    finally:
+        eigene_sprache.unlink(missing_ok=True)
+        for bak in (config_bak, sprache_bak, data_dir / "lang" / f"{TESTSPRACHE}.yml.bak"):
+            bak.unlink(missing_ok=True)
+        config.write_text(config_vorher, encoding="utf-8")
+        sprache.write_text(sprache_vorher, encoding="utf-8")
+        console(env, "cam reload", pause=2)
+
+
+def diff_kurz(soll, ist, zeilen=12):
+    """Die ersten Zeilen, in denen zwei Texte auseinandergehen, fuer die Ausgabe."""
+    unterschied = [z for z in difflib.unified_diff(soll.splitlines(), ist.splitlines(), "soll", "ist", n=0, lineterm="")
+                   if not z.startswith(("---", "+++"))]
+    return " | ".join(unterschied[:zeilen])
 
 
 # ---------------------------------------------------------------------------
@@ -22704,6 +22835,8 @@ ABSCHNITTE = [
     Abschnitt("meldungen", message_switch_checks, "display/CamActionBar config/Messages"),
     Abschnitt("sprache", language_checks,
               "config/Messages config/ConfigFile config/ConfigReader config/ConfigIssue display/CamActionBar"),
+    Abschnitt("konfig_ergaenzen", konfig_ergaenzen_checks,
+              "config/ConfigUpdater config/YamlOutline config/ConfigMigrations config/ConfigFile"),
     Abschnitt("liste", liste_checks, "list"),
     Abschnitt("aktionsleiste", aktionsleiste_checks, "display/CamActionBar display/ActionBarDisplay"),
     Abschnitt("tempo", tempo_checks, "speed"),

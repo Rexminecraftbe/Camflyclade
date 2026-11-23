@@ -13,9 +13,18 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.logging.Level;
@@ -40,6 +49,13 @@ public final class ConfigFile {
 
     /** The ending of a language file, after the name of its language. */
     private static final String LANGUAGE_FILE_ENDING = ".yml";
+
+    /**
+     * What is put behind the name of a file to keep it the way it was before
+     * {@link ConfigUpdater} completed it. Not {@code .yml}: a copy of a
+     * language file would otherwise count as a language of its own.
+     */
+    private static final String BACKUP_ENDING = ".bak";
 
     /**
      * How much of the reason a broken config file gives is passed on. The rest
@@ -131,8 +147,9 @@ public final class ConfigFile {
         String broken = CONFIG_FILE;
         Exception problem = load(loaded, new File(plugin.getDataFolder(), CONFIG_FILE));
         YamlConfiguration language = null;
+        String languagePath = null;
         if (problem == null) {
-            String languagePath = languagePath(languageOf(loaded));
+            languagePath = languagePath(languageOf(loaded));
             File languageFile = new File(plugin.getDataFolder(), languagePath);
             // Without a file the built-in English one is used, see Messages#use.
             if (languageFile.isFile()) {
@@ -144,6 +161,16 @@ public final class ConfigFile {
         if (problem != null && config != null) {
             reportBrokenConfig("config-broken", broken, problem, initiator);
             return false;
+        }
+        if (problem == null) {
+            loaded = complete(CONFIG_FILE, CONFIG_FILE, loaded, ConfigMigrations.CONFIG,
+                    CamSettings.UNLISTED_KEYS, initiator);
+            // Only the English file, which the plugin writes whole: another
+            // language may well be a file with a few texts on purpose, the rest
+            // coming from the English one - filled up, it would be that no more.
+            if (language != null && languagePath.equals(languagePath(DEFAULT_LANGUAGE))) {
+                language = complete(languagePath, languagePath, language, List.of(), Set.of(), initiator);
+            }
         }
         InputStream defaults = plugin.getResource(CONFIG_FILE);
         if (defaults != null) {
@@ -157,6 +184,118 @@ public final class ConfigFile {
         }
         messages.use(language);
         return true;
+    }
+
+    /**
+     * Writes into a file what the same file in the jar has and it lacks, see
+     * {@link ConfigUpdater}, and says so. The file as it was stays next to it,
+     * with {@link #BACKUP_ENDING} behind its name.
+     *
+     * <p>Run each time the files are read, at the start and with
+     * {@code /cam reload}: a new version of the plugin brings its new settings
+     * into the file at the first start, and a key that was deleted by mistake
+     * comes back with the next reload.</p>
+     *
+     * @param path       the file, the way it stands below the data folder
+     * @param builtIn    the file in the jar to complete it from
+     * @param read       the file as it was just read
+     * @param migrations changes for files of older versions, see {@link ConfigMigrations}
+     * @param ownKeys    sections whose keys the file chooses itself
+     * @return the file as it is now: the one read, or the completed one
+     */
+    private YamlConfiguration complete(String path, String builtIn, YamlConfiguration read,
+                                       List<ConfigUpdater.Migration> migrations, Set<String> ownKeys,
+                                       CommandSender initiator) {
+        Path file = plugin.getDataFolder().toPath().resolve(path);
+        String text;
+        String model;
+        try (InputStream stream = plugin.getResource(builtIn)) {
+            if (stream == null || !Files.isRegularFile(file)) {
+                return read;
+            }
+            model = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+            byte[] bytes = Files.readAllBytes(file);
+            try {
+                // Strictly: Bukkit reads a file in another encoding all the
+                // same, with a question mark for each umlaut it cannot make
+                // sense of. Written back, those would be lost for good.
+                text = StandardCharsets.UTF_8.newDecoder()
+                        .onMalformedInput(CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(CodingErrorAction.REPORT)
+                        .decode(ByteBuffer.wrap(bytes)).toString();
+            } catch (CharacterCodingException ex) {
+                ConfigUpdater.Result lacking = ConfigUpdater.update(new String(bytes, StandardCharsets.UTF_8), model,
+                        ownKeys, migrations);
+                if (lacking.changed() || lacking.failure() != null) {
+                    reportUpdate("config-update-failed", path, initiator, "{error}",
+                            messages.configMessage("config-update-encoding"));
+                }
+                return read;
+            }
+        } catch (IOException ex) {
+            return read;
+        }
+        ConfigUpdater.Result result = ConfigUpdater.update(text, model, ownKeys, migrations);
+        if (result.failure() != null) {
+            String reason = result.failure().equals(ConfigUpdater.Result.LAYOUT)
+                    ? messages.configMessage("config-update-layout")
+                    : messages.configMessage("config-update-check").replace("{path}", result.failure());
+            reportUpdate("config-update-failed", path, initiator, "{error}", reason);
+            return read;
+        }
+        if (!result.changed()) {
+            return read;
+        }
+        YamlConfiguration updated = new YamlConfiguration();
+        Path backup = file.resolveSibling(file.getFileName() + BACKUP_ENDING);
+        Path temp = file.resolveSibling(file.getFileName() + ".tmp");
+        try {
+            updated.loadFromString(result.text());
+            Files.copy(file, backup, StandardCopyOption.REPLACE_EXISTING);
+            Files.writeString(temp, result.text(), StandardCharsets.UTF_8);
+            try {
+                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException ex) {
+                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException | InvalidConfigurationException ex) {
+            reportUpdate("config-update-failed", path, initiator, "{error}",
+                    messages.configMessage("config-update-write").replace("{error}", String.valueOf(ex.getMessage())));
+            return read;
+        }
+        String backupName = path + BACKUP_ENDING;
+        for (Map.Entry<String, String> rename : result.renamed().entrySet()) {
+            reportUpdate("config-renamed", path, initiator, "{old}", rename.getKey(), "{new}", rename.getValue(),
+                    "{backup}", backupName);
+        }
+        Collection<String> added = result.added();
+        if (added.size() == 1) {
+            reportUpdate("config-updated-single", path, initiator, "{keys}", added.iterator().next(),
+                    "{backup}", backupName);
+        } else if (!added.isEmpty()) {
+            reportUpdate("config-updated", path, initiator, "{count}", String.valueOf(added.size()),
+                    "{keys}", String.join(", ", added), "{backup}", backupName);
+        }
+        return updated;
+    }
+
+    /**
+     * Says what {@link #complete} did: in the console, and after a reload in
+     * the chat of who started it, unless the switch {@code config-updated}
+     * is off.
+     *
+     * @param fills placeholder and value, one pair after the other; {@code {file}} is filled already
+     */
+    private void reportUpdate(String key, String file, CommandSender initiator, String... fills) {
+        String text = messages.configMessage(key).replace("{file}", file);
+        for (int i = 0; i + 1 < fills.length; i += 2) {
+            text = text.replace(fills[i], fills[i + 1]);
+        }
+        boolean failed = key.equals("config-update-failed");
+        log.log(failed ? Level.WARNING : Level.INFO, ChatColor.stripColor(text));
+        if (initiator instanceof Player && messages.isMessageEnabled("config-updated")) {
+            initiator.sendMessage(text);
+        }
     }
 
     /**

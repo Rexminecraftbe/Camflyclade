@@ -225,14 +225,14 @@ public final class CamSettings {
     private static final int MIN_TOUR_INVITATION_SECONDS = 5;
 
     /** The section of {@code /cam follow}. */
-    private static final String FOLLOW_SECTION = "follow";
+    static final String FOLLOW_SECTION = "follow";
 
     /**
      * What the section of {@code /cam follow} was called while it was
      * {@code /cam follow}: an older file is read as it was written, see
      * {@link ConfigReader#renamed}.
      */
-    private static final String OLD_FOLLOW_SECTION = "tour";
+    static final String OLD_FOLLOW_SECTION = "tour";
 
     /**
      * Keys that are read although the config file built into the jar leaves
