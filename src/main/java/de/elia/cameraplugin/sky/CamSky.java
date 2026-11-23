@@ -447,8 +447,8 @@ public final class CamSky {
         }
         following.add(guest.getUniqueId());
         boolean guideInCam = plugin.isInCameraMode(guide);
-        standIn(guest, settings.isTourGuideTime(), guideInCam ? shownTime.get(guide.getUniqueId()) : null,
-                settings.isTourGuideWeather(), guideInCam ? shownWeather.get(guide.getUniqueId()) : null);
+        standIn(guest, settings.follow().guideTime(), guideInCam ? shownTime.get(guide.getUniqueId()) : null,
+                settings.follow().guideWeather(), guideInCam ? shownWeather.get(guide.getUniqueId()) : null);
     }
 
     /** He is off the tour he followed: his own time and weather hold again, with what he picked on it. */

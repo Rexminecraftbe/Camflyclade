@@ -5,6 +5,8 @@ import de.elia.cameraplugin.body.MobTargetMode;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.SessionTask;
+import de.elia.cameraplugin.session.SessionTicker;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Creaking;
@@ -28,7 +30,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityEvent;
 import org.bukkit.event.entity.EntityTargetEvent;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.lang.reflect.Method;
 import java.util.HashMap;
@@ -84,16 +85,19 @@ public final class MobTargeting implements Listener {
     private static final double PIGLIN_FLEE_DISTANCE = 6.0;
 
     private final JavaPlugin plugin;
+    /** The tick of each camera mode, which the watching here runs on. */
+    private final SessionTicker sessions;
     private final CamSettings settings;
     private final CameraPlayers cameraPlayers;
-    private final Map<UUID, BukkitRunnable> mobTargetTasks = new HashMap<>();
+    private final Map<UUID, SessionTask> mobTargetTasks = new HashMap<>();
     /**
      * The mobs steered by their brain that are about to let go of their
      * target, by mob id, with whom they are handed when they do.
      */
     private final Map<UUID, LivingEntity> handOvers = new HashMap<>();
 
-    public MobTargeting(JavaPlugin plugin, CamSettings settings, CameraPlayers cameraPlayers) {
+    public MobTargeting(JavaPlugin plugin, SessionTicker sessions, CamSettings settings, CameraPlayers cameraPlayers) {
+        this.sessions = sessions;
         this.plugin = plugin;
         this.settings = settings;
         this.cameraPlayers = cameraPlayers;
@@ -121,7 +125,7 @@ public final class MobTargeting implements Listener {
      *                     {@link CameraData#getDamageTarget()}
      */
     public void turnMobsFromPlayer(Player player, LivingEntity damageTarget) {
-        boolean attracts = settings.getMobTargetMode().attractsMobs();
+        boolean attracts = settings.body().mobTargetMode().attractsMobs();
         for (Entity entity : player.getNearbyEntities(MAX_MOB_TARGET_RANGE, MAX_MOB_TARGET_RANGE, MAX_MOB_TARGET_RANGE)) {
             // Aggro away from the player: onto his body, or nowhere at all -
             // when the body is out of the reach of that mob, and in the mode
@@ -213,11 +217,11 @@ public final class MobTargeting implements Listener {
      *                     {@link CameraData#getDamageTarget()}
      */
     public void startMobTargeting(Player player, LivingEntity damageTarget) {
-        if (!settings.getMobTargetMode().attractsMobs() || searchRadius() <= 0.0) {
+        if (!settings.body().mobTargetMode().attractsMobs() || searchRadius() <= 0.0) {
             return;
         }
         stopMobTargeting(player);
-        BukkitRunnable task = new BukkitRunnable() {
+        SessionTask task = new SessionTask() {
             @Override
             public void run() {
                 if (!cameraPlayers.contains(player.getUniqueId()) || !player.isOnline()
@@ -229,12 +233,12 @@ public final class MobTargeting implements Listener {
                 sendMobsAfterBody(player, damageTarget);
             }
         };
-        task.runTaskTimer(plugin, 0L, MOB_TARGET_INTERVAL);
+        task.runTaskTimer(sessions, player, 0L, MOB_TARGET_INTERVAL);
         mobTargetTasks.put(player.getUniqueId(), task);
     }
 
     public void stopMobTargeting(Player player) {
-        BukkitRunnable task = mobTargetTasks.remove(player.getUniqueId());
+        SessionTask task = mobTargetTasks.remove(player.getUniqueId());
         if (task != null) {
             task.cancel();
         }
@@ -299,7 +303,8 @@ public final class MobTargeting implements Listener {
      * far as the mob with the longest reach and sorts the rest out mob by mob.
      */
     private double searchRadius() {
-        return settings.getMobTargetMode() == MobTargetMode.CUSTOM ? settings.getMobTargetRadius() : MAX_MOB_TARGET_RANGE;
+        return settings.body().mobTargetMode() == MobTargetMode.CUSTOM ? settings.body().mobTargetRadius()
+                : MAX_MOB_TARGET_RANGE;
     }
 
     /**
@@ -320,8 +325,9 @@ public final class MobTargeting implements Listener {
      * and nothing is handed over to it either.</p>
      */
     private double sightRangeFor(Mob mob, LivingEntity body) {
-        double range = settings.getMobTargetMode() == MobTargetMode.CUSTOM ? settings.getMobTargetRadius() : vanillaFollowRange(mob);
-        if (settings.isMobTargetHeads() && MobHeads.matches(body.getEquipment(), mob.getType())) {
+        double range = settings.body().mobTargetMode() == MobTargetMode.CUSTOM ? settings.body().mobTargetRadius()
+                : vanillaFollowRange(mob);
+        if (settings.body().mobTargetHeads() && MobHeads.matches(body.getEquipment(), mob.getType())) {
             range *= MOB_HEAD_SIGHT_FACTOR;
         }
         return range;
@@ -380,7 +386,7 @@ public final class MobTargeting implements Listener {
         if (!(event.getTarget() instanceof Player player)) {
             // In the mode false the body is nobody's target either, not even of
             // a mob that would go for a mannequin by itself.
-            if (!settings.getMobTargetMode().attractsMobs() && isActiveBody(event.getTarget())) {
+            if (!settings.body().mobTargetMode().attractsMobs() && isActiveBody(event.getTarget())) {
                 refuse(event);
             }
             return;
@@ -389,7 +395,7 @@ public final class MobTargeting implements Listener {
         if (data == null) {
             return;
         }
-        if (settings.getMobTargetMode().attractsMobs() && event.getEntity() instanceof Mob mob
+        if (settings.body().mobTargetMode().attractsMobs() && event.getEntity() instanceof Mob mob
                 && noticesBody(mob, data.getDamageTarget())) {
             event.setTarget(data.getDamageTarget());
             return;
@@ -436,7 +442,7 @@ public final class MobTargeting implements Listener {
             return;
         }
         if (!(event.getEntity() instanceof Mob mob) || mob instanceof Warden
-                || !settings.getMobTargetMode().attractsMobs()) {
+                || !settings.body().mobTargetMode().attractsMobs()) {
             return;
         }
         LivingEntity current = mob.getTarget();
@@ -535,7 +541,7 @@ public final class MobTargeting implements Listener {
      * @param increase how much angrier the warden is about to get
      */
     private boolean keepsAngerOff(Warden warden, Entity target, int increase) {
-        boolean attracts = settings.getMobTargetMode().attractsMobs();
+        boolean attracts = settings.body().mobTargetMode().attractsMobs();
         if (isActiveBody(target)) {
             return !attracts;
         }

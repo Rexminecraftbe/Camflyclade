@@ -180,9 +180,9 @@ public class CamCommand implements CommandExecutor {
         String word = args[0].toLowerCase(Locale.ROOT);
         MenuAccess access;
         if (isAdminCommand(args)) {
-            access = plugin.getSettings().getAdminAccess();
+            access = plugin.getSettings().menu().adminAccess();
         } else if (MENU_WORDS.contains(word)) {
-            access = plugin.getSettings().getMenuAccess();
+            access = plugin.getSettings().menu().access();
         } else {
             return true;
         }
@@ -220,19 +220,20 @@ public class CamCommand implements CommandExecutor {
         CamSettings settings = plugin.getSettings();
         return switch (args[0].toLowerCase(Locale.ROOT)) {
             case "back" -> !settings.isBackCommandEnabled();
-            case "resume" -> !settings.isResumeEnabled();
-            case "spot" -> !settings.isViewpointsEnabled();
-            case "follow", "tour" -> !settings.isTourEnabled();
-            case "photo" -> !settings.isPhotoModeEnabled();
+            case "resume" -> !settings.resume().enabled();
+            case "spot" -> !settings.spots().enabled();
+            case "follow", "tour" -> !settings.follow().enabled();
+            case "photo" -> !settings.photo().enabled();
             case "time" -> !settings.isCamTimeEnabled();
             case "weather" -> !settings.isCamWeatherEnabled();
             case "nightvision" -> !settings.isNightVisionPlayerChoice();
-            case "stats" -> isAdminCommand(args) ? !settings.isStatsEnabled() : !plugin.getStats().showsAnything();
+            case "stats" -> isAdminCommand(args) ? !settings.statistics().enabled()
+                    : !plugin.getStats().showsAnything();
             case "list" -> settings.getCamListAccess() == ListAccess.OFF;
             case "tp" -> settings.getCamListAccess() == ListAccess.OFF || !settings.isCamListTeleport();
             case "stop" -> !settings.isStopCommandEnabled();
             case "ban", "unban", "banlist" -> !settings.isCamBanEnabled();
-            case "trail" -> !settings.isTrailEnabled();
+            case "trail" -> !settings.trail().enabled();
             default -> false;
         };
     }

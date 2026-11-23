@@ -67,11 +67,11 @@ public final class NoCollisionTeam {
         // Members see each other through the invisibility, which is what mode
         // CAM lives on. Mode NONE hides the player from everybody, so there it
         // would be a hole.
-        team.setCanSeeFriendlyInvisibles(settings.getPlayerVisibilityMode() != VisibilityMode.NONE);
+        team.setCanSeeFriendlyInvisibles(settings.cameraMode().visibilityMode() != VisibilityMode.NONE);
         // The name over a camera player is a text display of its own, see
         // CamNameTag. His name tag would stand there a second time.
         team.setOption(Team.Option.NAME_TAG_VISIBILITY,
-                settings.showsPlayerName() ? Team.OptionStatus.NEVER : Team.OptionStatus.ALWAYS);
+                settings.cameraMode().showsName() ? Team.OptionStatus.NEVER : Team.OptionStatus.ALWAYS);
         return team;
     }
 
@@ -203,7 +203,7 @@ public final class NoCollisionTeam {
      * itself, the server takes every entity out of its team when it goes.</p>
      */
     private void refreshBodyTeam() {
-        if (settings.getMovementSensitivity().allowsEntityPush()) {
+        if (settings.body().movementSensitivity().allowsEntityPush()) {
             deleteTeam(BODY_TEAM);
             return;
         }

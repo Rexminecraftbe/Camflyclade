@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.display;
 
+import de.elia.cameraplugin.body.BodySettings;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
@@ -110,7 +111,7 @@ public final class CamNameTag implements Listener {
 
     public void startFor(Player player) {
         stopFor(player);
-        if (!settings.showsPlayerName()) {
+        if (!settings.cameraMode().showsName()) {
             return;
         }
         follow(player);
@@ -125,11 +126,11 @@ public final class CamNameTag implements Listener {
      */
     public void keepOverGuide(Player guide) {
         UUID id = guide.getUniqueId();
-        if (tasks.containsKey(id) || !settings.showsPlayerName() || !overGuide(guide)) {
+        if (tasks.containsKey(id) || !settings.cameraMode().showsName() || !overGuide(guide)) {
             return;
         }
         guides.add(id);
-        if (settings.isTourGuideNameReplacing() && plugin.getGuideTeam().hide(guide)) {
+        if (settings.follow().guideNameReplacing() && plugin.getGuideTeam().hide(guide)) {
             replacing.add(id);
         }
         follow(guide);
@@ -180,7 +181,7 @@ public final class CamNameTag implements Listener {
                 }
                 if (guides.contains(player.getUniqueId())) {
                     // Like his name tag: not through walls while he sneaks.
-                    boolean through = settings.getPlayerNameStyle().throughWalls() && !player.isSneaking();
+                    boolean through = settings.cameraMode().nameStyle().throughWalls() && !player.isSneaking();
                     if (current.isSeeThrough() != through) {
                         current.setSeeThrough(through);
                     }
@@ -202,8 +203,8 @@ public final class CamNameTag implements Listener {
     private TextDisplay putUp(Player player) {
         String text = textFor(player);
         boolean rides = rides(player);
-        TextDisplay name = NameDisplay.spawnStyled(nameLocation(player), text, settings.getPlayerNameStyle(), nameKey,
-                display -> {
+        TextDisplay name = NameDisplay.spawnStyled(nameLocation(player), text, settings.cameraMode().nameStyle(),
+                nameKey, display -> {
                     display.setVisibleByDefault(false);
                     if (rides) {
                         liftOverHead(display);
@@ -228,12 +229,12 @@ public final class CamNameTag implements Listener {
         String own = nameOf(player);
         List<Player> guests = plugin.getTour().stackedOver(player);
         if (guests.isEmpty() && !guides.contains(player.getUniqueId())) {
-            return NameDisplay.styled(own, settings.getPlayerNameStyle());
+            return NameDisplay.styled(own, settings.cameraMode().nameStyle());
         }
         List<String> lines = new ArrayList<>();
         for (int i = guests.size() - 1; i >= 0; i--) {
             String line = NameDisplay.styled(onTour("player.tour-follower-format", guests.get(i)),
-                    settings.getPlayerNameStyle());
+                    settings.cameraMode().nameStyle());
             if (!ChatColor.stripColor(line).isBlank()) {
                 lines.add(line);
             }
@@ -243,12 +244,12 @@ public final class CamNameTag implements Listener {
                 String builder = messages.getMessage("player.tour-builder-format").replace("{player}",
                         player.getName());
                 lines.add(ChatColor.stripColor(builder).isBlank()
-                        ? NameDisplay.styled(player.getName(), settings.getPlayerNameStyle()) : builder);
+                        ? NameDisplay.styled(player.getName(), settings.cameraMode().nameStyle()) : builder);
             }
             return String.join("\n", lines);
         }
         String guide = onTour("player.tour-guide-format", player);
-        lines.add(ChatColor.stripColor(guide).isBlank() ? NameDisplay.styled(own, settings.getPlayerNameStyle())
+        lines.add(ChatColor.stripColor(guide).isBlank() ? NameDisplay.styled(own, settings.cameraMode().nameStyle())
                 : guide);
         return String.join("\n", lines);
     }
@@ -270,7 +271,7 @@ public final class CamNameTag implements Listener {
 
     /** Whether his name sits on him as a passenger: in mode RIDE, and never over a guide out of camera mode. */
     private boolean rides(Player player) {
-        return settings.getPlayerNameMode() == NameMode.RIDE && !guides.contains(player.getUniqueId());
+        return settings.cameraMode().nameMode() == NameMode.RIDE && !guides.contains(player.getUniqueId());
     }
 
     /**
@@ -340,7 +341,7 @@ public final class CamNameTag implements Listener {
         } else {
             Location target = nameLocation(player);
             if (name.getLocation().distanceSquared(target)
-                    > CamSettings.MIN_MOVE_THRESHOLD * CamSettings.MIN_MOVE_THRESHOLD) {
+                    > BodySettings.MIN_MOVE_THRESHOLD * BodySettings.MIN_MOVE_THRESHOLD) {
                 name.teleport(target);
             }
         }

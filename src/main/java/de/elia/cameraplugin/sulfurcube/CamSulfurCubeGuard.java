@@ -1,5 +1,7 @@
 package de.elia.cameraplugin.sulfurcube;
 
+import de.elia.cameraplugin.session.SessionTask;
+import de.elia.cameraplugin.session.SessionTicker;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
@@ -15,7 +17,6 @@ import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.world.EntitiesUnloadEvent;
 import org.bukkit.inventory.EquipmentSlotGroup;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -77,12 +78,15 @@ public final class CamSulfurCubeGuard implements Listener {
     private static final long INTERVAL = 1L;
 
     private final JavaPlugin plugin;
+    /** The tick of each camera mode, which the watching here runs on. */
+    private final SessionTicker sessions;
     private final AttributeModifier firm;
-    private final Map<UUID, BukkitRunnable> tasks = new HashMap<>();
+    private final Map<UUID, SessionTask> tasks = new HashMap<>();
     /** The cubes each camera player holds firm right now, by player id. */
     private final Map<UUID, Set<SulfurCube>> held = new HashMap<>();
 
-    public CamSulfurCubeGuard(JavaPlugin plugin) {
+    public CamSulfurCubeGuard(JavaPlugin plugin, SessionTicker sessions) {
+        this.sessions = sessions;
         this.plugin = plugin;
         this.firm = new AttributeModifier(new NamespacedKey(plugin, "cam_no_push"), FIRM,
                 AttributeModifier.Operation.ADD_NUMBER, EquipmentSlotGroup.ANY);
@@ -93,7 +97,7 @@ public final class CamSulfurCubeGuard implements Listener {
         if (tasks.containsKey(player.getUniqueId())) {
             return;
         }
-        BukkitRunnable task = new BukkitRunnable() {
+        SessionTask task = new SessionTask() {
             @Override
             public void run() {
                 if (!player.isOnline()) {
@@ -103,13 +107,13 @@ public final class CamSulfurCubeGuard implements Listener {
                 watch(player);
             }
         };
-        task.runTaskTimer(plugin, 0L, INTERVAL);
+        task.runTaskTimer(sessions, player, 0L, INTERVAL);
         tasks.put(player.getUniqueId(), task);
     }
 
     /** Stops watching and lets go of the cubes this camera held, when camera mode ends. */
     public void stopFor(Player player) {
-        BukkitRunnable task = tasks.remove(player.getUniqueId());
+        SessionTask task = tasks.remove(player.getUniqueId());
         if (task != null) {
             task.cancel();
         }
@@ -120,7 +124,7 @@ public final class CamSulfurCubeGuard implements Listener {
     }
 
     public void onDisable() {
-        for (BukkitRunnable task : tasks.values()) {
+        for (SessionTask task : tasks.values()) {
             task.cancel();
         }
         tasks.clear();

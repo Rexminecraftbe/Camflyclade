@@ -122,12 +122,12 @@ public final class CamTrail implements Listener {
      * {@code cam-trail.flights}.
      */
     public void startFor(Player player, Location body) {
-        if (!settings.isTrailEnabled()) {
+        if (!settings.trail().enabled()) {
             return;
         }
         Deque<FlightTrail> kept = flights.computeIfAbsent(player.getUniqueId(), id -> new ArrayDeque<>());
         kept.addFirst(new FlightTrail(player.getUniqueId(), player.getName(), body));
-        while (kept.size() > settings.getTrailFlights()) {
+        while (kept.size() > settings.trail().flights()) {
             kept.removeLast();
         }
     }
@@ -176,13 +176,13 @@ public final class CamTrail implements Listener {
      * the right of the command, and the console, which is the server.
      */
     public boolean mayUse(CommandSender sender) {
-        return settings.isTrailEnabled()
+        return settings.trail().enabled()
                 && (!(sender instanceof Player player) || player.hasPermission(PERMISSION));
     }
 
     /** {@code /cam trail}, with what follows it. */
     public void command(CommandSender sender, String[] args) {
-        if (!settings.isTrailEnabled()) {
+        if (!settings.trail().enabled()) {
             messages.sendConfiguredMessage(sender, "trail-off");
             return;
         }
@@ -245,7 +245,7 @@ public final class CamTrail implements Listener {
      * than how the command goes - in the menu the command may well be off.
      */
     public void hideFromMenu(Player viewer) {
-        if (!settings.isTrailEnabled()) {
+        if (!settings.trail().enabled()) {
             messages.sendConfiguredMessage(viewer, "trail-off");
             return;
         }
@@ -353,7 +353,7 @@ public final class CamTrail implements Listener {
      *                if he is in it
      */
     public void showFlight(Player viewer, String name, long startedAt, boolean toStart) {
-        if (!settings.isTrailEnabled()) {
+        if (!settings.trail().enabled()) {
             messages.sendConfiguredMessage(viewer, "trail-off");
             return;
         }
@@ -486,7 +486,7 @@ public final class CamTrail implements Listener {
         }
         // A click runs /cam trail, which menu.admin-access may keep to the
         // menu - the flights are picked there then.
-        if (sender instanceof Player && !plugin.getSettings().getAdminAccess().allowsCommands()) {
+        if (sender instanceof Player && !plugin.getSettings().menu().adminAccess().allowsCommands()) {
             return;
         }
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(
@@ -581,17 +581,17 @@ public final class CamTrail implements Listener {
      * grows.
      */
     private int showSeconds(List<FlightTrail> now) {
-        TrailShowMode mode = settings.getTrailShowMode();
+        TrailShowMode mode = settings.trail().showMode();
         if (mode == TrailShowMode.FOREVER) {
             return -1;
         }
         if (mode == TrailShowMode.FIXED) {
-            return settings.getTrailShowSeconds();
+            return settings.trail().showSeconds();
         }
-        int minBlocks = settings.getTrailShowMinBlocks();
-        int maxBlocks = settings.getTrailShowMaxBlocks();
-        int minSeconds = settings.getTrailShowMinSeconds();
-        int maxSeconds = settings.getTrailShowMaxSeconds();
+        int minBlocks = settings.trail().showMinBlocks();
+        int maxBlocks = settings.trail().showMaxBlocks();
+        int minSeconds = settings.trail().showMinSeconds();
+        int maxSeconds = settings.trail().showMaxSeconds();
         double longest = 0.0;
         for (FlightTrail trail : now) {
             if (trail.isFlying()) {
@@ -779,12 +779,12 @@ public final class CamTrail implements Listener {
      * {@code cam-trail.flights} has become smaller.
      */
     public void onReload() {
-        if (!settings.isTrailEnabled()) {
+        if (!settings.trail().enabled()) {
             onDisable();
             return;
         }
         for (Deque<FlightTrail> kept : flights.values()) {
-            while (kept.size() > settings.getTrailFlights()) {
+            while (kept.size() > settings.trail().flights()) {
                 kept.removeLast();
             }
         }

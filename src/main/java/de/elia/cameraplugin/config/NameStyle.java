@@ -25,7 +25,7 @@ public record NameStyle(ChatColor color, boolean throughWalls, double viewDistan
      * @param path         the section, e.g. {@code body.name}
      * @param defaultColor the colour that stands in the shipped config file
      */
-    static NameStyle read(ConfigReader config, String path, ChatColor defaultColor) {
+    public static NameStyle read(ConfigReader config, String path, ChatColor defaultColor) {
         return new NameStyle(
                 readColor(config, path + ".color", defaultColor),
                 config.getBoolean(path + ".through-walls", false),

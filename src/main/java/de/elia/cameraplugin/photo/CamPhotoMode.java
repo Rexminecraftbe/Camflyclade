@@ -90,12 +90,12 @@ public final class CamPhotoMode implements Listener {
 
     /** Whether {@code /cam photo} does anything for this player right now. */
     public boolean mayUse(Player player) {
-        return settings.isPhotoModeEnabled() && plugin.isInCameraMode(player);
+        return settings.photo().enabled() && plugin.isInCameraMode(player);
     }
 
     /** {@code /cam photo}: switches photo mode on, or off again. */
     public void command(Player player) {
-        if (!settings.isPhotoModeEnabled()) {
+        if (!settings.photo().enabled()) {
             messages.sendConfiguredMessage(player, "photo-off");
             return;
         }
@@ -134,7 +134,7 @@ public final class CamPhotoMode implements Listener {
      * {@link de.elia.cameraplugin.visibility.CamVisibility}.
      */
     public boolean hidesPlayersFrom(Player viewer) {
-        return settings.photoHidesPlayers() && active.containsKey(viewer.getUniqueId());
+        return settings.photo().hidesPlayers() && active.containsKey(viewer.getUniqueId());
     }
 
     /** Whether it was photo mode that hid this player from this viewer. */
@@ -155,7 +155,7 @@ public final class CamPhotoMode implements Listener {
 
     /** Hides the body of a camera player who has just started from everybody photo mode runs for. */
     public void hideNewBody(CameraData data) {
-        if (!settings.photoHidesBodies()) {
+        if (!settings.photo().hidesBodies()) {
             return;
         }
         for (Map.Entry<UUID, Hidden> entry : active.entrySet()) {
@@ -168,12 +168,12 @@ public final class CamPhotoMode implements Listener {
 
     /** Hides everything there is to hide from one player that he still sees. */
     private void hideFrom(Player viewer, Hidden hidden) {
-        if (settings.photoHidesPlayers()) {
+        if (settings.photo().hidesPlayers()) {
             for (Player other : Bukkit.getOnlinePlayers()) {
                 hidePlayer(viewer, hidden, other);
             }
         }
-        if (settings.photoHidesBodies()) {
+        if (settings.photo().hidesBodies()) {
             for (UUID id : cameraPlayers.ids()) {
                 CameraData data = cameraPlayers.get(id);
                 if (data != null) {
@@ -218,7 +218,7 @@ public final class CamPhotoMode implements Listener {
 
     /** Whether photo mode hides mobs or items at all, {@code hide-mobs} and {@code hide-items}. */
     private boolean hidesMobsOrItems() {
-        return settings.photoHidesMobs() || settings.photoHidesItems();
+        return settings.photo().hidesMobs() || settings.photo().hidesItems();
     }
 
     /**
@@ -228,9 +228,9 @@ public final class CamPhotoMode implements Listener {
      */
     private boolean ofHiddenKind(Entity entity) {
         if (entity instanceof Mob) {
-            return settings.photoHidesMobs();
+            return settings.photo().hidesMobs();
         }
-        return (entity instanceof Item || entity instanceof ExperienceOrb) && settings.photoHidesItems();
+        return (entity instanceof Item || entity instanceof ExperienceOrb) && settings.photo().hidesItems();
     }
 
     /**
@@ -347,7 +347,7 @@ public final class CamPhotoMode implements Listener {
     /** A player joining is hidden from everybody photo mode runs for straight away. */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
-        if (!settings.photoHidesPlayers()) {
+        if (!settings.photo().hidesPlayers()) {
             return;
         }
         for (Map.Entry<UUID, Hidden> entry : active.entrySet()) {

@@ -161,12 +161,12 @@ public final class CamLocatorBar implements Listener {
      * colour it has when it comes onto the bar.</p>
      */
     public void startFor(Player player, CameraData data) {
-        if (!settings.isBodyOnLocatorBar()) {
+        if (!settings.body().onLocatorBar()) {
             return;
         }
         hideCamera(player);
         Color point = data.getLocatorBarPoint();
-        if (point == null || !settings.isBodyVisible()) {
+        if (point == null || !settings.body().visible()) {
             return;
         }
         LivingEntity body = data.getBody();

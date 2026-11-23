@@ -85,7 +85,7 @@ public final class CamWebMap implements Listener {
      */
     public void start() {
         stop();
-        if (!settings.isWebMapEnabled()) {
+        if (!settings.webMap().enabled()) {
             return;
         }
         for (Plugin map : Bukkit.getPluginManager().getPlugins()) {
@@ -157,13 +157,13 @@ public final class CamWebMap implements Listener {
             }
         }
         String layer = ChatColor.stripColor(messages.getMessage("web-map-layer"));
-        boolean hidden = settings.isWebMapHidden();
+        boolean hidden = settings.webMap().hidden();
         MapLink link;
-        if (name.equals(BLUEMAP) && settings.isWebMapBlueMap()) {
+        if (name.equals(BLUEMAP) && settings.webMap().blueMap()) {
             link = new BlueMapLink(plugin, map, LAYER_ID, layer, hidden, this::changed);
-        } else if (name.equals(DYNMAP) && settings.isWebMapDynmap()) {
+        } else if (name.equals(DYNMAP) && settings.webMap().dynmap()) {
             link = new DynmapLink(map, LAYER_ID, layer, hidden);
-        } else if (name.equals(SQUAREMAP) && settings.isWebMapSquaremap()) {
+        } else if (name.equals(SQUAREMAP) && settings.webMap().squaremap()) {
             link = new SquaremapLink(map, LAYER_ID, layer, hidden);
         } else {
             return false;
@@ -212,15 +212,15 @@ public final class CamWebMap implements Listener {
     private List<MapSpot> collect() {
         CamSpots spots = plugin.getSpots();
         SpotBans.Ban everybody = plugin.getSpotModeration().everybodyBan();
-        if (!settings.isViewpointsSharing()
+        if (!settings.spots().sharing()
                 || everybody != null && everybody.stage(SpotBans.Kind.PUBLIC) == SpotBans.Stage.NO_LOOK) {
             return List.of();
         }
         List<MapSpot> list = new ArrayList<>();
         for (Share share : spots.publicSpots()) {
             Spot spot = share.getSpot();
-            if (share.likes() < settings.getWebMapMinLikes()
-                    || spots.views(share.getOwner(), spot) < settings.getWebMapMinViews()
+            if (share.likes() < settings.webMap().minLikes()
+                    || spots.views(share.getOwner(), spot) < settings.webMap().minViews()
                     || Bukkit.getWorld(spot.world()) == null) {
                 continue;
             }
@@ -247,7 +247,7 @@ public final class CamWebMap implements Listener {
      * while only the menu goes, nothing while neither does.
      */
     private String jump(Share share, CamSpots spots) {
-        MenuAccess access = settings.getMenuAccess();
+        MenuAccess access = settings.menu().access();
         if (access.allowsCommands()) {
             return text("web-map-jump-command", share, spots);
         }
@@ -326,8 +326,8 @@ public final class CamWebMap implements Listener {
      * while there is none.
      */
     public String linkTo(Spot spot) {
-        String link = settings.getWebMapLink();
-        if (!settings.isWebMapEnabled() || link.isEmpty()) {
+        String link = settings.webMap().link();
+        if (!settings.webMap().enabled() || link.isEmpty()) {
             return null;
         }
         return link.replace("{world}", spot.world())

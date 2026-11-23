@@ -58,7 +58,7 @@ public final class EndWarning {
      * @param key  the text, e.g. {@code end-warning-afk}
      */
     public void warn(Player player, double left, String key) {
-        settings.getEndWarningSound().play(player);
+        settings.sounds().endWarning().play(player);
         if (messages.isMessageEnabled(key)) {
             plugin.getActionBar().warn(player, messages.getMessage(key)
                     .replace("{time}", CamTimeLimit.formatDuration((long) Math.ceil(left))));

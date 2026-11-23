@@ -4,11 +4,12 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.preferences.CamPreferences;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.SessionTask;
+import de.elia.cameraplugin.session.SessionTicker;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -66,12 +67,14 @@ public final class CamNightVision {
             PotionEffectType.NIGHT_VISION, PotionEffect.INFINITE_DURATION, 0, false, false, false);
 
     private final JavaPlugin plugin;
+    /** The tick of each camera mode, which the watching here runs on. */
+    private final SessionTicker sessions;
     private final CamSettings settings;
     private final Messages messages;
     private final CameraPlayers cameraPlayers;
     /** Keeps the mode each player picked with {@code /cam nightvision}. */
     private final CamPreferences preferences;
-    private final Map<UUID, BukkitRunnable> tasks = new HashMap<>();
+    private final Map<UUID, SessionTask> tasks = new HashMap<>();
     /** The players wearing the night vision of this class right now. */
     private final Set<UUID> given = new HashSet<>();
     /** The mode of the spot each camera player was put down at last, in place of his own, see {@link #showSpot}. */
@@ -79,8 +82,9 @@ public final class CamNightVision {
     /** The mode of the guide each guest follows, in place of his own, see {@link #showGuide}. */
     private final Map<UUID, NightVisionMode> guideModes = new HashMap<>();
 
-    public CamNightVision(JavaPlugin plugin, CamSettings settings, Messages messages, CameraPlayers cameraPlayers,
-                          CamPreferences preferences) {
+    public CamNightVision(JavaPlugin plugin, SessionTicker sessions, CamSettings settings, Messages messages,
+                          CameraPlayers cameraPlayers, CamPreferences preferences) {
+        this.sessions = sessions;
         this.plugin = plugin;
         this.settings = settings;
         this.messages = messages;
@@ -130,7 +134,7 @@ public final class CamNightVision {
         if (!cameraPlayers.contains(id)) {
             return;
         }
-        NightVisionMode wanted = !settings.isTourGuideNightVision() ? null
+        NightVisionMode wanted = !settings.follow().guideNightVision() ? null
                 : cameraPlayers.contains(guide.getUniqueId()) ? modeFor(guide) : NightVisionMode.OFF;
         NightVisionMode was = wanted == null ? guideModes.remove(id) : guideModes.put(id, wanted);
         if (was != wanted) {
@@ -207,11 +211,11 @@ public final class CamNightVision {
         if (mode == NightVisionMode.OFF || !plugin.isEnabled()) {
             return;
         }
-        BukkitRunnable old = tasks.remove(player.getUniqueId());
+        SessionTask old = tasks.remove(player.getUniqueId());
         if (old != null) {
             old.cancel();
         }
-        BukkitRunnable task = new BukkitRunnable() {
+        SessionTask task = new SessionTask() {
             @Override
             public void run() {
                 if (!player.isOnline() || !cameraPlayers.contains(player.getUniqueId())) {
@@ -222,7 +226,7 @@ public final class CamNightVision {
                 update(player, mode == NightVisionMode.ALWAYS || isDark(player));
             }
         };
-        task.runTaskTimer(plugin, 0L, INTERVAL);
+        task.runTaskTimer(sessions, player, 0L, INTERVAL);
         tasks.put(player.getUniqueId(), task);
     }
 
@@ -264,7 +268,7 @@ public final class CamNightVision {
 
     /** Stops looking after his night vision, and takes off the one of this class. */
     private void stopLooking(Player player) {
-        BukkitRunnable task = tasks.remove(player.getUniqueId());
+        SessionTask task = tasks.remove(player.getUniqueId());
         if (task != null) {
             task.cancel();
         }
@@ -367,7 +371,7 @@ public final class CamNightVision {
     public void onDisable() {
         spotModes.clear();
         guideModes.clear();
-        for (BukkitRunnable task : tasks.values()) {
+        for (SessionTask task : tasks.values()) {
             task.cancel();
         }
         tasks.clear();

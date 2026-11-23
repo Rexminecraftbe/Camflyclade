@@ -141,7 +141,7 @@ public final class CamScoutGuard implements Listener {
                 }
             }
         }
-        if (!(photo.isActive(viewer) && settings.photoHidesBodies())) {
+        if (!(photo.isActive(viewer) && settings.photo().hidesBodies())) {
             // A body that is gone is no longer there to be seen; showing it
             // again only takes it off the list the server keeps for him.
             hidden.entities.values().removeIf(part -> {
@@ -226,7 +226,7 @@ public final class CamScoutGuard implements Listener {
             Player viewer = Bukkit.getPlayer(entry.getKey());
             CameraData own = cameraPlayers.get(entry.getKey());
             if (viewer == null || own == null || viewer.equals(owner)
-                    || (plugin.getPhotoMode().isActive(viewer) && settings.photoHidesBodies())) {
+                    || (plugin.getPhotoMode().isActive(viewer) && settings.photo().hidesBodies())) {
                 continue;
             }
             Location center = center(viewer, own);

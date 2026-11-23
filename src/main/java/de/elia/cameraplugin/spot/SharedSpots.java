@@ -69,7 +69,7 @@ public final class SharedSpots {
     }
 
     private boolean inFile() {
-        return settings.getViewpointsStorage() == StorageMode.FILE;
+        return settings.spots().storage() == StorageMode.FILE;
     }
 
     /**

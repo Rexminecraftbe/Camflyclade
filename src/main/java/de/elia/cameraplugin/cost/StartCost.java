@@ -70,13 +70,13 @@ public final class StartCost {
      * @param take whether to take the cost, or only to see that he has it
      */
     private boolean settle(Player player, boolean take) {
-        if (!settings.hasStartCost()) {
+        if (!settings.startCost().costsAnything()) {
             return true;
         }
-        int xp = settings.getStartCostXp();
-        boolean points = settings.costsXpPoints();
+        int xp = settings.startCost().xp();
+        boolean points = settings.startCost().costsXpPoints();
         int carriedXp = points ? XpPoints.total(player) : player.getLevel();
-        double money = settings.getStartCostMoney();
+        double money = settings.startCost().money();
         VaultEconomy economy = money > 0.0 ? economy() : null;
         if (economy == null) {
             money = 0.0;
@@ -89,7 +89,7 @@ public final class StartCost {
                 missing.add(experience(xp - carriedXp, points));
             }
         }
-        for (Map.Entry<Material, Integer> entry : settings.getStartCostItems().entrySet()) {
+        for (Map.Entry<Material, Integer> entry : settings.startCost().items().entrySet()) {
             int needed = entry.getValue();
             cost.add(items(entry.getKey(), needed));
             int carried = count(player.getInventory(), entry.getKey());
@@ -129,7 +129,7 @@ public final class StartCost {
                 player.setLevel(player.getLevel() - xp);
             }
         }
-        for (Map.Entry<Material, Integer> entry : settings.getStartCostItems().entrySet()) {
+        for (Map.Entry<Material, Integer> entry : settings.startCost().items().entrySet()) {
             take(player.getInventory(), entry.getKey(), entry.getValue());
         }
         player.updateInventory();

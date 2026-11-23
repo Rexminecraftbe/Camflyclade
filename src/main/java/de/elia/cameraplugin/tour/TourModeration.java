@@ -66,7 +66,7 @@ public final class TourModeration {
 
     /** Whether this sender may moderate tours: while tours are on, with the right, or the console. */
     public boolean mayUse(CommandSender sender) {
-        return settings.isTourEnabled()
+        return settings.follow().enabled()
                 && (!(sender instanceof Player player) || player.hasPermission(PERMISSION)
                 || player.hasPermission(OLD_PERMISSION));
     }

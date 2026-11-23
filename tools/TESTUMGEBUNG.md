@@ -90,8 +90,12 @@ und wählt die Abschnitte, die etwas davon betrifft:
 * **Die Sammeldateien** unter `camfly2` und `config` - `CameraPlugin`,
   `CamCommand`, `CamTabCompleter`, `CamSettings`, `Messages` …: Was in den
   geänderten Zeilen steht. Eine Zeile in `CamSettings.load`, die
-  `cam-trail.flights` liest, führt über das Feld und seinen Getter zu
-  `CamTrail` und `CamMenu`; `case "trail"` in `CamCommand` zum Paket `trail`.
+  `start-delay.seconds` liest, führt über das Feld und seinen Getter zu
+  `StartDelay`; `case "trail"` in `CamCommand` zum Paket `trail`. Die
+  größeren Abschnitte der `config.yml` lesen eigene Klassen in ihrem Paket -
+  `trail/TrailSettings`, `tour/FollowSettings` …: Eine Änderung darin zählt
+  wie jede andere Java-Änderung, `TrailSettings.flights` führt zu `trail` und
+  zu den Seiten des Menüs, die es aufrufen.
 * **`config.yml`, `lang/en.yml`, `plugin.yml`**: die Schlüssel der geänderten
   Zeilen, über die Stellen im Code, die sie lesen. Ein Abschnitt, der einen
   geänderten Schlüssel mit `set_option` setzt, läuft auch.

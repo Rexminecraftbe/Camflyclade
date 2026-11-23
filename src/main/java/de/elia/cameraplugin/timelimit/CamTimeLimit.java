@@ -5,6 +5,7 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.session.EndReason;
+import de.elia.cameraplugin.session.SessionTask;
 import de.elia.cameraplugin.storage.PlayerStore;
 import de.elia.cameraplugin.storage.StorageMode;
 import org.bukkit.Bukkit;
@@ -39,7 +40,7 @@ public final class CamTimeLimit {
     private final Messages messages;
     private final CameraPlayers cameraPlayers;
     private final PlayerStore store;
-    private final Map<UUID, BukkitRunnable> timeLimitTasks = new HashMap<>();
+    private final Map<UUID, SessionTask> timeLimitTasks = new HashMap<>();
     private final Map<UUID, BossBar> bossBars = new HashMap<>();
     /** When the cooldown of each player began, on {@code storage: memory}. */
     private final Map<UUID, Long> cooldownsInMemory = new HashMap<>();
@@ -102,17 +103,17 @@ public final class CamTimeLimit {
     }
 
     public void startTimeLimit(Player player) {
-        if (!settings.isTimeLimitEnabled()) return;
+        if (!settings.timeLimit().enabled()) return;
         cancelTimeLimit(player);
         BossBar bar = null;
-        if (settings.showsBossbar()) {
-            bar = Bukkit.createBossBar("", settings.getBossbarColor(), settings.getBossbarStyle());
+        if (settings.timeLimit().showsBossbar()) {
+            bar = Bukkit.createBossBar("", settings.timeLimit().bossbarColor(), settings.timeLimit().bossbarStyle());
             bar.addPlayer(player);
             bossBars.put(player.getUniqueId(), bar);
         }
-        long total = settings.getDurationSeconds();
+        long total = settings.timeLimit().durationSeconds();
         BossBar finalBar = bar;
-        BukkitRunnable task = new BukkitRunnable() {
+        SessionTask task = new SessionTask() {
             long remaining = total;
             @Override
             public void run() {
@@ -141,12 +142,12 @@ public final class CamTimeLimit {
                 }
             }
         };
-        task.runTaskTimer(plugin, 20L, 20L);
+        task.runTaskTimer(plugin.getSessionTicker(), player, 20L, 20L);
         timeLimitTasks.put(player.getUniqueId(), task);
     }
 
     public void cancelTimeLimit(Player player) {
-        BukkitRunnable t = timeLimitTasks.remove(player.getUniqueId());
+        SessionTask t = timeLimitTasks.remove(player.getUniqueId());
         if (t != null) t.cancel();
         BossBar bar = bossBars.remove(player.getUniqueId());
         if (bar != null) bar.removeAll();
@@ -161,12 +162,13 @@ public final class CamTimeLimit {
      * the player, and he is not to wait for it.</p>
      */
     public void startCooldown(Player player, EndReason reason) {
-        if (!settings.isCooldownsEnabled() || settings.getCooldownSeconds() <= 0 || reason == EndReason.RELOAD) {
+        if (!settings.timeLimit().cooldownsEnabled() || settings.timeLimit().cooldownSeconds() <= 0
+                || reason == EndReason.RELOAD) {
             return;
         }
         UUID id = player.getUniqueId();
         long now = System.currentTimeMillis();
-        if (settings.getCooldownStorage() == StorageMode.MEMORY) {
+        if (settings.timeLimit().cooldownStorage() == StorageMode.MEMORY) {
             cooldownsInMemory.put(id, now);
         } else {
             store.get(id).setCooldownStarted(now);
@@ -183,16 +185,16 @@ public final class CamTimeLimit {
      * {@code /cam stats player}.
      */
     private long remainingMillis(UUID playerId) {
-        if (!settings.isCooldownsEnabled()) {
+        if (!settings.timeLimit().cooldownsEnabled()) {
             return 0L;
         }
-        Long started = settings.getCooldownStorage() == StorageMode.MEMORY
+        Long started = settings.timeLimit().cooldownStorage() == StorageMode.MEMORY
                 ? cooldownsInMemory.get(playerId)
                 : store.look(playerId).getCooldownStarted();
         if (started == null) {
             return 0L;
         }
-        long remaining = started + settings.getCooldownSeconds() * 1000L - System.currentTimeMillis();
+        long remaining = started + settings.timeLimit().cooldownSeconds() * 1000L - System.currentTimeMillis();
         if (remaining <= 0L) {
             // Over, and of no further use in memory.
             cooldownsInMemory.remove(playerId);
@@ -226,8 +228,9 @@ public final class CamTimeLimit {
             return;
         }
         Watch watch = new Watch();
-        if (settings.showsCooldownBossbar()) {
-            watch.bar = Bukkit.createBossBar("", settings.getBossbarColor(), settings.getBossbarStyle());
+        if (settings.timeLimit().showsCooldownBossbar()) {
+            watch.bar = Bukkit.createBossBar("", settings.timeLimit().bossbarColor(),
+                    settings.timeLimit().bossbarStyle());
             watch.bar.addPlayer(player);
             updateCooldownBar(watch.bar, remainingMillis(id));
         }
@@ -255,7 +258,7 @@ public final class CamTimeLimit {
 
     /** The bossbar of a cooldown fills up the way a battery charges, until he may start again. */
     private void updateCooldownBar(BossBar bar, long remainingMillis) {
-        double total = settings.getCooldownSeconds() * 1000.0;
+        double total = settings.timeLimit().cooldownSeconds() * 1000.0;
         bar.setProgress(Math.max(0.0, Math.min(1.0, 1.0 - remainingMillis / total)));
         bar.setTitle(messages.isMessageEnabled("cooldown-bossbar")
                 ? messages.getMessage("cooldown-bossbar")
@@ -297,7 +300,7 @@ public final class CamTimeLimit {
     }
 
     public void onDisable() {
-        for (BukkitRunnable task : timeLimitTasks.values()) {
+        for (SessionTask task : timeLimitTasks.values()) {
             task.cancel();
         }
         timeLimitTasks.clear();

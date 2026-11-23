@@ -62,7 +62,7 @@ public final class SpotModeration {
 
     /** Whether this sender may moderate spots: while spots are on, with the right, or the console. */
     public boolean mayUse(CommandSender sender) {
-        return settings.isViewpointsEnabled()
+        return settings.spots().enabled()
                 && (!(sender instanceof Player player) || player.hasPermission(PERMISSION));
     }
 

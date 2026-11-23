@@ -123,7 +123,7 @@ public final class SpotGuestbook implements Listener {
     }
 
     private boolean inFile() {
-        return settings.getViewpointsStorage() == StorageMode.FILE;
+        return settings.spots().storage() == StorageMode.FILE;
     }
 
     private Path file() {
@@ -132,7 +132,7 @@ public final class SpotGuestbook implements Listener {
 
     /** How the owner hears of his spots: {@link Mode#OFF} for everybody while there is no guestbook. */
     public Mode modeOf(UUID owner) {
-        return settings.isGuestbookEnabled() ? modes.getOrDefault(owner, Mode.ON) : Mode.OFF;
+        return settings.spots().guestbook() ? modes.getOrDefault(owner, Mode.ON) : Mode.OFF;
     }
 
     /** Whether the owner hears of his spots at all: the guestbook is there, and he did not switch it off. */
@@ -157,7 +157,7 @@ public final class SpotGuestbook implements Listener {
      * gone.
      */
     public void set(Player owner, Mode mode) {
-        if (!settings.isGuestbookEnabled() || isLocked(owner.getUniqueId())) {
+        if (!settings.spots().guestbook() || isLocked(owner.getUniqueId())) {
             return;
         }
         UUID id = owner.getUniqueId();
@@ -168,7 +168,7 @@ public final class SpotGuestbook implements Listener {
         }
         switch (mode) {
             case ON -> messages.sendConfiguredMessage(owner, "spot-guestbook-on",
-                    "{minutes}", String.valueOf(settings.getGuestbookIntervalMinutes()));
+                    "{minutes}", String.valueOf(settings.spots().guestbookIntervalMinutes()));
             case LOGIN -> messages.sendConfiguredMessage(owner, "spot-guestbook-login");
             case OFF -> {
                 news.remove(id);
@@ -320,7 +320,7 @@ public final class SpotGuestbook implements Listener {
             return;
         }
         messages.sendConfiguredMessage(owner, header,
-                "{minutes}", String.valueOf(settings.getGuestbookIntervalMinutes()));
+                "{minutes}", String.valueOf(settings.spots().guestbookIntervalMinutes()));
         if (messages.isMessageEnabled("spot-guestbook-entry")) {
             for (String line : lines) {
                 owner.sendMessage(line);
@@ -341,8 +341,8 @@ public final class SpotGuestbook implements Listener {
             updates.cancel();
             updates = null;
         }
-        if (settings.isGuestbookEnabled()) {
-            long every = settings.getGuestbookIntervalMinutes() * MINUTE;
+        if (settings.spots().guestbook()) {
+            long every = settings.spots().guestbookIntervalMinutes() * MINUTE;
             updates = Bukkit.getScheduler().runTaskTimer(plugin, this::tellUpdates, every, every);
         }
         if (!inFile() || !Files.exists(file())) {

@@ -66,7 +66,7 @@ public final class SpotViews {
     }
 
     private boolean inFile() {
-        return settings.getViewpointsStorage() == StorageMode.FILE;
+        return settings.spots().storage() == StorageMode.FILE;
     }
 
     private Path file() {
@@ -88,7 +88,7 @@ public final class SpotViews {
      */
     public boolean count(UUID owner, String key, UUID viewer) {
         long now = System.currentTimeMillis();
-        long again = TimeUnit.MINUTES.toMillis(settings.getViewsCooldownMinutes());
+        long again = TimeUnit.MINUTES.toMillis(settings.spots().viewsCooldownMinutes());
         String who = owner + "/" + key + "/" + viewer;
         Long last = lastCounted.get(who);
         if (last != null && now - last < again) {

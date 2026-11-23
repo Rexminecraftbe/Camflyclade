@@ -120,16 +120,16 @@ public final class StartChecks implements Listener {
      */
     private boolean counts(Entity victim, UUID owner) {
         if (owner != null) {
-            return settings.waitsAfterHittingPlayers();
+            return settings.camSafety().waitsAfterHittingPlayers();
         }
         if (victim instanceof Player) {
-            return victim.hasMetadata("NPC") ? settings.waitsAfterHittingFriendly()
-                    : settings.waitsAfterHittingPlayers();
+            return victim.hasMetadata("NPC") ? settings.camSafety().waitsAfterHittingFriendly()
+                    : settings.camSafety().waitsAfterHittingPlayers();
         }
         if (victim instanceof Enemy) {
-            return settings.waitsAfterHittingMobs();
+            return settings.camSafety().waitsAfterHittingMobs();
         }
-        return settings.waitsAfterHittingFriendly() && !(victim instanceof ArmorStand)
+        return settings.camSafety().waitsAfterHittingFriendly() && !(victim instanceof ArmorStand)
                 && !(victim instanceof Mannequin);
     }
 
@@ -150,11 +150,11 @@ public final class StartChecks implements Listener {
     }
 
     public boolean checkCamSafety(Player player) {
-        if (!settings.isCamSafetyEnabled()) return true;
+        if (!settings.camSafety().enabled()) return true;
         Long last = lastDamageTimes.get(player.getUniqueId());
         if (last == null) return true;
         long elapsed = System.currentTimeMillis() - last;
-        long delayMillis = settings.getCamSafetyDelay() * 1000L;
+        long delayMillis = settings.camSafety().delay() * 1000L;
         if (elapsed >= delayMillis) return true;
         sendCamSafety(player, (delayMillis - elapsed + 999) / 1000);
         return false;
@@ -192,10 +192,10 @@ public final class StartChecks implements Listener {
      *         from, and how far
      */
     public boolean checkCamNearby(Player player) {
-        if (!settings.locksNearPlayers()) {
+        if (!settings.camSafety().locksNearPlayers()) {
             return true;
         }
-        double radius = settings.getCamSafetyNearbyRadius();
+        double radius = settings.camSafety().nearbyRadius();
         Location at = player.getLocation();
         Player nearest = null;
         double nearestSquared = radius * radius;
@@ -275,13 +275,13 @@ public final class StartChecks implements Listener {
      * @return whether he may start; if not, he has been told why
      */
     public boolean checkCamEffects(Player player) {
-        if (settings.getStartWithEffects() == EffectStart.ANY) {
+        if (settings.cameraMode().startWithEffects() == EffectStart.ANY) {
             return true;
         }
         List<String> blocking = new ArrayList<>();
         for (PotionEffect effect : player.getActivePotionEffects()) {
             PotionEffectType type = effect.getType();
-            if (settings.getStartWithEffects() == EffectStart.POSITIVE
+            if (settings.cameraMode().startWithEffects() == EffectStart.POSITIVE
                     && type.getCategory() != PotionEffectTypeCategory.HARMFUL) {
                 continue;
             }

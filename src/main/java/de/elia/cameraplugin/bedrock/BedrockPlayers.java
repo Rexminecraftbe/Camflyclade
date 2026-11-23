@@ -88,7 +88,7 @@ public final class BedrockPlayers implements Listener {
         if (player.getUniqueId().getMostSignificantBits() == 0L) {
             return true;
         }
-        String prefix = settings.getBedrockNamePrefix();
+        String prefix = settings.bedrock().namePrefix();
         return !prefix.isEmpty() && player.getName().startsWith(prefix);
     }
 
@@ -101,7 +101,7 @@ public final class BedrockPlayers implements Listener {
         if (!(sender instanceof Player player)) {
             return false;
         }
-        return switch (settings.getBedrockScope()) {
+        return switch (settings.bedrock().scope()) {
             case ALL -> true;
             case OFF -> false;
             case BEDROCK -> isBedrock(player);
@@ -122,7 +122,7 @@ public final class BedrockPlayers implements Listener {
      * Bedrock, {@code bedrock.menu: forms}.
      */
     public boolean menuAsForms(Player player) {
-        return settings.getBedrockMenu() == BedrockMenu.FORMS && formsReach(player);
+        return settings.bedrock().menu() == BedrockMenu.FORMS && formsReach(player);
     }
 
     /**
@@ -132,17 +132,17 @@ public final class BedrockPlayers implements Listener {
      * themselves stay the chest.
      */
     public boolean menuChoicesAsForms(Player player) {
-        return settings.getBedrockMenu() != BedrockMenu.CHEST && formsReach(player);
+        return settings.bedrock().menu() != BedrockMenu.CHEST && formsReach(player);
     }
 
     /** Whether an invitation comes to him as a window as well, {@code bedrock.invitation-forms}. */
     public boolean invitationForms(Player player) {
-        return settings.isBedrockInvitationForms() && formsReach(player);
+        return settings.bedrock().invitationForms() && formsReach(player);
     }
 
     /** Whether the buttons in the chat say the command they run, {@code bedrock.chat-commands}. */
     public boolean writesCommands(CommandSender sender) {
-        return settings.isBedrockChatCommands() && adapts(sender);
+        return settings.bedrock().chatCommands() && adapts(sender);
     }
 
     /**
@@ -153,7 +153,7 @@ public final class BedrockPlayers implements Listener {
      * is there for; the line says {@link #menuHint} in their place.
      */
     public boolean answersInMenu(CommandSender to) {
-        MenuAccess access = settings.getMenuAccess();
+        MenuAccess access = settings.menu().access();
         return writesCommands(to) && access.allowsMenu() && !access.allowsCommands();
     }
 

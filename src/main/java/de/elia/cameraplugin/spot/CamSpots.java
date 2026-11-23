@@ -126,11 +126,11 @@ public final class CamSpots {
 
     /** Whether {@code /cam spot} is there at all. */
     public boolean isEnabled() {
-        return settings.isViewpointsEnabled();
+        return settings.spots().enabled();
     }
 
     private boolean inFile() {
-        return settings.getViewpointsStorage() == StorageMode.FILE;
+        return settings.spots().storage() == StorageMode.FILE;
     }
 
     /** The spots of a player, by {@link Spot#key()}, in the order he saved them; not to be changed. */
@@ -148,27 +148,27 @@ public final class CamSpots {
 
     /** The share of one of his spots, or {@code null} while it is shared with nobody. */
     public Share shareOf(Player player, Spot spot) {
-        return settings.isViewpointsSharing() ? shared.get(player.getUniqueId(), spot.key()) : null;
+        return settings.spots().sharing() ? shared.get(player.getUniqueId(), spot.key()) : null;
     }
 
     /** What others share with him: the public spots and those he accepted, for the tab completion. */
     public List<Share> sharedWith(Player player) {
-        return settings.isViewpointsSharing() ? shared.sharedWith(player.getUniqueId()) : List.of();
+        return settings.spots().sharing() ? shared.sharedWith(player.getUniqueId()) : List.of();
     }
 
     /** Every public spot, his own among them, for the page of the public spots. */
     public List<Share> publicSpots() {
-        return settings.isViewpointsSharing() ? shared.publicSpots() : List.of();
+        return settings.spots().sharing() ? shared.publicSpots() : List.of();
     }
 
     /** What others offered him and he has not accepted yet. */
     public List<Share> offers(Player player) {
-        return settings.isViewpointsSharing() ? shared.offeredTo(player.getUniqueId()) : List.of();
+        return settings.spots().sharing() ? shared.offeredTo(player.getUniqueId()) : List.of();
     }
 
     /** What others share with him by name and he accepted, for the page of the shared spots. */
     public List<Share> accepted(Player player) {
-        return settings.isViewpointsSharing() ? shared.acceptedBy(player.getUniqueId()) : List.of();
+        return settings.spots().sharing() ? shared.acceptedBy(player.getUniqueId()) : List.of();
     }
 
     /** The names of his spots, for the tab completion. */
@@ -222,7 +222,7 @@ public final class CamSpots {
      * names, accepted or offered.
      */
     public List<String> sharedNames(Player player, String name) {
-        Share share = settings.isViewpointsSharing() ? shared.get(player.getUniqueId(), Spot.key(name)) : null;
+        Share share = settings.spots().sharing() ? shared.get(player.getUniqueId(), Spot.key(name)) : null;
         List<String> names = new ArrayList<>();
         if (share != null) {
             if (share.isEveryone()) {
@@ -332,9 +332,9 @@ public final class CamSpots {
      * {@code viewpoints.max-per-player}. If not, he has been told.
      */
     public boolean hasRoom(Player player) {
-        if (settings.limitsViewpoints() && spotsOf(player).size() >= settings.getViewpointsMax()) {
+        if (settings.spots().limited() && spotsOf(player).size() >= settings.spots().max()) {
             messages.sendConfiguredMessage(player, "spot-full", "{max}",
-                    String.valueOf(settings.getViewpointsMax()));
+                    String.valueOf(settings.spots().max()));
             return false;
         }
         return true;
@@ -499,7 +499,7 @@ public final class CamSpots {
      */
     public List<String> icons() {
         List<String> known = new ArrayList<>();
-        for (String key : settings.getViewpointsIcons()) {
+        for (String key : settings.spots().icons()) {
             if (iconItem(key) != null) {
                 known.add(key);
             }
@@ -547,7 +547,7 @@ public final class CamSpots {
      * camera is. If not, he has been told so.
      */
     public boolean maySetHere(Player player) {
-        if (settings.isViewpointsSetInCamOnly() && !plugin.isInCameraMode(player)) {
+        if (settings.spots().setInCamOnly() && !plugin.isInCameraMode(player)) {
             messages.sendConfiguredMessage(player, "spot-set-cam-only");
             return false;
         }
@@ -658,7 +658,7 @@ public final class CamSpots {
      * hears about it, with the buttons to accept it and to turn it down.
      */
     public void share(Player player, String name, String with) {
-        if (!settings.isViewpointsSharing()) {
+        if (!settings.spots().sharing()) {
             messages.sendConfiguredMessage(player, "spot-share-off");
             return;
         }
@@ -711,7 +711,7 @@ public final class CamSpots {
      * makes the spot private again.
      */
     public void unshare(Player player, String name, String with) {
-        if (!settings.isViewpointsSharing()) {
+        if (!settings.spots().sharing()) {
             messages.sendConfiguredMessage(player, "spot-share-off");
             return;
         }
@@ -762,7 +762,7 @@ public final class CamSpots {
      * private keeps whom it is shared with by name, and its likes.
      */
     public void makePublic(Player player, Spot spot, boolean everybody) {
-        if (!settings.isViewpointsSharing()) {
+        if (!settings.spots().sharing()) {
             messages.sendConfiguredMessage(player, "spot-share-off");
             return;
         }
@@ -781,7 +781,7 @@ public final class CamSpots {
 
     /** {@code /cam spot accept Owner:spot}: takes a spot offered to him. */
     public void accept(Player player, String label) {
-        if (!settings.isViewpointsSharing()) {
+        if (!settings.spots().sharing()) {
             messages.sendConfiguredMessage(player, "spot-share-off");
             return;
         }
@@ -814,7 +814,7 @@ public final class CamSpots {
      * spots all the same.
      */
     public void decline(Player player, String label) {
-        if (!settings.isViewpointsSharing()) {
+        if (!settings.spots().sharing()) {
             messages.sendConfiguredMessage(player, "spot-share-off");
             return;
         }
@@ -850,7 +850,7 @@ public final class CamSpots {
 
     /** {@code /cam spot like Owner:spot}: likes a public spot of another player, or no longer does. */
     public void like(Player player, String label) {
-        if (!settings.isViewpointsSharing()) {
+        if (!settings.spots().sharing()) {
             messages.sendConfiguredMessage(player, "spot-share-off");
             return;
         }
@@ -924,7 +924,7 @@ public final class CamSpots {
                 .replace("{owner}", share.getOwnerName())
                 .replace("{spot}", share.getSpot().name());
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
-        boolean answerable = settings.getMenuAccess().allowsMenu() || settings.getMenuAccess().allowsCommands();
+        boolean answerable = settings.menu().access().allowsMenu() || settings.menu().access().allowsCommands();
         if (answerable && plugin.getBedrock().answersInMenu(other)) {
             // He cannot click them, and typing is not what the menu is for.
             line.addAll(plugin.getBedrock().menuHint());
@@ -941,7 +941,7 @@ public final class CamSpots {
             plugin.getBedrock().forms().question(other, messages.getMessage("bedrock-form-spot-offer-title"), text,
                     messages.getMessage("bedrock-form-spot-offer-accept"),
                     messages.getMessage("bedrock-form-spot-offer-decline"), yes -> {
-                        if (!settings.isViewpointsSharing()) {
+                        if (!settings.spots().sharing()) {
                             messages.sendConfiguredMessage(other, "spot-share-off");
                         } else if (yes) {
                             accept(other, share);
@@ -965,9 +965,9 @@ public final class CamSpots {
         if (spots.isEmpty()) {
             messages.sendConfiguredMessage(player, "spot-list-empty");
         } else {
-            messages.sendConfiguredMessage(player, settings.limitsViewpoints() ? "spot-list-header"
+            messages.sendConfiguredMessage(player, settings.spots().limited() ? "spot-list-header"
                     : "spot-list-header-unlimited", "{count}", String.valueOf(spots.size()),
-                    "{max}", String.valueOf(settings.getViewpointsMax()));
+                    "{max}", String.valueOf(settings.spots().max()));
             if (messages.isMessageEnabled("spot-list-entry")) {
                 for (Spot spot : spots.values()) {
                     player.spigot().sendMessage(ownLine(player, spot));
@@ -1044,7 +1044,7 @@ public final class CamSpots {
         List<BaseComponent> line = new ArrayList<>(Arrays.asList(TextComponent.fromLegacyText(text)));
         line.addAll(button(player, "spot-button-go", spot.name(),
                 new ClickEvent(ClickEvent.Action.RUN_COMMAND, jumpCommand(player, spot))));
-        if (settings.isViewpointsSharing()) {
+        if (settings.spots().sharing()) {
             line.addAll(button(player, "spot-button-share", spot.name(),
                     new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/cam spot share " + spot.name() + " ")));
         }
@@ -1153,7 +1153,7 @@ public final class CamSpots {
         String label;
         UUID owner;
         if (spot == null && name.indexOf(':') >= 0) {
-            Share share = settings.isViewpointsSharing() ? shared.find(player.getUniqueId(), name) : null;
+            Share share = settings.spots().sharing() ? shared.find(player.getUniqueId(), name) : null;
             if (share == null) {
                 messages.sendConfiguredMessage(player, "spot-shared-unknown", "{spot}", name);
                 return;
@@ -1197,7 +1197,7 @@ public final class CamSpots {
         }
         showLook(player, spot);
         viewed(player, owner, spot);
-        settings.getSpotSound().play(player);
+        settings.sounds().spot().play(player);
         if (messages.isMessageEnabled("spot-jumped")) {
             plugin.getActionBar().flash(player, messages.getMessage("spot-jumped").replace("{spot}", label));
         }
@@ -1210,7 +1210,7 @@ public final class CamSpots {
      * will stand where he stands -, and once more by the jump itself.
      */
     private void startThenJump(Player player, String name, Spot spot, String label) {
-        double reach = settings.getViewpointsStartDistance();
+        double reach = settings.spots().startDistance();
         if (reach <= 0.0) {
             messages.sendConfiguredMessage(player, "not-in-cam");
             return;

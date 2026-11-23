@@ -5,13 +5,13 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.mob.MobTargeting;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.SessionTask;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -52,7 +52,7 @@ public final class BodyAlarm {
 
     /** What the alarm of one camera player has told him about already. */
     private static final class Watch {
-        BukkitRunnable task;
+        SessionTask task;
         /** Whatever set off the alarm and is still after the body or near it, by entity id. */
         final Set<UUID> known = new HashSet<>();
         /** Until when the next alarm waits, as {@link System#currentTimeMillis()} counts. */
@@ -74,12 +74,12 @@ public final class BodyAlarm {
      */
     public void startFor(Player player, LivingEntity damageTarget) {
         stopFor(player);
-        if (!settings.alarmsForMobs() && !settings.alarmsForPlayers()) {
+        if (!settings.bodyAlarm().forMobs() && !settings.bodyAlarm().forPlayers()) {
             return;
         }
         UUID id = player.getUniqueId();
         Watch watch = new Watch();
-        watch.task = new BukkitRunnable() {
+        watch.task = new SessionTask() {
             @Override
             public void run() {
                 if (!player.isOnline() || !cameraPlayers.contains(id) || !damageTarget.isValid()) {
@@ -90,7 +90,7 @@ public final class BodyAlarm {
                 look(player, damageTarget, watch);
             }
         };
-        watch.task.runTaskTimer(plugin, INTERVAL, INTERVAL);
+        watch.task.runTaskTimer(plugin.getSessionTicker(), player, INTERVAL, INTERVAL);
         watches.put(id, watch);
     }
 
@@ -111,7 +111,7 @@ public final class BodyAlarm {
     /** One look around the body: sets off the alarm for whatever is new there. */
     private void look(Player player, LivingEntity body, Watch watch) {
         Map<UUID, Entity> threats = new LinkedHashMap<>();
-        if (settings.alarmsForMobs()) {
+        if (settings.bodyAlarm().forMobs()) {
             // As far as a mob notices anything at all: one that has found
             // the body further away is after it all the same, and a skeleton
             // shoots from fifteen blocks.
@@ -122,8 +122,8 @@ public final class BodyAlarm {
                 }
             }
         }
-        if (settings.alarmsForPlayers()) {
-            double radius = settings.getBodyAlarmPlayerRadius();
+        if (settings.bodyAlarm().forPlayers()) {
+            double radius = settings.bodyAlarm().playerRadius();
             Location at = body.getLocation();
             for (Player other : body.getWorld().getPlayers()) {
                 if (other.equals(player) || other.getGameMode() == GameMode.SPECTATOR
@@ -160,13 +160,13 @@ public final class BodyAlarm {
         }
         // One alarm for all that came at once, naming the closest of them.
         watch.known.addAll(threats.keySet());
-        watch.quietUntil = now + settings.getBodyAlarmCooldown() * 1000L;
+        watch.quietUntil = now + settings.bodyAlarm().cooldown() * 1000L;
         sound(player, nearest, Math.sqrt(nearestDistance));
     }
 
     /** Sets off the alarm, for the mob or the player that came closest. */
     private void sound(Player player, Entity threat, double distance) {
-        settings.getBodyAlarmSound().play(player);
+        settings.sounds().bodyAlarm().play(player);
         String blocks = String.valueOf(Math.round(distance));
         String text;
         if (threat instanceof Player other) {

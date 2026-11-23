@@ -1,12 +1,12 @@
 package de.elia.cameraplugin.ghast;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.session.SessionTask;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.HappyGhast;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.BoundingBox;
 
 import java.util.HashMap;
@@ -60,7 +60,7 @@ public class CamGhastGuard {
     private static final long INTERVAL = 2L;
 
     private final CameraPlugin plugin;
-    private final Map<UUID, BukkitRunnable> tasks = new HashMap<>();
+    private final Map<UUID, SessionTask> tasks = new HashMap<>();
 
     public CamGhastGuard(CameraPlugin plugin) {
         this.plugin = plugin;
@@ -71,7 +71,7 @@ public class CamGhastGuard {
         if (tasks.containsKey(player.getUniqueId())) {
             return;
         }
-        BukkitRunnable task = new BukkitRunnable() {
+        SessionTask task = new SessionTask() {
             @Override
             public void run() {
                 if (!player.isOnline()) {
@@ -84,20 +84,20 @@ public class CamGhastGuard {
                 }
             }
         };
-        task.runTaskTimer(plugin, INTERVAL, INTERVAL);
+        task.runTaskTimer(plugin.getSessionTicker(), player, INTERVAL, INTERVAL);
         tasks.put(player.getUniqueId(), task);
     }
 
     /** Stops watching him, when camera mode ends. */
     public void stopFor(Player player) {
-        BukkitRunnable task = tasks.remove(player.getUniqueId());
+        SessionTask task = tasks.remove(player.getUniqueId());
         if (task != null) {
             task.cancel();
         }
     }
 
     public void onDisable() {
-        for (BukkitRunnable task : tasks.values()) {
+        for (SessionTask task : tasks.values()) {
             task.cancel();
         }
         tasks.clear();

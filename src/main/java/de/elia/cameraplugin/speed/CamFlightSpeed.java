@@ -67,8 +67,8 @@ public final class CamFlightSpeed implements Listener {
     public void startFor(Player player) {
         originalSpeeds.putIfAbsent(player.getUniqueId(), player.getFlySpeed());
         Double own = plugin.getPreferences().flightSpeed(player);
-        setSpeed(player, own == null ? settings.getFlightSpeedStart()
-                : Math.min(settings.getFlightSpeedMax(), Math.max(settings.getFlightSpeedMin(), own)));
+        setSpeed(player, own == null ? settings.flightSpeed().start()
+                : Math.min(settings.flightSpeed().max(), Math.max(settings.flightSpeed().min(), own)));
     }
 
     /**
@@ -106,7 +106,7 @@ public final class CamFlightSpeed implements Listener {
     public void onSlotChange(PlayerItemHeldEvent event) {
         Player player = event.getPlayer();
         Double current = speeds.get(player.getUniqueId());
-        if (current == null || !settings.isFlightSpeedWheel()) {
+        if (current == null || !settings.flightSpeed().mouseWheel()) {
             return;
         }
         int ahead = Math.floorMod(event.getNewSlot() - event.getPreviousSlot(), HOTBAR_SLOTS);
@@ -122,9 +122,9 @@ public final class CamFlightSpeed implements Listener {
         // wheel one step: the next one starts from the same slot again.
         event.setCancelled(true);
         // Up the wheel the slots count down, and that is the faster way.
-        double step = ahead > HOTBAR_SLOTS / 2 ? settings.getFlightSpeedStep() : -settings.getFlightSpeedStep();
-        double speed = Math.min(settings.getFlightSpeedMax(),
-                Math.max(settings.getFlightSpeedMin(), round(current + step)));
+        double step = ahead > HOTBAR_SLOTS / 2 ? settings.flightSpeed().step() : -settings.flightSpeed().step();
+        double speed = Math.min(settings.flightSpeed().max(),
+                Math.max(settings.flightSpeed().min(), round(current + step)));
         setSpeed(player, speed);
         plugin.getPreferences().setFlightSpeed(player, speed);
         if (messages.isMessageEnabled("flight-speed")) {

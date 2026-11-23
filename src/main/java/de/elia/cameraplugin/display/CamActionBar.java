@@ -5,6 +5,7 @@ import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
+import de.elia.cameraplugin.session.SessionTask;
 import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.KeybindComponent;
@@ -95,7 +96,7 @@ public final class CamActionBar {
     private final CamSettings settings;
     private final Messages messages;
     private final CameraPlayers cameraPlayers;
-    private final Map<UUID, BukkitRunnable> actionBarTasks = new HashMap<>();
+    private final Map<UUID, SessionTask> actionBarTasks = new HashMap<>();
     private final Map<UUID, BukkitRunnable> offMessageTasks = new HashMap<>();
     /** Until when a line of {@link #flash} stands, as {@link System#currentTimeMillis()} counts. */
     private final Map<UUID, Long> flashUntil = new HashMap<>();
@@ -108,20 +109,20 @@ public final class CamActionBar {
     }
 
     public void startActionBar(Player player) {
-        if (!settings.isActionBarEnabled()) return;
+        if (!settings.actionBar().enabled()) return;
         stopActionBar(player);
         BukkitRunnable off = offMessageTasks.remove(player.getUniqueId());
         if (off != null) off.cancel();
-        ActionBarDisplay display = settings.getActionBarDisplay();
+        ActionBarDisplay display = settings.actionBar().display();
         boolean distance = display == ActionBarDisplay.DISTANCE;
         boolean onText = messages.isMessageEnabled("actionbar-on");
         if (!distance && !onText) return;
-        long onTicks = settings.getActionBarOnDuration();
+        long onTicks = settings.actionBar().onDuration();
         boolean startOnly = display == ActionBarDisplay.START;
         // Only the start line, and that for no time: nothing to show at all.
         if (startOnly && onTicks <= 0) return;
         long interval = distance ? DISTANCE_INTERVAL : TEXT_INTERVAL;
-        BukkitRunnable task = new BukkitRunnable() {
+        SessionTask task = new SessionTask() {
             private long ticks = 0;
 
             @Override
@@ -158,7 +159,7 @@ public final class CamActionBar {
                 }
             }
         };
-        task.runTaskTimer(plugin, 0L, interval);
+        task.runTaskTimer(plugin.getSessionTicker(), player, 0L, interval);
         actionBarTasks.put(player.getUniqueId(), task);
     }
 
@@ -343,7 +344,7 @@ public final class CamActionBar {
 
     public void stopActionBar(Player player) {
         flashUntil.remove(player.getUniqueId());
-        BukkitRunnable task = actionBarTasks.remove(player.getUniqueId());
+        SessionTask task = actionBarTasks.remove(player.getUniqueId());
         if (task != null) {
             task.cancel();
         }
@@ -360,7 +361,7 @@ public final class CamActionBar {
     public void showActionBarOffMessage(Player player) {
         boolean onLineShown = actionBarTasks.containsKey(player.getUniqueId());
         stopActionBar(player);
-        if (!settings.isActionBarEnabled() || plugin.isShuttingDown()) return;
+        if (!settings.actionBar().enabled() || plugin.isShuttingDown()) return;
         BukkitRunnable existing = offMessageTasks.remove(player.getUniqueId());
         if (existing != null) existing.cancel();
         if (!messages.isMessageEnabled("actionbar-off")) {
@@ -382,7 +383,7 @@ public final class CamActionBar {
                     return;
                 }
 
-                if (ticks >= settings.getActionBarOffDuration()) {
+                if (ticks >= settings.actionBar().offDuration()) {
                     this.cancel();
                     offMessageTasks.remove(player.getUniqueId());
                     return;
@@ -398,7 +399,7 @@ public final class CamActionBar {
     }
 
     public void onDisable() {
-        for (BukkitRunnable task : actionBarTasks.values()) {
+        for (SessionTask task : actionBarTasks.values()) {
             task.cancel();
         }
         actionBarTasks.clear();
