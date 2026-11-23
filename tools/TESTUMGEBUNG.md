@@ -19,6 +19,51 @@ sieben Servern nebeneinander - so viele trägt ein Rechner mit 15 GiB - knapp
 zwanzig Minuten, siehe
 [Mehrere Server nebeneinander](#mehrere-server-nebeneinander).
 
+Was sich ohne Server prüfen lässt, prüfen dagegen die
+[schnellen Tests](#schnelle-tests-ohne-server) in wenigen Sekunden, bei jedem
+Bauen und auf GitHub bei jedem Pull Request.
+
+## Schnelle Tests ohne Server
+
+Unter `src/test/java` liegen JUnit-Tests für die Teile des Plugins, die nur
+rechnen und keinen Server brauchen. `mvn package` fährt sie bei jedem Bauen mit,
+also auch der Schritt `build`; allein:
+
+```bash
+mvn -B test                                # alle, gut eine Viertelminute
+mvn -B test -Dtest=ConfigUpdaterTest       # nur eine Klasse
+```
+
+| Test                 | Was er prüft |
+|----------------------|--------------|
+| `ConfigUpdaterTest`  | Was der Config-Updater in eine Datei schreibt und wohin, was er stehen lässt, Umbenennungen, Versionen, Zeilenenden. |
+| `BundledFilesTest`   | Die mitgelieferte `config.yml` und `lang/en.yml`: Der Updater versteht sie, und **jeder** Schlüssel der `config.yml` (aus der `en.yml` eine Auswahl) kommt mit seinem Kommentar zurück, wenn er fehlt, ohne dass sich ein Wert ändert. Dazu eine Datei aus der Zeit von `/cam tour`. |
+| `ConfigReaderTest`   | Wie Werte gelesen, begrenzt und ersetzt werden, welche Hinweise dabei entstehen, und dass jeder Hinweis seinen Text in der `en.yml` hat. |
+| `YamlOutlineTest`    | Welche Zeilen zu welchem Schlüssel gehören und bei welchen Dateien der Updater lieber nichts anfasst. |
+| `MessageKeysTest`    | Jeder Text, den der Code mit festem Schlüssel aus `Messages` holt, steht in der `en.yml` - ein Tippfehler im Schlüssel fiele sonst nie auf, die Meldung bliebe nur leer. |
+| `SignalPathTest`     | Die Stärke des Funksignals und welche Blöcke zwischen Körper und Kamera es durchquert, in einer Testwelt. |
+| `CallsTest`          | Wie die Anbindung an BlueMap, Dynmap und squaremap Methoden per Name findet und aufruft. |
+
+Ohne Server kennt ein `Material` seine Eigenschaften nicht: `isBlock()` oder
+`isOccluding()` brauchen die Register des Servers und werfen sonst. Was davon
+abhängt, prüfen weiter nur die Tests im Spiel.
+
+Eine Änderung nur unter `src/test` wählt keinen Abschnitt der Tests im Spiel,
+siehe [Welche Abschnitte laufen](#welche-abschnitte-laufen).
+
+### Auf GitHub
+
+`.github/workflows/build.yml` läuft bei jedem Pull Request und jedem Push auf
+`master`, in ein paar Minuten:
+
+1. `mvn -B package` - bauen und die schnellen Tests
+2. die Schritte `jdk,paperapi,crosscheck,apicheck,names` dieses Skripts, mit
+   dem JDK der Action
+
+Das gebaute Jar hängt danach an jedem Lauf (`CamFly-jar`), bei roten Tests
+auch ihre Berichte (`testberichte`). Die Tests im laufenden Spiel laufen dort
+nicht - sie brauchen zu lange.
+
 ## Nützliche Aufrufe
 
 ```bash
@@ -51,7 +96,7 @@ Liefen die Tests auf mehreren Servern, hat jeder seine eigene: `server/`,
 | Schritt      | Was passiert |
 |--------------|--------------|
 | `jdk`        | JDK 25 von Adoptium holen. Das System hat meist nur 21, `paper-api` hat aber Klassendateien der Version 69. |
-| `build`      | `mvn -B clean package` gegen `spigot-api`. Maven holt die API selbst. |
+| `build`      | `mvn -B clean package` gegen `spigot-api`. Maven holt die API selbst. Die [schnellen Tests](#schnelle-tests-ohne-server) laufen dabei mit; schlägt einer fehl, gibt es kein Jar. |
 | `paperapi`   | `paper-api` und die zwölf Abhängigkeiten, die zum Übersetzen nötig sind; Jars einer anderen Version räumt er vorher weg. |
 | `crosscheck` | Denselben Quelltext noch einmal mit `javac` gegen `paper-api` übersetzen. |
 | `apicheck`   | Jeden Aufruf auf `org/bukkit`, `net/md_5`, `io/papermc` aus `target/classes` gegen `paper-api` auflösen. |
@@ -106,8 +151,9 @@ und wählt die Abschnitte, die etwas davon betrifft:
 * Dazu jeder Abschnitt, der **beim letzten Lauf** im selben Arbeitsordner
   durchgefallen ist (aus `ergebnis.json`).
 
-Reine Kommentare und Javadoc zählen nicht, `*.md`, `.idea/` und `.vscode/`
-auch nicht. **Alle** Abschnitte laufen, wenn sich etwas nicht zuordnen lässt:
+Reine Kommentare und Javadoc zählen nicht, `*.md`, `.idea/`, `.vscode/`,
+`src/test/` (die [schnellen Tests](#schnelle-tests-ohne-server)) und
+`.github/` auch nicht. **Alle** Abschnitte laufen, wenn sich etwas nicht zuordnen lässt:
 `pom.xml`, eine andere Datei unter `src/main/resources`, ein Schlüssel, den
 kein Code liest, was Server oder Bot einrichtet (`prepare_server_files`,
 `SERVER_PROPERTIES` …), eine Änderung an `step_tests`, oder wenn es keinen
