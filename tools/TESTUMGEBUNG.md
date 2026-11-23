@@ -43,6 +43,13 @@ mvn -B test -Dtest=ConfigUpdaterTest       # nur eine Klasse
 | `MessageKeysTest`    | Jeder Text, den der Code mit festem Schlüssel aus `Messages` holt, steht in der `en.yml` - ein Tippfehler im Schlüssel fiele sonst nie auf, die Meldung bliebe nur leer. |
 | `SignalPathTest`     | Die Stärke des Funksignals und welche Blöcke zwischen Körper und Kamera es durchquert, in einer Testwelt. |
 | `CallsTest`          | Wie die Anbindung an BlueMap, Dynmap und squaremap Methoden per Name findet und aufruft. |
+| `BatteryChargeTest`  | Die Rechnung des Akkus (`BatteryCharge`): Entladen im Flug, Laden bis zur Kapazität, eine Uhr, die zurückspringt, die Wartezeit bis `min-start`, der Füllstand der Bossbar, kein Start mit leerem Akku. |
+| `CamTimeLimitTest`   | Wie die Texte eine Dauer schreiben (`formatDuration`, `formatSeconds`), wie lange ein Cooldown noch läuft - auch nach einem neuen `cooldown-seconds` -, und seine Bossbar. |
+| `BanTimeTest`        | Die Zeiten von `/cam ban` (`BanTime`): was als Zeit gilt und was schon zum Grund gehört, die Einheiten, die Obergrenze von hundert Jahren, und welcher Text sagt, wie sich ein Bann geändert hat. Dazu wann ein `BanList.Ban` noch gilt. |
+| `SpotTest`           | Erlaubte Namen eines Spots (auch Emoji), wonach er gefunden wird, Punkt und Prozent im Pfad der YAML-Datei, und dass ein Spot samt Zeit, Wetter, Nachtsicht und Icon aus der Datei so zurückkommt, wie er hineinging - auch mit Namen wie `1e3`, `true` oder `null`. |
+| `ShareTest`          | Für wen ein geteilter Spot gilt: öffentlich, angeboten, angenommen, nie für den Besitzer; Likes bleiben, solange er privat ist. |
+| `PlayerFileTest`     | Die Datei eines Spielers unter `playerdata/stats` (`PlayerFile`): alles kommt so zurück, wie es hineinging, Dateien älterer Versionen, Zahlen unter 0, unsinnige Einstellungen und Text, der kein YAML ist. |
+| `TourTrailTest`      | Der Weg, dem die Kameras der Gäste beim Folgen zwei Ticks hinter dem Leiter nachfliegen (`TourTrail`): verlorene, doppelte und gesprungene Schritte, Anhalten, ein Weltwechsel. |
 
 Ohne Server kennt ein `Material` seine Eigenschaften nicht: `isBlock()` oder
 `isOccluding()` brauchen die Register des Servers und werfen sonst. Was davon
