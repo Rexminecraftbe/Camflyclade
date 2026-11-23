@@ -16,11 +16,8 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * {@code /cam ban}, {@code /cam unban} and {@code /cam banlist}: keeps single
@@ -58,17 +55,6 @@ public final class CamBan {
 
     /** The word that stands for everybody. */
     private static final String ALL = "all";
-
-    /** A time as the commands take it: numbers with s, m, h, d or w after them, such as 2h or 1d12h. */
-    private static final Pattern TIME = Pattern.compile("(?i)(\\d{1,9}[smhdw])+");
-    private static final Pattern TIME_PART = Pattern.compile("(?i)(\\d{1,9})([smhdw])");
-
-    /**
-     * The longest ban for a while, some hundred years: anything longer is as
-     * good as for good, and the end of it is to fit into a number of
-     * milliseconds.
-     */
-    private static final long MAX_MILLIS = 100L * 365L * 86_400_000L;
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
@@ -131,8 +117,8 @@ public final class CamBan {
         long now = System.currentTimeMillis();
         long until = 0L;
         int reasonFrom = 1;
-        if (args.length > 1 && TIME.matcher(args[1]).matches()) {
-            until = now + millis(args[1]);
+        if (args.length > 1 && BanTime.isTime(args[1])) {
+            until = now + BanTime.millis(args[1]);
             reasonFrom = 2;
         }
         give(sender, args[0], now, until, String.join(" ", Arrays.copyOfRange(args, reasonFrom, args.length)).trim());
@@ -150,7 +136,7 @@ public final class CamBan {
             return;
         }
         long now = System.currentTimeMillis();
-        give(sender, who, now, minutes > 0L ? now + Math.min(MAX_MILLIS, minutes * 60_000L) : 0L, reason.trim());
+        give(sender, who, now, minutes > 0L ? now + BanTime.minutes(minutes) : 0L, reason.trim());
     }
 
     /**
@@ -171,9 +157,9 @@ public final class CamBan {
                 if (plugin.isInCameraMode(player)) {
                     plugin.exitCameraMode(player, EndReason.BAN);
                 }
-                messages.sendMessage(player, change ? changed("banned-everybody-changed-", old, ban)
+                messages.sendMessage(player, change ? BanTime.changed("banned-everybody-changed-", old, ban)
                                 : "banned-everybody-now", "{player}", by, "{time}", messageTime(ban, now),
-                        "{reason}", messageReason(ban), "{date}", date(ban), "{diff}", difference(old, ban));
+                        "{reason}", messageReason(ban), "{date}", date(ban), "{diff}", BanTime.difference(old, ban));
             }
             messages.sendConfiguredMessage(sender, change ? "ban-everybody-changed" : "ban-everybody-done",
                     "{time}", messageTime(ban, now), "{reason}", messageReason(ban));
@@ -194,9 +180,9 @@ public final class CamBan {
             if (plugin.isInCameraMode(online)) {
                 plugin.exitCameraMode(online, EndReason.BAN);
             }
-            messages.sendMessage(online, change ? changed("banned-changed-", old, ban) : "banned-now",
+            messages.sendMessage(online, change ? BanTime.changed("banned-changed-", old, ban) : "banned-now",
                     "{player}", by, "{time}", messageTime(ban, now), "{reason}", messageReason(ban),
-                    "{date}", date(ban), "{diff}", difference(old, ban));
+                    "{date}", date(ban), "{diff}", BanTime.difference(old, ban));
         }
         messages.sendConfiguredMessage(sender, change ? "ban-changed" : "ban-done", "{player}", name,
                 "{time}", messageTime(ban, now), "{reason}", messageReason(ban));
@@ -353,33 +339,6 @@ public final class CamBan {
     }
 
     /**
-     * Which text tells whom a changed ban holds how it changed, after its
-     * {@code prefix}: {@code forever} when it is for good now, {@code until}
-     * when it was for good and is not any more, {@code longer} or
-     * {@code shorter} by a minute or more, else {@code now}.
-     */
-    private static String changed(String prefix, BanList.Ban old, BanList.Ban ban) {
-        if (ban.forGood() || old.forGood()) {
-            return prefix + (ban.forGood() == old.forGood() ? "now" : ban.forGood() ? "forever" : "until");
-        }
-        long diff = ban.until() - old.until();
-        return prefix + (Math.abs(diff) < 60_000L ? "now" : diff > 0L ? "longer" : "shorter");
-    }
-
-    /**
-     * By how much a ban lasts longer or shorter than the one it changed, in
-     * whole minutes, the way the texts write a duration; nothing where either
-     * is for good.
-     */
-    private static String difference(BanList.Ban old, BanList.Ban ban) {
-        if (old == null || old.forGood() || ban.forGood()) {
-            return "";
-        }
-        long minutes = Math.round(Math.abs(ban.until() - old.until()) / 60_000.0);
-        return CamTimeLimit.formatDuration(minutes * 60L);
-    }
-
-    /**
      * When a ban ends, as {@code ban-date} writes it, in the time zone of the
      * server; nothing for one for good. A pattern that is none falls back on
      * year, month, day, hour and minute.
@@ -404,24 +363,6 @@ public final class CamBan {
     /** Who bans, for the texts: a player by his name, the console as {@code console-name}. */
     private String name(CommandSender sender) {
         return sender instanceof Player player ? player.getName() : messages.getMessage("console-name");
-    }
-
-    /** A time such as 2h or 1d12h in milliseconds. */
-    private static long millis(String time) {
-        long total = 0L;
-        Matcher part = TIME_PART.matcher(time);
-        while (part.find()) {
-            long amount = Long.parseLong(part.group(1));
-            long unit = switch (part.group(2).toLowerCase(Locale.ROOT)) {
-                case "s" -> 1_000L;
-                case "m" -> 60_000L;
-                case "h" -> 3_600_000L;
-                case "d" -> 86_400_000L;
-                default -> 604_800_000L;
-            };
-            total = Math.min(MAX_MILLIS, total + Math.min(MAX_MILLIS, amount * unit));
-        }
-        return total;
     }
 
     /**

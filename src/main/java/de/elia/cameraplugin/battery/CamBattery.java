@@ -94,7 +94,7 @@ public final class CamBattery {
         }
 
         double chargeAt(long now) {
-            return Math.max(0.0, startCharge - (now - startedAt) / 1000.0);
+            return BatteryCharge.inFlight(startCharge, startedAt, now);
         }
     }
 
@@ -126,8 +126,7 @@ public final class CamBattery {
         if (stored == null) {
             return capacity;
         }
-        double back = Math.max(0L, now - stored.at()) / 1000.0 * settings.battery().recharge();
-        return Math.min(capacity, stored.charge() + back);
+        return BatteryCharge.charged(stored.charge(), stored.at(), now, capacity, settings.battery().recharge());
     }
 
     /**
@@ -159,7 +158,7 @@ public final class CamBattery {
 
     /** How long until a battery holding {@code charge} holds {@code wanted}, in whole seconds. */
     private long secondsUntil(double charge, double wanted) {
-        return Math.max(1L, (long) Math.ceil((wanted - charge) / settings.battery().recharge()));
+        return BatteryCharge.secondsUntil(charge, wanted, settings.battery().recharge());
     }
 
     /**
@@ -174,9 +173,7 @@ public final class CamBattery {
         }
         double charge = charge(player.getUniqueId());
         double needed = settings.battery().minStart();
-        // Any charge at all is needed, also with min-start: 0 - an empty
-        // battery would end camera mode in the very second it starts.
-        if (charge >= needed && charge > 0.0) {
+        if (BatteryCharge.enoughToStart(charge, needed)) {
             return true;
         }
         messages.sendMessage(player, "battery-low",
@@ -238,7 +235,7 @@ public final class CamBattery {
     }
 
     private double progress(double charge) {
-        return Math.max(0.0, Math.min(1.0, charge / settings.battery().capacity()));
+        return BatteryCharge.progress(charge, settings.battery().capacity());
     }
 
     /**

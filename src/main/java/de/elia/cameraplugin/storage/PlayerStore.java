@@ -1,12 +1,7 @@
 package de.elia.cameraplugin.storage;
 
 import de.elia.cameraplugin.log.ConsoleLog;
-import de.elia.cameraplugin.nightvision.NightVisionMode;
-import de.elia.cameraplugin.resume.LastFlight;
-import de.elia.cameraplugin.spot.Spot;
-import de.elia.cameraplugin.spot.SpotLook;
 import org.bukkit.Bukkit;
-import org.bukkit.WeatherType;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -20,8 +15,6 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -46,6 +39,9 @@ import java.util.stream.Stream;
  * its thread and not the server. Until the text is on the disk, reading the
  * file gives that text, so a player who leaves and comes straight back finds
  * his record the way he left it.</p>
+ *
+ * <p>What the text of a file says, and how a record is read from it, is up
+ * to {@link PlayerFile}.</p>
  */
 public final class PlayerStore {
 
@@ -54,16 +50,6 @@ public final class PlayerStore {
 
     /** The folder of everything the plugin keeps per player. */
     private static final String PLAYER_FOLDER = "playerdata";
-
-    /** Which layout a file has, for a later version that changes it. */
-    private static final int FORMAT = 1;
-
-    /** What stands at the top of every file, for whoever finds one and wonders. */
-    private static final List<String> HEADER = List.of(
-            "CamFly: statistics, battery charge, cooldown, spots of /cam spot, own settings and the end of the last",
-            "flight (/cam resume) of this player.",
-            "Deleting it starts the player from nothing: no statistics, a full battery, no cooldown, no spots, the",
-            "settings of the server.");
 
     private final JavaPlugin plugin;
     private final ConsoleLog log;
@@ -218,167 +204,21 @@ public final class PlayerStore {
         if (text == null && !Files.exists(path)) {
             return new PlayerRecord();
         }
-        YamlConfiguration file = new YamlConfiguration();
         try {
-            file.loadFromString(text != null ? text : Files.readString(path, StandardCharsets.UTF_8));
+            return PlayerFile.read(text != null ? text : Files.readString(path, StandardCharsets.UTF_8));
         } catch (IOException | InvalidConfigurationException ex) {
             keepBroken(path, ex);
             return new PlayerRecord();
         }
-        Double charge = file.isSet("battery.charge") ? file.getDouble("battery.charge") : null;
-        Long cooldown = file.isSet("cooldown.started") ? file.getLong("cooldown.started") : null;
-        long sessions = Math.max(0L, file.getLong("stats.sessions"));
-        double flown = Math.max(0.0, file.getDouble("stats.distance-flown"));
-        // A file from before the longest way was counted does not say it.
-        // The longest flight is at least as long as the average one - with
-        // a single flight it is that one - so that is where it starts, and
-        // the next flight that goes farther puts the real one in its place.
-        double longestFlown = file.isSet("stats.longest-distance")
-                ? Math.max(0.0, file.getDouble("stats.longest-distance"))
-                : sessions > 0 ? flown / sessions : 0.0;
-        PlayerRecord record = new PlayerRecord(
-                file.getString("name"),
-                sessions,
-                Math.max(0L, file.getLong("stats.total-seconds")),
-                Math.max(0L, file.getLong("stats.longest-seconds")),
-                flown,
-                longestFlown,
-                Math.max(0.0, file.getDouble("stats.farthest-from-body")),
-                // A file from before this was noted does not say since when
-                // its numbers count. With numbers in it, that stays unknown
-                // until they are reset; without, the next flight says it.
-                Math.max(0L, file.getLong("stats.counted-since")),
-                Math.max(0L, file.getLong("stats.last-flight")),
-                charge == null ? null : Math.max(0.0, charge),
-                file.getLong("battery.updated"),
-                cooldown);
-        readSpots(file, record);
-        record.load(readNightVision(file.getString("settings.night-vision")),
-                file.isSet("settings.flight-speed") ? file.getDouble("settings.flight-speed") : null,
-                file.isSet("settings.time") ? file.getLong("settings.time") : null,
-                readWeather(file.getString("settings.weather")),
-                readLastFlight(file.getConfigurationSection("last-flight")));
-        return record;
-    }
-
-    /** What {@code settings.night-vision} says: on, off or dark, {@code null} for anything else. */
-    private static NightVisionMode readNightVision(String word) {
-        if (word == null) {
-            return null;
-        }
-        return switch (word.toLowerCase(Locale.ROOT)) {
-            case "on" -> NightVisionMode.ALWAYS;
-            case "off" -> NightVisionMode.OFF;
-            case "dark" -> NightVisionMode.DARK;
-            default -> null;
-        };
-    }
-
-    /** How {@code settings.night-vision} writes a mode. */
-    private static String nightVisionWord(NightVisionMode mode) {
-        return switch (mode) {
-            case ALWAYS -> "on";
-            case OFF -> "off";
-            case DARK -> "dark";
-        };
-    }
-
-    /** What {@code settings.weather} says: clear or rain, {@code null} for anything else. */
-    private static WeatherType readWeather(String word) {
-        if (word == null) {
-            return null;
-        }
-        return switch (word.toLowerCase(Locale.ROOT)) {
-            case "clear" -> WeatherType.CLEAR;
-            case "rain" -> WeatherType.DOWNFALL;
-            default -> null;
-        };
-    }
-
-    /** The end of the last flight, or {@code null} for none or one without a world. */
-    private static LastFlight readLastFlight(ConfigurationSection section) {
-        String world = section == null ? null : section.getString("world");
-        if (world == null || world.isEmpty()) {
-            return null;
-        }
-        // A file of an older version may name the visit of /cam visit the
-        // flight was on (visit-owner, visit-spot): that is gone, the flight
-        // goes on where it ended.
-        return new LastFlight(world, section.getDouble("x"), section.getDouble("y"), section.getDouble("z"),
-                (float) section.getDouble("yaw"), (float) section.getDouble("pitch"), SpotLook.read(section));
-    }
-
-    /**
-     * Reads the spots of a file, see {@link Spot#read}. One without a name or
-     * a world is left out.
-     */
-    private static void readSpots(YamlConfiguration file, PlayerRecord record) {
-        ConfigurationSection section = file.getConfigurationSection("spots");
-        if (section == null) {
-            return;
-        }
-        for (String key : section.getKeys(false)) {
-            Spot spot = Spot.read(section.getConfigurationSection(key));
-            if (spot != null) {
-                record.loadSpot(spot);
-            }
-        }
     }
 
     private void write(UUID playerId, PlayerRecord record) {
-        YamlConfiguration file = new YamlConfiguration();
-        file.options().setHeader(HEADER);
-        file.set("format", FORMAT);
-        file.set("name", record.getName());
-        file.set("stats.sessions", record.getSessions());
-        file.set("stats.total-seconds", record.getTotalSeconds());
-        file.set("stats.longest-seconds", record.getLongestSeconds());
-        file.set("stats.distance-flown", Math.round(record.getDistanceFlown() * 10.0) / 10.0);
-        file.set("stats.longest-distance", Math.round(record.getLongestDistance() * 10.0) / 10.0);
-        file.set("stats.farthest-from-body", Math.round(record.getFarthestFromBody() * 10.0) / 10.0);
-        if (record.getCountedSince() > 0L) {
-            file.set("stats.counted-since", record.getCountedSince());
-        }
-        if (record.getLastFlightEnded() > 0L) {
-            file.set("stats.last-flight", record.getLastFlightEnded());
-        }
-        if (record.getBatteryCharge() != null) {
-            file.set("battery.charge", record.getBatteryCharge());
-            file.set("battery.updated", record.getBatteryUpdated());
-        }
-        if (record.getCooldownStarted() != null) {
-            file.set("cooldown.started", record.getCooldownStarted());
-        }
-        for (Spot spot : record.getSpots().values()) {
-            spot.write(file, "spots." + Spot.pathKey(spot.key()));
-        }
-        if (record.getNightVision() != null) {
-            file.set("settings.night-vision", nightVisionWord(record.getNightVision()));
-        }
-        if (record.getFlightSpeed() != null) {
-            file.set("settings.flight-speed", record.getFlightSpeed());
-        }
-        if (record.getCamTime() != null) {
-            file.set("settings.time", record.getCamTime());
-        }
-        if (record.getCamWeather() != null) {
-            file.set("settings.weather", record.getCamWeather() == WeatherType.CLEAR ? "clear" : "rain");
-        }
-        LastFlight flight = record.getLastFlight();
-        if (flight != null) {
-            file.set("last-flight.world", flight.world());
-            file.set("last-flight.x", flight.x());
-            file.set("last-flight.y", flight.y());
-            file.set("last-flight.z", flight.z());
-            file.set("last-flight.yaw", (double) flight.yaw());
-            file.set("last-flight.pitch", (double) flight.pitch());
-            flight.look().write(file, "last-flight");
-        }
+        String text = PlayerFile.text(record);
         // Counted as saved as soon as it is handed over: only a change from
         // now on has it written again. Should the disk turn it away, it counts
         // as changed again and goes with the next save, as before.
         record.markSaved();
-        writer.write(file(playerId), file.saveToString(),
+        writer.write(file(playerId), text,
                 "The statistics, battery, cooldown, spots and settings of " + record.getName(),
                 record::markDirty);
     }
