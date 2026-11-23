@@ -49,11 +49,12 @@ import java.util.function.Supplier;
  * own hides the line again, as does the bucket on the page of the flights in
  * the menu - a water bucket while a line is shown, an empty one otherwise.</p>
  *
- * <p>How long the line stays goes by how far the camera flew: a second for
- * every {@link #BLOCKS_PER_SECOND} blocks, between
- * {@code cam-trail.show-min-seconds} and {@code show-max-seconds}. A long
- * line needs the time: it is drawn only within {@link #REACH} of the viewer,
- * who has to fly along it to see it all.</p>
+ * <p>How long the line stays, {@code cam-trail.show-mode} says, see
+ * {@link TrailShowMode}: by how far the camera flew, between
+ * {@code show-min-seconds} and {@code show-max-seconds} - a long line needs
+ * the time, it is drawn only within {@link #REACH} of the viewer, who has to
+ * fly along it to see it all -, always {@code show-seconds}, or until it is
+ * hidden.</p>
  *
  * <p>The flights are kept in memory only, the last few of each player, until
  * the server stops - and only while {@code cam-trail} is on.</p>
@@ -75,12 +76,6 @@ public final class CamTrail implements Listener {
      * server keeps to 512 blocks.
      */
     private static final double REACH = 128.0;
-
-    /**
-     * How many blocks of a flight keep its line a second longer on screen,
-     * between {@code cam-trail.show-min-seconds} and {@code show-max-seconds}.
-     */
-    private static final double BLOCKS_PER_SECOND = 5.0;
 
     /** How far apart the specks are at most, in blocks. */
     private static final double SPACING = 0.5;
@@ -268,9 +263,15 @@ public final class CamTrail implements Listener {
      * @param number      which one, 1 for the newest as {@code /cam trail}
      *                    counts; 0 for all of them, and for one no longer kept
      * @param all         whether all his kept flights are shown
-     * @param secondsLeft how long the line stays yet
+     * @param secondsLeft how long the line stays yet; -1 while it stays
+     *                    until it is hidden, {@code show-mode: forever}
      */
     public record Shown(String player, int number, boolean all, long secondsLeft) {
+
+        /** Whether the line stays until it is hidden, rather than going by itself. */
+        public boolean untilHidden() {
+            return secondsLeft < 0L;
+        }
     }
 
     /**
@@ -550,10 +551,14 @@ public final class CamTrail implements Listener {
     private void show(Player viewer, Supplier<List<FlightTrail>> shown, List<FlightTrail> now, boolean all) {
         hide(viewer);
         int seconds = showSeconds(now);
-        Drawing task = new Drawing(viewer, shown, now.get(0).playerName(), all, seconds * 20L);
+        Drawing task = new Drawing(viewer, shown, now.get(0).playerName(), all, seconds < 0 ? -1L : seconds * 20L);
         viewers.put(viewer.getUniqueId(), task);
         task.runTaskTimer(plugin, 0L, INTERVAL);
-        messages.sendConfiguredMessage(viewer, "trail-shown", "{time}", CamTimeLimit.formatDuration(seconds));
+        if (seconds < 0) {
+            messages.sendConfiguredMessage(viewer, "trail-shown-forever");
+        } else {
+            messages.sendConfiguredMessage(viewer, "trail-shown", "{time}", CamTimeLimit.formatDuration(seconds));
+        }
         Set<String> worlds = new LinkedHashSet<>();
         for (FlightTrail trail : now) {
             for (FlightTrail.Piece piece : trail.pieces()) {
@@ -567,22 +572,41 @@ public final class CamTrail implements Listener {
     }
 
     /**
-     * How long the line of these flights stays, in seconds: a second for
-     * every {@link #BLOCKS_PER_SECOND} blocks of the longest of them, but at
-     * least {@code show-min-seconds} and at most {@code show-max-seconds} -
-     * the most while one of them is still under way, as its line grows.
+     * How long the line of these flights stays, in seconds, as
+     * {@code show-mode} has it; -1 for until it is hidden. With
+     * {@code dynamic} the longest of them counts: up to
+     * {@code show-min-blocks} it stays {@code show-min-seconds}, from
+     * {@code show-max-blocks} on {@code show-max-seconds}, and in between in
+     * proportion - the most while one of them is still under way, as its line
+     * grows.
      */
     private int showSeconds(List<FlightTrail> now) {
-        int min = settings.getTrailShowMinSeconds();
-        int max = settings.getTrailShowMaxSeconds();
+        TrailShowMode mode = settings.getTrailShowMode();
+        if (mode == TrailShowMode.FOREVER) {
+            return -1;
+        }
+        if (mode == TrailShowMode.FIXED) {
+            return settings.getTrailShowSeconds();
+        }
+        int minBlocks = settings.getTrailShowMinBlocks();
+        int maxBlocks = settings.getTrailShowMaxBlocks();
+        int minSeconds = settings.getTrailShowMinSeconds();
+        int maxSeconds = settings.getTrailShowMaxSeconds();
         double longest = 0.0;
         for (FlightTrail trail : now) {
             if (trail.isFlying()) {
-                return max;
+                return maxSeconds;
             }
             longest = Math.max(longest, trail.distanceFlown());
         }
-        return (int) Math.max(min, Math.min(max, Math.round(longest / BLOCKS_PER_SECOND)));
+        if (longest <= minBlocks) {
+            return minSeconds;
+        }
+        if (longest >= maxBlocks) {
+            return maxSeconds;
+        }
+        double share = (longest - minBlocks) / (maxBlocks - minBlocks);
+        return (int) Math.round(minSeconds + share * (maxSeconds - minSeconds));
     }
 
     /** What draws the flights for one viewer, and what the menu tells of it. */
@@ -595,7 +619,7 @@ public final class CamTrail implements Listener {
         private final String player;
         /** Whether they are all his kept flights. */
         private final boolean all;
-        /** How long the line stays, in ticks. */
+        /** How long the line stays, in ticks; -1 until it is hidden. */
         private final long total;
         private long ticks;
 
@@ -609,7 +633,7 @@ public final class CamTrail implements Listener {
 
         @Override
         public void run() {
-            if (!viewer.isOnline() || ticks >= total) {
+            if (!viewer.isOnline() || (total >= 0L && ticks >= total)) {
                 cancel();
                 viewers.remove(viewer.getUniqueId(), this);
                 return;
@@ -618,9 +642,9 @@ public final class CamTrail implements Listener {
             ticks += INTERVAL;
         }
 
-        /** How long the line stays yet, in whole seconds, rounded up. */
+        /** How long the line stays yet, in whole seconds, rounded up; -1 until it is hidden. */
         long secondsLeft() {
-            return Math.max(0L, (total - ticks + 19L) / 20L);
+            return total < 0L ? -1L : Math.max(0L, (total - ticks + 19L) / 20L);
         }
     }
 

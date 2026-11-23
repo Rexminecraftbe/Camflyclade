@@ -3729,8 +3729,8 @@ public final class CamMenu implements Listener {
     /**
      * The players whose flights {@code /cam trail} keeps: a click shows his
      * flights. The last button hides a line that is shown: a water bucket
-     * then, with which flight it is and how long it stays yet, an empty one
-     * while none is shown.
+     * then, with which flight it is and how long it stays yet - or that it
+     * stays until it is hidden -, an empty one while none is shown.
      */
     private void openTrails(Player player, int pageNumber) {
         CamTrail trail = plugin.getTrail();
@@ -3788,8 +3788,9 @@ public final class CamMenu implements Listener {
                 hideLore.addAll(lines(messages.getMessage("menu-admin-trails-hide-flight")
                         .replace("{number}", String.valueOf(shown.number())).replace("{player}", shown.player())));
             }
-            hideLore.addAll(lines(messages.getMessage("menu-admin-trails-hide-left")
-                    .replace("{time}", CamTimeLimit.formatDuration(shown.secondsLeft()))));
+            hideLore.addAll(lines(shown.untilHidden() ? messages.getMessage("menu-admin-trails-hide-forever")
+                    : messages.getMessage("menu-admin-trails-hide-left")
+                            .replace("{time}", CamTimeLimit.formatDuration(shown.secondsLeft()))));
         }
         // The page is drawn anew every second: the bucket empties by itself once the line is gone.
         put(page, SLOT_NEW, shown == null ? Material.BUCKET : Material.WATER_BUCKET,

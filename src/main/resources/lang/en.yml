@@ -458,9 +458,10 @@ messages:
   menu-admin-trails-count: "&7{count} flights, last: {date}"
   menu-admin-trails-hide: "&bHide the line"
   # Under the bucket: while a line is shown which flight it is ({number}, or all of them) and how long it stays yet
-  # ({time}), otherwise menu-admin-trails-hide-none.
+  # ({time}; with cam-trail.show-mode: forever menu-admin-trails-hide-forever), otherwise menu-admin-trails-hide-none.
   menu-admin-trails-hide-all: "&7Shown: all flights of {player}"
   menu-admin-trails-hide-flight: "&7Shown: flight #{number} of {player}"
+  menu-admin-trails-hide-forever: "&7Until you hide it"
   menu-admin-trails-hide-left: "&7{time} left"
   menu-admin-trails-hide-none: "&7No flight is shown right now."
   menu-admin-trails-lore: "&7Where the cameras flew."
@@ -1261,6 +1262,7 @@ messages:
   trail-off: "&c/cam trail is switched off."
   trail-place: "{x} {y} {z} ({world})"
   trail-shown: "&aShown for {time}: green at the body, red at the camera."
+  trail-shown-forever: "&aShown until you hide it: green at the body, red at the camera."
   trail-to: "&7Camera last at &f{place}"
   trail-usage: "&eUse /cam trail <player> [number|all] to show flights, /cam trail to hide them."
   # unbanned-now and unbanned-everybody-now: {player} is who lifted it.
@@ -1980,6 +1982,7 @@ message-settings:
   trail-none: true
   trail-off: true
   trail-shown: true
+  trail-shown-forever: true
   trail-to: true
   trail-usage: true
   unban-done: true

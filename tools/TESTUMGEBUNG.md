@@ -1790,11 +1790,12 @@ Strecke ohne den Sprung von `/cam back`, den Platz des Körpers und den
 letzten der Kamera · der Spieler bekommt die Linie als Partikel, alle mit dem
 Flag für die Sichtweite und alle auf dem geflogenen Weg, keinen quer zurück,
 wo `/cam back` die Kamera versetzt hat · `/cam trail` ohne Namen blendet sie
-aus, nach `show-min-seconds` = `show-max-seconds` hört sie von selbst auf ·
-sonst steht sie eine Sekunde je 5 Blöcke Strecke, beschnitten auf
-`show-min-seconds` und `show-max-seconds`, ein Flug, der noch läuft,
-`show-max-seconds` lang · eine ältere Datei mit `show-seconds` geht mit dieser
-festen Zeit weiter, ohne Warnung · ein Name ohne Flug wird
+aus, mit `show-mode: fixed` hört sie nach `show-seconds` von selbst auf · mit
+`dynamic` steht ein Flug bis `show-min-blocks` `show-min-seconds` da, ab
+`show-max-blocks` `show-max-seconds`, dazwischen entsprechend, ein Flug, der
+noch läuft, `show-max-seconds` lang · mit `forever` steht sie, bis
+`/cam trail` sie ausblendet · eine ältere Datei ohne `show-mode`, mit
+`show-seconds`, geht mit `fixed` weiter, ohne Warnung · ein Name ohne Flug wird
 gemeldet, ohne `camplugin.trail` fehlt das Recht, und `enabled: false`
 vergisst die Flüge · nach einem zweiten Flug zeigt `/cam trail <Name>` nur
 den neuen, mit Knöpfen für `[1]`, `[2]` und `[all]`, `/cam trail <Name> 2`
@@ -1905,7 +1906,9 @@ zeigt die Flüge des Bots, den neuesten zuerst, mit Datum, Dauer, Strecke, Start
 und Ende; Linksklick zeigt einen, Rechtsklick bringt den Bot an seinen Start,
 der letzte Knopf zeigt alle · der Eimer der Flugspuren ist dann ein
 Wassereimer mit dem Flug und der Zeit, die bleibt, blendet die Linie aus und
-ist danach leer; ein Klick darauf sagt, dass keine zu sehen ist · „Save a spot
+ist danach leer; ein Klick darauf sagt, dass keine zu sehen ist; mit
+`show-mode: forever` steht darunter, dass sie bleibt, bis man sie ausblendet ·
+„Save a spot
 here“ fragt im Chat nach dem Namen, ein Linksklick springt zum Punkt, ein
 Klick mit Umschalt löscht ihn · `access: menu` lässt nur das Menü, `command`
 nur die Befehle, `false` keins von beiden, `/cam` selbst aber schon ·
