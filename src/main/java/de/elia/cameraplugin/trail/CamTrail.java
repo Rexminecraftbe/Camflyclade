@@ -273,10 +273,14 @@ public final class CamTrail implements Listener {
     public record Shown(String player, int number, boolean all, long secondsLeft) {
     }
 
-    /** What this viewer is being shown right now, or {@code null} while he is shown no line. */
+    /**
+     * What this viewer is being shown right now, or {@code null} while he is
+     * shown no line - also in the moment after it was drawn for the last
+     * time, before its task notices that its time is up.
+     */
     public Shown shownTo(Player viewer) {
         Drawing drawing = viewers.get(viewer.getUniqueId());
-        if (drawing == null) {
+        if (drawing == null || drawing.secondsLeft() == 0L) {
             return null;
         }
         int number = 0;

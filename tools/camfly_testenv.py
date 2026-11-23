@@ -11478,10 +11478,14 @@ def menue_checks(env, bot):
         menue()
         klick(23)
         klick(16)
-        eimer = fenster().get("slots", {}).get("49") or {}
-        FIND.test("Flugspuren: solange eine Linie steht, ist der Eimer ein Wassereimer mit dem Flug und der Zeit",
-                  eimer.get("name") == "water_bucket" and f"Shown: all flights of {BOT_NAME}" in item_text(eimer)
-                  and " left" in item_text(eimer), f"{eimer.get('name')} / {item_text(eimer)}")
+        # Welches Item es ist, sagt der Bot nicht verlaesslich: Er kennt die
+        # IDs von 26.2 nicht und nennt die Eimer Buendel. Verglichen wird
+        # deshalb nur, dass der leere ein anderes Item ist als der volle.
+        voll = fenster().get("slots", {}).get("49") or {}
+        FIND.test("Flugspuren: solange eine Linie steht, sagt der Eimer, welcher Flug es ist und wie lange noch",
+                  f"Shown: all flights of {BOT_NAME}" in item_text(voll)
+                  and re.search(r"\d+ seconds left", item_text(voll)) is not None,
+                  item_text(voll).replace("\n", " / "))
         seit = bot.mark()
         klick(49, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
@@ -11489,10 +11493,11 @@ def menue_checks(env, bot):
         menue()
         klick(23)
         klick(16)
-        eimer = fenster().get("slots", {}).get("49") or {}
-        FIND.test("Flugspuren: ohne Linie ist der Eimer leer und sagt das",
-                  eimer.get("name") == "bucket" and "No flight is shown right now" in item_text(eimer),
-                  f"{eimer.get('name')} / {item_text(eimer)}")
+        leer = fenster().get("slots", {}).get("49") or {}
+        FIND.test("Flugspuren: ohne Linie ist der Eimer ein anderes Item (leer) und sagt, dass keine zu sehen ist",
+                  "No flight is shown right now" in item_text(leer) and "Shown:" not in item_text(leer)
+                  and leer.get("name") is not None and leer.get("name") != voll.get("name"),
+                  f"{voll.get('name')} -> {leer.get('name')} / " + item_text(leer).replace("\n", " / "))
         seit = bot.mark()
         klick(49, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
