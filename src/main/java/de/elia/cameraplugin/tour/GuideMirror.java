@@ -658,7 +658,7 @@ final class GuideMirror {
         }
         int ticks = guide.getFreezeTicks();
         int own = guest.getFreezeTicks();
-        if (ticks != state.frost || own != state.ownFrost || ++state.sinceFrost >= CamTour.FROST_REFRESH) {
+        if (ticks != state.frost || own != state.ownFrost || ++state.sinceFrost >= TourFollowing.FROST_REFRESH) {
             if (frost.show(guest, ticks)) {
                 state.frost = ticks;
             }

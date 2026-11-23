@@ -102,6 +102,29 @@ public final class CamTimeLimit {
         return seconds + (seconds == 1 ? " second" : " seconds");
     }
 
+    /**
+     * How long a cooldown of {@code cooldownSeconds} that began at
+     * {@code started} still runs at {@code now}, in milliseconds; 0 once it
+     * is over. Both moments as {@link System#currentTimeMillis()} counts them.
+     */
+    static long cooldownLeft(long started, int cooldownSeconds, long now) {
+        return Math.max(0L, started + cooldownSeconds * 1000L - now);
+    }
+
+    /** Milliseconds as whole seconds, rounded up: a cooldown with a moment left still has a second. */
+    static long wholeSeconds(long millis) {
+        return (millis + 999L) / 1000L;
+    }
+
+    /**
+     * How full the bossbar of a cooldown is, 0 to 1: it fills up the way a
+     * battery charges, until he may start again.
+     */
+    static double cooldownProgress(long remainingMillis, int cooldownSeconds) {
+        double total = cooldownSeconds * 1000.0;
+        return Math.max(0.0, Math.min(1.0, 1.0 - remainingMillis / total));
+    }
+
     public void startTimeLimit(Player player) {
         if (!settings.timeLimit().enabled()) return;
         cancelTimeLimit(player);
@@ -194,7 +217,7 @@ public final class CamTimeLimit {
         if (started == null) {
             return 0L;
         }
-        long remaining = started + settings.timeLimit().cooldownSeconds() * 1000L - System.currentTimeMillis();
+        long remaining = cooldownLeft(started, settings.timeLimit().cooldownSeconds(), System.currentTimeMillis());
         if (remaining <= 0L) {
             // Over, and of no further use in memory.
             cooldownsInMemory.remove(playerId);
@@ -209,7 +232,7 @@ public final class CamTimeLimit {
 
     /** How long the cooldown of a player still runs, in whole seconds rounded up, 0 when there is none. */
     public long getCooldownRemaining(UUID playerId) {
-        return (remainingMillis(playerId) + 999L) / 1000L;
+        return wholeSeconds(remainingMillis(playerId));
     }
 
     public long getCooldownRemaining(Player player) {
@@ -258,11 +281,10 @@ public final class CamTimeLimit {
 
     /** The bossbar of a cooldown fills up the way a battery charges, until he may start again. */
     private void updateCooldownBar(BossBar bar, long remainingMillis) {
-        double total = settings.timeLimit().cooldownSeconds() * 1000.0;
-        bar.setProgress(Math.max(0.0, Math.min(1.0, 1.0 - remainingMillis / total)));
+        bar.setProgress(cooldownProgress(remainingMillis, settings.timeLimit().cooldownSeconds()));
         bar.setTitle(messages.isMessageEnabled("cooldown-bossbar")
                 ? messages.getMessage("cooldown-bossbar")
-                        .replace("{time}", formatDuration((remainingMillis + 999L) / 1000L))
+                        .replace("{time}", formatDuration(wholeSeconds(remainingMillis)))
                 : "");
     }
 

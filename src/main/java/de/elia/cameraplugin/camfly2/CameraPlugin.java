@@ -311,6 +311,7 @@ public final class CameraPlugin extends JavaPlugin {
                 scoutGuard,
                 menu,
                 tour,
+                tour.guestEvents(),
                 guestbook,
                 webMap,
                 oreHider,
