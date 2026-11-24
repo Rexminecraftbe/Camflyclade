@@ -2319,6 +2319,14 @@ def prepare_server_files(env):
         text, n = replace_option(text, "enabled", "false", abschnitt)
         if n != 1:
             Log.warn(f"{abschnitt}.enabled nicht in der Konfiguration gefunden")
+    # Flugspuren liegen voreingestellt in Dateien. Der Testserver merkt sie
+    # sich nur im Arbeitsspeicher: sonst kaemen die Fluege eines Abschnitts -
+    # und eines frueheren Laufs, playerdata bleibt stehen - bei jedem wieder,
+    # der cam-trail einschaltet. Nur flugspur_checks schaltet storage: file
+    # fuer sich ein und raeumt seine Dateien wieder weg.
+    text, n = replace_option(text, "storage", "memory", "cam-trail")
+    if n != 1:
+        Log.warn("cam-trail.storage nicht in der Konfiguration gefunden")
     # Ein Leader laedt denselben Spieler voreingestellt erst nach einer Minute
     # wieder ein. Die Abschnitte laden ihn immer wieder ein; nur
     # fuehrung_checks stellt die Wartezeit fuer sich ein und prueft sie.
@@ -7311,7 +7319,18 @@ def flugspur_checks(env, bot):
     gibt es nicht, und die Tab-Vervollstaendigung bietet 1, 2 und all an.
     flights: 1 laesst nach dem Reload nur den letzten stehen. Ein Name ohne
     Flug wird gemeldet, ohne camplugin.trail fehlt das Recht, und
-    enabled: false vergisst die Fluege.
+    enabled: false vergisst die Fluege - der Testserver merkt sie sich nur im
+    Arbeitsspeicher (storage: memory).
+
+    Voreingestellt liegen sie in Dateien (storage: file) und bleiben 30 Tage
+    (keep-days) - nachgesehen in der ausgelieferten Datei. Ein Flug aus der
+    Zeit von storage: memory bekommt mit dem Umschalten seine Datei unter
+    playerdata/trails/<UUID>/, ein neuer beim Ende, mit Name, Start und der
+    Linie zuletzt. Nach enabled: false und wieder true sind beide aus den
+    Dateien wieder da, mit der Linie aus der Datei. Ein Flug, der vor 40
+    Tagen endete, ist danach mit seiner Datei weg; mit flights: 0 und
+    keep-days: 0 bleibt einer von vor 400 Tagen, und flights: 1 loescht die
+    Datei des aelteren.
     """
     def konsole(text):
         """Was die Konsole darauf sagt, ohne Farben - auch ohne die, die der
@@ -7326,6 +7345,8 @@ def flugspur_checks(env, bot):
     def hoch(pos):
         return [pos[0], pos[1] + SPUR_HOEHE, pos[2]]
 
+    spuren = env.server / "plugins" / "CamFly" / "playerdata" / "trails"
+    eigene = spuren / offline_uuid(BOT_NAME)
     try:
         cam_off(bot)
         FIND.test("Voreingestellt steht cam-trail.enabled: true da, mit flights: 5 (der Testserver startet es aus)",
@@ -7562,15 +7583,116 @@ def flugspur_checks(env, bot):
         set_option(env, "enabled", "false", "cam-trail")
         set_option(env, "enabled", "true", "cam-trail")
         log = konsole(f"cam trail {BOT_NAME}")
-        FIND.test("cam-trail.enabled: false vergisst die Fluege",
+        FIND.test("cam-trail.enabled: false vergisst die Fluege (storage: memory)",
                   f"{BOT_NAME} has no recorded flights" in log, log.strip()[-200:] or "nichts im Log")
+
+        # storage: file - eine Datei je Flug unter playerdata/trails/<UUID>/.
+        FIND.test("Voreingestellt steht cam-trail.storage: file da, mit keep-days: 30 (der Testserver merkt sie "
+                  "sich nur im Arbeitsspeicher)",
+                  re.search(r"(?m)^  storage:\s*file\n(?:\s*#.*\n)*\s*keep-days:\s*30\s*$",
+                            quelle[quelle.index("\ncam-trail:"):]) is not None, "")
+        shutil.rmtree(spuren, ignore_errors=True)
+
+        def flug(**weg):
+            """Ein Flug von da, wo der Bot steht; wo die Kamera zuletzt war."""
+            if not cam_on(bot):
+                return None
+            bot.call("fly", wait=30, timeout=15000, **weg)
+            time.sleep(0.5)
+            zuletzt = bot.server_pos()
+            cam_off(bot)
+            time.sleep(1.0)
+            return zuletzt
+
+        def dateien():
+            return sorted(eigene.glob("*.yml"))
+
+        def neu_lesen():
+            """Aus- und wieder einschalten: Der Arbeitsspeicher vergisst die
+            Fluege, und die Dateien werden neu gelesen - im Hintergrund,
+            einen Moment spaeter."""
+            set_option(env, "enabled", "false", "cam-trail")
+            set_option(env, "enabled", "true", "cam-trail")
+            time.sleep(1.0)
+
+        set_options(env, [("flights", "5", "cam-trail"), ("show-mode", "fixed", "cam-trail"),
+                          ("show-seconds", "4", "cam-trail")])
+        erster = flug(dy=4)
+        vorher = dateien()
+        set_option(env, "storage", "file", "cam-trail")
+        time.sleep(1.0)
+        nach_umschalten = dateien()
+        zweiter = flug(dx=-4, dy=2)
+        beide = dateien()
+        FIND.test("storage: file - ein Flug von vorher bekommt mit dem Umschalten seine Datei",
+                  not vorher and len(nach_umschalten) == 1, f"{len(vorher)} / {len(nach_umschalten)}")
+        FIND.test("storage: file - ein neuer Flug bekommt seine Datei, wenn er endet",
+                  len(beide) == 2 and erster is not None and zweiter is not None, f"{[d.name for d in beide]}")
+        text = beide[-1].read_text(encoding="utf-8") if beide else ""
+        FIND.test("Die Datei sagt, wessen Flug es ist und wo er anfing, mit der Linie zuletzt",
+                  f"\nname: {BOT_NAME}\n" in text and "\nstart:\n" in text and "\npieces:\n" in text
+                  and text.index("\nstart:\n") < text.index("\npieces:\n"), text[:300])
+
+        neu_lesen()
+        log = konsole(f"cam trail {BOT_NAME} 2")
+        FIND.test("storage: file - nach enabled: false und wieder true sind beide Fluege aus den Dateien da",
+                  re.search(rf"Flight #2 of {BOT_NAME}: \d+ blocks in .+, ended .+ ago", log) is not None,
+                  log.strip()[-200:] or "nichts im Log")
+        befehl(bot, "/cam trail", warten=0.5)
+        seit = partikel_marke(bot)
+        z = befehl(bot, f"/cam trail {BOT_NAME}")
+        teile = partikel_seit(bot, seit)
+        befehl(bot, "/cam trail", warten=0.5)
+        FIND.test("... und die Linie des neuesten kommt aus seiner Datei",
+                  gesagt(z, rf"Flight #1 of {BOT_NAME}") and zweiter is not None and bei(teile, zweiter),
+                  zeige(z[:1]) + f" - {len(teile)} Partikel")
+
+        # keep-days: 30. Der aeltere Flug begann und endete vor 40 Tagen - wann
+        # er begann, sagt der Name seiner Datei.
+        def zurueckdatieren(datei, tage):
+            vor = int((time.time() - tage * 86400) * 1000)
+            text = datei.read_text(encoding="utf-8")
+            text = re.sub(r"(?m)^started: .*$", f"started: {vor}", text)
+            text = re.sub(r"(?m)^ended: .*$", f"ended: {vor + 60000}", text)
+            neu = datei.with_name(f"{vor}.yml")
+            neu.write_text(text, encoding="utf-8")
+            datei.unlink()
+            return neu
+
+        alt = zurueckdatieren(beide[0], 40) if len(beide) == 2 else None
+        neu_lesen()
+        log = konsole(f"cam trail {BOT_NAME} 2")
+        FIND.test("keep-days: 30 - ein Flug, der vor 40 Tagen endete, ist nach dem Lesen weg, mit seiner Datei",
+                  f"No flight #2: {BOT_NAME} has only 1." in log and alt is not None and not alt.exists()
+                  and len(dateien()) == 1, log.strip()[-200:] or "nichts im Log")
+
+        # Fuer immer: flights: 0 und keep-days: 0.
+        set_options(env, [("flights", "0", "cam-trail"), ("keep-days", "0", "cam-trail")])
+        uebrig = dateien()
+        uralt = None
+        if uebrig:
+            kopie = uebrig[0].with_name("1.yml")
+            shutil.copy2(uebrig[0], kopie)
+            uralt = zurueckdatieren(kopie, 400)
+        neu_lesen()
+        log = konsole(f"cam trail {BOT_NAME} 2")
+        FIND.test("flights: 0 und keep-days: 0 - auch ein Flug von vor 400 Tagen bleibt",
+                  f"Flight #2 of {BOT_NAME}" in log and uralt is not None and uralt.exists(),
+                  log.strip()[-200:] or "nichts im Log")
+        set_option(env, "flights", "1", "cam-trail")
+        time.sleep(1.0)
+        FIND.test("flights: 1 - der aeltere Flug geht, mit seiner Datei",
+                  uralt is not None and not uralt.exists() and len(dateien()) == 1, f"{[d.name for d in dateien()]}")
     finally:
         console(env, f"op {BOT_NAME}", pause=1.0)
         cam_off(bot)
         set_options(env, [("enabled", "false", "cam-trail"), ("show-mode", "dynamic", "cam-trail"),
                           ("show-seconds", "30", "cam-trail"), ("show-min-blocks", "50", "cam-trail"),
                           ("show-min-seconds", "10", "cam-trail"), ("show-max-blocks", "1500", "cam-trail"),
-                          ("show-max-seconds", "300", "cam-trail"), ("flights", "5", "cam-trail")])
+                          ("show-max-seconds", "300", "cam-trail"), ("flights", "5", "cam-trail"),
+                          ("storage", "memory", "cam-trail"), ("keep-days", "30", "cam-trail")])
+        time.sleep(1.0)
+        shutil.rmtree(spuren, ignore_errors=True)
 
 
 def vorschlag_checks(env, bot):
@@ -11114,7 +11236,10 @@ def menue_checks(env, bot):
     letzte Knopf zeigt alle. Der Eimer auf der Seite der Flugspuren ist dann
     ein Wassereimer mit dem Flug und der Zeit, die bleibt, und blendet die
     Linie aus; danach ist er leer, und ein Klick sagt, dass keine zu sehen ist,
-    statt wie der Befehl geht.
+    statt wie der Befehl geht. Ein Umschalt-Klick auf einen Flug loescht ihn,
+    und die Seite bleibt offen; der Knopf unten rechts loescht alle Fluege des
+    Bots erst nach einer Rueckfrage - Keep them behaelt sie -, und danach steht
+    die Seite der Flugspuren ohne ihn da.
 
     Der Foto-Modus sagt unter seinem Namen, wie er steht: off und nach einem
     Klick on. Die Zeit sagt es in ihrem Namen:
@@ -11568,6 +11693,61 @@ def menue_checks(env, bot):
                   f"Shown: flight #1 of {BOT_NAME}" in item_text(voll) and "Until you hide it" in item_text(voll)
                   and " left" not in item_text(voll), item_text(voll).replace("\n", " / "))
         klick(49, warten=2.0)
+
+        # Loeschen: ein Umschalt-Klick loescht einen Flug, der Knopf unten
+        # rechts alle - nach einer Rueckfrage.
+        menue()
+        klick(23)
+        klick(16)
+        klick(0)
+        knopf = fenster().get("slots", {})
+        FIND.test("Unter jedem Flug steht, dass ein Umschalt-Klick ihn loescht; unten rechts der Knopf fuer alle",
+                  "Shift-click: delete" in item_text(knopf.get("1"))
+                  and "Delete all flights" in item_text(knopf.get("53")) and "52" not in knopf,
+                  f"{item_text(knopf.get('1'))} / {item_text(knopf.get('53'))}".replace("\n", " / "))
+        seit = bot.mark()
+        klick(1, mode=1, warten=2.0)
+        zeilen = zeilen_seit(bot, seit)
+        f = fenster()
+        knopf = f.get("slots", {})
+        FIND.test("Umschalt-Klick auf den aelteren Flug loescht ihn; die Seite bleibt offen, mit nur noch einem",
+                  gesagt(zeilen, rf"Deleted flight #2 of {BOT_NAME}")
+                  and f"Flights: {BOT_NAME}" in (f.get("title") or "") and "0" in knopf and "1" not in knopf,
+                  f"{f.get('title')} / {sorted(knopf)} / {zeige(zeilen)}")
+        bot.call("close_window", wait=10)
+        hinstellen(bot, x, y, z)
+        cam_on(bot)
+        bot.call("fly", wait=30, timeout=15000, dy=2)
+        time.sleep(1.0)
+        cam_off(bot)
+        time.sleep(1.5)
+        menue()
+        klick(23)
+        klick(16)
+        klick(0)
+        klick(53)
+        knopf = fenster().get("slots", {})
+        FIND.test("Der Knopf fuer alle fragt noch einmal: daneben steht, was weg ist, er selbst behaelt sie",
+                  "Delete all for good" in item_text(knopf.get("52"))
+                  and f"2 flights of {BOT_NAME}" in item_text(knopf.get("52"))
+                  and "Keep them" in item_text(knopf.get("53")),
+                  f"{item_text(knopf.get('52'))} / {item_text(knopf.get('53'))}".replace("\n", " / "))
+        klick(53)
+        knopf = fenster().get("slots", {})
+        FIND.test("Keep them behaelt sie, und der Knopf fragt wieder",
+                  "Delete all flights" in item_text(knopf.get("53")) and "52" not in knopf and "1" in knopf,
+                  f"{sorted(knopf)} / {item_text(knopf.get('53'))}".replace("\n", " / "))
+        klick(53)
+        seit = bot.mark()
+        klick(52, warten=2.0)
+        zeilen = zeilen_seit(bot, seit)
+        f = fenster()
+        titel = f.get("title") or ""
+        FIND.test("Delete all for good loescht beide; danach steht die Seite der Flugspuren da, ohne den Bot",
+                  gesagt(zeilen, rf"Deleted all 2 flights of {BOT_NAME}") and "Flights" in titel
+                  and "Flights:" not in titel and "0" not in f.get("slots", {}),
+                  f"{titel} / {sorted(f.get('slots', {}))} / {zeige(zeilen)}")
+        bot.call("close_window", wait=10)
         set_options(env, [("enabled", "false", "cam-trail"), ("show-mode", "dynamic", "cam-trail"),
                           ("show-min-seconds", "10", "cam-trail")])
 

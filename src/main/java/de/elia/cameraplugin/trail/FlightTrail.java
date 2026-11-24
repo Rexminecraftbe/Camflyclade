@@ -1,12 +1,16 @@
 package de.elia.cameraplugin.trail;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 
+import java.lang.ref.SoftReference;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * The way the camera of one player flew, for {@code /cam trail}: a line of
@@ -19,6 +23,11 @@ import java.util.UUID;
  * than {@link #MAX_POINTS}, every other one is dropped and the step doubles: a
  * long flight keeps its whole way, only coarser, and no flight takes more
  * memory than that.</p>
+ *
+ * <p>A flight kept in a file ({@code cam-trail.storage: file}) holds only what
+ * is said of it in memory - who, when, how long, how far, from where to where.
+ * Its line is read from the file when somebody looks at it, and kept while
+ * the memory has room for it, see {@link #keepInFile}.</p>
  */
 final class FlightTrail {
 
@@ -44,14 +53,24 @@ final class FlightTrail {
         private int size;
 
         private Piece(Location at) {
-            World world = at.getWorld();
+            World world = at.isWorldLoaded() ? at.getWorld() : null;
             this.worldId = world == null ? null : world.getUID();
             this.worldName = world == null ? "?" : world.getName();
             add(at);
         }
 
+        /** A piece read from the file of a flight. */
+        private Piece(TrailFile.Line line) {
+            this.worldId = line.worldId();
+            this.worldName = line.world();
+            this.coords = line.coords().clone();
+            this.size = coords.length / 3;
+        }
+
+        /** Whether it lies in this world: by its id, or by its name where the file had no id. */
         boolean isIn(World world) {
-            return world != null && world.getUID().equals(worldId);
+            return world != null && (worldId != null ? world.getUID().equals(worldId)
+                    : world.getName().equals(worldName));
         }
 
         String worldName() {
@@ -102,6 +121,11 @@ final class FlightTrail {
             size++;
         }
 
+        /** The piece as the file of the flight writes it. */
+        private TrailFile.Line toLine() {
+            return new TrailFile.Line(worldName, worldId, Arrays.copyOf(coords, 3 * size));
+        }
+
         /** Drops every other point, keeping the first and the last. */
         private void thinOut() {
             int kept = 0;
@@ -117,26 +141,82 @@ final class FlightTrail {
 
     private final UUID playerId;
     private final String playerName;
-    /** Where the body stood, the start of the way even once its first piece is dropped. */
+    /**
+     * Where the body stood, the start of the way even once its first piece is
+     * dropped. Its world may be missing while it is not loaded, see
+     * {@link #located}.
+     */
     private final Location start;
-    private final long startedAt = System.currentTimeMillis();
+    /** The name of the world of {@link #start}, to find it again once it is loaded. */
+    private final String startWorld;
+    private final long startedAt;
     /** When the flight ended, or 0 while the camera still flies. */
     private long endedAt;
-    private final List<Piece> pieces = new ArrayList<>();
+    /**
+     * The pieces of the way while they are held for good: while the camera
+     * flies it, and while the flight is kept in memory only. {@code null} for
+     * a flight kept in a file, see {@link #cached}.
+     */
+    private List<Piece> pieces;
+    /** The pieces of a flight kept in a file, as long as the memory has room for them. */
+    private SoftReference<List<Piece>> cached;
+    /** Reads the pieces of a flight kept in a file from it, when they are not {@link #cached}. */
+    private Supplier<List<Piece>> loader;
+    /** Whether it has a file, written or on its way. */
+    private boolean saved;
     private double step = FIRST_STEP;
     private int points;
     /** How far the camera flew, every step counted. */
     private double distanceFlown;
     /** Where the camera was after the last step, to tell a step from being put somewhere. */
     private Location lastSeen;
+    /** The name of the world of {@link #lastSeen}. */
+    private String lastWorld;
 
     FlightTrail(UUID playerId, String playerName, Location start) {
         this.playerId = playerId;
         this.playerName = playerName;
         this.start = start.clone();
+        this.startWorld = worldName(start);
+        this.startedAt = System.currentTimeMillis();
         this.lastSeen = start.clone();
+        this.lastWorld = startWorld;
+        this.pieces = new ArrayList<>();
         pieces.add(new Piece(start));
         points = 1;
+    }
+
+    /** A flight read from its file, its line not yet: see {@link #keepInFile}. */
+    private FlightTrail(TrailFile.Data head) {
+        this.playerId = head.player();
+        this.playerName = head.name();
+        this.start = location(head.start());
+        this.startWorld = head.start().world();
+        this.startedAt = head.startedAt();
+        this.endedAt = head.endedAt();
+        this.distanceFlown = head.distance();
+        this.lastSeen = location(head.last());
+        this.lastWorld = head.last().world();
+        this.saved = true;
+    }
+
+    /**
+     * A flight read from its file, with what is said of it; its line comes
+     * from the file once somebody looks at it, see {@link #keepInFile}.
+     */
+    static FlightTrail stored(TrailFile.Data head) {
+        return new FlightTrail(head);
+    }
+
+    /** The pieces of a line read from a file, the oldest first; a line without a point is left out. */
+    static List<Piece> piecesOf(List<TrailFile.Line> lines) {
+        List<Piece> read = new ArrayList<>();
+        for (TrailFile.Line line : lines) {
+            if (line.coords().length >= 3) {
+                read.add(new Piece(line));
+            }
+        }
+        return read;
     }
 
     /**
@@ -151,6 +231,7 @@ final class FlightTrail {
             distanceFlown += from.distance(to);
         }
         lastSeen = to.clone();
+        lastWorld = worldName(to);
         Piece piece = pieces.get(pieces.size() - 1);
         if (!piece.isIn(to.getWorld())) {
             breakOff(to);
@@ -167,7 +248,48 @@ final class FlightTrail {
             breakOff(cameraAt);
         }
         lastSeen = cameraAt.clone();
+        lastWorld = worldName(cameraAt);
         endedAt = System.currentTimeMillis();
+    }
+
+    /**
+     * The flight is kept in a file from now on, which is written or on its
+     * way: its line goes from memory as soon as the memory needs the room,
+     * and is read from the file again when it is looked at.
+     *
+     * @param loader reads the pieces from the file; never none
+     */
+    void keepInFile(Supplier<List<Piece>> loader) {
+        this.loader = loader;
+        if (pieces != null) {
+            cached = new SoftReference<>(Collections.unmodifiableList(new ArrayList<>(pieces)));
+            pieces = null;
+        }
+        saved = true;
+    }
+
+    /** Whether it has a file, written or on its way. */
+    boolean saved() {
+        return saved;
+    }
+
+    /** The flight as its file has it, see {@link TrailFile}. */
+    TrailFile.Data toData() {
+        List<TrailFile.Line> lines = new ArrayList<>();
+        for (Piece piece : pieces()) {
+            lines.add(piece.toLine());
+        }
+        return new TrailFile.Data(playerId, playerName, startedAt, endedAt, distanceFlown,
+                place(start, startWorld), place(lastSeen, lastWorld), lines);
+    }
+
+    /**
+     * The line of a flight whose file cannot be read any more: where the body
+     * stood and where the camera was last, each a piece of its own - the two
+     * ends are drawn, the way between them is not known.
+     */
+    List<Piece> endsOnly() {
+        return List.of(new Piece(line(place(start, startWorld))), new Piece(line(place(lastSeen, lastWorld))));
     }
 
     /**
@@ -222,6 +344,41 @@ final class FlightTrail {
                 && a.distanceSquared(b) <= JUMP * JUMP;
     }
 
+    private static String worldName(Location at) {
+        return at.isWorldLoaded() ? at.getWorld().getName() : "?";
+    }
+
+    private static TrailFile.Place place(Location at, String world) {
+        World loaded = at.isWorldLoaded() ? at.getWorld() : null;
+        return new TrailFile.Place(world, loaded == null ? null : loaded.getUID(), at.getX(), at.getY(), at.getZ(),
+                at.getYaw(), at.getPitch());
+    }
+
+    private static TrailFile.Line line(TrailFile.Place place) {
+        return new TrailFile.Line(place.world(), place.worldId(), new double[]{place.x(), place.y(), place.z()});
+    }
+
+    /** A spot of a file, in its world if that is loaded, else without one for now. */
+    private static Location location(TrailFile.Place place) {
+        World world = place.worldId() != null ? Bukkit.getWorld(place.worldId()) : null;
+        if (world == null) {
+            world = Bukkit.getWorld(place.world());
+        }
+        return new Location(world, place.x(), place.y(), place.z(), place.yaw(), place.pitch());
+    }
+
+    /**
+     * A copy of a spot in its world: one that was not loaded when the
+     * flight was read is looked up again by its name, so a world loaded later
+     * - by another plugin - is found.
+     */
+    private static Location located(Location at, String world) {
+        if (!at.isWorldLoaded() && world != null) {
+            at.setWorld(Bukkit.getWorld(world));
+        }
+        return at.clone();
+    }
+
     UUID playerId() {
         return playerId;
     }
@@ -254,18 +411,40 @@ final class FlightTrail {
         return distanceFlown;
     }
 
-    /** Where the body stood. */
+    /** Where the body stood; without a world while that is not loaded. */
     Location start() {
-        return start.clone();
+        return located(start, startWorld);
     }
 
-    /** Where the camera was last. */
+    /** The name of the world where the body stood. */
+    String startWorld() {
+        return startWorld;
+    }
+
+    /** Where the camera was last; without a world while that is not loaded. */
     Location last() {
-        return lastSeen.clone();
+        return located(lastSeen, lastWorld);
     }
 
-    /** The pieces of the way, the oldest first. Not to be changed. */
+    /** The name of the world where the camera was last. */
+    String lastWorld() {
+        return lastWorld;
+    }
+
+    /**
+     * The pieces of the way, the oldest first; never none. Not to be changed.
+     * For a flight kept in a file they are read from it, if the memory had
+     * to give them up.
+     */
     List<Piece> pieces() {
-        return Collections.unmodifiableList(pieces);
+        if (pieces != null) {
+            return Collections.unmodifiableList(pieces);
+        }
+        List<Piece> kept = cached == null ? null : cached.get();
+        if (kept == null) {
+            kept = Collections.unmodifiableList(loader.get());
+            cached = new SoftReference<>(kept);
+        }
+        return kept;
     }
 }
