@@ -62,8 +62,8 @@ import java.util.function.Supplier;
  * {@link TrailShowMode}: by how far the camera flew, between
  * {@code show-min-seconds} and {@code show-max-seconds} - a long line needs
  * the time, it is drawn only within {@link #REACH} of the viewer, who has to
- * fly along it to see it all -, always {@code show-seconds}, or until it is
- * hidden.</p>
+ * fly along it to see it all, and with {@code all} along every one of them -,
+ * always {@code show-seconds}, or until it is hidden.</p>
  *
  * <p>Recorded is only while {@code cam-trail} is on. The last
  * {@code cam-trail.flights} of each player are kept - all of them with 0 -,
@@ -792,11 +792,11 @@ public final class CamTrail implements Listener, PluginPart {
     /**
      * How long the line of these flights stays, in seconds, as
      * {@code show-mode} has it; -1 for until it is hidden. With
-     * {@code dynamic} the longest of them counts: up to
-     * {@code show-min-blocks} it stays {@code show-min-seconds}, from
-     * {@code show-max-blocks} on {@code show-max-seconds}, and in between in
-     * proportion - the most while one of them is still under way, as its line
-     * grows.
+     * {@code dynamic} all of them count together, as the viewer flies along
+     * every line: up to {@code show-min-blocks} it stays
+     * {@code show-min-seconds}, from {@code show-max-blocks} on
+     * {@code show-max-seconds}, and in between in proportion - the most while
+     * one of them is still under way, as its line grows.
      */
     private int showSeconds(List<FlightTrail> now) {
         TrailShowMode mode = settings.trail().showMode();
@@ -810,20 +810,20 @@ public final class CamTrail implements Listener, PluginPart {
         int maxBlocks = settings.trail().showMaxBlocks();
         int minSeconds = settings.trail().showMinSeconds();
         int maxSeconds = settings.trail().showMaxSeconds();
-        double longest = 0.0;
+        double together = 0.0;
         for (FlightTrail trail : now) {
             if (trail.isFlying()) {
                 return maxSeconds;
             }
-            longest = Math.max(longest, trail.distanceFlown());
+            together += trail.distanceFlown();
         }
-        if (longest <= minBlocks) {
+        if (together <= minBlocks) {
             return minSeconds;
         }
-        if (longest >= maxBlocks) {
+        if (together >= maxBlocks) {
             return maxSeconds;
         }
-        double share = (longest - minBlocks) / (maxBlocks - minBlocks);
+        double share = (together - minBlocks) / (maxBlocks - minBlocks);
         return (int) Math.round(minSeconds + share * (maxSeconds - minSeconds));
     }
 

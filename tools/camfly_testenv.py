@@ -7315,8 +7315,8 @@ def flugspur_checks(env, bot):
     show-seconds, geht mit fixed weiter, ohne Warnung.
 
     Nach einem zweiten Flug zeigt /cam trail <Name> nur den neuen, mit Knoepfen
-    fuer [1], [2] und [all], /cam trail <Name> 2 nur den alten, all beide; #3
-    gibt es nicht, und die Tab-Vervollstaendigung bietet 1, 2 und all an.
+    fuer [1], [2] und [all], /cam trail <Name> 2 nur den alten, all beide - mit
+    dynamic so lange, wie beide Strecken zusammen ergeben; #3 gibt es nicht, und die Tab-Vervollstaendigung bietet 1, 2 und all an.
     flights: 1 laesst nach dem Reload nur den letzten stehen. Ein Name ohne
     Flug wird gemeldet, ohne camplugin.trail fehlt das Recht, und
     enabled: false vergisst die Fluege - der Testserver merkt sie sich nur im
@@ -7559,6 +7559,25 @@ def flugspur_checks(env, bot):
                   and gesagt(z, r"^#2: \d+ blocks") and bei(teile, ecke) and bei(teile, nord),
                   zeige(z[:3]) + f" - {len(teile)} Partikel")
         befehl(bot, "/cam trail", warten=0.5)
+
+        # Mit dynamic zaehlen bei all beide Fluege zusammen: Mit einer Sekunde
+        # je Block (0 Bloecke 1 Sekunde, 100 Bloecke 101 Sekunden) steht die
+        # Linie 1 Sekunde und so viele, wie beide zusammen Bloecke haben - nicht
+        # nur so viele, wie der laengere hat. Die Konsole nennt die Strecken
+        # gerundet, die Summe der genauen liegt hoechstens einen Block daneben.
+        log = konsole(f"cam trail {BOT_NAME} all")
+        weiten = [int(w) for w in re.findall(r"#\d+: (\d+) blocks", log)]
+        set_options(env, [("show-min-blocks", "0", "cam-trail"), ("show-min-seconds", "1", "cam-trail"),
+                          ("show-max-blocks", "100", "cam-trail"), ("show-max-seconds", "101", "cam-trail")])
+        z = befehl(bot, f"/cam trail {BOT_NAME} all")
+        befehl(bot, "/cam trail", warten=0.5)
+        set_options(env, [("show-min-blocks", "0", "cam-trail"), ("show-min-seconds", "4", "cam-trail"),
+                          ("show-max-blocks", "1000", "cam-trail"), ("show-max-seconds", "9", "cam-trail")])
+        moeglich = list(range(sum(weiten), sum(weiten) + 3)) if len(weiten) == 2 else []
+        FIND.test("show-mode: dynamic - bei all zaehlen beide Fluege zusammen, nicht nur der laengere",
+                  len(weiten) == 2 and min(weiten) >= 3 and any(gesagt(z, gezeigt_fuer(n)) for n in moeglich),
+                  f"Strecken {weiten}, erwartet {moeglich}: {zeige(z)}")
+
         z = befehl(bot, f"/cam trail {BOT_NAME} 3")
         FIND.test("/cam trail <Name> 3: den gibt es nicht",
                   gesagt(z, rf"No flight #3: {BOT_NAME} has only 2"), zeige(z))

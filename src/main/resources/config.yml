@@ -1471,8 +1471,9 @@ cam-ban:
 # welcher Flug und wie lange noch), ein leerer, wenn keine zu sehen ist.
 # Wie lange die Linie zu sehen ist, sagt show-mode:
 #   dynamic = nach der Strecke des Flugs: ein Flug bis show-min-blocks Blöcke steht show-min-seconds da, einer ab
-#             show-max-blocks Blöcken show-max-seconds, dazwischen entsprechend länger. Bei all zählt der längste
-#             Flug, und ein Flug, der noch läuft, steht show-max-seconds da, weil seine Linie noch wächst.
+#             show-max-blocks Blöcken show-max-seconds, dazwischen entsprechend länger. Bei all zählen alle Flüge
+#             zusammen, denn man fliegt jede Linie ab - höchstens show-max-seconds. Ein Flug, der noch läuft, steht
+#             show-max-seconds da, weil seine Linie noch wächst.
 #             Mit den Werten unten: bis 50 Blöcke 10 Sekunden, 300 Blöcke 1 Minute, ab 1500 Blöcken 5 Minuten.
 #   fixed   = jede Linie show-seconds lang, egal wie weit der Flug ging
 #   forever = bis man sie ausblendet (/cam trail oder der Eimer im Menü), eine andere zeigen lässt oder offline geht

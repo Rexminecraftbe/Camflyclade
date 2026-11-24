@@ -1880,7 +1880,8 @@ endete, ist danach mit seiner Datei weg · mit `flights: 0` und `keep-days: 0`
 bleibt einer von vor 400 Tagen, `flights: 1` löscht die Datei des älteren ·
 nach einem zweiten Flug zeigt `/cam trail <Name>` nur
 den neuen, mit Knöpfen für `[1]`, `[2]` und `[all]`, `/cam trail <Name> 2`
-nur den alten und `all` beide, Flug 3 gibt es nicht, und die
+nur den alten und `all` beide, mit `dynamic` so lange, wie beide Strecken
+zusammen ergeben, Flug 3 gibt es nicht, und die
 Tab-Vervollständigung bietet `1`, `2` und `all` an · `flights: 1` lässt nach
 dem Reload nur den letzten stehen · mit `statistics.enabled: false` schlägt
 `/cam` kein `stats` mehr vor und `/cam stats` weder `reset` noch `player`, mit
