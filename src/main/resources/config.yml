@@ -1464,24 +1464,39 @@ cam-ban:
 # Im Menü (Admin-Seite, Flugspuren): ein Klick auf einen Kopf zeigt seine Flüge, der neueste zuerst, mit Datum und
 # Uhrzeit, Dauer, Strecke, Start und Ende beim Drüberfahren. Linksklick zeigt einen Flug, Rechtsklick zeigt ihn und
 # bringt einen zu seinem Start (aus dem Cam-Modus heraus, wenn man darin ist); ein Knopf zeigt alle auf einmal.
+# Löschen: Mit dem Recht camplugin.trail.delete (Operatoren haben es) löscht dort ein Umschalt-Klick einen Flug, und der
+# Knopf unten rechts alle Flüge des Spielers - er fragt vorher noch einmal. Ein Flug, der noch läuft, bleibt, bis er zu
+# Ende ist. Mit storage: file ist auch seine Datei weg.
 # Der Eimer auf der Seite der Flugspuren blendet die Linie aus: ein Wassereimer, solange eine zu sehen ist (darunter
 # welcher Flug und wie lange noch), ein leerer, wenn keine zu sehen ist.
 # Wie lange die Linie zu sehen ist, sagt show-mode:
 #   dynamic = nach der Strecke des Flugs: ein Flug bis show-min-blocks Blöcke steht show-min-seconds da, einer ab
-#             show-max-blocks Blöcken show-max-seconds, dazwischen entsprechend länger. Bei all zählt der längste
-#             Flug, und ein Flug, der noch läuft, steht show-max-seconds da, weil seine Linie noch wächst.
+#             show-max-blocks Blöcken show-max-seconds, dazwischen entsprechend länger. Bei all zählen alle Flüge
+#             zusammen, denn man fliegt jede Linie ab - höchstens show-max-seconds. Ein Flug, der noch läuft, steht
+#             show-max-seconds da, weil seine Linie noch wächst.
 #             Mit den Werten unten: bis 50 Blöcke 10 Sekunden, 300 Blöcke 1 Minute, ab 1500 Blöcken 5 Minuten.
 #   fixed   = jede Linie show-seconds lang, egal wie weit der Flug ging
 #   forever = bis man sie ausblendet (/cam trail oder der Eimer im Menü), eine andere zeigen lässt oder offline geht
 # Eine ältere Datei ohne show-mode, aber mit show-seconds, geht weiter wie bisher, mit fixed.
 # Wo die Kamera versetzt wurde (/cam back, Portal, Teleport), hat die Linie eine Lücke.
 # Gezeichnet wird bis 128 Blöcke um den, der zusieht.
-# Aufgezeichnet wird nur, solange enabled an ist, und nur im Arbeitsspeicher, bis zum Neustart
-# (nach /cam reload bleiben die Flüge, mit enabled: false sind sie weg).
+# Aufgezeichnet wird nur, solange enabled an ist. Gemerkt werden von jedem Spieler seine letzten flights Flüge, keiner
+# länger als keep-days Tage nach seinem Ende - wo, sagt storage:
+#   file   = auf der Platte, eine Datei je Flug in plugins/CamFly/playerdata/trails/<UUID>/ - die Flüge bleiben nach
+#            /cam reload und einem Neustart. Im Arbeitsspeicher steht nur, wann, wie lange und wie weit ein Flug ging;
+#            seine Linie wird erst aus der Datei gelesen, wenn ihn jemand ansieht.
+#   memory = nur im Arbeitsspeicher, bis zum Neustart (nach /cam reload bleiben sie)
+# Mit enabled: false vergisst der Arbeitsspeicher die Flüge. Die Dateien bleiben liegen und werden wieder gelesen,
+# sobald enabled wieder an ist.
+# Für immer, ohne dass je etwas von selbst gelöscht wird: storage: file, flights: 0 und keep-days: 0. Dann löschen nur
+# noch Admins im Menü.
+# /cam trail <Name> all und die Knöpfe im Chat nehmen höchstens die letzten 20 Flüge; ältere zeigt /cam trail mit ihrer
+# Nummer und das Menü.
 # Benutzen dürfen es die Konsole und wer das Recht camplugin.trail hat (Operatoren haben es).
 cam-trail:
   enabled: true
-  # Wie viele seiner letzten Flüge von jedem Spieler gemerkt werden (1 bis 20)
+  # Wie viele seiner letzten Flüge von jedem Spieler gemerkt werden: bei storage: file beliebig viele, bei memory 1 bis
+  # 20 (0 = alle - bei memory 20)
   flights: 5
   # dynamic, fixed oder forever (siehe oben)
   show-mode: dynamic
@@ -1495,6 +1510,10 @@ cam-trail:
   # wie lange, in Sekunden (show-min-seconds bis 600)
   show-max-blocks: 1500
   show-max-seconds: 300
+  # Wo die Flüge liegen: file oder memory (siehe oben)
+  storage: file
+  # Nach wie vielen Tagen ein Flug gelöscht wird, gezählt ab seinem Ende (0 = nie, er bleibt für immer)
+  keep-days: 30
 
 # Der Cam-Modus endet, wenn der Spieler eine Weile gar nichts tut: nicht fliegt, sich nicht umsieht und nicht
 # am Mausrad dreht. So steht kein Körper stundenlang herum, und der Akku läuft nicht leer, während niemand fliegt.

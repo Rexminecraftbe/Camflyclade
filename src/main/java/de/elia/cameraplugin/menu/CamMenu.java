@@ -147,6 +147,13 @@ public final class CamMenu implements Listener, PluginPart {
     static final int SLOT_TOUR_VIEW = 49;
     /** The button on the page of the tour that ends it, or what keeps him from leading or following. */
     static final int SLOT_TOUR_END = 47;
+    /**
+     * The buttons on the page of the flights of a player that delete all of
+     * them: in the corner of the last row, where the admin pages sort their
+     * players, and once it asks, the one that deletes them next to it.
+     */
+    static final int SLOT_FLIGHTS_DELETE = 53;
+    static final int SLOT_FLIGHTS_DELETE_CONFIRM = 52;
 
     /** What a button that only shows something does on a click: nothing. */
     static final Consumer<ClickType> NOTHING = click -> { };

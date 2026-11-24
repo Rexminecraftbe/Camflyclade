@@ -49,6 +49,8 @@ mvn -B test -Dtest=ConfigUpdaterTest       # nur eine Klasse
 | `SpotTest`           | Erlaubte Namen eines Spots (auch Emoji), wonach er gefunden wird, Punkt und Prozent im Pfad der YAML-Datei, und dass ein Spot samt Zeit, Wetter, Nachtsicht und Icon aus der Datei so zurückkommt, wie er hineinging - auch mit Namen wie `1e3`, `true` oder `null`. |
 | `ShareTest`          | Für wen ein geteilter Spot gilt: öffentlich, angeboten, angenommen, nie für den Besitzer; Likes bleiben, solange er privat ist. |
 | `PlayerFileTest`     | Die Datei eines Spielers unter `playerdata/stats` (`PlayerFile`): alles kommt so zurück, wie es hineinging, Dateien älterer Versionen, Zahlen unter 0, unsinnige Einstellungen und Text, der kein YAML ist. |
+| `TrailFileTest`      | Die Datei eines gemerkten Flugs unter `playerdata/trails` (`TrailFile`): alles kommt so zurück, wie es hineinging, die Punkte auf ein Hundertstel, die Linie steht zuletzt, und der Kopf lässt sich ohne sie lesen - auch wenn sie kaputt ist. Dazu Dateien, die jemand von Hand geändert hat. |
+| `TrailSettingsTest`  | `cam-trail.flights`, `storage` und `keep-days`: in Dateien ohne Grenze und 0 = alle, im Arbeitsspeicher höchstens 20, was nicht geht, wird mit einem Hinweis ersetzt. |
 | `TourTrailTest`      | Der Weg, dem die Kameras der Gäste beim Folgen zwei Ticks hinter dem Leiter nachfliegen (`TourTrail`): verlorene, doppelte und gesprungene Schritte, Anhalten, ein Weltwechsel. |
 
 Ohne Server kennt ein `Material` seine Eigenschaften nicht: `isBlock()` oder
@@ -1462,6 +1464,11 @@ einzutragen.
   und prüfen dabei auch, was sie ausgeschaltet sagen, und `cam-trail` soll
   nicht die Flüge aller anderen Abschnitte aufzeichnen. Den Standard lesen sie
   aus der `config.yml`, die das Plugin mitbringt.
+* **`cam-trail.storage` ist voreingestellt `file`**, der Testserver startet
+  mit `memory`: Sonst kämen die Flüge eines Abschnitts - und eines früheren
+  Laufs, `playerdata` bleibt stehen - bei jedem wieder, der `cam-trail`
+  einschaltet. Nur `flugspur` schaltet `file` für sich ein und löscht
+  `playerdata/trails` vorher und nachher.
 * **Voreingestellt gehen `spot`, `photo`, `time` und die anderen nur über das
   Menü** (`menu.access: menu`), ebenso `list`, `stop`, `ban`, `trail` und die
   anderen für Admins (`menu.admin-access: menu`). Die Abschnitte tippen sie als
@@ -1863,9 +1870,18 @@ noch läuft, `show-max-seconds` lang · mit `forever` steht sie, bis
 `/cam trail` sie ausblendet · eine ältere Datei ohne `show-mode`, mit
 `show-seconds`, geht mit `fixed` weiter, ohne Warnung · ein Name ohne Flug wird
 gemeldet, ohne `camplugin.trail` fehlt das Recht, und `enabled: false`
-vergisst die Flüge · nach einem zweiten Flug zeigt `/cam trail <Name>` nur
+vergisst die Flüge (mit `storage: memory`) · voreingestellt liegen sie in
+Dateien (`storage: file`) und bleiben 30 Tage (`keep-days`) · ein Flug von
+vorher bekommt mit dem Umschalten seine Datei unter
+`playerdata/trails/<UUID>/`, ein neuer, wenn er endet, mit Name, Start und
+der Linie zuletzt · nach `enabled: false` und wieder `true` sind beide aus den
+Dateien da, die Linie des neuesten aus seiner Datei · einer, der vor 40 Tagen
+endete, ist danach mit seiner Datei weg · mit `flights: 0` und `keep-days: 0`
+bleibt einer von vor 400 Tagen, `flights: 1` löscht die Datei des älteren ·
+nach einem zweiten Flug zeigt `/cam trail <Name>` nur
 den neuen, mit Knöpfen für `[1]`, `[2]` und `[all]`, `/cam trail <Name> 2`
-nur den alten und `all` beide, Flug 3 gibt es nicht, und die
+nur den alten und `all` beide, mit `dynamic` so lange, wie beide Strecken
+zusammen ergeben, Flug 3 gibt es nicht, und die
 Tab-Vervollständigung bietet `1`, `2` und `all` an · `flights: 1` lässt nach
 dem Reload nur den letzten stehen · mit `statistics.enabled: false` schlägt
 `/cam` kein `stats` mehr vor und `/cam stats` weder `reset` noch `player`, mit
@@ -1974,6 +1990,9 @@ der letzte Knopf zeigt alle · der Eimer der Flugspuren ist dann ein
 Wassereimer mit dem Flug und der Zeit, die bleibt, blendet die Linie aus und
 ist danach leer; ein Klick darauf sagt, dass keine zu sehen ist; mit
 `show-mode: forever` steht darunter, dass sie bleibt, bis man sie ausblendet ·
+ein Umschalt-Klick auf einen Flug löscht ihn, die Seite bleibt offen · der
+Knopf unten rechts löscht alle Flüge des Bots erst nach einer Rückfrage,
+„Keep them“ behält sie, danach steht die Seite der Flugspuren ohne ihn da ·
 „Save a spot
 here“ fragt im Chat nach dem Namen, ein Linksklick springt zum Punkt, ein
 Klick mit Umschalt löscht ihn · `access: menu` lässt nur das Menü, `command`

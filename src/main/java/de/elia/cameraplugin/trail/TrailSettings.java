@@ -1,11 +1,13 @@
 package de.elia.cameraplugin.trail;
 
 import de.elia.cameraplugin.config.ConfigReader;
+import de.elia.cameraplugin.config.SettingValues;
+import de.elia.cameraplugin.storage.StorageMode;
 
 /**
  * The section {@code cam-trail} of the config file, for {@code /cam trail}:
- * how many flights are kept and how long their line is shown. See
- * {@link de.elia.cameraplugin.config.CamSettings#trail()}.
+ * how many flights are kept, where and for how long, and how long their line
+ * is shown. See {@link de.elia.cameraplugin.config.CamSettings#trail()}.
  */
 public final class TrailSettings {
 
@@ -18,8 +20,12 @@ public final class TrailSettings {
     /** The most {@code cam-trail.show-min-blocks} and {@code show-max-blocks} accept. */
     private static final int MAX_TRAIL_SHOW_BLOCKS = 100_000;
 
-    /** The most flights {@code cam-trail.flights} keeps of each player. */
-    private static final int MAX_TRAIL_FLIGHTS = 20;
+    /**
+     * The most flights {@code cam-trail.flights} keeps of each player in
+     * memory only, {@code storage: memory}. Kept in files there is no limit
+     * but the one {@code flights} sets.
+     */
+    public static final int MAX_TRAIL_FLIGHTS = 20;
 
     /** Whether flights are recorded for {@code /cam trail}, {@code cam-trail.enabled}. */
     private boolean trailEnabled;
@@ -35,8 +41,12 @@ public final class TrailSettings {
     private int trailShowMaxBlocks;
     /** How long {@code dynamic} shows a flight at most, in seconds, {@code cam-trail.show-max-seconds}. */
     private int trailShowMaxSeconds;
-    /** How many of his last flights are kept of each player, {@code cam-trail.flights}. */
+    /** How many of his last flights are kept of each player, {@code cam-trail.flights}; 0 for all of them. */
     private int trailFlights;
+    /** Where the flights are kept, {@code cam-trail.storage}. */
+    private StorageMode trailStorage;
+    /** After how many days a flight is deleted, {@code cam-trail.keep-days}; 0 for never. */
+    private int trailKeepDays;
 
     /**
      * Reads the section from the config file. What does not fit is replaced
@@ -56,7 +66,16 @@ public final class TrailSettings {
                 MAX_TRAIL_SHOW_BLOCKS);
         trailShowMaxSeconds = config.getInt("cam-trail.show-max-seconds", 300, trailShowMinSeconds,
                 MAX_TRAIL_SHOW_SECONDS);
-        trailFlights = config.getInt("cam-trail.flights", 5, 1, MAX_TRAIL_FLIGHTS);
+        trailStorage = SettingValues.storage(config, "cam-trail.storage");
+        // In files as many as he says, 0 for all of them; in memory up to
+        // MAX_TRAIL_FLIGHTS, and 0 is as many as that.
+        if (trailStorage == StorageMode.FILE) {
+            trailFlights = config.getInt("cam-trail.flights", 5, 0);
+        } else {
+            int flights = config.getInt("cam-trail.flights", 5, 0, MAX_TRAIL_FLIGHTS);
+            trailFlights = flights == 0 ? MAX_TRAIL_FLIGHTS : flights;
+        }
+        trailKeepDays = config.getInt("cam-trail.keep-days", 30, 0);
     }
 
     public boolean enabled() {
@@ -87,7 +106,17 @@ public final class TrailSettings {
         return trailShowMaxSeconds;
     }
 
+    /** How many flights are kept of each player; 0 for all of them, kept in files. */
     public int flights() {
         return trailFlights;
+    }
+
+    public StorageMode storage() {
+        return trailStorage;
+    }
+
+    /** After how many days a flight is deleted; 0 for never. */
+    public int keepDays() {
+        return trailKeepDays;
     }
 }

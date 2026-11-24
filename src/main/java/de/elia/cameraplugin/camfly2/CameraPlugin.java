@@ -184,7 +184,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final StartChecks startChecks = new StartChecks(settings, messages, cameraPlayers);
     private final StartDelay startDelay = new StartDelay(this);
     private final CamStarter starter = new CamStarter(this);
-    private final CamTrail trail = new CamTrail(this);
+    private final CamTrail trail = new CamTrail(this, log, writer);
     private final CamMovementGuard movementGuard = new CamMovementGuard(this);
     private final CamBorderWall borderWall = new CamBorderWall(this);
     private final CamTeleportGuard teleportGuard = new CamTeleportGuard(this);
