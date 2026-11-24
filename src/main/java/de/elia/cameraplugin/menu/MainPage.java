@@ -20,6 +20,8 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import static de.elia.cameraplugin.menu.CamMenu.*;
+import static de.elia.cameraplugin.menu.MenuItems.*;
+import static de.elia.cameraplugin.menu.MenuSorts.*;
 
 /**
  * The main page of {@code /cam menu}: starting and ending camera mode,
@@ -300,7 +302,7 @@ final class MainPage {
      * are his own, which hold again after the tour, and the button says so.</p>
      *
      * <p>On Bedrock every choice is offered to be picked straight away, see
-     * {@link CamMenu#openPicks}, the one that holds now marked; once picked, the
+     * {@link BedrockPages#openPicks}, the one that holds now marked; once picked, the
      * menu closes.</p>
      *
      * @param fill    the placeholder in the name that the choice of now takes

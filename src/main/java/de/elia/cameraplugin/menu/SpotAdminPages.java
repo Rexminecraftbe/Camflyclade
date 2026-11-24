@@ -25,6 +25,9 @@ import java.util.function.LongConsumer;
 import java.util.function.LongSupplier;
 
 import static de.elia.cameraplugin.menu.CamMenu.*;
+import static de.elia.cameraplugin.menu.MenuDrafts.*;
+import static de.elia.cameraplugin.menu.MenuItems.*;
+import static de.elia.cameraplugin.menu.MenuSorts.*;
 
 /**
  * The admin pages of {@code /cam menu} about the spots of everybody: who
@@ -410,7 +413,7 @@ final class SpotAdminPages {
                     reopen.run();
                 });
             } else {
-                menu.act(player, () -> menu.ask(player, question, answer -> {
+                menu.act(player, () -> menu.questions.ask(player, question, answer -> {
                     draft.reason = answer;
                     reopen.run();
                 }, "{player}", draft.name));

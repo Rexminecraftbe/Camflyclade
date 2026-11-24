@@ -34,6 +34,8 @@ import java.util.function.Function;
 import java.util.function.IntConsumer;
 
 import static de.elia.cameraplugin.menu.CamMenu.*;
+import static de.elia.cameraplugin.menu.MenuItems.*;
+import static de.elia.cameraplugin.menu.MenuSorts.*;
 
 /**
  * The pages of the spots of {@code /cam menu}: the own ones, the public
@@ -137,7 +139,7 @@ final class SpotPages {
         newLore.addAll(lines(menu.text(player, sharing && !createPage ? "menu-new-spot-lore-public"
                 : "menu-new-spot-lore")));
         Consumer<ClickType> newSpot = createPage ? click -> menu.act(player, () -> menu.newSpotPages.startNewSpot(player))
-                : click -> menu.act(player, () -> menu.askName(player, sharing && click.isRightClick()));
+                : click -> menu.act(player, () -> menu.questions.askName(player, sharing && click.isRightClick()));
         menu.put(page, SLOT_SPOT_NEW, Material.WRITABLE_BOOK, messages.getMessage("menu-new-spot"), newLore, newSpot);
         if (sharing && !createPage) {
             menu.picks(player, page, SLOT_SPOT_NEW, List.of(menu.pick("menu-pick-spot-private", newSpot, ClickType.LEFT),
