@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.display;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
@@ -15,7 +16,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** The glowing outline of {@code camera-mode.glowing-outline: sight}. */
-public final class SightGlow {
+public final class SightGlow implements PluginPart {
 
     /**
      * How often {@code glowing-outline: sight} checks whether somebody has the
@@ -100,6 +101,7 @@ public final class SightGlow {
         }
     }
 
+    @Override
     public void onDisable() {
         for (SessionTask task : sightGlowTasks.values()) {
             task.cancel();

@@ -2,6 +2,7 @@ package de.elia.cameraplugin.display;
 
 import de.elia.cameraplugin.body.BodySettings;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraPlayers;
@@ -74,7 +75,7 @@ import java.util.UUID;
  * events do so before a change of worlds, and the next tick puts it back
  * on.</p>
  */
-public final class CamNameTag implements Listener {
+public final class CamNameTag implements Listener, PluginPart {
 
     /**
      * How far one line of a name tag reaches, in blocks: the step the game
@@ -454,6 +455,7 @@ public final class CamNameTag implements Listener {
         name.remove();
     }
 
+    @Override
     public void onDisable() {
         for (BukkitRunnable task : tasks.values()) {
             task.cancel();

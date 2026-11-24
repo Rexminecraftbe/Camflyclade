@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.signal;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
@@ -39,7 +40,7 @@ import java.util.UUID;
  * camera came out of there, the spot {@code max-distance} is measured from
  * as well. In a world neither of them is in, there is no signal at all.</p>
  */
-public final class CamSignal {
+public final class CamSignal implements PluginPart {
 
     /** How often the signal is measured, in ticks: as often as the action bar shows the distance. */
     private static final long INTERVAL = 4L;
@@ -116,6 +117,7 @@ public final class CamSignal {
         }
     }
 
+    @Override
     public void onDisable() {
         for (Link link : links.values()) {
             link.task.cancel();

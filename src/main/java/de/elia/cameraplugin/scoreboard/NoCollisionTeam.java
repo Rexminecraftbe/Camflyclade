@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.scoreboard;
 
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
@@ -20,7 +21,7 @@ import java.util.UUID;
  * in which camera players walk through everybody else and nobody pushes them
  * around, and {@code cam_body}, in which nobody pushes their bodies either.
  */
-public final class NoCollisionTeam {
+public final class NoCollisionTeam implements PluginPart {
 
     private static final String NO_COLLISION_TEAM = "cam_no_push";
     /**
@@ -252,5 +253,17 @@ public final class NoCollisionTeam {
         } else {
             leave(team, player.getName());
         }
+    }
+
+    /** After {@code /cam reload}: the team as the config file says now, see {@link #refreshNoCollisionTeam()}. */
+    @Override
+    public void onReload() {
+        refreshNoCollisionTeam();
+    }
+
+    /** When the plugin is switched off: no player is left in camera mode, so the team goes. */
+    @Override
+    public void onDisable() {
+        deleteNoCollisionTeam();
     }
 }

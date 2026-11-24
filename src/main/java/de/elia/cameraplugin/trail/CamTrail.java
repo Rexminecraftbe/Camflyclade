@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.trail;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.EndReason;
@@ -59,7 +60,7 @@ import java.util.function.Supplier;
  * <p>The flights are kept in memory only, the last few of each player, until
  * the server stops - and only while {@code cam-trail} is on.</p>
  */
-public final class CamTrail implements Listener {
+public final class CamTrail implements Listener, PluginPart {
 
     /** The right the command asks for. Operators have it by default. */
     public static final String PERMISSION = "camplugin.trail";
@@ -778,6 +779,7 @@ public final class CamTrail implements Listener {
      * lose what an admin may still want to look at -, only the oldest go when
      * {@code cam-trail.flights} has become smaller.
      */
+    @Override
     public void onReload() {
         if (!settings.trail().enabled()) {
             onDisable();
@@ -791,6 +793,7 @@ public final class CamTrail implements Listener {
     }
 
     /** Stops every line and forgets every flight. */
+    @Override
     public void onDisable() {
         for (Drawing task : viewers.values()) {
             task.cancel();

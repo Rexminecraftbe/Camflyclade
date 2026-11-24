@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.scoreboard;
 
+import de.elia.cameraplugin.camfly2.PluginPart;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.Scoreboard;
@@ -24,7 +25,7 @@ import java.util.HashSet;
  * without a name after a crash, the team is deleted at the start and when the
  * plugin is switched off, see {@link #delete()}.</p>
  */
-public final class GuideTeam {
+public final class GuideTeam implements PluginPart {
 
     static final String GUIDE_TEAM = "cam_guide";
 
@@ -79,5 +80,11 @@ public final class GuideTeam {
             team.removeEntry(entry);
         }
         team.unregister();
+    }
+
+    /** When the plugin is switched off: nobody shows anybody round any more, see {@link #delete()}. */
+    @Override
+    public void onDisable() {
+        delete();
     }
 }

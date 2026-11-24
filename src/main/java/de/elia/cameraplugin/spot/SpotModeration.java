@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.spot;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.EndReason;
@@ -31,7 +32,7 @@ import java.util.UUID;
  * everybody tells him that it is switched off. A tab of the spots he may not
  * look at shows him nothing but that.</p>
  */
-public final class SpotModeration {
+public final class SpotModeration implements PluginPart {
 
     /** The right of the admin page of the spots. Operators have it by default. */
     public static final String PERMISSION = "camplugin.spotadmin";
@@ -66,8 +67,12 @@ public final class SpotModeration {
                 && (!(sender instanceof Player player) || player.hasPermission(PERMISSION));
     }
 
-    /** Re-reads the restrictions after {@code /cam reload}, so that changes made in the file by hand count. */
-    public void reload() {
+    /**
+     * Reads the restrictions at the start and again after {@code /cam reload}, so that changes made in the
+     * file by hand count.
+     */
+    @Override
+    public void load() {
         bans.load();
     }
 

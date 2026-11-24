@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.timelimit;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraPlayers;
@@ -30,7 +31,7 @@ import java.util.UUID;
  * runs a task, once a second, and says when it is over - also after the
  * player joins with a cooldown that is not over yet.</p>
  */
-public final class CamTimeLimit {
+public final class CamTimeLimit implements PluginPart {
 
     /** Ticks between two looks at a cooldown. */
     private static final long INTERVAL = 20L;
@@ -310,6 +311,7 @@ public final class CamTimeLimit {
      * on {@code file} they all go on. Whoever has one left sees it again the
      * way the config file now says.
      */
+    @Override
     public void onReload() {
         for (Watch watch : cooldownWatches.values()) {
             watch.remove();
@@ -321,6 +323,7 @@ public final class CamTimeLimit {
         }
     }
 
+    @Override
     public void onDisable() {
         for (SessionTask task : timeLimitTasks.values()) {
             task.cancel();

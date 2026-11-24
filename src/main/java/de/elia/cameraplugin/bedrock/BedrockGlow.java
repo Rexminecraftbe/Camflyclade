@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.bedrock;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import org.bukkit.Bukkit;
 import org.bukkit.Particle;
 import org.bukkit.entity.Player;
@@ -24,7 +25,7 @@ import java.util.UUID;
  * hidden from him, not on the same tour -, the same as the particles of
  * {@code camera-particles}, and no further than the particles carry.</p>
  */
-public final class BedrockGlow {
+public final class BedrockGlow implements PluginPart {
 
     /** How often the outline is drawn, in ticks: twice a second. */
     private static final long INTERVAL = 10L;
@@ -40,12 +41,14 @@ public final class BedrockGlow {
         this.plugin = plugin;
     }
 
+    @Override
     public void start() {
         if (task == null) {
             task = Bukkit.getScheduler().runTaskTimer(plugin, this::draw, INTERVAL, INTERVAL);
         }
     }
 
+    @Override
     public void onDisable() {
         if (task != null) {
             task.cancel();

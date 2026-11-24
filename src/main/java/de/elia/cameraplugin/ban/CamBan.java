@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.ban;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.EndReason;
@@ -45,7 +46,7 @@ import java.util.UUID;
  * so - to him, whether he has to wait longer or less, or whether it is for
  * good now or not any more.</p>
  */
-public final class CamBan {
+public final class CamBan implements PluginPart {
 
     /** The right the commands ask for. Operators have it by default. */
     public static final String PERMISSION = "camplugin.ban";
@@ -288,8 +289,12 @@ public final class CamBan {
         return bans.everybody() != null;
     }
 
-    /** Re-reads the bans after {@code /cam reload}, so that changes made in the file by hand count. */
-    public void reload() {
+    /**
+     * Reads the bans at the start and again after {@code /cam reload}, so that changes made in the file by
+     * hand count.
+     */
+    @Override
+    public void load() {
         bans.load();
     }
 

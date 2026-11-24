@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.body;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.mob.MobTargeting;
@@ -38,7 +39,7 @@ import java.util.UUID;
  * {@code body-alarm.cooldown} seconds; whatever turns up in that time comes
  * after them, if it is still there.</p>
  */
-public final class BodyAlarm {
+public final class BodyAlarm implements PluginPart {
 
     /** How often the alarm looks around the body, in ticks. */
     private static final long INTERVAL = 20L;
@@ -101,6 +102,7 @@ public final class BodyAlarm {
         }
     }
 
+    @Override
     public void onDisable() {
         for (Watch watch : watches.values()) {
             watch.task.cancel();

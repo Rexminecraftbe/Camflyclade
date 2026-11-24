@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.mob;
 
 import de.elia.cameraplugin.body.MobHeads;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.GameMode;
@@ -57,7 +58,7 @@ import java.util.logging.Level;
  * goats, axolotls and the like. They pick whom they look at in their brain,
  * and no API reaches that.</p>
  */
-public final class MobGaze {
+public final class MobGaze implements PluginPart {
 
     /**
      * The furthest a mob of the game looks at a player, in blocks: the fox,
@@ -141,6 +142,7 @@ public final class MobGaze {
     }
 
     /** Looks up Paper's goal API and starts looking for mobs around the camera players. */
+    @Override
     public void start() {
         paper = PaperGoals.lookUp(plugin);
         if (paper == null) {
@@ -150,6 +152,7 @@ public final class MobGaze {
     }
 
     /** Stops looking and takes every goal back from the mobs. */
+    @Override
     public void onDisable() {
         if (task != null) {
             task.cancel();

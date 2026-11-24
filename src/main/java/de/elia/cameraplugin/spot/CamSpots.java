@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.spot;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.movement.CamMovementGuard;
@@ -60,7 +61,7 @@ import java.util.UUID;
  * them is up to {@link SpotSharing}, the list in the chat to {@link SpotList},
  * and who has spots, for the admin page, to {@link SpotOwners}.</p>
  */
-public final class CamSpots {
+public final class CamSpots implements PluginPart {
 
     /**
      * The words after {@code /cam spot} that are no spot. A name of a spot
@@ -671,7 +672,10 @@ public final class CamSpots {
         sharing.accept(player, share);
     }
 
-    /** Turns down an offer or drops a spot he accepted, from the menu, see {@link SpotSharing#decline(Player, Share)}. */
+    /**
+     * Turns down an offer or drops a spot he accepted, from the menu, see
+     * {@link SpotSharing#decline(Player, Share)}.
+     */
     public void decline(Player player, Share share) {
         sharing.decline(player, share);
     }
@@ -809,6 +813,7 @@ public final class CamSpots {
     }
 
     /** After a reload: on {@code storage: memory} every spot is forgotten. */
+    @Override
     public void onReload() {
         inMemory.clear();
     }
@@ -826,7 +831,8 @@ public final class CamSpots {
      * Reads who has spots, at the start and after a reload, see
      * {@link SpotOwners#index()}.
      */
-    public void indexOwners() {
+    @Override
+    public void load() {
         ownerIndex.index();
     }
 

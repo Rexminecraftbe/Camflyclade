@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.resume;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
@@ -41,7 +42,7 @@ import java.util.UUID;
  * <p>Where it is kept is {@code resume-command.storage}: in the file of the
  * player, or in memory until a restart.</p>
  */
-public final class CamResume {
+public final class CamResume implements PluginPart {
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
@@ -173,6 +174,7 @@ public final class CamResume {
     }
 
     /** Forgets every flight kept in memory, when the plugin is switched off. */
+    @Override
     public void onDisable() {
         inMemory.clear();
     }

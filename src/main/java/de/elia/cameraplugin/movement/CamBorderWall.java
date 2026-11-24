@@ -2,6 +2,7 @@ package de.elia.cameraplugin.movement;
 
 import de.elia.cameraplugin.area.CamAreaRules;
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.CameraPlayers;
@@ -71,7 +72,7 @@ import java.util.UUID;
  * keeps what it has read out of the world, so that a large radius costs
  * about as much as the border it shows and not as the room around it.</p>
  */
-public final class CamBorderWall implements Listener {
+public final class CamBorderWall implements Listener, PluginPart {
 
     /**
      * Ticks between two full looks at the wall. A look reads again what has
@@ -277,6 +278,7 @@ public final class CamBorderWall implements Listener {
         }
     }
 
+    @Override
     public void onDisable() {
         for (Wall wall : walls.values()) {
             wall.task.cancel();

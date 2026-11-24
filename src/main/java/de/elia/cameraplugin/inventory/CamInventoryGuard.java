@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.inventory;
 
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.session.SessionTask;
 import de.elia.cameraplugin.session.SessionTicker;
 import org.bukkit.Material;
@@ -44,7 +45,7 @@ import java.util.function.Predicate;
  * in his {@code CameraData} at the start and put back when he leaves, and a
  * block picked in the creative mode was made out of nothing anyway.</p>
  */
-public class CamInventoryGuard {
+public class CamInventoryGuard implements PluginPart {
 
     /** The slots a player carries his things in: the hotbar and the three rows. */
     private static final int STORAGE_SLOTS = 36;
@@ -124,6 +125,7 @@ public class CamInventoryGuard {
         }
     }
 
+    @Override
     public void onDisable() {
         for (SessionTask task : tasks.values()) {
             task.cancel();

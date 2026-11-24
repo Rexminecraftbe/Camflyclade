@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.scout;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.photo.CamPhotoMode;
 import de.elia.cameraplugin.session.CameraData;
@@ -45,7 +46,7 @@ import java.util.UUID;
  * <p>Whoever holds {@code camplugin.antiscout.bypass} sees everybody, the way
  * an operator does by default.</p>
  */
-public final class CamScoutGuard implements Listener {
+public final class CamScoutGuard implements Listener, PluginPart {
 
     /** The right that sees everybody all the same. */
     public static final String BYPASS = "camplugin.antiscout.bypass";
@@ -278,6 +279,7 @@ public final class CamScoutGuard implements Listener {
         }
     }
 
+    @Override
     public void onDisable() {
         for (UUID id : new ArrayList<>(active.keySet())) {
             Player player = Bukkit.getPlayer(id);

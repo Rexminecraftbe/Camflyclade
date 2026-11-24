@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.sulfurcube;
 
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.session.SessionTask;
 import de.elia.cameraplugin.session.SessionTicker;
 import org.bukkit.Location;
@@ -49,7 +50,7 @@ import java.util.UUID;
  * taken off before a chunk goes to disk, and anything a crash left behind
  * comes off again when the cube is loaded.</p>
  */
-public final class CamSulfurCubeGuard implements Listener {
+public final class CamSulfurCubeGuard implements Listener, PluginPart {
 
     /**
      * How close a player has to come to a cube to push it: the distance
@@ -123,6 +124,7 @@ public final class CamSulfurCubeGuard implements Listener {
         }
     }
 
+    @Override
     public void onDisable() {
         for (SessionTask task : tasks.values()) {
             task.cancel();

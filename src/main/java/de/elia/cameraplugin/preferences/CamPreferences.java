@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.preferences;
 
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.nightvision.NightVisionMode;
 import de.elia.cameraplugin.storage.PlayerRecord;
@@ -26,7 +27,7 @@ import java.util.UUID;
  * player, where they outlast his leaving and a restart, or in memory until
  * he leaves the server.</p>
  */
-public final class CamPreferences {
+public final class CamPreferences implements PluginPart {
 
     private final CamSettings settings;
     private final PlayerStore store;
@@ -163,6 +164,7 @@ public final class CamPreferences {
         inMemory.remove(playerId);
     }
 
+    @Override
     public void onDisable() {
         inMemory.clear();
     }

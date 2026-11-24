@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.cost;
 
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.log.ConsoleLog;
@@ -21,7 +22,7 @@ import java.util.logging.Level;
  * told what he is missing, and one who has all of it pays all of it at
  * once.</p>
  */
-public final class StartCost {
+public final class StartCost implements PluginPart {
 
     /** The slots a player carries his things in: the hotbar and the three rows. */
     private static final int STORAGE_SLOTS = 36;
@@ -39,7 +40,8 @@ public final class StartCost {
     }
 
     /** Lets the missing economy be reported again, after a reload. */
-    public void reset() {
+    @Override
+    public void onReload() {
         economyMissingReported = false;
     }
 

@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.menu;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.nightvision.NightVisionMode;
@@ -84,7 +85,7 @@ import static de.elia.cameraplugin.menu.MenuSorts.*;
  * {@link MenuSorts}, and what is set up on a page is one of
  * {@link MenuDrafts}.</p>
  */
-public final class CamMenu implements Listener {
+public final class CamMenu implements Listener, PluginPart {
 
     /**
      * The sizes of the windows: three rows for the main page and the small
@@ -400,12 +401,14 @@ public final class CamMenu implements Listener {
      * then, in the window that is open. The setting is read each time, so a
      * reload switches it on and off.
      */
+    @Override
     public void start() {
         if (live == null) {
             live = Bukkit.getScheduler().runTaskTimer(plugin, this::refresh, LIVE_TICKS, LIVE_TICKS);
         }
     }
 
+    @Override
     public void onDisable() {
         if (live != null) {
             live.cancel();

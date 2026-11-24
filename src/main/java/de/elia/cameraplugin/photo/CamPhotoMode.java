@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.photo;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
@@ -58,7 +59,7 @@ import java.util.UUID;
  * what he sits on, without it he would hang in the air for him. Once the
  * rider gets off, the next look round hides it.</p>
  */
-public final class CamPhotoMode implements Listener {
+public final class CamPhotoMode implements Listener, PluginPart {
 
     /** How often photo mode looks for anything new to hide, in ticks. */
     private static final long INTERVAL = 10L;
@@ -414,6 +415,7 @@ public final class CamPhotoMode implements Listener {
         }
     }
 
+    @Override
     public void onDisable() {
         for (UUID id : new ArrayList<>(active.keySet())) {
             Player player = Bukkit.getPlayer(id);

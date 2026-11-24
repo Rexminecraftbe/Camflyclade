@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.orb;
 
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.session.CameraPlayers;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
@@ -78,7 +79,7 @@ import java.util.UUID;
  * - by up to a tenth of a block, put back with the next tick of the
  * server.</p>
  */
-public final class CamOrbGuard {
+public final class CamOrbGuard implements PluginPart {
 
     /** How close a player has to come before an orb flies to them, in blocks: the game's own distance. */
     private static final double FOLLOW_RANGE = 8.0;
@@ -174,6 +175,7 @@ public final class CamOrbGuard {
      * Starts looking at the orbs around the camera players, once a tick. With
      * nobody in camera mode a look costs nothing.
      */
+    @Override
     public void start() {
         if (task == null) {
             task = plugin.getServer().getScheduler().runTaskTimer(plugin, this::sendOrbsAnew, 1L, 1L);
@@ -181,6 +183,7 @@ public final class CamOrbGuard {
     }
 
     /** Stops looking, and puts back the orbs that are up for their tick. */
+    @Override
     public void onDisable() {
         if (task != null) {
             task.cancel();
