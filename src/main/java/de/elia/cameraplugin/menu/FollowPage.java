@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.function.Consumer;
 
 import static de.elia.cameraplugin.menu.CamMenu.*;
+import static de.elia.cameraplugin.menu.MenuItems.*;
+import static de.elia.cameraplugin.menu.MenuSorts.*;
 
 /**
  * The page of {@code /cam follow} in {@code /cam menu}: who leads, who

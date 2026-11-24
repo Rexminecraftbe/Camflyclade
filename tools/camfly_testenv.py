@@ -22878,7 +22878,7 @@ ABSCHNITTE = [
     Abschnitt("fuehrung_ohne_cam", fuehrung_ohne_cam_checks, "tour display/CamNameTag scoreboard/GuideTeam"),
     Abschnitt("herzen_folgen", herzen_folgen_checks, "tour/GuideMirror tour/QuietHearts"),
     Abschnitt("gaestebuch", gaestebuch_checks,
-              "spot/SpotGuestbook spot/CamSpots spot/SpotViews menu/CamMenu menu/SpotPages"),
+              "spot/SpotGuestbook spot/CamSpots spot/SpotSharing spot/SpotViews menu/CamMenu menu/SpotPages"),
     Abschnitt("weiter", weiter_checks, "resume"),
     Abschnitt("weiter_himmel", weiter_himmel_checks,
               "resume sky nightvision spot/CamSpots storage/PlayerStore storage/PlayerFile session/CameraMode"),
@@ -22889,19 +22889,23 @@ ABSCHNITTE = [
     Abschnitt("menue", menue_checks, "menu"),
     Abschnitt("menue_live", menue_live_checks, "menu tour/CamTour tour/TourInvitations config/CamSettings stats"),
     Abschnitt("bedrock", bedrock_checks,
-              "bedrock menu display/CamActionBar spot/CamSpots tour/CamTour tour/TourInvitations tour/TourFollowing "
+              "bedrock menu display/CamActionBar spot/CamSpots spot/SpotList spot/SpotSharing tour/CamTour "
+              "tour/TourInvitations tour/TourFollowing "
               "tour/TourGuestEvents list/CamList trail/CamTrail"),
     Abschnitt("spotreiter", spotreiter_checks, "menu spot"),
-    Abschnitt("spotmoderation", spotmoderation_checks, "menu spot/SpotModeration spot/SpotBans spot/CamSpots"),
+    Abschnitt("spotmoderation", spotmoderation_checks,
+              "menu spot/SpotModeration spot/SpotBans spot/CamSpots spot/SpotSharing spot/SpotOwners"),
     Abschnitt("spotoptionen", spotoptionen_checks,
-              "menu spot/CamSpots spot/Spot spot/SpotModeration spot/SharedSpots spot/SpotViews storage/PlayerRecord"),
+              "menu spot/CamSpots spot/SpotSharing spot/SpotList spot/Spot spot/SpotModeration spot/SharedSpots "
+              "spot/SpotViews storage/PlayerRecord"),
     Abschnitt("tourmoderation", tourmoderation_checks,
               "menu tour/TourModeration tour/TourBans tour/CamTour tour/TourInvitations"),
-    Abschnitt("spot_nur_im_cam", spot_nur_im_cam_checks, "spot/CamSpots menu config/CamSettings"),
+    Abschnitt("spot_nur_im_cam", spot_nur_im_cam_checks, "spot/CamSpots spot/SpotList menu config/CamSettings"),
     Abschnitt("spot_ansicht", spot_ansicht_checks,
               "spot sky nightvision back resume tour/CamTour tour/TourFollowing preferences storage/PlayerStore "
               "storage/PlayerFile"),
-    Abschnitt("webkarte", webkarte_checks, "webmap spot/SharedSpots spot/CamSpots spot/SpotViews"),
+    Abschnitt("webkarte", webkarte_checks,
+              "webmap spot/SharedSpots spot/CamSpots spot/SpotSharing spot/SpotList spot/SpotViews"),
     Abschnitt("erze", erze_checks, "ore session/CameraMode"),
     Abschnitt("anstupsen", anstups_checks, "nudge", koerpertypen=True),
     Abschnitt("funk", funk_checks, "signal"),

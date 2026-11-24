@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.afk;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
@@ -36,7 +37,7 @@ import java.util.UUID;
  * does nothing does not count there after {@code statistics.afk-seconds}, see
  * {@link CameraData#noteActive}.</p>
  */
-public final class CamAfk implements Listener {
+public final class CamAfk implements Listener, PluginPart {
 
     /** Ticks between two looks at how long a camera has stood still. */
     private static final long INTERVAL = 20L;
@@ -136,6 +137,7 @@ public final class CamAfk implements Listener {
     }
 
     /** Stops every clock, when the plugin is switched off. */
+    @Override
     public void onDisable() {
         for (SessionTask task : tasks.values()) {
             task.cancel();

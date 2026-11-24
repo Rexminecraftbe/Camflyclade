@@ -22,6 +22,9 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 import static de.elia.cameraplugin.menu.CamMenu.*;
+import static de.elia.cameraplugin.menu.MenuDrafts.*;
+import static de.elia.cameraplugin.menu.MenuItems.*;
+import static de.elia.cameraplugin.menu.MenuSorts.*;
 
 /**
  * The pages of {@code /cam menu} that make a new spot, with its name, its
@@ -70,7 +73,7 @@ final class NewSpotPages {
      * @param key the question: {@code menu-spot-name} the first time
      */
     void askNewName(Player player, String key) {
-        menu.ask(player, key, typed -> {
+        menu.questions.ask(player, key, typed -> {
             CamSpots spots = plugin.getSpots();
             // He may have left camera mode while he typed.
             if (!spots.maySetHere(player)) {
@@ -125,7 +128,7 @@ final class NewSpotPages {
         List<RowButton> row = new ArrayList<>();
         row.add(new RowButton(item(Material.NAME_TAG, messages.getMessage("menu-new-spot-rename"),
                 lines(messages.getMessage("menu-new-spot-rename-lore").replace("{spot}", draft.name))),
-                click -> menu.act(player, () -> menu.ask(player, "menu-spot-rename", typed -> {
+                click -> menu.act(player, () -> menu.questions.ask(player, "menu-spot-rename", typed -> {
                     NewSpot now = menu.newSpots.get(id);
                     if (now == null) {
                         return;
@@ -302,7 +305,7 @@ final class NewSpotPages {
         if (admin || settings.spots().optionRename()) {
             row.add(new RowButton(item(Material.NAME_TAG, messages.getMessage("menu-spot-options-rename"),
                     lines(messages.getMessage("menu-spot-options-rename-lore"))),
-                    click -> menu.act(player, () -> menu.ask(player, "menu-spot-rename", typed -> {
+                    click -> menu.act(player, () -> menu.questions.ask(player, "menu-spot-rename", typed -> {
                         Spot renamed = admin ? moderation.rename(player, owner, ownerName, spot, typed)
                                 : spots.renameOwn(player, key, typed);
                         openSpotOptions(player, owner, ownerName, renamed != null ? renamed.key() : key, admin,

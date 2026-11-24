@@ -20,6 +20,9 @@ import java.util.Map;
 import java.util.UUID;
 
 import static de.elia.cameraplugin.menu.CamMenu.*;
+import static de.elia.cameraplugin.menu.MenuDrafts.*;
+import static de.elia.cameraplugin.menu.MenuItems.*;
+import static de.elia.cameraplugin.menu.MenuSorts.*;
 
 /**
  * The admin pages of {@code /cam menu} about {@code /cam follow}: who leads

@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.display;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.CameraData;
@@ -32,7 +33,7 @@ import java.util.UUID;
  * key of {@code exit-key} while it is on, and with {@code /cam}. With
  * {@code display: false} that start is all there is.</p>
  */
-public final class CamActionBar {
+public final class CamActionBar implements PluginPart {
 
     /**
      * How often the fixed line {@code actionbar-on} is sent again, in ticks.
@@ -398,6 +399,7 @@ public final class CamActionBar {
         offMessageTasks.put(player.getUniqueId(), task);
     }
 
+    @Override
     public void onDisable() {
         for (SessionTask task : actionBarTasks.values()) {
             task.cancel();

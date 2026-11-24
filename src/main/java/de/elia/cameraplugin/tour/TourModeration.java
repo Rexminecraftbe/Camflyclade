@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.tour;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
@@ -29,7 +30,7 @@ import java.util.UUID;
  * guide who would invite a player it keeps is told so, and the menu shows it
  * under him.</p>
  */
-public final class TourModeration {
+public final class TourModeration implements PluginPart {
 
     /** The right of the admin page of {@code /cam follow}. Operators have it by default. */
     public static final String PERMISSION = "camplugin.followadmin";
@@ -76,8 +77,12 @@ public final class TourModeration {
         return player.hasPermission(BYPASS) || player.hasPermission(OLD_BYPASS);
     }
 
-    /** Re-reads the restrictions after {@code /cam reload}, so that changes made in the file by hand count. */
-    public void reload() {
+    /**
+     * Reads the restrictions at the start and again after {@code /cam reload}, so that changes made in the
+     * file by hand count.
+     */
+    @Override
+    public void load() {
         bans.load();
     }
 

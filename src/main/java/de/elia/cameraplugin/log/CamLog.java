@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.log;
 
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.CameraData;
 import de.elia.cameraplugin.session.EndReason;
@@ -35,7 +36,7 @@ import java.util.logging.Level;
  * written by the {@link BackgroundWriter}, one after the other in the order
  * they came: a slow disk holds up only its thread and not the server.</p>
  */
-public final class CamLog {
+public final class CamLog implements PluginPart {
 
     /** The folder of the files, inside the folder of the plugin. */
     private static final String FOLDER = "logs";
@@ -135,7 +136,8 @@ public final class CamLog {
     }
 
     /** Clears out old files again with the next line, after a reload may have changed {@code keep-days}. */
-    public void reset() {
+    @Override
+    public void onReload() {
         lastDay = null;
     }
 }

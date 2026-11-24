@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.spot;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.log.ConsoleLog;
@@ -57,7 +58,7 @@ import java.util.logging.Level;
  * {@code playerdata/spot-guestbook.yml}, written after every change; or in
  * memory only, which {@code /cam reload} and a restart forget.</p>
  */
-public final class SpotGuestbook implements Listener {
+public final class SpotGuestbook implements Listener, PluginPart {
 
     /** The folder of everything the plugin keeps per player, inside the folder of the plugin. */
     private static final String PLAYER_FOLDER = "playerdata";
@@ -333,6 +334,7 @@ public final class SpotGuestbook implements Listener {
      * on {@code storage: memory} - and the clock of the updates, which starts
      * anew.
      */
+    @Override
     public void load() {
         modes.clear();
         news.clear();

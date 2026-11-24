@@ -30,6 +30,9 @@ import java.util.function.LongConsumer;
 import java.util.function.LongSupplier;
 
 import static de.elia.cameraplugin.menu.CamMenu.*;
+import static de.elia.cameraplugin.menu.MenuDrafts.*;
+import static de.elia.cameraplugin.menu.MenuItems.*;
+import static de.elia.cameraplugin.menu.MenuSorts.*;
 
 /**
  * The admin pages of {@code /cam menu}: who is in camera mode
@@ -194,7 +197,7 @@ final class AdminPages {
      * counted as well; whoever never flew, or only while the statistics were
      * switched off, comes last. The nearest first, whoever is online in his
      * world comes first, the closest to him at the top, see
-     * {@link CamMenu#distance(Player, Player)}; the others after them by name.
+     * {@link MenuSorts#distance(Player, Player)}; the others after them by name.
      */
     <T> void sortPlayers(Player admin, List<T> list, Function<T, String> name, Function<T, UUID> id) {
         list.sort(Comparator.comparing(name, String.CASE_INSENSITIVE_ORDER));
@@ -448,7 +451,7 @@ final class AdminPages {
                         openBan(player);
                     });
                 } else {
-                    menu.act(player, () -> menu.ask(player, "menu-admin-ban-reason-question", answer -> {
+                    menu.act(player, () -> menu.questions.ask(player, "menu-admin-ban-reason-question", answer -> {
                         draft.reason = answer;
                         openBan(player);
                     }, "{player}", target.name()));

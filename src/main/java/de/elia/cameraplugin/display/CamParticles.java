@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.display;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.session.CameraPlayers;
 import de.elia.cameraplugin.session.SessionTask;
@@ -16,7 +17,7 @@ import java.util.UUID;
  * The particles above a camera player, {@code camera-particles}. They are
  * for the others, the camera player himself never sees his own.
  */
-public final class CamParticles {
+public final class CamParticles implements PluginPart {
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
@@ -105,6 +106,7 @@ public final class CamParticles {
         }
     }
 
+    @Override
     public void onDisable() {
         for (SessionTask task : particleTasks.values()) {
             task.cancel();

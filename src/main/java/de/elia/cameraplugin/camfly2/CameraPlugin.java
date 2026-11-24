@@ -175,7 +175,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final JumpCheck jumpCheck = new JumpCheck(this);
     private final CamSpots spots = new CamSpots(this, playerStore, sharedSpots, spotViews, guestbook, jumpCheck);
     private final CamResume resume = new CamResume(this, playerStore, jumpCheck);
-    private final CamTour tour = new CamTour(this);
+    private final CamTour tour = new CamTour(this, log);
     private final TourModeration tourModeration = new TourModeration(this, new TourBans(this, log));
     private final CamScoutGuard scoutGuard = new CamScoutGuard(this);
     private final CamMenu menu = new CamMenu(this);
@@ -203,6 +203,11 @@ public final class CameraPlugin extends JavaPlugin {
     private boolean shuttingDown = false;
     /** Whether the start got past the config file and actually set anything up. */
     private boolean startedUp = false;
+    /**
+     * What has something to do at the start, on {@code /cam reload} and when
+     * the plugin is switched off, in the order it does it, see {@link #parts()}.
+     */
+    private List<PluginPart> parts = List.of();
 
     @Override
     public void onEnable() {
@@ -232,18 +237,12 @@ public final class CameraPlugin extends JavaPlugin {
         camGhastGuard = new CamGhastGuard(this);
         camSulfurCubeGuard = new CamSulfurCubeGuard(this, sessionTicker);
         camInventoryGuard = new CamInventoryGuard(this, sessionTicker, this::isInCameraMode);
+        parts = parts();
         configFile.reportConfigWarnings(loadConfigValues(), null);
         // Geyser and Floodgate are started by now: both come before, see softdepend.
-        bedrock.reload();
-        oreHider.reload();
-        ban.reload();
-        sharedSpots.load();
-        spotViews.load();
-        guestbook.load();
-        spotModeration.reload();
-        spots.indexOwners();
-        tour.load(log);
-        tourModeration.reload();
+        for (PluginPart part : parts) {
+            part.load();
+        }
         bodySpawner = new BodySpawner(this, settings, messages, log, cameraPlayers);
         camModeObjective.setUp();
         bodySpawner.removeLeftoverEntities();
@@ -331,11 +330,70 @@ public final class CameraPlugin extends JavaPlugin {
         oreHider.register();
         new CamSpawnFilter(this).register();
         progressGuard.register();
-        mobGaze.start();
-        orbGuard.start();
-        menu.start();
-        bedrockGlow.start();
-        movementGuard.startHoldingFlight();
+        for (PluginPart part : parts) {
+            part.start();
+        }
+    }
+
+    /**
+     * The parts of camera mode that have something to do at the start, on
+     * {@code /cam reload} or when the plugin is switched off, see
+     * {@link PluginPart}, in the order they do it. A part that is not in here
+     * is never loaded, started nor stopped.
+     *
+     * <p>What the order is for: Bedrock is known before anything else is
+     * read; the spots are counted after the shares and the restrictions are
+     * read; the files of the players are saved after the battery has settled
+     * the charge; and the teams go last, when no part of camera mode is left
+     * that would show anybody in them.</p>
+     */
+    private List<PluginPart> parts() {
+        return List.of(
+                camFireGuard,
+                camInventoryGuard,
+                camGhastGuard,
+                camSulfurCubeGuard,
+                borderWall,
+                movementGuard,
+                mobGaze,
+                orbGuard,
+                menu,
+                bedrock,
+                bedrockGlow,
+                particles,
+                sightGlow,
+                nameTag,
+                actionBar,
+                nightVision,
+                oreHider,
+                ban,
+                sharedSpots,
+                spotViews,
+                guestbook,
+                spotModeration,
+                spots,
+                timeLimit,
+                startCost,
+                camLog,
+                bodyAlarm,
+                nudge,
+                signal,
+                afk,
+                tour,
+                tourModeration,
+                photoMode,
+                scoutGuard,
+                startDelay,
+                trail,
+                // After camera mode has ended for everybody, which settled the
+                // batteries in flight and counted the flights.
+                battery,
+                playerStore,
+                preferences,
+                resume,
+                // No player left in camera mode -> remove the team.
+                noCollisionTeam,
+                guideTeam);
     }
 
     /**
@@ -403,49 +461,11 @@ public final class CameraPlugin extends JavaPlugin {
                 exitCameraMode(player, EndReason.SHUTDOWN);
             }
         }
-        if (camFireGuard != null) {
-            camFireGuard.onDisable();
+        // Every part, in the order of parts(): the files of the players
+        // among them, once camera mode has ended for everybody.
+        for (PluginPart part : parts) {
+            part.onDisable();
         }
-        if (camInventoryGuard != null) {
-            camInventoryGuard.onDisable();
-        }
-        if (camGhastGuard != null) {
-            camGhastGuard.onDisable();
-        }
-        if (camSulfurCubeGuard != null) {
-            camSulfurCubeGuard.onDisable();
-        }
-        borderWall.onDisable();
-        movementGuard.stopHoldingFlight();
-        mobGaze.onDisable();
-        orbGuard.onDisable();
-        menu.onDisable();
-        bedrockGlow.onDisable();
-        particles.onDisable();
-        sightGlow.onDisable();
-        nameTag.onDisable();
-        actionBar.onDisable();
-        nightVision.onDisable();
-        oreHider.onDisable();
-        timeLimit.onDisable();
-        bodyAlarm.onDisable();
-        nudge.onDisable();
-        signal.onDisable();
-        afk.onDisable();
-        tour.onDisable();
-        photoMode.onDisable();
-        scoutGuard.onDisable();
-        startDelay.onDisable();
-        trail.onDisable();
-        // After camera mode has ended for everybody, which settled the
-        // batteries in flight and counted the flights.
-        battery.onDisable();
-        playerStore.saveAll();
-        preferences.onDisable();
-        resume.onDisable();
-        // No player left in camera mode -> remove the team.
-        noCollisionTeam.deleteNoCollisionTeam();
-        guideTeam.delete();
         bodySpawner.removeLeftoverEntities();
         // Whatever of a camera mode is still running: the parts above have
         // stopped their own already.
@@ -519,23 +539,15 @@ public final class CameraPlugin extends JavaPlugin {
         // What the start asks for may change with the file.
         startDelay.callOffAll("start-delay-cancelled");
         configFile.reportConfigWarnings(loadConfigValues(), initiator);
-        bedrock.reload();
-        oreHider.reload();
-        ban.reload();
-        noCollisionTeam.refreshNoCollisionTeam();
-        timeLimit.onReload();
-        startCost.reset();
-        camLog.reset();
-        battery.onReload();
-        trail.onReload();
-        spots.onReload();
-        sharedSpots.load();
-        spotViews.load();
-        guestbook.load();
-        spotModeration.reload();
-        spots.indexOwners();
-        tour.load(log);
-        tourModeration.reload();
+        // First every part forgets what held for the file as it was, then
+        // each reads anew: the spots kept in memory are gone before they are
+        // counted again.
+        for (PluginPart part : parts) {
+            part.onReload();
+        }
+        for (PluginPart part : parts) {
+            part.load();
+        }
         webMap.start();
         return true;
     }

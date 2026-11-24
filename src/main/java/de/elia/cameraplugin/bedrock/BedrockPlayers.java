@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.bedrock;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.menu.MenuAccess;
@@ -46,7 +47,7 @@ import java.util.UUID;
  * things are shown and reached. A player taken for the wrong one gets
  * another way to the same things, nothing more.</p>
  */
-public final class BedrockPlayers implements Listener {
+public final class BedrockPlayers implements Listener, PluginPart {
 
     private final CamSettings settings;
     private final Messages messages;
@@ -61,7 +62,8 @@ public final class BedrockPlayers implements Listener {
     }
 
     /** Looks Geyser and Floodgate up anew and forgets who was found, at the start and after a reload. */
-    public void reload() {
+    @Override
+    public void load() {
         known.clear();
         forms.load();
     }

@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.nudge;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import net.md_5.bungee.api.ChatMessageType;
@@ -27,7 +28,7 @@ import java.util.UUID;
  * armour stand, and each of them once for either hand - and all of them after
  * the first fall into that wait as well.</p>
  */
-public final class CamNudge {
+public final class CamNudge implements PluginPart {
 
     private final CameraPlugin plugin;
     private final CamSettings settings;
@@ -75,6 +76,7 @@ public final class CamNudge {
         quietUntil.remove(player.getUniqueId());
     }
 
+    @Override
     public void onDisable() {
         quietUntil.clear();
     }

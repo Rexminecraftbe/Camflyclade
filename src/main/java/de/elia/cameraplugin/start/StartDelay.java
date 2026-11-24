@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.start;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.timelimit.CamTimeLimit;
@@ -31,7 +32,7 @@ import java.util.UUID;
  * Whether he may start at all is checked before the wait and once more at its
  * end, see {@link CamStarter}; the cost is only taken then.</p>
  */
-public final class StartDelay implements Listener {
+public final class StartDelay implements Listener, PluginPart {
 
     /**
      * How far the player may drift while he waits, in blocks. Anything more
@@ -167,6 +168,7 @@ public final class StartDelay implements Listener {
     }
 
     /** Stops every wait, when the plugin is switched off. */
+    @Override
     public void onDisable() {
         for (BukkitRunnable task : waiting.values()) {
             task.cancel();

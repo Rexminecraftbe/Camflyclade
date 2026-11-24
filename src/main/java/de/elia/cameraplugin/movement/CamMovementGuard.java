@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.movement;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.portal.PortalKind;
@@ -40,7 +41,7 @@ import java.util.concurrent.TimeUnit;
  * {@code false} - or with a wall that stops nobody - neither of the two holds
  * the camera back, not even behind a portal.</p>
  */
-public final class CamMovementGuard implements Listener {
+public final class CamMovementGuard implements Listener, PluginPart {
 
     /**
      * How long a portal is left alone after it turned a camera player away, in
@@ -567,6 +568,18 @@ public final class CamMovementGuard implements Listener {
             flightTask.cancel();
             flightTask = null;
         }
+    }
+
+    /** Holds the flight of the cameras from the start of the plugin on, see {@link #startHoldingFlight()}. */
+    @Override
+    public void start() {
+        startHoldingFlight();
+    }
+
+    /** Stops holding the flight when the plugin is switched off, see {@link #stopHoldingFlight()}. */
+    @Override
+    public void onDisable() {
+        stopHoldingFlight();
     }
 
     /**

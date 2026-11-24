@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.ghast;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.session.SessionTask;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -34,7 +35,7 @@ import java.util.UUID;
  * interaction lock of camera mode. What is left here is the one that needs
  * neither - simply standing on it.</p>
  */
-public class CamGhastGuard {
+public class CamGhastGuard implements PluginPart {
     /**
      * How far above a happy ghast a player still holds it still, in blocks.
      *
@@ -96,6 +97,7 @@ public class CamGhastGuard {
         }
     }
 
+    @Override
     public void onDisable() {
         for (SessionTask task : tasks.values()) {
             task.cancel();

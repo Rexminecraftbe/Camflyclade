@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.spot;
 
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.storage.StorageMode;
@@ -40,7 +41,7 @@ import java.util.logging.Level;
  * only, which {@code /cam reload} and a restart forget, like the spots
  * themselves.</p>
  */
-public final class SharedSpots {
+public final class SharedSpots implements PluginPart {
 
     /** The folder of everything the plugin keeps per player, inside the folder of the plugin. */
     private static final String PLAYER_FOLDER = "playerdata";
@@ -338,6 +339,7 @@ public final class SharedSpots {
      * At the start and after a reload: the shares of the file, or none on
      * {@code storage: memory}.
      */
+    @Override
     public void load() {
         shares.clear();
         onChange.run();

@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.tour;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.log.ConsoleLog;
@@ -116,7 +117,7 @@ import java.util.UUID;
  * and {@link TourGuestEvents} for what guests and guides do with the guide's
  * items. They read the tours; only this class changes them.</p>
  */
-public final class CamTour implements Listener {
+public final class CamTour implements Listener, PluginPart {
 
     /** Paper's event at the end of every tick, see {@link #watchTickEnd()}. */
     private static final String TICK_END = "com.destroystokyo.paper.event.server.ServerTickEndEvent";
@@ -129,6 +130,8 @@ public final class CamTour implements Listener {
     public static final String ALL = "all";
 
     private final CameraPlugin plugin;
+    /** Where {@link #load} says what does not work on this server. */
+    private final ConsoleLog log;
     private final CamSettings settings;
     private final Messages messages;
     private final CameraPlayers cameraPlayers;
@@ -169,8 +172,9 @@ public final class CamTour implements Listener {
     /** What guests and guides do with the guide's items, see {@link #guestEvents()}. */
     private final TourGuestEvents guestEvents;
 
-    public CamTour(CameraPlugin plugin) {
+    public CamTour(CameraPlugin plugin, ConsoleLog log) {
         this.plugin = plugin;
+        this.log = log;
         this.settings = plugin.getSettings();
         this.messages = plugin.getMessages();
         this.cameraPlayers = plugin.getCameraPlayers();
@@ -200,7 +204,8 @@ public final class CamTour implements Listener {
      * At the start and after a reload: looks up what the guide's view needs.
      * Where it is switched on and does not work, the console hears why.
      */
-    public void load(ConsoleLog log) {
+    @Override
+    public void load() {
         view.load(settings.follow().enabled() && settings.follow().guideView() ? log : null);
         visibility.load(settings.follow().enabled() ? log : null);
         swing.load(settings.follow().enabled() && settings.follow().mirrorSwing() ? log : null);
@@ -876,6 +881,7 @@ public final class CamTour implements Listener {
     }
 
     /** After a reload or when the plugin is switched off: nobody is on a tour any more. */
+    @Override
     public void onDisable() {
         for (UUID guide : new ArrayList<>(tours.keySet())) {
             Player player = Bukkit.getPlayer(guide);

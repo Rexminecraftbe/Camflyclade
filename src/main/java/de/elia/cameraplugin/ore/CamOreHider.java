@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.ore;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -84,7 +85,7 @@ import java.util.UUID;
  * twice, the second time a second later - a chunk the server sends later
  * than that shows its ores until the camera moves on.</p>
  */
-public final class CamOreHider implements Listener {
+public final class CamOreHider implements Listener, PluginPart {
 
     /** Paper's event for a chunk that reached a client, and the one for a chunk it dropped. */
     private static final String CHUNK_SENT = "io.papermc.paper.event.packet.PlayerChunkLoadEvent";
@@ -246,7 +247,8 @@ public final class CamOreHider implements Listener {
      * what is seen through, and what each ore looks like. What was looked at
      * before is forgotten - the ores may stand for something else now.
      */
-    public void reload() {
+    @Override
+    public void load() {
         found.clear();
         covers = Map.copyOf(settings.hideOres().covers());
         biomes = settings.hideOres().biomes() == null ? null : Set.copyOf(settings.hideOres().biomes());
@@ -710,6 +712,7 @@ public final class CamOreHider implements Listener {
         }, LIGHT_SETTLES);
     }
 
+    @Override
     public void onDisable() {
         stopTasks();
         shown.clear();

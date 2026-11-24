@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.storage;
 
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.log.ConsoleLog;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
@@ -43,7 +44,7 @@ import java.util.stream.Stream;
  * <p>What the text of a file says, and how a record is read from it, is up
  * to {@link PlayerFile}.</p>
  */
-public final class PlayerStore {
+public final class PlayerStore implements PluginPart {
 
     /** The folder of the files, inside the folder of the plugin. */
     private static final String FOLDER = "stats";
@@ -233,5 +234,11 @@ public final class PlayerStore {
         }
         log.log(Level.WARNING, "A file with statistics, battery, cooldown, spots and settings could not be read and"
                 + " was put aside, the player starts from nothing: " + aside + " (" + reason + ")");
+    }
+
+    /** When the plugin is switched off: every record in memory goes to its file, see {@link #saveAll()}. */
+    @Override
+    public void onDisable() {
+        saveAll();
     }
 }

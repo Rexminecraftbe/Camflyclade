@@ -1,6 +1,7 @@
 package de.elia.cameraplugin.battery;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.EndReason;
@@ -37,7 +38,7 @@ import java.util.UUID;
  * counts: the charge is settled when he leaves, and the clock starts again
  * when he joins.</p>
  */
-public final class CamBattery {
+public final class CamBattery implements PluginPart {
 
     /** Ticks between two looks at a battery with a bossbar. */
     private static final long INTERVAL = 20L;
@@ -325,6 +326,7 @@ public final class CamBattery {
      * full sees it charging the way the config file now says - a bossbar
      * that is up already goes and comes back in its new colour and notches.
      */
+    @Override
     public void onReload() {
         for (Bar charging : chargingBars.values()) {
             charging.remove();
@@ -371,6 +373,7 @@ public final class CamBattery {
     }
 
     /** Settles the battery of everybody online and takes every bossbar down, when the plugin is switched off. */
+    @Override
     public void onDisable() {
         for (UUID id : flights.keySet().toArray(new UUID[0])) {
             Player player = Bukkit.getPlayer(id);

@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.nightvision;
 
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.preferences.CamPreferences;
@@ -51,7 +52,7 @@ import java.util.UUID;
  * same: it is kept, but the guide's holds until he is off the tour; then his
  * own does, with what he picked on the way.</p>
  */
-public final class CamNightVision {
+public final class CamNightVision implements PluginPart {
 
     /** How often the light around the camera is looked at, in ticks. */
     private static final long INTERVAL = 10L;
@@ -368,6 +369,7 @@ public final class CamNightVision {
         }
     }
 
+    @Override
     public void onDisable() {
         spotModes.clear();
         guideModes.clear();

@@ -24,6 +24,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import static de.elia.cameraplugin.menu.CamMenu.*;
+import static de.elia.cameraplugin.menu.MenuItems.*;
+import static de.elia.cameraplugin.menu.MenuSorts.*;
 
 /**
  * The admin pages of {@code /cam menu} about {@code /cam trail}: the

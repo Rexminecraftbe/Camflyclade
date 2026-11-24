@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.fire;
 
+import de.elia.cameraplugin.camfly2.PluginPart;
 import de.elia.cameraplugin.config.ConfigReader;
 import de.elia.cameraplugin.session.SessionTask;
 import de.elia.cameraplugin.session.SessionTicker;
@@ -19,7 +20,7 @@ import java.util.*;
  * Simplified fire protection used for the camera mode. It hides nearby fire
  * blocks from the player and prevents burning while camera mode is active.
  */
-public class CamFireGuard implements Listener {
+public class CamFireGuard implements Listener, PluginPart {
 
     /**
      * Largest search radius for hide-fire that is accepted, in blocks, the
@@ -102,6 +103,7 @@ public class CamFireGuard implements Listener {
         return isPlayerInFire(player);
     }
 
+    @Override
     public void onDisable() {
         for (UUID id : new HashSet<>(tasks.keySet())) {
             Player p = plugin.getServer().getPlayer(id);
