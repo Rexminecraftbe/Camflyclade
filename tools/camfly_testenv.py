@@ -22966,9 +22966,11 @@ def erze_checks(env, bot):
         cam_on(bot)
         time.sleep(2.5)
         ohne_grenze = [sieht(bot, o) for o in nah]
+        # Wie mit 15: das auf dem Dach und das eingeschlossene bleiben Diamanterz.
         FIND.test("max-y: off - ohne Meldung in jeder Hoehe, die Erze der Hoehle sind wieder Stein",
-                  "hide-ores.max-y" not in neu and "diamond_ore" not in ohne_grenze
-                  and "deepslate_iron_ore" not in ohne_grenze, f"{ohne_grenze} {neu[-300:]}")
+                  "hide-ores.max-y" not in neu
+                  and ohne_grenze == ["stone", "deepslate", "diamond_ore", "diamond_ore"],
+                  f"{ohne_grenze} {neu[-300:]}")
         set_option(env, "max-y", "15", "hide-ores")
 
         FIND.test("Voreingestellt steht hide-ores.where: caves da, mit den Hoehlen-Biomen in der Liste",
