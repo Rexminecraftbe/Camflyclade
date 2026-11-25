@@ -1756,8 +1756,8 @@ dort `border-block` · auf
 mit `max-distance-mode: false` und mit `border-block: air` gibt es keine
 Grenze · `border-mode: false` gibt es nicht mehr: `/cam reload` schreibt dafür
 `push-back`, `max-distance-mode: false` und `cam-area.level: start` in die
-Datei, und die Kamera läuft weiter frei · `border-radius: 0` wird als zu klein
-gemeldet, und mit dem Ersatz 1 bleibt die Kamera an `max-distance` stehen ·
+Datei, und die Kamera läuft weiter frei · `border-radius: 0` ebenso, dazu
+`border-radius: 5` ·
 ein unbekannter Block und ein zu großer Radius werden gemeldet, und
 die Wand steht mit dem Ersatz · `border-radius: 32`, so weit, wie der
 Testserver die Welt schickt, wird nicht gemeldet · damit steht die Wand vom

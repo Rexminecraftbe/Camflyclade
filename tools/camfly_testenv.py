@@ -18409,8 +18409,8 @@ def border_checks(env, bot):
       * border-mode: false gibt es nicht mehr: /cam reload schreibt dafuer
         push-back, max-distance-mode: false und cam-area.level: start in die
         Datei, und der Bot laeuft weiter frei.
-      * border-radius: 0 ist keine Grenze mehr, sondern zu klein: gemeldet,
-        und mit dem Ersatz 1 bleibt er an max-distance stehen.
+      * border-radius: 0 ebenso: /cam reload schreibt dasselbe und
+        border-radius: 5 in die Datei, und der Bot laeuft weiter frei.
       * ein unbekannter Block und ein zu grosser Radius werden gemeldet, und
         die Wand steht mit dem, was dafuer genommen wird.
       * ein grosser Radius, so weit wie der Server die Welt schickt: die
@@ -18566,16 +18566,24 @@ def border_checks(env, bot):
         set_options(env, [("border-mode", "barrier"), ("max-distance-mode", "fixed"),
                           ("level", "always", "cam-area")])
 
-        # --- border-radius: 0 ist zu klein ---
-        vorher = len(server_log(env))
+        # --- border-radius: 0 schreibt /cam reload ebenso um ---
         set_option(env, "border-radius", "0")
-        neu = strip_colors(server_log(env)[vorher:])
-        FIND.test("border-radius: 0 wird als zu klein gemeldet",
-                  "camera-mode.border-radius is too small" in neu, neu[-300:])
+        text = (env.server / "plugins" / "CamFly" / "config.yml").read_text(encoding="utf-8")
+        FIND.test("border-radius: 0 - /cam reload schreibt push-back, max-distance-mode: false, "
+                  "cam-area.level: start und border-radius: 5 in die Datei",
+                  re.search(r"(?m)^  border-mode: push-back\s*$", text) is not None
+                  and re.search(r"(?m)^  max-distance-mode: false\s*$", text) is not None
+                  and re.search(r"(?m)^  level: start\s*$", text) is not None
+                  and re.search(r"(?m)^  border-radius: 5\s*$", text) is not None, "")
         ergebnis = grenz_lauf(bot, heim)
-        FIND.test("border-radius: 0 - mit dem Ersatz 1 kommt die Kamera nicht ueber max-distance",
-                  drin(ergebnis), grenz_zeige(ergebnis, heim))
+        FIND.test("border-radius: 0 - danach weiter keine Grenze, die Kamera laeuft ueber "
+                  "max-distance hinaus, ohne Meldung",
+                  frei(ergebnis) and ergebnis[1] == 0
+                  and not gewarnt(ergebnis, "can't go further"),
+                  grenz_zeige(ergebnis, heim))
         cam_off(bot)
+        set_options(env, [("border-mode", "barrier"), ("max-distance-mode", "fixed"),
+                          ("level", "always", "cam-area")])
 
         # --- was nicht passt, wird gemeldet ---
         vorher = len(server_log(env))
