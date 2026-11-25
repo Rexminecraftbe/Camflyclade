@@ -262,9 +262,8 @@ class BundledFilesTest {
         assertNull(result.failure());
         assertEquals(List.of("follow.mirror-item-details"), result.added());
         assertTrue(result.removed().containsAll(List.of("exit-click-guard", "web-map.bluemap", "web-map.dynmap",
-                "web-map.squaremap", "bedrock.map-icons", "body.health-rows-upward", "body.mob-target-heads",
-                "menu.ban-shift-step", "signal.levels", "cam-trail.show-min-blocks", "cam-trail.show-max-seconds",
-                "camera-mode.max-distance-enabled", "camera-mode.name.color", "body.name.color",
+                "web-map.squaremap", "bedrock.map-icons", "body.mob-target-heads", "menu.ban-shift-step",
+                "signal.levels", "camera-mode.max-distance-enabled", "camera-mode.name.color", "body.name.color",
                 "sounds.start.enabled", "sounds.follow-reach.enabled", "follow.mirror-count", "follow.mirror-name")),
                 result.removed().toString());
         assertEquals(Map.of(), result.values());
@@ -318,8 +317,8 @@ class BundledFilesTest {
         // One of the four details shown is not all four: the one switch stays off.
         assertFalse(actual.getBoolean("follow.mirror-item-details"));
         assertFalse(actual.contains("follow.mirror-count"));
-        // What is fixed now goes, whatever it said.
-        assertFalse(actual.contains("cam-trail.show-max-seconds"));
+        // What can still be set stays as it was set.
+        assertEquals(120, actual.getInt("cam-trail.show-max-seconds"));
         assertFalse(ConfigUpdater.update(result.text(), text, CamSettings.UNLISTED_KEYS, ConfigMigrations.CONFIG)
                 .changed());
     }

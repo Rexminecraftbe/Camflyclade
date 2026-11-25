@@ -7308,18 +7308,6 @@ def abstand_zur_strecke(p, a, b):
 SPUR_HOEHE = 1.0
 
 
-def dynamisch_sekunden(bloecke):
-    """Wie lange cam-trail.show-mode: dynamic eine Linie zeigt, die so viele
-    Bloecke lang ist, in Sekunden - die feste Kurve aus TrailShowMode: bis 50
-    Bloecke 10, ab 1500 Bloecken 300, dazwischen entsprechend, kaufmaennisch
-    gerundet wie Math.round."""
-    if bloecke <= 50:
-        return 10
-    if bloecke >= 1500:
-        return 300
-    return math.floor(10 + (bloecke - 50) / 1450 * 290 + 0.5)
-
-
 def flugspur_checks(env, bot):
     """cam-trail: /cam trail <Name> [Nummer|all] zeigt, wo die Kamera eines
     Spielers geflogen ist.
@@ -7334,9 +7322,10 @@ def flugspur_checks(env, bot):
     fuer die Sichtweite und alle auf dem geflogenen Weg - keiner auf der Linie
     quer zurueck, die /cam back nicht geflogen ist. /cam trail ohne Namen
     blendet sie aus, und mit show-mode: fixed hoert sie nach show-seconds
-    von selbst auf. Mit dynamic steht ein Flug bis 50 Bloecke 10 Sekunden da,
-    ein Flug, der noch laeuft, 5 Minuten (die Kurve dazwischen rechnet
-    TrailSettingsTest nach). Mit forever steht sie,
+    von selbst auf. Mit dynamic steht ein Flug bis show-min-blocks
+    show-min-seconds da, ab show-max-blocks show-max-seconds, dazwischen
+    entsprechend; ist show-max-seconds kleiner, gilt show-min-seconds, und ein
+    Flug, der noch laeuft, steht show-max-seconds da. Mit forever steht sie,
     bis /cam trail sie ausblendet. Eine aeltere Datei ohne show-mode, aber mit
     show-seconds, geht mit fixed weiter, ohne Warnung.
 
@@ -7383,11 +7372,11 @@ def flugspur_checks(env, bot):
                   gesagt(z, r"/cam trail is switched off"), zeige(z))
 
         quelle = quelle_config(env)
-        voreinstellung = (("show-mode", "dynamic"), ("show-seconds", "30"))
-        FIND.test("Voreingestellt steht cam-trail.show-mode: dynamic da, mit show-seconds: 30 - und nichts mehr fuer "
-                  "dynamic, dessen Zeiten fest sind",
-                  all(re.search(rf"(?m)^  {k}:\s*{v}\s*$", quelle) for k, v in voreinstellung)
-                  and "show-min-" not in quelle and "show-max-" not in quelle, "")
+        voreinstellung = (("show-mode", "dynamic"), ("show-seconds", "30"), ("show-min-blocks", "50"),
+                          ("show-min-seconds", "10"), ("show-max-blocks", "1500"), ("show-max-seconds", "300"))
+        FIND.test("Voreingestellt steht cam-trail.show-mode: dynamic da, mit show-seconds: 30, show-min-blocks: 50, "
+                  "show-min-seconds: 10, show-max-blocks: 1500 und show-max-seconds: 300",
+                  all(re.search(rf"(?m)^  {k}:\s*{v}\s*$", quelle) for k, v in voreinstellung), "")
         set_options(env, [("enabled", "true", "cam-trail"), ("show-mode", "fixed", "cam-trail"),
                           ("show-seconds", "4", "cam-trail")])
         heim = bot.server_pos()
@@ -7462,14 +7451,36 @@ def flugspur_checks(env, bot):
         # einen halben Block darunter oder darueber herauskaeme.
         bloecke = int(strecke.group(1)) if strecke else 0
 
-        set_option(env, "show-mode", "dynamic", "cam-trail")
-        z = befehl(bot, f"/cam trail {BOT_NAME}")
-        befehl(bot, "/cam trail", warten=0.5)
-        moeglich = sorted({dynamisch_sekunden(b) for b in (bloecke - 0.5, bloecke + 0.5)})
-        FIND.test("show-mode: dynamic - der Flug steht so lange da, wie seine Strecke sagt (bis 50 Bloecke 10 "
-                  "Sekunden)",
-                  any(gesagt(z, gezeigt_fuer(n)) for n in moeglich),
-                  f"{bloecke} Bloecke, erwartet {moeglich}: {zeige(z)}")
+        def nach_strecke(min_b, min_s, max_b, max_s):
+            """/cam trail mit dynamic und diesen Werten: was kam, und welche
+            Zeiten zu der Strecke passen."""
+            set_options(env, [("show-mode", "dynamic", "cam-trail"), ("show-min-blocks", str(min_b), "cam-trail"),
+                              ("show-min-seconds", str(min_s), "cam-trail"),
+                              ("show-max-blocks", str(max_b), "cam-trail"),
+                              ("show-max-seconds", str(max_s), "cam-trail")])
+            z = befehl(bot, f"/cam trail {BOT_NAME}")
+            befehl(bot, "/cam trail", warten=0.5)
+            max_s = max(max_s, min_s)
+
+            def sekunden(b):
+                if b <= min_b:
+                    return min_s
+                if b >= max_b:
+                    return max_s
+                return math.floor(min_s + (b - min_b) / (max_b - min_b) * (max_s - min_s) + 0.5)
+
+            moeglich = sorted({sekunden(b) for b in (bloecke - 0.5, bloecke + 0.5)})
+            passt = any(gesagt(z, gezeigt_fuer(n)) for n in moeglich)
+            return passt, f"{bloecke} Bloecke, erwartet {moeglich}: {zeige(z)}"
+
+        FIND.test("show-mode: dynamic - zwischen show-min-blocks (0, 1 s) und show-max-blocks (100, 21 s) entsprechend",
+                  *nach_strecke(0, 1, 100, 21))
+        FIND.test("show-mode: dynamic - unter show-min-blocks (50) steht er show-min-seconds (9) da",
+                  *nach_strecke(50, 9, 1500, 300))
+        FIND.test("show-mode: dynamic - ueber show-max-blocks (10) steht er show-max-seconds (2) da",
+                  *nach_strecke(0, 1, 10, 2))
+        FIND.test("show-mode: dynamic - ist show-max-seconds kleiner als show-min-seconds, gilt show-min-seconds",
+                  *nach_strecke(0, 8, 10, 3))
 
         # Eine aeltere Datei hat kein show-mode, nur show-seconds - und keine
         # config-version, die kam spaeter. Der Config-Updater traegt show-mode
@@ -7514,9 +7525,11 @@ def flugspur_checks(env, bot):
                   gesagt(weg, r"Flight hidden") and not partikel_seit(bot, seit), zeige(weg))
 
         # Ein zweiter Flug, schraeg hoch nach Norden: Seine Linie liegt weit
-        # weg von der Ecke des ersten. Fertige Fluege stehen 10 Sekunden da,
-        # einer, der noch laeuft, 5 Minuten.
-        set_option(env, "show-mode", "dynamic", "cam-trail")
+        # weg von der Ecke des ersten. Fertige Fluege stehen 4 Sekunden da,
+        # einer, der noch laeuft, 9.
+        set_options(env, [("show-mode", "dynamic", "cam-trail"), ("show-min-blocks", "0", "cam-trail"),
+                          ("show-min-seconds", "4", "cam-trail"), ("show-max-blocks", "1000", "cam-trail"),
+                          ("show-max-seconds", "9", "cam-trail")])
         if not FIND.test("Zweiter Cam-Modus fuer die Flugspur gestartet", cam_on(bot), ""):
             return
         bot.call("fly", wait=30, dy=3, dz=-5, timeout=15000)
@@ -7524,8 +7537,8 @@ def flugspur_checks(env, bot):
         nord = bot.server_pos()
         z = befehl(bot, f"/cam trail {BOT_NAME}")
         befehl(bot, "/cam trail", warten=0.5)
-        FIND.test("Ein Flug, der noch laeuft, steht am laengsten da (5 Minuten), seine Linie waechst noch",
-                  gesagt(z, r"Shown for 5m 0s:"), zeige(z))
+        FIND.test("Ein Flug, der noch laeuft, steht show-max-seconds da (9 Sekunden), seine Linie waechst noch",
+                  gesagt(z, gezeigt_fuer(9)), zeige(z))
         cam_off(bot)
         if nord is None:
             FIND.test("Position nach dem zweiten Flug lesbar", False, "")
@@ -7562,17 +7575,21 @@ def flugspur_checks(env, bot):
                   zeige(z[:3]) + f" - {len(teile)} Partikel")
         befehl(bot, "/cam trail", warten=0.5)
 
-        # Mit dynamic zaehlen bei all beide Fluege zusammen. Die Konsole nennt
-        # die Strecken gerundet, die Summe der genauen liegt hoechstens einen
-        # Block daneben. Die beiden hier sind zusammen kurz: Dass die Summe
-        # zaehlt und nicht der laengere, zeigt erst eine Strecke ueber 50
-        # Bloecken - das rechnet TrailSettingsTest mit der Kurve nach.
+        # Mit dynamic zaehlen bei all beide Fluege zusammen: Mit einer Sekunde
+        # je Block (0 Bloecke 1 Sekunde, 100 Bloecke 101 Sekunden) steht die
+        # Linie 1 Sekunde und so viele, wie beide zusammen Bloecke haben - nicht
+        # nur so viele, wie der laengere hat. Die Konsole nennt die Strecken
+        # gerundet, die Summe der genauen liegt hoechstens einen Block daneben.
         log = konsole(f"cam trail {BOT_NAME} all")
         weiten = [int(w) for w in re.findall(r"#\d+: (\d+) blocks", log)]
+        set_options(env, [("show-min-blocks", "0", "cam-trail"), ("show-min-seconds", "1", "cam-trail"),
+                          ("show-max-blocks", "100", "cam-trail"), ("show-max-seconds", "101", "cam-trail")])
         z = befehl(bot, f"/cam trail {BOT_NAME} all")
         befehl(bot, "/cam trail", warten=0.5)
-        moeglich = sorted({dynamisch_sekunden(b) for b in range(sum(weiten) - 1, sum(weiten) + 2)})
-        FIND.test("show-mode: dynamic - bei all stehen beide Fluege so lange da, wie ihre Strecken zusammen sagen",
+        set_options(env, [("show-min-blocks", "0", "cam-trail"), ("show-min-seconds", "4", "cam-trail"),
+                          ("show-max-blocks", "1000", "cam-trail"), ("show-max-seconds", "9", "cam-trail")])
+        moeglich = list(range(sum(weiten), sum(weiten) + 3)) if len(weiten) == 2 else []
+        FIND.test("show-mode: dynamic - bei all zaehlen beide Fluege zusammen, nicht nur der laengere",
                   len(weiten) == 2 and min(weiten) >= 3 and any(gesagt(z, gezeigt_fuer(n)) for n in moeglich),
                   f"Strecken {weiten}, erwartet {moeglich}: {zeige(z)}")
 
@@ -7706,7 +7723,9 @@ def flugspur_checks(env, bot):
         console(env, f"op {BOT_NAME}", pause=1.0)
         cam_off(bot)
         set_options(env, [("enabled", "false", "cam-trail"), ("show-mode", "dynamic", "cam-trail"),
-                          ("show-seconds", "30", "cam-trail"), ("flights", "5", "cam-trail"),
+                          ("show-seconds", "30", "cam-trail"), ("show-min-blocks", "50", "cam-trail"),
+                          ("show-min-seconds", "10", "cam-trail"), ("show-max-blocks", "1500", "cam-trail"),
+                          ("show-max-seconds", "300", "cam-trail"), ("flights", "5", "cam-trail"),
                           ("storage", "memory", "cam-trail"), ("keep-days", "30", "cam-trail")])
         time.sleep(1.0)
         shutil.rmtree(spuren, ignore_errors=True)
@@ -11608,7 +11627,7 @@ def menue_checks(env, bot):
         bot.call("close_window", wait=10)
         set_options(env, [("enabled", "false", "cam-ban"), ("enabled", "false", "stop-command"),
                           ("admin-access", "both", "menu"), ("enabled", "true", "cam-trail"),
-                          ("show-mode", "fixed", "cam-trail"), ("show-seconds", "60", "cam-trail")])
+                          ("show-min-seconds", "60", "cam-trail")])
 
         # Zwei Fluege vom selben Platz, dann ein Stueck daneben.
         for weg in ({"dy": 3}, {"dx": -3, "dy": 2}):
@@ -11758,7 +11777,7 @@ def menue_checks(env, bot):
                   f"{titel} / {sorted(f.get('slots', {}))} / {zeige(zeilen)}")
         bot.call("close_window", wait=10)
         set_options(env, [("enabled", "false", "cam-trail"), ("show-mode", "dynamic", "cam-trail"),
-                          ("show-seconds", "30", "cam-trail")])
+                          ("show-min-seconds", "10", "cam-trail")])
 
         original = datei.read_text(encoding="utf-8")
         text = menue_knopf(original, "start", slot=4)
@@ -11832,7 +11851,7 @@ def menue_checks(env, bot):
             # Wie der Testserver es fuer alle anderen Abschnitte hat.
             set_options(env, [("access", "both", "menu"), ("admin-access", "both", "menu"),
                               ("enabled", "false", "cam-ban"), ("enabled", "false", "cam-trail"),
-                              ("show-mode", "dynamic", "cam-trail"), ("show-seconds", "30", "cam-trail"),
+                              ("show-mode", "dynamic", "cam-trail"), ("show-min-seconds", "10", "cam-trail"),
                               ("enabled", "false", "stop-command")])
             console(env, "cam unban all", pause=0.5)
             spots_loeschen(bot, "Menue")
@@ -13937,8 +13956,8 @@ def herzen_am_namen_checks(env, bot):
     sonst doppelt dastuende, unter wie ueber den Herzen. Beide gehen mit dem
     Cam-Modus wieder weg. Mit Absorption IV - zehn gelbe Herzen - stehen die gelben
     (hud/heart/absorbing_full) hinter den roten, und weil es mehr als zehn
-    sind, stehen sie in einer zweiten Zeile: darueber wie in der Leiste, also
-    im Text vorn. Mit
+    sind, stehen sie in einer zweiten Zeile: voreingestellt darueber, also
+    im Text vorn, mit health-rows-upward: false darunter. Mit
     health-show-absorption: false gibt es keine gelben. Mit
     body.name-visible: false stehen die Herzen allein da.
 
@@ -13966,10 +13985,11 @@ def herzen_am_namen_checks(env, bot):
         cam_off(bot)
         text = ausgeliefert(env)
         FIND.test("Voreingestellt steht body.health-visible: false, health-position: above, health-show-missing: "
-                  "false und health-show-absorption: true da",
+                  "false, health-show-absorption: true und health-rows-upward: true da",
                   all(re.search(rf"(?m)^\s*{k}:\s*{v}\s*$", text) is not None
                       for k, v in (("health-visible", "false"), ("health-position", "above"),
-                                   ("health-show-missing", "false"), ("health-show-absorption", "true"))), "")
+                                   ("health-show-missing", "false"), ("health-show-absorption", "true"),
+                                   ("health-rows-upward", "true"))), "")
         set_options(env, [("enabled", "false", "cam-safety"), ("name-visible", "false", "camera-mode")])
         console(env, "gamerule natural_health_regeneration false", pause=0.3)
         spielmodus_setzen(bot, "survival")
@@ -14035,8 +14055,14 @@ def herzen_am_namen_checks(env, bot):
         text = daten_von(bot, NAME, "text")
         FIND.test("body.health-show-absorption: die zehn gelben Herzen der Absorption IV stehen da",
                   bool(text) and text.count("hud/heart/absorbing_full") == 10, text or "keine Antwort")
-        FIND.test("Die zweite Zeile Herzen steht ueber der ersten, wie in der Leiste",
+        FIND.test("body.health-rows-upward: true - die zweite Zeile steht ueber der ersten",
                   bool(text) and -1 < text.find("absorbing") < text.find("hud/heart/full"), text or "")
+
+        set_option(env, "health-rows-upward", "false")
+        cam_on(bot)
+        text = daten_von(bot, NAME, "text")
+        FIND.test("body.health-rows-upward: false - die zweite Zeile steht unter der ersten",
+                  bool(text) and -1 < text.find("hud/heart/full") < text.find("absorbing"), text or "")
 
         set_option(env, "health-show-absorption", "false")
         cam_on(bot)
@@ -14053,6 +14079,7 @@ def herzen_am_namen_checks(env, bot):
         cam_off(bot)
         set_options(env, [("health-visible", "false"), ("health-position", "above"), ("name-visible", "true", "body"),
                           ("health-show-missing", "false"), ("health-show-absorption", "true"),
+                          ("health-rows-upward", "true"),
                           ("enabled", "true", "cam-safety"), ("name-visible", "true", "camera-mode")])
         console(env, "gamerule natural_health_regeneration true", pause=0.3)
         bot.chat(f"/effect clear {BOT_NAME}")

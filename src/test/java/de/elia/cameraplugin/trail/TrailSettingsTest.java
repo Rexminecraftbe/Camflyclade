@@ -13,7 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * {@link TrailSettings}: how many flights are kept, where and for how long -
  * {@code cam-trail.flights}, {@code storage} and {@code keep-days} -, and how
- * long their line is shown, {@code show-mode} and {@code show-seconds}.
+ * long their line is shown, {@code show-mode}, {@code show-seconds} and the
+ * four times of {@code dynamic}.
  */
 class TrailSettingsTest {
 
@@ -63,17 +64,6 @@ class TrailSettingsTest {
     }
 
     @Test
-    void dynamicShowsTenSecondsUpToFiftyBlocksAndFiveMinutesFromFifteenHundred() {
-        assertEquals(10, TrailShowMode.seconds(0.0));
-        assertEquals(10, TrailShowMode.seconds(50.0));
-        // 300 blocks a minute in between: 10 s + 290 s * (300 - 50) / 1450.
-        assertEquals(60, TrailShowMode.seconds(300.0));
-        assertEquals(155, TrailShowMode.seconds(775.0));
-        assertEquals(300, TrailShowMode.seconds(1500.0));
-        assertEquals(300, TrailShowMode.seconds(100_000.0));
-    }
-
-    @Test
     void showSecondsIsForFixedAndDynamicIsTheDefault() throws InvalidConfigurationException {
         TrailSettings standard = new TrailSettings(reader("other: 1\n"));
         assertEquals(TrailShowMode.DYNAMIC, standard.showMode());
@@ -84,6 +74,43 @@ class TrailSettingsTest {
         assertEquals(TrailShowMode.FIXED, fixed.showMode());
         assertEquals(600, fixed.showSeconds());
         assertEquals(List.of("cam-trail.show-seconds=900"), notes(reader));
+    }
+
+    @Test
+    void dynamicShowsTenSecondsUpToFiftyBlocksAndFiveMinutesFromFifteenHundredOutOfTheBox()
+            throws InvalidConfigurationException {
+        ConfigReader reader = reader("other: 1\n");
+        TrailSettings trail = new TrailSettings(reader);
+
+        assertEquals(50, trail.showMinBlocks());
+        assertEquals(10, trail.showMinSeconds());
+        assertEquals(1500, trail.showMaxBlocks());
+        assertEquals(300, trail.showMaxSeconds());
+        assertEquals(List.of(), notes(reader));
+    }
+
+    @Test
+    void theTimesOfDynamicAreSetInTheFile() throws InvalidConfigurationException {
+        ConfigReader reader = reader("cam-trail:\n  show-min-blocks: 0\n  show-min-seconds: 4\n"
+                + "  show-max-blocks: 1000\n  show-max-seconds: 9\n");
+        TrailSettings trail = new TrailSettings(reader);
+
+        assertEquals(0, trail.showMinBlocks());
+        assertEquals(4, trail.showMinSeconds());
+        assertEquals(1000, trail.showMaxBlocks());
+        assertEquals(9, trail.showMaxSeconds());
+        assertEquals(List.of(), notes(reader));
+    }
+
+    @Test
+    void theLongestIsNeverShorterThanTheShortest() throws InvalidConfigurationException {
+        ConfigReader reader = reader("cam-trail:\n  show-min-blocks: 100\n  show-min-seconds: 8\n"
+                + "  show-max-blocks: 10\n  show-max-seconds: 3\n");
+        TrailSettings trail = new TrailSettings(reader);
+
+        assertEquals(101, trail.showMaxBlocks());
+        assertEquals(8, trail.showMaxSeconds());
+        assertEquals(List.of("cam-trail.show-max-blocks=10", "cam-trail.show-max-seconds=3"), notes(reader));
     }
 
     @Test

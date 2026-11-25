@@ -28,6 +28,8 @@ public final class BodySettings {
     private boolean bodyHealthShowMissing;
     /** Whether the yellow hearts of absorption stand there as well, {@code body.health-show-absorption}. */
     private boolean bodyHealthShowAbsorption;
+    /** Whether every further line of hearts stands above the one before, {@code body.health-rows-upward}. */
+    private boolean bodyHealthRowsUpward;
     /** How the name over the body looks, the section {@code body.name}. */
     private NameStyle bodyNameStyle;
     private boolean bodyVisible;
@@ -56,6 +58,7 @@ public final class BodySettings {
                 .equalsIgnoreCase("above");
         bodyHealthShowMissing = config.getBoolean("body.health-show-missing", false);
         bodyHealthShowAbsorption = config.getBoolean("body.health-show-absorption", true);
+        bodyHealthRowsUpward = config.getBoolean("body.health-rows-upward", true);
         bodyNameStyle = NameStyle.read(config, "body.name", ChatColor.YELLOW);
         bodyVisible = config.getBoolean("body.visible", true);
         bodyArmorVisible = config.getBoolean("body.armor-visible", true);
@@ -117,6 +120,10 @@ public final class BodySettings {
 
     public boolean healthShowAbsorption() {
         return bodyHealthShowAbsorption;
+    }
+
+    public boolean healthRowsUpward() {
+        return bodyHealthRowsUpward;
     }
 
     public NameStyle nameStyle() {

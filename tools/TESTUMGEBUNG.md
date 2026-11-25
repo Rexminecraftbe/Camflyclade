@@ -50,7 +50,7 @@ mvn -B test -Dtest=ConfigUpdaterTest       # nur eine Klasse
 | `ShareTest`          | Für wen ein geteilter Spot gilt: öffentlich, angeboten, angenommen, nie für den Besitzer; Likes bleiben, solange er privat ist. |
 | `PlayerFileTest`     | Die Datei eines Spielers unter `playerdata/stats` (`PlayerFile`): alles kommt so zurück, wie es hineinging, Dateien älterer Versionen, Zahlen unter 0, unsinnige Einstellungen und Text, der kein YAML ist. |
 | `TrailFileTest`      | Die Datei eines gemerkten Flugs unter `playerdata/trails` (`TrailFile`): alles kommt so zurück, wie es hineinging, die Punkte auf ein Hundertstel, die Linie steht zuletzt, und der Kopf lässt sich ohne sie lesen - auch wenn sie kaputt ist. Dazu Dateien, die jemand von Hand geändert hat. |
-| `TrailSettingsTest`  | `cam-trail.flights`, `storage` und `keep-days`: in Dateien ohne Grenze und 0 = alle, im Arbeitsspeicher höchstens 20, was nicht geht, wird mit einem Hinweis ersetzt. Dazu `show-seconds` für `fixed` und die feste Kurve von `dynamic`: bis 50 Blöcke 10 Sekunden, 300 Blöcke eine Minute, ab 1500 fünf Minuten. |
+| `TrailSettingsTest`  | `cam-trail.flights`, `storage` und `keep-days`: in Dateien ohne Grenze und 0 = alle, im Arbeitsspeicher höchstens 20, was nicht geht, wird mit einem Hinweis ersetzt. Dazu `show-seconds` für `fixed` und die vier Zeiten von `dynamic`: voreingestellt bis 50 Blöcke 10 Sekunden, ab 1500 fünf Minuten, und das Längste nie kürzer als das Kürzeste. |
 | `NameDisplayTest`    | Die Farbe der Namen über Körper und Kamera: der Farbcode vorn im Text, ohne einen gelb (Körper) oder weiß (Kamera), die Zeilen der Follower in der Farbe von `player.name-format`, und ein `color`, das eine ältere Datei noch hat, geht vor. |
 | `TourTrailTest`      | Der Weg, dem die Kameras der Gäste beim Folgen zwei Ticks hinter dem Leiter nachfliegen (`TourTrail`): verlorene, doppelte und gesprungene Schritte, Anhalten, ein Weltwechsel. |
 
@@ -1864,8 +1864,9 @@ letzten der Kamera · der Spieler bekommt die Linie als Partikel, alle mit dem
 Flag für die Sichtweite und alle auf dem geflogenen Weg, keinen quer zurück,
 wo `/cam back` die Kamera versetzt hat · `/cam trail` ohne Namen blendet sie
 aus, mit `show-mode: fixed` hört sie nach `show-seconds` von selbst auf · mit
-`dynamic` steht ein Flug nach seiner Strecke da - bis 50 Blöcke 10 Sekunden,
-ein Flug, der noch läuft, 5 Minuten · mit `forever` steht sie, bis
+`dynamic` steht ein Flug bis `show-min-blocks` `show-min-seconds` da, ab
+`show-max-blocks` `show-max-seconds`, dazwischen entsprechend, ein Flug, der
+noch läuft, `show-max-seconds` lang · mit `forever` steht sie, bis
 `/cam trail` sie ausblendet · eine ältere Datei ohne `show-mode`, mit
 `show-seconds`, geht mit `fixed` weiter, ohne Warnung · ein Name ohne Flug wird
 gemeldet, ohne `camplugin.trail` fehlt das Recht, und `enabled: false`

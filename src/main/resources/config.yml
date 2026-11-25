@@ -218,8 +218,8 @@ body:
   name-visible: true
 
   # Die Herzen des Spielers in einer eigenen Zeile am Namen über dem Körper zeigen, so viele, wie er hat: die Bilder
-  # aus seiner Leiste, ganze und ein halbes, zehn pro Zeile - und wie in der Leiste jede weitere Zeile darüber. Ändern
-  # sie sich im Cam-Modus, etwa durch einen Heiltrank, gehen sie mit. Bei name-visible: false stehen sie allein da.
+  # aus seiner Leiste, ganze und ein halbes, zehn pro Zeile. Ändern sie sich im Cam-Modus, etwa durch einen Heiltrank,
+  # gehen sie mit. Bei name-visible: false stehen sie allein da.
   # Die Bilder gehen nur auf Paper. Auf Spigot stehen dort Zeichen, die in der Sprachdatei stehen
   # (messages.armorstand.health-full, -half und -empty).
   health-visible: false
@@ -234,6 +234,11 @@ body:
   # Die gelben Herzen eines Goldapfels (Absorption) hinter den roten zeigen, wie in der Leiste. Der Cam-Modus pausiert
   # den Effekt; gezeigt wird, was der Spieler beim Start hatte.
   health-show-absorption: true
+
+  # Wohin die nächste Zeile Herzen kommt, wenn es mehr als zehn sind:
+  #   true  = darüber, wie in der Leiste
+  #   false = darunter
+  health-rows-upward: true
 
   # Aussehen des Namens. Der Text steht in der Sprachdatei unter messages.armorstand.name-format, \n beginnt eine neue
   # Zeile. Die Farbe ist ein Farbcode am Anfang des Texts, z. B. "&e{player}'s Body" - ohne einen ist er gelb.
@@ -1383,9 +1388,11 @@ cam-ban:
 # Der Eimer auf der Seite der Flugspuren blendet die Linie aus: ein Wassereimer, solange eine zu sehen ist (darunter
 # welcher Flug und wie lange noch), ein leerer, wenn keine zu sehen ist.
 # Wie lange die Linie zu sehen ist, sagt show-mode:
-#   dynamic = nach der Strecke des Flugs: bis 50 Blöcke 10 Sekunden, 300 Blöcke 1 Minute, ab 1500 Blöcken 5 Minuten,
-#             dazwischen entsprechend. Bei all zählen alle Flüge zusammen, denn man fliegt jede Linie ab - höchstens
-#             5 Minuten. Ein Flug, der noch läuft, steht 5 Minuten da, weil seine Linie noch wächst.
+#   dynamic = nach der Strecke des Flugs: ein Flug bis show-min-blocks Blöcke steht show-min-seconds da, einer ab
+#             show-max-blocks Blöcken show-max-seconds, dazwischen entsprechend länger. Bei all zählen alle Flüge
+#             zusammen, denn man fliegt jede Linie ab - höchstens show-max-seconds. Ein Flug, der noch läuft, steht
+#             show-max-seconds da, weil seine Linie noch wächst.
+#             Mit den Werten unten: bis 50 Blöcke 10 Sekunden, 300 Blöcke 1 Minute, ab 1500 Blöcken 5 Minuten.
 #   fixed   = jede Linie show-seconds lang, egal wie weit der Flug ging
 #   forever = bis man sie ausblendet (/cam trail oder der Eimer im Menü), eine andere zeigen lässt oder offline geht
 # Eine ältere Datei ohne show-mode, aber mit show-seconds, geht weiter wie bisher, mit fixed.
@@ -1413,6 +1420,14 @@ cam-trail:
   show-mode: dynamic
   # Für fixed: wie lange jede Linie zu sehen ist, in Sekunden (1 bis 600)
   show-seconds: 30
+  # Für dynamic: bis zu wie vielen Blöcken ein Flug am kürzesten zu sehen ist (0 bis 99999), und wie lange, in Sekunden
+  # (1 bis 600)
+  show-min-blocks: 50
+  show-min-seconds: 10
+  # Für dynamic: ab wie vielen Blöcken ein Flug am längsten zu sehen ist (mehr als show-min-blocks, bis 100000), und
+  # wie lange, in Sekunden (show-min-seconds bis 600)
+  show-max-blocks: 1500
+  show-max-seconds: 300
   # Nach wie vielen Tagen ein Flug gelöscht wird, gezählt ab seinem Ende (0 = nie, er bleibt für immer)
   keep-days: 30
 

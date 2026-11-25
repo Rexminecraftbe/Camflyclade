@@ -220,9 +220,7 @@ final class ConfigMigrations {
     /** What is no setting any more since the second tidying up: fine tuning fixed in the code. */
     private static final List<String> FIXED_NOW = List.of(
             "exit-click-guard", "web-map.bluemap", "web-map.dynmap", "web-map.squaremap", "bedrock.map-icons",
-            "body.health-rows-upward", "body.mob-target-heads", "menu.ban-shift-step", "signal.levels",
-            "cam-trail.show-min-blocks", "cam-trail.show-min-seconds", "cam-trail.show-max-blocks",
-            "cam-trail.show-max-seconds");
+            "body.mob-target-heads", "menu.ban-shift-step", "signal.levels");
 
     /**
      * Where a section had a {@code storage} of its own, before there was one
