@@ -25,9 +25,13 @@ public enum BorderMode {
      */
     PUSH_BACK,
     /**
-     * {@code false}: no border at distance or areas. Neither holds the camera
-     * back in flight, and no portal asks about them either. Shut lava, water
-     * and powder snow stop the step as under {@link #PUSH_BACK}.
+     * The old value {@code false}: no border at distance or areas. Neither
+     * holds the camera back in flight, and no portal asks about them either.
+     * Shut lava, water and powder snow stop the step as under
+     * {@link #PUSH_BACK}. The file says this with
+     * {@code max-distance-mode: false} and {@code cam-area.level: start} now;
+     * only a file the update could not change still has it, see
+     * {@link de.elia.cameraplugin.session.CameraModeSettings#OLD_BORDER_OFF}.
      */
     OFF
 }

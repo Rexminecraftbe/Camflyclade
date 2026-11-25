@@ -2,6 +2,7 @@ package de.elia.cameraplugin.config;
 
 import de.elia.cameraplugin.menu.AdminButton;
 import de.elia.cameraplugin.menu.MenuButton;
+import de.elia.cameraplugin.session.CameraModeSettings;
 import de.elia.cameraplugin.sound.SoundSettings;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.DynamicTest;
@@ -267,7 +268,8 @@ class BundledFilesTest {
                 "sounds.start.enabled", "sounds.follow-reach.enabled", "follow.mirror-count", "follow.mirror-name")),
                 result.removed().toString());
         assertEquals(Map.of(), result.values());
-        assertEquals(Map.of(), result.renamed());
+        // Renamed in the third tidying up, which runs on it as well.
+        assertEquals(Map.of(CameraModeSettings.OLD_INVISIBLE, "camera-mode.invisible"), result.renamed());
         // Every default of before is the default of now.
         YamlConfiguration expected = BuiltIn.yaml(text);
         YamlConfiguration actual = BuiltIn.yaml(result.text());
@@ -345,6 +347,179 @@ class BundledFilesTest {
         for (String old : List.of("mirror-count", "mirror-enchantments", "mirror-durability", "mirror-name")) {
             assertFalse(actual.contains("follow." + old), old);
         }
+    }
+
+    /**
+     * The config file as the jar had it before the third tidying up, which
+     * took out the border that is none, the switches that only hid a button
+     * or kept a player from deleting his spots, and gave
+     * {@code allow-invisibility-potion} a name that says what it does.
+     */
+    private static final String BEFORE_THIRD_TIDY_UP = "config-before-third-tidy-up.yml";
+
+    @Test
+    void fileFromBeforeTheThirdTidyUpSaysWhatTheNewOneSays() {
+        String text = BuiltIn.text(BuiltIn.CONFIG);
+
+        ConfigUpdater.Result result = ConfigUpdater.update(BuiltIn.text(BEFORE_THIRD_TIDY_UP), text,
+                CamSettings.UNLISTED_KEYS, ConfigMigrations.CONFIG);
+
+        assertNull(result.failure());
+        assertEquals(List.of(), result.added());
+        assertEquals(List.of("cam-list.stop", "viewpoints.options.delete"), result.removed());
+        assertEquals(Map.of(CameraModeSettings.OLD_INVISIBLE, "camera-mode.invisible"), result.renamed());
+        // The border of the file out of the box is one that holds: nothing about it changes.
+        assertEquals(Map.of(), result.values());
+        // Every default of before is the default of now.
+        YamlConfiguration expected = BuiltIn.yaml(text);
+        YamlConfiguration actual = BuiltIn.yaml(result.text());
+        assertEquals(expected.getKeys(true), actual.getKeys(true));
+        for (String path : expected.getKeys(true)) {
+            if (!expected.isConfigurationSection(path)) {
+                assertEquals(expected.get(path), actual.get(path), path);
+            }
+        }
+        // Done once: the next start finds nothing to do.
+        assertFalse(ConfigUpdater.update(result.text(), text, CamSettings.UNLISTED_KEYS, ConfigMigrations.CONFIG)
+                .changed());
+    }
+
+    @Test
+    void invisibilitySwitchedOffStaysOffUnderItsNewName() {
+        YamlConfiguration actual = afterThirdTidyUp(
+                "  allow-invisibility-potion: true", "  allow-invisibility-potion: false");
+
+        assertFalse(actual.getBoolean("camera-mode.invisible", true));
+        assertFalse(actual.contains(CameraModeSettings.OLD_INVISIBLE));
+    }
+
+    @Test
+    void invisibilityWithUnderscoresGetsTheNewNameAtOnce() {
+        String text = BuiltIn.text(BuiltIn.CONFIG);
+        String before = BuiltIn.text(BEFORE_TIDY_UP)
+                .replace("  allow_invisibility_potion: true", "  allow_invisibility_potion: false");
+        assertTrue(before.contains("allow_invisibility_potion: false"), "the test no longer finds its line");
+
+        ConfigUpdater.Result result = ConfigUpdater.update(before, text, CamSettings.UNLISTED_KEYS,
+                ConfigMigrations.CONFIG);
+
+        assertNull(result.failure());
+        assertEquals("camera-mode.invisible", result.renamed().get("camera-mode.allow_invisibility_potion"));
+        assertFalse(BuiltIn.yaml(result.text()).getBoolean("camera-mode.invisible", true));
+    }
+
+    @Test
+    void borderModeFalseBecomesNoDistanceAndAreasOnlyAtTheStart() {
+        ConfigUpdater.Result result = thirdTidyUp("  border-mode: barrier", "  border-mode: false");
+        YamlConfiguration actual = BuiltIn.yaml(result.text());
+
+        // Shut lava, water and powder snow stopped the step as push-back does.
+        assertEquals("push-back", actual.getString("camera-mode.border-mode"));
+        assertEquals("false", actual.getString("camera-mode.max-distance-mode"));
+        assertEquals("start", actual.getString("cam-area.level"));
+        assertEquals(List.of("false", "push-back"), result.values().get("camera-mode.border-mode"));
+        assertEquals(List.of("fixed", "false"), result.values().get("camera-mode.max-distance-mode"));
+        assertEquals(List.of("always", "start"), result.values().get("cam-area.level"));
+        assertEquals(5, actual.getInt("camera-mode.border-radius"));
+    }
+
+    @Test
+    void borderModeFalseLeavesTheSignalAndALevelThatDoesNotHoldInFlight() {
+        YamlConfiguration actual = afterThirdTidyUp(
+                "  border-mode: barrier", "  border-mode: false",
+                "  max-distance-mode: fixed", "  max-distance-mode: signal",
+                "  level: always", "  level: false");
+
+        assertEquals("push-back", actual.getString("camera-mode.border-mode"));
+        assertEquals("signal", actual.getString("camera-mode.max-distance-mode"));
+        assertEquals("false", actual.getString("cam-area.level"));
+    }
+
+    @Test
+    void wallBuiltNowhereIsNoBorderAsWell() {
+        ConfigUpdater.Result result = thirdTidyUp("  border-radius: 5", "  border-radius: 0");
+        YamlConfiguration actual = BuiltIn.yaml(result.text());
+
+        assertEquals("push-back", actual.getString("camera-mode.border-mode"));
+        assertEquals("false", actual.getString("camera-mode.max-distance-mode"));
+        assertEquals("start", actual.getString("cam-area.level"));
+        assertEquals(List.of("0", "5"), result.values().get("camera-mode.border-radius"));
+    }
+
+    @Test
+    void radiusZeroUnderPushBackOnlyGetsAValue() {
+        ConfigUpdater.Result result = thirdTidyUp("  border-radius: 5", "  border-radius: 0.0",
+                "  border-mode: barrier", "  border-mode: push-back");
+        YamlConfiguration actual = BuiltIn.yaml(result.text());
+
+        // push-back held without a wall: it still does, and the distance and the areas hold with it.
+        assertEquals("push-back", actual.getString("camera-mode.border-mode"));
+        assertEquals("fixed", actual.getString("camera-mode.max-distance-mode"));
+        assertEquals("always", actual.getString("cam-area.level"));
+        assertEquals(5, actual.getInt("camera-mode.border-radius"));
+        assertEquals(List.of("camera-mode.border-radius"), List.copyOf(result.values().keySet()));
+    }
+
+    @Test
+    void borderModeFalseWithoutTheSectionOfTheAreasBringsItWithLevelStart() {
+        String text = BuiltIn.text(BuiltIn.CONFIG);
+        String before = BuiltIn.text(BEFORE_THIRD_TIDY_UP).replace("  border-mode: barrier", "  border-mode: false");
+        YamlOutline outline = YamlOutline.of(lines(before));
+        before = without(lines(before), outline, outline.node("cam-area"));
+
+        ConfigUpdater.Result result = ConfigUpdater.update(before, text, CamSettings.UNLISTED_KEYS,
+                ConfigMigrations.CONFIG);
+
+        assertNull(result.failure());
+        assertEquals(List.of("cam-area"), result.added());
+        YamlConfiguration actual = BuiltIn.yaml(result.text());
+        assertEquals("start", actual.getString("cam-area.level"));
+        // The rest of the section as the jar has it.
+        assertEquals(List.of("lush_caves", "dripstone_caves", "deep_dark", "sulfur_caves"),
+                actual.getStringList("cam-area.forbidden-biomes"));
+        assertFalse(ConfigUpdater.update(result.text(), text, CamSettings.UNLISTED_KEYS, ConfigMigrations.CONFIG)
+                .changed());
+    }
+
+    @Test
+    void languageFileLosesThePageOfOptionsWithNothingOnIt() {
+        String text = BuiltIn.text(BuiltIn.LANGUAGE);
+        String before = text.replace("  menu-spot-options-rename: ",
+                "  menu-spot-options-none: \"&7Nothing to change\"\n"
+                        + "  menu-spot-options-none-lore: \"&7The server allows no options here.\"\n"
+                        + "  menu-spot-options-rename: ");
+
+        ConfigUpdater.Result result = ConfigUpdater.update(before, text, Set.of(), ConfigMigrations.LANGUAGE);
+
+        assertNull(result.failure());
+        assertEquals(List.of("messages.menu-spot-options-none", "messages.menu-spot-options-none-lore"),
+                result.removed());
+        assertEquals(text, result.text());
+    }
+
+    /**
+     * The config file from before the third tidying up with these lines
+     * changed, each pair the line and what it becomes, after the update.
+     */
+    private static ConfigUpdater.Result thirdTidyUp(String... replacements) {
+        String before = BuiltIn.text(BEFORE_THIRD_TIDY_UP);
+        for (int i = 0; i < replacements.length; i += 2) {
+            assertEquals(1, before.split(replacements[i], -1).length - 1,
+                    "the test does not find its line once: " + replacements[i]);
+            before = before.replace(replacements[i], replacements[i + 1]);
+        }
+        String text = BuiltIn.text(BuiltIn.CONFIG);
+        ConfigUpdater.Result result = ConfigUpdater.update(before, text, CamSettings.UNLISTED_KEYS,
+                ConfigMigrations.CONFIG);
+        assertNull(result.failure());
+        // Done once: the next start finds nothing to do.
+        assertFalse(ConfigUpdater.update(result.text(), text, CamSettings.UNLISTED_KEYS, ConfigMigrations.CONFIG)
+                .changed());
+        return result;
+    }
+
+    private static YamlConfiguration afterThirdTidyUp(String... replacements) {
+        return BuiltIn.yaml(thirdTidyUp(replacements).text());
     }
 
     @Test

@@ -211,7 +211,28 @@ public final class ConfigUpdater {
         if (model == null || !model.hasInlineValue() || has(path)) {
             return;
         }
+        String missing = topmostMissing(path);
+        if (!missing.equals(path)) {
+            // The section it stands in is missing as well: that comes whole,
+            // with the defaults of the built-in file and this value in it.
+            place(path, value);
+            added.add(missing);
+            return;
+        }
         insert(model, value, true);
+    }
+
+    /** The path itself, or the topmost section on the way to it that the file lacks. */
+    private String topmostMissing(String path) {
+        String missing = path;
+        for (int dot = path.lastIndexOf('.'); dot > 0; dot = path.lastIndexOf('.', dot - 1)) {
+            String section = path.substring(0, dot);
+            if (has(section)) {
+                break;
+            }
+            missing = section;
+        }
+        return missing;
     }
 
     /**

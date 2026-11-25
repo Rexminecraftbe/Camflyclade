@@ -64,7 +64,6 @@ public final class SpotSettings {
     private boolean spotOptionRename;
     private boolean spotOptionIcon;
     private boolean spotOptionShare;
-    private boolean spotOptionDelete;
     private boolean spotOptionMove;
     /** How long the same player at the same spot is no new view, {@code viewpoints.views-cooldown-minutes}. */
     private int viewsCooldownMinutes;
@@ -87,7 +86,6 @@ public final class SpotSettings {
         spotOptionRename = config.getBoolean("viewpoints.options.rename", true);
         spotOptionIcon = config.getBoolean("viewpoints.options.icon", true);
         spotOptionShare = config.getBoolean("viewpoints.options.share", true);
-        spotOptionDelete = config.getBoolean("viewpoints.options.delete", true);
         spotOptionMove = config.getBoolean("viewpoints.options.move", false);
         viewsCooldownMinutes = config.getInt("viewpoints.views-cooldown-minutes", 10, 0, MAX_VIEWS_COOLDOWN_MINUTES);
     }
@@ -177,11 +175,6 @@ public final class SpotSettings {
     /** Whether the owner may share a spot there, or make it public, {@code viewpoints.options.share}. */
     public boolean optionShare() {
         return spotOptionShare && sharing();
-    }
-
-    /** Whether the owner may delete a spot there, {@code viewpoints.options.delete}. */
-    public boolean optionDelete() {
-        return spotOptionDelete;
     }
 
     /**

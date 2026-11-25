@@ -64,7 +64,8 @@ final class ConfigMigrations {
                 }
             }),
             new ConfigUpdater.Migration(ConfigUpdater.Migration.ALWAYS, ConfigMigrations::tidyUp),
-            new ConfigUpdater.Migration(ConfigUpdater.Migration.ALWAYS, ConfigMigrations::fewerSwitches));
+            new ConfigUpdater.Migration(ConfigUpdater.Migration.ALWAYS, ConfigMigrations::fewerSwitches),
+            new ConfigUpdater.Migration(ConfigUpdater.Migration.ALWAYS, ConfigMigrations::noTraps));
 
     /**
      * Settings that are no settings any more, and the ones that have another
@@ -78,7 +79,8 @@ final class ConfigMigrations {
         }
         // Keys with underscores got hyphens like all the others.
         file.move("camera-mode.player_visibility_mode", "camera-mode.player-visibility");
-        file.move("camera-mode.allow_invisibility_potion", "camera-mode.allow-invisibility-potion");
+        // Its name with hyphens went in the third tidying up as well, see noTraps.
+        file.move("camera-mode.allow_invisibility_potion", "camera-mode.invisible");
         file.move("camera-mode.allow_lava_flight", "camera-mode.allow-lava-flight");
         file.move("camera-mode.allow_water_flight", "camera-mode.allow-water-flight");
         file.move("camera-mode.allow_powder_snow_flight", "camera-mode.allow-powder-snow-flight");
@@ -164,6 +166,54 @@ final class ConfigMigrations {
     }
 
     /**
+     * The third tidying up: no border that is none, no switch that only hides
+     * a button or locks a player in with his spots, and a name that says what
+     * the key does.
+     */
+    private static void noTraps(ConfigUpdater file) {
+        for (String gone : NO_TRAPS) {
+            file.remove(gone);
+        }
+        file.move(CameraModeSettings.OLD_INVISIBLE, "camera-mode.invisible");
+        // No border at all was border-mode: false, or a wall built nowhere
+        // around the player, border-radius: 0. The same is said by
+        // max-distance-mode: false - nothing holds the camera at the distance -
+        // and cam-area.level: start - nothing holds it at the areas in flight,
+        // nor behind a portal. What stays is shut lava, water and powder snow,
+        // which stopped the step as push-back does.
+        String mode = file.value(BORDER_MODE);
+        boolean off = CameraModeSettings.OLD_BORDER_OFF.equalsIgnoreCase(mode);
+        boolean noRadius = atMostZero(file.value(BORDER_RADIUS));
+        if (off || (noRadius && (mode == null || "barrier".equalsIgnoreCase(mode)))) {
+            setOrAdd(file, BORDER_MODE, "push-back");
+            String distance = file.value(DISTANCE_MODE);
+            if (distance == null || "fixed".equalsIgnoreCase(distance)) {
+                setOrAdd(file, DISTANCE_MODE, "false");
+            }
+            String level = file.value(AREA_LEVEL);
+            if (level == null || AreaRuleLevel.START_AND_FLIGHT.getConfigName().equalsIgnoreCase(level)) {
+                setOrAdd(file, AREA_LEVEL, AreaRuleLevel.START.getConfigName());
+            }
+        }
+        // A radius of 0 is none any more; under push-back it builds nothing anyway.
+        if (noRadius) {
+            setOrAdd(file, BORDER_RADIUS, "5");
+        }
+    }
+
+    /** Whether a value is a number of 0 or less. */
+    private static boolean atMostZero(String value) {
+        if (value == null) {
+            return false;
+        }
+        try {
+            return Double.parseDouble(value.trim()) <= 0.0;
+        } catch (NumberFormatException ex) {
+            return false;
+        }
+    }
+
+    /**
      * Gives a key a value of its own, for a setting another key said
      * something about until it went: written anew where the file has it,
      * added where it lacks it.
@@ -179,8 +229,9 @@ final class ConfigMigrations {
     /**
      * The changes of {@code lang/en.yml}: the texts of the ways of the spot
      * menu that went with {@code viewpoints.create-page} and
-     * {@code viewpoints.options.enabled}, and their switch - and the note of
-     * {@code signal.levels}.
+     * {@code viewpoints.options.enabled}, and their switch - the note of
+     * {@code signal.levels}, and the page of options with nothing on it,
+     * which there is no more since deleting a spot has no switch.
      */
     static final List<ConfigUpdater.Migration> LANGUAGE = List.of(
             new ConfigUpdater.Migration(ConfigUpdater.Migration.ALWAYS, file -> {
@@ -198,6 +249,8 @@ final class ConfigMigrations {
                 // The note on signal.levels that did not go down, which went
                 // with the levels into the code.
                 file.remove("messages.config-not-descending");
+                file.remove("messages.menu-spot-options-none");
+                file.remove("messages.menu-spot-options-none-lore");
             }));
 
     /** What is no setting any more. */
@@ -221,6 +274,18 @@ final class ConfigMigrations {
     private static final List<String> FIXED_NOW = List.of(
             "exit-click-guard.seconds", "web-map.bluemap", "web-map.dynmap", "web-map.squaremap", "bedrock.map-icons",
             "body.mob-target-heads", "menu.ban-shift-step", "signal.levels");
+
+    /**
+     * What is no setting any more since the third tidying up: the switch that
+     * only hid the stop button of {@code /cam list}, and the one that could
+     * keep a player from ever deleting a spot.
+     */
+    private static final List<String> NO_TRAPS = List.of("cam-list.stop", "viewpoints.options.delete");
+
+    private static final String BORDER_MODE = "camera-mode.border-mode";
+    private static final String BORDER_RADIUS = "camera-mode.border-radius";
+    private static final String DISTANCE_MODE = "camera-mode.max-distance-mode";
+    private static final String AREA_LEVEL = "cam-area.level";
 
     /**
      * Where a section had a {@code storage} of its own, before there was one

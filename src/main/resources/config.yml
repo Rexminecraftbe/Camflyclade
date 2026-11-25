@@ -71,7 +71,8 @@ camera-mode:
   # Pulverschnee passiert:
   #   barrier   = eine Wand, die nur der Spieler im Cam-Modus hat
   #   push-back = der Schritt wird abgebrochen, zurück auf die letzte Position
-  #   false     = keine Grenze, auch hinter Portalen wird niemand zurückgeholt (gesperrte Lava, Wasser, Pulverschnee halten wie bei push-back)
+  # Ganz ohne Grenze geht es mit max-distance-mode: false (keine Entfernung) und cam-area.level: start (verbotene
+  # Gebiete nur beim Start, nicht im Flug und nicht hinter Portalen).
   border-mode: barrier
 
   # Block der Wand: barrier ist unsichtbar, glass zeigt sie (Luft oder ein Block, durch den man durchkommt, z. B. Wasser oder Gras = keine Grenze)
@@ -84,7 +85,7 @@ camera-mode:
   border-block-lava: magma_block
   border-block-powder-snow: snow_block
 
-  # Wie weit um den Spieler die Wand erscheint, in Blöcken (0 = keine Grenze)
+  # Wie weit um den Spieler die Wand erscheint, in Blöcken (mindestens 1)
   # Höchstens so weit, wie der Server die Welt schickt: view-distance aus server.properties mal 16.
   # Ein großer Radius kostet mehr: Die Wand wächst mit der Fläche der Grenze im Umkreis.
   border-radius: 5
@@ -95,8 +96,9 @@ camera-mode:
   #   false = niemand - er bleibt aber in der Tab-Liste, und getragene Ausrüstung wie der Kamera-Kopf bleibt sichtbar
   player-visibility: true
 
-  # Unsichtbarkeitseffekt im Cam-Modus (bei player-visibility: false immer an)
-  allow-invisibility-potion: true
+  # Ob der Spieler im Cam-Modus den Unsichtbarkeitseffekt bekommt: Wer ihn sehen darf (player-visibility), sieht dann
+  # nur seinen Namen, seinen Umriss und seine Partikel, nicht ihn selbst. Bei player-visibility: false immer an.
+  invisible: true
 
   # Leuchtender Umriss, damit andere den unsichtbaren Spieler sehen:
   #   true  = immer - auch durch Wände
@@ -434,17 +436,15 @@ cam-list:
   # Nur für Spieler, die die Liste sehen dürfen und das Recht camplugin.teleport haben (Operatoren haben es).
   # Wer selbst im Cam-Modus ist, beendet ihn dabei. Zur Kamera kommt nur, wer fliegen kann
   # (Kreativ- oder Zuschauermodus, oder /fly), sonst fiele er herunter. Der Cam-Modus des anderen läuft weiter.
+  # Ein dritter Knopf [Stop] beendet den Cam-Modus des Spielers (Text: cam-list-stop, ein Klick schickt
+  # /cam stop <Name>) - für jeden, der /cam stop benutzen darf (stop-command).
   teleport: true
-  # Dahinter ein dritter Knopf [Stop], der den Cam-Modus des Spielers beendet (Text: cam-list-stop).
-  # Ein Klick schickt /cam stop <Name>. Nur bei stop-command.enabled: true und für Spieler, die die Liste
-  # sehen dürfen und das Recht camplugin.stop haben (Operatoren haben es).
-  stop: true
 
 # Statistik: wie oft jemand im Cam-Modus war, wie lange und wie weit die Kamera insgesamt geflogen ist, beides im
 # Schnitt pro Flug (eine Zeile), der längste Flug und die längste Strecke in einem Flug, wie weit die Kamera höchstens
 # vom Körper weg war und seit wann gezählt wird. Der weiteste Abstand steht nur da, wenn max-distance die Kamera nicht
-# hält: bei camera-mode.max-distance-mode: false, oder bei fixed mit einer Grenze, die niemanden aufhält (z. B.
-# border-mode: false). Mit fester Grenze oder Funksignal kommt fast jeder einmal bis max-distance - beim Signal in
+# hält: bei camera-mode.max-distance-mode: false, oder bei fixed mit einer Wand, die niemanden aufhält (z. B.
+# border-block: air). Mit fester Grenze oder Funksignal kommt fast jeder einmal bis max-distance - beim Signal in
 # freier Luft, und weiter nur in den paar Sekunden von signal.lost-seconds -, und bei allen stünde etwa dieselbe Zahl.
 # "Gezählt seit" ist der Beginn des ersten Flugs, der zählt - nach /cam stats reset der des nächsten. Wer schon vor
 # dieser Version Flüge in der Statistik hatte, bekommt die Zeile erst nach einem Reset: Wann sein erster war, steht
@@ -1002,7 +1002,8 @@ viewpoints:
     - abandoned_camp_map
     - warm_ocean_ruins_map
   # Die Seite "Optionen" eines Punkts: Rechtsklick auf einen eigenen Punkt im Menü. Was der Besitzer dort darf, steht
-  # darunter. Löschen fragt dort noch einmal nach.
+  # darunter. Löschen darf er immer - sonst käme er an seinem Limit (max-per-player) nie mehr an einen neuen Punkt;
+  # es fragt dort noch einmal nach.
   # Admins (camplugin.spotadmin) bekommen dieselbe Seite auf der Admin-Seite der Punkte, mit Rechtsklick (Linksklick
   # bringt sie hin): Umbenennen, Symbol, Privat machen und Löschen dürfen sie dort immer - die Schalter unten gelten
   # nur für die Besitzer. Der Besitzer erfährt, was ein Admin geändert hat.
@@ -1013,8 +1014,6 @@ viewpoints:
     icon: true
     # Teilen oder öffentlich machen (die Seite, die früher der Rechtsklick öffnete). Nur mit sharing: true.
     share: true
-    # Löschen.
-    delete: true
     # Den Punkt an die Stelle der Kamera verschieben, mit dem Blick und dem Aussehen (Zeit, Wetter, Nachtsicht) von
     # jetzt. Geht nur im Cam-Modus (Text: spot-move-cam-only). Name, Datum, Symbol, Aufrufe, Likes und Teilen bleiben.
     move: false
@@ -1285,7 +1284,7 @@ hide-ores:
   max-sky-light: 0
   # Bis zu welcher Höhe Erze ausgeblendet werden: das Erz auf dieser Höhe und alle darunter. Voreingestellt 15 - darunter
   # liegen die Diamanten (und Redstone, Lapis, das meiste Gold); Erze weiter oben, auch Bauten an der Oberfläche,
-  # bleiben, wie sie sind. off = in jeder Höhe. Gilt auch bei where: biomes.
+  # bleiben, wie sie sind. false = in jeder Höhe. Gilt auch bei where: biomes.
   max-y: 15
   # Welches Erz wie aussieht, je eine Zeile Erz: Block (ein Block wie bei border-block, auch mit [Zuständen]). Was hier
   # nicht steht, bleibt sichtbar. {} = keins.
@@ -1576,6 +1575,9 @@ cam-area:
 # zurückgeschickt, wenn man drüben in einem verbotenen Gebiet landet. Ein Portal, das in ein verbotenes Biom oder eine
 # verbotene Struktur führt, merkt sich das Plugin danach und lässt niemanden mehr hindurch - bis sich drüben etwas
 # ändert (das Portal dort abgebaut, die Stelle nicht mehr verboten, ein neues Portal in der Nähe) oder bis /cam reload.
+# In eine Dimension, die cam-area.dimensions verbietet (voreingestellt Nether und End), lässt ein Portal bei
+# cam-area.level: always gar nicht erst durch: nether: true bringt dann nur etwas mit cam-area.dimensions.nether: true,
+# end: true nur mit cam-area.dimensions.end: true.
 portals:
   # Netherportal durchlassen (in beide Richtungen)
   nether: false

@@ -268,10 +268,10 @@ final class NewSpotPages {
      * the admin page of the spots for an admin: the spot on top, under it
      * what may be done with it. Its owner as {@code viewpoints.options} lets
      * him: rename it, give it another icon, share it or make it public, move
-     * it to where his camera is - in camera mode only -, delete it. An admin
-     * always: rename it, give it another icon, make it private again, delete
-     * it. Deleting takes a second click, on a button of its own in the last
-     * row, so that neither a slip nor a double click loses a spot.
+     * it to where his camera is - in camera mode only -, and always delete it.
+     * An admin always: rename it, give it another icon, make it private again,
+     * delete it. Deleting takes a second click, on a button of its own in the
+     * last row, so that neither a slip nor a double click loses a spot.
      *
      * @param admin    whether an admin moderates it, from the admin page of the spots
      * @param deleting whether the second click that deletes it is waited for
@@ -348,37 +348,32 @@ final class NewSpotPages {
                         again.run();
                     })));
         }
-        if (admin || settings.spots().optionDelete()) {
-            row.add(deleting
-                    ? new RowButton(item(Material.BARRIER, messages.getMessage("menu-spot-options-delete-keep"),
-                    lines(messages.getMessage("menu-spot-options-delete-keep-lore"))), click -> menu.later(again))
-                    : new RowButton(item(Material.BARRIER, messages.getMessage("menu-spot-options-delete"),
-                    lines(messages.getMessage("menu-spot-options-delete-lore"))), click -> menu.later(() ->
-                    openSpotOptions(player, owner, ownerName, key, admin, true))));
-            if (deleting) {
-                menu.put(page, 22, shine(item(Material.LAVA_BUCKET, messages.getMessage("menu-spot-options-delete-confirm"),
-                        lines(messages.getMessage("menu-spot-options-delete-confirm-lore")
-                                .replace("{spot}", spot.name()))), true), click -> {
-                    // The second click of a double click on the button above it is no second thought.
-                    if (click == ClickType.DOUBLE_CLICK) {
-                        return;
+        // Deleting has no switch: without it a player at his limit would never get a new spot again.
+        row.add(deleting
+                ? new RowButton(item(Material.BARRIER, messages.getMessage("menu-spot-options-delete-keep"),
+                lines(messages.getMessage("menu-spot-options-delete-keep-lore"))), click -> menu.later(again))
+                : new RowButton(item(Material.BARRIER, messages.getMessage("menu-spot-options-delete"),
+                lines(messages.getMessage("menu-spot-options-delete-lore"))), click -> menu.later(() ->
+                openSpotOptions(player, owner, ownerName, key, admin, true))));
+        if (deleting) {
+            menu.put(page, 22, shine(item(Material.LAVA_BUCKET, messages.getMessage("menu-spot-options-delete-confirm"),
+                    lines(messages.getMessage("menu-spot-options-delete-confirm-lore")
+                            .replace("{spot}", spot.name()))), true), click -> {
+                // The second click of a double click on the button above it is no second thought.
+                if (click == ClickType.DOUBLE_CLICK) {
+                    return;
+                }
+                menu.later(() -> {
+                    if (admin) {
+                        moderation.delete(player, owner, ownerName, spot);
+                    } else {
+                        spots.delete(player, spot.name());
                     }
-                    menu.later(() -> {
-                        if (admin) {
-                            moderation.delete(player, owner, ownerName, spot);
-                        } else {
-                            spots.delete(player, spot.name());
-                        }
-                        back.run();
-                    });
+                    back.run();
                 });
-            }
+            });
         }
-        if (row.isEmpty()) {
-            menu.put(page, 13, Material.GRAY_DYE, "menu-spot-options-none", NOTHING);
-        } else {
-            putRow(page, row);
-        }
+        putRow(page, row);
         menu.put(page, 18, Material.ARROW, admin ? "menu-to-spots-of" : "menu-to-spots", click -> menu.later(back));
         // What he is doing with it stays as he leaves it, until he clicks.
         menu.show(player, page);
