@@ -1,5 +1,6 @@
 package de.elia.cameraplugin.interaction;
 
+import de.elia.cameraplugin.config.CamSettings;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Cancellable;
 import org.bukkit.event.EventHandler;
@@ -40,11 +41,11 @@ import java.util.UUID;
  * the creative mode, and it is still the same click until he lets go.</p>
  *
  * <p>Ending camera mode in any other way - {@code /cam}, the exit key -
- * comes with no click on the world, and leaves him his hands at once.</p>
+ * comes with no click on the world, and leaves him his hands at once. So does
+ * {@code exit-click-guard.enabled: false}, for every end.</p>
  *
- * <p>The section {@code exit-click-guard} of the config file switched it off
- * and set its time until both were fixed here: nobody could tell what to set
- * it to, and off it only let the click break a block.</p>
+ * <p>Its time is fixed here; the section {@code exit-click-guard} had it as
+ * {@code seconds} once, which nobody could tell what to set to.</p>
  */
 public final class ExitClickGuard implements Listener {
 
@@ -69,14 +70,23 @@ public final class ExitClickGuard implements Listener {
      */
     private static final long MIN_HOLD_MILLIS = 400L;
 
+    private final CamSettings settings;
     /** Until when the clicks of each player are turned away, as {@link System#currentTimeMillis()} counts. */
     private final Map<UUID, Long> heldUntil = new HashMap<>();
 
+    public ExitClickGuard(CamSettings settings) {
+        this.settings = settings;
+    }
+
     /**
      * A player ended camera mode with a click on his own body: what that
-     * click does on after it is turned away.
+     * click does on after it is turned away - unless the guard is switched
+     * off.
      */
     public void guard(Player player) {
+        if (!settings.isExitClickGuardEnabled()) {
+            return;
+        }
         long ping = Math.min(MAX_PING_MILLIS, Math.max(0, player.getPing()));
         heldUntil.put(player.getUniqueId(), System.currentTimeMillis() + GUARD_MILLIS + ping);
     }

@@ -219,7 +219,7 @@ final class ConfigMigrations {
 
     /** What is no setting any more since the second tidying up: fine tuning fixed in the code. */
     private static final List<String> FIXED_NOW = List.of(
-            "exit-click-guard", "web-map.bluemap", "web-map.dynmap", "web-map.squaremap", "bedrock.map-icons",
+            "exit-click-guard.seconds", "web-map.bluemap", "web-map.dynmap", "web-map.squaremap", "bedrock.map-icons",
             "body.mob-target-heads", "menu.ban-shift-step", "signal.levels");
 
     /**

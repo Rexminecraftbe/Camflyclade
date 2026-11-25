@@ -261,8 +261,8 @@ class BundledFilesTest {
 
         assertNull(result.failure());
         assertEquals(List.of("follow.mirror-item-details"), result.added());
-        assertTrue(result.removed().containsAll(List.of("exit-click-guard", "web-map.bluemap", "web-map.dynmap",
-                "web-map.squaremap", "bedrock.map-icons", "body.mob-target-heads", "menu.ban-shift-step",
+        assertTrue(result.removed().containsAll(List.of("exit-click-guard.seconds", "web-map.bluemap",
+                "web-map.dynmap", "web-map.squaremap", "bedrock.map-icons", "body.mob-target-heads", "menu.ban-shift-step",
                 "signal.levels", "camera-mode.max-distance-enabled", "camera-mode.name.color", "body.name.color",
                 "sounds.start.enabled", "sounds.follow-reach.enabled", "follow.mirror-count", "follow.mirror-name")),
                 result.removed().toString());
@@ -294,8 +294,10 @@ class BundledFilesTest {
                 .replace("    enabled: true\n    sound: block.note_block.chime\n    volume: 1.0",
                         "    enabled: false\n    sound: block.note_block.chime\n    volume: 0.5")
                 .replace("  mirror-count: false", "  mirror-count: true")
-                .replace("  show-max-seconds: 300", "  show-max-seconds: 120");
-        assertTrue(before.contains("color: red") && before.contains("volume: 0.5"), "the test no longer finds its lines");
+                .replace("  show-max-seconds: 300", "  show-max-seconds: 120")
+                .replace("exit-click-guard:\n  enabled: true", "exit-click-guard:\n  enabled: false");
+        assertTrue(before.contains("color: red") && before.contains("volume: 0.5")
+                && before.contains("exit-click-guard:\n  enabled: false"), "the test no longer finds its lines");
 
         ConfigUpdater.Result result = ConfigUpdater.update(before, text, CamSettings.UNLISTED_KEYS,
                 ConfigMigrations.CONFIG);
@@ -317,8 +319,10 @@ class BundledFilesTest {
         // One of the four details shown is not all four: the one switch stays off.
         assertFalse(actual.getBoolean("follow.mirror-item-details"));
         assertFalse(actual.contains("follow.mirror-count"));
-        // What can still be set stays as it was set.
+        // What can still be set stays as it was set; of exit-click-guard only the time goes, fixed now.
         assertEquals(120, actual.getInt("cam-trail.show-max-seconds"));
+        assertFalse(actual.getBoolean("exit-click-guard.enabled", true));
+        assertFalse(actual.contains("exit-click-guard.seconds"));
         assertFalse(ConfigUpdater.update(result.text(), text, CamSettings.UNLISTED_KEYS, ConfigMigrations.CONFIG)
                 .changed());
     }

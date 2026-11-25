@@ -164,7 +164,7 @@ public final class CameraPlugin extends JavaPlugin {
     private final EndWarning endWarning = new EndWarning(this);
     private final BodyAlarm bodyAlarm = new BodyAlarm(this);
     private final CamNudge nudge = new CamNudge(this);
-    private final ExitClickGuard exitClickGuard = new ExitClickGuard();
+    private final ExitClickGuard exitClickGuard = new ExitClickGuard(settings);
     private final CamSignal signal = new CamSignal(this);
     private final CamAfk afk = new CamAfk(this);
     private final CamBack back = new CamBack(this);

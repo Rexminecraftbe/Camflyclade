@@ -260,6 +260,12 @@ public final class CamSettings {
     /** Whether the key that swaps the hands ends camera mode, {@code exit-key.enabled}. */
     private boolean exitKeyEnabled;
 
+    /**
+     * Whether the click on his own body that ends camera mode reaches nothing
+     * else, {@code exit-click-guard.enabled}.
+     */
+    private boolean exitClickGuardEnabled;
+
 
 
 
@@ -393,6 +399,7 @@ public final class CamSettings {
         timeLimit = new TimeLimitSettings(config, flightLimit);
         camSafety = new CamSafetySettings(config);
         exitKeyEnabled = config.getBoolean("exit-key.enabled", true);
+        exitClickGuardEnabled = config.getBoolean("exit-click-guard.enabled", true);
         bedrock = new BedrockSettings(config, messages);
         battery = new BatterySettings(config, flightLimit);
         startCost = new StartCostSettings(config);
@@ -698,6 +705,12 @@ public final class CamSettings {
 
     public boolean isExitKeyEnabled() {
         return exitKeyEnabled;
+    }
+
+    // --------------------------------------------------------- exit-click-guard
+
+    public boolean isExitClickGuardEnabled() {
+        return exitClickGuardEnabled;
     }
 
     // ------------------------------------------------------------------ cam-log

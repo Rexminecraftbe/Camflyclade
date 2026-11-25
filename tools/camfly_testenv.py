@@ -20917,12 +20917,15 @@ def nachklick_checks(env, bot):
 
 
 def nachklick_schalter_checks(env, bot):
-    """Wie lange der Schutz aus nachklick_checks gilt: fest 0.3 Sekunden und
-    der Ping - die config.yml hat keinen Abschnitt exit-click-guard mehr.
+    """exit-click-guard: ob der Schutz aus nachklick_checks ueberhaupt gilt
+    (enabled) - wie lange, ist fest: 0.3 Sekunden und der Ping.
 
-    Gemessen wird mit einem einzigen Abbau in Kreativ nach dem Schlag auf den
-    eigenen Koerper: gleich danach (0.15 s) kommt er nicht durch, 1.2
-    Sekunden danach schon, die Zeit ist um.
+    Voreingestellt ist er an, und seconds gibt es nicht mehr - nachgesehen in
+    der ausgelieferten Datei. Gemessen wird mit einem einzigen Abbau in
+    Kreativ nach dem Schlag auf den eigenen Koerper: gleich danach (0.15 s)
+    kommt er nicht durch, 1.2 Sekunden danach schon, die Zeit ist um. Mit
+    enabled: false kommt schon der Abbau gleich nach dem Schlag durch, wie
+    vor dem Schutz.
     """
     if not FIND.test("Cam-Modus ist vor dem Test von exit-click-guard aus", cam_off(bot), ""):
         return
@@ -20966,16 +20969,22 @@ def nachklick_schalter_checks(env, bot):
                   else "der Block wurde abgebaut" if abgebaut else "der Block steht noch")
 
     try:
-        FIND.test("Die ausgelieferte config.yml hat keinen Abschnitt exit-click-guard mehr",
-                  re.search(r"(?m)^exit-click-guard:", ausgeliefert(env)) is None, "")
+        aus = ausgeliefert(env)
+        FIND.test("Voreingestellt steht exit-click-guard.enabled: true da, ohne seconds",
+                  re.search(r"(?m)^exit-click-guard:\s*\n\s*enabled:\s*true\s*$", aus) is not None
+                  and re.search(r"(?m)^exit-click-guard:\s*\n\s*enabled:.*\n\s+seconds:", aus) is None, "")
         spielmodus_setzen(bot, "creative")
         bot.chat(f"/clear {BOT_NAME}")
         time.sleep(0.6)
 
         probe("Ein Abbau gleich nach dem Schlag (0.15 s) kommt nicht durch", 150, False)
         probe("Ein Abbau 1.2 s nach dem Schlag kommt durch - die 0.3 Sekunden sind um", 1200, True)
+        set_option(env, "enabled", "false", "exit-click-guard")
+        probe("exit-click-guard.enabled: false - schon der Abbau gleich nach dem Schlag kommt durch",
+              150, True)
     finally:
         cam_off(bot)
+        set_option(env, "enabled", "true", "exit-click-guard")
         console(env, f"fill {bx - 3} {y} {bz - 2} {bx + 2} {y + 3} {bz + 2} minecraft:air", pause=0.3)
         spielmodus_setzen(bot, "survival")
         hinstellen(bot, heim[0], heim[1], heim[2])
