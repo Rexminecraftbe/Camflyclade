@@ -274,8 +274,9 @@ messages:
   # ban, menu-admin-ban-days, -hours and -minutes say how many of them the ban has ({amount}), with
   # menu-admin-ban-time-lore under them ({time} as ban-for or ban-for-good), menu-admin-ban-confirm-lore says what
   # the ban will be ({ban}: {time} with ban-reason), and menu-admin-banned how a ban stands; {step} in
-  # menu-admin-ban-time-actions is how many a click with shift adds or takes away (10). The -change ones are there instead while the player is banned
-  # already: then the page changes his ban, and menu-admin-unban ({player} in its -lore) lifts it.
+  # menu-admin-ban-time-actions is how many a click with shift adds or takes away (10). The -change ones are there
+  # instead while the player is banned already: then the page changes his ban, and menu-admin-unban ({player} in its
+  # -lore) lifts it.
   # On Bedrock (see bedrock in config.yml) there is but one click, a tap: a button that does something else on a
   # right-click or with shift offers what it does on a page of its own, menu-pick-title ({button} its name - the
   # chest itself keeps menu-title as its title there, like every page on Bedrock), each
@@ -853,10 +854,10 @@ messages:
   player.name-format: "{player}'s Cam"
   # While others follow a leader (/cam follow), their names stand over his camera, stacked over his: {name} = what
   # player.name-format says (without its colour), {player} = the player's name. The follower lines take the colour of
-  # player.name-format unless they start with a colour code of their own, the leader's line brings its own. Over a leader out of cam mode (follow.lead-without-cam),
-  # his own line is player.tour-builder-format ({player} = his name) - with follow.guide-name: replace, in place of his
-  # name tag; with above his name tag stays, and only the follower lines stand over it. The keys keep the name /cam
-  # follow had before, tour.
+  # player.name-format unless they start with a colour code of their own, the leader's line brings its own. Over a
+  # leader out of cam mode (follow.lead-without-cam), his own line is player.tour-builder-format ({player} = his name)
+  # - with follow.guide-name: replace, in place of his name tag; with above his name tag stays, and only the follower
+  # lines stand over it. The keys keep the name /cam follow had before, tour.
   player.tour-builder-format: "&6{player} &7(Leader)"
   player.tour-follower-format: "{name} &7(Follower)"
   player.tour-guide-format: "&6{name} &7(Leader)"
