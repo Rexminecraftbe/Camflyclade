@@ -23,7 +23,7 @@ import java.util.UUID;
  * only while {@code player-settings.flight-speed} is on; otherwise every
  * flight starts with {@code flight-speed.start}.</p>
  *
- * <p>Where they are kept is {@code player-settings.storage}: in the file of the
+ * <p>Where they are kept is {@code storage}: in the file of the
  * player, where they outlast his leaving and a restart, or in memory until
  * he leaves the server.</p>
  */

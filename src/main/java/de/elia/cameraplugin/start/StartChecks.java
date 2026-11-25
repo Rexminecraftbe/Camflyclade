@@ -296,7 +296,7 @@ public final class StartChecks implements Listener {
 
     /**
      * Checks whether camera mode may be started where the player is standing,
-     * as long as {@code cam-area.level} is not 0.
+     * as long as {@code cam-area.level} is not {@code false}.
      *
      * <p>Which areas those are is decided by
      * {@link de.elia.cameraplugin.area.CamAreaRules}: the world, by its name
@@ -361,8 +361,8 @@ public final class StartChecks implements Listener {
     /**
      * Checks whether camera mode may be started where the player is: not in
      * lava, water or powder snow while its switch under {@code camera-mode} -
-     * {@code allow_lava_flight}, {@code allow_water_flight},
-     * {@code allow_powder_snow_flight} - is off.
+     * {@code allow-lava-flight}, {@code allow-water-flight},
+     * {@code allow-powder-snow-flight} - is off.
      *
      * <p>In flight the camera does not get in there, see
      * {@link de.elia.cameraplugin.movement.CamMovementGuard}. Started inside,
@@ -388,7 +388,7 @@ public final class StartChecks implements Listener {
      * <p>Camera mode would take that fall off him. He flies from the moment it
      * starts, and his body sets out on a fall of its own from the spot it is
      * put down at, from a standstill and without the way he has fallen so far
-     * - on {@code body.movement-sensitivity: 0} it does not fall at all.
+     * - on {@code body.movement-sensitivity: fixed} it does not fall at all.
      * Started just above the ground after a long fall, camera mode would cost
      * him nothing; started higher up, it ends with him put back where his
      * body is, in the air, with the rest of the fall ahead of him and nothing

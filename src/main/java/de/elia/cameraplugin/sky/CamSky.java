@@ -32,7 +32,7 @@ import java.util.UUID;
  * <p>He picks them as he picks his night vision: in camera mode, where they
  * hold at once, and before it, for the next flight. Either way they are
  * kept, and every flight starts with them, until he resets them - kept as
- * {@code player-settings.storage} says, see
+ * {@code storage} says, see
  * {@link de.elia.cameraplugin.preferences.CamPreferences}. When camera mode
  * ends he sees what he saw before it again: the time and weather of the
  * world, or one another plugin gave him.</p>

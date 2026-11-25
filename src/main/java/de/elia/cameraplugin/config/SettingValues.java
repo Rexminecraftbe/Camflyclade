@@ -101,8 +101,18 @@ public final class SettingValues {
         }
     }
 
-    /** Reads where something is kept, the values file and memory. */
-    public static StorageMode storage(ConfigReader config, String path) {
+    /** The key at the top of the config file that says where everything about the players is kept. */
+    public static final String STORAGE = "storage";
+
+    /**
+     * Reads where the things of a section are kept, the values file and
+     * memory: {@code storage} at the top of the file, unless the section has
+     * a {@code storage} of its own.
+     *
+     * @param ownPath where the section has its own
+     */
+    public static StorageMode storage(ConfigReader config, String ownPath) {
+        String path = config.isSet(ownPath) ? ownPath : STORAGE;
         return config.getChoice(path, "file", "file", "memory").equalsIgnoreCase("memory")
                 ? StorageMode.MEMORY
                 : StorageMode.FILE;

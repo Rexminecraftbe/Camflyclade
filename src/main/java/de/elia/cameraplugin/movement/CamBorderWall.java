@@ -53,7 +53,7 @@ import java.util.UUID;
  * <p>Three borders are built: {@code camera-mode.max-distance} around the
  * body (or the portal the player came out of, see
  * {@link CamMovementGuard#distanceAnchor}), the biomes and structures
- * {@code cam-area} keeps the camera out of on level 2, and lava, water and
+ * {@code cam-area} keeps the camera out of on level {@code always}, and lava, water and
  * powder snow where their switch shuts them, see {@link FlightMedium}. The
  * wall never reaches past what those allow: a block of it is set wherever the
  * body would be too far away, in a forbidden block or in a shut medium if it

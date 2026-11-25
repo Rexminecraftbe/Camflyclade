@@ -15,6 +15,16 @@ config-version: 1
 # z. B. als lang/de.yml, die Texte darin übersetzen und hier de eintragen.
 language: en
 
+# Wo sich das Plugin merkt, was zu den Spielern gehört: ihre eigenen Einstellungen (player-settings), die Wartezeiten
+# (cooldown), den Ladestand des Akkus (battery), das Ende des letzten Flugs (resume-command), die Aussichtspunkte mit
+# Teilen, Aufrufen und Gästebuch (viewpoints) und die Flugspuren (cam-trail):
+#   file   = auf der Platte, in plugins/CamFly/playerdata - es bleibt nach dem Verlassen, /cam reload und einem Neustart
+#   memory = nur im Arbeitsspeicher - die Einstellungen bis der Spieler den Server verlässt, die Flugspuren bis zum
+#            Neustart, alles andere bis /cam reload oder zum Neustart
+# Ein einzelner Abschnitt kann davon abweichen, mit einer eigenen Zeile storage: file oder storage: memory unter
+# player-settings, cooldown, battery, resume-command, viewpoints oder cam-trail.
+storage: file
+
 # Anzeige in der Action-Bar
 action-bar:
   enabled: true
@@ -25,9 +35,9 @@ action-bar:
   #              ● = du bist höchstens 2 Blöcke von ihm weg.
   #              In einer anderen Welt zeigt er zum Portal, aus dem man kam (actionbar-distance-portal).
   #              Bei camera-mode.max-distance-mode: signal steht dahinter, wie stark das Funksignal ist (actionbar-signal).
-  #   text     = der feste Text actionbar-on, die ganze Zeit
-  #   false    = nur zu Beginn actionbar-on mit dem Hinweis, für on-duration; danach verblasst die Zeile
-  #              wie actionbar-off und es kommt nichts mehr
+  #   text       = der feste Text actionbar-on, die ganze Zeit
+  #   start-only = nur zu Beginn actionbar-on mit dem Hinweis, für on-duration; danach verblasst die Zeile
+  #                wie actionbar-off und es kommt nichts mehr
   # actionbar-on trägt den Hinweis, wie man den Cam-Modus beendet: mit der Taste (exit-key) oder /cam,
   # Text: actionbar-hint (bei exit-key: false actionbar-hint-command, nur /cam).
   # Warnungen (end-warning, body-alarm) und das Tempo des Mausrads kommen bei jeder Einstellung.
@@ -35,11 +45,9 @@ action-bar:
   # z. B. die Warnungen an der Grenze, warum der Cam-Modus nicht startet, ein Sprung, der nicht geht): Sie steht dort
   # statt im Chat, etwa drei Sekunden lang, und der Abstand wartet so lange.
   display: distance
-  # Wie lange zu Beginn actionbar-on mit dem Hinweis steht (bei distance, bevor der Abstand kommt, und bei false),
-  # in Ticks: 20 = 1 Sekunde, 0 = gleich der Abstand (bei false: gar nichts)
+  # Wie lange zu Beginn actionbar-on mit dem Hinweis steht (bei distance, bevor der Abstand kommt, und bei start-only),
+  # in Ticks: 20 = 1 Sekunde, 0 = gleich der Abstand (bei start-only: gar nichts)
   on-duration: 60
-  # Wie lange actionbar-off gesendet wird, in Ticks
-  off-duration: 1
 
 # Cam-Modus
 camera-mode:
@@ -57,10 +65,11 @@ camera-mode:
   #            gesperrte Lava, Wasser, Pulverschnee.
   max-distance-mode: fixed
 
-  # Sekunden zwischen zwei Warnungen an der Grenze (auch an Lava, Wasser und Pulverschnee)
-  distance-warning-cooldown: 3
+  # Sekunden zwischen zwei Warnungen an einer Grenze: max-distance, cam-area, gesperrte Lava, Wasser, Pulverschnee und
+  # gesperrte Portale
+  warning-cooldown: 3
 
-  # Was an der Grenze von max-distance (bei max-distance-mode: fixed), cam-area (Stufe 2) und gesperrter Lava, Wasser,
+  # Was an der Grenze von max-distance (bei max-distance-mode: fixed), cam-area (level: always) und gesperrter Lava, Wasser,
   # Pulverschnee passiert:
   #   barrier   = eine Wand, die nur der Spieler im Cam-Modus hat
   #   push-back = der Schritt wird abgebrochen, zurück auf die letzte Position
@@ -85,32 +94,33 @@ camera-mode:
   # Wer den Spieler im Cam-Modus sehen darf:
   #   cam   = nur Spieler, die selbst im Cam-Modus sind
   #   true  = alle
-  #   false = niemand er bleibt aber in der Tab-Liste, und getragene  ausrüstung wie der Kamera-Kopf bleibt sichtbar
-  player_visibility_mode: true
+  #   false = niemand - er bleibt aber in der Tab-Liste, und getragene Ausrüstung wie der Kamera-Kopf bleibt sichtbar
+  player-visibility: true
 
-  # Unsichtbarkeitseffekt im Cam-Modus (bei player_visibility_mode: false immer an)
-  allow_invisibility_potion: true
+  # Unsichtbarkeitseffekt im Cam-Modus (bei player-visibility: false immer an)
+  allow-invisibility-potion: true
 
   # Leuchtender Umriss, damit andere den unsichtbaren Spieler sehen:
   #   true  = immer - auch durch Wände
   #   false = kein Umriss
-  #   sight = nur, solange ihn ein anderer Spieler nicht von blöcken vertägt wird dann sehen den Umriss alle, auch durch Wände
-  # Bei player_visibility_mode: false gibt es keinen Umriss. Bedrock zeigt keinen - Bedrock-Spieler sehen statt dessen
+  #   sight = nur, solange ihn ein anderer Spieler direkt sehen könnte (keine Blöcke dazwischen) - dann sehen den
+  #           Umriss alle, auch durch Wände
+  # Bei player-visibility: false gibt es keinen Umriss. Bedrock zeigt keinen - Bedrock-Spieler sehen statt dessen
   # Partikel, siehe bedrock.glow-particle.
   glowing-outline: true
 
   # Name über dem Spieler im Cam-Modus, an Stelle seines Namensschilds - so steht er auch über dem unsichtbaren Spieler,
   # und der Text ist frei wählbar: messages.player.name-format in der Sprachdatei, z. B. "Cam von {player}" (leer = gar kein Name).
-  # Zu sehen für jeden, der den Spieler sieht (player_visibility_mode), auch für andere im Cam-Modus, nur nicht für ihn selbst.
+  # Zu sehen für jeden, der den Spieler sieht (player-visibility), auch für andere im Cam-Modus, nur nicht für ihn selbst.
   # false = sein normales Namensschild (unsichtbar sehen es nur andere im Cam-Modus)
   name-visible: true
 
   # Wie der Name am Spieler hängt:
-  #   1 = wird jeden Tick über ihn gesetzt: immer zu sehen, kann beim schnellen Fliegen aber etwas hinterherhängen
-  #   2 = sitzt fest auf ihm (als Passagier): hängt nie hinterher, wird beim Teleportieren aber kurz ausgeblendet.
-  #       Andere Plugins können den Spieler dann nicht teleportieren (Spigot gar nicht, Paper nicht in eine andere Welt),
-  #       Befehle wie /tp, Portale und CamFly selbst schon.
-  name-mode: 1
+  #   move = wird jeden Tick über ihn gesetzt: immer zu sehen, kann beim schnellen Fliegen aber etwas hinterherhängen
+  #   ride = sitzt fest auf ihm (als Passagier): hängt nie hinterher, wird beim Teleportieren aber kurz ausgeblendet.
+  #          Andere Plugins können den Spieler dann nicht teleportieren (Spigot gar nicht, Paper nicht in eine andere
+  #          Welt), Befehle wie /tp, Portale und CamFly selbst schon.
+  name-mode: move
 
   # Aussehen des Namens (der Text steht in der Sprachdatei unter messages.player.name-format, \n beginnt eine neue Zeile)
   name:
@@ -130,13 +140,13 @@ camera-mode:
     scale: 1.0
 
   # Flug durch Lava (false = an der Lava geht es nicht weiter, bei border-mode: barrier wird sie zur Wand aus border-block-lava; in Lava startet der Cam-Modus nicht)
-  allow_lava_flight: true
+  allow-lava-flight: true
 
   # Flug durch Wasser (false = am Wasser geht es nicht weiter, bei border-mode: barrier wird es zur Wand aus border-block-water; im Wasser startet der Cam-Modus nicht)
-  allow_water_flight: true
+  allow-water-flight: true
 
   # Flug durch Pulverschnee (false = am Pulverschnee geht es nicht weiter, bei border-mode: barrier wird er zur Wand aus border-block-powder-snow; darin startet der Cam-Modus nicht)
-  allow_powder_snow_flight: true
+  allow-powder-snow-flight: true
 
   # Spielmodus im Cam-Modus:
   #   adventure = Abenteuermodus
@@ -275,10 +285,10 @@ body:
   locator-bar: true
 
   # Wodurch sich der Körper verschieben lässt:
-  #   0 = durch nichts, er steht fest
-  #   1 = durch Schwerkraft, Wasser und Kolben
-  #   2 = zusätzlich durch Spieler und Mobs   (nur bei type: mannequin oder visible: false, sonst gilt 1)
-  movement-sensitivity: 1
+  #   fixed    = durch nichts, er steht fest
+  #   normal   = durch Schwerkraft, Wasser und Kolben
+  #   pushable = zusätzlich durch Spieler und Mobs   (nur bei type: mannequin oder visible: false, sonst gilt normal)
+  movement-sensitivity: normal
 
   # Erlaubte Bewegung in Blöcken, bevor der Cam-Modus endet
   move-threshold: 0.05
@@ -293,7 +303,7 @@ body:
   # Reichweite in Blöcken für mob-target: custom (0 = kein Mob, höchstens 64 wie der weiteste Mob in Vanilla)
   mob-target-radius: 16.0
 
-  # Mobkopf als Helm halbiert die Reichweite dieser Mobart (wie in Vanilla )
+  # Mobkopf als Helm halbiert die Reichweite dieser Mobart (wie in Vanilla)
   mob-target-heads: true
 
 # Fluggeschwindigkeit im Cam-Modus (1 = normal, wie im Kreativmodus)
@@ -327,7 +337,7 @@ night-vision:
   #   /cam nightvision on | off | dark  = immer, nie, nur im Dunkeln (dark mit light-level wie oben)
   #   /cam nightvision reset            = wieder wie mode
   #   /cam nightvision                  = an oder aus: aus, wenn gerade on oder dark gilt, sonst an
-  # Geht im Cam-Modus (sofort) und davor (für den nächsten Flug). Wie lange die Wahl gilt, sagt player-settings.storage:
+  # Geht im Cam-Modus (sofort) und davor (für den nächsten Flug). Wie lange die Wahl gilt, sagt storage (ganz oben):
   # für immer oder bis der Spieler den Server verlässt. Texte: nightvision-set, nightvision-set-memory, nightvision-reset.
   player-choice: true
 
@@ -336,12 +346,9 @@ night-vision:
 # von /cam weather werden immer gemerkt, bis der Spieler sie mit reset zurücksetzt - gewählt im Cam-Modus (gilt sofort)
 # oder davor (gilt ab dem nächsten Flug), im Menü wie mit dem Befehl. Die Fluggeschwindigkeit nach dem Schalter hier;
 # ist er aus, beginnt jeder Flug wieder mit flight-speed.start.
+# Gespeichert wird nach storage (ganz oben): in plugins/CamFly/playerdata/stats/<UUID>.yml oder nur, bis der Spieler den
+# Server verlässt.
 player-settings:
-  # Wo die Einstellungen liegen:
-  #   file   = in plugins/CamFly/playerdata/stats/<UUID>.yml - sie bleiben nach dem Verlassen, /cam reload und einem
-  #            Neustart
-  #   memory = nur im Arbeitsspeicher - bis der Spieler den Server verlässt
-  storage: file
   # Die Fluggeschwindigkeit vom Mausrad merken: Der nächste Flug beginnt so schnell, wie der letzte aufgehört hat
   # (zwischen flight-speed.min und max)
   flight-speed: true
@@ -380,7 +387,7 @@ sounds:
     volume: 1.0
     pitch: 1.0
   # An der Grenze: max-distance, cam-area, gesperrte Lava, Wasser, Pulverschnee und gesperrte Portale.
-  # So oft wie die Meldung dazu (distance-warning-cooldown usw.), auch wenn die Meldung selbst abgeschaltet ist.
+  # So oft wie die Meldung dazu (camera-mode.warning-cooldown), auch wenn die Meldung selbst abgeschaltet ist.
   border:
     enabled: true
     sound: block.note_block.bass
@@ -450,14 +457,6 @@ sounds:
     volume: 1.0
     pitch: 1.0
 
-# Schutz bei einem Absturz. Was der Cam-Modus dem Spieler abnimmt (Inventar, Spielmodus, Effekte, Flug), steht,
-# solange der Cam-Modus läuft, auch in plugins/CamFly/playerdata/crash/<UUID>.yml. Beim Ende wird die Datei gelöscht.
-# Stürzt der Server ab, ist sie beim nächsten Betreten noch da: Der Spieler bekommt alles zurück und steht wieder
-# bei seinem Körper. Kostet eine kleine Datei beim Start und ein Löschen beim Ende, im Cam-Modus selbst nichts.
-# Dateien, die schon da sind, werden auch mit false noch zurückgegeben.
-crash-protection:
-  enabled: true
-
 # /cam list: wer gerade im Cam-Modus ist, wie lange schon und wie weit von seinem Körper
 cam-list:
   # Wer den Befehl benutzen darf (die Konsole immer):
@@ -495,8 +494,8 @@ cam-list:
 #                                der anderen.
 #   /cam stats player <Name>   = die eines anderen (wer das darf, sagt view-others)
 # Gezählt wird ein Cam-Modus, wenn er endet und mindestens min-seconds lief. Gespeichert wird in
-# plugins/CamFly/playerdata/stats/<UUID>.yml, zusammen mit dem Ladestand des Akkus, der Wartezeit von time-limit, den
-# Aussichtspunkten, den eigenen Einstellungen und dem Ende des letzten Flugs für /cam resume (jeweils bei
+# plugins/CamFly/playerdata/stats/<UUID>.yml, zusammen mit dem Ladestand des Akkus, der Wartezeit (cooldown), den
+# Aussichtspunkten, den eigenen Einstellungen und dem Ende des letzten Flugs für /cam resume (diese bei
 # storage: file).
 # /cam stats zeigt auch den Akku und eine Wartezeit, die noch läuft - durch eine Leerzeile von den Zahlen getrennt,
 # denn sie sagen, wie es gerade steht, und zählen nicht über alle Flüge (Text: stats-gap).
@@ -542,33 +541,23 @@ cam-log:
 #   time-limit = jeder Flug dauert höchstens time-limit.duration-seconds
 #   battery    = ein Akku, der sich im Flug leert und danach wieder lädt (Abschnitt battery)
 #   false      = so lange er will
-# Kurz vor dem Ende warnt end-warning.
+# Kurz vor dem Ende warnt end-warning. Eine Wartezeit nach dem Ende gibt es mit jedem davon: Abschnitt cooldown.
 flight-limit: false
 
 # Zeitlimit für den Cam-Modus (bei flight-limit: time-limit)
 time-limit:
-  # Wartezeit nach dem Beenden (geht bei jedem flight-limit, auch bei false; ein Ende durch /cam reload zählt nicht)
-  cooldowns-enabled: false
   # Maximale Dauer in Sekunden
   duration-seconds: 300
-  # Wartezeit bis zum nächsten Start in Sekunden
-  cooldown-seconds: 120
   # Restzeit als Bossbar anzeigen
   show-bossbar: true
-  # Die Wartezeit als Bossbar anzeigen, bis man wieder in den Cam-Modus darf - auch nach dem Betreten des Servers
-  # (Text: cooldown-bossbar in der Sprachdatei)
-  show-bossbar-cooldown: true
-  # BLUE, GREEN, PINK, PURPLE, RED, WHITE oder YELLOW (für beide Bossbars)
+  # BLUE, GREEN, PINK, PURPLE, RED, WHITE oder YELLOW
   bossbar-color: BLUE
-  # Einteilung der Bossbars in Abschnitte: 0 = keine, 6, 10, 12 oder 20
+  # Einteilung der Bossbar in Abschnitte: 0 = keine, 6, 10, 12 oder 20
   bossbar-notches: 0
-  # Wo die Wartezeiten liegen:
-  #   file   = in plugins/CamFly/playerdata/stats/<UUID>.yml - sie laufen nach /cam reload und einem Neustart weiter
-  #   memory = nur im Arbeitsspeicher - nach /cam reload oder einem Neustart sind alle vorbei
-  storage: file
 
 # Akku (bei flight-limit: battery): Im Cam-Modus läuft er leer, außerhalb lädt er sich wieder auf.
-# Ist er leer, endet der Cam-Modus. Zu sehen ist der Ladestand mit /cam stats.
+# Ist er leer, endet der Cam-Modus. Zu sehen ist der Ladestand mit /cam stats. Gemerkt wird er nach storage (ganz oben) -
+# bei memory sind nach /cam reload oder einem Neustart alle Akkus wieder voll.
 battery:
   # Ein voller Akku, in Sekunden Flug
   capacity: 300
@@ -588,10 +577,22 @@ battery:
   bossbar-color: GREEN
   # Einteilung der Bossbars in Abschnitte: 0 = keine, 6, 10, 12 oder 20
   bossbar-notches: 10
-  # Wo der Ladestand liegt:
-  #   file   = in plugins/CamFly/playerdata/stats/<UUID>.yml - er bleibt nach /cam reload und einem Neustart
-  #   memory = nur im Arbeitsspeicher - nach /cam reload oder einem Neustart sind alle Akkus wieder voll
-  storage: file
+
+# Wartezeit nach dem Ende des Cam-Modus, bis man ihn wieder starten darf - bei jedem flight-limit, auch bei false.
+# Ein Ende durch /cam reload zählt nicht. Gemerkt wird sie nach storage (ganz oben): in
+# plugins/CamFly/playerdata/stats/<UUID>.yml, dann läuft sie nach /cam reload und einem Neustart weiter - oder nur im
+# Arbeitsspeicher, dann ist sie nach /cam reload oder einem Neustart vorbei. Texte: cooldown-text, cooldown-available.
+cooldown:
+  enabled: false
+  # Wie lange, in Sekunden
+  seconds: 120
+  # Die Wartezeit als Bossbar anzeigen, bis man wieder in den Cam-Modus darf - auch nach dem Betreten des Servers
+  # (Text: cooldown-bossbar in der Sprachdatei)
+  show-bossbar: true
+  # BLUE, GREEN, PINK, PURPLE, RED, WHITE oder YELLOW
+  bossbar-color: BLUE
+  # Einteilung der Bossbar in Abschnitte: 0 = keine, 6, 10, 12 oder 20
+  bossbar-notches: 0
 
 # Was ein Start des Cam-Modus kostet. Bezahlt wird erst, wenn sonst nichts mehr gegen den Start spricht.
 # Fehlt etwas, wird gar nichts genommen und der Spieler erfährt, was ihm fehlt.
@@ -630,14 +631,8 @@ camera-particles:
 # Feuerschutz im Cam-Modus: Der Spieler brennt nicht
 fireguard:
   enabled: true
-  # Feuer in der Nähe für den Spieler ausblenden
+  # Feuer direkt um den Spieler für ihn ausblenden (1,5 Blöcke zur Seite, 2 nach oben, 1 nach unten)
   hide-fire: true
-  # Prüfintervall in Ticks
-  tick-interval: 10
-  # Suchradius für hide-fire in Blöcken (höchstens 8, jeder Block im Umkreis wird bei jeder Prüfung angesehen)
-  radius-horizontal: 1.5
-  radius-up: 2
-  radius-down: 1
 
 # Kamera-Kopf auf dem Spieler im Cam-Modus (auch bei unsichtbarem Spieler zu sehen)
 camera-head:
@@ -711,13 +706,13 @@ menu:
     # öffentlich (die von allen, eigene dabei) und geteilt (was andere einem geteilt haben, und was sie einem anbieten -
     # das muss man erst annehmen). Unten von links: zurück, die Seite davor, die Glocke des Gästebuchs
     # (viewpoints.guestbook: an, nur beim Login oder aus), die drei Reiter, der Filter (sortieren), die Seite danach und
-    # ganz rechts der Knopf für einen neuen Punkt: Linksklick privat, Rechtsklick öffentlich - ein öffentlicher bleibt
-    # einer der eigenen und lässt sich auf der öffentlichen Seite mit Rechtsklick wieder offline nehmen, ohne ihn zu
-    # löschen. Ein Linksklick auf einen Punkt springt hin, auf einen geteilten oder öffentlichen genauso wie auf einen
+    # ganz rechts der Knopf für einen neuen Punkt (siehe viewpoints, "Wie ein neuer Punkt im Menü entsteht").
+    # Ein Linksklick auf einen Punkt springt hin, auf einen geteilten oder öffentlichen genauso wie auf einen
     # eigenen: nur, wohin die Kamera auch fliegen dürfte; ohne Cam-Modus startet er erst, wenn der Punkt nah genug ist
-    # (viewpoints.start-distance). Rechtsklick auf einen eigenen öffnet die Seite zum Teilen: die Spieler, unten in der
-    # Mitte das Leuchtfeuer, das ihn öffentlich macht (oder wieder privat), und ganz rechts der Trichter (zuerst, mit
-    # wem er geteilt ist, dann wem er angeboten ist; oder nach Name oder Nähe).
+    # (viewpoints.start-distance). Rechtsklick auf einen eigenen - auch auf dem Reiter der öffentlichen - öffnet seine
+    # Optionen (viewpoints.options): umbenennen, Symbol, teilen oder öffentlich machen, verschieben, löschen. Die Seite
+    # zum Teilen zeigt die Spieler, unten in der Mitte das Leuchtfeuer, das ihn öffentlich macht (oder wieder privat),
+    # und ganz rechts den Trichter (zuerst, mit wem er geteilt ist, dann wem er angeboten ist; oder nach Name oder Nähe).
     # Wartet ein Angebot, glänzt der Knopf.
     spots:
       item: filled_map
@@ -777,10 +772,11 @@ menu:
       item: feather
       slot: 16
     # Die Punkte aller Spieler (camplugin.spotadmin, nur mit viewpoints.enabled): die Spieler mit Punkten - auch wer
-    # offline ist -, ein Klick zeigt seine Punkte, privat, öffentlich und geteilt. Linksklick nimmt einen öffentlichen
-    # oder geteilten herunter (er ist wieder privat), Rechtsklick teleportiert einen selbst hin - von überall, ohne die
-    # Regeln eines Sprungs; im Cam-Modus endet der erst, wie bei /cam tp -, Umschalt-Klick löscht einen. Der Trichter
-    # sortiert seine Punkte: die neuesten zuerst, nach Namen, die meisten Likes, die meisten Aufrufe, die nächsten.
+    # offline ist -, ein Klick zeigt seine Punkte, privat, öffentlich und geteilt. Linksklick teleportiert einen selbst
+    # hin - von überall, ohne die Regeln eines Sprungs; im Cam-Modus endet der erst, wie bei /cam tp -, Rechtsklick
+    # öffnet die Optionen des Punkts (viewpoints.options): dort nimmt man einen öffentlichen oder geteilten herunter
+    # (er ist wieder privat) oder löscht ihn. Der Trichter sortiert seine Punkte: die neuesten zuerst, nach Namen, die
+    # meisten Likes, die meisten Aufrufe, die nächsten.
     # Unten der Knopf, der ihn einschränkt, für seine eigenen Punkte, die öffentlichen und die geteilten je ein Knopf,
     # den man weiterklickt (Linksklick weiter, Rechtsklick zurück): erlaubt - keine neuen (keinen Punkt speichern,
     # keinen öffentlich machen, keinen teilen) - auch keine anschauen (kein Sprung zu seinen eigenen, kein Sprung zu
@@ -921,13 +917,11 @@ back-command:
 # Wetter der Welt). /cam resume (auch der Knopf im Menü) stellt sie wieder ein, wie ein Aussichtspunkt es tut: Sie
 # gelten statt der eigenen, bis die Kamera woanders hingesetzt wird oder man selbst etwas einstellt; was der Flug nicht
 # hatte, ist die eigene Einstellung. Welche davon, sagen time, weather und night-vision unten.
+# Gemerkt wird das Ende nach storage (ganz oben): in plugins/CamFly/playerdata/stats/<UUID>.yml, oder nur im
+# Arbeitsspeicher, dann ist es nach einem Neustart weg.
 # Ton: sounds.spot, Texte: resume-...
 resume-command:
   enabled: true
-  # Wo das Ende des letzten Flugs liegt:
-  #   file   = in plugins/CamFly/playerdata/stats/<UUID>.yml - es bleibt nach /cam reload und einem Neustart
-  #   memory = nur im Arbeitsspeicher - nach einem Neustart ist es weg
-  storage: file
   # Ob /cam resume die Tageszeit des letzten Flugs wieder einstellt (nur mit cam-time.enabled)
   time: true
   # Ob es das Wetter des letzten Flugs wieder einstellt (nur mit cam-weather.enabled)
@@ -971,7 +965,7 @@ resume-command:
 # Zu Fuß sieht man die Zeit und das Wetter der Welt, ein Punkt von dort nimmt nichts mit.
 # (Texte: spot-saved-look, spot-list-look, menu-spot-look, spot-look-...)
 # Gesprungen wird nur, wohin die Kamera auch fliegen dürfte: in der Welt des Körpers, nicht weiter als max-distance
-# (bei max-distance-mode: signal nur, wohin das Signal reicht), nicht in ein Gebiet, das cam-area auf Stufe 2 verbietet,
+# (bei max-distance-mode: signal nur, wohin das Signal reicht), nicht in ein Gebiet, das cam-area mit level: always verbietet,
 # nicht in gesperrte Lava, Wasser oder Pulverschnee und nicht in einen Block, der dort inzwischen steht. Sonst sagt
 # eine Meldung, warum nicht. Wie bei /cam back zählt der Sprung nicht als geflogen, und /cam trail hat dort eine Lücke.
 # Aufrufe: Jeder Sprung zu einem Punkt zählt als Aufruf - von jedem, auch vom Besitzer,
@@ -989,14 +983,10 @@ viewpoints:
   set-in-cam-only: true
   # Wie viele Punkte jeder Spieler höchstens hat (1 bis 100, 0 = kein Limit). Öffentliche zählen mit. Der Knopf für
   # einen neuen Punkt im Menü zeigt, wie viele man hat und wie viele noch gehen (ohne Limit nur, wie viele man hat).
+  # Gemerkt werden die Punkte nach storage (ganz oben): in plugins/CamFly/playerdata/stats/<UUID>.yml, die geteilten
+  # zusätzlich in plugins/CamFly/playerdata/shared-spots.yml, die Aufrufe in plugins/CamFly/playerdata/spot-views.yml -
+  # oder nur im Arbeitsspeicher, dann sind sie nach /cam reload oder einem Neustart weg, auch das Teilen und die Aufrufe.
   max-per-player: 10
-  # Wo die Punkte liegen:
-  #   file   = in plugins/CamFly/playerdata/stats/<UUID>.yml - sie bleiben nach /cam reload und einem Neustart
-  #            (die geteilten zusätzlich in plugins/CamFly/playerdata/shared-spots.yml, die Aufrufe in
-  #            plugins/CamFly/playerdata/spot-views.yml)
-  #   memory = nur im Arbeitsspeicher - nach /cam reload oder einem Neustart sind sie weg, auch das Teilen und die
-  #            Aufrufe
-  storage: file
   # Ob Spieler ihre Punkte öffentlich machen und anderen anbieten dürfen (/cam spot share). Verschiebt oder benennt der
   # Besitzer einen geteilten Punkt um, wandert er für alle mit, löscht er ihn, ist er auch für alle weg. Mit false gibt es nur private
   # Punkte - auch im Menü nur den Reiter der eigenen.
@@ -1016,7 +1006,7 @@ viewpoints:
   #   nur beim Login    = alles erst, wenn er beitritt
   #   aus               = gar nicht, und für ihn wird auch nichts gesammelt
   # Hält ihn eine Sperre der Punkte (Admin-Seite der Punkte) davon ab, öffentliche oder geteilte Punkte anzusehen, erfährt
-  # er nichts, und für ihn wird nichts gesammelt; die Glocke sagt es. Gespeichert nach storage, in
+  # er nichts, und für ihn wird nichts gesammelt; die Glocke sagt es. Gespeichert nach storage (ganz oben), in
   # plugins/CamFly/playerdata/spot-guestbook.yml. Geht nur mit sharing: true - private Punkte sieht sich niemand sonst
   # an.
   guestbook: true
@@ -1026,15 +1016,12 @@ viewpoints:
   # Ein Name gilt nur einmal je Spieler: /cam spot set mit einem Namen, den man schon hat (Groß- und Kleinschreibung
   # zählen nicht), überschreibt den alten Punkt nicht, sondern sagt, dass es ihn schon gibt (Text: spot-name-taken).
   # Verschieben geht über die Optionen (options.move).
-  # Wie ein neuer Punkt im Menü entsteht:
-  #   true  = Knopf "Neuer Punkt", dann den Namen in den Chat, dann eine Seite mit Symbol (icons), noch einmal
-  #           Umbenennen, Teilen (dieselbe Seite wie in den Optionen: Spieler auswählen oder öffentlich machen - geteilt
-  #           wird erst beim Bestätigen, dann bekommen die Ausgewählten die Einladung), Bestätigen und Abbrechen. Gespeichert wird die Stelle, an der man beim
-  #           Eintippen des Namens war. Gibt es den Namen schon (oder ist er zu lang), fragt der Chat gleich noch
-  #           einmal - die nächste Zeile ist der nächste Versuch. Bedrock-Spieler mit Fenstern (bedrock.menu: mixed
-  #           oder forms) tippen den Namen in ein Fenster statt in den Chat; die Seite danach ist dieselbe.
-  #   false = wie früher: Der Name im Chat speichert den Punkt sofort (Linksklick privat, Rechtsklick öffentlich).
-  create-page: true
+  # Wie ein neuer Punkt im Menü entsteht: Knopf "Neuer Punkt", dann den Namen in den Chat, dann eine Seite mit Symbol
+  # (icons), noch einmal Umbenennen, Teilen (dieselbe Seite wie in den Optionen: Spieler auswählen oder öffentlich
+  # machen - geteilt wird erst beim Bestätigen, dann bekommen die Ausgewählten die Einladung), Bestätigen und Abbrechen.
+  # Gespeichert wird die Stelle, an der man beim Eintippen des Namens war. Gibt es den Namen schon (oder ist er zu
+  # lang), fragt der Chat gleich noch einmal - die nächste Zeile ist der nächste Versuch. Bedrock-Spieler mit Fenstern
+  # (bedrock.menu: mixed oder forms) tippen den Namen in ein Fenster statt in den Chat; die Seite danach ist dieselbe.
   # Die Symbole, aus denen man für einen Punkt wählt (beim Erstellen und in den Optionen), als Item-Namen. Angeboten
   # wird nur, was der Server kennt: bis 26.2 nur die Karte (filled_map) und die leere Karte (map), ab 26.3 auch die
   # Entdecker- und Bauwerkskarten, die dort eigene Items sind. Das erste ist das, mit dem ein neuer Punkt anfängt. Die
@@ -1060,15 +1047,12 @@ viewpoints:
     - desert_pyramid_map
     - abandoned_camp_map
     - warm_ocean_ruins_map
-  # Die Seite "Optionen" eines Punkts: Rechtsklick auf einen eigenen Punkt im Menü (statt wie früher Rechtsklick teilen
-  # und Shift-Klick löschen). Was der Besitzer dort darf, steht darunter. Löschen fragt dort noch einmal nach.
+  # Die Seite "Optionen" eines Punkts: Rechtsklick auf einen eigenen Punkt im Menü. Was der Besitzer dort darf, steht
+  # darunter. Löschen fragt dort noch einmal nach.
   # Admins (camplugin.spotadmin) bekommen dieselbe Seite auf der Admin-Seite der Punkte, mit Rechtsklick (Linksklick
   # bringt sie hin): Umbenennen, Symbol, Privat machen und Löschen dürfen sie dort immer - die Schalter unten gelten
   # nur für die Besitzer. Der Besitzer erfährt, was ein Admin geändert hat.
   options:
-    # false = keine Seite, für niemanden: Klicks wie früher (Rechtsklick teilen, Shift-Klick löschen; Admins:
-    # Linksklick privat machen, Rechtsklick hin, Shift-Klick löschen).
-    enabled: true
     # Umbenennen - auch hier nur in einen Namen, den man noch nicht hat. Aufrufe, Likes und Teilen bleiben.
     rename: true
     # Ein anderes Symbol (aus icons).
@@ -1310,7 +1294,7 @@ photo-mode:
 #   /cam time reset                                              = wieder die Zeit der Welt
 # Die Zeit steht still. Nur der Spieler selbst sieht sie, und nur im Cam-Modus; die Welt läuft mit ihrer eigenen Zeit
 # weiter. Geht im Cam-Modus (sofort) und davor (für den nächsten Flug). Gemerkt wird sie wie die Nachtsicht, für jeden
-# Flug bis /cam time reset - wie lange, sagt player-settings.storage: für immer oder bis der Spieler den Server
+# Flug bis /cam time reset - wie lange, sagt storage (ganz oben): für immer oder bis der Spieler den Server
 # verlässt. Mit dem Ende des Cam-Modus sieht er wieder, was er vorher sah. Texte: time-set, time-set-memory, time-reset.
 cam-time:
   enabled: true
@@ -1426,7 +1410,7 @@ progress-guard:
   advancements: true
   # Keine Bewegungs-Statistik im Cam-Modus: die Strecken (geflogen, gegangen, geschwommen ...), die Sprünge und die
   # Zeit beim Schleichen. Während des Flugs zählt das Spiel sie mit, am Ende stehen sie wieder, wie sie beim Start
-  # waren (nach einem Absturz mit crash-protection auch). Alles andere zählt weiter: Spielzeit, Schaden, Tode, die
+  # waren (auch nach einem Absturz des Servers). Alles andere zählt weiter: Spielzeit, Schaden, Tode, die
   # Zeit seit dem letzten Schlaf.
   statistics: true
 
@@ -1435,6 +1419,7 @@ progress-guard:
 # Benutzen dürfen es die Konsole und wer das Recht camplugin.stop hat (Operatoren haben es). Ton: sounds.end-forced.
 stop-command:
   enabled: true
+
 # /cam ban sperrt Spieler aus dem Cam-Modus aus, einzelne oder alle:
 #   /cam ban <Name> [Zeit] [Grund]  = einen Spieler, z. B. /cam ban Steve 2h Griefing (ohne Zeit für immer);
 #                                     ist er schon gesperrt, gelten ab jetzt die neue Zeit und der neue Grund
@@ -1452,6 +1437,7 @@ stop-command:
 cam-ban:
   # false = die Befehle sind aus, und keine Sperre gilt (playerdata/bans.yml bleibt, wie sie ist)
   enabled: true
+
 # /cam trail zeigt, wo die Kamera eines Spielers herumgeflogen ist: als Linie aus Partikeln, die nur
 # der sieht, der fragt - von grün am Körper über gelb nach rot, wo die Kamera zuletzt war. Dazu stehen im
 # Chat Länge, Dauer, Start und Ende des Flugs (Texte: trail-...), auch für die Konsole, die keine Partikel sieht.
@@ -1481,7 +1467,7 @@ cam-ban:
 # Wo die Kamera versetzt wurde (/cam back, Portal, Teleport), hat die Linie eine Lücke.
 # Gezeichnet wird bis 128 Blöcke um den, der zusieht.
 # Aufgezeichnet wird nur, solange enabled an ist. Gemerkt werden von jedem Spieler seine letzten flights Flüge, keiner
-# länger als keep-days Tage nach seinem Ende - wo, sagt storage:
+# länger als keep-days Tage nach seinem Ende - wo, sagt storage (ganz oben):
 #   file   = auf der Platte, eine Datei je Flug in plugins/CamFly/playerdata/trails/<UUID>/ - die Flüge bleiben nach
 #            /cam reload und einem Neustart. Im Arbeitsspeicher steht nur, wann, wie lange und wie weit ein Flug ging;
 #            seine Linie wird erst aus der Datei gelesen, wenn ihn jemand ansieht.
@@ -1510,8 +1496,6 @@ cam-trail:
   # wie lange, in Sekunden (show-min-seconds bis 600)
   show-max-blocks: 1500
   show-max-seconds: 300
-  # Wo die Flüge liegen: file oder memory (siehe oben)
-  storage: file
   # Nach wie vielen Tagen ein Flug gelöscht wird, gezählt ab seinem Ende (0 = nie, er bleibt für immer)
   keep-days: 30
 
@@ -1599,18 +1583,15 @@ cam-safety:
 # Wo der Cam-Modus erlaubt ist
 cam-area:
   # Wie streng:
-  #   0 = aus, die Listen werden nicht geprüft
-  #   1 = nur beim Start
-  #   2 = beim Start und im Flug - an der Grenze geht es nicht weiter (wie, sagt camera-mode.border-mode)
-  level: 2
-
-  # Sekunden zwischen zwei Meldungen an der Grenze (nur Stufe 2)
-  warning-cooldown: 3
+  #   false  = aus, die Listen werden nicht geprüft
+  #   start  = nur beim Start
+  #   always = beim Start und im Flug - an der Grenze geht es nicht weiter (wie, sagt camera-mode.border-mode)
+  level: always
 
   # Biom-Liste beachten
   biomes-enabled: true
 
-  # Verbotene Biome ([] = keine; Jede Struktur nur in eine Liste, sonst wird sie ignoriert)
+  # Verbotene Biome ([] = keine)
   forbidden-biomes:
     - lush_caves
     - dripstone_caves
@@ -1620,9 +1601,11 @@ cam-area:
   # Struktur-Listen beachten
   structures-enabled: false
 
-  # Verbotene Strukturen, in zwei Listen (Jede Struktur nur in eine Liste, sonst wird sie ignoriert):
+  # Verbotene Strukturen, in zwei Listen (jede Struktur nur in eine Liste, sonst wird sie ignoriert):
   #   -box        = der ganze Bereich der Struktur, lückenlos   (für kompakte Bauten)
   #   -components = nur die einzelnen Bauteile, dazwischen frei  (für weitläufige Bauten wie die Netherfestung)
+  # Eine Struktur, die erst nach dem Erzeugen der Welt gesetzt wird (von Hand oder von einem Plugin), zählt erst nach
+  # /cam reload.
   forbidden-structures-box:
     - monument
     - swamp_hut
@@ -1634,10 +1617,6 @@ cam-area:
     - trial_chambers
     - bastion_remnant
     - end_city
-
-  # Zwischenspeicher der Struktur-Prüfung in Chunks (256 = etwa 50 KB RAM, höchstens 4096; 0 = aus, kostet dann mehr Rechenzeit)
-  # Neu platzierte Strukturen zählen erst nach /cam reload (bei 0 sofort).
-  structures-cache-chunks: 256
 
   # Dimensionen, in denen der Cam-Modus erlaubt ist (Eigene Dimensionen von Plugins oder Datenpacks sperrt diese Liste nie.)
   dimensions:
@@ -1652,7 +1631,10 @@ cam-area:
   # nicht auseinanderhält. Der Name wie der Ordner der Welt, z. B. [lobby, event, world_nether] ([] = keine)
   forbidden-worlds: [lobby]
 
-# Portale im Cam-Modus (In der anderen Welt zählt max-distance ab dem Portal, wenn cam-area level:2 dann kann man zurück geschikt werden wenn Umgebung gespert ist)
+# Portale im Cam-Modus. In der anderen Welt zählt max-distance ab dem Portal. Bei cam-area.level: always wird man
+# zurückgeschickt, wenn man drüben in einem verbotenen Gebiet landet. Ein Portal, das in ein verbotenes Biom oder eine
+# verbotene Struktur führt, merkt sich das Plugin danach und lässt niemanden mehr hindurch - bis sich drüben etwas
+# ändert (das Portal dort abgebaut, die Stelle nicht mehr verboten, ein neues Portal in der Nähe) oder bis /cam reload.
 portals:
   # Netherportal durchlassen (in beide Richtungen)
   nether: false
@@ -1664,27 +1646,6 @@ portals:
   #   body   = zu seinem Körper
   #   portal = zum Portal, durch das er ging (wenn möglich, sonst body)
   return-to: body
-
-  # Sekunden zwischen zwei Meldungen an einem gesperrten Portal
-  warning-cooldown: 3
-
-  # Portale merken, die in ein verbotenes Biom oder eine verbotene Struktur führen (cam-area Stufe 2, Gemerkt wird bis zum Neustart oder /cam reload.):
-  #   true  = nach dem ersten Zurückholen bleibt das Portal gesperrt
-  #   false = jedes Mal hin und gleich wieder zurück
-  remember-blocked: true
-
-  # Wie viele Portale höchstens gemerkt werden (0 = keine)
-  remember-blocked-count: 128
-
-  # Gemerktes Portal wieder freigeben, wenn sich drüben etwas ändert (false = erst /cam reload gibt es frei):
-  #   - das Portal dort ist abgebaut oder versetzt
-  #   - die Stelle ist nicht mehr verboten
-  #   - ein neues Portal steht in der Nähe (siehe forget-radius)
-  forget-changed: true
-
-  # Umkreis in Blöcken (waagerecht) um die Ankunftsstelle:
-  # 0 = aus. Sollte zu portal-search-radius des Servers passen.
-  forget-radius: 128
 
 # Teleports im Cam-Modus, z. B. /tpa, /tpahere, /tp, /home, /spawn:
 #   true  = der Cam-Modus endet. Wer im Cam-Modus teleportiert wird, kommt mit seinen Sachen am Ziel an.

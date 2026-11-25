@@ -528,11 +528,11 @@ public final class BodySpawner implements Listener {
     /**
      * Puts the configured {@code body.movement-sensitivity} onto a mannequin.
      *
-     * <p>On level 0 it is nailed to its spot, on the levels above it is moved by
-     * gravity, water and pistons, because that movement is what ends camera
-     * mode. Only level 2 also lets players and mobs push it.</p>
+     * <p>On {@code fixed} it is nailed to its spot, on the levels above it is
+     * moved by gravity, water and pistons, because that movement is what ends
+     * camera mode. Only {@code pushable} also lets players and mobs push it.</p>
      *
-     * <p>That they do not push it below level 2 is the business of a team,
+     * <p>That they do not push it below {@code pushable} is the business of a team,
      * see {@link de.elia.cameraplugin.scoreboard.NoCollisionTeam}. The
      * mannequin itself stays collidable on every level: switched off, it
      * would let every arrow, trident and wind charge and the stab of a spear
@@ -541,7 +541,7 @@ public final class BodySpawner implements Listener {
      *
      * <p>The same call fits the hitbox and the body, because the mannequin is
      * the entity that gets pushed in either case. Behind the armour stand of
-     * the armorstand body level 2 has already fallen back to level 1, so
+     * the armorstand body {@code pushable} has already fallen back to {@code normal}, so
      * nobody ever pushes the hitbox standing in that body.</p>
      */
     private void applyMovementSensitivity(Mannequin mannequin) {
@@ -550,7 +550,7 @@ public final class BodySpawner implements Listener {
 
     /**
      * Gravity for the body entities, decided by
-     * {@code body.movement-sensitivity} alone: level 0 nails the body to its
+     * {@code body.movement-sensitivity} alone: {@code fixed} nails the body to its
      * spot, every level above it lets the body fall.
      */
     private boolean useBodyGravity() {

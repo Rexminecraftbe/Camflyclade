@@ -370,7 +370,7 @@ public final class CamNameTag implements Listener, PluginPart {
 
     /**
      * Whether this viewer is shown the name: everybody the camera player is
-     * shown to, which {@code player_visibility_mode} decides, but not he
+     * shown to, which {@code player-visibility} decides, but not he
      * himself - nobody has a name tag over his own head either -, and not
      * whoever is on the same tour, mostly at the same spot. Over a guide out
      * of camera mode nobody while his name tag would not show either.

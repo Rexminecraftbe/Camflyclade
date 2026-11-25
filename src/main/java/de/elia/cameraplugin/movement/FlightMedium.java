@@ -28,20 +28,20 @@ import java.util.Set;
  */
 public enum FlightMedium {
     /**
-     * Lava, {@code camera-mode.allow_lava_flight}. It used to end camera mode
+     * Lava, {@code camera-mode.allow-lava-flight}. It used to end camera mode
      * the moment the feet reached it; now it stops the camera like the other
      * two.
      */
     LAVA("cant-fly-in-lava", "cam-lava-start"),
     /**
-     * Water, {@code camera-mode.allow_water_flight}. The water standing in a
+     * Water, {@code camera-mode.allow-water-flight}. The water standing in a
      * waterlogged block counts as well, and so does the water around kelp,
      * seagrass and in a bubble column: the server holds a player in any of
      * them to be in water.
      */
     WATER("cant-fly-in-water", "cam-water-start"),
     /**
-     * Powder snow, {@code camera-mode.allow_powder_snow_flight}. Only leather
+     * Powder snow, {@code camera-mode.allow-powder-snow-flight}. Only leather
      * boots carry a player over it, and camera mode takes the armour off - the
      * camera sinks straight into it.
      */

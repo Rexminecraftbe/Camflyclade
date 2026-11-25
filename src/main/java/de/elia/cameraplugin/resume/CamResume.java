@@ -39,7 +39,7 @@ import java.util.UUID;
  * his body; and once more when it has started, in case the wait of
  * {@code start-delay} changed anything.</p>
  *
- * <p>Where it is kept is {@code resume-command.storage}: in the file of the
+ * <p>Where it is kept is {@code storage}: in the file of the
  * player, or in memory until a restart.</p>
  */
 public final class CamResume implements PluginPart {

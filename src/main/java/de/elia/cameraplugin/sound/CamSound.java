@@ -13,7 +13,7 @@ import java.util.Locale;
  * {@code end} or {@code border}.
  *
  * <p>Only the camera player hears it. Played where everybody could hear it,
- * it would give away a player whom {@code player_visibility_mode} keeps out
+ * it would give away a player whom {@code player-visibility} keeps out
  * of sight.</p>
  *
  * @param key    the sound, as {@code /playsound} names it, or {@code null}

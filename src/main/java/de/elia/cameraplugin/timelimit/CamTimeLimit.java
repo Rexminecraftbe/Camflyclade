@@ -20,14 +20,14 @@ import java.util.UUID;
 
 /**
  * How long camera mode may run at a time and how long a player waits before
- * he may start it again, the section {@code time-limit}.
+ * he may start it again, the sections {@code time-limit} and {@code cooldown}.
  *
  * <p>A cooldown is kept as the moment it began, in the file of the player or
- * only in memory, as {@code time-limit.storage} says - in the file it
+ * only in memory, as {@code storage} says - in the file it
  * outlasts {@code /cam reload} and a restart, the way the charge of the
  * battery does. How long it lasts is worked out from that moment whenever
- * somebody asks, so a new {@code cooldown-seconds} counts for a cooldown
- * that is running as well. Only the bossbar of {@code show-bossbar-cooldown}
+ * somebody asks, so a new {@code cooldown.seconds} counts for a cooldown
+ * that is running as well. Only the bossbar of {@code cooldown.show-bossbar}
  * runs a task, once a second, and says when it is over - also after the
  * player joins with a cooldown that is not over yet.</p>
  */
@@ -243,7 +243,7 @@ public final class CamTimeLimit implements PluginPart {
     /**
      * Watches the cooldown of a player who is online, until it is over: says
      * so with {@code cooldown-available}, and shows the bossbar of
-     * {@code show-bossbar-cooldown} until then. Nothing when he has none, or
+     * {@code cooldown.show-bossbar} until then. Nothing when he has none, or
      * when it is watched already.
      */
     private void watch(Player player) {
@@ -253,8 +253,8 @@ public final class CamTimeLimit implements PluginPart {
         }
         Watch watch = new Watch();
         if (settings.timeLimit().showsCooldownBossbar()) {
-            watch.bar = Bukkit.createBossBar("", settings.timeLimit().bossbarColor(),
-                    settings.timeLimit().bossbarStyle());
+            watch.bar = Bukkit.createBossBar("", settings.timeLimit().cooldownBossbarColor(),
+                    settings.timeLimit().cooldownBossbarStyle());
             watch.bar.addPlayer(player);
             updateCooldownBar(watch.bar, remainingMillis(id));
         }

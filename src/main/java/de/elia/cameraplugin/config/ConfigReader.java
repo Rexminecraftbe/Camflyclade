@@ -71,6 +71,11 @@ public final class ConfigReader {
         return config.contains(path, true) || !config.contains(old, true) ? path : old;
     }
 
+    /** Whether the file itself has this key, the defaults of the built-in file aside. */
+    public boolean isSet(String path) {
+        return config.contains(path, true);
+    }
+
     // ------------------------------------------------------------ truth values
 
     public boolean getBoolean(String path, boolean def) {
@@ -256,6 +261,29 @@ public final class ConfigReader {
         for (String candidate : allowed) {
             if (candidate.equalsIgnoreCase(value)) {
                 return value;
+            }
+        }
+        warnUnknownValue(path, value, String.join(", ", allowed), def);
+        return def;
+    }
+
+    /**
+     * Reads a choice whose values have new names: an old value counts as the
+     * one it stands for now, without a note - an older file goes on as it was
+     * written, until {@link ConfigUpdater} writes the new name into it.
+     *
+     * @param oldValues each old value, in lower case, and the new one it means
+     * @return one of {@code allowed}, in lower case
+     */
+    public String getChoice(String path, String def, Map<String, String> oldValues, String... allowed) {
+        String value = getString(path, def).toLowerCase(Locale.ROOT);
+        String now = oldValues.get(value);
+        if (now != null) {
+            return now;
+        }
+        for (String candidate : allowed) {
+            if (candidate.equalsIgnoreCase(value)) {
+                return candidate;
             }
         }
         warnUnknownValue(path, value, String.join(", ", allowed), def);

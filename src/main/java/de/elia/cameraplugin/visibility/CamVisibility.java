@@ -9,7 +9,7 @@ import org.bukkit.entity.Player;
 import java.util.UUID;
 
 /**
- * Who sees a camera player, after {@code camera-mode.player_visibility_mode}.
+ * Who sees a camera player, after {@code camera-mode.player-visibility}.
  */
 public final class CamVisibility {
 

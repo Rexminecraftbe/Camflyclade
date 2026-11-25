@@ -4,8 +4,9 @@ package de.elia.cameraplugin.body;
  * How strongly the camera body reacts to being pushed out of its spot.
  *
  * <p>The levels build on each other: each one allows a kind of movement that
- * the level below it does not. The number in brackets is the value used for
- * {@code body.movement-sensitivity} in the config file.</p>
+ * the level below it does not. The word in brackets is the value used for
+ * {@code body.movement-sensitivity} in the config file. Before, they were
+ * numbers, 0 to 2, which an older file may still have.</p>
  */
 public enum MovementSensitivity {
     /**
@@ -13,23 +14,25 @@ public enum MovementSensitivity {
      * movement check is therefore switched off, camera mode never ends because
      * the body was moved.
      */
-    FIXED(0),
+    FIXED("fixed", 0),
     /**
      * Gravity, water and pistons move the body and every such movement ends
      * camera mode. Players and mobs cannot push it.
      */
-    NORMAL(1),
+    NORMAL("normal", 1),
     /** Players and mobs push the body as well, which also ends camera mode. */
-    PUSHABLE(2);
+    PUSHABLE("pushable", 2);
 
-    private final int id;
+    private final String configName;
+    private final int oldId;
 
-    MovementSensitivity(int id) {
-        this.id = id;
+    MovementSensitivity(String configName, int oldId) {
+        this.configName = configName;
+        this.oldId = oldId;
     }
 
-    public int getId() {
-        return id;
+    public String getConfigName() {
+        return configName;
     }
 
     /** Whether the body is nailed to its spot and cannot be moved at all. */
@@ -59,17 +62,27 @@ public enum MovementSensitivity {
         return this;
     }
 
-    /**
-     * Resolves the number configured in {@code body.movement-sensitivity}.
-     *
-     * @return the matching level, or {@code null} if the number is unknown
-     */
-    public static MovementSensitivity fromId(int id) {
+    /** The value of every level in the config file. */
+    public static String[] configNames() {
+        return java.util.Arrays.stream(values()).map(MovementSensitivity::getConfigName).toArray(String[]::new);
+    }
+
+    /** The numbers an older file has, each with the value it stands for now. */
+    public static java.util.Map<String, String> oldValues() {
+        java.util.Map<String, String> old = new java.util.HashMap<>();
         for (MovementSensitivity sensitivity : values()) {
-            if (sensitivity.id == id) {
+            old.put(String.valueOf(sensitivity.oldId), sensitivity.configName);
+        }
+        return old;
+    }
+
+    /** The level of a value of the config file, which has to be one of {@link #configNames()}. */
+    public static MovementSensitivity byName(String name) {
+        for (MovementSensitivity sensitivity : values()) {
+            if (sensitivity.configName.equalsIgnoreCase(name)) {
                 return sensitivity;
             }
         }
-        return null;
+        return NORMAL;
     }
 }

@@ -34,7 +34,7 @@ import java.util.logging.Level;
  * while he is online. A spot that is moved keeps them, one that is deleted
  * loses them.</p>
  *
- * <p>Where they are kept follows {@code viewpoints.storage}, like
+ * <p>Where they are kept follows {@code storage}, like
  * {@link SharedSpots}: in one file for everybody,
  * {@code playerdata/spot-views.yml}, written after every view that counts;
  * or in memory only, which {@code /cam reload} and a restart forget.</p>

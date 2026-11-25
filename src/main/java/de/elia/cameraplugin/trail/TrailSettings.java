@@ -43,7 +43,7 @@ public final class TrailSettings {
     private int trailShowMaxSeconds;
     /** How many of his last flights are kept of each player, {@code cam-trail.flights}; 0 for all of them. */
     private int trailFlights;
-    /** Where the flights are kept, {@code cam-trail.storage}. */
+    /** Where the flights are kept, {@code storage}. */
     private StorageMode trailStorage;
     /** After how many days a flight is deleted, {@code cam-trail.keep-days}; 0 for never. */
     private int trailKeepDays;

@@ -3,8 +3,9 @@ package de.elia.cameraplugin.display;
 /**
  * How the name over the camera player keeps to him, see {@link CamNameTag}.
  *
- * <p>The number in brackets is the value used for
- * {@code camera-mode.name-mode} in the config file.</p>
+ * <p>The word in brackets is the value used for
+ * {@code camera-mode.name-mode} in the config file. Before, they were
+ * numbers, 1 and 2, which an older file may still have.</p>
  */
 public enum NameMode {
     /**
@@ -12,7 +13,7 @@ public enum NameMode {
      * moves it a moment after the player, so in fast flight it trails behind
      * a little.
      */
-    FOLLOW(1),
+    FOLLOW("move", 1),
     /**
      * Sits on him as a passenger, so the client carries it along with him and
      * it never trails behind. A player with a passenger cannot be teleported,
@@ -21,29 +22,41 @@ public enum NameMode {
      * Other plugins cannot teleport him while it sits there: Spigot turns
      * every such teleport down, Paper the ones into another world.
      */
-    RIDE(2);
+    RIDE("ride", 2);
 
-    private final int id;
+    private final String configName;
+    private final int oldId;
 
-    NameMode(int id) {
-        this.id = id;
+    NameMode(String configName, int oldId) {
+        this.configName = configName;
+        this.oldId = oldId;
     }
 
-    public int getId() {
-        return id;
+    public String getConfigName() {
+        return configName;
     }
 
-    /**
-     * Resolves the number configured in {@code camera-mode.name-mode}.
-     *
-     * @return the matching mode, or {@code null} if the number is unknown
-     */
-    public static NameMode fromId(int id) {
+    /** The value of every mode in the config file. */
+    public static String[] configNames() {
+        return java.util.Arrays.stream(values()).map(NameMode::getConfigName).toArray(String[]::new);
+    }
+
+    /** The numbers an older file has, each with the value it stands for now. */
+    public static java.util.Map<String, String> oldValues() {
+        java.util.Map<String, String> old = new java.util.HashMap<>();
         for (NameMode mode : values()) {
-            if (mode.id == id) {
+            old.put(String.valueOf(mode.oldId), mode.configName);
+        }
+        return old;
+    }
+
+    /** The mode of a value of the config file, which has to be one of {@link #configNames()}. */
+    public static NameMode byName(String name) {
+        for (NameMode mode : values()) {
+            if (mode.configName.equalsIgnoreCase(name)) {
                 return mode;
             }
         }
-        return null;
+        return FOLLOW;
     }
 }

@@ -2,7 +2,7 @@ package de.elia.cameraplugin.display;
 
 import de.elia.cameraplugin.config.ConfigReader;
 
-import java.util.Locale;
+import java.util.Map;
 
 /**
  * The section {@code action-bar} of the config file: what stands above the
@@ -10,8 +10,13 @@ import java.util.Locale;
  */
 public final class ActionBarSettings {
 
+    /** The value of {@code action-bar.display} for the line at the start alone. */
+    public static final String START_ONLY = "start-only";
+
+    /** What {@link #START_ONLY} was called before: {@code false}, which an older file may still have. */
+    public static final Map<String, String> OLD_DISPLAY_VALUES = Map.of("false", START_ONLY);
+
     private boolean actionBarEnabled;
-    private int actionBarOffDuration;
     /** How long {@code actionbar-on} stands at the start before the distance, in ticks, {@code action-bar.on-duration}. */
     private int actionBarOnDuration;
     /** What the action bar shows while camera mode runs, {@code action-bar.display}. */
@@ -23,23 +28,18 @@ public final class ActionBarSettings {
      */
     public ActionBarSettings(ConfigReader config) {
         actionBarEnabled = config.getBoolean("action-bar.enabled", true);
-        actionBarOffDuration = config.getInt("action-bar.off-duration", 10, 0);
         actionBarOnDuration = config.getInt("action-bar.on-duration", 60, 0);
-        String display = config.getChoice("action-bar.display", "distance", "distance", "text", "false")
-                .toLowerCase(Locale.ROOT);
+        String display = config.getChoice("action-bar.display", "distance", OLD_DISPLAY_VALUES,
+                "distance", "text", START_ONLY);
         actionBarDisplay = switch (display) {
             case "text" -> ActionBarDisplay.TEXT;
-            case "false" -> ActionBarDisplay.START;
+            case START_ONLY -> ActionBarDisplay.START;
             default -> ActionBarDisplay.DISTANCE;
         };
     }
 
     public boolean enabled() {
         return actionBarEnabled;
-    }
-
-    public int offDuration() {
-        return actionBarOffDuration;
     }
 
     public int onDuration() {

@@ -287,7 +287,7 @@ final class NewSpotPages {
         Runnable back = admin ? () -> menu.spotAdminPages.openSpotsOf(player, owner, ownerName, 0)
                 : () -> menu.spotPages.openSpots(player, SpotTab.PRIVATE, 0);
         Spot spot = spots.spotsOf(owner).get(key);
-        if (spot == null || !settings.spots().options()) {
+        if (spot == null || !settings.spots().enabled()) {
             back.run();
             return;
         }

@@ -2324,9 +2324,9 @@ def prepare_server_files(env):
     # und eines frueheren Laufs, playerdata bleibt stehen - bei jedem wieder,
     # der cam-trail einschaltet. Nur flugspur_checks schaltet storage: file
     # fuer sich ein und raeumt seine Dateien wieder weg.
-    text, n = replace_option(text, "storage", "memory", "cam-trail")
+    text, n = set_section_storage(text, "cam-trail", "memory")
     if n != 1:
-        Log.warn("cam-trail.storage nicht in der Konfiguration gefunden")
+        Log.warn("cam-trail nicht in der Konfiguration gefunden")
     # Ein Leader laedt denselben Spieler voreingestellt erst nach einer Minute
     # wieder ein. Die Abschnitte laden ihn immer wieder ein; nur
     # fuehrung_checks stellt die Wartezeit fuer sich ein und prueft sie.
@@ -3970,6 +3970,24 @@ def replace_option(text, key, value, section=None):
     return text[:head.end()] + block + rest[cut:], n
 
 
+def set_section_storage(text, section, value):
+    """storage eines einzelnen Abschnitts setzen, abweichend von dem ganz oben.
+
+    Die mitgelieferte config.yml hat storage nur einmal, ganz oben fuer alles;
+    ein Abschnitt darf eine eigene Zeile storage haben. Steht sie schon da,
+    wird sie ersetzt, sonst direkt unter dem Kopf des Abschnitts eingefuegt.
+    Gibt den neuen Text und die Zahl der Treffer zurueck (1, wenn es geklappt
+    hat).
+    """
+    text, n = replace_option(text, "storage", value, section)
+    if n:
+        return text, n
+    head = re.search(rf"(?m)^{re.escape(section)}:.*$", text)
+    if head is None:
+        return text, 0
+    return text[:head.end()] + f"\n  storage: {value}" + text[head.end():], 1
+
+
 # Die Sprachdatei, die das Plugin mitbringt und der Testserver benutzt, unter
 # src/main/resources wie unter plugins/CamFly.
 SPRACHDATEI = "lang/en.yml"
@@ -3984,7 +4002,9 @@ def set_options(env, changes):
     neu laden. Jede Aenderung ist (Schluessel, Wert) oder, wo der Name
     mehrdeutig ist, (Schluessel, Wert, Abschnitt). Was unter messages oder
     message-settings steht, kommt in die Sprachdatei, alles andere in die
-    config.yml - fuer einen Text braucht es deshalb immer den Abschnitt."""
+    config.yml - fuer einen Text braucht es deshalb immer den Abschnitt.
+    storage mit einem Abschnitt ist das eigene storage dieses Abschnitts, das
+    eingefuegt wird, wo es fehlt; ohne Abschnitt das fuer alles ganz oben."""
     data_dir = env.server / "plugins" / "CamFly"
     texte = {}
     for change in changes:
@@ -3993,7 +4013,10 @@ def set_options(env, changes):
         datei = SPRACHDATEI if section in SPRACH_ABSCHNITTE else "config.yml"
         if datei not in texte:
             texte[datei] = (data_dir / datei).read_text(encoding="utf-8")
-        texte[datei], n = replace_option(texte[datei], key, value, section)
+        if key == "storage" and section is not None:
+            texte[datei], n = set_section_storage(texte[datei], section, value)
+        else:
+            texte[datei], n = replace_option(texte[datei], key, value, section)
         if n != 1:
             where = f" unter {section}" if section else ""
             FIND.problem(f"{key} steht {n} Mal in {datei} auf dem Testserver{where}")
@@ -4697,16 +4720,16 @@ def aktionsleiste_checks(env, bot):
                   gesagt(z, r"[Cc]am mode activated") and not abstaende(z), zeige(z[-3:]))
         cam_off(bot)
 
-        set_option(env, "display", "false", "action-bar")
+        set_option(env, "display", "start-only", "action-bar")
         since = bot.mark()
         cam_on(bot)
         z = zeilen_seit(bot, since)
-        FIND.test("display: false - zu Beginn die Startzeile mit dem Hinweis",
+        FIND.test("display: start-only - zu Beginn die Startzeile mit dem Hinweis",
                   gesagt(z, r"[Cc]am mode activated") and gesagt(z, r"to leave"), zeige(z))
         since = bot.mark()
         time.sleep(5.0)
         z = zeilen_seit(bot, since)
-        FIND.test("display: false - danach kommt nichts mehr, weder die Startzeile noch der Abstand",
+        FIND.test("display: start-only - danach kommt nichts mehr, weder die Startzeile noch der Abstand",
                   not gesagt(z, r"[Cc]am mode activated") and not abstaende(z), zeige(z))
     finally:
         cam_off(bot)
@@ -4937,7 +4960,7 @@ def abschalten_checks(env, bot):
     Beim Ende des Servers ist das Plugin schon aus, wenn es den Cam-Modus
     aller beendet, und Bukkit nimmt ihm hidePlayer dann nicht mehr ab. Damit
     alles drankommt, was dabei jemanden verbergen wollte, steht
-    player_visibility_mode auf cam - wer zuerst aus dem Cam-Modus kommt,
+    player-visibility auf cam - wer zuerst aus dem Cam-Modus kommt,
     saehe den anderen nicht mehr -, anti-scouting ist an, mit radius 8, und
     der Gast, ohne op, ist im Fotomodus; ein dritter Spieler stand beim Start
     des Fotomodus nah und steht nun weit weg: Das Ende des Fotomodus gibt ihn
@@ -5009,7 +5032,7 @@ def abschalten_checks(env, bot):
                   kennt(bot, gast_nr) and kennt(zuschauer, fuehrer_nr),
                   f"{kennt(bot, gast_nr)} / {kennt(zuschauer, fuehrer_nr)}")
 
-        set_options(env, [("player_visibility_mode", "cam"), ("enabled", "true", "anti-scouting"),
+        set_options(env, [("player-visibility", "cam"), ("enabled", "true", "anti-scouting"),
                           ("radius", "8.0", "anti-scouting")])
         hinstellen(bot, x, y, z)
         console(env, f"tp {DRITTER_NAME} {x + 3} {y} {z + 2}", pause=1.0)
@@ -5064,18 +5087,17 @@ def abschalten_checks(env, bot):
             if not neu_gestartet:
                 cam_off(bot)
                 # Wie der Testserver es fuer alle anderen Abschnitte hat.
-                set_options(env, [("player_visibility_mode", "true"), ("enabled", "false", "anti-scouting"),
+                set_options(env, [("player-visibility", "true"), ("enabled", "false", "anti-scouting"),
                                   ("radius", "32.0", "anti-scouting")])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test des Abschaltens: {exc}")
 
 
 def absturz_checks(env, bot):
-    """crash-protection: die Datei unter plugins/CamFly/playerdata/crash, und was
-    nach einem Absturz aus ihr wird.
+    """Der Absturzschutz (immer an): die Datei unter plugins/CamFly/playerdata/crash,
+    und was nach einem Absturz aus ihr wird.
 
-    Im Cam-Modus liegt eine Datei da, nach dem Ende nicht mehr; mit
-    enabled: false gibt es gar keine. Fuer den Absturz traegt der Bot sieben
+    Im Cam-Modus liegt eine Datei da, nach dem Ende nicht mehr. Fuer den Absturz traegt der Bot sieben
     Diamanten, steht im Ueberlebensmodus und fliegt im Cam-Modus sechs Bloecke
     hoch, schneller gedreht. save-all schreibt ihn so auf die Platte, wie er
     im Cam-Modus ist - ohne Diamanten, im Abenteuermodus, in der Luft -, und
@@ -5126,13 +5148,6 @@ def absturz_checks(env, bot):
     FIND.test("crash-protection: nach dem Ende ist die Datei wieder weg", not dateien(), str(dateien()))
     FIND.test("Nach dem Ende leuchtet er nicht mehr", not leuchtet(bot), "")
     FIND.test("Nach dem Ende ist die Notiz des Leuchtens weg", not glow_notiz(bot), "")
-
-    set_option(env, "enabled", "false", "crash-protection")
-    cam_on(bot)
-    time.sleep(0.5)
-    FIND.test("crash-protection.enabled: false - keine Datei", not dateien(), str(dateien()))
-    cam_off(bot)
-    set_option(env, "enabled", "true", "crash-protection")
 
     bot.chat("/clear @s")
     bot.chat("/give @s minecraft:diamond 7")
@@ -6957,7 +6972,7 @@ def welten_checks(env, bot):
     Datei. Steht die Welt des Testservers, "world", darin, startet der
     Cam-Modus trotzdem, solange worlds-enabled false ist. Mit true startet
     er nicht, und die Meldung nennt die Welt; gross geschrieben steht sie
-    genauso in der Liste. Mit cam-area.level: 0 zaehlt auch diese Liste
+    genauso in der Liste. Mit cam-area.level: false zaehlt auch diese Liste
     nicht.
     """
     try:
@@ -6979,13 +6994,13 @@ def welten_checks(env, bot):
         FIND.test("forbidden-worlds: der Name zaehlt ohne Gross- und Kleinschreibung",
                   gesagt(z, r"can't start cam mode in the world world"), zeige(z))
 
-        set_option(env, "level", "0", "cam-area")
+        set_option(env, "level", "false", "cam-area")
         an = cam_on(bot)
         cam_off(bot)
-        FIND.test("cam-area.level: 0 - auch die Welten-Liste zaehlt nicht", an, "")
+        FIND.test("cam-area.level: false - auch die Welten-Liste zaehlt nicht", an, "")
     finally:
         cam_off(bot)
-        set_options(env, [("worlds-enabled", "false"), ("forbidden-worlds", "[lobby]"), ("level", "2", "cam-area")])
+        set_options(env, [("worlds-enabled", "false"), ("forbidden-worlds", "[lobby]"), ("level", "always", "cam-area")])
 
 
 def angriff_checks(env, bot):
@@ -7606,10 +7621,12 @@ def flugspur_checks(env, bot):
                   f"{BOT_NAME} has no recorded flights" in log, log.strip()[-200:] or "nichts im Log")
 
         # storage: file - eine Datei je Flug unter playerdata/trails/<UUID>/.
-        FIND.test("Voreingestellt steht cam-trail.storage: file da, mit keep-days: 30 (der Testserver merkt sie "
-                  "sich nur im Arbeitsspeicher)",
-                  re.search(r"(?m)^  storage:\s*file\n(?:\s*#.*\n)*\s*keep-days:\s*30\s*$",
-                            quelle[quelle.index("\ncam-trail:"):]) is not None, "")
+        FIND.test("Voreingestellt steht storage: file ganz oben und cam-trail mit keep-days: 30 da, ohne ein "
+                  "eigenes storage (der Testserver merkt sich die Fluege nur im Arbeitsspeicher)",
+                  re.search(r"(?m)^storage:\s*file\s*$", quelle) is not None
+                  and re.search(r"(?m)^  keep-days:\s*30\s*$", quelle[quelle.index("\ncam-trail:"):]) is not None
+                  and re.search(r"(?m)^  storage:", quelle[quelle.index("\ncam-trail:"):].split("\n\n# ")[0]) is None,
+                  "")
         shutil.rmtree(spuren, ignore_errors=True)
 
         def flug(**weg):
@@ -7867,11 +7884,12 @@ def aussichtspunkt_checks(env, bot):
     biom = f"{bx - 4} {max(-64, y - 4)} {bz - 4} {bx + 4} {min(320, y + 4)} {bz + 4}"
     wand = f"{_floor(x) + 5} {y} {bz - 3} {_floor(x) + 5} {y + 4} {bz + 3}"
     try:
-        FIND.test("Voreingestellt steht viewpoints mit enabled: true, max-per-player: 10 und storage: file da",
+        FIND.test("Voreingestellt steht viewpoints mit enabled: true und max-per-player: 10 da, storage: file "
+                  "ganz oben",
                   re.search(r"(?m)^viewpoints:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*start-distance:\s*16\s*\n"
                             r"(?:\s*#.*\n)*(?:\s*set-in-cam-only:\s*(?:true|false)\s*\n)?"
-                            r"(?:\s*#.*\n)*\s*max-per-player:\s*10\s*\n"
-                            r"(?:\s*#.*\n)*\s*storage:\s*file\s*$", ausgeliefert(env)) is not None, "")
+                            r"(?:\s*#.*\n)*\s*max-per-player:\s*10\s*$", ausgeliefert(env)) is not None
+                  and re.search(r"(?m)^storage:\s*file\s*$", ausgeliefert(env)) is not None, "")
         spots_loeschen(bot, "Turm", "Weit", "Mem")
         zeilen = befehl(bot, "/cam spot")
         FIND.test("/cam spot ohne Punkte sagt, wie man einen setzt", gesagt(zeilen, r"No spots yet"),
@@ -8465,8 +8483,8 @@ def zeit_wetter_checks(env, bot):
 
 def nachtsicht_wahl_checks(env, bot):
     """night-vision.player-choice: /cam nightvision, die Nachtsicht, die jeder
-    Spieler fuer sich selbst einstellt - mit player-settings.storage: file in
-    seiner Datei, mit memory, bis er den Server verlaesst.
+    Spieler fuer sich selbst einstellt - mit storage: file in seiner Datei,
+    mit storage: memory unter player-settings, bis er den Server verlaesst.
 
     Voreingestellt ist es an - nachgesehen in der ausgelieferten Datei. mode
     bleibt dark: am hellen Tag keine Nachtsicht, um Mitternacht schon. on
@@ -8539,7 +8557,7 @@ def nachtsicht_wahl_checks(env, bot):
         if FIND.test("Neu angemeldet fuer die eigene Nachtsicht", neu_anmelden(bot), ""):
             cam_on(bot)
             time.sleep(1.0)
-            FIND.test("player-settings.storage: file - nach dem Ab- und Anmelden gilt die Wahl weiter: am Tag mit",
+            FIND.test("storage: file - nach dem Ab- und Anmelden gilt die Wahl weiter: am Tag mit",
                       hat(), "")
             cam_off(bot)
         datei = spielerdatei(env)
@@ -8621,9 +8639,11 @@ def einstellungen_checks(env, bot):
         return bot.call("sky").get("rain") or 0
 
     quelle = (env.repo / "src" / "main" / "resources" / "config.yml").read_text(encoding="utf-8")
-    FIND.test("Voreingestellt steht player-settings mit storage: file und flight-speed: true da, ohne time und weather",
-              re.search(r"(?m)^player-settings:\s*\n(?:\s*#.*\n)*\s*storage:\s*file\s*\n(?:\s*#.*\n)*"
-                        r"\s*flight-speed:\s*true[ \t]*\n(?![ \t]+[\w#])", quelle) is not None, "")
+    FIND.test("Voreingestellt steht storage: file ganz oben und player-settings mit flight-speed: true da, ohne "
+              "time, weather und ein eigenes storage",
+              re.search(r"(?m)^storage:\s*file\s*$", quelle) is not None
+              and re.search(r"(?m)^player-settings:\s*\n(?:\s*#.*\n)*"
+                            r"\s*flight-speed:\s*true[ \t]*\n(?![ \t]+[\w#])", quelle) is not None, "")
     try:
         cam_off(bot)
         console(env, "weather clear", pause=0.5)
@@ -10890,9 +10910,9 @@ def weiter_checks(env, bot):
             pause=0.5)
     stein = None
     try:
-        FIND.test("Voreingestellt steht resume-command mit enabled: true und storage: file da",
-                  re.search(r"(?m)^resume-command:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*storage:\s*file\s*$",
-                            ausgeliefert(env)) is not None, "")
+        FIND.test("Voreingestellt steht resume-command mit enabled: true da, storage: file ganz oben",
+                  re.search(r"(?m)^resume-command:\s*\n\s*enabled:\s*true\s*$", ausgeliefert(env)) is not None
+                  and re.search(r"(?m)^storage:\s*file\s*$", ausgeliefert(env)) is not None, "")
         hinstellen(bot, x, y, z)
         if not FIND.test("Cam-Modus fuer /cam resume gestartet", cam_on(bot), ""):
             return
@@ -12552,11 +12572,12 @@ def spotmoderation_checks(env, bot):
     Der zweite Spieler setzt drei Punkte: ModA privat, ModB oeffentlich, ModC
     dem Bot angeboten. Auf der Admin-Seite (Knopf auf 20) steht er unter den
     Spielern mit Punkten, mit "Spots: 3, public: 1, shared: 1", und ein Klick
-    zeigt seine Punkte: ModA privat, ModB oeffentlich, ModC angeboten. Ein
-    Linksklick nimmt ModB herunter - er ist wieder privat, und der Besitzer
-    erfaehrt es -, ein Umschalt-Klick loescht ModA, auch das erfaehrt er.
-    Ein Rechtsklick auf ModC teleportiert den Bot hin, auch 30 Bloecke
-    weit. Der Trichter sortiert seine Punkte, erst die neuesten, nach einem
+    zeigt seine Punkte: ModA privat, ModB oeffentlich, ModC angeboten, unter
+    jedem Linksklick hin, Rechtsklick Optionen. In den Optionen von ModB nimmt
+    Make private ihn herunter - er ist wieder privat, und der Besitzer
+    erfaehrt es -, in denen von ModA loeschen Delete und die Bestaetigung
+    ihn, auch das erfaehrt er. Ein Linksklick auf ModC teleportiert den Bot
+    hin, auch 30 Bloecke weit. Der Trichter sortiert seine Punkte, erst die neuesten, nach einem
     Klick nach dem Namen.
 
     Der Knopf der Einschraenkung (49) oeffnet ihre Seite, mit je einem Knopf
@@ -12572,13 +12593,9 @@ def spotmoderation_checks(env, bot):
     Knopf glaenzt danach, und auf seiner Seite hebt der Milcheimer (35) die
     Einschraenkung auf: er darf wieder speichern.
 
-    Geht er offline, steht er weiter in der Liste, und ein Umschalt-Klick
+    Geht er offline, steht er weiter in der Liste, und Delete in den Optionen
     loescht seine Punkte aus seiner Datei. Die Koepfe der Seite fragen nicht
     bei Mojang nach: die Spieler dieses Servers haben keine Skin.
-
-    Das alles mit viewpoints.options.enabled: false, den Klicks von frueher;
-    die Seite der Optionen, die sonst Herunternehmen und Loeschen hat, prueft
-    spotoptionen.
     """
     def fenster(client):
         return client.call("window_slots", wait=10)
@@ -12594,6 +12611,20 @@ def spotmoderation_checks(env, bot):
 
     def platz(f, anfang):
         return next((i for i, t in texte(f).items() if t.startswith(anfang)), None)
+
+    def in_den_optionen(name, knopf, bestaetigen=False):
+        """Rechtsklick auf einen seiner Punkte, dann ein Knopf seiner Optionen -
+        und beim Loeschen die Bestaetigung (22) darunter."""
+        wo = platz(fenster(bot), name)
+        if wo is None:
+            return
+        klick(bot, wo, button=1)
+        hier = platz(fenster(bot), knopf)
+        if hier is None:
+            return
+        klick(bot, hier)
+        if bestaetigen:
+            klick(bot, 22)
 
     def seine_punkte():
         """Die Admin-Seite der Punkte, und darauf der zweite Spieler."""
@@ -12616,7 +12647,6 @@ def spotmoderation_checks(env, bot):
     datei = env.server / "plugins" / "CamFly" / "playerdata" / "stats" / f"{offline_uuid(ZUSCHAUER_NAME)}.yml"
     log_vorher = len(server_log(env))
     try:
-        spot_option(env, "enabled", "false")
         zuschauer.start()
         if not FIND.test("Zweiter Spieler fuer die Moderation kommt herein",
                          zuschauer.call("wait_spawn", wait=90, timeout=75000).get("spawned"), ""):
@@ -12641,32 +12671,35 @@ def spotmoderation_checks(env, bot):
         FIND.test("Ein Klick zeigt seine Punkte: privat, oeffentlich, angeboten",
                   f"Spots: {ZUSCHAUER_NAME}" in (f.get("title") or "") and "Private" in a
                   and "Public, 0 likes" in b and f"Offered to: {BOT_NAME}" in c
-                  and "Left-click: make private" in b and "Shift-click: delete" in a,
+                  and "Left-click: go there" in a and "Right-click: options" in a,
                   f"{f.get('title')} / {a} / {b} / {c}")
 
         seit = zuschauer.mark()
-        klick(bot, platz(f, "ModB"))
+        in_den_optionen("ModB", "Make private")
         dort = zeilen_seit(zuschauer, seit)
-        f = fenster(bot)
+        bot.call("close_window", wait=10)
+        liste, f = seine_punkte()
         b = texte(f).get(platz(f, "ModB"), "")
-        FIND.test("Linksklick nimmt einen oeffentlichen herunter: wieder privat, und der Besitzer erfaehrt es",
+        FIND.test("Make private in den Optionen nimmt einen oeffentlichen herunter: wieder privat, und der Besitzer "
+                  "erfaehrt es",
                   "Private" in b and gesagt(dort, rf"{BOT_NAME} made your spot ModB private"), f"{b} / {zeige(dort)}")
         seit = zuschauer.mark()
-        klick(bot, platz(f, "ModA"), mode=1)
+        in_den_optionen("ModA", "Delete", bestaetigen=True)
         dort = zeilen_seit(zuschauer, seit)
         f = fenster(bot)
-        FIND.test("Umschalt-Klick loescht einen Punkt, und der Besitzer erfaehrt es",
-                  platz(f, "ModA") is None and gesagt(dort, rf"{BOT_NAME} deleted your spot ModA"),
+        FIND.test("Delete in den Optionen und die Bestaetigung loeschen einen Punkt, und der Besitzer erfaehrt es",
+                  platz(f, "ModA") is None and platz(f, "ModB") is not None
+                  and gesagt(dort, rf"{BOT_NAME} deleted your spot ModA"),
                   f"{list(texte(f).values())} / {zeige(dort)}")
 
-        # Weit weg vom Punkt: der Rechtsklick fragt nicht, wie weit.
+        # Weit weg vom Punkt: der Linksklick fragt nicht, wie weit.
         bot.call("close_window", wait=10)
         hinstellen(bot, x - 30, y, z)
         liste, f = seine_punkte()
         seit = bot.mark()
-        klick(bot, platz(f, "ModC"), button=1, warten=2.0)
+        klick(bot, platz(f, "ModC"), warten=2.0)
         wo = bot.server_pos()
-        FIND.test("Rechtsklick teleportiert den Admin zum Punkt, von wo er auch ist",
+        FIND.test("Linksklick teleportiert den Admin zum Punkt, von wo er auch ist",
                   wo is not None and math.dist(wo, (x + 2, y, z)) < 0.6
                   and gesagt(zeilen_seit(bot, seit), rf"At {ZUSCHAUER_NAME}'s spot ModC"),
                   f"{wo} / {zeige(zeilen_seit(bot, seit))}")
@@ -12831,13 +12864,11 @@ def spotmoderation_checks(env, bot):
                   f"{list(texte(liste).values())} / {list(texte(f).values())}")
         seit = bot.mark()
         for name in ("ModD", "ModC", "ModB"):
-            wo = platz(fenster(bot), name)
-            if wo is not None:
-                klick(bot, wo, mode=1)
+            in_den_optionen(name, "Delete", bestaetigen=True)
         hier = zeilen_seit(bot, seit)
         bot.call("close_window", wait=10)
         text = datei.read_text(encoding="utf-8") if datei.exists() else ""
-        FIND.test("Offline loescht der Umschalt-Klick seine Punkte aus seiner Datei",
+        FIND.test("Offline loescht Delete in den Optionen seine Punkte aus seiner Datei",
                   gesagt(hier, rf"Deleted {ZUSCHAUER_NAME}'s spot ModD") and "ModD" not in text
                   and "ModB" not in text, f"{zeige(hier)} / {text[-300:]}")
         # Die Koepfe der Spieler ohne Skin - auf diesem Server alle - fragt
@@ -12854,18 +12885,17 @@ def spotmoderation_checks(env, bot):
                 spots_loeschen(zuschauer, "ModA", "ModB", "ModC", "ModD")
                 zuschauer.stop()
             einschraenkungen_weg(env, "spot-bans.yml")
-            spot_option(env, "enabled", "true")
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test der Moderation: {exc}")
 
 
 def spotoptionen_checks(env, bot):
-    """viewpoints.create-page, -icons und -options: wie ein Punkt im Menue
-    entsteht, welches Symbol er hat und was seine Optionen koennen.
+    """viewpoints.icons und -options: wie ein Punkt im Menue entsteht,
+    welches Symbol er hat und was seine Optionen koennen.
 
-    Voreingestellt stehen create-page: true, die Symbole mit filled_map und
-    map vorn, options mit enabled, rename, icon, share und delete an und move
-    aus, dazu bedrock.map-icons: false da - nachgesehen in der Datei, die das
+    Voreingestellt stehen die Symbole mit filled_map und map vorn, options
+    mit rename, icon, share und delete an und move aus, dazu
+    bedrock.map-icons: false da - nachgesehen in der Datei, die das
     Plugin mitbringt.
 
     Ein neuer Punkt: das Buch fragt nach dem Namen. Einen, den er schon hat,
@@ -12895,10 +12925,7 @@ def spotoptionen_checks(env, bot):
     cam mode" darunter, und ein Klick sagt, dass es nur dort geht - der Punkt
     bleibt -; im Cam-Modus wandert er an die Stelle der Kamera und behaelt
     sein Symbol. Delete und gleich Keep it lassen ihn stehen. Mit
-    options.rename: false fehlt Umbenennen. Mit options.enabled: false stehen
-    unter dem Punkt die Klicks von frueher, und der Rechtsklick oeffnet wieder
-    die Seite zum Teilen. Mit create-page: false speichert der Name im Chat
-    den Punkt sofort, ohne Seite.
+    options.rename: false fehlt Umbenennen.
 
     Auf der Admin-Seite der Punkte steht unter einem Punkt des Bots Linksklick
     hin, Rechtsklick Optionen; seine Optionen fuer Admins haben Umbenennen,
@@ -12965,11 +12992,10 @@ def spotoptionen_checks(env, bot):
         time.sleep(1.5)
         cam_off(zuschauer)
         quelle = quelle_config(env)
-        FIND.test("Voreingestellt stehen viewpoints.create-page: true, icons mit filled_map und map vorn, options "
-                  "mit enabled, rename, icon, share und delete an und move aus, und bedrock.map-icons: false da",
-                  re.search(r"(?m)^  create-page:\s*true\s*$", quelle) is not None
-                  and re.search(r"(?m)^  icons:\s*\n\s*- filled_map\s*\n\s*- map\s*\n", quelle) is not None
-                  and re.search(r"(?m)^  options:\s*\n(?:\s*#.*\n)*\s*enabled:\s*true\s*\n(?:\s*#.*\n)*"
+        FIND.test("Voreingestellt stehen viewpoints.icons mit filled_map und map vorn, options "
+                  "mit rename, icon, share und delete an und move aus, und bedrock.map-icons: false da",
+                  re.search(r"(?m)^  icons:\s*\n\s*- filled_map\s*\n\s*- map\s*\n", quelle) is not None
+                  and re.search(r"(?m)^  options:\s*\n(?:\s*#.*\n)*"
                                 r"\s*rename:\s*true\s*\n(?:\s*#.*\n)*\s*icon:\s*true\s*\n(?:\s*#.*\n)*"
                                 r"\s*share:\s*true\s*\n(?:\s*#.*\n)*\s*delete:\s*true\s*\n(?:\s*#.*\n)*"
                                 r"\s*move:\s*false\s*$", quelle) is not None
@@ -13190,28 +13216,6 @@ def spotoptionen_checks(env, bot):
                   and platz_mit(f, "Change icon") is not None and platz_mit(f, "Delete") is not None, str(knoepfe(f)))
         bot.call("close_window", wait=10)
         spot_option(env, "rename", "true")
-        spot_option(env, "enabled", "false")
-        f = punkte()
-        wo = platz_mit(f, "Optdrei")
-        unter = item_text(item(f, wo)) if wo is not None else ""
-        if wo is not None:
-            klick(wo, button=1)
-        f = fenster()
-        FIND.test("options.enabled: false - unter dem Punkt die Klicks von frueher, und der Rechtsklick oeffnet die "
-                  "Seite zum Teilen",
-                  "Shift-click: delete" in unter and "Right-click: share" in unter and "Share Optdrei" in titel(f),
-                  f"{unter} / {titel(f)}")
-        bot.call("close_window", wait=10)
-        spot_option(env, "enabled", "true")
-        set_option(env, "create-page", "false", "viewpoints")
-        punkte()
-        seit = bot.mark()
-        klick(53)
-        befehl(bot, "Sofort")
-        zeilen = zeilen_seit(bot, seit)
-        FIND.test("create-page: false - der Name im Chat speichert den Punkt sofort, ohne Seite",
-                  gesagt(zeilen, r"Spot Sofort saved\.") and not fenster().get("open"), zeige(zeilen))
-        set_option(env, "create-page", "true", "viewpoints")
 
         # --- Die Optionen fuer Admins ---
         befehl(bot, "/cam menu", warten=1.0)
@@ -13259,8 +13263,6 @@ def spotoptionen_checks(env, bot):
             cam_off(bot)
             spot_option(env, "move", "false")
             spot_option(env, "rename", "true")
-            spot_option(env, "enabled", "true")
-            set_option(env, "create-page", "true", "viewpoints")
             spots_loeschen(bot, *namen_der_punkte)
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
@@ -14124,10 +14126,10 @@ def herzen_am_namen_checks(env, bot):
 
 
 def wartezeit_checks(env, bot):
-    """time-limit: die Wartezeit nach dem Cam-Modus - ihre Bossbar, ihre
+    """cooldown: die Wartezeit nach dem Cam-Modus - ihre Bossbar, ihre
     Einteilung und wo sie liegt.
 
-    Mit cooldowns-enabled und 30 Sekunden Wartezeit bringt ein Ende durch
+    Mit cooldown.enabled und 30 Sekunden Wartezeit bringt ein Ende durch
     /cam reload keine Wartezeit, der Cam-Modus startet gleich wieder. Nach
     einem /cam zeigt eine Bossbar "Cam mode again in ...", voreingestellt
     ohne Einteilung, und ein neuer Start wird abgelehnt. /cam stats nennt die
@@ -14135,76 +14137,76 @@ def wartezeit_checks(env, bot):
     Voreingestellt liegt sie dort (storage: file): Ein /cam reload laesst
     sie weiterlaufen, ebenso das Neuanmelden, und die Bossbar ist danach
     wieder da. Mit bossbar-notches: 12 hat sie zwoelf Abschnitte, mit
-    show-bossbar-cooldown: false gibt es keine. Mit storage: memory zaehlt
+    show-bossbar: false gibt es keine. Mit storage: memory unter cooldown zaehlt
     die Datei nicht, und ein /cam reload vergisst, was im Speicher liegt. Mit
     3 Sekunden ist sie bald vorbei: "Cam mode available again", und die
     Bossbar verschwindet.
     """
     try:
         cam_off(bot)
-        set_options(env, [("cooldowns-enabled", "true"), ("cooldown-seconds", "30", "time-limit")])
+        set_options(env, [("enabled", "true", "cooldown"), ("seconds", "30", "cooldown")])
         if not FIND.test("Cam-Modus fuer die Wartezeit gestartet", cam_on(bot), ""):
             return
         console(env, "cam reload", pause=2)
         an = cam_on(bot)
-        FIND.test("time-limit: ein Ende durch /cam reload bringt keine Wartezeit", an, "")
+        FIND.test("cooldown: ein Ende durch /cam reload bringt keine Wartezeit", an, "")
         cam_off(bot)
         time.sleep(1.5)
         treffer, titel = bossbar_suche(bot, r"Cam mode again in \d")
-        FIND.test("show-bossbar-cooldown: nach dem Ende zeigt eine Bossbar die Wartezeit", bool(treffer), str(titel))
-        FIND.test("time-limit.bossbar-notches: voreingestellt 0 - die Bossbar ohne Einteilung",
+        FIND.test("cooldown.show-bossbar: nach dem Ende zeigt eine Bossbar die Wartezeit", bool(treffer), str(titel))
+        FIND.test("cooldown.bossbar-notches: voreingestellt 0 - die Bossbar ohne Einteilung",
                   bool(treffer) and treffer[0].get("dividers") == 0, str(treffer))
         z = befehl(bot, "/cam")
-        FIND.test("time-limit: waehrend der Wartezeit wird ein Start abgelehnt",
+        FIND.test("cooldown: waehrend der Wartezeit wird ein Start abgelehnt",
                   gesagt(z, r"Cam mode again in \d") and not gesagt(z, r"[Cc]am mode activated"), zeige(z))
         z = befehl(bot, "/cam stats")
         FIND.test("/cam stats nennt die Wartezeit", gesagt(z, r"Cam mode again in: \d"), zeige(z))
         datei = spielerdatei(env)
-        FIND.test("time-limit.storage: file - die Wartezeit steht in der Datei unter playerdata/stats",
+        FIND.test("storage: file - die Wartezeit steht in der Datei unter playerdata/stats",
                   datei is not None and re.search(r"(?m)^cooldown:\s*\n\s*started: \d+",
                                                   datei.read_text(encoding="utf-8")) is not None, str(datei))
         console(env, "cam reload", pause=2)
         z = befehl(bot, "/cam")
-        FIND.test("time-limit.storage: file - nach /cam reload laeuft die Wartezeit weiter",
+        FIND.test("storage: file - nach /cam reload laeuft die Wartezeit weiter",
                   gesagt(z, r"Cam mode again in \d"), zeige(z))
         if FIND.test("Bot meldet sich waehrend der Wartezeit neu an", neu_anmelden(bot), ""):
             treffer, titel = bossbar_suche(bot, r"Cam mode again in")
-            FIND.test("show-bossbar-cooldown: nach dem Betreten ist die Bossbar wieder da", bool(treffer), str(titel))
+            FIND.test("cooldown.show-bossbar: nach dem Betreten ist die Bossbar wieder da", bool(treffer), str(titel))
 
-        set_option(env, "bossbar-notches", "12", "time-limit")
+        set_option(env, "bossbar-notches", "12", "cooldown")
         treffer, titel = bossbar_suche(bot, r"Cam mode again in")
-        FIND.test("time-limit.bossbar-notches: 12 - die Bossbar in zwoelf Abschnitten",
+        FIND.test("cooldown.bossbar-notches: 12 - die Bossbar in zwoelf Abschnitten",
                   bool(treffer) and treffer[0].get("dividers") == 3, str(treffer))
-        set_option(env, "show-bossbar-cooldown", "false")
+        set_option(env, "show-bossbar", "false", "cooldown")
         treffer, titel = bossbar_suche(bot, r"Cam mode again in")
-        FIND.test("show-bossbar-cooldown: false - keine Bossbar", not treffer, str(titel))
+        FIND.test("cooldown.show-bossbar: false - keine Bossbar", not treffer, str(titel))
 
-        set_options(env, [("show-bossbar-cooldown", "true"), ("storage", "memory", "time-limit")])
+        set_options(env, [("show-bossbar", "true", "cooldown"), ("storage", "memory", "cooldown")])
         an = cam_on(bot)
-        FIND.test("time-limit.storage: memory - die Wartezeit in der Datei zaehlt nicht", an, "")
+        FIND.test("cooldown.storage: memory - die Wartezeit in der Datei zaehlt nicht", an, "")
         cam_off(bot)
         z = befehl(bot, "/cam")
-        FIND.test("time-limit.storage: memory - nach dem Ende wartet er wie sonst",
+        FIND.test("cooldown.storage: memory - nach dem Ende wartet er wie sonst",
                   gesagt(z, r"Cam mode again in \d"), zeige(z))
         console(env, "cam reload", pause=2)
         an = cam_on(bot)
-        FIND.test("time-limit.storage: memory - /cam reload vergisst die Wartezeit", an, "")
+        FIND.test("cooldown.storage: memory - /cam reload vergisst die Wartezeit", an, "")
         cam_off(bot)
 
-        set_option(env, "cooldown-seconds", "3", "time-limit")
+        set_option(env, "seconds", "3", "cooldown")
         cam_on(bot)
         since = bot.mark()
         cam_off(bot)
         vorbei = bot.expect(r"Cam mode available again", since, 8000)
         time.sleep(1.0)
         treffer, titel = bossbar_suche(bot, r"Cam mode again in")
-        FIND.test("time-limit: ist die Wartezeit vorbei, kommt \"Cam mode available again\" und die Bossbar geht",
+        FIND.test("cooldown: ist die Wartezeit vorbei, kommt \"Cam mode available again\" und die Bossbar geht",
                   bool(vorbei) and not treffer, str(titel))
     finally:
         cam_off(bot)
-        set_options(env, [("cooldowns-enabled", "false"), ("cooldown-seconds", "120", "time-limit"),
-                          ("show-bossbar-cooldown", "true"), ("bossbar-notches", "0", "time-limit"),
-                          ("storage", "file", "time-limit")])
+        set_options(env, [("enabled", "false", "cooldown"), ("seconds", "120", "cooldown"),
+                          ("show-bossbar", "true", "cooldown"), ("bossbar-notches", "0", "cooldown"),
+                          ("storage", "file", "cooldown")])
 
 
 def akku_speicher_checks(env, bot):
@@ -14426,7 +14428,7 @@ def konfig_ergaenzen_checks(env, bot):
     def wie_mitgeliefert(text):
         """Die Teile, die fehlen werden, so, wie die mitgelieferte sie hat:
         Die Abschnitte davor koennen einen Wert anders gelassen haben."""
-        for schluessel in ("max-distance-enabled", "distance-warning-cooldown"):
+        for schluessel in ("max-distance-enabled", "warning-cooldown"):
             zeile = re.search(rf"(?m)^  {schluessel}: .*$", mitgeliefert).group(0)
             text = re.sub(rf"(?m)^  {schluessel}: .*$", lambda _: zeile, text)
         block = re.search(afk_abschnitt, mitgeliefert).group(0)
@@ -14443,8 +14445,8 @@ def konfig_ergaenzen_checks(env, bot):
         eigen = config_vorher.replace("language: en\n", "# mein eigener Kommentar\nlanguage: en\n", 1)
         eigen, n1 = replace_option(eigen, "border-radius", "7", "camera-mode")
         gekuerzt, n2 = re.subn(r"(?m)^  max-distance-enabled: .*\n", "", eigen)
-        gekuerzt, n3 = re.subn(r"(?m)^  # Sekunden zwischen zwei Warnungen an der Grenze.*\n  distance-warning-cooldown: .*\n\n",
-                               "", gekuerzt)
+        gekuerzt, n3 = re.subn(r"(?m)^  # Sekunden zwischen zwei Warnungen an einer Grenze.*\n(?:  #.*\n)*"
+                               r"  warning-cooldown: .*\n\n", "", gekuerzt)
         gekuerzt, n4 = re.subn(afk_abschnitt, "", gekuerzt)
         FIND.test("Testdatei: drei Stellen entfernt, zwei eigene Aenderungen",
                   "# mein eigener Kommentar" in eigen and (n1, n2, n3, n4) == (1, 1, 1, 1), f"{n1} {n2} {n3} {n4}")
@@ -14460,7 +14462,7 @@ def konfig_ergaenzen_checks(env, bot):
                   "" if nachher == wie_mitgeliefert(eigen) else diff_kurz(wie_mitgeliefert(eigen), nachher))
         FIND.test("config.yml: die Konsole nennt sie, den ganzen Abschnitt als einen",
                   "config.yml lacked 3 entries, now added with their default values: "
-                  "camera-mode.max-distance-enabled, camera-mode.distance-warning-cooldown, afk-end." in log,
+                  "camera-mode.max-distance-enabled, camera-mode.warning-cooldown, afk-end." in log,
                   log.strip()[-400:])
         FIND.test("config.yml: die Datei davor liegt als config.yml.bak daneben",
                   config_bak.is_file() and config_bak.read_text(encoding="utf-8") == gekuerzt, "")
@@ -15575,7 +15577,7 @@ def rueckstoss_erste_vergleich(name, ohne, mit, nur_hoehe=False):
 
     Mit nur_hoehe zaehlt allein, wie hoch sie geht. Zur Seite haengt sie dann
     davon ab, wo der Mob beim Schlag steht und ob er den Bot vorher schon
-    angerempelt hat - den Koerper rempelt auf Stufe 1 niemand an.
+    angerempelt hat - den Koerper rempelt auf normal niemand an.
     """
     erste_ohne = ohne and ohne["erste"]
     if not FIND.test(f"{name} ohne Cam-Modus stoesst den Bot (Gegenprobe)", bool(erste_ohne),
@@ -15756,15 +15758,15 @@ def koerpertyp_jetzt(env):
 def schieben_checks(env, bot):
     """Ob ein Mob den Koerper schiebt, nach body.movement-sensitivity.
 
-    Auf Stufe 1 schiebt ihn niemand, auf Stufe 2 schieben ihn Spieler und
+    Auf normal schiebt ihn niemand, auf pushable schieben ihn Spieler und
     Mobs - aber nur, wo das Mannequin selbst der Koerper ist, bei mannequin.
-    Beim Ruestungsstaender von armorstand faellt Stufe 2 auf Stufe 1 zurueck.
+    Beim Ruestungsstaender von armorstand faellt pushable auf normal zurueck.
 
     Vom Schieben haelt das Plugin das Mannequin mit dem Team cam_body ab und
     nicht mehr damit, dass es nicht kollidiert: Daran liess der Server auch
     Pfeil, Dreizack, Windkugel und Speerstich vorbeigehen. Diese Probe haelt
     fest, dass das Team das Schieben genauso abhaelt. Ihre Gegenprobe ist
-    Stufe 2 mit mannequin - schiebt das Schwein dort nicht, sagt "schiebt nicht"
+    pushable mit mannequin - schiebt das Schwein dort nicht, sagt "schiebt nicht"
     auch sonst nichts.
 
     Geschoben wird mit einem Schwein, das sich nicht von der Stelle ruehrt:
@@ -15809,12 +15811,12 @@ def schieben_checks(env, bot):
 
     try:
         probe(1, False)
-        set_option(env, "movement-sensitivity", "2")
+        set_option(env, "movement-sensitivity", "pushable")
         probe(2, typ == "mannequin")
     finally:
         try:
             console(env, f"kill @e[tag={INTERACT_TAG}]", pause=0.3)
-            set_option(env, "movement-sensitivity", "1")
+            set_option(env, "movement-sensitivity", "normal")
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Schiebetest: {exc}")
@@ -16511,11 +16513,11 @@ NAME_AUF_SPIELER = "1.8"
 # Namens heissen unter body genauso, deshalb mit Abschnitt; nether steht unter
 # portals und unter cam-area.
 SPIELERNAME_VOREINSTELLUNG = [
-    ("name-visible", "true", "camera-mode"), ("name-mode", "1"),
+    ("name-visible", "true", "camera-mode"), ("name-mode", "move"),
     ("color", "white", "camera-mode"), ("through-walls", "false", "camera-mode"),
     ("view-distance", "64", "camera-mode"), ("background", "true", "camera-mode"),
     ("shadow", "false", "camera-mode"), ("scale", "1.0", "camera-mode"),
-    ("player_visibility_mode", "true"), ("allow_invisibility_potion", "true"),
+    ("player-visibility", "true"), ("allow-invisibility-potion", "true"),
     ("nether", "false", "portals"), ("nether", "false", "cam-area"),
     ("player.name-format", '"{player}\'s Cam"', "messages"),
 ]
@@ -16698,7 +16700,7 @@ def spielername_checks(env, bot):
     def reise(modus):
         """Durch das Netherportal und mit /cam zurueck zum Koerper."""
         hoehe = NAME_UEBER_SPIELER if modus == 1 else NAME_AUF_SPIELER
-        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("name-mode", str(modus)),
+        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("name-mode", "move" if modus == 1 else "ride"),
                                                        ("nether", "true", "portals"),
                                                        ("nether", "true", "cam-area")])
         if not FIND.test(f"Modus {modus}: Portal fuer die Reise steht",
@@ -16859,19 +16861,19 @@ def spielername_checks(env, bot):
             time.sleep(1.0)
 
         # --- Sichtbar traegt er ebenfalls den Namen statt seines Namensschilds ---
-        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("allow_invisibility_potion", "false")])
+        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("allow-invisibility-potion", "false")])
         oben = start()
-        if FIND.test("/cam startet mit allow_invisibility_potion: false", oben is not None, ""):
+        if FIND.test("/cam startet mit allow-invisibility-potion: false", oben is not None, ""):
             FIND.test("Auch sichtbar steht der Name als TextDisplay ueber ihm", spielername_frage(bot), "")
             FIND.test("Ein Spieler ohne Cam-Modus sieht ihn", sieht_ueber(zuschauer, oben), "")
             cam_off(bot)
             time.sleep(1.0)
 
-        # --- player_visibility_mode: cam - nur Kamera-Spieler sehen ihn ---
-        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("player_visibility_mode", "cam")])
+        # --- player-visibility: cam - nur Kamera-Spieler sehen ihn ---
+        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("player-visibility", "cam")])
         oben = start()
-        if FIND.test("/cam startet mit player_visibility_mode: cam", oben is not None, ""):
-            FIND.test("player_visibility_mode: cam: der Name steht ueber ihm", spielername_frage(bot), "")
+        if FIND.test("/cam startet mit player-visibility: cam", oben is not None, ""):
+            FIND.test("player-visibility: cam: der Name steht ueber ihm", spielername_frage(bot), "")
             FIND.test("Wer ihn nicht sehen darf, sieht auch den Namen nicht",
                       not sieht_ueber(zuschauer, oben), "")
             if FIND.test("Der zweite Spieler geht dafuer in den Cam-Modus", cam_on(zuschauer), ""):
@@ -16883,9 +16885,9 @@ def spielername_checks(env, bot):
             time.sleep(1.0)
 
         # --- Wann es keinen Namen gibt ---
-        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("player_visibility_mode", "false")])
-        if FIND.test("/cam startet mit player_visibility_mode: false", start() is not None, ""):
-            FIND.test("player_visibility_mode: false: kein Name, niemand soll ihn sehen",
+        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("player-visibility", "false")])
+        if FIND.test("/cam startet mit player-visibility: false", start() is not None, ""):
+            FIND.test("player-visibility: false: kein Name, niemand soll ihn sehen",
                       not spielername_frage(bot), "")
             cam_off(bot)
             time.sleep(1.0)
@@ -16902,9 +16904,9 @@ def spielername_checks(env, bot):
         reise(1)
 
         # --- Modus 2: der Name sitzt auf ihm ---
-        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("name-mode", "2")])
+        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("name-mode", "ride")])
         oben = start()
-        if FIND.test("/cam startet mit name-mode: 2", oben is not None, ""):
+        if FIND.test("/cam startet mit name-mode: ride", oben is not None, ""):
             FIND.test("Modus 2: der Name sitzt als Passagier auf ihm", passagier(bot), "")
             FIND.test("Modus 2: er sitzt oben auf seinem Kopf",
                       spielername_frage(bot, hoehe=NAME_AUF_SPIELER), "")
@@ -16942,7 +16944,7 @@ def spielername_checks(env, bot):
         # selbst fliegen zu lassen, damit CamFly ihn zurueckholt, geht nicht
         # verlaesslich: Nach einem Weltwechsel stimmt bei mineflayer die eigene
         # Position nicht mehr.
-        if FIND.test("/cam startet mit name-mode: 2 vor dem /tp in den Nether", start() is not None, ""):
+        if FIND.test("/cam startet mit name-mode: ride vor dem /tp in den Nether", start() is not None, ""):
             console(env, f"execute in minecraft:the_nether run tp {BOT_NAME} 0.5 130 0.5", pause=2.0)
             FIND.test("Modus 2: nach /tp in den Nether sitzt der Name dort wieder auf ihm",
                       in_nether(bot) and passagier(bot), "")
@@ -17291,8 +17293,8 @@ def kurz_verlauf(folge):
 
 
 def medium_checks(env, bot):
-    """Die Schalter allow_lava_flight, allow_water_flight und
-    allow_powder_snow_flight unter camera-mode.
+    """Die Schalter allow-lava-flight, allow-water-flight und
+    allow-powder-snow-flight unter camera-mode.
 
     Steht einer auf false, kommt die Kamera nicht hinein: Der Schritt an der
     Kante wird abgebrochen, und der Cam-Modus laeuft weiter. Darin starten
@@ -17353,7 +17355,7 @@ def medium_checks(env, bot):
     # by + 5 und ist oben bei by + 6 zu Ende; die Augen sitzen 1,62 ueber den
     # Fuessen, der Kopf endet bei 1,8.
     durch_die_decke = [(bx + 0.5, by + 4.5, bz - 6.5)]
-    schalter = ("allow_lava_flight", "allow_water_flight", "allow_powder_snow_flight")
+    schalter = ("allow-lava-flight", "allow-water-flight", "allow-powder-snow-flight")
     # Fuer die Wand: je ein Block vorn an Lava, Wasser und Pulverschnee, und
     # der Weg dorthin, anderthalb Bloecke davor. Die Lava und das Wasser zeigen
     # ihre oberste Lage, der Pulverschnee seine Seite zum Testplatz hin.
@@ -17487,26 +17489,26 @@ def medium_checks(env, bot):
         set_options(env, [(name, "false") for name in schalter])
 
         ergebnis = medium_flug(bot, heim, in_die_lava)
-        FIND.test("allow_lava_flight: false - die Kamera bleibt ueber der Lava "
+        FIND.test("allow-lava-flight: false - die Kamera bleibt ueber der Lava "
                   "stehen, der Cam-Modus laeuft weiter, die Meldung kommt",
                   gestoppt(ergebnis, "can't fly into lava",
                            lambda y: y >= oben - 0.01), zeige(ergebnis))
         lief, gesagt = start_in_lava()
-        FIND.test("allow_lava_flight: false - in der Lava startet /cam nicht, "
+        FIND.test("allow-lava-flight: false - in der Lava startet /cam nicht, "
                   "und die Ablehnung sagt warum",
                   not lief and not gesagt_hat(gesagt, "cam mode activated")
                   and gesagt_hat(gesagt, "can't start cam mode in lava"),
                   "; ".join(gesagt) or "nichts im Chat")
 
         ergebnis = medium_flug(bot, heim, ins_becken)
-        FIND.test("allow_water_flight: false - die Kamera bleibt ueber dem Wasser "
+        FIND.test("allow-water-flight: false - die Kamera bleibt ueber dem Wasser "
                   "stehen, der Cam-Modus laeuft weiter, die Meldung kommt",
                   gestoppt(ergebnis, "can't fly into water",
                            lambda y: y >= oben - 0.01), zeige(ergebnis))
 
         # Wer schon drin ist - hier per /tp -, kommt heraus, aber nicht tiefer.
         hinstellen(bot, *heim)
-        if FIND.test("allow_water_flight: false - /cam startet neben dem Becken",
+        if FIND.test("allow-water-flight: false - /cam startet neben dem Becken",
                      cam_on(bot), ""):
             bot.chat(f"/tp {BOT_NAME} {bx + 8.5} {by + 1} {bz + 0.5}")
             time.sleep(1.0)
@@ -17516,31 +17518,31 @@ def medium_checks(env, bot):
             heraus = bot.server_pos()
             cam_off(bot)
             time.sleep(1.0)
-            FIND.test("allow_water_flight: false - wer schon im Wasser ist, "
+            FIND.test("allow-water-flight: false - wer schon im Wasser ist, "
                       "kommt nicht tiefer hinein",
                       tiefer is not None and tiefer[1] > by + 0.9, str(tiefer))
-            FIND.test("allow_water_flight: false - wer schon im Wasser ist, "
+            FIND.test("allow-water-flight: false - wer schon im Wasser ist, "
                       "kommt heraus", heraus is not None and heraus[1] > by + 4.5,
                       str(heraus))
 
         lief, gesagt = medium_start(bot, im_becken, heim)
-        FIND.test("allow_water_flight: false - im Wasser startet /cam nicht, "
+        FIND.test("allow-water-flight: false - im Wasser startet /cam nicht, "
                   "und die Ablehnung sagt warum",
                   not lief and gesagt_hat(gesagt, "can't start cam mode in water"),
                   "; ".join(gesagt) or "nichts im Chat")
 
         ergebnis = medium_flug(bot, heim, in_den_wuerfel)
-        FIND.test("allow_powder_snow_flight: false - die Kamera bleibt auf dem "
+        FIND.test("allow-powder-snow-flight: false - die Kamera bleibt auf dem "
                   "Pulverschnee stehen, der Cam-Modus laeuft weiter, die Meldung kommt",
                   gestoppt(ergebnis, "can't fly into powder snow",
                            lambda y: y >= oben - 0.01), zeige(ergebnis))
         ergebnis = medium_flug(bot, unter_der_decke, durch_die_decke)
-        FIND.test("allow_powder_snow_flight: false - der Kopf der Kamera bleibt "
+        FIND.test("allow-powder-snow-flight: false - der Kopf der Kamera bleibt "
                   "unter der Pulverschnee-Decke",
                   gestoppt(ergebnis, "can't fly into powder snow",
                            lambda y: y + 1.8 <= by + 5.01), zeige(ergebnis))
         lief, gesagt = medium_start(bot, im_wuerfel, heim)
-        FIND.test("allow_powder_snow_flight: false - im Pulverschnee startet /cam "
+        FIND.test("allow-powder-snow-flight: false - im Pulverschnee startet /cam "
                   "nicht, und die Ablehnung sagt warum",
                   not lief and gesagt_hat(gesagt, "can't start cam mode in powder snow"),
                   "; ".join(gesagt) or "nichts im Chat")
@@ -17552,7 +17554,7 @@ def medium_checks(env, bot):
         # Client, der ueber ihr aufhoert zu fliegen: Er landet auf Magma, das
         # nur er hat, und niemand setzt ihn zurueck.
         hinstellen(bot, *heim)
-        if FIND.test("allow_lava_flight: false - /cam startet fuer die Wand in der Lava",
+        if FIND.test("allow-lava-flight: false - /cam startet fuer die Wand in der Lava",
                      cam_on(bot), ""):
             magma = wand_sicht(ueber_der_lava, lava_oben)
             since = bot.mark()
@@ -17603,7 +17605,7 @@ def medium_checks(env, bot):
                 erst = next((i for i, g in enumerate(folge) if g != "blue_stained_glass"), len(folge))
                 danach_anders += [g for g in folge[erst:] if g not in ("water", "air")]
             cam_off(bot)
-            FIND.test("allow_lava_flight: false - mit border-mode: barrier landet die "
+            FIND.test("allow-lava-flight: false - mit border-mode: barrier landet die "
                       "Kamera auf der Lava wie auf einem Block, ohne zurueckgesetzt zu "
                       "werden, und die Meldung kommt",
                       gelandet is not None and oben - 0.01 <= gelandet[1] <= oben + 0.1
@@ -17639,7 +17641,7 @@ def medium_checks(env, bot):
             fall = bot.call("fall", wait=20, ms=2500)
             gelandet = bot.server_pos()
             cam_off(bot)
-            FIND.test("allow_lava_flight: false - mit border-mode: push-back bleibt die "
+            FIND.test("allow-lava-flight: false - mit border-mode: push-back bleibt die "
                       "Lava Lava, und wer hineinfaellt, wird zurueckgesetzt",
                       gesehen == "lava" and fall.get("forced", 0) > 0
                       and gelandet is not None and gelandet[1] >= oben - 0.01,
@@ -19044,9 +19046,7 @@ def portal_checks(env, bot):
          den anderen Weg: Das Nachsehen an der Ankunft.
       5. Mit border-mode: false gibt es keine Grenze: Drueben bleibt er, auch
          im verbotenen Biom.
-      6. Mit forget-changed: false muss das Freigeben aufhoeren - der Eintrag
-         steht dann, bis /cam reload ihn wegraeumt.
-      7. Zum Schluss der Schalter portals.nether selbst.
+      6. Zum Schluss der Schalter portals.nether selbst.
 
     Die Chunks drueben werden festgehalten (/forceload): Ohne einen Spieler
     dort fallen sie weg, und /fill und /fillbiome brauchen sie geladen.
@@ -19149,25 +19149,8 @@ def portal_checks(env, bot):
                   "dem Portal nicht zurueck", ohne["was"] == "drueben", ohne["was"])
         set_option(env, "border-mode", "barrier")
 
-        # --- Und mit forget-changed: false bleibt es stehen ---
-        # Das Umstellen leert das Gemerkte, der Eintrag muss also erst wieder
-        # angelegt werden.
-        set_option(env, "forget-changed", "false")
-        gesperrt, siebte = sperre_herstellen(bot, portal, heim,
-                                            "7: sperren mit forget-changed false")
-        FIND.test("Auch mit forget-changed: false wird ein Portal gemerkt",
-                  gesperrt, siebte["was"])
-        achte = portal_probe(bot, portal, heim, "8: gemerkt")
-        FIND.test("Mit forget-changed: false greift das Gemerkte genauso",
-                  achte["was"] == "abgewiesen", achte["was"])
-        clear_nether_portals(bot, ziel)
-        neunte = portal_probe(bot, portal, heim, "9: Portal drueben weg, ohne Freigabe")
-        FIND.test("Mit forget-changed: false bleibt der Eintrag trotzdem stehen",
-                  neunte["was"] == "abgewiesen", neunte["was"])
-
         # --- Der Schalter fuer das Portal selbst ---
-        set_options(env, [("forget-changed", "true"),
-                          ("nether", "false", "portals")])
+        set_options(env, [("nether", "false", "portals")])
         zehnte = portal_probe(bot, portal, heim, "10: portals.nether false")
         FIND.test("Auf portals.nether: false traegt das Portal ihn gar nicht",
                   zehnte["was"] == "zu", zehnte["was"])
@@ -19193,7 +19176,6 @@ def portal_checks(env, bot):
         time.sleep(0.5)
         set_options(env, [("nether", "false", "portals"),
                           ("nether", "false", "cam-area"),
-                          ("forget-changed", "true"),
                           ("border-mode", "barrier")])
 
 
@@ -20555,7 +20537,7 @@ def kugeln_checks(env, bot):
     wegfliegt.
 
     Gegenproben: Nach dem Cam-Modus kommt die Kugel nicht mehr neu, sie
-    fliegt zum Bot und er sammelt sie ein. Mit player_visibility_mode: cam
+    fliegt zum Bot und er sammelt sie ein. Mit player-visibility: cam
     sieht der zweite Spieler die Kamera nicht, sein Client hat sie gar nicht,
     und ihm wird die Kugel nicht neu geschickt - dem Bot schon.
     """
@@ -20720,13 +20702,13 @@ def kugeln_checks(env, bot):
                       f"Kugel {kugel}, Startplatz {[x, y, z]}, Kamera {kamera}")
         cam_off(bot)
 
-        # Mit player_visibility_mode: cam hat der Client des zweiten Spielers
+        # Mit player-visibility: cam hat der Client des zweiten Spielers
         # die Kamera nicht - zu ihr fliegt dort nichts.
         console(env, weg, pause=0.3)
         sichtbarkeit_geaendert = True
-        set_option(env, "player_visibility_mode", "cam")
+        set_option(env, "player-visibility", "cam")
         hinstellen(bot, x, y, z)
-        if not FIND.test("Cam-Modus mit player_visibility_mode: cam gestartet", cam_on(bot), ""):
+        if not FIND.test("Cam-Modus mit player-visibility: cam gestartet", cam_on(bot), ""):
             return
         time.sleep(1.0)
         beim_bot, beim_zuschauer = zaehler(bot), zaehler(zuschauer)
@@ -20734,9 +20716,9 @@ def kugeln_checks(env, bot):
         time.sleep(WARTEN)
         bot_nah = geschickt(bot, beim_bot, nah)
         zuschauer_nah = geschickt(zuschauer, beim_zuschauer, nah)
-        FIND.test("player_visibility_mode: cam - dem Kamera-Spieler wird die Kugel laufend neu geschickt",
+        FIND.test("player-visibility: cam - dem Kamera-Spieler wird die Kugel laufend neu geschickt",
                   len(bot_nah) >= MINDESTENS, f"{len(bot_nah)} Mal")
-        FIND.test("player_visibility_mode: cam - dem zweiten Spieler, der die Kamera nicht sieht, nicht",
+        FIND.test("player-visibility: cam - dem zweiten Spieler, der die Kamera nicht sieht, nicht",
                   len(zuschauer_nah) <= 1, f"{len(zuschauer_nah)} Mal")
     finally:
         try:
@@ -20744,7 +20726,7 @@ def kugeln_checks(env, bot):
                 zuschauer.stop()
             cam_off(bot)
             if sichtbarkeit_geaendert:
-                set_option(env, "player_visibility_mode", "true")
+                set_option(env, "player-visibility", "true")
             console(env, weg, pause=0.3)
             console(env, f"xp set {BOT_NAME} 0 levels", pause=0.2)
             console(env, f"xp set {BOT_NAME} 0 points", pause=0.2)

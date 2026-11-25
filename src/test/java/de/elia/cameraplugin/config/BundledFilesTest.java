@@ -154,6 +154,95 @@ class BundledFilesTest {
         assertEquals(text, result.text());
     }
 
+    /** The config file as the jar had it before it was tidied up: what every server has until its first start with this one. */
+    private static final String BEFORE_TIDY_UP = "config-before-tidy-up.yml";
+
+    @Test
+    void fileFromBeforeTheTidyUpSaysWhatTheNewOneSays() {
+        String text = BuiltIn.text(BuiltIn.CONFIG);
+
+        ConfigUpdater.Result result = ConfigUpdater.update(BuiltIn.text(BEFORE_TIDY_UP), text,
+                CamSettings.UNLISTED_KEYS, ConfigMigrations.CONFIG);
+
+        assertNull(result.failure());
+        assertEquals(List.of(SettingValues.STORAGE), result.added());
+        assertTrue(result.removed().containsAll(List.of("crash-protection", "action-bar.off-duration",
+                "viewpoints.create-page", "viewpoints.options.enabled", "portals.forget-radius",
+                "cam-area.warning-cooldown", "time-limit.storage", "viewpoints.storage")), result.removed().toString());
+        assertEquals("cooldown.enabled", result.renamed().get("time-limit.cooldowns-enabled"));
+        assertEquals("camera-mode.player-visibility", result.renamed().get("camera-mode.player_visibility_mode"));
+        assertEquals(List.of("2", "always"), result.values().get("cam-area.level"));
+        // Every default of before is the default of now, under its new name.
+        YamlConfiguration expected = BuiltIn.yaml(text);
+        YamlConfiguration actual = BuiltIn.yaml(result.text());
+        assertEquals(expected.getKeys(true), actual.getKeys(true));
+        for (String path : expected.getKeys(true)) {
+            if (!expected.isConfigurationSection(path)) {
+                assertEquals(expected.get(path), actual.get(path), path);
+            }
+        }
+        // Done once: the next start finds nothing to do.
+        assertFalse(ConfigUpdater.update(result.text(), text, CamSettings.UNLISTED_KEYS, ConfigMigrations.CONFIG)
+                .changed());
+    }
+
+    @Test
+    void languageFileFromBeforeTheTidyUpLosesTheTextsOfTheOldWaysOfTheMenu() {
+        String text = BuiltIn.text(BuiltIn.LANGUAGE);
+        String before = text
+                .replace("  menu-spot-actions-options: ", "  menu-spot-actions: \"old\"\n  menu-spot-actions-options: ")
+                .replace("  menu-spot-name: true", "  menu-spot-name: true\n  menu-spot-name-public: true");
+
+        ConfigUpdater.Result result = ConfigUpdater.update(before, text, Set.of(), ConfigMigrations.LANGUAGE);
+
+        assertNull(result.failure());
+        assertEquals(List.of("messages.menu-spot-actions", "message-settings.menu-spot-name-public"), result.removed());
+        assertEquals(text, result.text());
+    }
+
+    @Test
+    void fileFromBeforeTheTidyUpKeepsWhatTheOwnerSet() {
+        String text = BuiltIn.text(BuiltIn.CONFIG);
+        String before = BuiltIn.text(BEFORE_TIDY_UP)
+                .replace("  player_visibility_mode: true", "  player_visibility_mode: cam")
+                .replace("  allow_lava_flight: true", "  allow_lava_flight: false")
+                .replace("  name-mode: 1", "  name-mode: 2")
+                .replace("  movement-sensitivity: 1", "  movement-sensitivity: 0")
+                .replace("  display: distance", "  display: false")
+                .replace("  distance-warning-cooldown: 3", "  distance-warning-cooldown: 7")
+                .replace("  cooldowns-enabled: false", "  cooldowns-enabled: true")
+                .replace("  cooldown-seconds: 120", "  cooldown-seconds: 30")
+                .replace("  bossbar-color: BLUE", "  bossbar-color: RED")
+                .replace("  level: 2", "  level: 1")
+                // viewpoints.storage and time-limit.storage, each by the line above it
+                .replace("#            Aufrufe\n  storage: file", "#            Aufrufe\n  storage: memory")
+                .replace("sind alle vorbei\n  storage: file", "sind alle vorbei\n  storage: memory");
+        assertEquals(2, before.split("storage: memory", -1).length - 1, "the test no longer finds its lines");
+
+        ConfigUpdater.Result result = ConfigUpdater.update(before, text, CamSettings.UNLISTED_KEYS,
+                ConfigMigrations.CONFIG);
+
+        assertNull(result.failure());
+        YamlConfiguration actual = BuiltIn.yaml(result.text());
+        assertEquals("cam", actual.getString("camera-mode.player-visibility"));
+        assertFalse(actual.getBoolean("camera-mode.allow-lava-flight"));
+        assertEquals("ride", actual.getString("camera-mode.name-mode"));
+        assertEquals("fixed", actual.getString("body.movement-sensitivity"));
+        assertEquals("start-only", actual.getString("action-bar.display"));
+        assertEquals(7, actual.getInt("camera-mode.warning-cooldown"));
+        assertTrue(actual.getBoolean("cooldown.enabled"));
+        assertEquals(30, actual.getInt("cooldown.seconds"));
+        assertEquals("RED", actual.getString("time-limit.bossbar-color"));
+        assertEquals("RED", actual.getString("cooldown.bossbar-color"));
+        assertEquals("start", actual.getString("cam-area.level"));
+        // A storage of their own that says otherwise stays, and is read there.
+        assertEquals("file", actual.getString("storage"));
+        assertEquals("memory", actual.getString("viewpoints.storage"));
+        assertEquals("memory", actual.getString("cooldown.storage"));
+        assertFalse(actual.contains("time-limit.storage"));
+        assertFalse(actual.contains("battery.storage"));
+    }
+
     // ---------------------------------------------------------------- helpers
 
     /**
@@ -223,7 +312,7 @@ class BundledFilesTest {
 
     /** As {@link ConfigFile} completes the file. */
     private static List<ConfigUpdater.Migration> migrations(String file) {
-        return file.equals(BuiltIn.CONFIG) ? ConfigMigrations.CONFIG : List.of();
+        return file.equals(BuiltIn.CONFIG) ? ConfigMigrations.CONFIG : ConfigMigrations.LANGUAGE;
     }
 
     private static List<String> lines(String text) {

@@ -1,9 +1,9 @@
 package de.elia.cameraplugin.storage;
 
 /**
- * Where the cooldowns of {@code time-limit} and the charge of {@code battery}
- * are kept, the values of {@code time-limit.storage} and
- * {@code battery.storage}: file and memory.
+ * Where what belongs to the players is kept - the cooldowns, the charge of
+ * the battery, the spots and the rest -, the values of {@code storage}: file
+ * and memory.
  */
 public enum StorageMode {
     /**

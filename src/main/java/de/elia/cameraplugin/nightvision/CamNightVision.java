@@ -35,7 +35,7 @@ import java.util.UUID;
  *
  * <p>With {@code night-vision.player-choice} each player picks the mode for
  * himself, {@code /cam nightvision}. The choice holds for every flight after
- * it, kept as {@code player-settings.storage} says, see
+ * it, kept as {@code storage} says, see
  * {@link CamPreferences}: in his file, or until he leaves the server.</p>
  *
  * <p>A spot saved with a night vision of its own, see

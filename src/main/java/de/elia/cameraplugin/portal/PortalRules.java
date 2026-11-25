@@ -38,28 +38,27 @@ import java.util.UUID;
  * without that the same portal would send him over and fetch him back every
  * single time.</p>
  *
- * <p>What is remembered is not taken on trust, as long as
- * {@code portals.forget-changed} is on. A portal leads where the world lets it
- * lead, and the world is built on: an entry is looked over before it turns
- * anybody away, see {@link #forbiddenAreaBehind(Location, AreaCheck)}, and a
- * portal newly built next to the far side of a remembered one lets that entry
- * go, see {@link #forgetPortalsNear(World, Collection)}. Switched off, an entry
- * stands until {@code /cam reload}.</p>
+ * <p>What is remembered is not taken on trust. A portal leads where the world
+ * lets it lead, and the world is built on: an entry is looked over before it
+ * turns anybody away, see {@link #forbiddenAreaBehind(Location, AreaCheck)},
+ * and a portal newly built next to the far side of a remembered one lets that
+ * entry go, see {@link #forgetPortalsNear(World, Collection)}.</p>
  */
 public final class PortalRules {
 
-    /** How long the message at a shut portal waits before it is sent again, in seconds. */
-    private static final int DEFAULT_WARNING_COOLDOWN = 3;
-
-    /** How many portals with a forbidden far side are remembered by default. */
-    private static final int DEFAULT_REMEMBERED_PORTALS = 128;
+    /**
+     * How many portals with a forbidden far side are remembered at most, the
+     * least recently used one giving way first. Far more than a server has
+     * portals that camera players walk through.
+     */
+    private static final int REMEMBERED_PORTALS = 128;
 
     /**
      * How close a newly built portal has to be to the far side of a remembered
-     * one to let that entry go, in blocks. The default is the radius the server
-     * looks for an existing portal in.
+     * one to let that entry go, in blocks: the radius the server looks for an
+     * existing portal in.
      */
-    private static final int DEFAULT_FORGET_RADIUS = 128;
+    private static final int FORGET_RADIUS = 128;
 
     /**
      * How far around the spot a trip came out at a portal block is looked for,
@@ -78,17 +77,12 @@ public final class PortalRules {
 
     private final Set<PortalKind> open = EnumSet.noneOf(PortalKind.class);
     private PortalReturn returnTo = PortalReturn.BODY;
-    private int warningCooldown = DEFAULT_WARNING_COOLDOWN;
-    private boolean rememberBlocked = true;
-    private int rememberedPortals = DEFAULT_REMEMBERED_PORTALS;
-    private boolean forgetChanged = true;
-    private int forgetRadius = DEFAULT_FORGET_RADIUS;
 
     /**
      * The portals that have already come out in a biome or a structure camera
      * mode is not allowed in, each with the name of that area and the spot the
      * trip came out at, the least recently used one giving way first once
-     * {@code remember-blocked-count} is reached.
+     * {@link #REMEMBERED_PORTALS} is reached.
      *
      * <p>Only kept for as long as the server runs and emptied by
      * {@code /cam reload}. Single entries are given up sooner than that
@@ -100,7 +94,7 @@ public final class PortalRules {
             new LinkedHashMap<>(16, 0.75f, true) {
                 @Override
                 protected boolean removeEldestEntry(Map.Entry<PortalSpot, BlockedPortal> eldest) {
-                    return size() > rememberedPortals;
+                    return size() > REMEMBERED_PORTALS;
                 }
             };
 
@@ -158,12 +152,6 @@ public final class PortalRules {
         }
         returnTo = PortalReturn.byName(config.getChoice("portals.return-to",
                 PortalReturn.BODY.getConfigName(), PortalReturn.configNames()));
-        warningCooldown = config.getInt("portals.warning-cooldown", DEFAULT_WARNING_COOLDOWN, 0);
-        rememberBlocked = config.getBoolean("portals.remember-blocked", true);
-        rememberedPortals = config.getInt("portals.remember-blocked-count",
-                DEFAULT_REMEMBERED_PORTALS, 0);
-        forgetChanged = config.getBoolean("portals.forget-changed", true);
-        forgetRadius = config.getInt("portals.forget-radius", DEFAULT_FORGET_RADIUS, 0);
         blockedPortals.clear();
     }
 
@@ -171,9 +159,8 @@ public final class PortalRules {
      * The area behind this portal, when it has already taken a camera player
      * into a biome or a structure camera mode is not allowed in.
      *
-     * <p>What was written down is looked over before it is used, unless
-     * {@code portals.forget-changed} is off. Is the portal on the far side
-     * gone, or is the spot over there not forbidden any more, the entry is
+     * <p>What was written down is looked over before it is used. Is the
+     * portal on the far side gone, or is the spot over there not forbidden any more, the entry is
      * dropped and this portal is walked through once again - otherwise it would
      * keep turning players away from a trip that has long since stopped ending
      * where it did.</p>
@@ -185,16 +172,13 @@ public final class PortalRules {
      *         {@code null} when nothing is known about this portal
      */
     public String forbiddenAreaBehind(Location portal, AreaCheck check) {
-        if (!rememberBlocked || blockedPortals.isEmpty()) {
+        if (blockedPortals.isEmpty()) {
             return null;
         }
         PortalSpot spot = spotOf(portal);
         BlockedPortal blocked = spot == null ? null : blockedPortals.get(spot);
         if (blocked == null) {
             return null;
-        }
-        if (!forgetChanged) {
-            return blocked.area();
         }
         String area = areaStillBehind(blocked, check);
         if (area == null) {
@@ -280,9 +264,6 @@ public final class PortalRules {
      * @param arrival the spot he came out at
      */
     public void rememberForbiddenArea(Location portal, String area, Location arrival) {
-        if (!rememberBlocked || rememberedPortals <= 0) {
-            return;
-        }
         PortalSpot spot = spotOf(portal);
         World arrivedIn = arrival == null ? null : arrival.getWorld();
         if (spot == null || arrivedIn == null) {
@@ -305,15 +286,11 @@ public final class PortalRules {
      * did - until {@code /cam reload}, which is a heavy answer to a portal
      * somebody moved by two chunks.</p>
      *
-     * <p>Hangs on {@code portals.forget-changed} like the checking does, and on
-     * {@code portals.forget-radius} of its own, which switches off this half
-     * alone.</p>
-     *
      * @param world  the world the new portal stands in
      * @param blocks the blocks it is made of
      */
     public void forgetPortalsNear(World world, Collection<BlockState> blocks) {
-        if (!forgetChanged || forgetRadius <= 0 || blockedPortals.isEmpty() || world == null
+        if (blockedPortals.isEmpty() || world == null
                 || blocks == null || blocks.isEmpty()) {
             return;
         }
@@ -323,8 +300,8 @@ public final class PortalRules {
     }
 
     /**
-     * Whether one of these blocks stands within {@code portals.forget-radius}
-     * of the far side, measured the way the server measures its search for a
+     * Whether one of these blocks stands within {@link #FORGET_RADIUS} of the
+     * far side, measured the way the server measures its search for a
      * portal: a square around the spot the trip lands at, height left out of
      * it.
      */
@@ -332,8 +309,8 @@ public final class PortalRules {
         int x = (int) Math.floor(arrival.x());
         int z = (int) Math.floor(arrival.z());
         for (BlockState block : blocks) {
-            if (Math.abs(block.getX() - x) <= forgetRadius
-                    && Math.abs(block.getZ() - z) <= forgetRadius) {
+            if (Math.abs(block.getX() - x) <= FORGET_RADIUS
+                    && Math.abs(block.getZ() - z) <= FORGET_RADIUS) {
                 return true;
             }
         }
@@ -388,10 +365,5 @@ public final class PortalRules {
     /** Where a player who has to be brought back is put down. */
     public PortalReturn getReturnTo() {
         return returnTo;
-    }
-
-    /** How long the message at a shut portal waits before it is sent again, in seconds. */
-    public int getWarningCooldown() {
-        return warningCooldown;
     }
 }

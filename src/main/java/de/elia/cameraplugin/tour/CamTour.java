@@ -584,7 +584,7 @@ public final class CamTour implements Listener, PluginPart {
      * Whether the guide would see the other one but for camera mode: a
      * player a vanish plugin hides is no one to invite. A guide out of camera
      * mode does not see a camera player under
-     * {@code player_visibility_mode: cam}, which is camera mode as well.
+     * {@code player-visibility: cam}, which is camera mode as well.
      */
     boolean seen(Player guide, Player other) {
         return guide.canSee(other) || plugin.getPhotoMode().hides(guide, other)

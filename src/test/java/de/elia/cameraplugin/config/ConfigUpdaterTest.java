@@ -244,4 +244,236 @@ class ConfigUpdaterTest {
         assertTrue(ConfigUpdater.update(WITHOUT_DISTANCE, BUILT_IN, Set.of(), keepOld).text()
                 .contains("distance: 7"));
     }
+
+    // ------------------------------------------------- taking out and moving
+
+    private static ConfigUpdater.Result migrate(String file, String builtIn,
+                                                java.util.function.Consumer<ConfigUpdater> change) {
+        return ConfigUpdater.update(file, builtIn, Set.of(),
+                List.of(new ConfigUpdater.Migration(ConfigUpdater.Migration.ALWAYS, change)));
+    }
+
+    @Test
+    void removeTakesTheKeyWithItsCommentAndLeavesOneGap() {
+        String file = BUILT_IN.replace("""
+                  enabled: true
+
+                """, """
+                  enabled: true
+
+                  # How often, in ticks
+                  interval: 10
+
+                """);
+
+        ConfigUpdater.Result result = migrate(file, BUILT_IN, updater -> updater.remove("first.interval"));
+
+        assertEquals(BUILT_IN, result.text());
+        assertEquals(List.of("first.interval"), result.removed());
+        assertEquals(List.of(), result.added());
+        assertNull(result.failure());
+    }
+
+    @Test
+    void removeLeavesACommentThatSpeaksOfTheKeysBelowAsWell() {
+        String builtIn = """
+                messages:
+                  # The page of the spots: -actions under each spot
+                  spot-actions-options: "options"
+                  spot-name: "name"
+                """;
+        String file = """
+                messages:
+                  # The page of the spots: -actions under each spot
+                  spot-actions: "old"
+                  spot-actions-bedrock: "old too"
+                  spot-actions-options: "options"
+                  spot-name: "name"
+                """;
+
+        ConfigUpdater.Result result = migrate(file, builtIn, updater -> {
+            updater.remove("messages.spot-actions");
+            updater.remove("messages.spot-actions-bedrock");
+        });
+
+        assertEquals(builtIn, result.text());
+        assertEquals(List.of("messages.spot-actions", "messages.spot-actions-bedrock"), result.removed());
+    }
+
+    @Test
+    void removeOfTheFirstKeyOfASectionLeavesNoGapAtItsStart() {
+        String builtIn = "section:\n  # Kept\n  kept: 1\n";
+        String file = "section:\n  # Gone\n  gone: 2\n\n  # Kept\n  kept: 1\n";
+
+        ConfigUpdater.Result result = migrate(file, builtIn, updater -> updater.remove("section.gone"));
+
+        assertEquals(builtIn, result.text());
+    }
+
+    @Test
+    void removeOfTheLastKeyTakesTheSectionWithIt() {
+        String file = BUILT_IN.replace("""
+                # Worlds without camera mode""", """
+                # Gone for good
+                gone:
+                  enabled: true
+
+                # Worlds without camera mode""");
+
+        ConfigUpdater.Result result = migrate(file, BUILT_IN, updater -> updater.remove("gone.enabled"));
+
+        assertEquals(BUILT_IN, result.text());
+        assertEquals(List.of("gone.enabled"), result.removed());
+    }
+
+    @Test
+    void moveWritesTheKeyWithItsNewCommentAndTheOldValue() {
+        String builtIn = """
+                section:
+                  # Who sees him: cam, true or false
+                  player-visibility: true
+
+                  # Next
+                  next: 1
+                """;
+        String file = """
+                section:
+                  # Who sees him (old words)
+                  player_visibility_mode: cam   # ours
+
+                  # Next
+                  next: 1
+                """;
+
+        ConfigUpdater.Result result = migrate(file, builtIn,
+                updater -> updater.move("section.player_visibility_mode", "section.player-visibility"));
+
+        assertEquals(builtIn.replace("player-visibility: true", "player-visibility: cam   # ours"), result.text());
+        assertEquals(Map.of("section.player_visibility_mode", "section.player-visibility"), result.renamed());
+        assertEquals(List.of(), result.added());
+        assertEquals(List.of(), result.removed());
+        assertNull(result.failure());
+    }
+
+    @Test
+    void moveIntoASectionTheFileLacksWritesTheSectionAndCopyFillsIt() {
+        String builtIn = """
+                limit:
+                  # How long
+                  seconds: 300
+                  color: BLUE
+
+                # The wait
+                wait:
+                  enabled: false
+                  seconds: 120
+                  color: BLUE
+                """;
+        String file = """
+                limit:
+                  # Wait after the end
+                  wait-enabled: true
+                  # How long
+                  seconds: 300
+                  # How long to wait
+                  wait-seconds: 30
+                  color: RED
+                """;
+
+        ConfigUpdater.Result result = migrate(file, builtIn, updater -> {
+            updater.move("limit.wait-enabled", "wait.enabled");
+            updater.move("limit.wait-seconds", "wait.seconds");
+            updater.copy("limit.color", "wait.color");
+        });
+
+        assertNull(result.failure());
+        assertEquals(builtIn.replace("enabled: false", "enabled: true").replace("seconds: 120", "seconds: 30")
+                .replace("limit:\n  # How long\n  seconds: 300\n  color: BLUE", "limit:\n  # How long\n  seconds: 300\n  color: RED")
+                .replace("  enabled: true\n  seconds: 30\n  color: BLUE", "  enabled: true\n  seconds: 30\n  color: RED"),
+                result.text());
+        assertEquals(Map.of("limit.wait-enabled", "wait.enabled", "limit.wait-seconds", "wait.seconds"),
+                result.renamed());
+        // Written because of the moves, not because the file lacked it.
+        assertEquals(List.of(), result.added());
+    }
+
+    @Test
+    void copyLeavesASectionAloneThatWasThereBefore() {
+        String builtIn = "limit:\n  color: BLUE\nwait:\n  color: BLUE\n";
+        String file = "limit:\n  color: RED\nwait:\n  color: GREEN\n";
+
+        assertFalse(migrate(file, builtIn, updater -> updater.copy("limit.color", "wait.color")).changed());
+    }
+
+    @Test
+    void moveOnlyTakesTheOldKeyOutWhereTheNewOneIsThereAlready() {
+        String builtIn = "section:\n  range: 100\n";
+        String file = "section:\n  range: 70\n  distance: 50\n";
+
+        ConfigUpdater.Result result = migrate(file, builtIn, updater -> updater.move("section.distance", "section.range"));
+
+        assertEquals(builtIn.replace("100", "70"), result.text());
+        assertEquals(List.of("section.distance"), result.removed());
+        assertEquals(Map.of(), result.renamed());
+    }
+
+    @Test
+    void renameValueWritesTheNewValueWithTheNewComment() {
+        String builtIn = """
+                section:
+                  # How strict: false, start or always
+                  level: always
+                """;
+        String file = """
+                section:
+                  # How strict: 0, 1 or 2
+                  level: 1
+                """;
+        Map<String, String> words = Map.of("0", "false", "1", "start", "2", "always");
+
+        ConfigUpdater.Result result = migrate(file, builtIn, updater -> updater.renameValue("section.level", words::get));
+
+        assertEquals(builtIn.replace("level: always", "level: start"), result.text());
+        assertEquals(Map.of("section.level", List.of("1", "start")), result.values());
+        assertFalse(migrate(builtIn, builtIn, updater -> updater.renameValue("section.level", words::get)).changed());
+    }
+
+    @Test
+    void moveOutsideKeepsAKeyTheBuiltInFileDoesNotHave() {
+        String builtIn = "limit:\n  seconds: 300\n\nwait:\n  enabled: false\n";
+        String file = "limit:\n  seconds: 300\n  storage: memory\n\nwait:\n  enabled: true\n";
+
+        ConfigUpdater.Result result = migrate(file, builtIn,
+                updater -> updater.moveOutside("limit.storage", "wait.storage"));
+
+        assertEquals("limit:\n  seconds: 300\n\nwait:\n  enabled: true\n  storage: memory\n", result.text());
+        assertEquals(Map.of("limit.storage", "wait.storage"), result.renamed());
+    }
+
+    @Test
+    void moveOutsideLeavesTheKeyWhereThereIsNoSectionToTakeIt() {
+        String builtIn = "limit:\n  seconds: 300\n";
+        String file = "limit:\n  seconds: 300\n  storage: memory\n";
+
+        assertFalse(migrate(file, builtIn, updater -> updater.moveOutside("limit.storage", "nowhere.storage"))
+                .changed());
+        assertFalse(migrate(file, builtIn, updater -> updater.moveOutside("limit.storage", "limit.kept"))
+                .changed());
+    }
+
+    @Test
+    void valueReadsWhatYamlReads() {
+        String file = "section:\n  quoted: \"memory\"   # a note\n  number: 2\n  list:\n    - a\n";
+        String[] read = new String[3];
+
+        migrate(file, file, updater -> {
+            read[0] = updater.value("section.quoted");
+            read[1] = updater.value("section.number");
+            read[2] = updater.value("section.list");
+        });
+
+        assertEquals("memory", read[0]);
+        assertEquals("2", read[1]);
+        assertNull(read[2]);
+    }
 }

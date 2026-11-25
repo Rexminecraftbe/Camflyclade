@@ -53,7 +53,7 @@ import java.util.logging.Level;
  * the public spots or at those shared by name, see {@link #isLocked}: the
  * spots of others are closed to him, and so is what others make of his.</p>
  *
- * <p>Where it is kept follows {@code viewpoints.storage}, like
+ * <p>Where it is kept follows {@code storage}, like
  * {@link SpotViews}: in one file for everybody,
  * {@code playerdata/spot-guestbook.yml}, written after every change; or in
  * memory only, which {@code /cam reload} and a restart forget.</p>
