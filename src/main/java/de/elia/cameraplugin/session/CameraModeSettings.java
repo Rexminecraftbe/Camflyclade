@@ -26,8 +26,15 @@ import java.util.Map;
  */
 public final class CameraModeSettings {
 
+    /**
+     * The switch that said whether {@code max-distance} held the camera at
+     * all, before {@code max-distance-mode} had the value {@code false} for
+     * it. The update of the file takes it out; only a file it could not
+     * change still has it.
+     */
+    public static final String OLD_DISTANCE_SWITCH = "camera-mode.max-distance-enabled";
+
     // Configurable values
-    private boolean maxDistanceEnabled;
     private double maxDistance;
     /** How max-distance holds the camera, {@code camera-mode.max-distance-mode}. */
     private DistanceMode distanceMode;
@@ -91,10 +98,19 @@ public final class CameraModeSettings {
      * and noted in the reader, see {@link ConfigReader#getWarnings()}.
      */
     public CameraModeSettings(ConfigReader config, Messages messages, JavaPlugin plugin) {
-        maxDistanceEnabled = config.getBoolean("camera-mode.max-distance-enabled", true);
         maxDistance = config.getDouble("camera-mode.max-distance", 100.0, 0.0);
-        distanceMode = config.getChoice("camera-mode.max-distance-mode", "fixed", "fixed", "signal")
-                .equalsIgnoreCase("signal") ? DistanceMode.SIGNAL : DistanceMode.FIXED;
+        String distance = config.getChoice("camera-mode.max-distance-mode", "fixed", "fixed", "signal", "false")
+                .toLowerCase(Locale.ROOT);
+        distanceMode = switch (distance) {
+            case "signal" -> DistanceMode.SIGNAL;
+            case "false" -> DistanceMode.OFF;
+            default -> DistanceMode.FIXED;
+        };
+        // Switched off with a key of its own before false was a value of the
+        // mode. A file the update could not change says so there still.
+        if (!config.getBoolean(OLD_DISTANCE_SWITCH, true)) {
+            distanceMode = DistanceMode.OFF;
+        }
         // Called distance-warning-cooldown before it counted for every border.
         warningCooldown = config.getInt(config.renamed("camera-mode.warning-cooldown",
                 "camera-mode.distance-warning-cooldown"), 3, 0);
@@ -127,11 +143,11 @@ public final class CameraModeSettings {
         // The keys with underscores got hyphens like all others; an older file is read as it was written.
         String visibility = config.getChoice(
                 config.renamed("camera-mode.player-visibility", "camera-mode.player_visibility_mode"),
-                "cam", "cam", "true", "false").toLowerCase();
+                "true", "cam", "true", "false").toLowerCase(Locale.ROOT);
         playerVisibilityMode = switch (visibility) {
-            case "true" -> VisibilityMode.ALL;
+            case "cam" -> VisibilityMode.CAM;
             case "false" -> VisibilityMode.NONE;
-            default -> VisibilityMode.CAM;
+            default -> VisibilityMode.ALL;
         };
         allowInvisibilityPotion = config.getBoolean(
                 config.renamed("camera-mode.allow-invisibility-potion", "camera-mode.allow_invisibility_potion"), true);
@@ -221,23 +237,23 @@ public final class CameraModeSettings {
     }
 
     /**
-     * Whether {@code max-distance} holds the camera back at a border: switched
-     * on, in the mode {@code fixed}, and a border that holds. Under
+     * Whether {@code max-distance} holds the camera back at a border: in the
+     * mode {@code fixed}, and a border that holds. Under
      * {@code signal} it is the signal that holds it, see {@link #usesSignal()},
      * and there is no border at the distance.
      */
     public boolean limitsDistance() {
-        return maxDistanceEnabled && distanceMode == DistanceMode.FIXED && bordersHold;
+        return distanceMode == DistanceMode.FIXED && bordersHold;
     }
 
     /**
      * Whether the camera flies on a radio signal from its body,
-     * {@code max-distance-mode: signal} with {@code max-distance} switched on.
+     * {@code max-distance-mode: signal}.
      * Whatever {@code border-mode} says: the signal is no border, nothing is
      * run into at its end.
      */
     public boolean usesSignal() {
-        return maxDistanceEnabled && distanceMode == DistanceMode.SIGNAL;
+        return distanceMode == DistanceMode.SIGNAL;
     }
 
     public VisibilityMode visibilityMode() {

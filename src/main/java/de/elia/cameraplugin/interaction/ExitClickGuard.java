@@ -1,6 +1,5 @@
 package de.elia.cameraplugin.interaction;
 
-import de.elia.cameraplugin.config.CamSettings;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Cancellable;
 import org.bukkit.event.EventHandler;
@@ -33,7 +32,7 @@ import java.util.UUID;
  * to break it, to dig it, to click it or to set something on it - and every
  * use of the item in his hand is turned away, the way it is in camera mode.
  * The block he hit comes back on his screen with that. The while is
- * {@code exit-click-guard.seconds} and his ping on top, the time the client
+ * {@link #GUARD_MILLIS} and his ping on top, the time the client
  * takes to learn that camera mode is over: until then it cannot break
  * anything in the creative mode, and its first try comes in only after. Every
  * try turned away starts the while anew, and for at least
@@ -41,43 +40,45 @@ import java.util.UUID;
  * the creative mode, and it is still the same click until he lets go.</p>
  *
  * <p>Ending camera mode in any other way - {@code /cam}, the exit key -
- * comes with no click on the world, and leaves him his hands at once. So does
- * {@code exit-click-guard.enabled: false}, for every end.</p>
+ * comes with no click on the world, and leaves him his hands at once.</p>
+ *
+ * <p>The section {@code exit-click-guard} of the config file switched it off
+ * and set its time until both were fixed here: nobody could tell what to set
+ * it to, and off it only let the click break a block.</p>
  */
 public final class ExitClickGuard implements Listener {
+
+    /**
+     * How long the clicks are turned away after the end, his ping not yet
+     * counted, in milliseconds. The first try of a held button comes in after
+     * his ping, which is added on top, and up to two ticks more, his own and
+     * the server's: 100 ms. Twice that and a little more leaves room for a
+     * try that the server takes up late, when it lags.
+     */
+    private static final long GUARD_MILLIS = 300L;
 
     /** The most ping that is added: a ping beyond that is no ping, but a stalled connection. */
     private static final long MAX_PING_MILLIS = 1000L;
 
     /**
-     * The least a try turned away keeps the guard up for, in milliseconds,
-     * however short {@code exit-click-guard.seconds} is. A held button tries
-     * again every five ticks in the creative mode, 250 ms, and every four with
-     * a right click; the rest is room for a try that comes a tick or two late,
-     * held up on the way or on the server. Without it, a short setting would
-     * run out between two tries of a button still down.
+     * How long a try turned away keeps the guard up for, in milliseconds. A
+     * held button tries again every five ticks in the creative mode, 250 ms,
+     * and every four with a right click; the rest is room for a try that comes
+     * a tick or two late, held up on the way or on the server. Shorter, the
+     * guard would run out between two tries of a button still down.
      */
     private static final long MIN_HOLD_MILLIS = 400L;
 
-    private final CamSettings settings;
     /** Until when the clicks of each player are turned away, as {@link System#currentTimeMillis()} counts. */
     private final Map<UUID, Long> heldUntil = new HashMap<>();
 
-    public ExitClickGuard(CamSettings settings) {
-        this.settings = settings;
-    }
-
     /**
      * A player ended camera mode with a click on his own body: what that
-     * click does on after it is turned away - unless the guard is switched
-     * off.
+     * click does on after it is turned away.
      */
     public void guard(Player player) {
-        if (!settings.isExitClickGuardEnabled()) {
-            return;
-        }
         long ping = Math.min(MAX_PING_MILLIS, Math.max(0, player.getPing()));
-        heldUntil.put(player.getUniqueId(), System.currentTimeMillis() + settings.getExitClickGuardMillis() + ping);
+        heldUntil.put(player.getUniqueId(), System.currentTimeMillis() + GUARD_MILLIS + ping);
     }
 
     /**
@@ -119,8 +120,7 @@ public final class ExitClickGuard implements Listener {
 
     /**
      * Turns the event away if the player's click is still the one that ended
-     * camera mode, and keeps it that for another
-     * {@code exit-click-guard.seconds}, at least {@link #MIN_HOLD_MILLIS}: he
+     * camera mode, and keeps it that for another {@link #MIN_HOLD_MILLIS}: he
      * still holds the button.
      */
     private void turnAway(Player player, Cancellable event) {
@@ -135,6 +135,6 @@ public final class ExitClickGuard implements Listener {
             return;
         }
         event.setCancelled(true);
-        heldUntil.put(id, Math.max(until, now + Math.max(MIN_HOLD_MILLIS, settings.getExitClickGuardMillis())));
+        heldUntil.put(id, Math.max(until, now + MIN_HOLD_MILLIS));
     }
 }

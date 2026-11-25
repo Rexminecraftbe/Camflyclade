@@ -14,9 +14,6 @@ import java.util.Map;
  */
 public final class MenuSettings {
 
-    /** The most {@code menu.ban-shift-step} takes. */
-    private static final int MAX_BAN_SHIFT_STEP = 100;
-
     /** How the players get at back, spot, photo and the rest, {@code menu.access}. */
     private MenuAccess menuAccess;
     /** How admins get at list, stop, ban, trail and the rest, {@code menu.admin-access}. */
@@ -27,11 +24,6 @@ public final class MenuSettings {
     private final Map<MenuButton, Integer> menuSlots = new EnumMap<>(MenuButton.class);
     /** The same for the admin page, {@code menu.admin-buttons}. */
     private final Map<AdminButton, MenuIcon> adminIcons = new EnumMap<>(AdminButton.class);
-    /**
-     * How many days, hours or minutes a click with shift adds to a ban on its
-     * page or takes away, {@code menu.ban-shift-step}.
-     */
-    private int banShiftStep;
     /** Whether the pages of the menu that are open are drawn anew by themselves, {@code menu.live-update}. */
     private boolean menuLiveUpdate;
     private final Map<AdminButton, Integer> adminSlots = new EnumMap<>(AdminButton.class);
@@ -45,7 +37,6 @@ public final class MenuSettings {
         adminAccess = readMenuAccess(config, "menu.admin-access");
         readButtons(config, messages, "menu.buttons", MenuButton.values(), menuIcons, menuSlots);
         readButtons(config, messages, "menu.admin-buttons", AdminButton.values(), adminIcons, adminSlots);
-        banShiftStep = config.getInt("menu.ban-shift-step", 10, 1, MAX_BAN_SHIFT_STEP);
         menuLiveUpdate = config.getBoolean("menu.live-update", true);
     }
 
@@ -112,11 +103,6 @@ public final class MenuSettings {
 
     public MenuAccess adminAccess() {
         return adminAccess;
-    }
-
-    /** How many days, hours or minutes a click with shift adds to a ban in the menu or takes away. */
-    public int banShiftStep() {
-        return banShiftStep;
     }
 
     /** Whether the pages of the menu that are open are drawn anew by themselves, as things change. */

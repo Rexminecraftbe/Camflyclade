@@ -98,16 +98,12 @@ final class MenuItems {
      * without, which every map of the menu is -, and never by the name the
      * menu gave it; an empty map keeps its name. Its name, its lines and its
      * shine go along. So do the maps of the structures 26.3 brings, the icons
-     * a spot may have, unless {@code bedrock.map-icons} lets them be.
-     *
-     * @param maps whether the maps of 26.3 stay as they are, {@code bedrock.map-icons}
+     * a spot may have: whether Bedrock shows their name or "Unknown Map" was
+     * never tried. A switch, {@code bedrock.map-icons}, let them be themselves
+     * to try it; it was taken out, the empty map shows the name for sure.
      */
-    static ItemStack forBedrock(ItemStack item, boolean maps) {
-        if (item == null || item.getType() == Material.MAP) {
-            return item;
-        }
-        boolean filled = item.getType() == Material.FILLED_MAP;
-        if (!filled && (maps || !item.getType().name().endsWith("_MAP"))) {
+    static ItemStack forBedrock(ItemStack item) {
+        if (item == null || item.getType() == Material.MAP || !item.getType().name().endsWith("_MAP")) {
             return item;
         }
         ItemStack map = new ItemStack(Material.MAP, item.getAmount());

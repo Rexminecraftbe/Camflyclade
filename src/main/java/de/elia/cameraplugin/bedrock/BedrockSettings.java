@@ -21,8 +21,6 @@ public final class BedrockSettings {
     private boolean bedrockInvitationForms;
     /** Whether the buttons in the chat say the command they run, {@code bedrock.chat-commands}. */
     private boolean bedrockChatCommands;
-    /** Whether Bedrock is shown the maps of 26.3 as themselves, {@code bedrock.map-icons}. */
-    private boolean bedrockMapIcons;
     /**
      * Whether a guest on Bedrock who sees through the eyes of his guide is
      * turned along with him rather than shown Geyser's camera,
@@ -60,7 +58,6 @@ public final class BedrockSettings {
                 : menu.equalsIgnoreCase("chest") ? BedrockMenu.CHEST : BedrockMenu.MIXED;
         bedrockInvitationForms = config.getBoolean("bedrock.invitation-forms", true);
         bedrockChatCommands = config.getBoolean("bedrock.chat-commands", true);
-        bedrockMapIcons = config.getBoolean("bedrock.map-icons", false);
         bedrockFollowTurn = config.getChoice("bedrock.follow-view", "camera", "camera", "turn")
                 .equalsIgnoreCase("turn");
         String glow = config.getString("bedrock.glow-particle", "end_rod");
@@ -86,15 +83,6 @@ public final class BedrockSettings {
 
     public boolean chatCommands() {
         return bedrockChatCommands;
-    }
-
-    /**
-     * Whether the menu shows Bedrock the maps 26.3 brings as themselves,
-     * {@code bedrock.map-icons}; if not, as an empty map, like the filled
-     * map, whose name Bedrock does not show.
-     */
-    public boolean mapIcons() {
-        return bedrockMapIcons;
     }
 
     public boolean followTurn() {

@@ -1124,7 +1124,7 @@ def bereich_passt(bereich, klasse):
 
 
 def schluessel_passt(a, b):
-    """config:camera-mode.name passt zu config:camera-mode.name.color und umgekehrt."""
+    """config:camera-mode.name passt zu config:camera-mode.name.through-walls und umgekehrt."""
     return a == b or a.startswith(b + ".") or b.startswith(a + ".")
 
 

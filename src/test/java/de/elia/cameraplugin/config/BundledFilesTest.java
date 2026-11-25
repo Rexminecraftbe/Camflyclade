@@ -2,6 +2,7 @@ package de.elia.cameraplugin.config;
 
 import de.elia.cameraplugin.menu.AdminButton;
 import de.elia.cameraplugin.menu.MenuButton;
+import de.elia.cameraplugin.sound.SoundSettings;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -165,7 +166,8 @@ class BundledFilesTest {
                 CamSettings.UNLISTED_KEYS, ConfigMigrations.CONFIG);
 
         assertNull(result.failure());
-        assertEquals(List.of(SettingValues.STORAGE), result.added());
+        // The four switches of the items of the leader were all off, which the one that took their place is anyway.
+        assertEquals(List.of(SettingValues.STORAGE, "follow.mirror-item-details"), result.added());
         assertTrue(result.removed().containsAll(List.of("crash-protection", "action-bar.off-duration",
                 "viewpoints.create-page", "viewpoints.options.enabled", "portals.forget-radius",
                 "cam-area.warning-cooldown", "time-limit.storage", "viewpoints.storage")), result.removed().toString());
@@ -241,6 +243,127 @@ class BundledFilesTest {
         assertEquals("memory", actual.getString("cooldown.storage"));
         assertFalse(actual.contains("time-limit.storage"));
         assertFalse(actual.contains("battery.storage"));
+    }
+
+    /**
+     * The config file as the jar had it before the second tidying up, which
+     * merged switches and fixed fine tuning in the code: what every server
+     * has until its first start with this one.
+     */
+    private static final String BEFORE_FEWER_SWITCHES = "config-before-fewer-switches.yml";
+
+    @Test
+    void fileFromBeforeFewerSwitchesSaysWhatTheNewOneSays() {
+        String text = BuiltIn.text(BuiltIn.CONFIG);
+
+        ConfigUpdater.Result result = ConfigUpdater.update(BuiltIn.text(BEFORE_FEWER_SWITCHES), text,
+                CamSettings.UNLISTED_KEYS, ConfigMigrations.CONFIG);
+
+        assertNull(result.failure());
+        assertEquals(List.of("follow.mirror-item-details"), result.added());
+        assertTrue(result.removed().containsAll(List.of("exit-click-guard", "web-map.bluemap", "web-map.dynmap",
+                "web-map.squaremap", "bedrock.map-icons", "body.health-rows-upward", "body.mob-target-heads",
+                "menu.ban-shift-step", "signal.levels", "cam-trail.show-min-blocks", "cam-trail.show-max-seconds",
+                "camera-mode.max-distance-enabled", "camera-mode.name.color", "body.name.color",
+                "sounds.start.enabled", "sounds.follow-reach.enabled", "follow.mirror-count", "follow.mirror-name")),
+                result.removed().toString());
+        assertEquals(Map.of(), result.values());
+        assertEquals(Map.of(), result.renamed());
+        // Every default of before is the default of now.
+        YamlConfiguration expected = BuiltIn.yaml(text);
+        YamlConfiguration actual = BuiltIn.yaml(result.text());
+        assertEquals(expected.getKeys(true), actual.getKeys(true));
+        for (String path : expected.getKeys(true)) {
+            if (!expected.isConfigurationSection(path)) {
+                assertEquals(expected.get(path), actual.get(path), path);
+            }
+        }
+        // Done once: the next start finds nothing to do.
+        assertFalse(ConfigUpdater.update(result.text(), text, CamSettings.UNLISTED_KEYS, ConfigMigrations.CONFIG)
+                .changed());
+    }
+
+    @Test
+    void fileFromBeforeFewerSwitchesKeepsWhatTheOwnerSet() {
+        String text = BuiltIn.text(BuiltIn.CONFIG);
+        String before = BuiltIn.text(BEFORE_FEWER_SWITCHES)
+                .replace("  max-distance-enabled: true", "  max-distance-enabled: false")
+                .replace("  max-distance-mode: fixed", "  max-distance-mode: signal")
+                .replace("    color: yellow", "    color: red")
+                .replace("    enabled: true\n    sound: block.beacon.activate",
+                        "    enabled: false\n    sound: block.beacon.activate")
+                .replace("    enabled: true\n    sound: block.note_block.chime\n    volume: 1.0",
+                        "    enabled: false\n    sound: block.note_block.chime\n    volume: 0.5")
+                .replace("  mirror-count: false", "  mirror-count: true")
+                .replace("  show-max-seconds: 300", "  show-max-seconds: 120");
+        assertTrue(before.contains("color: red") && before.contains("volume: 0.5"), "the test no longer finds its lines");
+
+        ConfigUpdater.Result result = ConfigUpdater.update(before, text, CamSettings.UNLISTED_KEYS,
+                ConfigMigrations.CONFIG);
+
+        assertNull(result.failure());
+        YamlConfiguration actual = BuiltIn.yaml(result.text());
+        // Switched off, max-distance is the value false of the mode now, whatever mode it had.
+        assertEquals("false", actual.getString("camera-mode.max-distance-mode"));
+        assertFalse(actual.contains("camera-mode.max-distance-enabled"));
+        assertEquals(List.of("signal", "false"), result.values().get("camera-mode.max-distance-mode"));
+        // A colour other than the default stays, and is read as before; the default one goes.
+        assertEquals("red", actual.getString("body.name.color"));
+        assertFalse(actual.contains("camera-mode.name.color"));
+        // A sound switched off is one with volume 0.
+        assertEquals(0.0, actual.getDouble("sounds.start.volume"));
+        assertEquals(0.0, actual.getDouble("sounds.nudge.volume"));
+        assertFalse(actual.contains("sounds.start.enabled"));
+        assertEquals(1.0, actual.getDouble("sounds.end.volume"));
+        // One of the four details shown is not all four: the one switch stays off.
+        assertFalse(actual.getBoolean("follow.mirror-item-details"));
+        assertFalse(actual.contains("follow.mirror-count"));
+        // What is fixed now goes, whatever it said.
+        assertFalse(actual.contains("cam-trail.show-max-seconds"));
+        assertFalse(ConfigUpdater.update(result.text(), text, CamSettings.UNLISTED_KEYS, ConfigMigrations.CONFIG)
+                .changed());
+    }
+
+    @Test
+    void allFourDetailsOfTheItemsShownAreTheOneSwitchOn() {
+        String text = BuiltIn.text(BuiltIn.CONFIG);
+        String before = BuiltIn.text(BEFORE_FEWER_SWITCHES)
+                .replace("  mirror-count: false", "  mirror-count: true")
+                .replace("  mirror-enchantments: false", "  mirror-enchantments: true")
+                .replace("  mirror-durability: false", "  mirror-durability: true")
+                .replace("  mirror-name: false", "  mirror-name: true");
+
+        ConfigUpdater.Result result = ConfigUpdater.update(before, text, CamSettings.UNLISTED_KEYS,
+                ConfigMigrations.CONFIG);
+
+        assertNull(result.failure());
+        YamlConfiguration actual = BuiltIn.yaml(result.text());
+        assertTrue(actual.getBoolean("follow.mirror-item-details"));
+        for (String old : List.of("mirror-count", "mirror-enchantments", "mirror-durability", "mirror-name")) {
+            assertFalse(actual.contains("follow." + old), old);
+        }
+    }
+
+    @Test
+    void languageFileLosesTheNoteOfTheSignalLevels() {
+        String text = BuiltIn.text(BuiltIn.LANGUAGE);
+        String before = text.replace("  config-out-of-range: ",
+                "  config-not-descending: \"&cThe values of {path} have to go down\"\n  config-out-of-range: ");
+
+        ConfigUpdater.Result result = ConfigUpdater.update(before, text, Set.of(), ConfigMigrations.LANGUAGE);
+
+        assertNull(result.failure());
+        assertEquals(List.of("messages.config-not-descending"), result.removed());
+        assertEquals(text, result.text());
+    }
+
+    @Test
+    void everySoundOfTheConfigFileIsKnown() {
+        YamlConfiguration config = BuiltIn.yaml(BuiltIn.text(BuiltIn.CONFIG));
+
+        // The update takes the old switch of each of them out, and only of these.
+        assertEquals(new java.util.LinkedHashSet<>(SoundSettings.SOUNDS),
+                config.getConfigurationSection(SoundSettings.SECTION).getKeys(false));
     }
 
     // ---------------------------------------------------------------- helpers

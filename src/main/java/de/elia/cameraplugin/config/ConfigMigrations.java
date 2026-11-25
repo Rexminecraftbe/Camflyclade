@@ -6,6 +6,9 @@ import de.elia.cameraplugin.display.ActionBarSettings;
 import de.elia.cameraplugin.display.NameMode;
 import de.elia.cameraplugin.menu.AdminButton;
 import de.elia.cameraplugin.menu.MenuButton;
+import de.elia.cameraplugin.session.CameraModeSettings;
+import de.elia.cameraplugin.sound.CamSound;
+import de.elia.cameraplugin.sound.SoundSettings;
 
 import java.util.List;
 import java.util.Locale;
@@ -60,7 +63,8 @@ final class ConfigMigrations {
                     file.add("cam-trail.show-mode", "fixed");
                 }
             }),
-            new ConfigUpdater.Migration(ConfigUpdater.Migration.ALWAYS, ConfigMigrations::tidyUp));
+            new ConfigUpdater.Migration(ConfigUpdater.Migration.ALWAYS, ConfigMigrations::tidyUp),
+            new ConfigUpdater.Migration(ConfigUpdater.Migration.ALWAYS, ConfigMigrations::fewerSwitches));
 
     /**
      * Settings that are no settings any more, and the ones that have another
@@ -114,9 +118,69 @@ final class ConfigMigrations {
     }
 
     /**
+     * The second tidying up: switches that two keys held where one does, and
+     * fine tuning that is fixed in the code now.
+     */
+    private static void fewerSwitches(ConfigUpdater file) {
+        for (String gone : FIXED_NOW) {
+            file.remove(gone);
+        }
+        // max-distance-enabled became the value false of max-distance-mode.
+        if ("false".equalsIgnoreCase(file.value(CameraModeSettings.OLD_DISTANCE_SWITCH))) {
+            setOrAdd(file, "camera-mode.max-distance-mode", "false");
+        }
+        file.remove(CameraModeSettings.OLD_DISTANCE_SWITCH);
+        // The colour of a name is the colour code at the start of its text. A
+        // color key that names the default colour goes; another one stays,
+        // and is read as before, see NameStyle.
+        for (String[] name : NAME_COLORS) {
+            String path = name[0] + "." + NameStyle.OLD_COLOR;
+            String color = file.value(path);
+            if (color != null && color.trim().replace(' ', '_').equalsIgnoreCase(name[1])) {
+                file.remove(path);
+            }
+        }
+        // Four switches for what the followers see of the items of the leader
+        // became one. On only where all four were: each shows something of
+        // his items that he may not want shown, and the one switch shows all.
+        boolean allDetails = true;
+        for (String detail : OLD_ITEM_DETAILS) {
+            allDetails &= "true".equalsIgnoreCase(file.value(detail));
+        }
+        if (allDetails) {
+            file.add("follow.mirror-item-details", "true");
+        }
+        for (String detail : OLD_ITEM_DETAILS) {
+            file.remove(detail);
+        }
+        // A sound is switched off with volume 0, it had a switch enabled as well.
+        for (String sound : SoundSettings.SOUNDS) {
+            String path = SoundSettings.SECTION + "." + sound;
+            if ("false".equalsIgnoreCase(file.value(path + "." + CamSound.OLD_SWITCH))) {
+                setOrAdd(file, path + ".volume", "0.0");
+            }
+            file.remove(path + "." + CamSound.OLD_SWITCH);
+        }
+    }
+
+    /**
+     * Gives a key a value of its own, for a setting another key said
+     * something about until it went: written anew where the file has it,
+     * added where it lacks it.
+     */
+    private static void setOrAdd(ConfigUpdater file, String path, String value) {
+        if (file.has(path)) {
+            file.renameValue(path, old -> value);
+        } else {
+            file.add(path, value);
+        }
+    }
+
+    /**
      * The changes of {@code lang/en.yml}: the texts of the ways of the spot
      * menu that went with {@code viewpoints.create-page} and
-     * {@code viewpoints.options.enabled}, and their switch.
+     * {@code viewpoints.options.enabled}, and their switch - and the note of
+     * {@code signal.levels}.
      */
     static final List<ConfigUpdater.Migration> LANGUAGE = List.of(
             new ConfigUpdater.Migration(ConfigUpdater.Migration.ALWAYS, file -> {
@@ -131,6 +195,9 @@ final class ConfigMigrations {
                     file.remove("messages." + text);
                 }
                 file.remove("message-settings.menu-spot-name-public");
+                // The note on signal.levels that did not go down, which went
+                // with the levels into the code.
+                file.remove("messages.config-not-descending");
             }));
 
     /** What is no setting any more. */
@@ -142,6 +209,20 @@ final class ConfigMigrations {
             "portals.forget-radius",
             "cam-area.structures-cache-chunks",
             "viewpoints.create-page", "viewpoints.options.enabled");
+
+    /** The sections of the names that had a colour of their own, each with its default colour. */
+    private static final String[][] NAME_COLORS = {{"camera-mode.name", "white"}, {"body.name", "yellow"}};
+
+    /** The four switches that {@code follow.mirror-item-details} took the place of. */
+    private static final List<String> OLD_ITEM_DETAILS = List.of("follow.mirror-count", "follow.mirror-enchantments",
+            "follow.mirror-durability", "follow.mirror-name");
+
+    /** What is no setting any more since the second tidying up: fine tuning fixed in the code. */
+    private static final List<String> FIXED_NOW = List.of(
+            "exit-click-guard", "web-map.bluemap", "web-map.dynmap", "web-map.squaremap", "bedrock.map-icons",
+            "body.health-rows-upward", "body.mob-target-heads", "menu.ban-shift-step", "signal.levels",
+            "cam-trail.show-min-blocks", "cam-trail.show-min-seconds", "cam-trail.show-max-blocks",
+            "cam-trail.show-max-seconds");
 
     /**
      * Where a section had a {@code storage} of its own, before there was one

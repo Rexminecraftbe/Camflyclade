@@ -5788,11 +5788,11 @@ def statistik_checks(env, bot):
         FIND.test("statistics: die Zahlen stehen in der Datei unter playerdata/stats",
                   re.search(rf"(?m)^\s*sessions: {mal + 1}$", text) is not None
                   and re.search(r"(?m)^\s*longest-distance: \d", text) is not None, str(datei))
-        set_option(env, "max-distance-enabled", "false", "camera-mode")
+        set_option(env, "max-distance-mode", "false")
         z = befehl(bot, "/cam stats")
-        FIND.test("max-distance-enabled: false - ohne feste Grenze steht der weiteste Abstand zum Koerper da",
+        FIND.test("max-distance-mode: false - ohne feste Grenze steht der weiteste Abstand zum Koerper da",
                   zahl(z, r"Farthest from the body: (\d+) blocks") >= 4, zeige(z))
-        set_options(env, [("max-distance-enabled", "true", "camera-mode"), ("max-distance-mode", "signal")])
+        set_option(env, "max-distance-mode", "signal")
         z = befehl(bot, "/cam stats")
         FIND.test("max-distance-mode: signal - mit dem Funksignal auch kein weitester Abstand zum Koerper: in freier "
                   "Luft kaeme jeder bis max-distance",
@@ -5876,7 +5876,7 @@ def statistik_checks(env, bot):
         set_option(env, "min-seconds", "0", "statistics")
 
         # --- Ein Sprung zu einem Punkt ist kein Flug ---
-        set_option(env, "max-distance-enabled", "false", "camera-mode")
+        set_option(env, "max-distance-mode", "false")
         heim = bot.server_pos()
         if heim is not None:
             hx, hy, hz = _floor(heim[0]), _floor(heim[1]), _floor(heim[2])
@@ -5903,7 +5903,7 @@ def statistik_checks(env, bot):
                           "Punkt zehn hoeher nicht, die vier Bloecke von dort weiter hoch schon",
                           1 <= weitest <= 7, zeige(z))
         spots_loeschen(bot, "Statistik")
-        set_option(env, "max-distance-enabled", "true", "camera-mode")
+        set_option(env, "max-distance-mode", "fixed")
 
         # --- Grosse Zahlen in Dreiergruppen ---
         cam_off(bot)
@@ -5993,8 +5993,8 @@ def statistik_checks(env, bot):
     finally:
         console(env, f"op {BOT_NAME}", pause=1.5)
         set_options(env, [("enabled", "true", "statistics"), ("view-others", "admin", "statistics"),
-                          ("min-seconds", "0", "statistics"), ("max-distance-enabled", "true", "camera-mode"),
-                          ("max-distance-mode", "fixed"), ("stats-thousands-separator", '","', "messages")])
+                          ("min-seconds", "0", "statistics"), ("max-distance-mode", "fixed"),
+                          ("stats-thousands-separator", '","', "messages")])
 
 
 def statistik_folgen_checks(env, bot):
@@ -6011,7 +6011,7 @@ def statistik_folgen_checks(env, bot):
     Nachholen beim Annehmen, ein Sprung, zaehlt nicht. Mit
     count-follow-distance: false zaehlt nur, was er selbst fliegt - auf der
     Fuehrung nichts -, der Flug selbst und seine Zeit aber schon. Fuer den
-    weitesten Abstand steht max-distance-enabled auf false.
+    weitesten Abstand steht max-distance-mode auf false.
     """
     def zahl(zeilen, muster):
         for z in zeilen:
@@ -6060,7 +6060,7 @@ def statistik_folgen_checks(env, bot):
                   re.search(r"(?m)^statistics:\s*\n(?:\s+.*\n)*?\s*count-follow-distance:\s*true\s*$",
                             quelle_config(env)) is not None, "")
         # Vor der ersten Frage, siehe mobtreffer_checks.
-        set_options(env, [("enabled", "false", "cam-safety"), ("max-distance-enabled", "false", "camera-mode")])
+        set_options(env, [("enabled", "false", "cam-safety"), ("max-distance-mode", "false")])
         if not FIND.test("Cam-Modus ist vor dem Test der Statistik beim Folgen aus", cam_off(bot), ""):
             return
         console(env, f"fill {_floor(x) - 4} {y} {_floor(z) - 3} {_floor(x) + 26} {y + 4} {_floor(z) + 3} "
@@ -6095,7 +6095,7 @@ def statistik_folgen_checks(env, bot):
         cam_off(zuschauer)
         zuschauer.call("velocity", on=False)
         zuschauer.stop()
-        set_options(env, [("enabled", "true", "cam-safety"), ("max-distance-enabled", "true", "camera-mode"),
+        set_options(env, [("enabled", "true", "cam-safety"), ("max-distance-mode", "fixed"),
                           ("count-follow-distance", "true", "statistics")])
         hinstellen(bot, heim[0], heim[1], heim[2])
 
@@ -7308,6 +7308,18 @@ def abstand_zur_strecke(p, a, b):
 SPUR_HOEHE = 1.0
 
 
+def dynamisch_sekunden(bloecke):
+    """Wie lange cam-trail.show-mode: dynamic eine Linie zeigt, die so viele
+    Bloecke lang ist, in Sekunden - die feste Kurve aus TrailShowMode: bis 50
+    Bloecke 10, ab 1500 Bloecken 300, dazwischen entsprechend, kaufmaennisch
+    gerundet wie Math.round."""
+    if bloecke <= 50:
+        return 10
+    if bloecke >= 1500:
+        return 300
+    return math.floor(10 + (bloecke - 50) / 1450 * 290 + 0.5)
+
+
 def flugspur_checks(env, bot):
     """cam-trail: /cam trail <Name> [Nummer|all] zeigt, wo die Kamera eines
     Spielers geflogen ist.
@@ -7322,10 +7334,9 @@ def flugspur_checks(env, bot):
     fuer die Sichtweite und alle auf dem geflogenen Weg - keiner auf der Linie
     quer zurueck, die /cam back nicht geflogen ist. /cam trail ohne Namen
     blendet sie aus, und mit show-mode: fixed hoert sie nach show-seconds
-    von selbst auf. Mit dynamic steht ein Flug bis show-min-blocks
-    show-min-seconds da, ab show-max-blocks show-max-seconds, dazwischen
-    entsprechend; ist show-max-seconds kleiner, gilt show-min-seconds, und ein
-    Flug, der noch laeuft, steht show-max-seconds da. Mit forever steht sie,
+    von selbst auf. Mit dynamic steht ein Flug bis 50 Bloecke 10 Sekunden da,
+    ein Flug, der noch laeuft, 5 Minuten (die Kurve dazwischen rechnet
+    TrailSettingsTest nach). Mit forever steht sie,
     bis /cam trail sie ausblendet. Eine aeltere Datei ohne show-mode, aber mit
     show-seconds, geht mit fixed weiter, ohne Warnung.
 
@@ -7372,11 +7383,11 @@ def flugspur_checks(env, bot):
                   gesagt(z, r"/cam trail is switched off"), zeige(z))
 
         quelle = quelle_config(env)
-        voreinstellung = (("show-mode", "dynamic"), ("show-seconds", "30"), ("show-min-blocks", "50"),
-                          ("show-min-seconds", "10"), ("show-max-blocks", "1500"), ("show-max-seconds", "300"))
-        FIND.test("Voreingestellt steht cam-trail.show-mode: dynamic da, mit show-seconds: 30, show-min-blocks: 50, "
-                  "show-min-seconds: 10, show-max-blocks: 1500 und show-max-seconds: 300",
-                  all(re.search(rf"(?m)^  {k}:\s*{v}\s*$", quelle) for k, v in voreinstellung), "")
+        voreinstellung = (("show-mode", "dynamic"), ("show-seconds", "30"))
+        FIND.test("Voreingestellt steht cam-trail.show-mode: dynamic da, mit show-seconds: 30 - und nichts mehr fuer "
+                  "dynamic, dessen Zeiten fest sind",
+                  all(re.search(rf"(?m)^  {k}:\s*{v}\s*$", quelle) for k, v in voreinstellung)
+                  and "show-min-" not in quelle and "show-max-" not in quelle, "")
         set_options(env, [("enabled", "true", "cam-trail"), ("show-mode", "fixed", "cam-trail"),
                           ("show-seconds", "4", "cam-trail")])
         heim = bot.server_pos()
@@ -7451,36 +7462,14 @@ def flugspur_checks(env, bot):
         # einen halben Block darunter oder darueber herauskaeme.
         bloecke = int(strecke.group(1)) if strecke else 0
 
-        def nach_strecke(min_b, min_s, max_b, max_s):
-            """/cam trail mit dynamic und diesen Werten: was kam, und welche
-            Zeiten zu der Strecke passen."""
-            set_options(env, [("show-mode", "dynamic", "cam-trail"), ("show-min-blocks", str(min_b), "cam-trail"),
-                              ("show-min-seconds", str(min_s), "cam-trail"),
-                              ("show-max-blocks", str(max_b), "cam-trail"),
-                              ("show-max-seconds", str(max_s), "cam-trail")])
-            z = befehl(bot, f"/cam trail {BOT_NAME}")
-            befehl(bot, "/cam trail", warten=0.5)
-            max_s = max(max_s, min_s)
-
-            def sekunden(b):
-                if b <= min_b:
-                    return min_s
-                if b >= max_b:
-                    return max_s
-                return math.floor(min_s + (b - min_b) / (max_b - min_b) * (max_s - min_s) + 0.5)
-
-            moeglich = sorted({sekunden(b) for b in (bloecke - 0.5, bloecke + 0.5)})
-            passt = any(gesagt(z, gezeigt_fuer(n)) for n in moeglich)
-            return passt, f"{bloecke} Bloecke, erwartet {moeglich}: {zeige(z)}"
-
-        FIND.test("show-mode: dynamic - zwischen show-min-blocks (0, 1 s) und show-max-blocks (100, 21 s) entsprechend",
-                  *nach_strecke(0, 1, 100, 21))
-        FIND.test("show-mode: dynamic - unter show-min-blocks (50) steht er show-min-seconds (9) da",
-                  *nach_strecke(50, 9, 1500, 300))
-        FIND.test("show-mode: dynamic - ueber show-max-blocks (10) steht er show-max-seconds (2) da",
-                  *nach_strecke(0, 1, 10, 2))
-        FIND.test("show-mode: dynamic - ist show-max-seconds kleiner als show-min-seconds, gilt show-min-seconds",
-                  *nach_strecke(0, 8, 10, 3))
+        set_option(env, "show-mode", "dynamic", "cam-trail")
+        z = befehl(bot, f"/cam trail {BOT_NAME}")
+        befehl(bot, "/cam trail", warten=0.5)
+        moeglich = sorted({dynamisch_sekunden(b) for b in (bloecke - 0.5, bloecke + 0.5)})
+        FIND.test("show-mode: dynamic - der Flug steht so lange da, wie seine Strecke sagt (bis 50 Bloecke 10 "
+                  "Sekunden)",
+                  any(gesagt(z, gezeigt_fuer(n)) for n in moeglich),
+                  f"{bloecke} Bloecke, erwartet {moeglich}: {zeige(z)}")
 
         # Eine aeltere Datei hat kein show-mode, nur show-seconds - und keine
         # config-version, die kam spaeter. Der Config-Updater traegt show-mode
@@ -7525,11 +7514,9 @@ def flugspur_checks(env, bot):
                   gesagt(weg, r"Flight hidden") and not partikel_seit(bot, seit), zeige(weg))
 
         # Ein zweiter Flug, schraeg hoch nach Norden: Seine Linie liegt weit
-        # weg von der Ecke des ersten. Fertige Fluege stehen 4 Sekunden da,
-        # einer, der noch laeuft, 9.
-        set_options(env, [("show-mode", "dynamic", "cam-trail"), ("show-min-blocks", "0", "cam-trail"),
-                          ("show-min-seconds", "4", "cam-trail"), ("show-max-blocks", "1000", "cam-trail"),
-                          ("show-max-seconds", "9", "cam-trail")])
+        # weg von der Ecke des ersten. Fertige Fluege stehen 10 Sekunden da,
+        # einer, der noch laeuft, 5 Minuten.
+        set_option(env, "show-mode", "dynamic", "cam-trail")
         if not FIND.test("Zweiter Cam-Modus fuer die Flugspur gestartet", cam_on(bot), ""):
             return
         bot.call("fly", wait=30, dy=3, dz=-5, timeout=15000)
@@ -7537,8 +7524,8 @@ def flugspur_checks(env, bot):
         nord = bot.server_pos()
         z = befehl(bot, f"/cam trail {BOT_NAME}")
         befehl(bot, "/cam trail", warten=0.5)
-        FIND.test("Ein Flug, der noch laeuft, steht show-max-seconds da (9 Sekunden), seine Linie waechst noch",
-                  gesagt(z, gezeigt_fuer(9)), zeige(z))
+        FIND.test("Ein Flug, der noch laeuft, steht am laengsten da (5 Minuten), seine Linie waechst noch",
+                  gesagt(z, r"Shown for 5m 0s:"), zeige(z))
         cam_off(bot)
         if nord is None:
             FIND.test("Position nach dem zweiten Flug lesbar", False, "")
@@ -7575,21 +7562,17 @@ def flugspur_checks(env, bot):
                   zeige(z[:3]) + f" - {len(teile)} Partikel")
         befehl(bot, "/cam trail", warten=0.5)
 
-        # Mit dynamic zaehlen bei all beide Fluege zusammen: Mit einer Sekunde
-        # je Block (0 Bloecke 1 Sekunde, 100 Bloecke 101 Sekunden) steht die
-        # Linie 1 Sekunde und so viele, wie beide zusammen Bloecke haben - nicht
-        # nur so viele, wie der laengere hat. Die Konsole nennt die Strecken
-        # gerundet, die Summe der genauen liegt hoechstens einen Block daneben.
+        # Mit dynamic zaehlen bei all beide Fluege zusammen. Die Konsole nennt
+        # die Strecken gerundet, die Summe der genauen liegt hoechstens einen
+        # Block daneben. Die beiden hier sind zusammen kurz: Dass die Summe
+        # zaehlt und nicht der laengere, zeigt erst eine Strecke ueber 50
+        # Bloecken - das rechnet TrailSettingsTest mit der Kurve nach.
         log = konsole(f"cam trail {BOT_NAME} all")
         weiten = [int(w) for w in re.findall(r"#\d+: (\d+) blocks", log)]
-        set_options(env, [("show-min-blocks", "0", "cam-trail"), ("show-min-seconds", "1", "cam-trail"),
-                          ("show-max-blocks", "100", "cam-trail"), ("show-max-seconds", "101", "cam-trail")])
         z = befehl(bot, f"/cam trail {BOT_NAME} all")
         befehl(bot, "/cam trail", warten=0.5)
-        set_options(env, [("show-min-blocks", "0", "cam-trail"), ("show-min-seconds", "4", "cam-trail"),
-                          ("show-max-blocks", "1000", "cam-trail"), ("show-max-seconds", "9", "cam-trail")])
-        moeglich = list(range(sum(weiten), sum(weiten) + 3)) if len(weiten) == 2 else []
-        FIND.test("show-mode: dynamic - bei all zaehlen beide Fluege zusammen, nicht nur der laengere",
+        moeglich = sorted({dynamisch_sekunden(b) for b in range(sum(weiten) - 1, sum(weiten) + 2)})
+        FIND.test("show-mode: dynamic - bei all stehen beide Fluege so lange da, wie ihre Strecken zusammen sagen",
                   len(weiten) == 2 and min(weiten) >= 3 and any(gesagt(z, gezeigt_fuer(n)) for n in moeglich),
                   f"Strecken {weiten}, erwartet {moeglich}: {zeige(z)}")
 
@@ -7723,9 +7706,7 @@ def flugspur_checks(env, bot):
         console(env, f"op {BOT_NAME}", pause=1.0)
         cam_off(bot)
         set_options(env, [("enabled", "false", "cam-trail"), ("show-mode", "dynamic", "cam-trail"),
-                          ("show-seconds", "30", "cam-trail"), ("show-min-blocks", "50", "cam-trail"),
-                          ("show-min-seconds", "10", "cam-trail"), ("show-max-blocks", "1500", "cam-trail"),
-                          ("show-max-seconds", "300", "cam-trail"), ("flights", "5", "cam-trail"),
+                          ("show-seconds", "30", "cam-trail"), ("flights", "5", "cam-trail"),
                           ("storage", "memory", "cam-trail"), ("keep-days", "30", "cam-trail")])
         time.sleep(1.0)
         shutil.rmtree(spuren, ignore_errors=True)
@@ -9796,7 +9777,7 @@ def fuehrung_ohne_cam_checks(env, bot):
     der Bot unsichtbar ist. Der Gast bekommt die Herzen des Bots auf seinen
     Bildschirm (max_health 10: 10 statt seiner 20, am Server bleiben es 20),
     das Item in seiner Hand und das in der zweiten als eigene Ausruestung - am
-    Server bleiben seine Haende leer. Mit mirror-count: false, voreingestellt,
+    Server bleiben seine Haende leer. Mit mirror-item-details: false, voreingestellt,
     ohne die Zahl im Stapel: 16 Steine kommen als einer, und die Hand des Bots
     selbst, die im Blick des Bots die Hotbar fuellt, auch - das Paket des
     Servers aendert CamFly auf dem Weg zum Gast, die echte Zahl kommt dort nie
@@ -9804,12 +9785,12 @@ def fuehrung_ohne_cam_checks(env, bot):
     wieder gezeigt); der dritte bekommt die echte. Setzt der
     Bot einen Block, kommt der Stein mit gewechselter Marke in den Daten, im
     Ueberleben wie im Kreativmodus, damit sein Client ihn absinken laesst.
-    Mit mirror-enchantments und -durability: false, voreingestellt, kommt ein
+    Ebenso kommt ein
     verzaubertes, abgenutztes Schwert mit einer Verzauberung, die nichts sagt
     (Stufe 1, im Tooltip ausgeblendet), und ohne Schaden - als eigenes und am
     Bot; der dritte bekommt das echte. Nimmt es Schaden, wechselt die Marke.
-    Ein verzaubertes Buch kommt ohne seine Verzauberung. Mit mirror-name:
-    false, voreingestellt, kommt ein umbenanntes Schwert ohne seinen Namen -
+    Ein verzaubertes Buch kommt ohne seine Verzauberung. Ebenso kommt ein
+    umbenanntes Schwert ohne seinen Namen -
     als eigenes und am Bot; der dritte bekommt es mit.
     Schwingt der Bot den Arm, schwingt der
     Gast seinen mit (Paket animation mit der eigenen Nummer: 0, und 3 fuer die
@@ -9825,9 +9806,9 @@ def fuehrung_ohne_cam_checks(env, bot):
     seine eigenen Herzen, und der Bot ist aus dem Team; endet der Cam-Modus,
     endet sie. Im Zuschauermodus fuehrt keiner, und wechselt der Bot dahin,
     endet die Fuehrung. Mit mirror-main-hand: false kommt nur die zweite
-    Hand, mit mirror-count: true mit ihrer Zahl, als eigene und am Bot, mit
-    mirror-enchantments und -durability: true ein Schild mit seiner
-    Verzauberung und seinem Schaden, mit mirror-name: true mit seinem Namen, mit
+    Hand, mit mirror-item-details: true mit ihrer Zahl, als eigene und am Bot,
+    ein Schild mit seiner Verzauberung und seinem Schaden und einer mit seinem
+    Namen, mit
     mirror-swing: false schwingt nichts mit, mit mirror-effects:
     false kommen keine Effekte, mit fine-hold: false haelt ihn der Server nur
     jeden Tick fest. Mit guide-name: above bleibt sein Name, ueber ihm steht nur der
@@ -9899,16 +9880,14 @@ def fuehrung_ohne_cam_checks(env, bot):
     try:
         quelle = quelle_config(env)
         FIND.test("Voreingestellt stehen lead-without-cam: true, guide-name: replace, sieben mirror-... und "
-                  "fine-hold auf true, mirror-experience, -count, -enchantments, -durability und -name auf false da",
+                  "fine-hold auf true, mirror-experience und mirror-item-details auf false da",
                   all(re.search(rf"(?m)^\s+{schluessel}:\s*{wert}\s*$", quelle) is not None
                       for schluessel, wert in (("lead-without-cam", "true"), ("guide-name", "replace"),
                                                ("mirror-health", "true"), ("mirror-main-hand", "true"),
                                                ("mirror-off-hand", "true"), ("mirror-swing", "true"),
                                                ("mirror-head", "true"), ("mirror-effects", "true"),
                                                ("mirror-frost", "true"), ("mirror-experience", "false"),
-                                               ("mirror-count", "false"), ("mirror-enchantments", "false"),
-                                               ("mirror-durability", "false"), ("mirror-name", "false"),
-                                               ("fine-hold", "true"))), "")
+                                               ("mirror-item-details", "false"), ("fine-hold", "true"))), "")
         zuschauer.start()
         dritter.start()
         if not FIND.test("Zweiter und dritter Spieler fuer die Fuehrung ohne Cam-Modus kommen herein",
@@ -10015,7 +9994,7 @@ def fuehrung_ohne_cam_checks(env, bot):
             console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:stone {zahl}", pause=1.0)
             am_bot_je.append([p.get("count") for p in haende_des_bots(zuschauer, fremd_gast)])
         eigen = eigene_hand(ausruestung)
-        FIND.test("mirror-count: false - 16, 12 und 16 Steine des Bots kommen beim Gast als eigener Stein ohne Zahl "
+        FIND.test("mirror-item-details: false - 16, 12 und 16 Steine des Bots kommen beim Gast als eigener Stein ohne Zahl "
                   "(als einer)", bool(eigen) and all(p.get("count") == 1 for p in eigen), str(eigen[-4:]))
         FIND.test("Die Hand des Bots selbst (im Blick des Bots seine Hotbar): das Paket des Servers kommt beim Gast "
                   "schon als ein Stein an, die echte Zahl (16, 12, 16) nie",
@@ -10083,7 +10062,7 @@ def fuehrung_ohne_cam_checks(env, bot):
         eigen = eigene_hand(ausruestung)
         am_bot = haende_des_bots(zuschauer, fremd_gast)
         beim_dritten = haende_des_bots(dritter, fremd_dritter)
-        FIND.test("mirror-enchantments und -durability: false - das Schwert des Bots (Schaerfe V, Pluenderung III, 100 "
+        FIND.test("mirror-item-details: false - das Schwert des Bots (Schaerfe V, Pluenderung III, 100 "
                   "Schaden) kommt beim Gast als eigenes mit einer Verzauberung, die nichts sagt (Stufe 1, im Tooltip "
                   "ausgeblendet), und ohne Schaden", bool(eigen) and verborgen(eigen[-1]), str(eigen[-2:]))
         FIND.test("Die Hand des Bots selbst (im Blick des Bots seine Hotbar) bekommt der Gast genauso - nie mit den "
@@ -10129,7 +10108,7 @@ def fuehrung_ohne_cam_checks(env, bot):
         eigen = eigene_hand(ausruestung)
         am_bot = haende_des_bots(zuschauer, fremd_gast)
         beim_dritten = haende_des_bots(dritter, fremd_dritter)
-        FIND.test("mirror-name: false - das Schwert \"Exkalibur\" des Bots kommt beim Gast ohne seinen Namen, als "
+        FIND.test("mirror-item-details: false - das Schwert \"Exkalibur\" des Bots kommt beim Gast ohne seinen Namen, als "
                   "eigenes und am Bot",
                   bool(eigen) and bool(am_bot)
                   and all("custom_name" not in bestandteile(p) for p in eigen + am_bot),
@@ -10347,9 +10326,7 @@ def fuehrung_ohne_cam_checks(env, bot):
         # Jeder Reload beendet den Cam-Modus des Gastes: danach von vorn.
         set_options(env, [("mirror-main-hand", "false", "follow"), ("mirror-swing", "false", "follow"),
                           ("mirror-effects", "false", "follow"), ("fine-hold", "false", "follow"),
-                          ("mirror-experience", "true", "follow"), ("mirror-count", "true", "follow"),
-                          ("mirror-enchantments", "true", "follow"), ("mirror-durability", "true", "follow"),
-                          ("mirror-name", "true", "follow")])
+                          ("mirror-experience", "true", "follow"), ("mirror-item-details", "true", "follow")])
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         ausruestung = zuschauer.call("own_equipment").get("count", 0)
@@ -10364,14 +10341,14 @@ def fuehrung_ohne_cam_checks(env, bot):
         console(env, f"item replace entity {BOT_NAME} weapon.offhand with minecraft:torch 5", pause=1.5)
         eigen = eigene_hand(ausruestung, 1)
         am_bot = haende_des_bots(zuschauer, fremd_gast, 1)
-        FIND.test("mirror-count: true - der Gast sieht die Zahl: 5 Fackeln in der zweiten Hand, als eigene und am Bot",
+        FIND.test("mirror-item-details: true - der Gast sieht die Zahl: 5 Fackeln in der zweiten Hand, als eigene und am Bot",
                   bool(eigen) and eigen[-1].get("count") == 5 and bool(am_bot)
                   and all(p.get("count") == 5 for p in am_bot), f"{eigen[-3:]} / {am_bot[-3:]}")
         ausruestung = zuschauer.call("own_equipment").get("count", 0)
         console(env, f"item replace entity {BOT_NAME} weapon.offhand with "
                      f"minecraft:shield[enchantments={{unbreaking:3}},damage=50]", pause=1.5)
         eigen = eigene_hand(ausruestung, 1)
-        FIND.test("mirror-enchantments und -durability: true - der Schild kommt mit seiner Verzauberung (III) und "
+        FIND.test("mirror-item-details: true - der Schild kommt mit seiner Verzauberung (III) und "
                   "seinem Schaden (50)",
                   bool(eigen) and stufen(eigen[-1]) == [3] and bestandteile(eigen[-1]).get("damage") == 50,
                   str(eigen[-2:]))
@@ -10379,7 +10356,7 @@ def fuehrung_ohne_cam_checks(env, bot):
         console(env, f'item replace entity {BOT_NAME} weapon.offhand with minecraft:shield[custom_name="Burgtor"]',
                 pause=1.5)
         eigen = eigene_hand(ausruestung, 1)
-        FIND.test("mirror-name: true - der Schild kommt mit seinem Namen (\"Burgtor\")",
+        FIND.test("mirror-item-details: true - der Schild kommt mit seinem Namen (\"Burgtor\")",
                   bool(eigen) and "custom_name" in bestandteile(eigen[-1]), str(eigen[-2:]))
         console(env, f"item replace entity {BOT_NAME} weapon.offhand with minecraft:shield", pause=0.3)
         schwuenge = zuschauer.call("own_swings").get("count", 0)
@@ -10412,9 +10389,8 @@ def fuehrung_ohne_cam_checks(env, bot):
 
         set_options(env, [("mirror-main-hand", "true", "follow"), ("mirror-swing", "true", "follow"),
                           ("mirror-effects", "true", "follow"), ("fine-hold", "true", "follow"),
-                          ("mirror-experience", "false", "follow"), ("mirror-count", "false", "follow"),
-                          ("mirror-enchantments", "false", "follow"), ("mirror-durability", "false", "follow"),
-                          ("mirror-name", "false", "follow"), ("guide-name", "above", "follow")])
+                          ("mirror-experience", "false", "follow"), ("mirror-item-details", "false", "follow"),
+                          ("guide-name", "above", "follow")])
         hinstellen(bot, x, y, z)
         console(env, f"tp {ZUSCHAUER_NAME} {gast[0]} {y} {z}", pause=0.5)
         einladen_und_annehmen()
@@ -10445,9 +10421,7 @@ def fuehrung_ohne_cam_checks(env, bot):
             console(env, f"item replace entity {BOT_NAME} weapon.mainhand with minecraft:air", pause=0.3)
             console(env, f"item replace entity {BOT_NAME} weapon.offhand with minecraft:air", pause=0.3)
             set_options(env, [("lead-without-cam", "true", "follow"), ("guide-name", "replace", "follow"),
-                              ("mirror-main-hand", "true", "follow"), ("mirror-count", "false", "follow"),
-                              ("mirror-enchantments", "false", "follow"), ("mirror-durability", "false", "follow"),
-                              ("mirror-name", "false", "follow")])
+                              ("mirror-main-hand", "true", "follow"), ("mirror-item-details", "false", "follow")])
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test der Fuehrung ohne Cam-Modus: {exc}")
@@ -11258,9 +11232,8 @@ def menue_checks(env, bot):
     Mitte (49) Everybody mit einem im Cam-Modus, vorn in der Liste der Bot;
     ein Klick darauf bietet Beenden und Sperren an. Beenden beendet den Cam-Modus aller.
     Sperren steht auf fuer immer; Tage, Stunden und Minuten - alle mit der
-    Uhr - kommen mit einem Linksklick dazu, mit Umschalt so viele wie
-    menu.ban-shift-step (voreingestellt 10, im Test 5), und mit einem
-    Rechtsklick weg, nur nie bis auf nichts. Der Grund kommt aus dem Chat -
+    Uhr - kommen mit einem Linksklick dazu, mit Umschalt zehn auf einmal,
+    und mit einem Rechtsklick weg, nur nie bis auf nichts. Der Grund kommt aus dem Chat -
     einer, der mit 1h anfaengt, bleibt der Grund -, und die Nachricht sagt
     "because:". Danach steht Banned unter dem Kopf, der Knopf Change ban
     glaenzt; einen eigenen Knopf zum Aufheben hat die Seite nicht. Change
@@ -11527,10 +11500,7 @@ def menue_checks(env, bot):
         FIND.test("admin-access: menu - /cam list verweist auf das Menue, die Konsole darf es weiter",
                   gesagt(zeilen, r"Use /cam menu for that") and "Nobody is in cam mode" in log
                   and "list" not in tab("/cam "), f"{zeige(zeilen)} / {log.strip()[-200:]}")
-        FIND.test("Voreingestellt steht menu.ban-shift-step: 10 da",
-                  re.search(r"(?m)^  ban-shift-step:\s*10\s*$", quelle_config(env)) is not None, "")
-        set_options(env, [("enabled", "true", "cam-ban"), ("enabled", "true", "stop-command"),
-                          ("ban-shift-step", "5", "menu")])
+        set_options(env, [("enabled", "true", "cam-ban"), ("enabled", "true", "stop-command")])
         cam_on(bot)
         menue()
         klick(23)
@@ -11571,19 +11541,19 @@ def menue_checks(env, bot):
         arten = {(knopf.get(platz) or {}).get("name") for platz in ("12", "13", "14")}
         FIND.test("Tage, Stunden und Minuten sind dasselbe Item (die Uhr)", len(arten) == 1 and None not in arten,
                   str(arten))
-        FIND.test("ban-shift-step: 5 - die Knoepfe sagen, dass Umschalt fuenf auf einmal gibt",
-                  "Shift: ±5" in item_text(knopf.get("14")), item_text(knopf.get("14")))
+        FIND.test("Die Knoepfe sagen, dass Umschalt zehn auf einmal gibt",
+                  "Shift: ±10" in item_text(knopf.get("14")), item_text(knopf.get("14")))
         klick(13)
         klick(14, mode=1)
         klick(14, button=1)
         klick(12, button=1)
         knopf = fenster().get("slots", {})
-        FIND.test("Zeit: Stunde dazu, mit Umschalt fuenf Minuten dazu, eine weg - 1h 4m, fuer immer ist es nicht mehr",
-                  "Hours: 1" in item_text(knopf.get("13")) and "Minutes: 4" in item_text(knopf.get("14"))
-                  and "Total: for 1h 4m 0s" in item_text(knopf.get("14"))
+        FIND.test("Zeit: Stunde dazu, mit Umschalt zehn Minuten dazu, eine weg - 1h 9m, fuer immer ist es nicht mehr",
+                  "Hours: 1" in item_text(knopf.get("13")) and "Minutes: 9" in item_text(knopf.get("14"))
+                  and "Total: for 1h 9m 0s" in item_text(knopf.get("14"))
                   and "Now" not in item_text(knopf.get("10")),
                   f"{item_text(knopf.get('13'))} / {item_text(knopf.get('14'))} / {item_text(knopf.get('10'))}")
-        FIND.test("Zeit: einen Tag weg geht bei 1h 4m nicht - es bleibt, wie es ist (nichts waere fuer immer)",
+        FIND.test("Zeit: einen Tag weg geht bei 1h 9m nicht - es bleibt, wie es ist (nichts waere fuer immer)",
                   "Days: 0" in item_text(knopf.get("12")) and "Hours: 1" in item_text(knopf.get("13")),
                   item_text(knopf.get("12")))
         seit = bot.mark()
@@ -11595,14 +11565,14 @@ def menue_checks(env, bot):
         f = fenster()
         FIND.test("Nach dem Grund ist die Seite wieder da, mit dem Grund und der Zeit",
                   f.get("open") and "1h Testgrund" in item_text(f.get("slots", {}).get("16"))
-                  and "Minutes: 4" in item_text(f.get("slots", {}).get("14")),
+                  and "Minutes: 9" in item_text(f.get("slots", {}).get("14")),
                   item_text(f.get("slots", {}).get("16")))
         seit = bot.mark()
         klick(22, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
         knopf = fenster().get("slots", {})
-        FIND.test("Sperren sperrt alle fuer 1h 4m mit dem Grund - der mit 1h anfaengt, bleibt der Grund",
-                  gesagt(zeilen, r"Everybody is banned from cam mode for 1h 4m 0s because: 1h Testgrund\."),
+        FIND.test("Sperren sperrt alle fuer 1h 9m mit dem Grund - der mit 1h anfaengt, bleibt der Grund",
+                  gesagt(zeilen, r"Everybody is banned from cam mode for 1h 9m 0s because: 1h Testgrund\."),
                   zeige(zeilen))
         FIND.test("Danach: Banned unter dem Kopf, Change ban glaenzt - und kein eigener Knopf zum Aufheben",
                   "Banned" in item_text(knopf.get("13")) and "Change ban" in item_text(knopf.get("15"))
@@ -11614,7 +11584,7 @@ def menue_checks(env, bot):
         knopf = f.get("slots", {})
         FIND.test("Change ban: die Seite hat die Zeit, die noch bleibt, und statt des Grundes Unban",
                   "Change ban: Everybody" in (f.get("title") or "") and "Hours: 1" in item_text(knopf.get("13"))
-                  and "Minutes: 4" in item_text(knopf.get("14")) and "Unban" in item_text(knopf.get("16"))
+                  and "Minutes: 9" in item_text(knopf.get("14")) and "Unban" in item_text(knopf.get("16"))
                   and "Everybody can use cam mode again" in item_text(knopf.get("16"))
                   and not any("Reason" in item_text(v) for v in knopf.values())
                   and "Change ban" in item_text(knopf.get("22")) and "26" not in knopf,
@@ -11623,8 +11593,8 @@ def menue_checks(env, bot):
         seit = bot.mark()
         klick(22, warten=2.0)
         zeilen = zeilen_seit(bot, seit)
-        FIND.test("Change ban: ein Tag mehr - jetzt 1d 1h 4m, und es heisst, sie ist geaendert",
-                  gesagt(zeilen, r"Everybody is now banned from cam mode for 1d 1h 4m because: 1h Testgrund\."),
+        FIND.test("Change ban: ein Tag mehr - jetzt 1d 1h 9m, und es heisst, sie ist geaendert",
+                  gesagt(zeilen, r"Everybody is now banned from cam mode for 1d 1h 9m because: 1h Testgrund\."),
                   zeige(zeilen))
         klick(15)
         seit = bot.mark()
@@ -11638,7 +11608,7 @@ def menue_checks(env, bot):
         bot.call("close_window", wait=10)
         set_options(env, [("enabled", "false", "cam-ban"), ("enabled", "false", "stop-command"),
                           ("admin-access", "both", "menu"), ("enabled", "true", "cam-trail"),
-                          ("show-min-seconds", "60", "cam-trail"), ("ban-shift-step", "10", "menu")])
+                          ("show-mode", "fixed", "cam-trail"), ("show-seconds", "60", "cam-trail")])
 
         # Zwei Fluege vom selben Platz, dann ein Stueck daneben.
         for weg in ({"dy": 3}, {"dx": -3, "dy": 2}):
@@ -11788,7 +11758,7 @@ def menue_checks(env, bot):
                   f"{titel} / {sorted(f.get('slots', {}))} / {zeige(zeilen)}")
         bot.call("close_window", wait=10)
         set_options(env, [("enabled", "false", "cam-trail"), ("show-mode", "dynamic", "cam-trail"),
-                          ("show-min-seconds", "10", "cam-trail")])
+                          ("show-seconds", "30", "cam-trail")])
 
         original = datei.read_text(encoding="utf-8")
         text = menue_knopf(original, "start", slot=4)
@@ -11862,7 +11832,7 @@ def menue_checks(env, bot):
             # Wie der Testserver es fuer alle anderen Abschnitte hat.
             set_options(env, [("access", "both", "menu"), ("admin-access", "both", "menu"),
                               ("enabled", "false", "cam-ban"), ("enabled", "false", "cam-trail"),
-                              ("show-mode", "dynamic", "cam-trail"), ("show-min-seconds", "10", "cam-trail"),
+                              ("show-mode", "dynamic", "cam-trail"), ("show-seconds", "30", "cam-trail"),
                               ("enabled", "false", "stop-command")])
             console(env, "cam unban all", pause=0.5)
             spots_loeschen(bot, "Menue")
@@ -12894,9 +12864,8 @@ def spotoptionen_checks(env, bot):
     welches Symbol er hat und was seine Optionen koennen.
 
     Voreingestellt stehen die Symbole mit filled_map und map vorn, options
-    mit rename, icon, share und delete an und move aus, dazu
-    bedrock.map-icons: false da - nachgesehen in der Datei, die das
-    Plugin mitbringt.
+    mit rename, icon, share und delete an und move aus - nachgesehen in der
+    Datei, die das Plugin mitbringt.
 
     Ein neuer Punkt: das Buch fragt nach dem Namen. Einen, den er schon hat,
     fragt der Chat gleich noch einmal ab - die naechste Zeile ist der naechste
@@ -12993,13 +12962,12 @@ def spotoptionen_checks(env, bot):
         cam_off(zuschauer)
         quelle = quelle_config(env)
         FIND.test("Voreingestellt stehen viewpoints.icons mit filled_map und map vorn, options "
-                  "mit rename, icon, share und delete an und move aus, und bedrock.map-icons: false da",
+                  "mit rename, icon, share und delete an und move aus",
                   re.search(r"(?m)^  icons:\s*\n\s*- filled_map\s*\n\s*- map\s*\n", quelle) is not None
                   and re.search(r"(?m)^  options:\s*\n(?:\s*#.*\n)*"
                                 r"\s*rename:\s*true\s*\n(?:\s*#.*\n)*\s*icon:\s*true\s*\n(?:\s*#.*\n)*"
                                 r"\s*share:\s*true\s*\n(?:\s*#.*\n)*\s*delete:\s*true\s*\n(?:\s*#.*\n)*"
-                                r"\s*move:\s*false\s*$", quelle) is not None
-                  and re.search(r"(?m)^  map-icons:\s*false\s*$", quelle) is not None, "")
+                                r"\s*move:\s*false\s*$", quelle) is not None, "")
         spots_loeschen(bot, *namen_der_punkte)
         hinstellen(bot, x, y, z)
         befehl(bot, "/cam spot set Optalt")
@@ -13752,10 +13720,9 @@ def funk_checks(env, bot):
     Eine Grenze, an die man stoesst, gibt es nicht: In freier Luft fliegt die
     Kamera ueber die 30 Bloecke hinaus, bis das Signal sie zurueckholt.
 
-    signal.levels (voreingestellt 80, 60, 40, 20) legt fest, ab wie viel
-    Prozent welche Stufe gilt: Mit 95, 85, 50, 10 sind 90 % "good", 67 %
-    "medium" und 17 % "weak". Mit 85, 67, 90, 20 ist medium nicht kleiner
-    als good: /cam reload meldet das, und es gelten wieder die voreingestellten.
+    Die Stufen sind fest - fuenf Balken ab 80 %, vier ab 60, drei ab 40,
+    zwei ab 20 -, die config.yml hat kein signal.levels mehr: 90 % sind
+    "excellent", 50 % "medium" und 33 % "weak".
     """
     if not FIND.test("Cam-Modus ist vor dem Test des Funksignals aus", cam_off(bot), ""):
         return
@@ -13922,50 +13889,25 @@ def funk_checks(env, bot):
         FIND.test("signal: dort holt das Signal die Kamera zurueck", gesagt(z_, r"back at your body")
                   and am_koerper()[0], zeige(z_[-3:]))
 
-        # --- signal.levels: ab wie viel Prozent welche Stufe ---
-        FIND.test("Voreingestellt stehen signal.levels mit 80, 60, 40 und 20 da",
-                  re.search(r"(?m)^  levels:\n    excellent: 80\n    good: 60\n    medium: 40\n    weak: 20$",
-                            ausgeliefert(env)) is not None, "")
-        set_options(env, [("excellent", "95", "signal"), ("good", "85", "signal"), ("medium", "50", "signal"),
-                          ("weak", "10", "signal")])
+        # --- Die Stufen: fest 80, 60, 40 und 20 Prozent ---
+        FIND.test("Die ausgelieferte config.yml hat kein signal.levels mehr",
+                  re.search(r"(?m)^  levels:", ausgeliefert(env)) is None, "")
         luft()
         hinstellen(bot, x, y, z)
         cam_on(bot)
-        kamera_bei(3)
-        wort, symbole = anzeige()
-        FIND.test("signal.levels 95/85/50/10: bei 90 % \"good\" mit icon/ping_4",
-                  wort == "good" and symbole == ["icon/ping_4"], f"{wort} {symbole}")
-        kamera_bei(10)
-        wort, symbole = anzeige()
-        FIND.test("signal.levels 95/85/50/10: bei 67 % \"medium\" mit icon/ping_3",
-                  wort == "medium" and symbole == ["icon/ping_3"], f"{wort} {symbole}")
-        mauer(4, 6)
-        wort, symbole = anzeige()
-        FIND.test("signal.levels 95/85/50/10: bei 17 % \"weak\" mit icon/ping_2",
-                  wort == "weak" and symbole == ["icon/ping_2"], f"{wort} {symbole}")
-        luft()
-        vorher = len(server_log(env))
-        set_options(env, [("excellent", "85", "signal"), ("good", "67", "signal"), ("medium", "90", "signal"),
-                          ("weak", "20", "signal")])
-        log = strip_colors(server_log(env)[vorher:])
-        FIND.test("signal.levels 85/67/90/20: medium nicht kleiner als good - /cam reload meldet den Fehler",
-                  "The values of signal.levels have to go down" in log
-                  and "excellent 85, good 67, medium 90, weak 20" in log, log.strip()[-300:])
-        hinstellen(bot, x, y, z)
-        cam_on(bot)
-        kamera_bei(10)
-        wort, symbole = anzeige()
-        FIND.test("signal.levels 85/67/90/20: es gelten 80, 60, 40, 20 - bei 67 % \"good\"",
-                  wort == "good" and symbole == ["icon/ping_4"], f"{wort} {symbole}")
+        for abstand, prozent, stufe, symbol in ((3, 90, "excellent", "icon/ping_5"), (15, 50, "medium", "icon/ping_3"),
+                                                (20, 33, "weak", "icon/ping_2")):
+            kamera_bei(abstand)
+            wort, symbole = anzeige()
+            FIND.test(f"Feste Stufen: bei {prozent} % \"{stufe}\" mit {symbol}",
+                      wort == stufe and symbole == [symbol], f"{wort} {symbole}")
     finally:
         try:
             cam_off(bot)
             luft()
             set_options(env, [("max-distance-mode", "fixed"), ("max-distance", "100.0"),
                               ("lost", "back", "signal"), ("lost-seconds", "3", "signal"),
-                              ("actionbar-signal", '" &7| {icon} &7Signal: {quality}"', "messages"),
-                              ("excellent", "80", "signal"), ("good", "60", "signal"), ("medium", "40", "signal"),
-                              ("weak", "20", "signal")])
+                              ("actionbar-signal", '" &7| {icon} &7Signal: {quality}"', "messages")])
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test des Funksignals: {exc}")
@@ -13995,8 +13937,8 @@ def herzen_am_namen_checks(env, bot):
     sonst doppelt dastuende, unter wie ueber den Herzen. Beide gehen mit dem
     Cam-Modus wieder weg. Mit Absorption IV - zehn gelbe Herzen - stehen die gelben
     (hud/heart/absorbing_full) hinter den roten, und weil es mehr als zehn
-    sind, stehen sie in einer zweiten Zeile: voreingestellt darueber, also
-    im Text vorn, mit health-rows-upward: false darunter. Mit
+    sind, stehen sie in einer zweiten Zeile: darueber wie in der Leiste, also
+    im Text vorn. Mit
     health-show-absorption: false gibt es keine gelben. Mit
     body.name-visible: false stehen die Herzen allein da.
 
@@ -14024,11 +13966,10 @@ def herzen_am_namen_checks(env, bot):
         cam_off(bot)
         text = ausgeliefert(env)
         FIND.test("Voreingestellt steht body.health-visible: false, health-position: above, health-show-missing: "
-                  "false, health-show-absorption: true und health-rows-upward: true da",
+                  "false und health-show-absorption: true da",
                   all(re.search(rf"(?m)^\s*{k}:\s*{v}\s*$", text) is not None
                       for k, v in (("health-visible", "false"), ("health-position", "above"),
-                                   ("health-show-missing", "false"), ("health-show-absorption", "true"),
-                                   ("health-rows-upward", "true"))), "")
+                                   ("health-show-missing", "false"), ("health-show-absorption", "true"))), "")
         set_options(env, [("enabled", "false", "cam-safety"), ("name-visible", "false", "camera-mode")])
         console(env, "gamerule natural_health_regeneration false", pause=0.3)
         spielmodus_setzen(bot, "survival")
@@ -14094,14 +14035,8 @@ def herzen_am_namen_checks(env, bot):
         text = daten_von(bot, NAME, "text")
         FIND.test("body.health-show-absorption: die zehn gelben Herzen der Absorption IV stehen da",
                   bool(text) and text.count("hud/heart/absorbing_full") == 10, text or "keine Antwort")
-        FIND.test("body.health-rows-upward: true - die zweite Zeile steht ueber der ersten",
+        FIND.test("Die zweite Zeile Herzen steht ueber der ersten, wie in der Leiste",
                   bool(text) and -1 < text.find("absorbing") < text.find("hud/heart/full"), text or "")
-
-        set_option(env, "health-rows-upward", "false")
-        cam_on(bot)
-        text = daten_von(bot, NAME, "text")
-        FIND.test("body.health-rows-upward: false - die zweite Zeile steht unter der ersten",
-                  bool(text) and -1 < text.find("hud/heart/full") < text.find("absorbing"), text or "")
 
         set_option(env, "health-show-absorption", "false")
         cam_on(bot)
@@ -14118,7 +14053,6 @@ def herzen_am_namen_checks(env, bot):
         cam_off(bot)
         set_options(env, [("health-visible", "false"), ("health-position", "above"), ("name-visible", "true", "body"),
                           ("health-show-missing", "false"), ("health-show-absorption", "true"),
-                          ("health-rows-upward", "true"),
                           ("enabled", "true", "cam-safety"), ("name-visible", "true", "camera-mode")])
         console(env, "gamerule natural_health_regeneration true", pause=0.3)
         bot.chat(f"/effect clear {BOT_NAME}")
@@ -14428,7 +14362,7 @@ def konfig_ergaenzen_checks(env, bot):
     def wie_mitgeliefert(text):
         """Die Teile, die fehlen werden, so, wie die mitgelieferte sie hat:
         Die Abschnitte davor koennen einen Wert anders gelassen haben."""
-        for schluessel in ("max-distance-enabled", "warning-cooldown"):
+        for schluessel in ("max-distance", "warning-cooldown"):
             zeile = re.search(rf"(?m)^  {schluessel}: .*$", mitgeliefert).group(0)
             text = re.sub(rf"(?m)^  {schluessel}: .*$", lambda _: zeile, text)
         block = re.search(afk_abschnitt, mitgeliefert).group(0)
@@ -14444,7 +14378,7 @@ def konfig_ergaenzen_checks(env, bot):
         sprache_bak.unlink(missing_ok=True)
         eigen = config_vorher.replace("language: en\n", "# mein eigener Kommentar\nlanguage: en\n", 1)
         eigen, n1 = replace_option(eigen, "border-radius", "7", "camera-mode")
-        gekuerzt, n2 = re.subn(r"(?m)^  max-distance-enabled: .*\n", "", eigen)
+        gekuerzt, n2 = re.subn(r"(?m)^  max-distance: .*\n", "", eigen)
         gekuerzt, n3 = re.subn(r"(?m)^  # Sekunden zwischen zwei Warnungen an einer Grenze.*\n(?:  #.*\n)*"
                                r"  warning-cooldown: .*\n\n", "", gekuerzt)
         gekuerzt, n4 = re.subn(afk_abschnitt, "", gekuerzt)
@@ -14462,7 +14396,7 @@ def konfig_ergaenzen_checks(env, bot):
                   "" if nachher == wie_mitgeliefert(eigen) else diff_kurz(wie_mitgeliefert(eigen), nachher))
         FIND.test("config.yml: die Konsole nennt sie, den ganzen Abschnitt als einen",
                   "config.yml lacked 3 entries, now added with their default values: "
-                  "camera-mode.max-distance-enabled, camera-mode.warning-cooldown, afk-end." in log,
+                  "camera-mode.max-distance, camera-mode.warning-cooldown, afk-end." in log,
                   log.strip()[-400:])
         FIND.test("config.yml: die Datei davor liegt als config.yml.bak daneben",
                   config_bak.is_file() and config_bak.read_text(encoding="utf-8") == gekuerzt, "")
@@ -16234,10 +16168,10 @@ NAME_UEBER_MANNEQUIN = 1.8 + 0.275
 # fuer den Namen ueber dem Kamera-Spieler - deshalb mit Abschnitt.
 NAME_VOREINSTELLUNG = [
     ("type", "armorstand"), ("visible", "true"), ("name-visible", "true", "body"),
-    ("color", "yellow", "body"), ("through-walls", "false", "body"),
+    ("through-walls", "false", "body"),
     ("view-distance", "64", "body"), ("background", "true", "body"),
     ("shadow", "false", "body"), ("scale", "1.0", "body"),
-    ("armorstand.name-format", '"{player}\'s Body"', "messages"),
+    ("armorstand.name-format", '"&e{player}\'s Body"', "messages"),
 ]
 
 
@@ -16289,8 +16223,9 @@ def name_checks(env, bot):
 
     Er ist nicht mehr das Namensschild des Koerpers, sondern eine eigene
     Entitaet ohne Hitbox, die ueber ihm steht. Nur so lassen sich die
-    Schalter unter body.name umsetzen - Farbe, durch Waende, Sichtweite,
-    Hintergrund, Schatten, Groesse -, und nur so behaelt ein unsichtbarer
+    Schalter unter body.name umsetzen - durch Waende, Sichtweite,
+    Hintergrund, Schatten, Groesse - und seine Farbe aus dem Farbcode vorn im
+    Text, gelb ohne einen, und nur so behaelt ein unsichtbarer
     Koerper seinen Namen, ohne dass ein Ruestungsstaender ihn tragen muss:
     Unsichtbar ist der Koerper bei beiden Typen ein einziges Mannequin.
 
@@ -16423,13 +16358,14 @@ def name_checks(env, bot):
                       f"{staender} Ruestungsstaender, {puppen} Mannequins, "
                       f"{'gemeldet' if gemeldet else 'nicht gemeldet'}")
 
-        # --- Die Schalter unter body.name ---
-        set_options(env, [("type", "armorstand"), ("color", "red", "body"), ("through-walls", "true", "body"),
+        # --- Die Schalter unter body.name, und ein Farbcode vorn im Text ---
+        set_options(env, [("type", "armorstand"), ("armorstand.name-format", '"&c{player}\'s Body"', "messages"),
+                          ("through-walls", "true", "body"),
                           ("view-distance", "32", "body"), ("background", "false", "body"),
                           ("shadow", "true", "body"), ("scale", "2.0", "body")])
         if FIND.test("/cam startet mit geaenderten Schaltern fuer den Namen", start(), ""):
             text = daten_von(bot, NAME, "text")
-            FIND.test("color: red faerbt den Namen rot",
+            FIND.test("&c vorn in armorstand.name-format faerbt den Namen rot",
                       bool(text) and 'color: "red"' in text and '"yellow"' not in text,
                       text or "keine Antwort")
             for name, nbt in (("through-walls: true zeigt ihn durch Waende", "{see_through:1b}"),
@@ -16448,34 +16384,29 @@ def name_checks(env, bot):
             cam_off(bot)
             time.sleep(1.0)
 
-        # Etwas, das keine Farbe ist, wird gemeldet und faellt auf gelb zurueck.
-        set_option(env, "color", "blau", "body")
-        meldung = any("Unknown value" in zeile and "body.name.color" in zeile
-                      for zeile in server_log(env).splitlines())
-        FIND.test("Eine unbekannte Farbe wird gemeldet", meldung,
-                  "" if meldung else "keine Meldung im Server-Log")
+        # Ohne Farbcode vorn ist der Name gelb, wie mit &e.
+        set_option(env, "armorstand.name-format", '"{player}\'s Body"', "messages")
         if start():
             text = daten_von(bot, NAME, "text")
-            FIND.test("Eine unbekannte Farbe faellt auf gelb zurueck",
-                      bool(text) and 'color: "yellow"' in text, text or "keine Antwort")
+            FIND.test("Ohne Farbcode vorn in armorstand.name-format ist der Name gelb",
+                      bool(text) and 'color: "yellow"' in text and f"{BOT_NAME}'s Body" in text,
+                      text or "keine Antwort")
             cam_off(bot)
             time.sleep(1.0)
 
-        # --- Mehrere Zeilen, und ein Farbcode vorn im Text ---
-        # So stand der Name frueher in der Datei: &e vorn. color ersetzt ihn,
-        # der Farbcode der zweiten Zeile bleibt.
+        # --- Mehrere Zeilen, jede mit ihrem Farbcode ---
+        # Der Farbcode vorn faerbt die erste Zeile, der der zweiten Zeile sie.
         # Doppelt geschuetzt: replace_option reicht den Wert durch re.subn,
         # das aus \\ einen einzelnen Rueckstrich macht. In der Datei steht
         # danach \n in Anfuehrungszeichen, und YAML macht daraus die neue Zeile.
-        set_options(env, [("color", "red", "body"),
-                          ("armorstand.name-format", '"&e{player}\'s Body\\\\n&7Kamera"', "messages")])
+        set_option(env, "armorstand.name-format", '"&c{player}\'s Body\\\\n&7Kamera"', "messages")
         if FIND.test("/cam startet mit einem Namen ueber zwei Zeilen", start(), ""):
             # /data zeigt den Zeilenumbruch als \n, oder er steht selbst da.
             text = daten_von(bot, NAME, "text")
             FIND.test("\\n im Namen beginnt eine neue Zeile",
                       bool(text) and ("\\n" in text or "\n" in text) and "Kamera" in text,
                       text or "keine Antwort")
-            FIND.test("color ersetzt den Farbcode vorn im Text, weiter hinten gilt der eigene",
+            FIND.test("Der Farbcode vorn faerbt die erste Zeile, der der zweiten Zeile die zweite",
                       bool(text) and 'color: "red"' in text and 'color: "gray"' in text
                       and '"yellow"' not in text, text or "keine Antwort")
             cam_off(bot)
@@ -16514,7 +16445,7 @@ NAME_AUF_SPIELER = "1.8"
 # portals und unter cam-area.
 SPIELERNAME_VOREINSTELLUNG = [
     ("name-visible", "true", "camera-mode"), ("name-mode", "move"),
-    ("color", "white", "camera-mode"), ("through-walls", "false", "camera-mode"),
+    ("through-walls", "false", "camera-mode"),
     ("view-distance", "64", "camera-mode"), ("background", "true", "camera-mode"),
     ("shadow", "false", "camera-mode"), ("scale", "1.0", "camera-mode"),
     ("player-visibility", "true"), ("allow-invisibility-potion", "true"),
@@ -16802,18 +16733,18 @@ def spielername_checks(env, bot):
         FIND.test("Mit dem Cam-Modus geht auch der Name", kein_name_mehr(), "")
 
         # --- Die Schalter unter camera-mode.name ---
-        set_options(env, [("color", "red", "camera-mode"), ("through-walls", "true", "camera-mode"),
+        set_options(env, [("through-walls", "true", "camera-mode"),
                           ("view-distance", "32", "camera-mode"),
                           ("background", "false", "camera-mode"), ("shadow", "true", "camera-mode"),
                           ("scale", "2.0", "camera-mode"),
-                          ("player.name-format", '"&eCam von {player}\\\\n&7Kamera"', "messages")])
+                          ("player.name-format", '"&cCam von {player}\\\\n&7Kamera"', "messages")])
         if FIND.test("/cam startet mit geaenderten Schaltern fuer den Spielernamen",
                      start() is not None, ""):
             text = spielername_daten(bot, "text")
             FIND.test("Der Text ist frei: Cam von {player}",
                       bool(text) and f"Cam von {BOT_NAME}" in text, text or "keine Antwort")
-            FIND.test("color: red faerbt den Spielernamen rot, statt des Farbcodes vorn",
-                      bool(text) and 'color: "red"' in text and '"yellow"' not in text,
+            FIND.test("&c vorn in player.name-format faerbt den Spielernamen rot",
+                      bool(text) and 'color: "red"' in text and '"white"' not in text,
                       text or "keine Antwort")
             FIND.test("\\n im Spielernamen beginnt eine neue Zeile, ihr Farbcode gilt",
                       bool(text) and ("\\n" in text or "\n" in text) and "Kamera" in text
@@ -16835,15 +16766,11 @@ def spielername_checks(env, bot):
             cam_off(bot)
             time.sleep(1.0)
 
-        # Etwas, das keine Farbe ist, wird gemeldet und faellt auf weiss zurueck.
-        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("color", "blau", "camera-mode")])
-        meldung = any("Unknown value" in zeile and "camera-mode.name.color" in zeile
-                      for zeile in server_log(env).splitlines())
-        FIND.test("Eine unbekannte Farbe fuer den Spielernamen wird gemeldet", meldung,
-                  "" if meldung else "keine Meldung im Server-Log")
+        # Ohne Farbcode vorn ist der Spielername weiss.
+        set_options(env, SPIELERNAME_VOREINSTELLUNG)
         if start() is not None:
             text = spielername_daten(bot, "text")
-            FIND.test("Sie faellt auf weiss zurueck",
+            FIND.test("Ohne Farbcode vorn in player.name-format ist der Spielername weiss",
                       bool(text) and 'color: "white"' in text, text or "keine Antwort")
             cam_off(bot)
             time.sleep(1.0)
@@ -20963,18 +20890,12 @@ def nachklick_checks(env, bot):
 
 
 def nachklick_schalter_checks(env, bot):
-    """exit-click-guard: ob der Schutz aus nachklick_checks ueberhaupt gilt
-    (enabled) und wie lange (seconds).
+    """Wie lange der Schutz aus nachklick_checks gilt: fest 0.3 Sekunden und
+    der Ping - die config.yml hat keinen Abschnitt exit-click-guard mehr.
 
-    Voreingestellt ist er an, mit 0.3 Sekunden - nachgesehen in der
-    ausgelieferten Datei. Gemessen wird mit einem einzigen Abbau in Kreativ
-    1.2 Sekunden nach dem Schlag auf den eigenen Koerper: Mit 0.3 kommt er
-    durch, die Zeit ist um; mit seconds: 2 nicht. Mit enabled: false kommt
-    schon der Abbau gleich nach dem Schlag durch, wie vor dem Schutz.
-
-    Das Kleinste, was seconds annimmt, ist 0.15: Darunter kaeme schon der
-    erste Versuch einer gehaltenen Taste durch. 0.1 wird gemeldet und auf
-    0.15 gehoben, 0.15 selbst nicht.
+    Gemessen wird mit einem einzigen Abbau in Kreativ nach dem Schlag auf den
+    eigenen Koerper: gleich danach (0.15 s) kommt er nicht durch, 1.2
+    Sekunden danach schon, die Zeit ist um.
     """
     if not FIND.test("Cam-Modus ist vor dem Test von exit-click-guard aus", cam_off(bot), ""):
         return
@@ -21018,35 +20939,16 @@ def nachklick_schalter_checks(env, bot):
                   else "der Block wurde abgebaut" if abgebaut else "der Block steht noch")
 
     try:
-        FIND.test("Voreingestellt steht exit-click-guard.enabled: true mit seconds: 0.3 da",
-                  re.search(r"(?m)^exit-click-guard:\s*\n\s*enabled:\s*true\s*\n(?:\s*#.*\n)*\s*seconds:\s*0\.3\s*$",
-                            ausgeliefert(env)) is not None, "")
+        FIND.test("Die ausgelieferte config.yml hat keinen Abschnitt exit-click-guard mehr",
+                  re.search(r"(?m)^exit-click-guard:", ausgeliefert(env)) is None, "")
         spielmodus_setzen(bot, "creative")
         bot.chat(f"/clear {BOT_NAME}")
         time.sleep(0.6)
 
-        probe("exit-click-guard.seconds: 0.3 - ein Abbau 1.2 s nach dem Schlag kommt durch", 1200, True)
-        set_option(env, "seconds", "2", "exit-click-guard")
-        probe("exit-click-guard.seconds: 2 - derselbe Abbau 1.2 s nach dem Schlag kommt nicht durch",
-              1200, False)
-        set_options(env, [("enabled", "false", "exit-click-guard"), ("seconds", "0.3", "exit-click-guard")])
-        probe("exit-click-guard.enabled: false - schon der Abbau gleich nach dem Schlag kommt durch",
-              150, True)
-
-        vorher = len(server_log(env))
-        set_option(env, "seconds", "0.1", "exit-click-guard")
-        log = strip_colors(server_log(env)[vorher:])
-        FIND.test("exit-click-guard.seconds: weniger als 0.15 wird gemeldet und auf 0.15 gehoben",
-                  "exit-click-guard.seconds is too small: 0.1. Using 0.15" in log,
-                  log.strip()[-200:] or "nichts im Log")
-        vorher = len(server_log(env))
-        set_option(env, "seconds", "0.15", "exit-click-guard")
-        log = strip_colors(server_log(env)[vorher:])
-        FIND.test("exit-click-guard.seconds: 0.15 nimmt er ohne Meldung an",
-                  "exit-click-guard.seconds" not in log, log.strip()[-200:])
+        probe("Ein Abbau gleich nach dem Schlag (0.15 s) kommt nicht durch", 150, False)
+        probe("Ein Abbau 1.2 s nach dem Schlag kommt durch - die 0.3 Sekunden sind um", 1200, True)
     finally:
         cam_off(bot)
-        set_options(env, [("enabled", "true", "exit-click-guard"), ("seconds", "0.3", "exit-click-guard")])
         console(env, f"fill {bx - 3} {y} {bz - 2} {bx + 2} {y + 3} {bz + 2} minecraft:air", pause=0.3)
         spielmodus_setzen(bot, "survival")
         hinstellen(bot, heim[0], heim[1], heim[2])
@@ -22645,8 +22547,8 @@ def webkarte_checks(env, bot):
     allen drei Karten weg. web-map.hidden: true schaltet die Ebenen
     voreingestellt aus, min-likes: 5 laesst Karte weg. min-views - voreingestellt
     0 - laesst sie mit 1 ebenso weg, bis der Bot einmal hingesprungen ist;
-    danach ist sie da. squaremap: false nimmt sie nur dort weg, enabled: false
-    ueberall. Mit web-map.link hat /cam spot list einen Knopf [Map] mit der
+    danach ist sie da. enabled: false nimmt sie von allen Karten - einen
+    Schalter je Karte gibt es nicht mehr. Mit web-map.link hat /cam spot list einen Knopf [Map] mit der
     Adresse des Spots.
     """
     uuid = offline_uuid(BOT_NAME)
@@ -22668,9 +22570,9 @@ def webkarte_checks(env, bot):
     zuschauer = BotClient(env, name=ZUSCHAUER_NAME)
     try:
         aus = ausgeliefert(env)
-        FIND.test("Voreingestellt steht web-map an, fuer alle drei Karten",
+        FIND.test("Voreingestellt steht web-map an - fuer jede Karte, die da ist, ohne Schalter je Karte",
                   re.search(r"(?m)^web-map:\s*\n\s*enabled:\s*true\s*$", aus) is not None
-                  and all(re.search(rf"(?m)^\s+{k}:\s*true\s*$", aus) for k in ("bluemap", "dynmap", "squaremap")),
+                  and not any(re.search(rf"(?m)^\s+{k}:", aus) for k in ("bluemap", "dynmap", "squaremap")),
                   "")
         log = strip_colors(server_log(env))
         fehlt = [k for k in ("BlueMap", "dynmap", "squaremap") if f"The public spots are shown on {k}." not in log]
@@ -22783,13 +22685,7 @@ def webkarte_checks(env, bot):
         karten = alle()
         FIND.test("web-map.min-views: 1 - nach einem Sprung dorthin ist Karte auf allen drei Karten",
                   all(len(nadeln(k)) == 1 for k in karten.values()), "\n".join(sum(karten.values(), [])))
-        set_options(env, [("min-views", "0", "web-map"), ("squaremap", "false", "web-map")])
-        time.sleep(1.0)
-        karten = alle()
-        FIND.test("web-map.squaremap: false - nur squaremap hat keine Spots",
-                  nadeln(karten["bluemap"]) and nadeln(karten["dynmap"]) and not nadeln(karten["squaremap"]),
-                  "\n".join(sum(karten.values(), [])))
-        set_options(env, [("squaremap", "true", "web-map"), ("enabled", "false", "web-map")])
+        set_options(env, [("min-views", "0", "web-map"), ("enabled", "false", "web-map")])
         time.sleep(1.0)
         karten = alle()
         FIND.test("web-map.enabled: false - auf keiner Karte ein Spot",
@@ -22810,7 +22706,6 @@ def webkarte_checks(env, bot):
             cam_off(bot)
             set_options(env, [("enabled", "true", "web-map"), ("hidden", "false", "web-map"),
                               ("min-likes", "0", "web-map"), ("min-views", "0", "web-map"),
-                              ("squaremap", "true", "web-map"),
                               ("link", '""', "web-map")])
             spots_loeschen(bot, "Karte", "Geheim")
             hinstellen(bot, heim[0], heim[1], heim[2])

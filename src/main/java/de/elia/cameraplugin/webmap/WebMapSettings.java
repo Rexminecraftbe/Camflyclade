@@ -10,12 +10,6 @@ public final class WebMapSettings {
 
     /** Whether the public spots go on the web maps of the server, {@code web-map.enabled}. */
     private boolean webMapEnabled;
-    /** Whether on BlueMap, {@code web-map.bluemap}. */
-    private boolean webMapBlueMap;
-    /** Whether on Dynmap, {@code web-map.dynmap}. */
-    private boolean webMapDynmap;
-    /** Whether on squaremap, {@code web-map.squaremap}. */
-    private boolean webMapSquaremap;
     /** Whether the layer of the spots is switched off on the page until a visitor switches it on, {@code web-map.hidden}. */
     private boolean webMapHidden;
     /** How many likes a public spot needs to get onto the map, {@code web-map.min-likes}. */
@@ -35,9 +29,6 @@ public final class WebMapSettings {
     public WebMapSettings(ConfigReader config, boolean spotsShared) {
         this.spotsShared = spotsShared;
         webMapEnabled = config.getBoolean("web-map.enabled", true);
-        webMapBlueMap = config.getBoolean("web-map.bluemap", true);
-        webMapDynmap = config.getBoolean("web-map.dynmap", true);
-        webMapSquaremap = config.getBoolean("web-map.squaremap", true);
         webMapHidden = config.getBoolean("web-map.hidden", false);
         webMapMinLikes = config.getInt("web-map.min-likes", 0, 0);
         webMapMinViews = config.getInt("web-map.min-views", 0, 0);
@@ -50,21 +41,6 @@ public final class WebMapSettings {
      */
     public boolean enabled() {
         return webMapEnabled && spotsShared;
-    }
-
-    /** Whether the public spots go on BlueMap, while it is there, {@code web-map.bluemap}. */
-    public boolean blueMap() {
-        return webMapBlueMap;
-    }
-
-    /** Whether the public spots go on Dynmap, while it is there, {@code web-map.dynmap}. */
-    public boolean dynmap() {
-        return webMapDynmap;
-    }
-
-    /** Whether the public spots go on squaremap, while it is there, {@code web-map.squaremap}. */
-    public boolean squaremap() {
-        return webMapSquaremap;
     }
 
     /** Whether the layer of the spots starts switched off on the page of the map, {@code web-map.hidden}. */

@@ -26,6 +26,12 @@ public record CamSound(String key, float volume, float pitch) {
     /** A sound that is switched off and plays nothing. */
     public static final CamSound OFF = new CamSound(null, 0.0f, 1.0f);
 
+    /**
+     * The switch each sound had before {@code volume: 0} was the only way to
+     * switch it off.
+     */
+    public static final String OLD_SWITCH = "enabled";
+
     /** The lowest and highest pitch, the range the client plays a sound in. */
     private static final double MIN_PITCH = 0.5;
     private static final double MAX_PITCH = 2.0;
@@ -41,8 +47,11 @@ public record CamSound(String key, float volume, float pitch) {
     public static CamSound read(ConfigReader config, String path, String allowed, String defaultSound,
                                 double defaultPitch) {
         // Read even when it is switched off, so that a mistyped name is
-        // reported now and not only once somebody turns the switch on.
-        boolean enabled = config.getBoolean(path + ".enabled", true);
+        // reported now and not only once somebody turns it up again. A switch
+        // of its own, enabled, said that until volume 0 alone did; the update
+        // of the file makes it volume 0, only a file it could not change
+        // still has it.
+        boolean enabled = config.getBoolean(path + "." + OLD_SWITCH, true);
         String raw = config.getString(path + ".sound", defaultSound);
         String key = parseKey(raw);
         if (key == null) {

@@ -44,6 +44,14 @@ import static de.elia.cameraplugin.menu.MenuSorts.*;
  */
 final class AdminPages {
 
+    /**
+     * How many days, hours or minutes a click with shift adds to a ban on its
+     * page or takes away, where a click alone does one. Ten: the step between
+     * a few minutes and an hour, a few days and a month. The section
+     * {@code menu} had it as {@code ban-shift-step} once.
+     */
+    static final int BAN_SHIFT_STEP = 10;
+
     private final CamMenu menu;
     private final CameraPlugin plugin;
     private final CamSettings settings;
@@ -482,7 +490,7 @@ final class AdminPages {
     /**
      * One of the buttons of the time of a ban: how many days, hours or
      * minutes it has, and what that makes altogether. A click adds one, a
-     * right-click takes one away, with shift {@code menu.ban-shift-step} of
+     * right-click takes one away, with shift {@link #BAN_SHIFT_STEP} of
      * them. Taking away stops short of nothing - nothing would be for good -,
      * adding at the longest ban the buttons give. On Bedrock, with its
      * windows, a window of its own that stays open, see {@link #banUnitWindow}.
@@ -497,7 +505,7 @@ final class AdminPages {
                          Runnable reopen, long unit, String time) {
         long minutes = current.getAsLong();
         long amount = amount(minutes, unit);
-        int shiftStep = settings.menu().banShiftStep();
+        int shiftStep = BAN_SHIFT_STEP;
         List<String> lore = new ArrayList<>(lines(messages.getMessage("menu-admin-ban-time-lore")
                 .replace("{time}", time)));
         lore.addAll(lines(menu.text(player, "menu-admin-ban-time-actions")
@@ -525,7 +533,7 @@ final class AdminPages {
     /**
      * One of the buttons of the time of a ban as a window of Bedrock: how
      * many days, hours or minutes, and what that makes altogether, with
-     * {@code +1}, {@code -1} and as many at once as {@code menu.ban-shift-step}
+     * {@code +1}, {@code -1} and as many at once as {@link #BAN_SHIFT_STEP}
      * says. It stays open after each - sent anew as it stands then - until
      * the way back, or closing it, leads back to the page. Taking away stops
      * at a minute, rather than doing nothing where it would reach nought - a
@@ -539,8 +547,8 @@ final class AdminPages {
     boolean banUnitWindow(Player player, String key, long unit, LongSupplier current, LongConsumer set,
                                   Runnable back) {
         long minutes = current.getAsLong();
-        String step = String.valueOf(settings.menu().banShiftStep());
-        long many = unit * settings.menu().banShiftStep();
+        String step = String.valueOf(BAN_SHIFT_STEP);
+        long many = unit * BAN_SHIFT_STEP;
         long[] changes = {unit, -unit, many, -many};
         List<String> labels = List.of(ChatColor.stripColor(messages.getMessage("menu-pick-ban-more")),
                 ChatColor.stripColor(messages.getMessage("menu-pick-ban-less")),

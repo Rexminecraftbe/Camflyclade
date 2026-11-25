@@ -72,14 +72,12 @@ public final class FollowSettings {
     private boolean tourMirrorFrost;
     /** Whether they see his experience bar and level as theirs, {@code follow.mirror-experience}. */
     private boolean tourMirrorExperience;
-    /** Whether they see how many of his items are in a stack, {@code follow.mirror-count}. */
-    private boolean tourMirrorCount;
-    /** Whether they see which enchantments his items have, {@code follow.mirror-enchantments}. */
-    private boolean tourMirrorEnchantments;
-    /** Whether they see how worn his items are, {@code follow.mirror-durability}. */
-    private boolean tourMirrorDurability;
-    /** Whether they see the names he gave his items, at an anvil say, {@code follow.mirror-name}. */
-    private boolean tourMirrorName;
+    /**
+     * Whether they see all there is to his items - how many are in a stack,
+     * their enchantments, their wear and the names he gave them -,
+     * {@code follow.mirror-item-details}.
+     */
+    private boolean tourMirrorItemDetails;
     /** Whether guests in the guide's view are held turned between the ticks too, {@code follow.fine-hold}. */
     private boolean tourFineHold;
     /** Whether a guide may invite everybody he could invite at once, {@code follow.invite-all}. */
@@ -128,10 +126,7 @@ public final class FollowSettings {
         tourMirrorEffects = config.getBoolean(follow + ".mirror-effects", true);
         tourMirrorFrost = config.getBoolean(follow + ".mirror-frost", true);
         tourMirrorExperience = config.getBoolean(follow + ".mirror-experience", false);
-        tourMirrorCount = config.getBoolean(follow + ".mirror-count", false);
-        tourMirrorEnchantments = config.getBoolean(follow + ".mirror-enchantments", false);
-        tourMirrorDurability = config.getBoolean(follow + ".mirror-durability", false);
-        tourMirrorName = config.getBoolean(follow + ".mirror-name", false);
+        tourMirrorItemDetails = config.getBoolean(follow + ".mirror-item-details", false);
         tourFineHold = config.getBoolean(follow + ".fine-hold", true);
         tourInviteAll = config.getBoolean(follow + ".invite-all", true);
         tourGuideTime = config.getBoolean(follow + ".guide-time", true);
@@ -237,32 +232,17 @@ public final class FollowSettings {
     }
 
     /**
-     * Whether the guests see how many items are in the stacks in the guide's
-     * hands - in their hotbar, and in his where they see through his eyes.
+     * Whether the guests see all there is to the guide's items: how many are
+     * in the stacks in his hands - in their hotbar, and in his where they see
+     * through his eyes -, which enchantments they have, how worn they are and
+     * the names he gave them, at an anvil say. Otherwise each of them looks as
+     * one, only glinting where it is enchanted, as new and with the item's own
+     * name, as the game calls it. One switch for the four since there were
+     * four, {@code mirror-count}, {@code -enchantments}, {@code -durability}
+     * and {@code -name}.
      */
-    public boolean mirrorCount() {
-        return tourMirrorCount;
-    }
-
-    /**
-     * Whether the guests see which enchantments the guide's items have -
-     * otherwise only that they have some, by their glint.
-     */
-    public boolean mirrorEnchantments() {
-        return tourMirrorEnchantments;
-    }
-
-    /** Whether the guests see how worn the guide's items are: the bar under them, and the tooltip. */
-    public boolean mirrorDurability() {
-        return tourMirrorDurability;
-    }
-
-    /**
-     * Whether the guests see the names the guide gave his items - at an anvil,
-     * say -, otherwise only the item's own name, as the game calls it.
-     */
-    public boolean mirrorName() {
-        return tourMirrorName;
+    public boolean mirrorItemDetails() {
+        return tourMirrorItemDetails;
     }
 
     /** Whether guests who see through the guide's eyes are held turned between the ticks too. */

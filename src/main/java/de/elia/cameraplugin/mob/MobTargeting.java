@@ -318,8 +318,7 @@ public final class MobTargeting implements Listener {
      * included.</p>
      *
      * <p>A mob head on the body halves it, the way it halves the distance at
-     * which that kind of mob notices a player wearing it. That part is switched
-     * by {@code body.mob-target-heads}.</p>
+     * which that kind of mob notices a player wearing it.</p>
      *
      * <p>The mode {@code false} never asks: nothing is sent to the body there
      * and nothing is handed over to it either.</p>
@@ -327,7 +326,7 @@ public final class MobTargeting implements Listener {
     private double sightRangeFor(Mob mob, LivingEntity body) {
         double range = settings.body().mobTargetMode() == MobTargetMode.CUSTOM ? settings.body().mobTargetRadius()
                 : vanillaFollowRange(mob);
-        if (settings.body().mobTargetHeads() && MobHeads.matches(body.getEquipment(), mob.getType())) {
+        if (MobHeads.matches(body.getEquipment(), mob.getType())) {
             range *= MOB_HEAD_SIGHT_FACTOR;
         }
         return range;

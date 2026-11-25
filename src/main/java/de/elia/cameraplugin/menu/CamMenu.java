@@ -274,8 +274,6 @@ public final class CamMenu implements Listener, PluginPart {
          * otherwise than Java does, see {@link MenuItems#forBedrock}.
          */
         boolean bedrock;
-        /** Whether the maps of 26.3 stay themselves on Bedrock, {@code bedrock.map-icons}, see {@link MenuItems#forBedrock}. */
-        boolean bedrockMaps;
         Inventory inventory;
         /**
          * Its title, which a page drawn anew in place keeps. On Bedrock the
@@ -495,7 +493,6 @@ public final class CamMenu implements Listener, PluginPart {
         page.listing = null;
         page.again = null;
         page.bedrock = bedrock;
-        page.bedrockMaps = settings.bedrock().mapIcons();
         page.rows = !bedrock ? null : switch (size) {
             case SMALL -> SMALL_ON_LARGE;
             case MEDIUM -> MEDIUM_ON_LARGE;
@@ -886,7 +883,7 @@ public final class CamMenu implements Listener, PluginPart {
      */
     static void put(Page page, int slot, ItemStack item, Consumer<ClickType> action) {
         int at = page.at(slot);
-        page.inventory.setItem(at, page.bedrock ? forBedrock(item, page.bedrockMaps) : item);
+        page.inventory.setItem(at, page.bedrock ? forBedrock(item) : item);
         page.buttons.put(at, action);
     }
 

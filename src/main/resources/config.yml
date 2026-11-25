@@ -51,18 +51,16 @@ action-bar:
 
 # Cam-Modus
 camera-mode:
-  # Entfernung zum Körper begrenzen
-  max-distance-enabled: true
-
   # Maximale Entfernung zum Körper in Blöcken (bei max-distance-mode: signal die Reichweite des Funks in freier Luft)
   max-distance: 100.0
 
   # Wie max-distance die Kamera hält:
-  #   fixed  = fest: bis max-distance und keinen Block weiter, an der Grenze wie border-mode sagt (wie bisher)
+  #   fixed  = fest: bis max-distance und keinen Block weiter, an der Grenze wie border-mode sagt
   #   signal = über Funk: Die Kamera ist eine Drohne, ihr Körper sendet das Signal. Blöcke zwischen beiden schwächen es,
   #            unter der Erde und hinter Mauern kommt sie nicht so weit wie in freier Luft (Abschnitt signal).
   #            Eine Grenze, an die man stößt, gibt es dafür nicht: border-mode gilt nur noch für cam-area und
   #            gesperrte Lava, Wasser, Pulverschnee.
+  #   false  = gar nicht: Die Kamera fliegt so weit sie will, max-distance gilt nicht
   max-distance-mode: fixed
 
   # Sekunden zwischen zwei Warnungen an einer Grenze: max-distance, cam-area, gesperrte Lava, Wasser, Pulverschnee und
@@ -122,12 +120,9 @@ camera-mode:
   #          Welt), Befehle wie /tp, Portale und CamFly selbst schon.
   name-mode: move
 
-  # Aussehen des Namens (der Text steht in der Sprachdatei unter messages.player.name-format, \n beginnt eine neue Zeile)
+  # Aussehen des Namens. Der Text steht in der Sprachdatei unter messages.player.name-format, \n beginnt eine neue
+  # Zeile. Die Farbe ist ein Farbcode am Anfang des Texts, z. B. "&b{player}'s Cam" - ohne einen ist er weiß.
   name:
-    # Farbe der Schrift (ersetzt einen Farbcode am Anfang von name-format):
-    #   white, yellow, gold, red, dark_red, light_purple, dark_purple, blue,
-    #   dark_blue, aqua, dark_aqua, green, dark_green, gray, dark_gray, black
-    color: white
     # Durch Wände sichtbar (false = nur bei freier Sicht, der Name verrät nicht, wo der Spieler ist)
     through-walls: false
     # Sichtweite in Blöcken (64 = wie ein Namensschild; mehr als entity-tracking-range: display in der spigot.yml geht nicht)
@@ -170,9 +165,10 @@ camera-mode:
 # Funksignal (bei camera-mode.max-distance-mode: signal). Es reicht in freier Luft max-distance Blöcke weit,
 # gemessen von den Augen des Körpers bis zu denen der Kamera - in einer anderen Welt vom Portal aus, aus dem sie
 # kam, wie bei max-distance. Wie stark es ist, zeigt die Action-Bar wie das Spiel eine Verbindung: mit dem
-# Verbindungssymbol aus der Tab-Liste (ein bis fünf Balken, ein rotes Kreuz, wenn es weg ist) und einem Wort dazu
-# (Texte: actionbar-signal, signal-quality-...). Das Symbol geht nur auf Paper, auf Spigot stehen dort vier Balken
-# aus Zeichen.
+# Verbindungssymbol aus der Tab-Liste und einem Wort dazu (Texte: actionbar-signal, signal-quality-...): fünf Balken
+# ab 80 % (excellent), vier ab 60 % (good), drei ab 40 % (medium), zwei ab 20 % (weak), darunter einer (very weak) und
+# ein rotes Kreuz, wenn es weg ist (none). Das Symbol geht nur auf Paper, auf Spigot stehen dort vier Balken aus
+# Zeichen.
 # Reißt es ab, zählt die Action-Bar lost-seconds herunter (signal-lost), mit dem Ton sounds.signal-lost:
 # So lange hat die Kamera Zeit, zurück ins Signal zu fliegen. Schafft sie es, kommt der Ton sounds.signal-back.
 signal:
@@ -204,16 +200,6 @@ signal:
     lodestone: 15.0
     # Getöntes Glas lässt kein Licht durch und auch das Signal nur schwer
     tinted_glass: 5.0
-  # Ab wie viel Prozent die Anzeige des Signals welche Stufe zeigt, mit Symbol und Wort (Texte signal-quality-...):
-  #   excellent = fünf Balken, good = vier, medium = drei, weak = zwei. Darunter very weak mit einem Balken, und ist
-  #   das Signal ganz weg, none mit dem roten Kreuz.
-  # Jede Zahl muss kleiner sein als die davor (0 bis 100). Ist sie es nicht, meldet /cam reload einen Fehler, und es
-  # gelten 80, 60, 40, 20.
-  levels:
-    excellent: 80
-    good: 60
-    medium: 40
-    weak: 20
   # Was passiert, wenn das Signal weg bleibt:
   #   back = die Kamera springt zurück zum Körper (Ton sounds.back, Text signal-back-to-body), der Cam-Modus läuft weiter
   #   end  = der Cam-Modus endet (Ton sounds.end-forced, Text signal-ended)
@@ -232,8 +218,8 @@ body:
   name-visible: true
 
   # Die Herzen des Spielers in einer eigenen Zeile am Namen über dem Körper zeigen, so viele, wie er hat: die Bilder
-  # aus seiner Leiste, ganze und ein halbes, zehn pro Zeile. Ändern sie sich im Cam-Modus, etwa durch einen Heiltrank,
-  # gehen sie mit. Bei name-visible: false stehen sie allein da.
+  # aus seiner Leiste, ganze und ein halbes, zehn pro Zeile - und wie in der Leiste jede weitere Zeile darüber. Ändern
+  # sie sich im Cam-Modus, etwa durch einen Heiltrank, gehen sie mit. Bei name-visible: false stehen sie allein da.
   # Die Bilder gehen nur auf Paper. Auf Spigot stehen dort Zeichen, die in der Sprachdatei stehen
   # (messages.armorstand.health-full, -half und -empty).
   health-visible: false
@@ -249,17 +235,9 @@ body:
   # den Effekt; gezeigt wird, was der Spieler beim Start hatte.
   health-show-absorption: true
 
-  # Wohin die nächste Zeile Herzen kommt, wenn es mehr als zehn sind:
-  #   true  = darüber, wie in der Leiste
-  #   false = darunter
-  health-rows-upward: true
-
-  # Aussehen des Namens (der Text steht in der Sprachdatei unter messages.armorstand.name-format, \n beginnt eine neue Zeile)
+  # Aussehen des Namens. Der Text steht in der Sprachdatei unter messages.armorstand.name-format, \n beginnt eine neue
+  # Zeile. Die Farbe ist ein Farbcode am Anfang des Texts, z. B. "&e{player}'s Body" - ohne einen ist er gelb.
   name:
-    # Farbe der Schrift (ersetzt einen Farbcode am Anfang von name-format):
-    #   white, yellow, gold, red, dark_red, light_purple, dark_purple, blue,
-    #   dark_blue, aqua, dark_aqua, green, dark_green, gray, dark_gray, black
-    color: yellow
     # Durch Wände sichtbar (false = nur bei freier Sicht, der Name verrät nicht, wo der Körper steht)
     through-walls: false
     # Sichtweite in Blöcken (64 = wie ein Namensschild; mehr als entity-tracking-range: display in der spigot.yml geht nicht)
@@ -297,14 +275,12 @@ body:
   #   vanilla = mit ihrer normalen Sichtweite (Zombie: 16 Blöcke)
   #   custom  = mit mob-target-radius, für alle gleich
   #   false   = nie
+  # Trägt der Körper den Kopf einer Mobart als Helm, halbiert das ihre Reichweite, wie in Vanilla.
   # Der Wärter hält sich nur auf Paper daran, auf Spigot greift er den Körper an, wenn er ihn riecht.
   mob-target: false
 
   # Reichweite in Blöcken für mob-target: custom (0 = kein Mob, höchstens 64 wie der weiteste Mob in Vanilla)
   mob-target-radius: 16.0
-
-  # Mobkopf als Helm halbiert die Reichweite dieser Mobart (wie in Vanilla)
-  mob-target-heads: true
 
 # Fluggeschwindigkeit im Cam-Modus (1 = normal, wie im Kreativmodus)
 flight-speed:
@@ -354,27 +330,23 @@ player-settings:
   flight-speed: true
 
 # Töne im Cam-Modus. Nur der Spieler selbst hört sie, sonst würden sie einen unsichtbaren Spieler verraten.
-#   enabled = Ton an (true) oder aus (false)
 #   sound   = der Name wie bei /playsound, z. B. block.beacon.activate, entity.player.levelup, block.note_block.pling
 #             (ein Ton aus einem Ressourcenpaket mit seinem eigenen Namensraum, z. B. meinpaket:kamera.an)
-#   volume  = Lautstärke, 0 bis 1 (0 = aus)
+#   volume  = Lautstärke, 0 bis 1 - 0 schaltet den Ton ab
 #   pitch   = Tonhöhe, 0.5 (tief) bis 2 (hoch), 1 = wie er ist
 sounds:
   # Beim Start des Cam-Modus
   start:
-    enabled: true
     sound: block.beacon.activate
     volume: 1.0
     pitch: 1.0
   # Beim Ende mit /cam (oder einem Klick auf den eigenen Körper), zurück am Körper
   end:
-    enabled: true
     sound: block.beacon.deactivate
     volume: 1.0
     pitch: 1.0
   # Beim Ende, weil dem Körper etwas passiert ist: angegriffen, beschädigt, verschoben, ertrinkt, erstickt, Trank
   end-body:
-    enabled: true
     sound: entity.illusioner.mirror_move
     volume: 1.0
     pitch: 1.0
@@ -382,50 +354,42 @@ sounds:
   # Funksignal weg (signal.lost: end)
   # (beim Tod, beim Verlassen des Servers und beim Herunterfahren gibt es keinen Ton)
   end-forced:
-    enabled: true
     sound: block.respawn_anchor.deplete
     volume: 1.0
     pitch: 1.0
   # An der Grenze: max-distance, cam-area, gesperrte Lava, Wasser, Pulverschnee und gesperrte Portale.
   # So oft wie die Meldung dazu (camera-mode.warning-cooldown), auch wenn die Meldung selbst abgeschaltet ist.
   border:
-    enabled: true
     sound: block.note_block.bass
     volume: 1.0
     pitch: 0.5
   # Beim Sprung zurück zum Körper mit /cam back (back-command) und wenn das Funksignal weg bleibt (signal.lost: back)
   back:
-    enabled: true
     sound: entity.enderman.teleport
     volume: 1.0
     pitch: 1.0
   # Kurz vor dem Ende durch Zeitlimit oder Akku (end-warning)
   end-warning:
-    enabled: true
     sound: item.lodestone_compass.lock
     volume: 1.0
     pitch: 1.0
   # Wenn etwas dem Körper gefährlich wird (body-alarm)
   body-alarm:
-    enabled: true
     sound: entity.warden.nearby_close
     volume: 1.0
     pitch: 1.0
   # Jede Sekunde der Wartezeit vor dem Start (start-delay)
   start-delay:
-    enabled: true
     sound: block.note_block.hat
     volume: 1.0
     pitch: 1.0
   # Wenn ein anderer Spieler den Körper anstupst (nudge)
   nudge:
-    enabled: true
     sound: block.note_block.chime
     volume: 1.0
     pitch: 1.0
   # Wenn das Funksignal abreißt (camera-mode.max-distance-mode: signal)
   signal-lost:
-    enabled: true
     sound: block.conduit.deactivate
     volume: 1.0
     pitch: 1.0
@@ -433,26 +397,22 @@ sounds:
   # nicht beim Sprung zurück zum Körper (signal.lost: back) und nicht beim Ende (signal.lost: end). Auch für einen
   # Follower (follow), wenn der Leader rechtzeitig wieder in seine Reichweite kommt.
   signal-back:
-    enabled: true
     sound: block.conduit.activate
     volume: 1.0
     pitch: 1.0
   # Beim Sprung an einen Aussichtspunkt mit /cam spot <Name> (viewpoints) und dorthin, wo der letzte Flug aufhörte,
   # mit /cam resume (resume-command)
   spot:
-    enabled: true
     sound: item.chorus_fruit.teleport
     volume: 1.0
     pitch: 1.0
   # Wenn einen jemand einlädt, ihm zu folgen (follow; hieß früher tour-invite, das geht weiter)
   follow-invite:
-    enabled: true
     sound: block.note_block.bell
     volume: 1.0
     pitch: 1.0
   # Wenn der Leader aus der Reichweite eines Followers fliegt (follow) - beide hören ihn (hieß früher tour-reach)
   follow-reach:
-    enabled: true
     sound: block.conduit.deactivate
     volume: 1.0
     pitch: 1.0
@@ -477,10 +437,10 @@ cam-list:
 
 # Statistik: wie oft jemand im Cam-Modus war, wie lange und wie weit die Kamera insgesamt geflogen ist, beides im
 # Schnitt pro Flug (eine Zeile), der längste Flug und die längste Strecke in einem Flug, wie weit die Kamera höchstens
-# vom Körper weg war und seit wann gezählt wird. Der weiteste Abstand steht nur ohne feste Grenze und ohne Funksignal
-# da (camera-mode.max-distance-mode: fixed oder signal): Mit beiden kommt fast jeder einmal bis max-distance - beim
-# Signal in freier Luft, und weiter nur in den paar Sekunden von signal.lost-seconds -, und bei allen stünde etwa
-# dieselbe Zahl.
+# vom Körper weg war und seit wann gezählt wird. Der weiteste Abstand steht nur da, wenn max-distance die Kamera nicht
+# hält: bei camera-mode.max-distance-mode: false, oder bei fixed mit einer Grenze, die niemanden aufhält (z. B.
+# border-mode: false). Mit fester Grenze oder Funksignal kommt fast jeder einmal bis max-distance - beim Signal in
+# freier Luft, und weiter nur in den paar Sekunden von signal.lost-seconds -, und bei allen stünde etwa dieselbe Zahl.
 # "Gezählt seit" ist der Beginn des ersten Flugs, der zählt - nach /cam stats reset der des nächsten. Wer schon vor
 # dieser Version Flüge in der Statistik hatte, bekommt die Zeile erst nach einem Reset: Wann sein erster war, steht
 # nirgends.
@@ -757,7 +717,7 @@ menu:
     # was geht: den Cam-Modus beenden (stop-command, camplugin.stop) und sperren (cam-ban, camplugin.ban). Ist er
     # gesperrt, glänzt der Knopf zum Sperren (einen Kopf zeichnet Minecraft nie glänzend) und führt dahin, wo man seine
     # Sperre ändert oder aufhebt. Die Dauer einer Sperre: für immer, oder Tage, Stunden und Minuten - Linksklick eins
-    # dazu, Rechtsklick eins weg, mit Umschalt so viele wie ban-shift-step unten. Bei einem Gesperrten steht da, was
+    # dazu, Rechtsklick eins weg, mit Umschalt zehn. Bei einem Gesperrten steht da, was
     # seine Sperre noch hat.
     players:
       item: iron_bars
@@ -806,9 +766,6 @@ menu:
     back:
       item: arrow
       slot: 22
-  # Wie viele Tage, Stunden oder Minuten ein Klick mit Umschalt auf der Seite einer Sperre dazugibt oder wegnimmt
-  # (ohne Umschalt einen), 1 bis 100
-  ban-shift-step: 10
   # Offene Seiten des Menüs aktualisieren sich von selbst, ohne dass man es neu öffnen muss: Einladungen und Follower
   # beim Folgen, wer in der Nähe ist und wie weit weg, neue Angebote und Likes bei den Aussichtspunkten, wer im Cam-Modus
   # ist und seit wann, Sperren, die ablaufen ... - jede Sekunde, die Listen der Admin-Seite mit Spielern, die offline
@@ -830,18 +787,6 @@ menu:
 # den Cam-Modus genauso.
 exit-key:
   enabled: true
-
-# Wer den Cam-Modus mit einem Klick auf seinen eigenen Körper beendet, hat die Maustaste danach noch einen Moment
-# unten - und sein Spiel macht damit gleich weiter, sobald der Körper weg ist: In Kreativ baut es den Block ab, der
-# hinter dem Körper stand, und ein gehaltener Rechtsklick setzt den Block aus der Hand dorthin.
-# Mit enabled: true trifft der Klick nur den Körper: Für seconds danach baut, setzt und benutzt der Spieler nichts.
-# Hält er die Taste länger, bleibt der Schutz, bis er loslässt.
-# Wer mit /cam oder exit-key aufhört, hat seine Hände sofort wieder.
-exit-click-guard:
-  enabled: true
-  # Wie lange, in Sekunden (0.15 bis 5). Dazu kommt der Ping des Spielers: So lange braucht sein Spiel, bis es
-  # erfährt, dass der Cam-Modus vorbei ist. Unter 0.3 kann bei Lag doch noch ein Block durchkommen.
-  seconds: 0.3
 
 # Bedrock-Spieler (über Geyser, mit oder ohne Floodgate): Was Bedrock nicht kann - klickbare Knöpfe im Chat, Rechts-
 # und Shift-Klick in einem Fenster, den Leuchtumriss, die Taste F -, bekommen sie auf einem anderen Weg. Rechte gibt
@@ -894,12 +839,6 @@ bedrock:
   #            Kamera direkt hinter ihm. Die Items des Leaders hat er in der Hand wie auf Java, und sie drehen sich mit -
   #            das Umschauen kommt aber nur in 20 Schritten pro Sekunde und ruckelt.
   follow-view: camera
-  # Die Symbole der Punkte (viewpoints.icons) in der Truhe: Bedrock zeigt bei einer gefüllten Karte nicht den Namen,
-  # den das Menü ihr gibt, sondern "Unbekannte Karte". Deshalb sieht ein Bedrock-Spieler jede Karte als leere Karte -
-  # Name und Text darunter bleiben, nur das Bild ist das der leeren Karte. In Fenstern von Bedrock gibt es keine Bilder.
-  # true = die Karten von 26.3 (alle außer filled_map) zeigen sich auf Bedrock als sie selbst. Zum Ausprobieren: Steht
-  # dann auf Bedrock wieder "Unbekannte Karte" statt des Namens, zurück auf false.
-  map-icons: false
 
 # /cam back: Die Kamera springt zurück zum Körper, der Cam-Modus läuft weiter - für jeden, der sich verflogen hat.
 # Sie schaut danach in dieselbe Richtung wie vorher. Aus einer anderen Welt (Portal) geht es genauso zurück.
@@ -1027,7 +966,8 @@ viewpoints:
   # Entdecker- und Bauwerkskarten, die dort eigene Items sind. Das erste ist das, mit dem ein neuer Punkt anfängt. Die
   # Namen stehen unter map-names in der Sprachdatei. Ändert eine spätere Version einen Item-Namen, kann man ihn hier
   # anpassen. Mit nur einem Eintrag (oder keinem) gibt es keine Wahl. Ein Punkt ohne eigenes Symbol (mit /cam spot set
-  # gesetzt oder von früher) zeigt sich wie bisher. Bedrock: siehe bedrock.map-icons.
+  # gesetzt oder von früher) zeigt sich wie bisher. Bedrock-Spieler sehen jede Karte in der Truhe als leere Karte, mit
+  # demselben Namen und Text: Bei einer gefüllten zeigt Bedrock "Unbekannte Karte" statt des Namens.
   icons:
     - filled_map
     - map
@@ -1082,10 +1022,6 @@ viewpoints:
 # mehr, sagt die Konsole das einmal, und nur diese Karte bekommt keine Punkte. Geht nur mit viewpoints.sharing: true.
 web-map:
   enabled: true
-  # Auf welchen Karten, sofern sie auf dem Server sind
-  bluemap: true
-  dynmap: true
-  squaremap: true
   # Ob die Ebene der Punkte auf der Seite der Karte erst ausgeschaltet ist, bis ein Besucher sie einschaltet
   hidden: false
   # Wie viele Likes ein öffentlicher Punkt mindestens haben muss, um auf die Karte zu kommen (0 = alle)
@@ -1149,11 +1085,10 @@ web-map:
 # nicht, solange er unsichtbar ist, und nicht durch Wände, solange er schleicht.
 # Seine Follower sehen auf ihrem eigenen Bildschirm seine Herzen, die Items in seinen Händen (voreingestellt ohne die
 # Zahl im Stapel, ohne die Verzauberungen, ohne Abnutzung und ohne den Namen, den er ihnen gegeben hat, siehe
-# mirror-count, -enchantments, -durability und -name) und
-# auf seinem Kopf, seine Effekte und seinen Frost (mirror-...) - nur auf ihrem Bildschirm: Am Server bleiben ihre
-# Herzen, Effekte und ihr Frost ihre, und ihre Hände bleiben leer wie im Cam-Modus; nehmen, wegwerfen oder benutzen
-# lässt sich nichts davon, und sein übriges Inventar sehen sie nicht. Ihr Hunger bleibt ihrer, ihre XP auch, außer mit
-# mirror-experience.
+# mirror-item-details) und auf seinem Kopf, seine Effekte und seinen Frost (mirror-...) - nur auf ihrem Bildschirm:
+# Am Server bleiben ihre Herzen, Effekte und ihr Frost ihre, und ihre Hände bleiben leer wie im Cam-Modus; nehmen,
+# wegwerfen oder benutzen lässt sich nichts davon, und sein übriges Inventar sehen sie nicht. Ihr Hunger bleibt
+# ihrer, ihre XP auch, außer mit mirror-experience.
 # Hören sie auf zu folgen (oder startet er den Cam-Modus), sehen sie wieder ihre eigenen Herzen, Hände, Effekte und
 # ihren eigenen Frost.
 # Mit guide-view sieht ein Follower durch seine Augen: Die Herzen dort zeichnet das Spiel selbst - und den Hunger
@@ -1218,22 +1153,14 @@ follow:
   mirror-health: true
   mirror-main-hand: true
   mirror-off-hand: true
-  # Ob sie sehen, wie viele Items in den Stapeln in den Händen des Leaders sind: die Zahl in ihrer Hotbar und - im Blick
-  # des Leaders - in dessen Hotbar. Mit false sehen sie die Items ohne Zahl; am Server und für alle anderen bleibt sie.
-  mirror-count: false
-  # Ob sie sehen, welche Verzauberungen seine Items haben (im Tooltip, wenn sie ihr Inventar öffnen). Mit false sehen
-  # sie nur, dass ein Item verzaubert ist: am Glitzern und am Namen in der Farbe eines verzauberten Items. Verzauberte
-  # Bücher zeigen keine Verzauberungen. Gilt auch für das Item auf seinem Kopf (mirror-head).
-  mirror-enchantments: false
-  # Ob sie sehen, wie abgenutzt seine Items sind: den Balken unter dem Item in ihrer Hotbar und - im Blick des Leaders -
-  # in dessen Hotbar, und mit F3+H die Haltbarkeit im Tooltip. Mit false sehen seine Items bei ihnen aus wie neu (auch
-  # eine fast kaputte Elytra, die das Spiel sonst kaputt zeichnet).
-  mirror-durability: false
-  # Ob sie die Namen sehen, die er seinen Items gegeben hat (z. B. am Amboss umbenannt): über ihrer Hotbar, wenn das
-  # Item in die Hand kommt, und im Tooltip. Mit false sehen sie nur den normalen Namen des Items - ein Schwert, das er
-  # "Exkalibur" genannt hat, heißt bei ihnen "Diamantschwert". Am Server und für alle anderen bleibt sein Name.
+  # Ob sie alles von den Items in seinen Händen sehen: wie viele in einem Stapel sind (die Zahl in ihrer Hotbar und - im
+  # Blick des Leaders - in dessen Hotbar), welche Verzauberungen sie haben (im Tooltip), wie abgenutzt sie sind (der
+  # Balken unter dem Item, mit F3+H die Haltbarkeit im Tooltip) und die Namen, die er ihnen gegeben hat (z. B. am Amboss
+  # umbenannt). Mit false sehen sie jedes Item ohne Zahl, verzaubert nur am Glitzern und am Namen in der Farbe eines
+  # verzauberten Items, wie neu (auch eine fast kaputte Elytra) und mit seinem normalen Namen - ein Schwert, das er
+  # "Exkalibur" genannt hat, heißt bei ihnen "Diamantschwert". Am Server und für alle anderen bleibt alles, wie es ist.
   # Gilt auch für das Item auf seinem Kopf (mirror-head).
-  mirror-name: false
+  mirror-item-details: false
   # Ob ihr Arm mit seinem Item schwingt, wenn seiner schwingt (schlagen, abbauen, Blöcke setzen). Nur der Schwung:
   # Wie das Item nach einem Schlag oder dem Setzen absinkt und wieder hochkommt, zeigt ein Client nur bei eigenen.
   # Geht wie guide-view nur auf Paper (ein Paket über das Innere des Servers).
@@ -1456,11 +1383,9 @@ cam-ban:
 # Der Eimer auf der Seite der Flugspuren blendet die Linie aus: ein Wassereimer, solange eine zu sehen ist (darunter
 # welcher Flug und wie lange noch), ein leerer, wenn keine zu sehen ist.
 # Wie lange die Linie zu sehen ist, sagt show-mode:
-#   dynamic = nach der Strecke des Flugs: ein Flug bis show-min-blocks Blöcke steht show-min-seconds da, einer ab
-#             show-max-blocks Blöcken show-max-seconds, dazwischen entsprechend länger. Bei all zählen alle Flüge
-#             zusammen, denn man fliegt jede Linie ab - höchstens show-max-seconds. Ein Flug, der noch läuft, steht
-#             show-max-seconds da, weil seine Linie noch wächst.
-#             Mit den Werten unten: bis 50 Blöcke 10 Sekunden, 300 Blöcke 1 Minute, ab 1500 Blöcken 5 Minuten.
+#   dynamic = nach der Strecke des Flugs: bis 50 Blöcke 10 Sekunden, 300 Blöcke 1 Minute, ab 1500 Blöcken 5 Minuten,
+#             dazwischen entsprechend. Bei all zählen alle Flüge zusammen, denn man fliegt jede Linie ab - höchstens
+#             5 Minuten. Ein Flug, der noch läuft, steht 5 Minuten da, weil seine Linie noch wächst.
 #   fixed   = jede Linie show-seconds lang, egal wie weit der Flug ging
 #   forever = bis man sie ausblendet (/cam trail oder der Eimer im Menü), eine andere zeigen lässt oder offline geht
 # Eine ältere Datei ohne show-mode, aber mit show-seconds, geht weiter wie bisher, mit fixed.
@@ -1488,14 +1413,6 @@ cam-trail:
   show-mode: dynamic
   # Für fixed: wie lange jede Linie zu sehen ist, in Sekunden (1 bis 600)
   show-seconds: 30
-  # Für dynamic: bis zu wie vielen Blöcken ein Flug am kürzesten zu sehen ist (0 bis 99999), und wie lange, in Sekunden
-  # (1 bis 600)
-  show-min-blocks: 50
-  show-min-seconds: 10
-  # Für dynamic: ab wie vielen Blöcken ein Flug am längsten zu sehen ist (mehr als show-min-blocks, bis 100000), und
-  # wie lange, in Sekunden (show-min-seconds bis 600)
-  show-max-blocks: 1500
-  show-max-seconds: 300
   # Nach wie vielen Tagen ein Flug gelöscht wird, gezählt ab seinem Ende (0 = nie, er bleibt für immer)
   keep-days: 30
 

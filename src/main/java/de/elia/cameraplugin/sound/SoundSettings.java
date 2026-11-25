@@ -4,11 +4,21 @@ import de.elia.cameraplugin.config.ConfigReader;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.session.EndReason;
 
+import java.util.List;
+
 /**
  * The section {@code sounds} of the config file: the sound of each moment
  * of camera mode. See {@link de.elia.cameraplugin.config.CamSettings#sounds()}.
  */
 public final class SoundSettings {
+
+    /** The section of the sounds. */
+    public static final String SECTION = "sounds";
+
+    /** The sounds below {@link #SECTION}, each a section of its own. */
+    public static final List<String> SOUNDS = List.of("start", "end", "end-body", "end-forced", "border", "back",
+            "end-warning", "body-alarm", "start-delay", "nudge", "signal-lost", "signal-back", "spot",
+            "follow-invite", "follow-reach");
 
     /** The sounds of {@code sounds}, {@link CamSound#OFF} for one that is switched off. */
     private CamSound startSound;

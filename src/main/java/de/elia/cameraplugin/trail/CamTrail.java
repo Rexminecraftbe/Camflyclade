@@ -59,8 +59,8 @@ import java.util.function.Supplier;
  * the menu - a water bucket while a line is shown, an empty one otherwise.</p>
  *
  * <p>How long the line stays, {@code cam-trail.show-mode} says, see
- * {@link TrailShowMode}: by how far the camera flew, between
- * {@code show-min-seconds} and {@code show-max-seconds} - a long line needs
+ * {@link TrailShowMode}: by how far the camera flew, between ten seconds and
+ * five minutes - a long line needs
  * the time, it is drawn only within {@link #REACH} of the viewer, who has to
  * fly along it to see it all, and with {@code all} along every one of them -,
  * always {@code show-seconds}, or until it is hidden.</p>
@@ -793,10 +793,8 @@ public final class CamTrail implements Listener, PluginPart {
      * How long the line of these flights stays, in seconds, as
      * {@code show-mode} has it; -1 for until it is hidden. With
      * {@code dynamic} all of them count together, as the viewer flies along
-     * every line: up to {@code show-min-blocks} it stays
-     * {@code show-min-seconds}, from {@code show-max-blocks} on
-     * {@code show-max-seconds}, and in between in proportion - the most while
-     * one of them is still under way, as its line grows.
+     * every line, see {@link TrailShowMode#seconds} - the most while one of
+     * them is still under way, as its line grows.
      */
     private int showSeconds(List<FlightTrail> now) {
         TrailShowMode mode = settings.trail().showMode();
@@ -806,25 +804,14 @@ public final class CamTrail implements Listener, PluginPart {
         if (mode == TrailShowMode.FIXED) {
             return settings.trail().showSeconds();
         }
-        int minBlocks = settings.trail().showMinBlocks();
-        int maxBlocks = settings.trail().showMaxBlocks();
-        int minSeconds = settings.trail().showMinSeconds();
-        int maxSeconds = settings.trail().showMaxSeconds();
         double together = 0.0;
         for (FlightTrail trail : now) {
             if (trail.isFlying()) {
-                return maxSeconds;
+                return TrailShowMode.MAX_SECONDS;
             }
             together += trail.distanceFlown();
         }
-        if (together <= minBlocks) {
-            return minSeconds;
-        }
-        if (together >= maxBlocks) {
-            return maxSeconds;
-        }
-        double share = (together - minBlocks) / (maxBlocks - minBlocks);
-        return (int) Math.round(minSeconds + share * (maxSeconds - minSeconds));
+        return TrailShowMode.seconds(together);
     }
 
     /** What draws the flights for one viewer, and what the menu tells of it. */

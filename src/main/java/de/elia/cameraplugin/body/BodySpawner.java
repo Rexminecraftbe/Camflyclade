@@ -377,10 +377,9 @@ public final class BodySpawner implements Listener {
      * The hearts of a player the way his bar shows them: every whole one, the
      * half one at the end, with {@code body.health-show-missing} those he is
      * missing up to his maximum, and with {@code health-show-absorption} the
-     * yellow ones after them. Ten to a line like the bar; with
-     * {@code health-rows-upward} every further line stands above the one
-     * before, as on the bar, otherwise below. {@code null} stands for the
-     * start of a new line.
+     * yellow ones after them. Ten to a line like the bar, every further line
+     * above the one before, as on the bar. {@code null} stands for the start
+     * of a new line.
      */
     private List<Heart> hearts(Player player, double absorption) {
         int halves = (int) Math.ceil(player.getHealth());
@@ -402,9 +401,7 @@ public final class BodySpawner implements Listener {
         for (int from = 0; from < all.size(); from += HEARTS_PER_LINE) {
             lines.add(all.subList(from, Math.min(all.size(), from + HEARTS_PER_LINE)));
         }
-        if (settings.body().healthRowsUpward()) {
-            Collections.reverse(lines);
-        }
+        Collections.reverse(lines);
         List<Heart> hearts = new ArrayList<>();
         for (List<Heart> line : lines) {
             if (!hearts.isEmpty()) {
@@ -417,7 +414,7 @@ public final class BodySpawner implements Listener {
 
     /**
      * The name over the body in letters: {@code name-format} with his name in
-     * the colour of {@code body.name}, and with {@code body.health-visible} his
+     * its colour, see {@link NameDisplay#colorOf}, and with {@code body.health-visible} his
      * hearts in a line of their own over or under it, written with the
      * letters of {@code armorstand.health-full}, {@code -half},
      * {@code -empty}, {@code -absorbing-full} and {@code -absorbing-half}.
@@ -446,7 +443,7 @@ public final class BodySpawner implements Listener {
     }
 
     /**
-     * {@code name-format} with his name in the colour of {@code body.name},
+     * {@code name-format} with his name in its colour, see {@link NameDisplay#colorOf},
      * or nothing with {@code name-visible: false}.
      */
     private String styledName(Player player) {

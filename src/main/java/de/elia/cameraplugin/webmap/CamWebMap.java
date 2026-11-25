@@ -144,8 +144,9 @@ public final class CamWebMap implements Listener {
     }
 
     /**
-     * Links up with a plugin if it is one of the maps and switched on in
-     * {@code web-map}.
+     * Links up with a plugin if it is one of the maps. Each one that is
+     * there gets the spots: a switch for each, which {@code web-map} had,
+     * hardly ever had anything to choose, a server has one map.
      *
      * @return whether it is linked up now
      */
@@ -159,11 +160,11 @@ public final class CamWebMap implements Listener {
         String layer = ChatColor.stripColor(messages.getMessage("web-map-layer"));
         boolean hidden = settings.webMap().hidden();
         MapLink link;
-        if (name.equals(BLUEMAP) && settings.webMap().blueMap()) {
+        if (name.equals(BLUEMAP)) {
             link = new BlueMapLink(plugin, map, LAYER_ID, layer, hidden, this::changed);
-        } else if (name.equals(DYNMAP) && settings.webMap().dynmap()) {
+        } else if (name.equals(DYNMAP)) {
             link = new DynmapLink(map, LAYER_ID, layer, hidden);
-        } else if (name.equals(SQUAREMAP) && settings.webMap().squaremap()) {
+        } else if (name.equals(SQUAREMAP)) {
             link = new SquaremapLink(map, LAYER_ID, layer, hidden);
         } else {
             return false;

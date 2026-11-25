@@ -168,8 +168,8 @@ public final class CamSignal implements PluginPart {
 
     /**
      * How strong a signal is in steps, as the icons and words go: 0 when it is
-     * gone, 5 from the percent {@code signal.levels.excellent} names, 4 from
-     * {@code good}, 3 from {@code medium}, 2 from {@code weak}, and 1 below.
+     * gone, 5 from the percent of excellent, 4 from good, 3 from medium, 2
+     * from weak, see {@link SignalSettings#levels()}, and 1 below.
      * Measured on the percent {@code {percent}} shows, so that both agree.
      */
     private int level(double strength) {

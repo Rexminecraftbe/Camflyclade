@@ -215,9 +215,7 @@ public final class CamTour implements Listener, PluginPart {
         quietHearts.load(settings.follow().enabled() && settings.follow().mirrorHealth() ? log : null);
         slots.load(settings.follow().enabled()
                 && (settings.follow().mirrorMainHand() || settings.follow().mirrorOffHand()) ? log : null);
-        boolean hides = !settings.follow().mirrorCount() || !settings.follow().mirrorEnchantments()
-                || !settings.follow().mirrorDurability() || !settings.follow().mirrorName();
-        hands.load(settings.follow().enabled() && hides ? log : null);
+        hands.load(settings.follow().enabled() && !settings.follow().mirrorItemDetails() ? log : null);
     }
 
     /**

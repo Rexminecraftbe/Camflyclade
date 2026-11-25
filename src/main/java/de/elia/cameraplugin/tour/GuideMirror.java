@@ -77,12 +77,10 @@ import java.util.function.UnaryOperator;
  * his client draws the next picture.</p>
  *
  * <p>What the guests do not see of the guide's items, their clients are not
- * sent, see {@link #shown}: how many are in a stack, unless
- * {@code follow.mirror-count}; which enchantments they have, unless
- * {@code follow.mirror-enchantments} - only that they have some -; how worn
- * they are, unless {@code follow.mirror-durability}; the names the guide gave
- * them - at an anvil, say -, unless {@code follow.mirror-name}: they see the
- * item's own name instead. Seen through the guide's
+ * sent, see {@link #shown}, unless {@code follow.mirror-item-details}: how
+ * many are in a stack; which enchantments they have - only that they have
+ * some -; how worn they are; the names the guide gave them - at an anvil,
+ * say -: they see the item's own name instead. Seen through the guide's
  * eyes, the hotbar a client draws is not the guest's but the guide's, filled
  * with what the server sends everybody of the guide's hands - the real ones.
  * On their way to the guest, those packets are changed, see
@@ -363,13 +361,13 @@ final class GuideMirror {
         if (item.getType().isAir()) {
             return item;
         }
-        boolean asOne = !settings.follow().mirrorCount() && item.getAmount() != 1;
+        boolean hide = hides();
+        boolean asOne = hide && item.getAmount() != 1;
         ItemMeta meta = item.hasItemMeta() ? item.getItemMeta() : null;
-        boolean enchanted = !settings.follow().mirrorEnchantments() && meta != null
+        boolean enchanted = hide && meta != null
                 && (meta.hasEnchants() || meta instanceof EnchantmentStorageMeta stored && stored.hasStoredEnchants());
-        boolean worn = !settings.follow().mirrorDurability() && meta instanceof Damageable damageable
-                && damageable.hasDamage();
-        boolean named = !settings.follow().mirrorName() && meta != null && meta.hasDisplayName();
+        boolean worn = hide && meta instanceof Damageable damageable && damageable.hasDamage();
+        boolean named = hide && meta != null && meta.hasDisplayName();
         if (!marked && !asOne && !enchanted && !worn && !named) {
             return item;
         }
@@ -792,7 +790,6 @@ final class GuideMirror {
 
     /** Whether the guests do not see all of the guide's items: their count, enchantments, wear or name. */
     private boolean hides() {
-        return !settings.follow().mirrorCount() || !settings.follow().mirrorEnchantments()
-                || !settings.follow().mirrorDurability() || !settings.follow().mirrorName();
+        return !settings.follow().mirrorItemDetails();
     }
 }

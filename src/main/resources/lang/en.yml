@@ -37,7 +37,9 @@ messages:
   armorstand.health-empty: "&8❤"
   armorstand.health-full: "&c❤"
   armorstand.health-half: "&c❥"
-  armorstand.name-format: "{player}'s Body"
+  # The name over the body (body.name-visible), \n starting a new line. Its colour is the colour code at its start;
+  # without one it is yellow.
+  armorstand.name-format: "&e{player}'s Body"
   back-not-in-cam: "&cOnly in cam mode."
   back-off: "&c/cam back is switched off."
   back-to-body: "&aBack at your body"
@@ -174,7 +176,6 @@ messages:
   config-expected-number: "&cWrong value for {path}: '{value}'. Expected a number. Using {used} instead."
   config-expected-text: "&cWrong value for {path}: '{value}'. Expected text. Using {used} instead."
   config-expected-whole-number: "&cWrong value for {path}: '{value}'. Expected a whole number. Using {used} instead."
-  config-not-descending: "&cThe values of {path} have to go down, each lower than the one before: {value}. Using {used} instead."
   config-out-of-range: "&cValue for {path} is out of range: {value}. Using {used} instead."
   config-syntax-extra-colon: 'there is one ":" too many here, or the value belongs in quotes'
   config-syntax-indentation: "the indentation here does not match the lines above"
@@ -273,7 +274,7 @@ messages:
   # ban, menu-admin-ban-days, -hours and -minutes say how many of them the ban has ({amount}), with
   # menu-admin-ban-time-lore under them ({time} as ban-for or ban-for-good), menu-admin-ban-confirm-lore says what
   # the ban will be ({ban}: {time} with ban-reason), and menu-admin-banned how a ban stands; {step} in
-  # menu-admin-ban-time-actions is menu.ban-shift-step. The -change ones are there instead while the player is banned
+  # menu-admin-ban-time-actions is how many a click with shift adds or takes away (10). The -change ones are there instead while the player is banned
   # already: then the page changes his ban, and menu-admin-unban ({player} in its -lore) lifts it.
   # On Bedrock (see bedrock in config.yml) there is but one click, a tap: a button that does something else on a
   # right-click or with shift offers what it does on a page of its own, menu-pick-title ({button} its name - the
@@ -847,10 +848,12 @@ messages:
   photo-ended: "&aPhoto mode off."
   photo-off: "&c/cam photo is switched off."
   photo-started: "&aPhoto mode on: players, bodies, mobs and items hidden."
+  # The name over the camera player (camera-mode.name-visible), \n starting a new line. Its colour is the colour code
+  # at its start; without one it is white.
   player.name-format: "{player}'s Cam"
   # While others follow a leader (/cam follow), their names stand over his camera, stacked over his: {name} = what
   # player.name-format says (without its colour), {player} = the player's name. The follower lines take the colour of
-  # camera-mode.name.color, the leader's line brings its own. Over a leader out of cam mode (follow.lead-without-cam),
+  # player.name-format unless they start with a colour code of their own, the leader's line brings its own. Over a leader out of cam mode (follow.lead-without-cam),
   # his own line is player.tour-builder-format ({player} = his name) - with follow.guide-name: replace, in place of his
   # name tag; with above his name tag stays, and only the follower lines stand over it. The keys keep the name /cam
   # follow had before, tour.
@@ -1083,10 +1086,10 @@ messages:
   # statistics.count-follow-distance is false -, here, in stats-average, stats-longest-distance and stats-farthest.
   stats-distance: "&7Distance flown: &f{distance} blocks"
   # How far the camera flew away from the body: only flying counts, a jump does not - to a spot, with /cam resume, after
-  # the guide of /cam follow. Only without a fixed border (camera-mode.max-distance-mode: fixed with a border that
-  # holds) and without the signal (max-distance-mode: signal): with either, nearly everybody gets to max-distance once
-  # - on the signal in the open air, and beyond it only for signal.lost-seconds -, and the number would be about the
-  # same for all.
+  # the guide of /cam follow. Only while max-distance does not hold the camera: with camera-mode.max-distance-mode:
+  # false, or with fixed and a border that holds nobody back (e.g. border-mode: false). With a fixed border or the
+  # signal nearly everybody gets to max-distance once - on the signal in the open air, and beyond it only for
+  # signal.lost-seconds -, and the number would be about the same for all.
   stats-farthest: "&7Farthest from the body: &f{distance} blocks"
   # While he is in cam mode: how long the flight has been going on ({time}). The numbers under it count it already,
   # as they will once it ends - in the menu they grow by the second. With statistics.skip-afk-time, {time} is all of
