@@ -2,7 +2,9 @@ package de.elia.cameraplugin.movement;
 
 /**
  * How {@code camera-mode.max-distance} holds the camera to its body, the
- * values of {@code camera-mode.max-distance-mode}.
+ * values of {@code camera-mode.max-distance-mode}. Until it had the value
+ * {@code false}, a switch of its own said whether it held the camera at all,
+ * {@code camera-mode.max-distance-enabled}.
  */
 public enum DistanceMode {
     /**
@@ -18,5 +20,7 @@ public enum DistanceMode {
      * There is no border to run into: once the signal is gone, the camera goes
      * back to its body or camera mode ends, as {@code signal.lost} has it.
      */
-    SIGNAL
+    SIGNAL,
+    /** {@code false}: not at all, the camera flies as far as it likes. */
+    OFF
 }

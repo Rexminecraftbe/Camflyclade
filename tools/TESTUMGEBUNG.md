@@ -37,7 +37,7 @@ mvn -B test -Dtest=ConfigUpdaterTest       # nur eine Klasse
 | Test                 | Was er prüft |
 |----------------------|--------------|
 | `ConfigUpdaterTest`  | Was der Config-Updater in eine Datei schreibt und wohin, was er stehen lässt, Umbenennungen, Versionen, Zeilenenden - und was er herausnimmt, in einen anderen Abschnitt verschiebt oder mit neuem Wert schreibt, samt Leerzeilen und Kommentar. |
-| `BundledFilesTest`   | Die mitgelieferte `config.yml` und `lang/en.yml`: Der Updater versteht sie, und **jeder** Schlüssel der `config.yml` (aus der `en.yml` eine Auswahl) kommt mit seinem Kommentar zurück, wenn er fehlt, ohne dass sich ein Wert ändert. Dazu eine Datei aus der Zeit von `/cam tour` und die `config.yml` von vor dem Aufräumen (`src/test/resources/config-before-tidy-up.yml`): mit ihren Standardwerten sagt sie danach genau, was die neue sagt, und eigene Werte bleiben - unter neuem Namen, im Abschnitt `cooldown`, als Wort statt Zahl. |
+| `BundledFilesTest`   | Die mitgelieferte `config.yml` und `lang/en.yml`: Der Updater versteht sie, und **jeder** Schlüssel der `config.yml` (aus der `en.yml` eine Auswahl) kommt mit seinem Kommentar zurück, wenn er fehlt, ohne dass sich ein Wert ändert. Dazu eine Datei aus der Zeit von `/cam tour` und die `config.yml` von vor dem Aufräumen (`src/test/resources/config-before-tidy-up.yml`): mit ihren Standardwerten sagt sie danach genau, was die neue sagt, und eigene Werte bleiben - unter neuem Namen, im Abschnitt `cooldown`, als Wort statt Zahl. Ebenso die `config.yml` von vor dem zweiten Aufräumen (`config-before-fewer-switches.yml`): `max-distance-enabled: false` wird `max-distance-mode: false`, ein abgeschalteter Ton `volume: 0`, eine eigene Farbe eines Namens bleibt, die voreingestellte geht, die vier `follow.mirror-...` der Items werden `mirror-item-details` (an nur, wenn alle vier an waren), und was fest eingebaut ist, geht. |
 | `ConfigReaderTest`   | Wie Werte gelesen, begrenzt und ersetzt werden, welche Hinweise dabei entstehen, und dass jeder Hinweis seinen Text in der `en.yml` hat. Alte Werte einer Auswahl (Zahlen, `false`) zählen ohne Hinweis als ihr neuer Name, und ein eigenes `storage` eines Abschnitts geht vor dem ganz oben. |
 | `YamlOutlineTest`    | Welche Zeilen zu welchem Schlüssel gehören und bei welchen Dateien der Updater lieber nichts anfasst. |
 | `MessageKeysTest`    | Jeder Text, den der Code mit festem Schlüssel aus `Messages` holt, steht in der `en.yml` - ein Tippfehler im Schlüssel fiele sonst nie auf, die Meldung bliebe nur leer. |
@@ -50,7 +50,8 @@ mvn -B test -Dtest=ConfigUpdaterTest       # nur eine Klasse
 | `ShareTest`          | Für wen ein geteilter Spot gilt: öffentlich, angeboten, angenommen, nie für den Besitzer; Likes bleiben, solange er privat ist. |
 | `PlayerFileTest`     | Die Datei eines Spielers unter `playerdata/stats` (`PlayerFile`): alles kommt so zurück, wie es hineinging, Dateien älterer Versionen, Zahlen unter 0, unsinnige Einstellungen und Text, der kein YAML ist. |
 | `TrailFileTest`      | Die Datei eines gemerkten Flugs unter `playerdata/trails` (`TrailFile`): alles kommt so zurück, wie es hineinging, die Punkte auf ein Hundertstel, die Linie steht zuletzt, und der Kopf lässt sich ohne sie lesen - auch wenn sie kaputt ist. Dazu Dateien, die jemand von Hand geändert hat. |
-| `TrailSettingsTest`  | `cam-trail.flights`, `storage` und `keep-days`: in Dateien ohne Grenze und 0 = alle, im Arbeitsspeicher höchstens 20, was nicht geht, wird mit einem Hinweis ersetzt. |
+| `TrailSettingsTest`  | `cam-trail.flights`, `storage` und `keep-days`: in Dateien ohne Grenze und 0 = alle, im Arbeitsspeicher höchstens 20, was nicht geht, wird mit einem Hinweis ersetzt. Dazu `show-seconds` für `fixed` und die vier Zeiten von `dynamic`: voreingestellt bis 50 Blöcke 10 Sekunden, ab 1500 fünf Minuten, und das Längste nie kürzer als das Kürzeste. |
+| `NameDisplayTest`    | Die Farbe der Namen über Körper und Kamera: der Farbcode vorn im Text, ohne einen gelb (Körper) oder weiß (Kamera), die Zeilen der Follower in der Farbe von `player.name-format`, und ein `color`, das eine ältere Datei noch hat, geht vor. |
 | `TourTrailTest`      | Der Weg, dem die Kameras der Gäste beim Folgen zwei Ticks hinter dem Leiter nachfliegen (`TourTrail`): verlorene, doppelte und gesprungene Schritte, Anhalten, ein Weltwechsel. |
 
 Ohne Server kennt ein `Material` seine Eigenschaften nicht: `isBlock()` oder
@@ -1676,9 +1677,9 @@ Mannequin, ohne Rüstungsständer, mit dem Namen darüber · voreingestellt ist
 der Name gelb, nicht durch Wände zu sehen, hat den Hintergrund eines
 Namensschilds, keinen Schatten, Größe 1 und 64 Blöcke Sichtweite · jeder
 Schalter unter `body.name` ändert genau das, und fest hell ist der Name
-dabei immer · eine unbekannte Farbe wird gemeldet und fällt auf gelb zurück ·
-`color` ersetzt einen Farbcode vorn in `name-format`, ein Farbcode weiter
-hinten gilt weiter · `\n` beginnt eine neue Zeile · `name-visible: false`
+dabei immer · seine Farbe ist der Farbcode vorn in `armorstand.name-format`,
+ohne einen ist er gelb, ein Farbcode weiter hinten gilt weiter · `\n` beginnt
+eine neue Zeile · `name-visible: false`
 setzt keinen Namen · über dem unsichtbaren Kamera-Spieler steht sein Name als
 TextDisplay, wo sonst sein Namensschild hinge, trägt den Text aus
 `player.name-format` und folgt ihm im Flug · mit `name-mode: move` sitzt er nicht auf
@@ -1688,9 +1689,9 @@ Höhe des Namensschilds · sein Namensschild ist abgeschaltet, mit
 ein anderer Kamera-Spieler auch, der Kamera-Spieler selbst nicht ·
 voreingestellt ist er weiß, sonst wie der Name über dem Körper · jeder
 Schalter unter `camera-mode.name` ändert genau das, ohne den Namen über dem
-Körper anzufassen, und der Text ist frei, etwa „Cam von {player}“ · eine
-unbekannte Farbe und ein unbekannter `name-mode` werden gemeldet und fallen
-auf weiß und `move` zurück · mit `allow-invisibility-potion: false` trägt er
+Körper anzufassen, und der Text ist frei, etwa „Cam von {player}“, mit seiner
+Farbe vorn (ohne eine weiß) · ein unbekannter `name-mode` wird gemeldet und
+fällt auf `move` zurück · mit `allow-invisibility-potion: false` trägt er
 den Namen ebenso · mit `player-visibility: cam` sieht ihn nur, wer selbst
 im Cam-Modus ist · mit `player-visibility: false` und `name-visible:
 false` gibt es keinen · in beiden Modi steht er nach der Reise durch das

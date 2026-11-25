@@ -36,7 +36,7 @@ public final class ParticleSettings {
     public ParticleSettings(ConfigReader config, Messages messages) {
         particlesEnabled = config.getBoolean("camera-particles.enabled", true);
         particleType = SettingValues.particle(config, messages, "camera-particles.particle", Particle.SOUL_FIRE_FLAME);
-        particleHeight = config.getDouble("camera-particles.height", 1.0);
+        particleHeight = config.getDouble("camera-particles.height", 0.2);
         particlesPerTick = config.getDouble("camera-particles.particles-per-tick", 1.0, 0.0,
                 MAX_PARTICLES_PER_TICK);
         particleSpread = config.getDouble("camera-particles.spread", 0.0, 0.0);

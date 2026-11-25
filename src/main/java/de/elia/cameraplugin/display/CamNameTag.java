@@ -234,8 +234,8 @@ public final class CamNameTag implements Listener, PluginPart {
         }
         List<String> lines = new ArrayList<>();
         for (int i = guests.size() - 1; i >= 0; i--) {
-            String line = NameDisplay.styled(onTour("player.tour-follower-format", guests.get(i)),
-                    settings.cameraMode().nameStyle());
+            String line = NameDisplay.styledLike(onTour("player.tour-follower-format", guests.get(i)),
+                    nameOf(guests.get(i)), settings.cameraMode().nameStyle());
             if (!ChatColor.stripColor(line).isBlank()) {
                 lines.add(line);
             }
@@ -245,7 +245,7 @@ public final class CamNameTag implements Listener, PluginPart {
                 String builder = messages.getMessage("player.tour-builder-format").replace("{player}",
                         player.getName());
                 lines.add(ChatColor.stripColor(builder).isBlank()
-                        ? NameDisplay.styled(player.getName(), settings.cameraMode().nameStyle()) : builder);
+                        ? NameDisplay.styledLike(player.getName(), own, settings.cameraMode().nameStyle()) : builder);
             }
             return String.join("\n", lines);
         }

@@ -45,8 +45,6 @@ public final class BodySettings {
     private MobTargetMode mobTargetMode;
     /** The range of the mode {@code custom}, in blocks. */
     private double mobTargetRadius;
-    /** Whether a mob head on the body halves the range of that kind of mob. */
-    private boolean mobTargetHeads;
 
     /**
      * Reads the section from the config file. What does not fit is replaced
@@ -84,7 +82,6 @@ public final class BodySettings {
         };
         mobTargetRadius = config.getDouble("body.mob-target-radius", 16.0, 0.0,
                 MobTargeting.MAX_MOB_TARGET_RANGE);
-        mobTargetHeads = config.getBoolean("body.mob-target-heads", true);
     }
 
     /**
@@ -160,9 +157,5 @@ public final class BodySettings {
 
     public double mobTargetRadius() {
         return mobTargetRadius;
-    }
-
-    public boolean mobTargetHeads() {
-        return mobTargetHeads;
     }
 }

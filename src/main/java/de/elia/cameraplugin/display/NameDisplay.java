@@ -13,6 +13,7 @@ import org.joml.AxisAngle4f;
 import org.joml.Vector3f;
 
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -157,14 +158,37 @@ public final class NameDisplay {
     }
 
     /**
-     * The text a name shows. The colour comes from the style. It takes the
-     * place of a colour code at the very start of the text, where name-format
-     * carried it before the setting existed ({@code &e}), so an older config
-     * file follows the setting as well; codes further on still colour what
-     * comes after them.
+     * The text a name shows, in its colour, see {@link #colorOf}. Codes
+     * further on still colour what comes after them.
      */
     public static String styled(String format, NameStyle style) {
-        return style.color() + withoutLeadingColor(format);
+        return colorOf(format, style) + withoutLeadingColor(format);
+    }
+
+    /**
+     * A line in the colour of another text - a follower over the camera of a
+     * leader in the colour of {@code player.name-format} - unless it brings a
+     * colour code of its own at its start.
+     */
+    public static String styledLike(String line, String model, NameStyle style) {
+        if (style.color() == null && LEADING_COLOR.matcher(line).find()) {
+            return line;
+        }
+        return colorOf(model, style) + withoutLeadingColor(line);
+    }
+
+    /**
+     * The colour a name shows in: the colour codes at the very start of its
+     * text, or the default colour of the style when it starts without one.
+     * The {@code color} key of an older file, while it still has one, goes
+     * before both, as it did then.
+     */
+    public static String colorOf(String format, NameStyle style) {
+        if (style.color() != null) {
+            return style.color().toString();
+        }
+        Matcher leading = LEADING_COLOR.matcher(format);
+        return leading.find() ? leading.group() : style.defaultColor().toString();
     }
 
     /** The text without the colour codes at its very start, for a text that brings a colour of its own. */

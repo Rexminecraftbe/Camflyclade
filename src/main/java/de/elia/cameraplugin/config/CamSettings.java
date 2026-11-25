@@ -21,6 +21,7 @@ import de.elia.cameraplugin.resume.ResumeSettings;
 import de.elia.cameraplugin.scout.ScoutAnchor;
 import de.elia.cameraplugin.session.CameraModeSettings;
 import de.elia.cameraplugin.signal.SignalSettings;
+import de.elia.cameraplugin.sound.CamSound;
 import de.elia.cameraplugin.sound.SoundSettings;
 import de.elia.cameraplugin.spawning.SpawnMode;
 import de.elia.cameraplugin.speed.FlightSpeedSettings;
@@ -68,26 +69,6 @@ public final class CamSettings {
      */
     private static final int MAX_START_DELAY_SECONDS = 60;
 
-    /**
-     * The shortest time {@code exit-click-guard.seconds} accepts. The first
-     * try of a held button comes in after the player's ping, which is added
-     * on top, and up to two ticks more, his own and the server's: 100 ms. A
-     * shorter time would let that try through.
-     */
-    private static final double MIN_EXIT_CLICK_GUARD_SECONDS = 0.15;
-
-    /**
-     * The default of {@code exit-click-guard.seconds}: twice the shortest,
-     * with room for a try that the server takes up late, when it lags.
-     */
-    private static final double DEFAULT_EXIT_CLICK_GUARD_SECONDS = 0.3;
-
-    /**
-     * The longest time {@code exit-click-guard.seconds} accepts. Longer, it
-     * no longer catches the tail of a click but keeps a player who is back at
-     * his body from building.
-     */
-    private static final double MAX_EXIT_CLICK_GUARD_SECONDS = 5.0;
 
 
 
@@ -145,7 +126,10 @@ public final class CamSettings {
      * names of what {@code /cam follow} renamed, which an older file still
      * has, and {@code visitor-camera} of {@code /cam visit}, which is gone.
      */
-    public static final Set<String> UNLISTED_KEYS = Set.of("mirror-damage.debug", "start-cost.items",
+    public static final Set<String> UNLISTED_KEYS = unlistedKeys();
+
+    private static Set<String> unlistedKeys() {
+        List<String> keys = new ArrayList<>(List.of("mirror-damage.debug", "start-cost.items",
             "signal.block-costs", "hide-ores.blocks", "visitor-camera", OLD_FOLLOW_SECTION, "sounds.tour-invite", "sounds.tour-reach",
             "menu.buttons.tour", "menu.admin-buttons.tours",
             // A storage of a section's own, apart from the one at the top, see SettingValues#storage.
@@ -155,7 +139,16 @@ public final class CamSettings {
             "time-limit.cooldowns-enabled", "time-limit.cooldown-seconds", "time-limit.show-bossbar-cooldown",
             "camera-mode.distance-warning-cooldown", "camera-mode.player_visibility_mode",
             "camera-mode.allow_invisibility_potion", "camera-mode.allow_lava_flight", "camera-mode.allow_water_flight",
-            "camera-mode.allow_powder_snow_flight");
+            "camera-mode.allow_powder_snow_flight",
+            // Keys that went in the second tidying up, still read in a file the update could not change -
+            // and the colour of a name that is not the default, which the update leaves, see NameStyle.
+            CameraModeSettings.OLD_DISTANCE_SWITCH, "camera-mode.name." + NameStyle.OLD_COLOR,
+            "body.name." + NameStyle.OLD_COLOR));
+        for (String sound : SoundSettings.SOUNDS) {
+            keys.add(SoundSettings.SECTION + "." + sound + "." + CamSound.OLD_SWITCH);
+        }
+        return Set.copyOf(keys);
+    }
 
 
     private final JavaPlugin plugin;
@@ -272,8 +265,7 @@ public final class CamSettings {
      * else, {@code exit-click-guard.enabled}.
      */
     private boolean exitClickGuardEnabled;
-    /** For how long, in milliseconds, {@code exit-click-guard.seconds}. */
-    private long exitClickGuardMillis;
+
 
 
 
@@ -408,8 +400,6 @@ public final class CamSettings {
         camSafety = new CamSafetySettings(config);
         exitKeyEnabled = config.getBoolean("exit-key.enabled", true);
         exitClickGuardEnabled = config.getBoolean("exit-click-guard.enabled", true);
-        exitClickGuardMillis = Math.round(1000.0 * config.getDouble("exit-click-guard.seconds", DEFAULT_EXIT_CLICK_GUARD_SECONDS,
-                MIN_EXIT_CLICK_GUARD_SECONDS, MAX_EXIT_CLICK_GUARD_SECONDS));
         bedrock = new BedrockSettings(config, messages);
         battery = new BatterySettings(config, flightLimit);
         startCost = new StartCostSettings(config);
@@ -721,10 +711,6 @@ public final class CamSettings {
 
     public boolean isExitClickGuardEnabled() {
         return exitClickGuardEnabled;
-    }
-
-    public long getExitClickGuardMillis() {
-        return exitClickGuardMillis;
     }
 
     // ------------------------------------------------------------------ cam-log

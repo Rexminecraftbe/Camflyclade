@@ -120,7 +120,6 @@ final class BedrockPages {
         page.title = messages.getMessage("menu-pick-title").replace("{button}", name);
         page.inventory = Bukkit.createInventory(page, LIST, messages.getMessage("menu-title"));
         page.bedrock = true;
-        page.bedrockMaps = settings.bedrock().mapIcons();
         put(page, SLOT_PICK_BUTTON, button.clone(), NOTHING);
         for (int i = 0; i < picks.size() && i < PICK_SLOTS.length; i++) {
             Pick pick = picks.get(i);

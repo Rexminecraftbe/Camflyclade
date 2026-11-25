@@ -417,7 +417,7 @@ public final class BodySpawner implements Listener {
 
     /**
      * The name over the body in letters: {@code name-format} with his name in
-     * the colour of {@code body.name}, and with {@code body.health-visible} his
+     * its colour, see {@link NameDisplay#colorOf}, and with {@code body.health-visible} his
      * hearts in a line of their own over or under it, written with the
      * letters of {@code armorstand.health-full}, {@code -half},
      * {@code -empty}, {@code -absorbing-full} and {@code -absorbing-half}.
@@ -446,7 +446,7 @@ public final class BodySpawner implements Listener {
     }
 
     /**
-     * {@code name-format} with his name in the colour of {@code body.name},
+     * {@code name-format} with his name in its colour, see {@link NameDisplay#colorOf},
      * or nothing with {@code name-visible: false}.
      */
     private String styledName(Player player) {
