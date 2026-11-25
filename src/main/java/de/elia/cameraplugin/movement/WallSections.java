@@ -246,7 +246,7 @@ final class WallSections {
 
     /**
      * @param areasRead whether forbidden areas keep the camera out at all:
-     *                  {@code cam-area} on level 2, with a biome or structure
+     *                  {@code cam-area} on level {@code always}, with a biome or structure
      *                  to look for
      * @param media     the media whose switch keeps the camera out
      * @param whole     which blocks the camera cannot be in

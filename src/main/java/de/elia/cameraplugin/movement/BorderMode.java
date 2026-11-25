@@ -3,7 +3,7 @@ package de.elia.cameraplugin.movement;
 /**
  * What happens where the camera is not allowed to go on: at
  * {@code camera-mode.max-distance}, at the areas {@code cam-area} keeps it
- * out of on level 2, and at lava, water and powder snow where their switch
+ * out of on level {@code always}, and at lava, water and powder snow where their switch
  * shuts them - the values of {@code camera-mode.border-mode}.
  *
  * <p>Whether lava, water and powder snow are a border at all is up to their

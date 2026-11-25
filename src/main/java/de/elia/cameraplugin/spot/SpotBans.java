@@ -24,7 +24,7 @@ import java.util.logging.Level;
  * spots - his own, the public ones, those shared by name - no new ones, or
  * none at all, not even to look at - for good or for a while, with a reason.
  * Kept in
- * {@code playerdata/spot-bans.yml}, whatever {@code viewpoints.storage}
+ * {@code playerdata/spot-bans.yml}, whatever {@code storage}
  * says: a restriction outlasts {@code /cam reload} and a restart, like a
  * ban of camera mode.
  *

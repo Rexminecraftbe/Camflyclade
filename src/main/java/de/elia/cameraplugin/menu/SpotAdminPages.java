@@ -185,15 +185,12 @@ final class SpotAdminPages {
             return share == null ? 0 : share.likes();
         }, spot -> spots.views(owner, spot), menu.spotPages.nearFrom(player));
         Page page = menu.page(player, LIST, messages.getMessage("menu-admin-spots-of-title").replace("{player}", name));
-        // Filled in below, once the list knows which page of it is shown.
-        int[] shown = new int[1];
         List<Row> entries = new ArrayList<>();
         for (Spot spot : list) {
-            entries.add(new Row(spot.key(), slot -> putSpotOf(player, page, slot, owner, name, spot, shown)));
+            entries.add(new Row(spot.key(), slot -> putSpotOf(player, page, slot, owner, name, spot)));
         }
         Listed listed = menu.list(page, "spots-of:" + owner + ":" + sort.key, entries, pageNumber);
         int number = listed.number();
-        shown[0] = number;
         if (listed.empty()) {
             menu.put(page, 22, Material.GRAY_DYE, "menu-admin-spots-none", NOTHING);
         }
@@ -218,13 +215,10 @@ final class SpotAdminPages {
 
     /**
      * One spot of a player on the admin page: where it is, whether it is
-     * public, shared or private, and its views. A click takes a public or
-     * shared one down, right-click takes the admin there, shift-click deletes
-     * it.
-     *
-     * @param shown which page of the list is shown, once it is known
+     * public, shared or private, and its views. A click takes the admin
+     * there, right-click opens its options.
      */
-    void putSpotOf(Player player, Page page, int slot, UUID owner, String name, Spot spot, int[] shown) {
+    void putSpotOf(Player player, Page page, int slot, UUID owner, String name, Spot spot) {
         SpotModeration moderation = plugin.getSpotModeration();
         CamSpots spots = plugin.getSpots();
         Share share = spots.shareOf(owner, spot.key());
@@ -246,53 +240,25 @@ final class SpotAdminPages {
         if (!open && !shared) {
             lore.addAll(lines(messages.getMessage("menu-admin-spot-private")));
         }
-        boolean options = settings.spots().options();
-        lore.addAll(lines(menu.text(player, options ? "menu-admin-spot-actions-options"
-                : open || shared ? "menu-admin-spot-actions-shared" : "menu-admin-spot-actions")));
+        lore.addAll(lines(menu.text(player, "menu-admin-spot-actions-options")));
         // Its own icon where it has one; else how it is shared.
         Material icon = CamSpots.iconOf(spot,
                 open ? Material.GLOBE_BANNER_PATTERN : shared ? Material.MAP : Material.FILLED_MAP);
-        if (options) {
-            Consumer<ClickType> action = click -> {
-                if (click.isShiftClick()) {
-                    // Nothing: deleting is for the page of the options.
-                    return;
-                }
-                if (click.isRightClick()) {
-                    menu.later(() -> menu.newSpotPages.openSpotOptions(player, owner, name, spot.key(), true, false));
-                } else if (click.isLeftClick()) {
-                    menu.act(player, () -> moderation.teleport(player, name, spot));
-                }
-            };
-            menu.put(page, slot, item(icon, messages.getMessage("menu-spot").replace("{spot}", spot.name()), lore),
-                    action);
-            menu.picks(player, page, slot, List.of(menu.pick("menu-pick-spot-go", action, ClickType.LEFT),
-                    menu.pick("menu-pick-spot-options", action, ClickType.RIGHT)));
-            return;
-        }
         Consumer<ClickType> action = click -> {
             if (click.isShiftClick()) {
-                menu.later(() -> {
-                    moderation.delete(player, owner, name, spot);
-                    openSpotsOf(player, owner, name, shown[0]);
-                });
-            } else if (click.isRightClick()) {
+                // Nothing: deleting is for the page of the options.
+                return;
+            }
+            if (click.isRightClick()) {
+                menu.later(() -> menu.newSpotPages.openSpotOptions(player, owner, name, spot.key(), true, false));
+            } else if (click.isLeftClick()) {
                 menu.act(player, () -> moderation.teleport(player, name, spot));
-            } else if (click.isLeftClick() && (open || shared)) {
-                menu.later(() -> {
-                    moderation.takeDown(player, owner, name, spot);
-                    openSpotsOf(player, owner, name, shown[0]);
-                });
             }
         };
-        menu.put(page, slot, item(icon, messages.getMessage("menu-spot").replace("{spot}", spot.name()), lore), action);
-        List<Pick> picks = new ArrayList<>();
-        if (open || shared) {
-            picks.add(menu.pick("menu-pick-spot-take-down", action, ClickType.LEFT));
-        }
-        picks.add(menu.pick("menu-pick-spot-go", action, ClickType.RIGHT));
-        picks.add(menu.pick("menu-pick-spot-delete", action, ClickType.SHIFT_LEFT));
-        menu.picks(player, page, slot, picks);
+        menu.put(page, slot, item(icon, messages.getMessage("menu-spot").replace("{spot}", spot.name()), lore),
+                action);
+        menu.picks(player, page, slot, List.of(menu.pick("menu-pick-spot-go", action, ClickType.LEFT),
+                menu.pick("menu-pick-spot-options", action, ClickType.RIGHT)));
     }
 
     /**

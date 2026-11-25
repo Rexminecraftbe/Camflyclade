@@ -31,7 +31,8 @@ public final class CameraModeSettings {
     private double maxDistance;
     /** How max-distance holds the camera, {@code camera-mode.max-distance-mode}. */
     private DistanceMode distanceMode;
-    private int distanceWarningCooldown;
+    /** How long a message at a border waits before it comes again, in seconds, {@code camera-mode.warning-cooldown}. */
+    private int warningCooldown;
     /** What happens at the border of camera mode, {@code camera-mode.border-mode}. */
     private BorderMode borderMode;
     /** What the wall of the mode barrier is made of, {@code camera-mode.border-block}. */
@@ -64,11 +65,11 @@ public final class CameraModeSettings {
     private NameMode playerNameMode;
     /** How the name over the camera player looks, the section {@code camera-mode.name}. */
     private NameStyle playerNameStyle;
-    /** Whether the camera may fly into lava, {@code camera-mode.allow_lava_flight}. */
+    /** Whether the camera may fly into lava, {@code camera-mode.allow-lava-flight}. */
     private boolean allowLavaFlight;
-    /** Whether the camera may fly into water, {@code camera-mode.allow_water_flight}. */
+    /** Whether the camera may fly into water, {@code camera-mode.allow-water-flight}. */
     private boolean allowWaterFlight;
-    /** Whether the camera may fly into powder snow, {@code camera-mode.allow_powder_snow_flight}. */
+    /** Whether the camera may fly into powder snow, {@code camera-mode.allow-powder-snow-flight}. */
     private boolean allowPowderSnowFlight;
     /** The mode the camera player flies in, {@code camera-mode.gamemode}. */
     private CamGameMode camGameMode;
@@ -94,7 +95,9 @@ public final class CameraModeSettings {
         maxDistance = config.getDouble("camera-mode.max-distance", 100.0, 0.0);
         distanceMode = config.getChoice("camera-mode.max-distance-mode", "fixed", "fixed", "signal")
                 .equalsIgnoreCase("signal") ? DistanceMode.SIGNAL : DistanceMode.FIXED;
-        distanceWarningCooldown = config.getInt("camera-mode.distance-warning-cooldown", 3, 0);
+        // Called distance-warning-cooldown before it counted for every border.
+        warningCooldown = config.getInt(config.renamed("camera-mode.warning-cooldown",
+                "camera-mode.distance-warning-cooldown"), 3, 0);
         String border = config.getChoice("camera-mode.border-mode", "barrier", "barrier", "push-back", "false")
                 .toLowerCase(Locale.ROOT);
         borderMode = switch (border) {
@@ -121,14 +124,17 @@ public final class CameraModeSettings {
         bordersHold = borderMode == BorderMode.PUSH_BACK
                 || (borderMode == BorderMode.BARRIER && borderRadius > 0.0
                         && borderBlock.getMaterial().isSolid());
-        String visibility = config.getChoice("camera-mode.player_visibility_mode", "cam", "cam", "true", "false")
-                .toLowerCase();
+        // The keys with underscores got hyphens like all others; an older file is read as it was written.
+        String visibility = config.getChoice(
+                config.renamed("camera-mode.player-visibility", "camera-mode.player_visibility_mode"),
+                "cam", "cam", "true", "false").toLowerCase();
         playerVisibilityMode = switch (visibility) {
             case "true" -> VisibilityMode.ALL;
             case "false" -> VisibilityMode.NONE;
             default -> VisibilityMode.CAM;
         };
-        allowInvisibilityPotion = config.getBoolean("camera-mode.allow_invisibility_potion", true);
+        allowInvisibilityPotion = config.getBoolean(
+                config.renamed("camera-mode.allow-invisibility-potion", "camera-mode.allow_invisibility_potion"), true);
         String glow = config.getChoice("camera-mode.glowing-outline", "true", "true", "false", "sight")
                 .toLowerCase();
         glowMode = switch (glow) {
@@ -137,11 +143,15 @@ public final class CameraModeSettings {
             default -> GlowMode.ALWAYS;
         };
         playerNameVisible = config.getBoolean("camera-mode.name-visible", true);
-        playerNameMode = resolveNameMode(config, config.getInt("camera-mode.name-mode", NameMode.FOLLOW.getId()));
+        playerNameMode = NameMode.byName(config.getChoice("camera-mode.name-mode", NameMode.FOLLOW.getConfigName(),
+                NameMode.oldValues(), NameMode.configNames()));
         playerNameStyle = NameStyle.read(config, "camera-mode.name", ChatColor.WHITE);
-        allowLavaFlight = config.getBoolean("camera-mode.allow_lava_flight", true);
-        allowWaterFlight = config.getBoolean("camera-mode.allow_water_flight", true);
-        allowPowderSnowFlight = config.getBoolean("camera-mode.allow_powder_snow_flight", true);
+        allowLavaFlight = config.getBoolean(
+                config.renamed("camera-mode.allow-lava-flight", "camera-mode.allow_lava_flight"), true);
+        allowWaterFlight = config.getBoolean(
+                config.renamed("camera-mode.allow-water-flight", "camera-mode.allow_water_flight"), true);
+        allowPowderSnowFlight = config.getBoolean(
+                config.renamed("camera-mode.allow-powder-snow-flight", "camera-mode.allow_powder_snow_flight"), true);
         String camMode = config.getChoice("camera-mode.gamemode",
                 "adventure", "adventure", "survival", "creative", "keep").toLowerCase();
         camGameMode = switch (camMode) {
@@ -175,26 +185,17 @@ public final class CameraModeSettings {
         mediumBorderBlocks.put(medium, block.getMaterial().isSolid() ? block : borderBlock.clone());
     }
 
-    /**
-     * Turns the number configured in {@code camera-mode.name-mode} into a mode
-     * and falls back to 1 when the value is unknown.
-     */
-    private NameMode resolveNameMode(ConfigReader config, int configuredId) {
-        NameMode requested = NameMode.fromId(configuredId);
-        if (requested == null) {
-            config.warnUnknownValue("camera-mode.name-mode", configuredId, "1, 2",
-                    String.valueOf(NameMode.FOLLOW.getId()));
-            return NameMode.FOLLOW;
-        }
-        return requested;
-    }
 
     public double maxDistance() {
         return maxDistance;
     }
 
-    public int distanceWarningCooldown() {
-        return distanceWarningCooldown;
+    /**
+     * How long a message at a border waits before it is sent again, in
+     * seconds: max-distance, cam-area, lava, water, powder snow and portals.
+     */
+    public int warningCooldown() {
+        return warningCooldown;
     }
 
     /** A copy of the block the wall is made of, free to be changed by the caller. */

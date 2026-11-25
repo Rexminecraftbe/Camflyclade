@@ -13,7 +13,7 @@ public final class ResumeSettings {
 
     /** Whether {@code /cam resume} goes on where the last flight ended, {@code resume-command.enabled}. */
     private boolean resumeEnabled;
-    /** Where the end of the last flight is kept, {@code resume-command.storage}. */
+    /** Where the end of the last flight is kept, {@code storage}. */
     private StorageMode resumeStorage;
     /** Whether {@code /cam resume} shows the time of day of the last flight again, {@code resume-command.time}. */
     private boolean resumeTime;

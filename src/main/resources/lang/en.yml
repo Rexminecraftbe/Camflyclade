@@ -194,8 +194,14 @@ messages:
   # {keys} lists them, a section added whole as one; {backup} is the file as it was before.
   config-updated: "&e{file} lacked {count} entries, now added with their default values: {keys}. The file as it was is kept as {backup}."
   config-updated-single: "&e{file} lacked {keys}, now added with its default value. The file as it was is kept as {backup}."
-  # A setting that has a new name since the file was written, renamed in the file. Its value stays.
+  # A setting that has a new name or place since the file was written, renamed in the file. Its value stays.
   config-renamed: "&e{file}: {old} is called {new} now and was renamed. The file as it was is kept as {backup}."
+  # Entries the file no longer needs - settings the plugin no longer has, or one storage of a section that says what
+  # the storage for all of them says -, taken out of the file with their comments. {keys} lists them.
+  config-removed: "&e{file}: {count} entries are not needed any more and were taken out: {keys}. The file as it was is kept as {backup}."
+  config-removed-single: "&e{file}: {keys} is not needed any more and was taken out. The file as it was is kept as {backup}."
+  # A value that is called otherwise now, e.g. a number that became a word: {path} the setting, {old} and {new} the values.
+  config-value-renamed: "&e{file}: {old} for {path} is called {new} now and was changed. The file as it was is kept as {backup}."
   # The file lacks entries but could not be completed; {error} is one of the three below.
   config-update-failed: "&e{file} lacks entries of this version of the plugin but was left as it is ({error}). Their default values apply all the same."
   config-update-encoding: "it is not saved as UTF-8"
@@ -206,10 +212,10 @@ messages:
   # Who {player} in stopped-by, banned-now and banlist is when the command comes from the console.
   console-name: "the server"
   cooldown-available: "&aCam mode available again"
-  # The bossbar of time-limit.show-bossbar-cooldown, {time} is the time left.
+  # The bossbar of cooldown.show-bossbar, {time} is the time left.
   cooldown-bossbar: "Cam mode again in {time}"
   crash-restored: "&eServer crash during cam mode: back at your body, nothing lost."
-  # time-limit.cooldowns-enabled: {time} is how long he still has to wait.
+  # cooldown.enabled: {time} is how long he still has to wait.
   cooldown-text: "&cCam mode again in {time}."
   # The parts of start-cost that cost-missing and cost-paid list, one after the other.
   cost-item: "{amount}x {item}"
@@ -365,12 +371,8 @@ messages:
   # ({count} spots, {public} of them public, {shared} shared by name), everybody in the middle of the last row
   # (-everybody-..., with -actions-change in place of -actions while a restriction holds); menu-admin-spot-... the
   # page of one player's spots and the page that restricts them, with a button for each kind of spots (-private, -public, -shared).
-  menu-admin-spot-actions: "&bRight-click: go there\n&cShift-click: delete"
-  menu-admin-spot-actions-bedrock: "&eTap: go there or delete"
   menu-admin-spot-actions-options: "&bLeft-click: go there\n&aRight-click: options"
   menu-admin-spot-actions-options-bedrock: "&eTap: go there or options"
-  menu-admin-spot-actions-shared: "&eLeft-click: make private\n&bRight-click: go there\n&cShift-click: delete"
-  menu-admin-spot-actions-shared-bedrock: "&eTap: make private, go there\n&eor delete"
   menu-admin-spot-private: "&7Private"
   menu-admin-spot-restrict: "&cRestrict"
   menu-admin-spot-restrict-change: "&cChange restriction"
@@ -530,7 +532,7 @@ messages:
   menu-icon-lore: "&7Pick this icon."
   menu-icons-title: "&8Icon: {spot}"
   menu-new-spot: "&aSave a spot here"
-  # The page of a new spot (viewpoints.create-page), menu-new-spot-title ({spot}: its name): on top the spot as it
+  # The page of a new spot, menu-new-spot-title ({spot}: its name): on top the spot as it
   # will be, under it menu-new-spot-rename ({spot} in its -lore), menu-new-spot-icon ({icon}) and menu-new-spot-share,
   # which opens the same page as for a saved spot (menu-share-...) - under it -share-public or -private, and
   # -share-invited ({players}) while somebody is picked; nothing is shared before it is saved, a player picked there
@@ -552,8 +554,6 @@ messages:
   # Under the button of a new spot while viewpoints.set-in-cam-only is on.
   menu-new-spot-cam-only: "&eOnly in cam mode"
   menu-new-spot-lore: "&7Saves your position and view."
-  menu-new-spot-lore-public: "&7Saves your position and view.\n&fLeft-click: private\n&eRight-click: public"
-  menu-new-spot-lore-public-bedrock: "&7Saves your position and view.\n&eTap: private or public"
   menu-new-spot-rename: "&eRename"
   menu-new-spot-rename-lore: "&7Name: &f{spot}"
   menu-new-spot-share: "&aShare or make public"
@@ -595,17 +595,11 @@ messages:
   menu-pick-follow: "&aFollow"
   menu-pick-reason-none: "&7None"
   menu-pick-reason-write: "&eWrite one"
-  menu-pick-spot-delete: "&cDelete"
   menu-pick-spot-go: "&bGo there"
   menu-pick-spot-jump: "&eJump there"
   menu-pick-spot-like: "&dLike"
-  menu-pick-spot-offline: "&7Make private"
   menu-pick-spot-options: "&aOptions"
-  menu-pick-spot-private: "&fPrivate"
-  menu-pick-spot-public: "&ePublic"
   menu-pick-spot-remove: "&cRemove from list"
-  menu-pick-spot-share: "&aShare or make public"
-  menu-pick-spot-take-down: "&eMake private"
   menu-pick-spot-unlike: "&7Unlike"
   menu-pick-stats-reset: "&cReset"
   menu-pick-stats-show: "&eShow in chat"
@@ -614,8 +608,6 @@ messages:
   menu-pick-tp-camera: "&bGo to camera"
   menu-previous: "&7« Previous page"
   menu-public-own: "&f{spot} &7(yours)"
-  menu-public-own-actions: "&eLeft-click: jump there\n&7Right-click: make private"
-  menu-public-own-actions-bedrock: "&eTap: jump there or make private"
   menu-public-own-actions-options: "&eLeft-click: jump there\n&aRight-click: options"
   menu-public-own-actions-options-bedrock: "&eTap: jump there or options"
   menu-public-spot-actions: "&eLeft-click: jump there\n&dRight-click: like"
@@ -658,12 +650,8 @@ messages:
   menu-sort-shared: "shared first"
   menu-sort-views: "most views first"
   menu-spot: "&f{spot}"
-  menu-spot-actions: "&eLeft-click: jump there\n&cShift-click: delete"
-  menu-spot-actions-bedrock: "&eTap: jump there or delete"
   menu-spot-actions-options: "&eLeft-click: jump there\n&aRight-click: options"
   menu-spot-actions-options-bedrock: "&eTap: jump there or options"
-  menu-spot-actions-share: "&eLeft-click: jump there\n&aRight-click: share or make public\n&cShift-click: delete"
-  menu-spot-actions-share-bedrock: "&eTap: jump there, share or delete"
   menu-spot-created: "&7Saved: &f{date}"
   menu-spot-liked: "&dYou like it"
   menu-spot-likes: "&d{likes} likes"
@@ -674,8 +662,6 @@ messages:
   menu-spot-name-again: "&eType another name in chat, max. 16 characters (&f{cancel}&e to abort)."
   menu-spot-name-again-form: "Another name for the new spot (max. 16 characters)"
   menu-spot-name-form: "Name of the new spot (max. 16 characters)"
-  menu-spot-name-public: "&eType the public spot's name in chat, max. 16 characters (&f{cancel}&e to abort)."
-  menu-spot-name-public-form: "Name of the new public spot (max. 16 characters)"
   menu-spot-offered-lore: "&7Offered to: {players}"
   # The options of a spot (viewpoints.options), a right-click on it: menu-spot-options-title ({spot}), on the admin
   # page menu-spot-options-admin-title ({player}: its owner); on top the spot, under it what may be done with it.
@@ -838,7 +824,7 @@ messages:
   menu-weather-rain: "rain"
   menu-weather-reset: "the world's"
   # /cam nightvision (night-vision.player-choice): {mode} in nightvision-set and nightvision-reset is
-  # nightvision-always, nightvision-never or nightvision-dark. nightvision-set with player-settings.storage: file,
+  # nightvision-always, nightvision-never or nightvision-dark. nightvision-set with storage: file,
   # nightvision-set-memory with memory.
   nightvision-always: "always"
   nightvision-dark: "in the dark"
@@ -1151,7 +1137,7 @@ messages:
   teleport-ended: "&cCam mode ended: you were teleported."
   time-limit-expired: "&cCam mode ended: time is up."
   # /cam time (cam-time) and /cam weather (cam-weather), in cam mode and before it, for the next flights: {time} and
-  # {weather} as the player typed them. time-set and weather-set with player-settings.storage: file, time-set-memory
+  # {weather} as the player typed them. time-set and weather-set with storage: file, time-set-memory
   # and weather-set-memory with memory.
   time-off: "&c/cam time is switched off."
   time-reset: "&aCam time: the world's again."
@@ -1757,7 +1743,6 @@ message-settings:
   menu-only: true
   menu-spot-name: true
   menu-spot-name-again: true
-  menu-spot-name-public: true
   nightvision-off: true
   nightvision-reset: actionbar
   nightvision-set: actionbar

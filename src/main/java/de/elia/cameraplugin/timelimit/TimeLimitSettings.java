@@ -8,9 +8,14 @@ import org.bukkit.boss.BarStyle;
 
 
 /**
- * The section {@code time-limit} of the config file, while
- * {@code flight-limit: time-limit}: how long a flight may last, and how long a
- * player waits before the next. See {@link de.elia.cameraplugin.config.CamSettings#timeLimit()}.
+ * The sections {@code time-limit} of the config file, while
+ * {@code flight-limit: time-limit}: how long a flight may last - and
+ * {@code cooldown}, whatever {@code flight-limit} says: how long a player
+ * waits before the next. See {@link de.elia.cameraplugin.config.CamSettings#timeLimit()}.
+ *
+ * <p>The cooldown was part of {@code time-limit} before it got a section of
+ * its own; an older file is read as it was written, see
+ * {@link ConfigReader#renamed}.</p>
  */
 public final class TimeLimitSettings {
 
@@ -19,12 +24,16 @@ public final class TimeLimitSettings {
     private int durationSeconds;
     private int cooldownSeconds;
     private boolean showBossbar;
-    /** Whether the cooldown shows as a bossbar until it is over, {@code time-limit.show-bossbar-cooldown}. */
+    /** Whether the cooldown shows as a bossbar until it is over, {@code cooldown.show-bossbar}. */
     private boolean cooldownBossbar;
     private BarColor bossbarColor;
-    /** The notches of both bossbars of the time limit, {@code time-limit.bossbar-notches}. */
+    /** The notches of the bossbar of the time limit, {@code time-limit.bossbar-notches}. */
     private BarStyle bossbarStyle;
-    /** Where the cooldowns are kept, {@code time-limit.storage}. */
+    /** The colour of the bossbar of the cooldown, {@code cooldown.bossbar-color}. */
+    private BarColor cooldownBossbarColor;
+    /** The notches of the bossbar of the cooldown, {@code cooldown.bossbar-notches}. */
+    private BarStyle cooldownBossbarStyle;
+    /** Where the cooldowns are kept, {@code storage}. */
     private StorageMode cooldownStorage;
 
     /** {@code flight-limit}, which says whether this section counts at all. */
@@ -36,14 +45,21 @@ public final class TimeLimitSettings {
      */
     public TimeLimitSettings(ConfigReader config, FlightLimit flightLimit) {
         this.flightLimit = flightLimit;
-        cooldownsEnabled = config.getBoolean("time-limit.cooldowns-enabled", false);
         durationSeconds = config.getInt("time-limit.duration-seconds", 300, 1);
-        cooldownSeconds = config.getInt("time-limit.cooldown-seconds", 120, 0);
         showBossbar = config.getBoolean("time-limit.show-bossbar", true);
-        cooldownBossbar = config.getBoolean("time-limit.show-bossbar-cooldown", true);
         bossbarColor = config.getEnum("time-limit.bossbar-color", BarColor.class, BarColor.BLUE);
         bossbarStyle = SettingValues.notches(config, "time-limit.bossbar-notches", 0);
-        cooldownStorage = SettingValues.storage(config, "time-limit.storage");
+        cooldownsEnabled = config.getBoolean(config.renamed("cooldown.enabled", "time-limit.cooldowns-enabled"), false);
+        cooldownSeconds = config.getInt(config.renamed("cooldown.seconds", "time-limit.cooldown-seconds"), 120, 0);
+        cooldownBossbar = config.getBoolean(
+                config.renamed("cooldown.show-bossbar", "time-limit.show-bossbar-cooldown"), true);
+        // Both bossbars had the colour and the notches of time-limit, until
+        // the cooldown got a section of its own.
+        cooldownBossbarColor = config.getEnum(config.renamed("cooldown.bossbar-color", "time-limit.bossbar-color"),
+                BarColor.class, BarColor.BLUE);
+        cooldownBossbarStyle = SettingValues.notches(config,
+                config.renamed("cooldown.bossbar-notches", "time-limit.bossbar-notches"), 0);
+        cooldownStorage = SettingValues.storage(config, config.renamed("cooldown.storage", "time-limit.storage"));
     }
 
     /** Whether {@code flight-limit} is {@code time-limit}. */
@@ -77,6 +93,14 @@ public final class TimeLimitSettings {
 
     public BarStyle bossbarStyle() {
         return bossbarStyle;
+    }
+
+    public BarColor cooldownBossbarColor() {
+        return cooldownBossbarColor;
+    }
+
+    public BarStyle cooldownBossbarStyle() {
+        return cooldownBossbarStyle;
     }
 
     public StorageMode cooldownStorage() {

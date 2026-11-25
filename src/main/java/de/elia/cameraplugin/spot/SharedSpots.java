@@ -35,7 +35,7 @@ import java.util.logging.Level;
  * spots of the owner are read from his file only while he is online. When he
  * moves or deletes the spot, {@link CamSpots} tells this class.</p>
  *
- * <p>Where the shares are kept follows {@code viewpoints.storage}: in one file
+ * <p>Where the shares are kept follows {@code storage}: in one file
  * for everybody, {@code playerdata/shared-spots.yml}, written after every
  * change and read at the start and with {@code /cam reload}; or in memory
  * only, which {@code /cam reload} and a restart forget, like the spots

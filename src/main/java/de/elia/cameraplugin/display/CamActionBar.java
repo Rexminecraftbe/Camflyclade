@@ -31,7 +31,7 @@ import java.util.UUID;
  * The latter starts with the first for {@code on-duration} as well, so that the
  * player is told camera mode has started at all - and how to end it: with the
  * key of {@code exit-key} while it is on, and with {@code /cam}. With
- * {@code display: false} that start is all there is.</p>
+ * {@code display: start-only} that start is all there is.</p>
  */
 public final class CamActionBar implements PluginPart {
 
@@ -69,6 +69,12 @@ public final class CamActionBar implements PluginPart {
      * milliseconds: as long as the client shows a line, fading included.
      */
     private static final long WARN_MILLIS = 3000L;
+
+    /**
+     * For how many ticks {@code actionbar-off} is sent at the end. Once is
+     * enough: the client keeps the line up on its own, fading it out.
+     */
+    private static final int OFF_TICKS = 1;
 
     /**
      * The direction of the body as seen by the player, clockwise from straight
@@ -384,7 +390,7 @@ public final class CamActionBar implements PluginPart {
                     return;
                 }
 
-                if (ticks >= settings.actionBar().offDuration()) {
+                if (ticks >= OFF_TICKS) {
                     this.cancel();
                     offMessageTasks.remove(player.getUniqueId());
                     return;

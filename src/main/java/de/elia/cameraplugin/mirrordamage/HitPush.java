@@ -360,8 +360,8 @@ final class HitPush {
 
     /**
      * Whether something solid touches the stand-in from below. Asked of the
-     * blocks and not of the entity: a body held in its spot on sensitivity
-     * level 0 has no gravity and never finds out it is standing on anything.
+     * blocks and not of the entity: a body held in its spot on
+     * {@code movement-sensitivity: fixed} has no gravity and never finds out it is standing on anything.
      */
     private static boolean standsOnGround(LivingEntity standIn) {
         BoundingBox box = standIn.getBoundingBox();

@@ -164,7 +164,7 @@ public final class CamMovementGuard implements Listener, PluginPart {
 
     /**
      * Tells the player that he has reached the end of his leash, at most once
-     * every {@code camera-mode.distance-warning-cooldown} seconds - the step is
+     * every {@code camera-mode.warning-cooldown} seconds - the step is
      * stopped over and over as long as he keeps walking against the border.
      *
      * @param key   the message: the one for a step that does not go through, or
@@ -173,7 +173,7 @@ public final class CamMovementGuard implements Listener, PluginPart {
      *              {@code {from}} names
      */
     private void warnDistanceLimit(Player player, String key, CameraData data, Location where) {
-        if (!mayWarn(distanceMessageCooldown, player, settings.cameraMode().distanceWarningCooldown())) {
+        if (!mayWarn(distanceMessageCooldown, player, settings.cameraMode().warningCooldown())) {
             return;
         }
         settings.sounds().border().play(player);
@@ -227,7 +227,7 @@ public final class CamMovementGuard implements Listener, PluginPart {
      * <p>Two things can shut a portal: the switch of its own kind under
      * {@code portals}, and {@code cam-area} forbidding the world behind it, by
      * its dimension or by its name -
-     * but only on level 2, the level that keeps him out of such a place while he
+     * but only on level {@code always}, the level that keeps him out of such a place while he
      * flies, and only while {@code camera-mode.border-mode} has a border that
      * holds. A portal that is shut simply does not carry him anywhere; he keeps
      * standing where he is.</p>
@@ -235,10 +235,8 @@ public final class CamMovementGuard implements Listener, PluginPart {
      * <p>Where a portal comes out cannot be asked beforehand, so a forbidden
      * biome or structure over there is found only by walking through once, see
      * {@link #afterPortal(Player, Location)}. From then on the portal is known
-     * and shuts like the other two, as long as {@code portals.remember-blocked}
-     * is on - and, under {@code portals.forget-changed}, only for as long as
-     * what was found over there still holds, which is looked over at every
-     * attempt.</p>
+     * and shuts like the other two - for as long as what was found over there
+     * still holds, which is looked over at every attempt.</p>
      */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onCameraPortal(PlayerPortalEvent event) {
@@ -302,7 +300,7 @@ public final class CamMovementGuard implements Listener, PluginPart {
      * The world a portal leads into, when {@code cam-area} does not allow
      * camera mode in it at all, by its dimension or by its name.
      *
-     * <p>Only level 2 keeps the player out of it: level 1 has a say over the
+     * <p>Only level {@code always} keeps the player out of it: {@code start} has a say over the
      * start alone and lets him fly wherever he likes afterwards, portals
      * included. So does a border that holds nobody back, see
      * {@link CamSettings#keepsOutOfAreas()}.</p>
@@ -336,7 +334,7 @@ public final class CamMovementGuard implements Listener, PluginPart {
      * is shut, or camera mode is not allowed in what lies behind it.
      *
      * <p>He keeps standing in the portal, which asks again and again, so the
-     * message waits {@code portals.warning-cooldown} seconds before it is sent
+     * message waits {@code camera-mode.warning-cooldown} seconds before it is sent
      * a second time.</p>
      *
      * @param area the forbidden dimension behind the portal, or the biome or
@@ -344,7 +342,7 @@ public final class CamMovementGuard implements Listener, PluginPart {
      *             {@code null} when the portal is shut on its own
      */
     private void warnPortalShut(Player player, PortalKind kind, String area) {
-        if (!mayWarn(portalMessageCooldown, player, settings.getPortalRules().getWarningCooldown())) {
+        if (!mayWarn(portalMessageCooldown, player, settings.cameraMode().warningCooldown())) {
             return;
         }
         settings.sounds().border().play(player);
@@ -661,7 +659,7 @@ public final class CamMovementGuard implements Listener, PluginPart {
      * the mode.</p>
      *
      * <p>The warning waits as long as the one at the distance border,
-     * {@code camera-mode.distance-warning-cooldown}: the step is stopped again
+     * {@code camera-mode.warning-cooldown}: the step is stopped again
      * and again as long as the player keeps pushing against the edge.</p>
      */
     private boolean entersClosedMedium(Player player, Location from, Location to) {
@@ -675,11 +673,10 @@ public final class CamMovementGuard implements Listener, PluginPart {
 
     /**
      * Tells the player which of lava, water and powder snow keeps the camera
-     * out, at most once every {@code camera-mode.distance-warning-cooldown}
-     * seconds.
+     * out, at most once every {@code camera-mode.warning-cooldown} seconds.
      */
     private void warnMedium(Player player, FlightMedium medium) {
-        if (mayWarn(mediumMessageCooldown, player, settings.cameraMode().distanceWarningCooldown())) {
+        if (mayWarn(mediumMessageCooldown, player, settings.cameraMode().warningCooldown())) {
             settings.sounds().border().play(player);
             messages.sendMessage(player, medium.getFlightMessage());
         }
@@ -687,7 +684,7 @@ public final class CamMovementGuard implements Listener, PluginPart {
 
     /**
      * Whether this step would carry the player into an area camera mode is not
-     * allowed in, which only level 2 keeps him out of.
+     * allowed in, which only level {@code always} keeps him out of.
      *
      * <p>He is stopped at the border and not sent back to his body: the step is
      * simply cancelled, the same way {@code camera-mode.max-distance} does it.
@@ -716,10 +713,10 @@ public final class CamMovementGuard implements Listener, PluginPart {
 
     /**
      * Tells the player which area camera mode is not allowed in, at most once
-     * every {@code cam-area.warning-cooldown} seconds.
+     * every {@code camera-mode.warning-cooldown} seconds.
      */
     private void warnAreaLimit(Player player, String area) {
-        if (mayWarn(areaMessageCooldown, player, settings.getCamAreaRules().getWarningCooldown())) {
+        if (mayWarn(areaMessageCooldown, player, settings.cameraMode().warningCooldown())) {
             settings.sounds().border().play(player);
             messages.sendMessage(player, "cam-area-limit", "{area}", area);
         }

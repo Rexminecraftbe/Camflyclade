@@ -169,7 +169,8 @@ public final class ConfigFile {
             // language may well be a file with a few texts on purpose, the rest
             // coming from the English one - filled up, it would be that no more.
             if (language != null && languagePath.equals(languagePath(DEFAULT_LANGUAGE))) {
-                language = complete(languagePath, languagePath, language, List.of(), Set.of(), initiator);
+                language = complete(languagePath, languagePath, language, ConfigMigrations.LANGUAGE, Set.of(),
+                        initiator);
             }
         }
         InputStream defaults = plugin.getResource(CONFIG_FILE);
@@ -267,6 +268,18 @@ public final class ConfigFile {
         for (Map.Entry<String, String> rename : result.renamed().entrySet()) {
             reportUpdate("config-renamed", path, initiator, "{old}", rename.getKey(), "{new}", rename.getValue(),
                     "{backup}", backupName);
+        }
+        Collection<String> removed = result.removed();
+        if (removed.size() == 1) {
+            reportUpdate("config-removed-single", path, initiator, "{keys}", removed.iterator().next(),
+                    "{backup}", backupName);
+        } else if (!removed.isEmpty()) {
+            reportUpdate("config-removed", path, initiator, "{count}", String.valueOf(removed.size()),
+                    "{keys}", String.join(", ", removed), "{backup}", backupName);
+        }
+        for (Map.Entry<String, List<String>> value : result.values().entrySet()) {
+            reportUpdate("config-value-renamed", path, initiator, "{path}", value.getKey(),
+                    "{old}", value.getValue().get(0), "{new}", value.getValue().get(1), "{backup}", backupName);
         }
         Collection<String> added = result.added();
         if (added.size() == 1) {

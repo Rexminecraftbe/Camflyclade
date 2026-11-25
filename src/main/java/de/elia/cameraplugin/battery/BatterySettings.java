@@ -28,7 +28,7 @@ public final class BatterySettings {
     private BarColor batteryBossbarColor;
     /** The notches of both bossbars of the battery, {@code battery.bossbar-notches}. */
     private BarStyle batteryBossbarStyle;
-    /** Where the charge is kept, {@code battery.storage}. */
+    /** Where the charge is kept, {@code storage}. */
     private StorageMode batteryStorage;
 
     /** {@code flight-limit}, which says whether this section counts at all. */

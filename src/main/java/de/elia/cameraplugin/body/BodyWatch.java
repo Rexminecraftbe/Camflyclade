@@ -16,7 +16,7 @@ import org.bukkit.util.Vector;
 
 /**
  * Watches the body while camera mode runs, after
- * {@code body.movement-sensitivity}: on level 0 it is held in its spot, on the
+ * {@code body.movement-sensitivity}: on {@code fixed} it is held in its spot, on the
  * levels above that camera mode ends as soon as it leaves it. Its name is kept
  * standing over it either way.
  */
@@ -94,8 +94,8 @@ public final class BodyWatch {
     }
 
     /**
-     * Puts the body back whenever something moved it, as long as sensitivity
-     * level 0 is set.
+     * Puts the body back whenever something moved it, as long as
+     * {@code movement-sensitivity: fixed} is set.
      *
      * <p>{@code setImmovable} keeps gravity and knockback off the mannequin but
      * does not stop a piston, and an armour stand is pushed by one as well. The

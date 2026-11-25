@@ -65,8 +65,14 @@ public final class BodySettings {
         bodyVisible = config.getBoolean("body.visible", true);
         bodyArmorVisible = config.getBoolean("body.armor-visible", true);
         bodyOnLocatorBar = config.getBoolean("body.locator-bar", true);
-        movementSensitivity = resolveMovementSensitivity(config,
-                config.getInt("body.movement-sensitivity", MovementSensitivity.NORMAL.getId()));
+        // pushable is cut back to normal for the visible armour stand of the
+        // armorstand body. That is a valid setting in the wrong combination
+        // and not a mistake, so it is described in the config file instead of
+        // being logged.
+        movementSensitivity = MovementSensitivity.byName(config.getChoice("body.movement-sensitivity",
+                        MovementSensitivity.NORMAL.getConfigName(), MovementSensitivity.oldValues(),
+                        MovementSensitivity.configNames()))
+                .forBody(bodyType.isMannequinBody(bodyVisible));
         double moveThreshold = config.getDouble("body.move-threshold", 0.05, MIN_MOVE_THRESHOLD);
         moveThresholdSquared = moveThreshold * moveThreshold;
         String mobTarget = config.getChoice("body.mob-target", "false", "vanilla", "custom", "false")
@@ -93,25 +99,6 @@ public final class BodySettings {
             return BodyType.ARMOR_STAND;
         }
         return requested;
-    }
-
-    /**
-     * Turns the number configured in {@code body.movement-sensitivity} into a
-     * level and falls back to 1 when the value is unknown.
-     *
-     * <p>Level 2 is cut back to level 1 for the visible armour stand of the
-     * armorstand body. That is a valid setting in the wrong combination and
-     * not a mistake, so it is described in the config file instead of being
-     * logged.</p>
-     */
-    private MovementSensitivity resolveMovementSensitivity(ConfigReader config, int configuredId) {
-        MovementSensitivity requested = MovementSensitivity.fromId(configuredId);
-        if (requested == null) {
-            config.warnUnknownValue("body.movement-sensitivity", configuredId, "0, 1, 2",
-                    String.valueOf(MovementSensitivity.NORMAL.getId()));
-            requested = MovementSensitivity.NORMAL;
-        }
-        return requested.forBody(bodyType.isMannequinBody(bodyVisible));
     }
 
     public BodyType type() {

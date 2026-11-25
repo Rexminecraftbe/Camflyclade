@@ -36,15 +36,15 @@ mvn -B test -Dtest=ConfigUpdaterTest       # nur eine Klasse
 
 | Test                 | Was er prüft |
 |----------------------|--------------|
-| `ConfigUpdaterTest`  | Was der Config-Updater in eine Datei schreibt und wohin, was er stehen lässt, Umbenennungen, Versionen, Zeilenenden. |
-| `BundledFilesTest`   | Die mitgelieferte `config.yml` und `lang/en.yml`: Der Updater versteht sie, und **jeder** Schlüssel der `config.yml` (aus der `en.yml` eine Auswahl) kommt mit seinem Kommentar zurück, wenn er fehlt, ohne dass sich ein Wert ändert. Dazu eine Datei aus der Zeit von `/cam tour`. |
-| `ConfigReaderTest`   | Wie Werte gelesen, begrenzt und ersetzt werden, welche Hinweise dabei entstehen, und dass jeder Hinweis seinen Text in der `en.yml` hat. |
+| `ConfigUpdaterTest`  | Was der Config-Updater in eine Datei schreibt und wohin, was er stehen lässt, Umbenennungen, Versionen, Zeilenenden - und was er herausnimmt, in einen anderen Abschnitt verschiebt oder mit neuem Wert schreibt, samt Leerzeilen und Kommentar. |
+| `BundledFilesTest`   | Die mitgelieferte `config.yml` und `lang/en.yml`: Der Updater versteht sie, und **jeder** Schlüssel der `config.yml` (aus der `en.yml` eine Auswahl) kommt mit seinem Kommentar zurück, wenn er fehlt, ohne dass sich ein Wert ändert. Dazu eine Datei aus der Zeit von `/cam tour` und die `config.yml` von vor dem Aufräumen (`src/test/resources/config-before-tidy-up.yml`): mit ihren Standardwerten sagt sie danach genau, was die neue sagt, und eigene Werte bleiben - unter neuem Namen, im Abschnitt `cooldown`, als Wort statt Zahl. |
+| `ConfigReaderTest`   | Wie Werte gelesen, begrenzt und ersetzt werden, welche Hinweise dabei entstehen, und dass jeder Hinweis seinen Text in der `en.yml` hat. Alte Werte einer Auswahl (Zahlen, `false`) zählen ohne Hinweis als ihr neuer Name, und ein eigenes `storage` eines Abschnitts geht vor dem ganz oben. |
 | `YamlOutlineTest`    | Welche Zeilen zu welchem Schlüssel gehören und bei welchen Dateien der Updater lieber nichts anfasst. |
 | `MessageKeysTest`    | Jeder Text, den der Code mit festem Schlüssel aus `Messages` holt, steht in der `en.yml` - ein Tippfehler im Schlüssel fiele sonst nie auf, die Meldung bliebe nur leer. |
 | `SignalPathTest`     | Die Stärke des Funksignals und welche Blöcke zwischen Körper und Kamera es durchquert, in einer Testwelt. |
 | `CallsTest`          | Wie die Anbindung an BlueMap, Dynmap und squaremap Methoden per Name findet und aufruft. |
 | `BatteryChargeTest`  | Die Rechnung des Akkus (`BatteryCharge`): Entladen im Flug, Laden bis zur Kapazität, eine Uhr, die zurückspringt, die Wartezeit bis `min-start`, der Füllstand der Bossbar, kein Start mit leerem Akku. |
-| `CamTimeLimitTest`   | Wie die Texte eine Dauer schreiben (`formatDuration`, `formatSeconds`), wie lange ein Cooldown noch läuft - auch nach einem neuen `cooldown-seconds` -, und seine Bossbar. |
+| `CamTimeLimitTest`   | Wie die Texte eine Dauer schreiben (`formatDuration`, `formatSeconds`), wie lange ein Cooldown noch läuft - auch nach einem neuen `cooldown.seconds` -, und seine Bossbar. |
 | `BanTimeTest`        | Die Zeiten von `/cam ban` (`BanTime`): was als Zeit gilt und was schon zum Grund gehört, die Einheiten, die Obergrenze von hundert Jahren, und welcher Text sagt, wie sich ein Bann geändert hat. Dazu wann ein `BanList.Ban` noch gilt. |
 | `SpotTest`           | Erlaubte Namen eines Spots (auch Emoji), wonach er gefunden wird, Punkt und Prozent im Pfad der YAML-Datei, und dass ein Spot samt Zeit, Wetter, Nachtsicht und Icon aus der Datei so zurückkommt, wie er hineinging - auch mit Namen wie `1e3`, `true` oder `null`. |
 | `ShareTest`          | Für wen ein geteilter Spot gilt: öffentlich, angeboten, angenommen, nie für den Besitzer; Likes bleiben, solange er privat ist. |
@@ -574,7 +574,7 @@ einzutragen.
 * **Vier Tests melden den Bot ab und wieder an**: der Akku, der dazwischen
   die Datei des Bots unter `playerdata/stats/` löscht - solange er online
   ist, hält das Plugin sie im Speicher -, der Akku noch einmal für die
-  Bossbar nach dem Betreten, die Wartezeit von `time-limit`, deren Bossbar
+  Bossbar nach dem Betreten, die Wartezeit von `cooldown`, deren Bossbar
   nach dem Betreten wiederkommen muss, und die alte Absturzdatei, die nur
   beim Betreten gelesen wird.
 * **Der Akku rechnet mit dem Laden, das gerade gilt.** Was er hält, steht
@@ -989,15 +989,15 @@ einzutragen.
   setzt in Paper und Spigot `collides`, und `isPickable()` gibt genau das
   zurück; `canBeHitByProjectile()` und der Stich des Speers
   (`PiercingWeapon.canHitEntity`) fragen danach. Damit Spieler und Mobs den
-  Körper trotzdem nicht schieben, steht sein Mannequin auf Stufe 0 und 1 im
+  Körper trotzdem nicht schieben, steht sein Mannequin auf `fixed` und `normal` im
   Team `cam_body` mit der Kollisionsregel `never`.
 * **Den Schiebetest macht ein Schwein mit Tempo 0**, 0,3 Blöcke neben der
   Mitte des Körpers: Es schiebt, was in ihm steht, und läuft selbst nicht
   davon. Ohne KI schiebt ein Mob gar nichts, und genau in der Mitte fehlte
   dem Stoß die Richtung - beides nachgemessen an einem freien Mannequin, das
-  sich dann nicht rührte. Auf Stufe 1 muss der Cam-Modus weiterlaufen, auf
-  Stufe 2 muss er mit `mannequin` enden - das ist die Gegenprobe. Mit
-  `armorstand` fällt Stufe 2 auf 1 zurück, der Körper bleibt stehen. Das
+  sich dann nicht rührte. Auf `normal` muss der Cam-Modus weiterlaufen, auf
+  `pushable` muss er mit `mannequin` enden - das ist die Gegenprobe. Mit
+  `armorstand` fällt `pushable` auf `normal` zurück, der Körper bleibt stehen. Das
   Schwein kommt erst ein paar Sekunden nach dem Start: Eine Sekunde lang
   merkt sich die Bewegungsprüfung des Plugins noch keine Stelle, und was den
   Körper bis dahin verschiebt, fiele ihr nicht auf.
@@ -1198,13 +1198,13 @@ einzutragen.
   dem Kamera-Spieler für sich ab: Zu Beginn des Cam-Modus steht der Bot genau
   über seinem Körper, und `NAME` nimmt das nächste TextDisplay.
 * **Den Namen über dem Kamera-Spieler sucht der Test an der Stelle**, nicht an
-  der Art: im Modus 1 2,075 über den Füßen des Bots, die Höhe eines Spielers
-  plus 0,275, im Modus 2 1,8 - dort sitzt ein Passagier, die Schrift ist um
+  der Art: mit `name-mode: move` 2,075 über den Füßen des Bots, die Höhe eines
+  Spielers plus 0,275, mit `ride` 1,8 - dort sitzt ein Passagier, die Schrift ist um
   0,275 hinaufgeschoben. Am Server mit `/execute at`, in den Clients über die
   Position der Entitäten - der Bot liest die Entitätsarten mit den Daten von
   26.1, und das TextDisplay liegt hinter dem Sulfur Cube, also um eins
   verrutscht.
-* **Im Modus 2 fragt der Test den Client nach dem Fahrzeug**, nicht nach der
+* **Mit `name-mode: ride` fragt der Test den Client nach dem Fahrzeug**, nicht nach der
   Stelle. Einem Passagier schickt der Server keine eigenen Positionen, der
   Client setzt ihn auf sein Fahrzeug - mineflayer nur nicht, bei ihm bleibt
   er stehen, wo er ihn zuerst sah. `entities` gibt deshalb zu jeder Entität
@@ -1240,12 +1240,12 @@ einzutragen.
   ersten Schritt zurück - aber nach einem Weltwechsel stimmt bei mineflayer die
   eigene Position nicht mehr, und der Schritt landete einmal mitten im Nether.
 * **Ein Passagier verträgt sich nicht mit einem Teleport.** So wurde es
-  ausprobiert, bevor es Modus 2 gab: Saß der Name als Passagier auf dem
+  ausprobiert, bevor es `name-mode: ride` gab: Saß der Name als Passagier auf dem
   Spieler, lehnte Spigot 26.2 jeden `player.teleport()` ab - nach `/cam` blieb
   der Spieler in der Luft hängen statt an seinem Körper, und aus dem Nether
   kam er gar nicht mehr zurück. Paper nahm den Passagier in derselben Welt
   mit, warf ihn aber am Portal und bei `/tp` in eine andere Welt ab; der Name
-  blieb am Portal in der Overworld stehen. Modus 2 nimmt ihn deshalb vor jedem
+  blieb am Portal in der Overworld stehen. `ride` nimmt ihn deshalb vor jedem
   Teleport von CamFly selbst und vor jedem Wechsel der Welt ab, und genau das
   prüft der Test: Beenden, `/tp` in derselben und in eine andere Welt, die
   Reise durch das Portal und dass am Portal nichts zurückbleibt.
@@ -1464,8 +1464,8 @@ einzutragen.
   und prüfen dabei auch, was sie ausgeschaltet sagen, und `cam-trail` soll
   nicht die Flüge aller anderen Abschnitte aufzeichnen. Den Standard lesen sie
   aus der `config.yml`, die das Plugin mitbringt.
-* **`cam-trail.storage` ist voreingestellt `file`**, der Testserver startet
-  mit `memory`: Sonst kämen die Flüge eines Abschnitts - und eines früheren
+* **`storage` ist voreingestellt `file`**, der Testserver gibt `cam-trail`
+  eine eigene Zeile `storage: memory`: Sonst kämen die Flüge eines Abschnitts - und eines früheren
   Laufs, `playerdata` bleibt stehen - bei jedem wieder, der `cam-trail`
   einschaltet. Nur `flugspur` schaltet `file` für sich ein und löscht
   `playerdata/trails` vorher und nachher.
@@ -1625,8 +1625,7 @@ Portal trägt den Kamera-Spieler in den Nether · ein verbotenes Biom dahinter
 holt ihn zurück · danach lässt
 dasselbe Portal ihn gar nicht mehr durch · ein drüben neu gebautes Portal gibt
 das gemerkte wieder frei · ein drüben abgebautes ebenso · auf
-`border-mode: false` holt ihn auch das verbotene Biom nicht zurück · mit
-`forget-changed: false` bleibt der Eintrag stehen · auf `portals.nether: false`
+`border-mode: false` holt ihn auch das verbotene Biom nicht zurück · auf `portals.nether: false`
 trägt das Portal ihn gar nicht erst hinüber · im Cam-Modus lässt sich kein
 Hebel umlegen, kein Block abbauen und keine Druckplatte auslösen · kein Bild
 im Rahmen drehen, kein Fenster einer Kistenlore öffnen und kein Boot
@@ -1640,7 +1639,7 @@ vier Blöcke halb so oft wie zwei, sechseinhalb ein Viertel, zehn ein Zehntel
 - und siebzehn Blöcke weg gar nicht · fliegt die Kamera schnell, kommt eine
 Kugel zwanzig Blöcke voraus neu, eine fünfzehn Blöcke neben der Flugbahn
 nicht · nach dem Cam-Modus keine mehr, und mit
-`player_visibility_mode: cam` dem nicht, der die Kamera nicht sieht · eine
+`player-visibility: cam` dem nicht, der die Kamera nicht sieht · eine
 Kugel, die dem Spieler beim Start schon folgte, folgt der Kamera nicht · ein
 Pfeil, ein Pfeil mit Schlag II, ein geworfener Dreizack, TNT und die
 Schläge eines Spielers auf den Körper stoßen den Spieler genau dorthin, wo
@@ -1655,7 +1654,7 @@ Schallstoß eines Wärters schleudert weit weg, alles wie ohne Cam-Modus ·
 Pfeil, TNT, Windkugel, Sprintschlag und Speerstich auch mit
 `damage-mode: false` · die Tränke, die Meldungen zu einem Treffer und jede
 Probe zum Rückstoß mit Körpertyp `armorstand` und mit `mannequin` · auf
-Bewegungsstufe 1 schiebt ein Mob den Körper nicht, auf Stufe 2 bei
+`movement-sensitivity: normal` schiebt ein Mob den Körper nicht, auf `pushable` bei
 `mannequin` schon und beendet damit den Cam-Modus, bei `armorstand` nicht · ein Wärter greift
 den Körper mit `mob-target: vanilla` an und mit `false` nicht, auch wenn ihn der
 Kamera-Spieler reizt · ein Eisengolem, der beim Start hinter dem Spieler her
@@ -1682,8 +1681,8 @@ dabei immer · eine unbekannte Farbe wird gemeldet und fällt auf gelb zurück �
 hinten gilt weiter · `\n` beginnt eine neue Zeile · `name-visible: false`
 setzt keinen Namen · über dem unsichtbaren Kamera-Spieler steht sein Name als
 TextDisplay, wo sonst sein Namensschild hinge, trägt den Text aus
-`player.name-format` und folgt ihm im Flug · im Modus 1 sitzt er nicht auf
-ihm, im Modus 2 sitzt er als Passagier auf seinem Kopf, die Schrift auf der
+`player.name-format` und folgt ihm im Flug · mit `name-mode: move` sitzt er nicht auf
+ihm, mit `ride` sitzt er als Passagier auf seinem Kopf, die Schrift auf der
 Höhe des Namensschilds · sein Namensschild ist abgeschaltet, mit
 `name-visible: false` wieder da · ein Spieler ohne Cam-Modus sieht den Namen,
 ein anderer Kamera-Spieler auch, der Kamera-Spieler selbst nicht ·
@@ -1691,12 +1690,12 @@ voreingestellt ist er weiß, sonst wie der Name über dem Körper · jeder
 Schalter unter `camera-mode.name` ändert genau das, ohne den Namen über dem
 Körper anzufassen, und der Text ist frei, etwa „Cam von {player}“ · eine
 unbekannte Farbe und ein unbekannter `name-mode` werden gemeldet und fallen
-auf weiß und Modus 1 zurück · mit `allow_invisibility_potion: false` trägt er
-den Namen ebenso · mit `player_visibility_mode: cam` sieht ihn nur, wer selbst
-im Cam-Modus ist · mit `player_visibility_mode: false` und `name-visible:
+auf weiß und `move` zurück · mit `allow-invisibility-potion: false` trägt er
+den Namen ebenso · mit `player-visibility: cam` sieht ihn nur, wer selbst
+im Cam-Modus ist · mit `player-visibility: false` und `name-visible:
 false` gibt es keinen · in beiden Modi steht er nach der Reise durch das
 Netherportal drüben wieder über ihm, am Portal bleibt nichts zurück, und das
-Beenden bringt ihn aus dem Nether zurück zu seinem Körper · im Modus 2 nimmt
+Beenden bringt ihn aus dem Nether zurück zu seinem Körper · mit `ride` nimmt
 `/tp` in derselben Welt den Namen mit, nach `/tp` in den Nether sitzt er dort
 wieder auf ihm, und `/cam` bringt ihn aus derselben wie aus der anderen Welt
 zu seinem Körper, ohne dass ein Name zurückbleibt · der
@@ -1715,9 +1714,9 @@ Startmodus zurück · ein unbekannter Wert wird gemeldet und fällt auf
 vier Werte abgelehnt, und der Spieler bleibt dabei Zuschauer · auch in
 Überleben und Kreativ lässt sich im Cam-Modus kein Block abbauen, Gegenprobe:
 ohne Cam-Modus geht es in beiden sehr wohl · was im Cam-Modus in die Taschen
-kommt, ist im nächsten Tick wieder weg · auf `allow_lava_flight: false` bleibt
-die Kamera über der Lava stehen, auf `allow_water_flight: false` über dem
-Wasser, auf `allow_powder_snow_flight: false` auf dem Pulverschnee und mit dem
+kommt, ist im nächsten Tick wieder weg · auf `allow-lava-flight: false` bleibt
+die Kamera über der Lava stehen, auf `allow-water-flight: false` über dem
+Wasser, auf `allow-powder-snow-flight: false` auf dem Pulverschnee und mit dem
 Kopf unter einer Decke daraus, der Cam-Modus läuft dabei weiter und die
 Meldung kommt · wer schon im Wasser ist, kommt heraus, aber nicht tiefer hinein
 · in Lava, Wasser und Pulverschnee startet `/cam` dann nicht, und die Ablehnung
@@ -1824,7 +1823,7 @@ auf null · `/cam stats reset <Name>` setzt die eines anderen auf null, von
 der Konsole auch, während er abgemeldet ist, und online erfährt er, wer es
 war · ein unbekannter Name wird gemeldet, ohne op
 (`camplugin.stats.reset`) darf er nur sich selbst zurücksetzen · mit `statistics.enabled: false` sagt `/cam stats`, dass sie aus
-ist · die Datei der crash-protection liegt unter `playerdata/crash/`, und
+ist · die Datei des Absturzschutzes liegt unter `playerdata/crash/`, und
 eine, die vor dem Update noch direkt unter `playerdata/` lag, gibt dem
 Spieler beim Betreten trotzdem alles zurück: er steht an der Stelle aus der
 Datei, sie ist weg, und Spielmodus und Flug sind die aus der Datei · nach dem
@@ -1836,7 +1835,7 @@ geschrieben hatte, ist er nach dem Neustart, wie das Ende ihn hinterließ: mit
 seinen Sachen, im Überlebensmodus, am Körper, ohne Leuchten · fehlt nach
 einem Absturz im Cam-Modus die Datei, nimmt ihm die Notiz in seinen Daten
 trotzdem das Leuchten ab ·
-`action-bar.display: false` zeigt die Startzeile mit dem Hinweis nur zu
+`action-bar.display: start-only` zeigt die Startzeile mit dem Hinweis nur zu
 Beginn, danach kommt nichts mehr · `/cam back` setzt die Kamera an den
 Körper, der Cam-Modus läuft weiter, mit dem Ton und der Zeile in der
 Action-Bar, und sie fliegt danach weiter · mit `back-command.enabled: false`
@@ -1928,10 +1927,10 @@ Meldung sagt, von wem man wie weit weg muss (16 Blöcke, 13 mehr), zwanzig
 Blöcke weg geht es, mit `nearby-radius: 25` nicht (25 Blöcke, 5 mehr) · für den anderen gilt dasselbe, ein Spieler im
 Cam-Modus zählt nicht, und mit `cam-safety.enabled: false` ist auch die
 Kampfsperre aus · die eigene Nachtsicht gilt voreingestellt
-(`player-settings.storage: file`) auch nach dem Ab- und Anmelden und steht in
-der Datei des Bots unter `settings`, mit `storage: memory` sagt die Meldung,
+(`storage: file`) auch nach dem Ab- und Anmelden und steht in
+der Datei des Bots unter `settings`, mit `storage: memory` unter `player-settings` sagt die Meldung,
 dass sie bis zum Verlassen gilt, und danach ist sie vergessen ·
-voreingestellt steht `player-settings` mit `storage: file`, `flight-speed:
+voreingestellt steht ganz oben `storage: file` und `player-settings` mit `flight-speed:
 true`, `time: false` und `weather: false` da (der Testserver schaltet
 `flight-speed` für alle anderen Abschnitte ab) · mit `flight-speed: true`
 beginnt der nächste Flug so schnell, wie der letzte aufhörte, auch nach dem

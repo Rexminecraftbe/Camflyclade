@@ -83,28 +83,19 @@ public final class CamAreaRules {
             List.of("mansion", "fortress", "ancient_city", "trial_chambers",
                     "bastion_remnant", "end_city");
 
-    /** How many chunks the structure lookup keeps at once by default. */
-    private static final int DEFAULT_REMEMBERED_CHUNKS = 256;
-
     /**
-     * How many chunks the structure lookup may be set to keep, some 800 KB.
-     * The store fills with every chunk a camera player flies through and is
-     * only emptied by {@code /cam reload}, so with a very large value a
-     * long-running server would keep a good part of its world in it.
+     * How many chunks the structure lookup keeps at once, some 50 KB: enough
+     * for the chunks around every camera on a busy server, the least recently
+     * used one giving way first.
      */
-    private static final int MAX_REMEMBERED_CHUNKS = 4096;
-
-    /** How long the message at the border waits before it is sent again, in seconds. */
-    private static final int DEFAULT_WARNING_COOLDOWN = 3;
+    private static final int REMEMBERED_CHUNKS = 256;
 
     private AreaRuleLevel level = AreaRuleLevel.START_AND_FLIGHT;
-    private int warningCooldown = DEFAULT_WARNING_COOLDOWN;
     private boolean biomesEnabled = true;
     private boolean structuresEnabled = false;
     private boolean worldsEnabled = false;
     /** The names of the forbidden worlds, in small letters: the server does not tell them apart by case. */
     private final Set<String> forbiddenWorlds = new HashSet<>();
-    private int rememberedChunks = DEFAULT_REMEMBERED_CHUNKS;
     private final Set<NamespacedKey> forbiddenBiomes = new HashSet<>();
     private final Set<NamespacedKey> boxStructures = new HashSet<>();
     private final Set<NamespacedKey> componentStructures = new HashSet<>();
@@ -113,7 +104,7 @@ public final class CamAreaRules {
 
     /**
      * What has already been worked out for a chunk, the least recently used
-     * entry giving way first once {@code structures-cache-chunks} is reached.
+     * entry giving way first once {@link #REMEMBERED_CHUNKS} is reached.
      * Worth keeping because a structure does not move: it is placed once while
      * the chunk is generated and stays as it is. Only one that is set
      * afterwards, by hand or by another plugin, is missed until the next
@@ -124,7 +115,7 @@ public final class CamAreaRules {
                 @Override
                 protected boolean removeEldestEntry(
                         Map.Entry<ChunkKey, List<ForbiddenStructure>> eldest) {
-                    return size() > rememberedChunks;
+                    return size() > REMEMBERED_CHUNKS;
                 }
             };
 
@@ -148,8 +139,8 @@ public final class CamAreaRules {
 
     /** Reads the whole section out of the config file. */
     public void load(ConfigReader config) {
-        level = resolveLevel(config);
-        warningCooldown = config.getInt("cam-area.warning-cooldown", DEFAULT_WARNING_COOLDOWN, 0);
+        level = AreaRuleLevel.byName(config.getChoice("cam-area.level", AreaRuleLevel.START_AND_FLIGHT.getConfigName(),
+                AreaRuleLevel.oldValues(), AreaRuleLevel.configNames()));
         // The lists are read even when their switch is off, so that a mistyped
         // name is reported now and not only once somebody turns the switch on.
         biomesEnabled = config.getBoolean("cam-area.biomes-enabled", true);
@@ -161,8 +152,6 @@ public final class CamAreaRules {
         readKeys(config, "cam-area.forbidden-structures-components", DEFAULT_COMPONENT_STRUCTURES,
                 Registry.STRUCTURE, componentStructures);
         dropStructuresInBothLists(config);
-        rememberedChunks = config.getInt("cam-area.structures-cache-chunks",
-                DEFAULT_REMEMBERED_CHUNKS, 0, MAX_REMEMBERED_CHUNKS);
         knownChunks.clear();
         allowedDimensions.clear();
         for (Map.Entry<World.Environment, String> dimension : DIMENSIONS.entrySet()) {
@@ -195,11 +184,6 @@ public final class CamAreaRules {
 
     public AreaRuleLevel getLevel() {
         return level;
-    }
-
-    /** How long the message at the border waits before it is sent again, in seconds. */
-    public int getWarningCooldown() {
-        return warningCooldown;
     }
 
     /**
@@ -320,13 +304,9 @@ public final class CamAreaRules {
      *
      * <p>Worth keeping because the same chunk is asked again and again: a step
      * of one block sets off this check, so flying straight through a chunk asks
-     * about it some sixteen times. On 0 nothing is kept and every step asks
-     * anew.</p>
+     * about it some sixteen times.</p>
      */
     private List<ForbiddenStructure> structuresAround(World world, int chunkX, int chunkZ) {
-        if (rememberedChunks <= 0) {
-            return lookUpStructures(world, chunkX, chunkZ);
-        }
         ChunkKey chunk = new ChunkKey(world.getUID(), chunkX, chunkZ);
         List<ForbiddenStructure> known = knownChunks.get(chunk);
         if (known == null) {
@@ -429,22 +409,6 @@ public final class CamAreaRules {
             }
             into.add(key);
         }
-    }
-
-    /**
-     * Reads {@code cam-area.level} and falls back to the strictest level when
-     * the number is unknown - a rule nobody can read is better kept than
-     * quietly dropped.
-     */
-    private AreaRuleLevel resolveLevel(ConfigReader config) {
-        int configured = config.getInt("cam-area.level", AreaRuleLevel.START_AND_FLIGHT.getId());
-        AreaRuleLevel requested = AreaRuleLevel.fromId(configured);
-        if (requested == null) {
-            config.warnUnknownValue("cam-area.level", configured, "0, 1, 2",
-                    String.valueOf(AreaRuleLevel.START_AND_FLIGHT.getId()));
-            return AreaRuleLevel.START_AND_FLIGHT;
-        }
-        return requested;
     }
 
     /**

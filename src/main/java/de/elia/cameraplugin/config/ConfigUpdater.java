@@ -36,6 +36,11 @@ import java.util.Set;
  *       by {@link Migration}s before anything is added.</li>
  * </ul>
  *
+ * <p>A {@link Migration} may also take a key out that is no setting any more,
+ * move one into another section, or give a value its new name. Such a key is
+ * written anew from the built-in file, with its comment from there, which
+ * speaks of it as it is now; the old one goes with its comment.</p>
+ *
  * <p>Before the text is handed back it is read once more, and every value the
  * file had must still be there, the same - under its new name, if it was
  * renamed - and nothing else may have come in but the added keys and the
@@ -70,11 +75,19 @@ public final class ConfigUpdater {
      *
      * @param text    the file as it is now, or {@code null} when nothing had to change or when it failed
      * @param added   the keys that were added, the topmost of each - a section added whole is one
-     * @param renamed old and new path of each key that was renamed
+     * @param renamed old and new path of each key that was renamed or moved
+     * @param removed the keys that were taken out, because they are no settings any more
+     * @param values  each key whose value was given its new name, with the old value and the new one
      * @param failure why the file was not changed although it lacked something, or {@code null}: {@link #LAYOUT}
      *                or the key at which the completed file would not have said the same as before
      */
-    public record Result(String text, List<String> added, Map<String, String> renamed, String failure) {
+    public record Result(String text, List<String> added, Map<String, String> renamed, List<String> removed,
+                         Map<String, List<String>> values, String failure) {
+
+        /** Nothing changed, nothing failed. */
+        static Result unchanged(String failure) {
+            return new Result(null, List.of(), Map.of(), List.of(), Map.of(), failure);
+        }
 
         /** The {@code failure} of a file whose lines could not all be placed, see {@link YamlOutline#isReliable()}. */
         public static final String LAYOUT = "";
@@ -90,6 +103,16 @@ public final class ConfigUpdater {
     private final Set<String> ownKeys;
     private final List<String> added = new ArrayList<>();
     private final Map<String, String> renamed = new LinkedHashMap<>();
+    /** The keys taken out because they are no settings any more, for the report. */
+    private final List<String> removed = new ArrayList<>();
+    /** Each key whose value got its new name: the old value and the new one, for the report. */
+    private final Map<String, List<String>> newValues = new LinkedHashMap<>();
+    /** Every key taken out of the file, also the old place of one that moved: the check leaves them be. */
+    private final Set<String> dropped = new java.util.HashSet<>();
+    /** Every key written into the file anew, also a moved one and a section it needed: the check lets them in. */
+    private final Set<String> placed = new java.util.HashSet<>();
+    /** Old and new path of each key that moved with its value as it was, for the check. */
+    private final Map<String, String> movedAsIs = new LinkedHashMap<>();
     private YamlOutline outline;
     /** Whether any line has changed. */
     private boolean changed;
@@ -116,14 +139,13 @@ public final class ConfigUpdater {
         YamlConfiguration before = parse(file.body());
         YamlConfiguration reference = parse(model.body());
         if (before == null || reference == null || !builtIn.isReliable()) {
-            return new Result(null, List.of(), Map.of(), null);
+            return Result.unchanged(null);
         }
         ConfigUpdater updater = new ConfigUpdater(file.lines, builtIn, ownKeys);
         if (!updater.outline.isReliable()) {
             // Told only when it matters: a file that lacks nothing is fine
             // however it is written.
-            return new Result(null, List.of(), Map.of(),
-                    lacksAnything(before, reference, ownKeys) ? Result.LAYOUT : null);
+            return Result.unchanged(lacksAnything(before, reference, ownKeys) ? Result.LAYOUT : null);
         }
         int fileVersion = before.getInt(VERSION_KEY, 0);
         int builtInVersion = reference.getInt(VERSION_KEY, 0);
@@ -138,15 +160,15 @@ public final class ConfigUpdater {
             updater.setValue(VERSION_KEY, String.valueOf(builtInVersion));
         }
         if (!updater.changed) {
-            return new Result(null, List.of(), Map.of(), null);
+            return Result.unchanged(null);
         }
         String updated = file.text();
         String failure = updater.check(before, file.body());
         List<String> added = Collections.unmodifiableList(updater.added);
         Map<String, String> renames = Collections.unmodifiableMap(updater.renamed);
-        return failure == null
-                ? new Result(updated, added, renames, null)
-                : new Result(null, added, renames, failure);
+        List<String> removed = Collections.unmodifiableList(updater.removed);
+        Map<String, List<String>> values = Collections.unmodifiableMap(updater.newValues);
+        return new Result(failure == null ? updated : null, added, renames, removed, values, failure);
     }
 
     // ------------------------------------------------------------ migrations
@@ -189,7 +211,239 @@ public final class ConfigUpdater {
         if (model == null || !model.hasInlineValue() || has(path)) {
             return;
         }
-        insert(model, value);
+        insert(model, value, true);
+    }
+
+    /**
+     * The value of a key that has it on its own line, as YAML reads it, or
+     * {@code null} when the file has no such key.
+     */
+    public String value(String path) {
+        YamlOutline.Node node = outline.node(path);
+        if (node == null || !node.hasInlineValue()) {
+            return null;
+        }
+        YamlConfiguration line = parse("v: " + lines.get(node.line).substring(node.valueStart));
+        Object value = line == null ? null : line.get("v");
+        return value == null ? null : value.toString();
+    }
+
+    /**
+     * Takes a key out of the file that is no setting any more, with its
+     * comment and everything below it - and the section it stood in, when
+     * nothing is left in that.
+     */
+    public void remove(String path) {
+        if (cut(path)) {
+            removed.add(path);
+        }
+    }
+
+    /**
+     * Moves a key to another place, with its value as it is - under another
+     * name, or into another section. It is written there as the built-in file
+     * has it, with its comment, and taken out where it was. Has the file a
+     * key at the new place already, the old one only goes.
+     *
+     * @param path    where it stands now
+     * @param newPath where the built-in file has it
+     */
+    public void move(String path, String newPath) {
+        YamlOutline.Node node = outline.node(path);
+        if (node == null || !node.hasInlineValue() || builtIn.node(newPath) == null) {
+            return;
+        }
+        if (has(newPath) && !isPlaced(newPath)) {
+            remove(path);
+            return;
+        }
+        String text = lines.get(node.line).substring(node.valueStart);
+        cut(path);
+        place(newPath, text);
+        renamed.put(path, newPath);
+        movedAsIs.put(path, newPath);
+    }
+
+    /**
+     * Writes the value of a key a second time into a section that a
+     * {@link #move} has just written anew, for a setting that two now hold
+     * where it was one. The key itself stays. Nothing happens where the
+     * section was there before, with what the owner set in it.
+     */
+    public void copy(String path, String newPath) {
+        YamlOutline.Node node = outline.node(path);
+        if (node == null || !node.hasInlineValue() || !has(newPath) || !isPlaced(newPath)) {
+            return;
+        }
+        setValue(newPath, lines.get(node.line).substring(node.valueStart));
+    }
+
+    /**
+     * Moves a key into a section where the built-in file has no such key, at
+     * its end and without a comment - for a key that only an older file has,
+     * still read there. The section is added first, when the file lacks it.
+     */
+    public void moveOutside(String path, String newPath) {
+        YamlOutline.Node node = outline.node(path);
+        int dot = newPath.lastIndexOf('.');
+        if (node == null || !node.hasInlineValue() || dot < 0 || has(newPath)) {
+            return;
+        }
+        String text = lines.get(node.line).substring(node.valueStart);
+        String parentPath = newPath.substring(0, dot);
+        // Checked before anything is cut, so that the value cannot get lost on
+        // the way - and only into another section: one that the cut leaves
+        // empty would go with it.
+        YamlOutline.Node section = has(parentPath) ? outline.node(parentPath) : builtIn.node(parentPath);
+        if (section == null || section.hasInlineValue() || section.holdsList || path.startsWith(parentPath + ".")) {
+            return;
+        }
+        cut(path);
+        if (!has(parentPath)) {
+            placeSection(parentPath);
+        }
+        YamlOutline.Node parent = outline.node(parentPath);
+        int indent = parent.children.isEmpty() ? parent.indent + 2 : parent.children.getFirst().indent;
+        lines.add(parent.end + 1, " ".repeat(Math.max(indent, 0)) + newPath.substring(dot + 1) + ": " + text);
+        placed.add(newPath);
+        renamed.put(path, newPath);
+        movedAsIs.put(path, newPath);
+        changed = true;
+        outline = YamlOutline.of(lines);
+    }
+
+    /**
+     * Gives the value of a key its new name, for a setting whose values are
+     * called otherwise now. The key is written anew, as the built-in file has
+     * it with its comment, which speaks of the new values.
+     *
+     * @param rename the new value for the one the file has, or {@code null} when it needs none
+     */
+    public void renameValue(String path, java.util.function.UnaryOperator<String> rename) {
+        String old = value(path);
+        String now = old == null || builtIn.node(path) == null ? null : rename.apply(old);
+        if (now == null || now.equals(old)) {
+            return;
+        }
+        cut(path);
+        place(path, now);
+        newValues.put(path, List.of(old, now));
+    }
+
+    /** Whether a key was written into the file by this update, itself or with a section it stands in. */
+    private boolean isPlaced(String path) {
+        for (String p : placed) {
+            if (path.equals(p) || path.startsWith(p + ".")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Writes a key of the built-in file with a value of its own - and first
+     * the section it stands in, with the defaults of the built-in file, when
+     * the file lacks that.
+     */
+    private void place(String path, String value) {
+        if (has(path)) {
+            setValue(path, value);
+            return;
+        }
+        int dot = path.lastIndexOf('.');
+        String parentPath = dot < 0 ? "" : path.substring(0, dot);
+        if (!parentPath.isEmpty() && !has(parentPath)) {
+            placeSection(parentPath);
+            setValue(path, value);
+            return;
+        }
+        insert(builtIn.node(path), value, false);
+        placed.add(path);
+    }
+
+    /** Writes a section of the built-in file whole, with its defaults - and the one it stands in, when missing. */
+    private void placeSection(String path) {
+        int dot = path.lastIndexOf('.');
+        String parentPath = dot < 0 ? "" : path.substring(0, dot);
+        if (!parentPath.isEmpty() && !has(parentPath)) {
+            placeSection(parentPath);
+            return;
+        }
+        insert(builtIn.node(path), null, false);
+        placed.add(path);
+    }
+
+    /**
+     * Takes a key out of the lines: its comment, the key, everything below
+     * it. The blank lines around it are left so that one gap stays where two
+     * met, and none where a section would start with one. A section left
+     * empty goes with it.
+     *
+     * @return whether the file had the key
+     */
+    private boolean cut(String path) {
+        YamlOutline.Node node = outline.node(path);
+        if (node == null) {
+            return false;
+        }
+        int from = outline.commentStart(node);
+        int to = node.end;
+        if (commentBelongsBelow(node, from)) {
+            from = node.line;
+        }
+        int blanksBelow = outline.blankLinesBelow(to);
+        boolean blankAbove = from == 0 || lines.get(from - 1).isBlank();
+        boolean startsSection = node.parent != outline.root() && from == node.parent.line + 1;
+        if (blanksBelow > 0 && (blankAbove || startsSection)) {
+            to += blanksBelow;
+        }
+        if (to + 1 >= lines.size()) {
+            // Nothing after it: no blank line is left at the end of the file.
+            while (from > 0 && lines.get(from - 1).isBlank()) {
+                from--;
+            }
+        }
+        lines.subList(from, to + 1).clear();
+        dropped.add(path);
+        changed = true;
+        outline = YamlOutline.of(lines);
+        int dot = path.lastIndexOf('.');
+        if (dot > 0) {
+            YamlOutline.Node parent = outline.node(path.substring(0, dot));
+            if (parent != null && parent.children.isEmpty() && !parent.hasInlineValue() && !parent.holdsList) {
+                cut(parent.path);
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether the comment above a key speaks of the keys right below it as
+     * well, so that it stays when the key goes: the built-in file has the
+     * same comment over one of them. Looked at are the keys that follow
+     * without a comment or a blank line of their own, up to the first that
+     * the built-in file has.
+     */
+    private boolean commentBelongsBelow(YamlOutline.Node node, int from) {
+        if (from == node.line) {
+            return false;
+        }
+        List<String> comment = lines.subList(from, node.line);
+        List<YamlOutline.Node> siblings = node.parent.children;
+        int end = node.end;
+        for (int i = siblings.indexOf(node) + 1; i < siblings.size(); i++) {
+            YamlOutline.Node below = siblings.get(i);
+            if (below.line != end + 1) {
+                return false;
+            }
+            YamlOutline.Node model = builtIn.node(below.path);
+            if (model != null) {
+                List<String> there = builtIn.lines().subList(builtIn.commentStart(model), model.line);
+                return there.size() == comment.size() && sameComment(from, there);
+            }
+            end = below.end;
+        }
+        return false;
     }
 
     // ---------------------------------------------------------------- adding
@@ -202,7 +456,7 @@ public final class ConfigUpdater {
                 YamlOutline.Node parent = model == builtIn.root() ? outline.root() : outline.node(model.path);
                 // Below a key that has a value of its own nothing is read anyway.
                 if (parent != null && !parent.hasInlineValue() && !parent.holdsList) {
-                    insert(child, null);
+                    insert(child, null, true);
                 }
             } else if (!mine.hasInlineValue() && !mine.holdsList && !child.hasInlineValue()
                     && !ownKeys.contains(child.path)) {
@@ -215,9 +469,10 @@ public final class ConfigUpdater {
      * Writes a key of the built-in file into the file, with its comment and
      * everything below it, next to the keys it stands next to there.
      *
-     * @param value the value to write instead of the built-in one, or {@code null} for that
+     * @param value  the value to write instead of the built-in one, or {@code null} for that
+     * @param report whether it counts among the keys the file lacked, see {@link Result#added()}
      */
-    private void insert(YamlOutline.Node model, String value) {
+    private void insert(YamlOutline.Node model, String value, boolean report) {
         List<String> source = builtIn.lines();
         int from = builtIn.commentStart(model);
         List<String> block = new ArrayList<>(source.subList(from, model.end + 1));
@@ -310,7 +565,9 @@ public final class ConfigUpdater {
             lines.remove(at);
         }
         lines.addAll(at, insertion);
-        added.add(model.path);
+        if (report) {
+            added.add(model.path);
+        }
         changed = true;
         outline = YamlOutline.of(lines);
     }
@@ -382,6 +639,16 @@ public final class ConfigUpdater {
             if (before.isConfigurationSection(path) || path.equals(VERSION_KEY)) {
                 continue;
             }
+            String moved = movedAsIs.get(path);
+            if (moved != null) {
+                if (!Objects.equals(before.get(path), after.get(moved))) {
+                    return path;
+                }
+                continue;
+            }
+            if (under(path, dropped)) {
+                continue;
+            }
             if (!Objects.equals(before.get(path), after.get(newPath(path)))) {
                 return path;
             }
@@ -390,7 +657,7 @@ public final class ConfigUpdater {
             if (after.isConfigurationSection(path) || path.equals(VERSION_KEY)) {
                 continue;
             }
-            if (!before.contains(oldPath(path)) && added.stream().noneMatch(a -> path.equals(a) || path.startsWith(a + "."))) {
+            if (!before.contains(oldPath(path)) && !under(path, added) && !under(path, placed)) {
                 return path;
             }
         }
@@ -399,7 +666,22 @@ public final class ConfigUpdater {
                 return path;
             }
         }
+        for (String path : placed) {
+            if (!after.contains(path)) {
+                return path;
+            }
+        }
         return null;
+    }
+
+    /** Whether a key is one of these or stands below one of them. */
+    private static boolean under(String path, java.util.Collection<String> keys) {
+        for (String key : keys) {
+            if (path.equals(key) || path.startsWith(key + ".")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Where a key of the old text stands in the new one, renamed or not. */

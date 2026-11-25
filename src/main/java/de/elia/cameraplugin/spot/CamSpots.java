@@ -53,7 +53,7 @@ import java.util.UUID;
  * {@code /cam spot Owner:spot} - by the same rules, held from their own
  * body.</p>
  *
- * <p>Where they are kept is {@code viewpoints.storage}: in the file of the
+ * <p>Where they are kept is {@code storage}: in the file of the
  * player, or in memory only, which {@code /cam reload} and a restart
  * forget.</p>
  *

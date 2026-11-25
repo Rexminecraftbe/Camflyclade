@@ -22,14 +22,20 @@ import java.util.*;
  */
 public class CamFireGuard implements Listener, PluginPart {
 
+    /** How often the player is checked for fire on him and around him, in ticks. */
+    private static final long TICK_INTERVAL = 10L;
+
     /**
-     * Largest search radius for hide-fire that is accepted, in blocks, the
-     * same for every direction. Every block in reach is looked at on every
-     * pass, for every player in camera mode, so the work grows with the cube
-     * of it: at 8 it is some 3400 blocks, at 1000 it would be billions and
-     * the server would stand still.
+     * How far around the player fire is hidden, in blocks: sideways, as a
+     * circle, and up and down from his feet. Enough for the fire he could
+     * fly into or see flickering in front of his face; every block in reach
+     * is looked at on every pass, for every player in camera mode.
      */
-    private static final int MAX_RADIUS = 8;
+    private static final double RADIUS_SIDEWAYS = 1.5;
+    private static final int RADIUS_UP = 2;
+    private static final int RADIUS_DOWN = 1;
+    private static final double RADIUS_SIDEWAYS_SQUARED = RADIUS_SIDEWAYS * RADIUS_SIDEWAYS;
+    private static final int RANGE_XZ = (int) Math.ceil(RADIUS_SIDEWAYS);
 
     private final JavaPlugin plugin;
     /** The tick of each camera mode, which the watching here runs on. */
@@ -38,12 +44,6 @@ public class CamFireGuard implements Listener, PluginPart {
     // configuration values
     private boolean enabled;
     private boolean hideFire;
-    private long tickInterval;
-    private double radiusH;
-    private int radiusUp;
-    private int radiusDown;
-    private double radiusH2;
-    private int rangeXZ;
 
     private final Map<UUID, SessionTask> tasks = new HashMap<>();
     private final Map<UUID, Set<Block>> hiddenMap = new HashMap<>();
@@ -57,14 +57,6 @@ public class CamFireGuard implements Listener, PluginPart {
     public void loadConfig(ConfigReader config) {
         enabled = config.getBoolean("fireguard.enabled", true);
         hideFire = config.getBoolean("fireguard.hide-fire", true);
-        // A period of zero would make the task run every single tick, so one
-        // tick is the smallest interval that is accepted here.
-        tickInterval = config.getLong("fireguard.tick-interval", 10L, 1L);
-        radiusH = config.getDouble("fireguard.radius-horizontal", 1.5, 0.0, MAX_RADIUS);
-        radiusUp = config.getInt("fireguard.radius-up", 2, 0, MAX_RADIUS);
-        radiusDown = config.getInt("fireguard.radius-down", 1, 0, MAX_RADIUS);
-        radiusH2 = radiusH * radiusH;
-        rangeXZ = (int) Math.ceil(radiusH);
     }
 
     public void startFor(Player player) {
@@ -86,7 +78,7 @@ public class CamFireGuard implements Listener, PluginPart {
                 }
             }
         };
-        task.runTaskTimer(sessions, player, 0L, tickInterval);
+        task.runTaskTimer(sessions, player, 0L, TICK_INTERVAL);
         tasks.put(player.getUniqueId(), task);
     }
 
@@ -119,10 +111,10 @@ public class CamFireGuard implements Listener, PluginPart {
         if (w == null) return;
 
         Set<Block> current = new HashSet<>();
-        for (int dx = -rangeXZ; dx <= rangeXZ; dx++)
-            for (int dz = -rangeXZ; dz <= rangeXZ; dz++) {
-                if (dx * dx + dz * dz > radiusH2) continue;
-                for (int dy = -radiusDown; dy <= radiusUp; dy++) {
+        for (int dx = -RANGE_XZ; dx <= RANGE_XZ; dx++)
+            for (int dz = -RANGE_XZ; dz <= RANGE_XZ; dz++) {
+                if (dx * dx + dz * dz > RADIUS_SIDEWAYS_SQUARED) continue;
+                for (int dy = -RADIUS_DOWN; dy <= RADIUS_UP; dy++) {
                     Block b = w.getBlockAt(
                             loc.getBlockX() + dx,
                             loc.getBlockY() + dy,
@@ -152,9 +144,9 @@ public class CamFireGuard implements Listener, PluginPart {
             if (!block.getWorld().equals(loc.getWorld())) continue;
             double dx = block.getX() - loc.getBlockX();
             double dz = block.getZ() - loc.getBlockZ();
-            if (dx * dx + dz * dz > radiusH2) continue;
+            if (dx * dx + dz * dz > RADIUS_SIDEWAYS_SQUARED) continue;
             int dy = block.getY() - loc.getBlockY();
-            if (dy > radiusUp || dy < -radiusDown) continue;
+            if (dy > RADIUS_UP || dy < -RADIUS_DOWN) continue;
             p.sendBlockChange(block.getLocation(), Material.AIR.createBlockData());
             hiddenMap.computeIfAbsent(id, k -> new HashSet<>()).add(block);
         }

@@ -45,6 +45,29 @@ class ConfigReaderTest {
     }
 
     @Test
+    void oldValueOfAChoiceCountsAsItsNewNameWithoutANote() {
+        Map<String, String> old = Map.of("0", "false", "1", "start", "2", "always");
+        ConfigReader reader = reader("number: 1\nword: Always\nunknown: 7\nfalse-value: false\n");
+
+        assertEquals("start", reader.getChoice("number", "always", old, "false", "start", "always"));
+        assertEquals("always", reader.getChoice("word", "start", old, "false", "start", "always"));
+        assertEquals("false", reader.getChoice("false-value", "always", old, "false", "start", "always"));
+        assertEquals("always", reader.getChoice("unknown", "always", old, "false", "start", "always"));
+        assertEquals(List.of("config-unknown-value unknown=7"), notes(reader));
+    }
+
+    @Test
+    void storageOfASectionCountsWhereAnOlderFileHasIt() {
+        ConfigReader reader = reader("storage: memory\nviewpoints:\n  storage: file\nbattery:\n  capacity: 3\n");
+
+        assertEquals(de.elia.cameraplugin.storage.StorageMode.FILE,
+                SettingValues.storage(reader, "viewpoints.storage"));
+        assertEquals(de.elia.cameraplugin.storage.StorageMode.MEMORY,
+                SettingValues.storage(reader, "battery.storage"));
+        assertEquals(List.of(), notes(reader));
+    }
+
+    @Test
     void valueOfTheWrongTypeIsReportedAndReplaced() {
         ConfigReader reader = reader("flag: sometimes\n");
 

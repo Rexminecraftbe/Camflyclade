@@ -147,7 +147,15 @@ public final class CamSettings {
      */
     public static final Set<String> UNLISTED_KEYS = Set.of("mirror-damage.debug", "start-cost.items",
             "signal.block-costs", "hide-ores.blocks", "visitor-camera", OLD_FOLLOW_SECTION, "sounds.tour-invite", "sounds.tour-reach",
-            "menu.buttons.tour", "menu.admin-buttons.tours");
+            "menu.buttons.tour", "menu.admin-buttons.tours",
+            // A storage of a section's own, apart from the one at the top, see SettingValues#storage.
+            "player-settings.storage", "battery.storage", "resume-command.storage", "viewpoints.storage",
+            "cam-trail.storage", "cooldown.storage", "time-limit.storage",
+            // The old names of keys that were moved or renamed, read as long as the new ones are missing.
+            "time-limit.cooldowns-enabled", "time-limit.cooldown-seconds", "time-limit.show-bossbar-cooldown",
+            "camera-mode.distance-warning-cooldown", "camera-mode.player_visibility_mode",
+            "camera-mode.allow_invisibility_potion", "camera-mode.allow_lava_flight", "camera-mode.allow_water_flight",
+            "camera-mode.allow_powder_snow_flight");
 
 
     private final JavaPlugin plugin;
@@ -185,8 +193,6 @@ public final class CamSettings {
     private boolean nightVisionPlayerChoice;
 
 
-    /** Whether camera mode leaves a file to recover from a crash, {@code crash-protection.enabled}. */
-    private boolean crashProtectionEnabled;
 
     /** Who may use {@code /cam list}, {@code cam-list.access}. */
     private ListAccess camListAccess;
@@ -215,7 +221,7 @@ public final class CamSettings {
 
 
 
-    /** Where the settings players pick for themselves are kept, {@code player-settings.storage}. */
+    /** Where the settings players pick for themselves are kept, {@code storage}. */
     private StorageMode playerSettingsStorage;
     /** Whether the speed he last flew at is kept, {@code player-settings.flight-speed}. */
     private boolean playerSettingsFlightSpeed;
@@ -361,7 +367,6 @@ public final class CamSettings {
         nightVisionLightLevel = config.getInt("night-vision.light-level", 7, 0, MAX_LIGHT_LEVEL);
         nightVisionPlayerChoice = config.getBoolean("night-vision.player-choice", true);
         sounds = new SoundSettings(config, messages);
-        crashProtectionEnabled = config.getBoolean("crash-protection.enabled", true);
         camListAccess = SettingValues.access(config, "cam-list.access");
         camListTeleport = config.getBoolean("cam-list.teleport", true);
         camListStop = config.getBoolean("cam-list.stop", true);
@@ -521,8 +526,9 @@ public final class CamSettings {
 
     /**
      * Whether {@code cam-area} keeps the camera out of forbidden areas in
-     * flight and behind portals: level 2, and a border that holds. The start
-     * is not part of this, level 1 and 2 turn it away whatever the border does.
+     * flight and behind portals: level {@code always}, and a border that holds.
+     * The start is not part of this, {@code start} and {@code always} turn it
+     * away whatever the border does.
      */
     public boolean keepsOutOfAreas() {
         return camAreaRules.getLevel().blocksFlight() && cameraMode.bordersHold();
@@ -695,7 +701,7 @@ public final class CamSettings {
 
 
 
-    // -------------------------------------------------- nudge, crash-protection
+    // ------------------------------------------------------------------ nudge
 
     public boolean isNudgeEnabled() {
         return nudgeEnabled;
@@ -703,10 +709,6 @@ public final class CamSettings {
 
     public int getNudgeCooldown() {
         return nudgeCooldown;
-    }
-
-    public boolean isCrashProtectionEnabled() {
-        return crashProtectionEnabled;
     }
 
     // ----------------------------------------------------------------- exit-key

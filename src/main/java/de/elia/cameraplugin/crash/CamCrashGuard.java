@@ -1,7 +1,6 @@
 package de.elia.cameraplugin.crash;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
-import de.elia.cameraplugin.config.CamSettings;
 import de.elia.cameraplugin.config.Messages;
 import de.elia.cameraplugin.log.ConsoleLog;
 import de.elia.cameraplugin.progress.CamProgressGuard;
@@ -35,8 +34,9 @@ import java.util.UUID;
 import java.util.logging.Level;
 
 /**
- * Keeps what camera mode takes off a player safe from a crash,
- * {@code crash-protection}.
+ * Keeps what camera mode takes off a player safe from a crash. Always on:
+ * it costs next to nothing, and without it a crash could cost a player his
+ * inventory.
  *
  * <p>While camera mode runs, his things are only in memory, in his
  * {@link CameraData}. A server that goes down without shutting down - killed,
@@ -91,13 +91,11 @@ public final class CamCrashGuard implements Listener {
             "⚠ Do not edit or delete it while the server is running! ⚠");
 
     private final CameraPlugin plugin;
-    private final CamSettings settings;
     private final Messages messages;
     private final ConsoleLog log;
 
     public CamCrashGuard(CameraPlugin plugin, ConsoleLog log) {
         this.plugin = plugin;
-        this.settings = plugin.getSettings();
         this.messages = plugin.getMessages();
         this.log = log;
     }
@@ -126,9 +124,6 @@ public final class CamCrashGuard implements Listener {
      * brought along what it brings, see {@code CameraMode#switchGameMode}.
      */
     public void save(Player player, CameraData data) {
-        if (!settings.isCrashProtectionEnabled()) {
-            return;
-        }
         YamlConfiguration file = new YamlConfiguration();
         file.options().setHeader(HEADER);
         file.set("format", FORMAT);
@@ -182,9 +177,7 @@ public final class CamCrashGuard implements Listener {
 
     /**
      * Deletes the file of a player whose camera mode has ended and who has
-     * his things back. Done whatever {@code crash-protection.enabled} says: a
-     * file from before it was switched off would otherwise turn him back to
-     * that old state on his next join.
+     * his things back.
      */
     public void delete(Player player) {
         try {

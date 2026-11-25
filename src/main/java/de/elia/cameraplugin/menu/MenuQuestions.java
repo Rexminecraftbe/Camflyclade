@@ -2,8 +2,6 @@ package de.elia.cameraplugin.menu;
 
 import de.elia.cameraplugin.camfly2.CameraPlugin;
 import de.elia.cameraplugin.config.Messages;
-import de.elia.cameraplugin.spot.Spot;
-import de.elia.cameraplugin.spot.SpotBans;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
@@ -48,26 +46,6 @@ final class MenuQuestions {
         this.menu = menu;
         this.plugin = menu.plugin;
         this.messages = menu.messages;
-    }
-
-    /**
-     * Asks for the name of a new spot in the chat; the next line he writes is
-     * it. A public one is made public once it is saved.
-     */
-    void askName(Player player, boolean makePublic) {
-        // Asked before the name: nobody types one only to hear that it does not go here.
-        if (!plugin.getSpots().maySetHere(player)) {
-            return;
-        }
-        if (makePublic && !plugin.getSpotModeration().checkNew(player, SpotBans.Kind.PUBLIC)) {
-            return;
-        }
-        ask(player, makePublic ? "menu-spot-name-public" : "menu-spot-name", name -> {
-            Spot spot = plugin.getSpots().set(player, name);
-            if (spot != null && makePublic) {
-                plugin.getSpots().makePublic(player, spot, true);
-            }
-        });
     }
 
     /**

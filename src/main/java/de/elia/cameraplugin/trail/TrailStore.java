@@ -23,7 +23,7 @@ import java.util.function.Consumer;
 import java.util.logging.Level;
 
 /**
- * The files of the kept flights, {@code cam-trail.storage: file}: one for
+ * The files of the kept flights, {@code storage: file}: one for
  * each flight, {@code playerdata/trails/<uuid>/<start>.yml} in the folder of
  * the plugin, named after the player and when the flight began. A file is
  * written once, when the flight ends, and deleted with it - nothing is ever

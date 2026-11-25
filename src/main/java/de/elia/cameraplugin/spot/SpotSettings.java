@@ -46,7 +46,7 @@ public final class SpotSettings {
     private boolean viewpointsEnabled;
     /** How many spots each player may keep, {@code viewpoints.max-per-player}. */
     private int viewpointsMax;
-    /** Where the spots are kept, {@code viewpoints.storage}. */
+    /** Where the spots are kept, {@code storage}. */
     private StorageMode viewpointsStorage;
     /** Whether a player may share his spots with others, {@code viewpoints.sharing}. */
     private boolean viewpointsSharing;
@@ -58,12 +58,8 @@ public final class SpotSettings {
     private double viewpointsStartDistance;
     /** Whether a spot is saved only in camera mode, {@code viewpoints.set-in-cam-only}. */
     private boolean viewpointsSetInCamOnly;
-    /** Whether a new spot of the menu gets its page before it is saved, {@code viewpoints.create-page}. */
-    private boolean viewpointsCreatePage;
     /** The icons a spot may have, {@code viewpoints.icons}: keys of items without the namespace. */
     private List<String> viewpointsIcons = DEFAULT_SPOT_ICONS;
-    /** Whether a spot of the menu has its page of options, {@code viewpoints.options.enabled}. */
-    private boolean spotOptionsEnabled;
     /** What the owner may do on the page of the options, {@code viewpoints.options.<what>}. */
     private boolean spotOptionRename;
     private boolean spotOptionIcon;
@@ -87,9 +83,7 @@ public final class SpotSettings {
                 MAX_GUESTBOOK_INTERVAL_MINUTES);
         viewpointsStartDistance = config.getDouble("viewpoints.start-distance", 16.0, 0.0, CamSettings.MAX_START_DISTANCE);
         viewpointsSetInCamOnly = config.getBoolean("viewpoints.set-in-cam-only", true);
-        viewpointsCreatePage = config.getBoolean("viewpoints.create-page", true);
         viewpointsIcons = readSpotIcons(config);
-        spotOptionsEnabled = config.getBoolean("viewpoints.options.enabled", true);
         spotOptionRename = config.getBoolean("viewpoints.options.rename", true);
         spotOptionIcon = config.getBoolean("viewpoints.options.icon", true);
         spotOptionShare = config.getBoolean("viewpoints.options.share", true);
@@ -161,15 +155,6 @@ public final class SpotSettings {
     }
 
     /**
-     * Whether a new spot of the menu - after its name - gets a page of its
-     * own, with its icon, its name once more and whether it is public, before
-     * it is saved, {@code viewpoints.create-page}; if not, the name saves it.
-     */
-    public boolean createPage() {
-        return viewpointsCreatePage;
-    }
-
-    /**
      * The icons a spot may have, {@code viewpoints.icons}, in their order:
      * keys of items without the namespace, in small letters - also those this
      * server does not know, which {@link de.elia.cameraplugin.spot.CamSpots#icons}
@@ -177,15 +162,6 @@ public final class SpotSettings {
      */
     public List<String> icons() {
         return viewpointsIcons;
-    }
-
-    /**
-     * Whether a spot of the menu has its page of options - a right-click on
-     * it -, {@code viewpoints.options.enabled}; if not, a right-click shares
-     * it and a click with shift deletes it, as before there was the page.
-     */
-    public boolean options() {
-        return enabled() && spotOptionsEnabled;
     }
 
     /** Whether the owner may rename a spot on its page of options, {@code viewpoints.options.rename}. */

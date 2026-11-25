@@ -134,17 +134,10 @@ final class SpotPages {
         if (settings.spots().setInCamOnly()) {
             newLore.addAll(lines(messages.getMessage("menu-new-spot-cam-only")));
         }
-        // With its own page, whether it is public is set there: one click starts it.
-        boolean createPage = settings.spots().createPage();
-        newLore.addAll(lines(menu.text(player, sharing && !createPage ? "menu-new-spot-lore-public"
-                : "menu-new-spot-lore")));
-        Consumer<ClickType> newSpot = createPage ? click -> menu.act(player, () -> menu.newSpotPages.startNewSpot(player))
-                : click -> menu.act(player, () -> menu.questions.askName(player, sharing && click.isRightClick()));
+        // Whether it is public is set on its own page: one click starts it.
+        newLore.addAll(lines(menu.text(player, "menu-new-spot-lore")));
+        Consumer<ClickType> newSpot = click -> menu.act(player, () -> menu.newSpotPages.startNewSpot(player));
         menu.put(page, SLOT_SPOT_NEW, Material.WRITABLE_BOOK, messages.getMessage("menu-new-spot"), newLore, newSpot);
-        if (sharing && !createPage) {
-            menu.picks(player, page, SLOT_SPOT_NEW, List.of(menu.pick("menu-pick-spot-private", newSpot, ClickType.LEFT),
-                    menu.pick("menu-pick-spot-public", newSpot, ClickType.RIGHT)));
-        }
         if (settings.spots().guestbook()) {
             guestbookButton(player, page, () -> openSpots(player, tab, number));
         }
@@ -269,44 +262,23 @@ final class SpotPages {
                     .replace("{players}", spots.offeredTo(share))));
         }
         lore.addAll(reachLore());
-        boolean options = settings.spots().options();
-        lore.addAll(lines(menu.text(player, options ? "menu-spot-actions-options"
-                : settings.spots().sharing() ? "menu-spot-actions-share" : "menu-spot-actions")));
+        lore.addAll(lines(menu.text(player, "menu-spot-actions-options")));
         Consumer<ClickType> action = click -> {
-            if (options) {
-                if (click.isShiftClick()) {
-                    // Nothing: deleting is for the page of the options.
-                    return;
-                }
-                if (click.isRightClick()) {
-                    menu.later(() -> menu.newSpotPages.openSpotOptions(player, player.getUniqueId(), player.getName(), spot.key(), false,
-                            false));
-                } else if (click.isLeftClick()) {
-                    menu.act(player, () -> spots.jump(player, spot.name()));
-                }
-            } else if (click.isShiftClick()) {
-                menu.later(() -> {
-                    spots.delete(player, spot.name());
-                    openSpots(player, SpotTab.PRIVATE, 0);
-                });
-            } else if (click.isRightClick() && settings.spots().sharing()) {
-                menu.later(() -> openShare(player, spot.key(), 0));
+            if (click.isShiftClick()) {
+                // Nothing: deleting is for the page of the options.
+                return;
+            }
+            if (click.isRightClick()) {
+                menu.later(() -> menu.newSpotPages.openSpotOptions(player, player.getUniqueId(), player.getName(), spot.key(), false,
+                        false));
             } else if (click.isLeftClick()) {
                 menu.act(player, () -> spots.jump(player, spot.name()));
             }
         };
         menu.put(page, slot, CamSpots.iconOf(spot, Material.FILLED_MAP),
                 messages.getMessage("menu-spot").replace("{spot}", spot.name()), lore, action);
-        List<Pick> picks = new ArrayList<>(List.of(menu.pick("menu-pick-spot-jump", action, ClickType.LEFT)));
-        if (options) {
-            picks.add(menu.pick("menu-pick-spot-options", action, ClickType.RIGHT));
-        } else {
-            if (settings.spots().sharing()) {
-                picks.add(menu.pick("menu-pick-spot-share", action, ClickType.RIGHT));
-            }
-            picks.add(menu.pick("menu-pick-spot-delete", action, ClickType.SHIFT_LEFT));
-        }
-        menu.picks(player, page, slot, picks);
+        menu.picks(player, page, slot, List.of(menu.pick("menu-pick-spot-jump", action, ClickType.LEFT),
+                menu.pick("menu-pick-spot-options", action, ClickType.RIGHT)));
     }
 
     /**
@@ -324,21 +296,15 @@ final class SpotPages {
         lore.addAll(lines(messages.getMessage("menu-spot-likes").replace("{likes}", String.valueOf(share.likes()))));
         if (own) {
             lore.addAll(reachLore());
-            boolean options = settings.spots().options();
-            lore.addAll(lines(menu.text(player, options ? "menu-public-own-actions-options" : "menu-public-own-actions")));
+            lore.addAll(lines(menu.text(player, "menu-public-own-actions-options")));
             Consumer<ClickType> action = click -> {
                 if (click.isShiftClick()) {
-                    // Deleting is for the tab of his own spots, or for its options, not this one.
+                    // Deleting is for its options, not this one.
                     return;
                 }
-                if (click.isRightClick() && options) {
+                if (click.isRightClick()) {
                     menu.later(() -> menu.newSpotPages.openSpotOptions(player, player.getUniqueId(), player.getName(), spot.key(), false,
                             false));
-                } else if (click.isRightClick()) {
-                    menu.later(() -> {
-                        spots.makePublic(player, spot, false);
-                        openSpots(player, SpotTab.PUBLIC, 0);
-                    });
                 } else if (click.isLeftClick()) {
                     menu.act(player, () -> spots.jump(player, spot.name()));
                 }
@@ -346,7 +312,7 @@ final class SpotPages {
             menu.put(page, slot, CamSpots.iconOf(spot, Material.FILLED_MAP),
                     messages.getMessage("menu-public-own").replace("{spot}", spot.name()), lore, action);
             menu.picks(player, page, slot, List.of(menu.pick("menu-pick-spot-jump", action, ClickType.LEFT),
-                    menu.pick(options ? "menu-pick-spot-options" : "menu-pick-spot-offline", action, ClickType.RIGHT)));
+                    menu.pick("menu-pick-spot-options", action, ClickType.RIGHT)));
             return;
         }
         boolean liked = share.isLikedBy(player.getUniqueId());
@@ -511,7 +477,6 @@ final class SpotPages {
             }
         }
         // Shared from its options, it leads back there.
-        boolean options = settings.spots().options();
         sharePage(player, spot.name(), "share:" + key, people,
                 other -> share == null ? "off" : share.isAcceptedBy(other) ? "on"
                         : share.isOfferedTo(other) ? "offered" : "off",
@@ -524,13 +489,9 @@ final class SpotPages {
                     }
                 },
                 share != null && share.isEveryone(), everybody -> spots.makePublic(player, target, everybody),
-                options ? "menu-to-spot" : "menu-to-spots", () -> {
-                    if (options) {
-                        menu.newSpotPages.openSpotOptions(player, player.getUniqueId(), player.getName(), key, false, false);
-                    } else {
-                        openSpots(player, SpotTab.PRIVATE, 0);
-                    }
-                }, number -> openShare(player, key, number), pageNumber);
+                "menu-to-spot",
+                () -> menu.newSpotPages.openSpotOptions(player, player.getUniqueId(), player.getName(), key, false, false),
+                number -> openShare(player, key, number), pageNumber);
     }
 
     /**

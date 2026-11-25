@@ -24,7 +24,7 @@ import java.util.function.Supplier;
  * long flight keeps its whole way, only coarser, and no flight takes more
  * memory than that.</p>
  *
- * <p>A flight kept in a file ({@code cam-trail.storage: file}) holds only what
+ * <p>A flight kept in a file ({@code storage: file}) holds only what
  * is said of it in memory - who, when, how long, how far, from where to where.
  * Its line is read from the file when somebody looks at it, and kept while
  * the memory has room for it, see {@link #keepInFile}.</p>

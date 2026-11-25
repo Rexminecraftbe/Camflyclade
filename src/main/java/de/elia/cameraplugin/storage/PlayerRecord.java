@@ -54,10 +54,10 @@ public final class PlayerRecord {
     /** When {@link #batteryCharge} was last worked out, as {@link System#currentTimeMillis()} counts. */
     private long batteryUpdated;
     /**
-     * When his last cooldown of {@code time-limit} began, as
+     * When his last {@code cooldown} began, as
      * {@link System#currentTimeMillis()} counts, or {@code null} while he has
      * never had one. How long it lasts is up to the config file, so a new
-     * {@code cooldown-seconds} counts for a cooldown that is running as well.
+     * {@code cooldown.seconds} counts for a cooldown that is running as well.
      */
     private Long cooldownStarted;
     /** His spots of {@code /cam spot}, by {@link Spot#key()}, in the order he saved them. */
