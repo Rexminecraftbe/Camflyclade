@@ -120,7 +120,7 @@ messages:
   cam-command-blocked: "&cYou can't use /{command} in cam mode."
   cam-effect-start: "&cYou can't start cam mode with {effect}."
   cam-falling-start: "&cYou can't start cam mode while falling."
-  # The buttons behind each line of /cam list, see cam-list.teleport and cam-list.stop, and what hovering over them says.
+  # The buttons behind each line of /cam list, see cam-list.teleport and stop-command, and what hovering over them says.
   cam-list-body: "&a[Body]"
   cam-list-body-hover: "&7Teleport to {player}'s body"
   cam-list-camera: "&b[Camera]"
@@ -157,7 +157,7 @@ messages:
   cant-fly-in-powder-snow: "&cYou can't fly into powder snow."
   cant-fly-in-water: "&cYou can't fly into water."
   config-allowed-blocks: "any block, e.g. barrier or glass"
-  config-allowed-height: "a height, e.g. 15 or -32, or off"
+  config-allowed-height: "a height, e.g. 15 or -32, or false"
   config-allowed-menu-items: "any item, e.g. clock or ender_pearl, or camera_head or night_vision_potion"
   config-allowed-particles: "a particle without extra data, e.g. soul_fire_flame, flame or end_rod"
   config-allowed-signal-costs: "a number of blocks of at least 0, or stop"
@@ -682,8 +682,6 @@ messages:
   menu-spot-options-move: "&bMove here"
   menu-spot-options-move-cam-only: "&eOnly in cam mode"
   menu-spot-options-move-lore: "&7Moves it to where your camera is,\n&7looking the way you look."
-  menu-spot-options-none: "&7Nothing to change"
-  menu-spot-options-none-lore: "&7The server allows no options here."
   menu-spot-options-rename: "&eRename"
   menu-spot-options-rename-lore: "&7Give it another name."
   menu-spot-options-share: "&aShare or make public"
@@ -1088,7 +1086,7 @@ messages:
   stats-distance: "&7Distance flown: &f{distance} blocks"
   # How far the camera flew away from the body: only flying counts, a jump does not - to a spot, with /cam resume, after
   # the guide of /cam follow. Only while max-distance does not hold the camera: with camera-mode.max-distance-mode:
-  # false, or with fixed and a border that holds nobody back (e.g. border-mode: false). With a fixed border or the
+  # false, or with fixed and a wall that holds nobody back (e.g. border-block: air). With a fixed border or the
   # signal nearly everybody gets to max-distance once - on the signal in the open air, and beyond it only for
   # signal.lost-seconds -, and the number would be about the same for all.
   stats-farthest: "&7Farthest from the body: &f{distance} blocks"

@@ -17,7 +17,7 @@ import java.util.UUID;
  * {@code /cam stop <player>} and {@code /cam stop all}: ends the camera mode
  * of somebody else, or of everybody - before an event or a restart, say. The
  * section {@code stop-command}; {@code /cam list} offers it as a button
- * behind each line, see {@code cam-list.stop}.
+ * behind each line to whoever may use it.
  *
  * <p>It ends the way {@code /cam reload} ends it, from outside: he is put
  * back at his body, hears {@code sounds.end-forced}, and is told who it
@@ -55,11 +55,12 @@ public final class CamStop {
 
     /**
      * Whether the lines of {@code /cam list} end in a button for it: a player
-     * who may use it, while {@code cam-list.stop} is on. The console cannot
-     * click.
+     * who may use it. The console cannot click. Hiding it from him would keep
+     * nothing from him that {@code /cam stop} and the menu do not give him
+     * anyway, so there is no switch for it.
      */
     public boolean showsButton(CommandSender sender) {
-        return sender instanceof Player && settings.isCamListStop() && mayUse(sender);
+        return sender instanceof Player && mayUse(sender);
     }
 
     /** {@code /cam stop}, with what follows it. */

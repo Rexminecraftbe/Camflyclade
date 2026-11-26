@@ -34,6 +34,27 @@ public final class CameraModeSettings {
      */
     public static final String OLD_DISTANCE_SWITCH = "camera-mode.max-distance-enabled";
 
+    /**
+     * The old value of {@code camera-mode.border-mode} for no border at all,
+     * which {@code max-distance-mode: false} and {@code cam-area.level: start}
+     * say now. The update of the file writes those in its place; only a file
+     * it could not change still has it, and is read as it was written.
+     */
+    public static final String OLD_BORDER_OFF = "false";
+
+    /**
+     * The smallest {@code camera-mode.border-radius}. A wall built nowhere
+     * around the player stopped nobody, and was no border at all - a second
+     * way of saying {@link #OLD_BORDER_OFF}.
+     */
+    public static final double MIN_BORDER_RADIUS = 1.0;
+
+    /**
+     * What {@code camera-mode.invisible} was called until it said what it
+     * does. Still read in a file the update could not change.
+     */
+    public static final String OLD_INVISIBLE = "camera-mode.allow-invisibility-potion";
+
     // Configurable values
     private double maxDistance;
     /** How max-distance holds the camera, {@code camera-mode.max-distance-mode}. */
@@ -57,14 +78,14 @@ public final class CameraModeSettings {
      * the camera back at all.
      *
      * <p>{@code push-back} does, and {@code barrier} does with a wall that
-     * stops somebody: made of a block that cannot be walked through, and
-     * built at least a little way around the player. Air, water, grass or a
-     * radius of 0 leave the camera exactly as free as {@code false} does - in
-     * flight and behind portals alike.</p>
+     * stops somebody: made of a block that cannot be walked through. Air,
+     * water or grass leave the camera free - in flight and behind portals
+     * alike -, and so does the old value {@link #OLD_BORDER_OFF}.</p>
      */
     private boolean bordersHold;
     private VisibilityMode playerVisibilityMode;
-    private boolean allowInvisibilityPotion;
+    /** Whether the camera player has the effect of invisibility, {@code camera-mode.invisible}. */
+    private boolean invisible;
     private GlowMode glowMode;
     /** Whether the camera player carries a name of the plugin, {@code camera-mode.name-visible}. */
     private boolean playerNameVisible;
@@ -114,11 +135,11 @@ public final class CameraModeSettings {
         // Called distance-warning-cooldown before it counted for every border.
         warningCooldown = config.getInt(config.renamed("camera-mode.warning-cooldown",
                 "camera-mode.distance-warning-cooldown"), 3, 0);
-        String border = config.getChoice("camera-mode.border-mode", "barrier", "barrier", "push-back", "false")
-                .toLowerCase(Locale.ROOT);
+        String border = config.getChoice("camera-mode.border-mode", "barrier",
+                Map.of(OLD_BORDER_OFF, OLD_BORDER_OFF), "barrier", "push-back");
         borderMode = switch (border) {
             case "push-back" -> BorderMode.PUSH_BACK;
-            case "false" -> BorderMode.OFF;
+            case OLD_BORDER_OFF -> BorderMode.OFF;
             default -> BorderMode.BARRIER;
         };
         borderBlock = SettingValues.block(config, messages, "camera-mode.border-block", "barrier");
@@ -131,15 +152,14 @@ public final class CameraModeSettings {
         // blocks for each chunk of its view-distance: the client throws away
         // every block beyond that. A world with a smaller view-distance of
         // its own cuts it back further, see CamBorderWall.
-        borderRadius = config.getDouble("camera-mode.border-radius", 5.0, 0.0,
+        borderRadius = config.getDouble("camera-mode.border-radius", 5.0, MIN_BORDER_RADIUS,
                 plugin.getServer().getViewDistance() * 16.0);
         // A wall that nobody runs into holds nobody back: made of something
-        // that can be walked through, or not built anywhere around the player.
-        // Stopping the camera some other way would say the opposite of what
-        // the file says, so there is simply no border then, as with "false".
+        // that can be walked through. Stopping the camera some other way would
+        // say the opposite of what the file says, so there is simply no border
+        // then.
         bordersHold = borderMode == BorderMode.PUSH_BACK
-                || (borderMode == BorderMode.BARRIER && borderRadius > 0.0
-                        && borderBlock.getMaterial().isSolid());
+                || (borderMode == BorderMode.BARRIER && borderBlock.getMaterial().isSolid());
         // The keys with underscores got hyphens like all others; an older file is read as it was written.
         String visibility = config.getChoice(
                 config.renamed("camera-mode.player-visibility", "camera-mode.player_visibility_mode"),
@@ -149,8 +169,11 @@ public final class CameraModeSettings {
             case "false" -> VisibilityMode.NONE;
             default -> VisibilityMode.ALL;
         };
-        allowInvisibilityPotion = config.getBoolean(
-                config.renamed("camera-mode.allow-invisibility-potion", "camera-mode.allow_invisibility_potion"), true);
+        // Called allow-invisibility-potion, which sounded like a potion the
+        // player may drink, and allow_invisibility_potion before that.
+        invisible = config.getBoolean(config.renamed(
+                config.renamed("camera-mode.invisible", OLD_INVISIBLE),
+                "camera-mode.allow_invisibility_potion"), true);
         String glow = config.getChoice("camera-mode.glowing-outline", "true", "true", "false", "sight")
                 .toLowerCase();
         glowMode = switch (glow) {
@@ -260,8 +283,9 @@ public final class CameraModeSettings {
         return playerVisibilityMode;
     }
 
-    public boolean allowsInvisibilityPotion() {
-        return allowInvisibilityPotion;
+    /** Whether the camera player has the effect of invisibility, {@code camera-mode.invisible}. */
+    public boolean invisible() {
+        return invisible;
     }
 
     public GlowMode glowMode() {

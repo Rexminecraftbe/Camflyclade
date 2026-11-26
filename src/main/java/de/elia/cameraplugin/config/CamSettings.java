@@ -143,7 +143,9 @@ public final class CamSettings {
             // Keys that went in the second tidying up, still read in a file the update could not change -
             // and the colour of a name that is not the default, which the update leaves, see NameStyle.
             CameraModeSettings.OLD_DISTANCE_SWITCH, "camera-mode.name." + NameStyle.OLD_COLOR,
-            "body.name." + NameStyle.OLD_COLOR));
+            "body.name." + NameStyle.OLD_COLOR,
+            // And the one renamed in the third, read under its old name as long as the new one is missing.
+            CameraModeSettings.OLD_INVISIBLE));
         for (String sound : SoundSettings.SOUNDS) {
             keys.add(SoundSettings.SECTION + "." + sound + "." + CamSound.OLD_SWITCH);
         }
@@ -191,8 +193,6 @@ public final class CamSettings {
     private ListAccess camListAccess;
     /** Whether the list offers to go to a camera or a body, {@code cam-list.teleport}. */
     private boolean camListTeleport;
-    /** Whether the list offers to end a camera mode, {@code cam-list.stop}. */
-    private boolean camListStop;
 
     /** Whether {@code /cam stop} ends the camera mode of others, {@code stop-command.enabled}. */
     private boolean stopCommandEnabled;
@@ -361,7 +361,6 @@ public final class CamSettings {
         sounds = new SoundSettings(config, messages);
         camListAccess = SettingValues.access(config, "cam-list.access");
         camListTeleport = config.getBoolean("cam-list.teleport", true);
-        camListStop = config.getBoolean("cam-list.stop", true);
         stopCommandEnabled = config.getBoolean("stop-command.enabled", true);
         camBanEnabled = config.getBoolean("cam-ban.enabled", true);
         afkEndEnabled = config.getBoolean("afk-end.enabled", false);
@@ -581,10 +580,6 @@ public final class CamSettings {
 
     public boolean isCamListTeleport() {
         return camListTeleport;
-    }
-
-    public boolean isCamListStop() {
-        return camListStop;
     }
 
     // ------------------------------------------- stop-command, cam-ban, afk-end

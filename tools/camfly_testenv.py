@@ -6630,7 +6630,8 @@ def stopp_checks(env, bot):
     gemeldet. /cam stop all von der Konsole beendet beide, und der zweite
     Spieler liest "the server". Ohne op fehlt das Recht camplugin.stop, und
     der Cam-Modus des anderen laeuft weiter. In der Liste steht hinter seiner
-    Zeile ein Klick auf "/cam stop <Name>", mit cam-list.stop: false nicht.
+    Zeile ein Klick auf "/cam stop <Name>", mit stop-command.enabled: false
+    nicht - einen eigenen Schalter fuer den Knopf gibt es nicht mehr.
     """
     if not FIND.test("Cam-Modus ist vor dem Test von /cam stop aus", cam_off(bot), ""):
         return
@@ -6707,10 +6708,10 @@ def stopp_checks(env, bot):
         FIND.test("/cam stop ohne camplugin.stop: keine Berechtigung, der Cam-Modus des anderen laeuft weiter",
                   gesagt(zeilen, r"permission") and noch_im_cam_modus(), zeige(zeilen))
 
-        set_option(env, "stop", "false", "cam-list")
+        set_option(env, "enabled", "false", "stop-command")
         kamera_an()
         pakete = pakete_seit_liste()
-        FIND.test("cam-list.stop: false - die Liste ohne den Knopf",
+        FIND.test("stop-command.enabled: false - die Liste ohne den Knopf",
                   ZUSCHAUER_NAME in pakete and "/cam stop" not in pakete, pakete[-300:] or "kein Paket")
     finally:
         try:
@@ -6718,7 +6719,7 @@ def stopp_checks(env, bot):
                 zuschauer.stop()
             console(env, f"op {BOT_NAME}", pause=1.0)
             cam_off(bot)
-            set_options(env, [("enabled", "false", "stop-command"), ("stop", "true", "cam-list")])
+            set_option(env, "enabled", "false", "stop-command")
             hinstellen(bot, heim[0], heim[1], heim[2])
         except Exception as exc:
             FIND.problem(f"Aufraeumen nach dem Test von /cam stop: {exc}")
@@ -12883,8 +12884,8 @@ def spotoptionen_checks(env, bot):
     welches Symbol er hat und was seine Optionen koennen.
 
     Voreingestellt stehen die Symbole mit filled_map und map vorn, options
-    mit rename, icon, share und delete an und move aus - nachgesehen in der
-    Datei, die das Plugin mitbringt.
+    mit rename, icon und share an und move aus - Loeschen hat keinen Schalter
+    mehr -, nachgesehen in der Datei, die das Plugin mitbringt.
 
     Ein neuer Punkt: das Buch fragt nach dem Namen. Einen, den er schon hat,
     fragt der Chat gleich noch einmal ab - die naechste Zeile ist der naechste
@@ -12913,7 +12914,9 @@ def spotoptionen_checks(env, bot):
     cam mode" darunter, und ein Klick sagt, dass es nur dort geht - der Punkt
     bleibt -; im Cam-Modus wandert er an die Stelle der Kamera und behaelt
     sein Symbol. Delete und gleich Keep it lassen ihn stehen. Mit
-    options.rename: false fehlt Umbenennen.
+    options.rename: false fehlt Umbenennen. Sind rename, icon und share aus,
+    steht noch Loeschen da - sonst kaeme ein Spieler an seinem Limit nie mehr
+    an einen neuen Punkt.
 
     Auf der Admin-Seite der Punkte steht unter einem Punkt des Bots Linksklick
     hin, Rechtsklick Optionen; seine Optionen fuer Admins haben Umbenennen,
@@ -12981,11 +12984,11 @@ def spotoptionen_checks(env, bot):
         cam_off(zuschauer)
         quelle = quelle_config(env)
         FIND.test("Voreingestellt stehen viewpoints.icons mit filled_map und map vorn, options "
-                  "mit rename, icon, share und delete an und move aus",
+                  "mit rename, icon und share an und move aus, ohne delete",
                   re.search(r"(?m)^  icons:\s*\n\s*- filled_map\s*\n\s*- map\s*\n", quelle) is not None
                   and re.search(r"(?m)^  options:\s*\n(?:\s*#.*\n)*"
                                 r"\s*rename:\s*true\s*\n(?:\s*#.*\n)*\s*icon:\s*true\s*\n(?:\s*#.*\n)*"
-                                r"\s*share:\s*true\s*\n(?:\s*#.*\n)*\s*delete:\s*true\s*\n(?:\s*#.*\n)*"
+                                r"\s*share:\s*true\s*\n(?:\s*#.*\n)*"
                                 r"\s*move:\s*false\s*$", quelle) is not None, "")
         spots_loeschen(bot, *namen_der_punkte)
         hinstellen(bot, x, y, z)
@@ -13202,6 +13205,16 @@ def spotoptionen_checks(env, bot):
                   "Options: Optdrei" in titel(f) and platz_mit(f, "Rename") is None
                   and platz_mit(f, "Change icon") is not None and platz_mit(f, "Delete") is not None, str(knoepfe(f)))
         bot.call("close_window", wait=10)
+        spot_option(env, "icon", "false")
+        spot_option(env, "share", "false")
+        f = optionen("Optdrei")
+        FIND.test("options: rename, icon, share und move aus - Loeschen steht trotzdem da",
+                  "Options: Optdrei" in titel(f) and platz_mit(f, "Delete") is not None
+                  and platz_mit(f, "Change icon") is None and platz_mit(f, "Nothing to change") is None,
+                  str(knoepfe(f)))
+        bot.call("close_window", wait=10)
+        spot_option(env, "share", "true")
+        spot_option(env, "icon", "true")
         spot_option(env, "rename", "true")
 
         # --- Die Optionen fuer Admins ---
@@ -16475,7 +16488,7 @@ SPIELERNAME_VOREINSTELLUNG = [
     ("through-walls", "false", "camera-mode"),
     ("view-distance", "64", "camera-mode"), ("background", "true", "camera-mode"),
     ("shadow", "false", "camera-mode"), ("scale", "1.0", "camera-mode"),
-    ("player-visibility", "true"), ("allow-invisibility-potion", "true"),
+    ("player-visibility", "true"), ("invisible", "true", "camera-mode"),
     ("nether", "false", "portals"), ("nether", "false", "cam-area"),
     ("player.name-format", '"{player}\'s Cam"', "messages"),
 ]
@@ -16815,9 +16828,9 @@ def spielername_checks(env, bot):
             time.sleep(1.0)
 
         # --- Sichtbar traegt er ebenfalls den Namen statt seines Namensschilds ---
-        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("allow-invisibility-potion", "false")])
+        set_options(env, SPIELERNAME_VOREINSTELLUNG + [("invisible", "false", "camera-mode")])
         oben = start()
-        if FIND.test("/cam startet mit allow-invisibility-potion: false", oben is not None, ""):
+        if FIND.test("/cam startet mit invisible: false", oben is not None, ""):
             FIND.test("Auch sichtbar steht der Name als TextDisplay ueber ihm", spielername_frage(bot), "")
             FIND.test("Ein Spieler ohne Cam-Modus sieht ihn", sieht_ueber(zuschauer, oben), "")
             cam_off(bot)
@@ -18392,7 +18405,12 @@ def border_checks(env, bot):
         hat dort Luft, ein zweiter Spieler ebenso, und nach dem Cam-Modus
         ist sie auch bei ihm wieder weg.
       * push-back: er kommt auch nicht weiter, wird dabei aber zurueckgesetzt.
-      * false, Luft als border-block und border-radius 0: keine Grenze.
+      * max-distance-mode: false und Luft als border-block: keine Grenze.
+      * border-mode: false gibt es nicht mehr: /cam reload schreibt dafuer
+        push-back, max-distance-mode: false und cam-area.level: start in die
+        Datei, und der Bot laeuft weiter frei.
+      * border-radius: 0 ebenso: /cam reload schreibt dasselbe und
+        border-radius: 5 in die Datei, und der Bot laeuft weiter frei.
       * ein unbekannter Block und ein zu grosser Radius werden gemeldet, und
         die Wand steht mit dem, was dafuer genommen wird.
       * ein grosser Radius, so weit wie der Server die Welt schickt: die
@@ -18518,11 +18536,9 @@ def border_checks(env, bot):
 
         # --- keine Grenze ---
         for aenderungen, name in (
-                ([("border-mode", "false")], "border-mode: false"),
-                ([("border-mode", "barrier"), ("border-block", "air")],
-                 "border-block: air"),
-                ([("border-block", "barrier"), ("border-radius", "0")],
-                 "border-radius: 0")):
+                ([("border-mode", "barrier"), ("max-distance-mode", "false")], "max-distance-mode: false"),
+                ([("max-distance-mode", "fixed"), ("border-block", "air")],
+                 "border-block: air")):
             set_options(env, aenderungen)
             ergebnis = grenz_lauf(bot, heim)
             FIND.test(f"{name} - keine Grenze, die Kamera laeuft ueber max-distance "
@@ -18531,6 +18547,43 @@ def border_checks(env, bot):
                       and not gewarnt(ergebnis, "can't go further"),
                       grenz_zeige(ergebnis, heim))
             cam_off(bot)
+
+        # --- border-mode: false schreibt /cam reload um ---
+        set_options(env, [("border-block", "barrier"), ("border-mode", "false")])
+        text = (env.server / "plugins" / "CamFly" / "config.yml").read_text(encoding="utf-8")
+        FIND.test("border-mode: false - /cam reload schreibt push-back, max-distance-mode: false "
+                  "und cam-area.level: start in die Datei",
+                  re.search(r"(?m)^  border-mode: push-back\s*$", text) is not None
+                  and re.search(r"(?m)^  max-distance-mode: false\s*$", text) is not None
+                  and re.search(r"(?m)^  level: start\s*$", text) is not None, "")
+        ergebnis = grenz_lauf(bot, heim)
+        FIND.test("border-mode: false - danach weiter keine Grenze, die Kamera laeuft ueber "
+                  "max-distance hinaus, ohne Meldung",
+                  frei(ergebnis) and ergebnis[1] == 0
+                  and not gewarnt(ergebnis, "can't go further"),
+                  grenz_zeige(ergebnis, heim))
+        cam_off(bot)
+        set_options(env, [("border-mode", "barrier"), ("max-distance-mode", "fixed"),
+                          ("level", "always", "cam-area")])
+
+        # --- border-radius: 0 schreibt /cam reload ebenso um ---
+        set_option(env, "border-radius", "0")
+        text = (env.server / "plugins" / "CamFly" / "config.yml").read_text(encoding="utf-8")
+        FIND.test("border-radius: 0 - /cam reload schreibt push-back, max-distance-mode: false, "
+                  "cam-area.level: start und border-radius: 5 in die Datei",
+                  re.search(r"(?m)^  border-mode: push-back\s*$", text) is not None
+                  and re.search(r"(?m)^  max-distance-mode: false\s*$", text) is not None
+                  and re.search(r"(?m)^  level: start\s*$", text) is not None
+                  and re.search(r"(?m)^  border-radius: 5\s*$", text) is not None, "")
+        ergebnis = grenz_lauf(bot, heim)
+        FIND.test("border-radius: 0 - danach weiter keine Grenze, die Kamera laeuft ueber "
+                  "max-distance hinaus, ohne Meldung",
+                  frei(ergebnis) and ergebnis[1] == 0
+                  and not gewarnt(ergebnis, "can't go further"),
+                  grenz_zeige(ergebnis, heim))
+        cam_off(bot)
+        set_options(env, [("border-mode", "barrier"), ("max-distance-mode", "fixed"),
+                          ("level", "always", "cam-area")])
 
         # --- was nicht passt, wird gemeldet ---
         vorher = len(server_log(env))
@@ -18673,6 +18726,7 @@ def border_checks(env, bot):
             # Der Reload holt ihn auch aus dem Cam-Modus, falls eine Probe
             # mittendrin abgebrochen ist.
             set_options(env, [("max-distance", "100.0"), ("border-mode", "barrier"),
+                              ("max-distance-mode", "fixed"), ("level", "always", "cam-area"),
                               ("border-block", "barrier"),
                               ("border-block-water", "blue_stained_glass"),
                               ("border-radius", "5")])
@@ -18998,8 +19052,9 @@ def portal_checks(env, bot):
          woanders heraus, also muss der Eintrag fallen.
       4. Drueben alle Portalfelder wegnehmen. Dasselbe noch einmal, nur ueber
          den anderen Weg: Das Nachsehen an der Ankunft.
-      5. Mit border-mode: false gibt es keine Grenze: Drueben bleibt er, auch
-         im verbotenen Biom.
+      5. Mit cam-area.level: start gilt das Biom nur beim Start: Drueben
+         bleibt er, auch im verbotenen Biom - so, wie es frueher
+         border-mode: false tat.
       6. Zum Schluss der Schalter portals.nether selbst.
 
     Die Chunks drueben werden festgehalten (/forceload): Ohne einen Spieler
@@ -19094,14 +19149,14 @@ def portal_checks(env, bot):
         FIND.test("Ist das Portal drueben abgebaut, wird das Gemerkte verworfen",
                   durchgelassen(sechste), sechste["was"])
 
-        # --- Ohne Grenze holt ihn auch hinter dem Portal niemand zurueck ---
+        # --- Nur beim Start holt ihn auch hinter dem Portal niemand zurueck ---
         # Das Umstellen leert das Gemerkte, und drueben ist es weiter
-        # verboten: Mit einer Grenze kaeme er gleich wieder zurueck.
-        set_option(env, "border-mode", "false")
-        ohne = portal_probe(bot, portal, heim, "border-mode false")
-        FIND.test("Auf border-mode: false holt ihn auch ein verbotenes Biom hinter "
+        # verboten: Mit level: always kaeme er gleich wieder zurueck.
+        set_option(env, "level", "start", "cam-area")
+        ohne = portal_probe(bot, portal, heim, "cam-area.level start")
+        FIND.test("Auf cam-area.level: start holt ihn auch ein verbotenes Biom hinter "
                   "dem Portal nicht zurueck", ohne["was"] == "drueben", ohne["was"])
-        set_option(env, "border-mode", "barrier")
+        set_option(env, "level", "always", "cam-area")
 
         # --- Der Schalter fuer das Portal selbst ---
         set_options(env, [("nether", "false", "portals")])
@@ -19130,7 +19185,7 @@ def portal_checks(env, bot):
         time.sleep(0.5)
         set_options(env, [("nether", "false", "portals"),
                           ("nether", "false", "cam-area"),
-                          ("border-mode", "barrier")])
+                          ("level", "always", "cam-area")])
 
 
 def fuehrung_nether_checks(env, bot):
@@ -22772,7 +22827,8 @@ def erze_checks(env, bot):
     alten Regel "kein Block bis zum Himmel" waere es Stein gewesen. Mit
     max-sky-light: 15 sind auch dieses und das auf dem Dach Stein, das
     eingeschlossene nicht. Mit max-y: -61 liegt die Hoehle zu hoch, und ihre
-    Erze bleiben, wie sie sind.
+    Erze bleiben, wie sie sind. Mit max-y: off - ohne Anfuehrungszeichen,
+    also false - gilt jede Hoehe, ohne Meldung.
 
     hide-ores.where: biomes - voreingestellt steht caves da: In der nahen
     Hoehle, die das Biom der Ebene hat, bleiben jetzt alle Erze, wie sie
@@ -22902,6 +22958,19 @@ def erze_checks(env, bot):
         tief_genug = [sieht(bot, o) for o in nah]
         FIND.test("max-y: -61 - die Hoehle liegt hoeher, ihre Erze bleiben, wie sie sind",
                   tief_genug == ["diamond_ore", "deepslate_iron_ore", "diamond_ore", "diamond_ore"], str(tief_genug))
+        # off ohne Anfuehrungszeichen liest YAML als false - bis es false hiess, wurde es
+        # abgewiesen und durch 15 ersetzt, was hier gleich aussaehe: darum zaehlt die Meldung.
+        vorher = len(server_log(env))
+        set_option(env, "max-y", "off", "hide-ores")
+        neu = strip_colors(server_log(env)[vorher:])
+        cam_on(bot)
+        time.sleep(2.5)
+        ohne_grenze = [sieht(bot, o) for o in nah]
+        # Wie mit 15: das auf dem Dach und das eingeschlossene bleiben Diamanterz.
+        FIND.test("max-y: off - ohne Meldung in jeder Hoehe, die Erze der Hoehle sind wieder Stein",
+                  "hide-ores.max-y" not in neu
+                  and ohne_grenze == ["stone", "deepslate", "diamond_ore", "diamond_ore"],
+                  f"{ohne_grenze} {neu[-300:]}")
         set_option(env, "max-y", "15", "hide-ores")
 
         FIND.test("Voreingestellt steht hide-ores.where: caves da, mit den Hoehlen-Biomen in der Liste",

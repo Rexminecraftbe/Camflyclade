@@ -25,8 +25,15 @@ public final class OreSettings {
     /** The brightest light the game has, sky or block. */
     private static final int MAX_LIGHT = 15;
 
-    /** The word of {@code hide-ores.max-y} for no limit at all. */
-    private static final String NO_LIMIT = "off";
+    /** The word of {@code hide-ores.max-y} for no limit at all, as for every other setting that is off. */
+    private static final String NO_LIMIT = "false";
+
+    /**
+     * What the file said for no limit before it was {@code false}. YAML reads
+     * an {@code off} without quotes as {@code false} anyway; this is the one
+     * in quotes.
+     */
+    private static final String OLD_NO_LIMIT = "off";
 
     /** The biomes of {@code hide-ores.biomes} out of the box: the caves the game has as biomes of their own. */
     private static final List<String> DEFAULT_ORE_BIOMES =
@@ -112,19 +119,37 @@ public final class OreSettings {
     /**
      * Reads {@code hide-ores.max-y}: the height of the highest ore that is
      * hidden, out of the box 15 - where the diamonds begin -, or
-     * {@code off} for ores of every height.
+     * {@code false} for ores of every height.
      */
     private int readOreMaxY(ConfigReader config, Messages messages) {
         String path = "hide-ores.max-y";
         String raw = config.getString(path, "15").trim();
-        if (raw.equalsIgnoreCase(NO_LIMIT)) {
+        Integer height = maxY(raw);
+        if (height == null) {
+            config.warnUnknownValue(path, raw, messages.configMessage("config-allowed-height"), "15");
+            return 15;
+        }
+        return height;
+    }
+
+    /**
+     * The height a value of {@code hide-ores.max-y} stands for, as
+     * {@link ConfigReader#getString} hands it over: a whole number, or
+     * {@link Integer#MAX_VALUE} for {@code false} - also an {@code off}
+     * without quotes, which YAML reads as {@code false} - and an
+     * {@code "off"} in quotes.
+     *
+     * @return the height, or {@code null} when the value is none of these
+     */
+    static Integer maxY(String raw) {
+        String value = raw.trim();
+        if (value.equalsIgnoreCase(NO_LIMIT) || value.equalsIgnoreCase(OLD_NO_LIMIT)) {
             return Integer.MAX_VALUE;
         }
         try {
-            return Integer.parseInt(raw);
+            return Integer.parseInt(value);
         } catch (NumberFormatException ex) {
-            config.warnUnknownValue(path, raw, messages.configMessage("config-allowed-height"), "15");
-            return 15;
+            return null;
         }
     }
 

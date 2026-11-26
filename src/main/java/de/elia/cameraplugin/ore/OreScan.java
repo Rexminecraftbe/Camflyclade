@@ -60,7 +60,10 @@ final class OreScan {
             if (bottom > highestOre) {
                 break;
             }
-            for (int y = bottom; y < Math.min(bottom + 16, highestOre + 1); y++) {
+            // In long: without a limit highestOre is Integer.MAX_VALUE, and one
+            // more would wrap around to the lowest int - no ore would be hidden.
+            int top = (int) Math.min(bottom + 16L, highestOre + 1L);
+            for (int y = bottom; y < top; y++) {
                 for (int x = 0; x < 16; x++) {
                     for (int z = 0; z < 16; z++) {
                         BlockData cover = lookFor.get(copy.getBlockType(x, y, z));

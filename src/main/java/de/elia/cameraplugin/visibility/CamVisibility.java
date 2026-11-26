@@ -29,7 +29,7 @@ public final class CamVisibility {
      * so there it is applied even when the option is switched off.
      */
     public boolean needsInvisibility() {
-        return settings.cameraMode().allowsInvisibilityPotion()
+        return settings.cameraMode().invisible()
                 || settings.cameraMode().visibilityMode() == VisibilityMode.NONE;
     }
 
